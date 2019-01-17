@@ -440,7 +440,7 @@ protected:
 
 private:
 
-    static constexpr StreamPort FAKE_CONSUMER{Port::Input, std::numeric_limits<unsigned>::max()};
+    static const StreamPort FAKE_CONSUMER;
 
 protected:
 
@@ -531,6 +531,8 @@ protected:
     PopCountGraph                               mPopCountGraph;
 
 };
+
+const StreamPort PipelineCompiler::FAKE_CONSUMER{Port::Input, std::numeric_limits<unsigned>::max()};
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
 

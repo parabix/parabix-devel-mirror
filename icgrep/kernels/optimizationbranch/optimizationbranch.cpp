@@ -4,7 +4,7 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/container/flat_map.hpp>
 #include <llvm/Support/raw_ostream.h>
-
+#include <toolchain/toolchain.h>
 
 #warning at compilation, this must verify that the I/O rates of the branch permits the rates of the branches
 
@@ -69,15 +69,15 @@ void loadHandle(const std::unique_ptr<KernelBuilder> & b, Kernel * const kernel,
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateMultiBlockLogic
+ * @brief generateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
 
-    BasicBlock * const loopCond = b->CreateBasicBlock("cond");
+
     BasicBlock * const nonZeroPath = b->CreateBasicBlock("nonZeroPath");
     BasicBlock * const allZeroPath = b->CreateBasicBlock("allZeroPath");
-    BasicBlock * const mergePaths = b->CreateBasicBlock("mergePaths");
     BasicBlock * const exit = b->CreateBasicBlock("exit");
+
 
 
     Constant * const ZERO = b->getSize(0);
@@ -86,41 +86,56 @@ void OptimizationBranch::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     loadHandle(b, mAllZeroKernel, "0");
     loadHandle(b, mNonZeroKernel, "1");
 
-    BasicBlock * const entry = b->GetInsertBlock();
-    b->CreateBr(loopCond);
-
-    PHINode * terminatedPhi = nullptr;
-    if (canSetTerminateSignal()) {
-        b->SetInsertPoint(mergePaths);
-        terminatedPhi = b->CreatePHI(b->getInt1Ty(), 2);
-    }
-
-    b->SetInsertPoint(loopCond);
-    IntegerType * const sizeTy = b->getSizeTy();
-    PHINode * const first = b->CreatePHI(sizeTy, 3, "firstStride");
-    first->addIncoming(ZERO, entry);
-    PHINode * const last = b->CreatePHI(sizeTy, 3, "lastStride");
-    PHINode * const currentState = b->CreatePHI(b->getInt1Ty(), 3);
-    currentState->addIncoming(UndefValue::get(b->getInt1Ty()), entry);
-    Value * finished = nullptr;
 
     if (LLVM_LIKELY(isa<StreamSet>(mCondition))) {
 
-        last->addIncoming(ZERO, entry);
-
+        BasicBlock * const entry = b->GetInsertBlock();
+        BasicBlock * const loopCond = b->CreateBasicBlock("cond", nonZeroPath);
         BasicBlock * const summarizeOneStride = b->CreateBasicBlock("summarizeOneStride", nonZeroPath);
         BasicBlock * const checkStride = b->CreateBasicBlock("checkStride", nonZeroPath);
         BasicBlock * const processStrides = b->CreateBasicBlock("processStrides", nonZeroPath);
+        BasicBlock * const mergePaths = b->CreateBasicBlock("mergePaths", nonZeroPath);
+
+        b->CreateBr(loopCond);
+
+        b->SetInsertPoint(loopCond);
+        IntegerType * const sizeTy = b->getSizeTy();
+        IntegerType * const boolTy = b->getInt1Ty();
+        PHINode * const currentFirstIndex = b->CreatePHI(sizeTy, 3, "firstStride");
+        currentFirstIndex->addIncoming(ZERO, entry);
+        PHINode * const currentLastIndex = b->CreatePHI(sizeTy, 3, "lastStride");
+        currentLastIndex->addIncoming(ZERO, entry);
+        PHINode * const currentState = b->CreatePHI(boolTy, 3);
+        currentState->addIncoming(UndefValue::get(boolTy), entry);
+
 
         Constant * const blocksPerStride = b->getSize(getStride() / b->getBitBlockWidth());
         Value * const numOfConditionStreams = b->getInputStreamSetCount(CONDITION_TAG);
         Value * const numOfConditionBlocks = b->CreateMul(numOfConditionStreams, blocksPerStride);
 
-        Value * const offset = b->CreateMul(last, blocksPerStride);
+        Value * const offset = b->CreateMul(currentLastIndex, blocksPerStride);
         Value * basePtr = b->getInputStreamBlockPtr(CONDITION_TAG, ZERO, offset);
         Type * const BitBlockTy = b->getBitBlockType();
         basePtr = b->CreatePointerCast(basePtr, BitBlockTy->getPointerTo());
         b->CreateBr(summarizeOneStride);
+
+        // Predeclare some phi nodes
+
+        b->SetInsertPoint(nonZeroPath);
+        PHINode * const firstNonZeroIndex = b->CreatePHI(sizeTy, 2);
+        PHINode * const lastNonZeroIndex = b->CreatePHI(sizeTy, 2);
+        PHINode * const allZeroAfterNonZero = b->CreatePHI(boolTy, 2);
+
+        b->SetInsertPoint(allZeroPath);
+        PHINode * const firstAllZeroIndex = b->CreatePHI(sizeTy, 2);
+        PHINode * const lastAllZeroIndex = b->CreatePHI(sizeTy, 2);
+        PHINode * const nonZeroAfterAllZero = b->CreatePHI(boolTy, 2);
+
+        PHINode * terminatedPhi = nullptr;
+        if (canSetTerminateSignal()) {
+            b->SetInsertPoint(mergePaths);
+            terminatedPhi = b->CreatePHI(b->getInt1Ty(), 2);
+        }
 
         // OR together every condition block in this stride
         b->SetInsertPoint(summarizeOneStride);
@@ -143,56 +158,99 @@ void OptimizationBranch::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         b->SetInsertPoint(checkStride);
         Value * const nextState = b->bitblock_any(value);
         Value * const sameState = b->CreateICmpEQ(nextState, currentState);
-        Value * const firstStride = b->CreateICmpEQ(last, ZERO);
+        Value * const firstStride = b->CreateICmpEQ(currentLastIndex, ZERO);
         Value * const continuation = b->CreateOr(sameState, firstStride);
-        Value * const nextIndex = b->CreateAdd(last, ONE);
-        Value * const notLastStride = b->CreateICmpNE(nextIndex, numOfStrides);
+        Value * const nextIndex = b->CreateAdd(currentLastIndex, ONE);
+//        Value * const lastStrideIndex = b->CreateUMin(mNumOfStrides, ONE);
+        Value * const notLastStride = b->CreateICmpULT(nextIndex, mNumOfStrides);
         Value * const checkNextStride = b->CreateAnd(continuation, notLastStride);
-        last->addIncoming(nextIndex, checkStride);
-        first->addIncoming(first, checkStride);
+        currentLastIndex->addIncoming(nextIndex, checkStride);
+        currentFirstIndex->addIncoming(currentFirstIndex, checkStride);
         currentState->addIncoming(nextState, checkStride);
         b->CreateLikelyCondBr(checkNextStride, loopCond, processStrides);
 
-        // Process every stride between [first, index)
+        // Process every stride between [first, last)
         b->SetInsertPoint(processStrides);
+
         // state is implicitly "indeterminate" during our first stride
         Value * const selectedPath = b->CreateSelect(firstStride, nextState, currentState);
-        finished = b->CreateNot(notLastStride);
+        firstNonZeroIndex->addIncoming(currentFirstIndex, processStrides);
+        firstAllZeroIndex->addIncoming(currentFirstIndex, processStrides);
+        // When we reach the last (but not necessarily final) stride of this kernel,
+        // we will either "append" the final stride to the current run or complete
+        // the current run then perform one more iteration for the final stride, depending
+        // whether it flips the branch selection state.
+
+//        b->CallPrintInt(" &&& nextState", nextState);
+//        b->CallPrintInt(" &&& firstStride", firstStride);
+//        b->CallPrintInt(" &&& continuation", continuation);
+//        b->CallPrintInt(" &&& notLastStride", notLastStride);
+
+//        b->CallPrintInt(" &&& nextIndex", nextIndex);
+//        b->CallPrintInt(" &&& currentLastIndex", currentLastIndex);
+
+//        b->CallPrintInt(" &&& mNumOfStrides", mNumOfStrides);
+//        b->CallPrintInt(" &&& nextIndex", nextIndex);
+
+        Value * const nextLast = b->CreateSelect(continuation, mNumOfStrides, nextIndex);
+
+//        b->CallPrintInt(" &&& nextLast", nextLast);
+
+        Value * const nextFirst = b->CreateSelect(continuation, mNumOfStrides, currentLastIndex);
+
+//        b->CallPrintInt(" &&& nextFirst", nextFirst);
+
+
+        lastNonZeroIndex->addIncoming(nextFirst, processStrides);
+        lastAllZeroIndex->addIncoming(nextFirst, processStrides);
+        Value * finished = b->CreateNot(notLastStride);
+        Value * const flipLastState = b->CreateAnd(finished, b->CreateNot(continuation));
+        nonZeroAfterAllZero->addIncoming(flipLastState, processStrides);
+        allZeroAfterNonZero->addIncoming(flipLastState, processStrides);
         b->CreateCondBr(selectedPath, nonZeroPath, allZeroPath);
 
-        first->addIncoming(last, mergePaths);
-        last->addIncoming(nextIndex, mergePaths);
+        // make the actual calls and take any potential termination signal
+        b->SetInsertPoint(nonZeroPath);
+        callKernel(b, mNonZeroKernel, firstNonZeroIndex, lastNonZeroIndex, terminatedPhi);
+        BasicBlock * const nonZeroPathExit = b->GetInsertBlock();
+        firstAllZeroIndex->addIncoming(nextFirst, nonZeroPathExit);
+        lastAllZeroIndex->addIncoming(nextLast, nonZeroPathExit);
+        nonZeroAfterAllZero->addIncoming(b->getFalse(), nonZeroPathExit);
+        b->CreateUnlikelyCondBr(allZeroAfterNonZero, allZeroPath, mergePaths);
+
+        b->SetInsertPoint(allZeroPath);
+        callKernel(b, mAllZeroKernel, firstAllZeroIndex, lastAllZeroIndex, terminatedPhi);
+        BasicBlock * const allZeroPathExit = b->GetInsertBlock();
+        firstNonZeroIndex->addIncoming(nextFirst, allZeroPathExit);
+        lastNonZeroIndex->addIncoming(nextLast, allZeroPathExit);
+        allZeroAfterNonZero->addIncoming(b->getFalse(), allZeroPathExit);
+        b->CreateUnlikelyCondBr(nonZeroAfterAllZero, nonZeroPath, mergePaths);
+
+        b->SetInsertPoint(mergePaths);
+        currentFirstIndex->addIncoming(nextFirst, mergePaths);
+        currentLastIndex->addIncoming(nextLast, mergePaths);
         currentState->addIncoming(nextState, mergePaths);
+        if (terminatedPhi) {
+            finished = b->CreateOr(finished, terminatedPhi);
+        }
+        b->CreateLikelyCondBr(finished, exit, loopCond);
+
     } else {
-        Value * const cond = b->getScalarField(CONDITION_TAG);
-        b->CreateCondBr(b->CreateIsNotNull(cond), nonZeroPath, allZeroPath);
 
-        last->addIncoming(numOfStrides, entry);
-        last->addIncoming(numOfStrides, mergePaths);
-        first->addIncoming(ZERO, mergePaths);
-        currentState->addIncoming(b->getFalse(), mergePaths);
-        finished = b->getTrue();
+//        Value * const cond = b->getScalarField(CONDITION_TAG);
+//        b->CreateCondBr(b->CreateIsNotNull(cond), nonZeroPath, allZeroPath);
+
+//        // make the actual calls and take any potential termination signal
+//        b->SetInsertPoint(nonZeroPath);
+//        callKernel(b, mNonZeroKernel, ZERO, mNumOfStrides, b->getTrue(), nullptr);
+//        b->CreateBr(exit);
+
+//        b->SetInsertPoint(allZeroPath);
+//        callKernel(b, mAllZeroKernel, ZERO, mNumOfStrides, b->getTrue(), nullptr);
+//        b->CreateBr(exit);
     }
-
-    // make the actual calls and take any potential termination signal
-    b->SetInsertPoint(nonZeroPath);
-    callKernel(b, mNonZeroKernel, first, last, terminatedPhi);
-    b->CreateBr(mergePaths);
-
-    b->SetInsertPoint(allZeroPath);
-    callKernel(b, mAllZeroKernel, first, last, terminatedPhi);
-    b->CreateBr(mergePaths);
-
-    b->SetInsertPoint(mergePaths);
-    // Value * finished = b->CreateICmpEQ(last, numOfStrides);
-    if (terminatedPhi) {
-        finished = b->CreateOr(finished, terminatedPhi);
-    }
-    b->CreateLikelyCondBr(finished, exit, loopCond);
 
     b->SetInsertPoint(exit);
-
-    b->CallPrintInt("branch_exit --------------------", numOfStrides);
 
 }
 
@@ -204,6 +262,16 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
                                     Value * const first, Value * const last,
                                     PHINode * const terminatedPhi) {
 
+//    b->CallPrintInt(" &&& " + kernel->getName() + "_first", first);
+//    b->CallPrintInt(" &&& " + kernel->getName() + "_last", last);
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * const nonZeroLength = b->CreateICmpULT(first, last);
+        Value * valid = b->CreateOr(nonZeroLength, b->CreateIsNull(last));
+        b->CreateAssert(valid,
+            "Branch cannot execute 0 strides unless this is the final stride");
+    }
+
     Function * const doSegment = kernel->getDoSegmentFunction(b->getModule());
 
     BasicBlock * incrementItemCounts = nullptr;
@@ -213,10 +281,6 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
         kernelExit = b->CreateBasicBlock("kernelExit");
     }
 
-
-    b->CallPrintInt("branch_first -------------------", first);
-    b->CallPrintInt("branch_last --------------------", last);
-
     std::vector<Value *> args;
     args.reserve(doSegment->arg_size());
     if (kernel->isStateful()) {
@@ -225,6 +289,8 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
     Value * const numOfStrides = b->CreateSub(last, first);
     args.push_back(numOfStrides); // numOfStrides
     const auto numOfInputs = kernel->getNumOfStreamInputs();
+
+    Value * const isFinal = b->CreateIsNull(last);
 
     for (unsigned i = 0; i < numOfInputs; i++) {
 
@@ -239,7 +305,9 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
         }
         args.push_back(processed);
         // accessible input items (after non-deferred processed item count)
-        args.push_back(getItemCountIncrement(b, input, first, last, mAccessibleInputItems[i]));
+        Value * accessible = getItemCountIncrement(b, input, first, last, mAccessibleInputItems[i]);
+        accessible = b->CreateSelect(isFinal, mAccessibleInputItems[i], accessible);
+        args.push_back(accessible);
         // TODO: What if one of the branches requires this but the other doesn't?
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
             args.push_back(b->CreateGEP(mPopCountRateArray[i], first));
@@ -260,10 +328,10 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
             produced = b->CreateLoad(produced);
         }
         args.push_back(produced);
-        args.push_back(getItemCountIncrement(b, output, first, last, mWritableOutputItems[i]));
+        Value * writable = getItemCountIncrement(b, output, first, last, mWritableOutputItems[i]);
+        writable = b->CreateSelect(isFinal, mWritableOutputItems[i], writable);
+        args.push_back(writable);
     }
-
-
 
     Value * const terminated = b->CreateCall(doSegment, args);
     if (incrementItemCounts) {
@@ -273,23 +341,27 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
     }
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mInputStreamSets[i];
+        const Binding & input = kernel->getInputStreamSetBinding(i);
         if (isParamConstant(input)) {
             Value * const processed = b->CreateLoad(mProcessedInputItemPtr[i]);
             Value * const itemCount = getItemCountIncrement(b, input, first, last);
             Value * const updatedInputCount = b->CreateAdd(processed, itemCount);
             b->CreateStore(updatedInputCount, mProcessedInputItemPtr[i]);
         }
+//        Value * const processed = b->CreateLoad(mProcessedInputItemPtr[i]);
+//        b->CallPrintInt(" &&& " + input.getName() + "_processed'", processed);
     }
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mOutputStreamSets[i];
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
         if (isParamConstant(output)) {
             Value * const produced = b->CreateLoad(mProducedOutputItemPtr[i]);
             Value * const itemCount = getItemCountIncrement(b, output, first, last);
             Value * const updatedOutputCount = b->CreateAdd(produced, itemCount);
             b->CreateStore(updatedOutputCount, mProducedOutputItemPtr[i]);
         }
+//        Value * const processed = b->CreateLoad(mProducedOutputItemPtr[i]);
+//        b->CallPrintInt(" &&& " + output.getName() + "_produced'", processed);
     }
 
     if (incrementItemCounts) {
@@ -297,8 +369,6 @@ void OptimizationBranch::callKernel(const std::unique_ptr<KernelBuilder> & b,
         b->CreateBr(kernelExit);
         b->SetInsertPoint(kernelExit);
     }
-
-    b->CallPrintInt("branch_exec --------------", numOfStrides);
 
 }
 
@@ -475,11 +545,10 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
     Bindings && stream_outputs,
     Bindings && scalar_inputs,
     Bindings && scalar_outputs)
-: MultiBlockKernel(b, TypeId::OptimizationBranch, std::move(signature),
-                   std::move(stream_inputs), std::move(stream_outputs),
-                   std::move(scalar_inputs), std::move(scalar_outputs),
-                   // internal scalar
-                   {Binding{b->getInt8Ty(), "priorState"}})
+: Kernel(b, TypeId::OptimizationBranch, std::move(signature),
+         std::move(stream_inputs), std::move(stream_outputs),
+         std::move(scalar_inputs), std::move(scalar_outputs),
+         {})
 , mCondition(condition.get())
 , mNonZeroKernel(nonZeroKernel.get())
 , mAllZeroKernel(allZeroKernel.get()) {

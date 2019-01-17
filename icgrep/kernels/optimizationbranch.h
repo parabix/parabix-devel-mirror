@@ -9,13 +9,12 @@ namespace kernel {
 
 struct OptimizationBranchCompiler;
 
-class OptimizationBranch final : public MultiBlockKernel {
+class OptimizationBranch final : public Kernel {
     friend class OptimizationBranchBuilder;
 public:
 
     static bool classof(const Kernel * const k) {
         switch (k->getTypeId()) {
-            case TypeId::MultiBlock:
             case TypeId::OptimizationBranch:
                 return true;
             default:
@@ -43,7 +42,7 @@ protected:
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
