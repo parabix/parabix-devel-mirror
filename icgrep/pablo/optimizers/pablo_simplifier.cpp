@@ -287,7 +287,7 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
                     }
                 }
             } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
-                if (isa<And>(stmt) ^ isa<Zeroes>(op)) {
+                if (isa<And>(stmt) ^ isa<Zeroes>(op[i])) {
                     return op[1 - i];
                 } else {
                     return op[i];
@@ -314,7 +314,7 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
                 negated ^= true;
                 op[i] = n->getExpr();
             } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
-                negated ^= isa<Ones>(op);
+                negated ^= isa<Ones>(op[i]);
                 expr = op[1 - i];
             }
         }
