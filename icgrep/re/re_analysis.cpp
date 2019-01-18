@@ -182,6 +182,7 @@ bool isByteLength(const RE * re) {
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
         return isByteLength(e->getLH()) && isByteLength(e->getRH());
     } else if (const CC * cc = dyn_cast<CC>(re)) {
+        if (cc->empty()) return false;
         const cc::Alphabet * a = cc->getAlphabet();
         if (a == &cc::Unicode) {
             return (cc->max_codepoint() <= 0x7F);
@@ -234,8 +235,8 @@ bool isUnicodeUnitLength(const RE * re) {
         return isUnicodeUnitLength(e->getLH()) && isUnicodeUnitLength(e->getRH());
     } else if (isa<Any>(re)) {
         return true;
-    } else if (isa<CC>(re)) {
-        return true;
+    } else if (const CC * cc = dyn_cast<CC>(re)) {
+        return !(cc->empty());
     } else if (const Name * n = dyn_cast<Name>(re)) {
         // Eventually names might be set up for not unit length items.
         if (n->getType() == Name::Type::Unicode || n->getType() == Name::Type::UnicodeProperty) {

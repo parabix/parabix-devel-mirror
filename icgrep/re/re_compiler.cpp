@@ -120,6 +120,9 @@ inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb)
 }
 
 MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder & pb) {
+    if (cc->empty()) {
+        return makeMarker(FinalMatchUnit, pb.createZeroes());
+    }
     PabloAST * nextPos = markerVar(marker);
     const cc::Alphabet * a = cc->getAlphabet();
     if (a == &cc::Byte) {
