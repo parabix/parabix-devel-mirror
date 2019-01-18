@@ -295,7 +295,6 @@ kernels/bitstream_pdep_kernel.h
 kernels/block_kernel.cpp
 kernels/callback.cpp
 kernels/callback.h
-kernels/cc_kernel.cpp
 kernels/cc_scan_kernel.cpp
 kernels/cc_scan_kernel.h
 kernels/charclasses.cpp

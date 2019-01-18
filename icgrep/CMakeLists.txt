@@ -137,14 +137,10 @@ add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp)
 # add_executable(lz4d lz4d.cpp lz4/lz4_frame_decoder.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
-add_executable(core combine/core.cpp combine/regexGen.cpp combine/stringGen.cpp combine/propGen.cpp combine/icgrep-test/icgrep-test.cpp grep_interface.cpp grep/grep_engine.cpp kernels/scanmatchgen.cpp kernels/u8u32_kernel.cpp kernels/delmask_kernel.cpp  kernels/cc_scan_kernel.cpp kernels/charclasses.cpp kernels/linebreak_kernel.cpp kernels/streams_merge.cpp kernels/grep_kernel.cpp kernels/until_n.cpp)
 add_executable(lz4_decoder lz4_decoder.cpp)
 add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_generator.cpp lz4/grep/lz4_grep_bytestream_generator.cpp lz4/grep/lz4_grep_bytestream_generator.h lz4/grep/lz4_grep_bitstream_generator.cpp lz4/grep/lz4_grep_bitstream_generator.h lz4/grep/lz4_grep_swizzle_generator.cpp lz4/grep/lz4_grep_swizzle_generator.h)
 add_executable(idisa_test idisa_test.cpp)
 add_executable(cachejanitord ${OBJECT_CACHE_DAEMON_SRC})
-
-#Exclude CoRE from default build.
-set_target_properties(core PROPERTIES EXCLUDE_FROM_ALL 1)
 
 target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
@@ -153,7 +149,6 @@ target_link_libraries (base64 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boo
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (editd PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 # target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
-target_link_libraries (core RegExpCompiler ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_grep LZ4_Lib UCDlib PabloADT RegExpCompiler CodeGen CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (idisa_test CodeGen PabloADT ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
@@ -242,7 +237,9 @@ message(STATUS "LLVM Version Integer: ${LLVM_VERSION_INTEGER}")
 
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}\"'")
 IF (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+  IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+  ENDIF()
 ENDIF()
 
 SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
@@ -306,10 +303,6 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/base64
   COMMAND python base64test.py ${CMAKE_BINARY_DIR}/base64)
 
-add_test(
-  NAME pdep64_test
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/IDISA_test
-  COMMAND ${CMAKE_BINARY_DIR}/idisa_test simd_pdep 64 randhex65536a randhex65536b)
 
 #add_test(
 #  NAME lz4d_ext_dep_test
