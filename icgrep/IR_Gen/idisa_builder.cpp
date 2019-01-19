@@ -521,6 +521,51 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
         return CreateSelect(CreateICmpSLT(cond, mZeroInitializer), aVec, bVec);
     }
 }
+
+Value * IDISA_Builder::simd_binary(unsigned char mask, Value * a, Value * b) {
+    // Form the 4-bit table for based on the bitwise values from a and b
+    // a b | mask = 0b1000
+    // 0 0 | 0
+    // 0 1 | 0
+    // 1 0 | 0
+    // 1 1 | 1
+    switch(mask) {
+        case 0b00000000: return allZeroes();
+        case 0b00000001: return CreateNot(CreateOr(a, b));
+        case 0b00000010: return CreateAnd(CreateNot(a), b);
+        case 0b00000011: return CreateNot(a);
+        case 0b00000100: return CreateAnd(a, CreateNot(b));
+        case 0b00000101: return CreateNot(b);
+        case 0b00000110: return CreateXor(a, b);
+        case 0b00000111: return CreateNot(CreateAnd(a, b));
+        case 0b00001000: return CreateAnd(a, b);
+        case 0b00001001: return CreateNot(CreateXor(a, b));
+        case 0b00001010: return b;
+        case 0b00001011: return CreateOr(CreateNot(a), b);
+        case 0b00001100: return a;
+        case 0b00001101: return CreateOr(a, CreateNot(b));
+        case 0b00001110: return CreateOr(a, b);
+        case 0b00001111: return allOnes();
+        default: report_fatal_error("simd_binary mask is in wrong format!");
+    }
+}
+
+Value * IDISA_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Value * c) {
+    if (mask == 0) return allZeroes();
+    else if (mask == 0xFF) return allOnes();
+
+    unsigned char not_a_mask = mask & 0x0F;
+    unsigned char a_mask = (mask >> 4) & 0x0F;
+
+    if (a_mask == not_a_mask) return simd_binary(a_mask, b, c);
+    else if ((a_mask ^ not_a_mask) == 0x0F) return CreateXor(a, simd_binary(not_a_mask, b, c));
+
+    Value * bc_hi = simd_binary(a_mask, b, c);
+    Value * bc_lo = simd_binary(not_a_mask, b, c);
+    Value * a_bc = CreateAnd(a, bc_hi);
+    Value * not_a_bc = CreateAnd(CreateNot(a), bc_lo);
+    return CreateOr(a_bc, not_a_bc);
+}
     
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     if (fw < 8) {

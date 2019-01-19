@@ -126,6 +126,8 @@ public:
     virtual llvm::Value * simd_min(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_umin(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_if(unsigned fw, llvm::Value * cond, llvm::Value * a, llvm::Value * b);
+    llvm::Value * simd_binary(unsigned char mask, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ternary(unsigned char mask, llvm::Value * a, llvm::Value * b, llvm::Value * c);
     
     virtual llvm::Value * simd_slli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * simd_srli(unsigned fw, llvm::Value * a, unsigned shift);

@@ -875,17 +875,21 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_AVX512F_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) {
     if (fw == 1) {
-        Value * ternLogicFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pternlog_d_512);
         // Form the 8-bit table for simd-if based on the bitwise values from cond, a and b.
         //   (cond, a, b) =  (111), (110), (101), (100), (011), (010), (001), (000)
         // if(cond, a, b) =    1      1      0      0      1      0      1      0    = 0xCA
-        Constant * simd_if_mask = ConstantInt::get(getInt32Ty(), 0xCA);
-        Constant * writemask = ConstantInt::getAllOnesValue(getInt16Ty());
-        Value * args[5] = {fwCast(32, cond), fwCast(32, a), fwCast(32, b), simd_if_mask, writemask};
-        Value * rslt = CreateCall(ternLogicFn, args);
-        return rslt;
+        return simd_ternary(0xCA, cond, a, b);
     }
     return IDISA_AVX2_Builder::simd_if(fw, cond, a, b);
+}
+
+Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Value * c) {
+    Value * ternLogicFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pternlog_d_512);
+    Constant * simd_mask = ConstantInt::get(getInt32Ty(), mask);
+    Constant * writemask = ConstantInt::getAllOnesValue(getInt16Ty());
+    Value * args[5] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask, writemask};
+    Value * rslt = CreateCall(ternLogicFn, args);
+    return rslt;
 }
 
 void IDISA_AVX512F_Builder::getAVX512Features() {
