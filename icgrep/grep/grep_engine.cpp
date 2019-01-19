@@ -11,7 +11,7 @@
 #include <kernels/callback.h>
 #include <kernels/charclasses.h>
 #include <cc/cc_kernel.h>
-#include <kernels/grep_kernel.h>
+#include <grep/grep_kernel.h>
 #include <kernels/UCD_property_kernel.h>
 #include <kernels/grapheme_kernel.h>
 #include <kernels/linebreak_kernel.h>

@@ -61,7 +61,7 @@ SET(OBJECT_CACHE_SRC toolchain/object_cache.cpp)
 
 SET(OBJECT_CACHE_DAEMON_SRC toolchain/object_cache_daemon.cpp)
 
-SET(GREP_CORE_SRC kernels/linebreak_kernel.cpp kernels/grep_kernel.cpp kernels/scanmatchgen.cpp )
+SET(GREP_CORE_SRC kernels/linebreak_kernel.cpp grep/grep_kernel.cpp kernels/scanmatchgen.cpp )
 
 SET(TOOLCHAIN_SRC toolchain/toolchain.cpp)
 
