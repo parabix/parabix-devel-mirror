@@ -11,4 +11,10 @@ llvm-[0-9].[0-9].[0-9].src/
 *.kate-swp
 *~
 .DS_Store
-
+#
+# Don't track IDE files
+*.files
+*.config
+*.creator.user
+*.creator
+*.includes
