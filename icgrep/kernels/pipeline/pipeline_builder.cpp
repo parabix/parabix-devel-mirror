@@ -446,12 +446,6 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
                              allZero->getOutputStreamSetBindings(),
                              mOutputStreamSets);
 
-    if (isa<StreamSet>(mCondition)) {
-        mInputStreamSets.emplace_back(OptimizationBranch::CONDITION_TAG, mCondition);
-    } else {
-        mInputScalars.emplace_back(OptimizationBranch::CONDITION_TAG, mCondition);
-    }
-
     OptimizationBranch * const br =
             new OptimizationBranch(mDriver.getBuilder(), std::move(name),
                                    mCondition, nonZero, allZero,

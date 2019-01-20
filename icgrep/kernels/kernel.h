@@ -47,6 +47,7 @@ class Kernel : public AttributeSet {
     friend class PipelineCompiler;
     friend class PipelineKernel;
     friend class OptimizationBranch;
+    friend class OptimizationBranchCompiler;
     friend class BaseDriver;
 public:
 
@@ -350,11 +351,11 @@ public:
     // Add ExternalLinkage method declarations for the kernel to a given client module.
     virtual void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b);
 
-    llvm::Value * createInstance(const std::unique_ptr<KernelBuilder> & b);
+    llvm::Value * createInstance(const std::unique_ptr<KernelBuilder> & b) const;
 
     virtual void initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<llvm::Value *> & args);
 
-    llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b);
+    llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const handle) const;
 
     void generateKernel(const std::unique_ptr<KernelBuilder> & b);
 
@@ -374,11 +375,9 @@ public:
 
     LLVM_READNONE bool isCountable(const Binding & binding) const;
 
-    LLVM_READNONE bool isCalculable(const Binding & binding) const;
+    LLVM_READNONE bool isAddressable(const Binding & binding) const;
 
     LLVM_READNONE bool requiresOverflow(const Binding & binding) const;
-
-    LLVM_READNONE bool isUnknownRate(const Binding & binding) const;
 
     /* Fill in any generated names / attributes for the kernel if their initialization is dependent on
      * settings / bindings added after construction. */

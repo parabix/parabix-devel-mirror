@@ -76,30 +76,22 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
             if (input.isDeferred()) {
                 mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
             }
-//            if (LLVM_UNLIKELY(onlyOne && isPipelineInput(kernelIndex, i))) {
-//                mPipelineKernel->addLocalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-//            } else {
-                mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-//            }
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
         }
 
         const auto numOfOutputs = kernel->getNumOfStreamOutputs();
         for (unsigned i = 0; i < numOfOutputs; i++) {
             const Binding & output = kernel->getOutputStreamSetBinding(i);
             const auto prefix = makeBufferName(kernelIndex, output);
-//            if (LLVM_UNLIKELY(isPipelineOutput(kernelIndex, i))) {
-//                mPipelineKernel->addLocalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-//            } else {
-                mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-//            }
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
         }
     }
 
     if (LLVM_LIKELY(kernel->isStateful() && !kernel->hasFamilyName())) {
         // if this is a family kernel, it's handle will be passed into the kernel
         // methods rather than stored within the pipeline state
-        PointerType * kernelPtrTy = kernel->getKernelType()->getPointerTo(0);
-        mPipelineKernel->addInternalScalar(kernelPtrTy, makeKernelName(kernelIndex));
+        PointerType * const handlePtrTy = kernel->getKernelType()->getPointerTo(0);
+        mPipelineKernel->addInternalScalar(handlePtrTy, makeKernelName(kernelIndex));
     }
 }
 

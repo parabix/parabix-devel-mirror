@@ -200,7 +200,7 @@ Function * PipelineKernel::addOrDeclareMainFunction(const std::unique_ptr<kernel
         // call the pipeline kernel
         b->CreateCall(doSegment, segmentArgs);
         // call and return the final output value(s)
-        b->CreateRet(finalizeInstance(b));
+        b->CreateRet(finalizeInstance(b, handle));
     }
 
     return main;

@@ -462,9 +462,9 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
 
-#warning TODO: add MProtect to buffers and their handles.
+    // TODO: add MProtect to buffers and their handles.
 
-#warning TODO: send in the # of output items we want in the external buffers
+    // TODO: send in the # of output items we want in the external buffers
 
     b->setKernel(mPipelineKernel);
 
@@ -504,7 +504,6 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         }
         args.push_back(epoch(b, input, getInputBuffer(i), processed, inputItems));
         mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
-
         args.push_back(inputItems); assert (inputItems);
 
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {

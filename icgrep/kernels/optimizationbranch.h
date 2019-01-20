@@ -11,6 +11,7 @@ struct OptimizationBranchCompiler;
 
 class OptimizationBranch final : public Kernel {
     friend class OptimizationBranchBuilder;
+    friend class OptimizationBranchCompiler;
 public:
 
     static bool classof(const Kernel * const k) {
@@ -22,9 +23,17 @@ public:
         }
     }
 
-    const static std::string CONDITION_TAG;
+    const Kernel * getAllZeroKernel() const {
+        return mAllZeroKernel;
+    }
 
-    ~OptimizationBranch();
+    const Kernel * getNonZeroKernel() const {
+        return mNonZeroKernel;
+    }
+
+    const Relationship * getCondition() const {
+        return mCondition;
+    }
 
 protected:
 
@@ -38,6 +47,8 @@ protected:
                        Bindings && scalar_inputs,
                        Bindings && scalar_outputs);
 
+    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+
     void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
@@ -48,20 +59,10 @@ protected:
 
 private:
 
-    llvm::Value * getItemCountIncrement(const std::unique_ptr<KernelBuilder> & b, const Binding & binding,
-                                        llvm::Value * const first, llvm::Value * const last,
-                                        llvm::Value * const defaultValue = nullptr) const;
-
-    void callKernel(const std::unique_ptr<KernelBuilder> & b,
-                    const Kernel * const kernel, llvm::Value * const first, llvm::Value * const last,
-                    llvm::PHINode * const terminatedPhi);
-
-private:
-
-    Relationship * const                                mCondition;
-    Kernel * const                                      mNonZeroKernel;
-    Kernel * const                                      mAllZeroKernel;
-    mutable std::unique_ptr<OptimizationBranchCompiler> mCompiler;
+    Relationship * const                        mCondition;
+    Kernel * const                              mNonZeroKernel;
+    Kernel * const                              mAllZeroKernel;
+    std::unique_ptr<OptimizationBranchCompiler> mCompiler;
 };
 
 }

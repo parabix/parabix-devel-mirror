@@ -246,26 +246,6 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isParamAddressable
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isParamAddressable(const Binding & binding) {
-    if (binding.isDeferred()) {
-        return true;
-    }
-    const ProcessingRate & rate = binding.getRate();
-    return (rate.isBounded() || rate.isUnknown());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isParamConstant
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isParamConstant(const Binding & binding) {
-    assert (!binding.isDeferred());
-    const ProcessingRate & rate = binding.getRate();
-    return rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasParam
  ** ------------------------------------------------------------------------------------------------------------- */
 inline bool hasParam(const Binding & binding) {
@@ -338,9 +318,9 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         fields.push_back(bufferType->getPointerTo());
         // processed input items
         const Binding & input = mInputStreamSets[i];
-        if (isParamAddressable(input)) {
+        if (isAddressable(input)) {
             fields.push_back(sizePtrTy); // updatable
-        }  else if (isParamConstant(input)) {
+        }  else if (isCountable(input)) {
             fields.push_back(sizeTy);  // constant
         }
         // accessible input items (after non-deferred processed item count)
@@ -363,9 +343,9 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
             fields.push_back(bufferType->getPointerTo());
         }
         // produced output items
-        if (canTerminate || isParamAddressable(output)) {
+        if (canTerminate || isAddressable(output)) {
             fields.push_back(sizePtrTy); // updatable
-        } else if (isParamConstant(output)) {
+        } else if (isCountable(output)) {
             fields.push_back(sizeTy); // constant
         }
         // If this is a local buffer, the next param is its consumed item count;
@@ -490,11 +470,11 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         // a loop; otherwise, it will be discarded in favor of the param itself.
 
         Value * processed = nullptr;
-        if (isParamAddressable(input)) {
+        if (isAddressable(input)) {
             assert (arg != args.end());
             mUpdatableProcessedInputItemPtr[i] = *arg++;
             processed = b->CreateLoad(mUpdatableProcessedInputItemPtr[i]);
-        } else if (LLVM_LIKELY(isParamConstant(input))) {
+        } else if (LLVM_LIKELY(isCountable(input))) {
             assert (arg != args.end());
             processed = *arg++;
         } else { // isRelative
@@ -565,11 +545,11 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         /// produced item count
         /// ----------------------------------------------------
         Value * produced = nullptr;
-        if (LLVM_LIKELY(canTerminate || isParamAddressable(output))) {
+        if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
             assert (arg != args.end());
             mUpdatableProducedOutputItemPtr[i] = *arg++;
             produced = b->CreateLoad(mUpdatableProducedOutputItemPtr[i]);
-        } else if (LLVM_LIKELY(isParamConstant(output))) {
+        } else if (LLVM_LIKELY(isCountable(output))) {
             assert (arg != args.end());
             produced = *arg++;
         } else { // isRelative
@@ -592,12 +572,13 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         /// ----------------------------------------------------
         /// consumed or writable item count
         /// ----------------------------------------------------
-        Value * const items = *arg++;
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
-            mConsumedOutputItems[i] = items;
+            Value * const consumed = *arg++;
+            mConsumedOutputItems[i] = consumed;
         } else {
-            mWritableOutputItems[i] = items;
-            Value * const capacity = b->CreateAdd(produced, items);
+            Value * writable = *arg++;
+            mWritableOutputItems[i] = writable;
+            Value * const capacity = b->CreateAdd(produced, writable);
             buffer->setCapacity(b.get(), capacity);
         }
     }
@@ -637,9 +618,9 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         /// processed item count
         /// ----------------------------------------------------
         const Binding & input = mInputStreamSets[i];
-        if (isParamAddressable(input)) {
+        if (isAddressable(input)) {
             props.push_back(mProcessedInputItemPtr[i]);
-        } else if (LLVM_LIKELY(isParamConstant(input))) {
+        } else if (LLVM_LIKELY(isCountable(input))) {
             props.push_back(b->CreateLoad(mProcessedInputItemPtr[i]));
         }
         /// ----------------------------------------------------
@@ -675,9 +656,9 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         /// ----------------------------------------------------
         /// produced item count
         /// ----------------------------------------------------
-        if (LLVM_LIKELY(canTerminate || isParamAddressable(output))) {
+        if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
             props.push_back(mProducedOutputItemPtr[i]);
-        } else if (LLVM_LIKELY(isParamConstant(output))) {
+        } else if (LLVM_LIKELY(isCountable(output))) {
             props.push_back(b->CreateLoad(mProducedOutputItemPtr[i]));
         }
         /// ----------------------------------------------------
@@ -979,7 +960,7 @@ std::string Kernel::getStringHash(const StringRef str) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) {
+Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) const {
     if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
         llvm_unreachable("Kernel state must be constructed prior to calling createInstance");
     }
@@ -1013,15 +994,14 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::v
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalizeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b) {
+Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value * const handle) const {
     Value * result = nullptr;
     Function * const termFunc = getTerminateFunction(b->getModule());
     if (LLVM_LIKELY(isStateful())) {
-        result = b->CreateCall(termFunc, { mHandle });
+        result = b->CreateCall(termFunc, { handle });
     } else {
         result = b->CreateCall(termFunc);
     }
-    mHandle = nullptr;
     if (mOutputScalars.empty()) {
         assert (!result || result->getType()->isVoidTy());
         result = nullptr;
@@ -1158,28 +1138,22 @@ RateValue Kernel::getUpperBound(const Binding & binding) const {
  * @brief isCountable
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Kernel::isCountable(const Binding & binding) const {
-    const ProcessingRate & rate = binding.getRate();
-    if (rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount()) {
-        return true;
-    } else if (rate.isRelative()) {
-        return isCountable(getStreamBinding(rate.getReference()));
-    } else {
+    if (LLVM_UNLIKELY(binding.isDeferred())) {
         return false;
     }
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isCalculable
+ * @brief isAddressable
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isCalculable(const Binding & binding) const {
-    const ProcessingRate & rate = binding.getRate();
-    if (rate.isFixed() || rate.isBounded()) {
+bool Kernel::isAddressable(const Binding & binding) const {
+    if (LLVM_UNLIKELY(binding.isDeferred())) {
         return true;
-    } else if (rate.isRelative()) {
-        return isCalculable(getStreamBinding(rate.getReference()));
-    } else {
-        return false;
     }
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isBounded() || rate.isUnknown();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1193,20 +1167,6 @@ bool Kernel::requiresOverflow(const Binding & binding) const {
         return requiresOverflow(getStreamBinding(rate.getReference()));
     } else {
         return true;
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isUnknownRate
- ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isUnknownRate(const Binding & binding) const {
-    const ProcessingRate & rate = binding.getRate();
-    if (rate.isUnknown()) {
-        return true;
-    } else if (rate.isRelative()) {
-        return isUnknownRate(getStreamBinding(rate.getReference()));
-    } else {
-        return false;
     }
 }
 

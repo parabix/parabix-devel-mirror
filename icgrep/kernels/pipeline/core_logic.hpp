@@ -198,7 +198,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isParamAddressable
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isParamAddressable(const Binding & binding) {
+inline bool isAddressable(const Binding & binding) {
     if (binding.isDeferred()) {
         return true;
     }

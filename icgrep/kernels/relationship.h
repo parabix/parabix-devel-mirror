@@ -55,6 +55,10 @@ public:
         return A.allocate<uint8_t>(size);
     }
 
+    bool isConstant() const {
+        return mClassTypeId == ClassTypeId::ScalarConstant;
+    }
+
 protected:
 
     Relationship(const ClassTypeId typeId, llvm::Type * type) noexcept
