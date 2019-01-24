@@ -74,14 +74,15 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
             if (combine) {
                 codepoint_t lo = lo_codepoint(cc->front());
                 codepoint_t hi = lo_codepoint(cc->back());
+                PabloAST * even_odd = getBasisVar(0, pb);
+                if ((lo & 1) == 0) {
+                    llvm::errs() << "even\n";
+                    even_odd = pb.createNot(even_odd);
+                }
                 lo &= (mEncodingMask - 1);
                 hi |= (mEncodingMask ^ (mEncodingMask - 1));
                 PabloAST * expr = make_range(lo, hi, pb);
-                PabloAST * bit0 = getBasisVar(0, pb);
-                if ((lo & 1) == 0) {
-                    bit0 = pb.createNot(bit0);
-                }
-                return pb.createAnd(expr, bit0);
+                return pb.createAnd(expr, even_odd);
             }
         }
     }
