@@ -76,7 +76,6 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
                 codepoint_t hi = lo_codepoint(cc->back());
                 PabloAST * even_odd = getBasisVar(0, pb);
                 if ((lo & 1) == 0) {
-                    llvm::errs() << "even\n";
                     even_odd = pb.createNot(even_odd);
                 }
                 lo &= (mEncodingMask - 1);
