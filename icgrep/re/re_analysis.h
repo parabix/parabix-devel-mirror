@@ -3,6 +3,7 @@
 
 #include <utility>
 namespace re { class RE; class Name; class CC;}
+namespace cc { class Alphabet;}
 
 namespace re {
 
@@ -22,7 +23,7 @@ bool isRequireNonFinal(const RE * re, bool checkByteLength = true);
     
 bool isUnicodeUnitLength(const RE * re);
 
-std::pair<int, int> getUnicodeUnitLengthRange(const RE * re);
+    std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexingAlphabet);
 
 bool isFixedLength(const RE * re);
 

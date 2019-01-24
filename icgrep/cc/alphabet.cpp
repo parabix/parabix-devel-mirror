@@ -49,6 +49,8 @@ const UnicodeMappableAlphabet ISO_Latin1("ISO_Latin1", 0xFF, {});
 
 const CodeUnitAlphabet Byte("Byte", 8);
     
+const CodeUnitAlphabet UTF8("UTF8", 8);
+
 const CodeUnitAlphabet UTF16("UTF16", 16);
     
 }

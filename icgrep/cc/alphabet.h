@@ -97,6 +97,8 @@ const extern UnicodeMappableAlphabet ISO_Latin1; // ISO_Latin1("ISO_Latin1", 0xF
 
 const extern CodeUnitAlphabet Byte; // Byte("Byte", 8);
     
+const extern CodeUnitAlphabet UTF8; // UTF8("UTF8", 8);
+
 const extern CodeUnitAlphabet UTF16; // UTF16("UTF16", 16);
     
 }

@@ -27,6 +27,7 @@
 #include <re/to_utf8.h>
 #include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
 #include <cc/alphabet.h>
+#include <cc/multiplex_CCs.h>
 #include <cc/cc_compiler.h>
 #include <UCD/ucd_compiler.hpp>
 #include "pablo/builder.hpp"        // for PabloBuilder
@@ -300,8 +301,8 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
 }
 
 inline bool alignedUnicodeLength(const RE * const lh, const RE * const rh) {
-    const auto lhl = getUnicodeUnitLengthRange(lh);
-    const auto rhl = getUnicodeUnitLengthRange(rh);
+    const auto lhl = getLengthRange(lh, &cc::Unicode);
+    const auto rhl = getLengthRange(rh, &cc::Unicode);
     return (lhl.first == lhl.second && lhl.first == rhl.first && lhl.second == rhl.second);
 }
 

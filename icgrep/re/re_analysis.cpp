@@ -17,6 +17,7 @@
 #include <re/printer_re.h>
 #include <cc/alphabet.h>
 #include <cc/multiplex_CCs.h>
+#include <UCD/UTF.h>
 #include <limits.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
@@ -249,19 +250,19 @@ bool isUnicodeUnitLength(const RE * re) {
     return false; // otherwise
 }
 
-std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
+std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexAlphabet) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         std::pair<int, int> range = std::make_pair(INT_MAX, 0);
-        for (const RE * re : *alt) {
-            auto r = getUnicodeUnitLengthRange(re);
-            range.first = std::min<int>(range.first, r.first);
-            range.second = std::max<int>(range.second, r.second);
+        for (const RE * a : *alt) {
+            auto a_range = getLengthRange(a, indexAlphabet);
+            range.first = std::min<int>(range.first, a_range.first);
+            range.second = std::max<int>(range.second, a_range.second);
         }
         return range;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         std::pair<int, int> range = std::make_pair(0, 0);
         for (const RE * re : *seq) {
-            auto tmp = getUnicodeUnitLengthRange(re);
+            auto tmp = getLengthRange(re, indexAlphabet);
             if (LLVM_LIKELY(tmp.first < (INT_MAX - range.first))) {
                 range.first += tmp.first;
             } else {
@@ -275,7 +276,7 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
         }
         return range;
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-        auto range = getUnicodeUnitLengthRange(rep->getRE());
+        auto range = getLengthRange(rep->getRE(), indexAlphabet);
         if (LLVM_LIKELY(rep->getLB() != Rep::UNBOUNDED_REP && range.first < INT_MAX)) {
             range.first *= rep->getLB();
         } else {
@@ -291,36 +292,39 @@ std::pair<int, int> getUnicodeUnitLengthRange(const RE * re) {
         return std::make_pair(0, 0);
     } else if (const Diff * diff = dyn_cast<Diff>(re)) {
         // The range is determined by the first operand only.
-        return getUnicodeUnitLengthRange(diff->getLH());
+        return getLengthRange(diff->getLH(), indexAlphabet);
     } else if (const Intersect * i = dyn_cast<Intersect>(re)) {
-        const auto r1 = getUnicodeUnitLengthRange(i->getLH());
-        const auto r2 = getUnicodeUnitLengthRange(i->getRH());
+        const auto r1 = getLengthRange(i->getLH(), indexAlphabet);
+        const auto r2 = getLengthRange(i->getRH(), indexAlphabet);
         // The matched string cannot be shorter than the largest of the min lengths
         // nor can it be longer than the smallest of the max lengths.
         return std::make_pair(std::max(r1.first, r2.first), std::min(r1.second, r2.second));
-    } else if (isa<CC>(re)) {
-        return std::make_pair(1, 1);
+    } else if (const CC * cc = dyn_cast<CC>(re)) {
+        auto alphabet = cc->getAlphabet();
+        if (const cc::MultiplexedAlphabet * a = dyn_cast<cc::MultiplexedAlphabet>(alphabet)) {
+            alphabet = a->getSourceAlphabet();
+        }
+        if (isa<cc::CodeUnitAlphabet>(alphabet)) return std::make_pair(1, 1);
+        if (indexAlphabet == alphabet) return std::make_pair(1, 1);
+        if ((indexAlphabet == &cc::UTF8) && (alphabet == &cc::Unicode)) {
+            return std::make_pair(UTF<8>::encoded_length(lo_codepoint(cc->front())),
+                                  UTF<8>::encoded_length(hi_codepoint(cc->back())));
+        }
+        return std::make_pair(0, INT_MAX);
     } else if (const Name * n = dyn_cast<Name>(re)) {
-        // Eventually names might be set up for not unit length items.
         switch (n->getType()) {
-            case Name::Type::Unicode:
-            case Name::Type::UnicodeProperty:
-                return std::make_pair(1, 1);
-            case Name::Type::Capture:
-            case Name::Type::Reference:
-                return getUnicodeUnitLengthRange(n->getDefinition());
-            case Name::Type::ZeroWidth:
-                return std::make_pair(0, 0);
             case Name::Type::Unknown:
                 return std::make_pair(0, INT_MAX);
+            default:
+                return getLengthRange(n->getDefinition(), indexAlphabet);
         }
-    } 
+    }
     return std::make_pair(1, 1);
 }
-    
+
 bool isFixedLength(const RE * re) {
     if (isa<Alt>(re)) {
-        auto range = getUnicodeUnitLengthRange(re);
+        auto range = getLengthRange(re, &cc::Unicode);
         return range.first == range.second;
     } else if (const Seq * seq = dyn_cast<Seq>(re)) {
         for (const RE * e : *seq) {
