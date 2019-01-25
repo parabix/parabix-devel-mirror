@@ -388,7 +388,7 @@ void ICGrepKernel::generatePabloMethod() {
         ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
     }
     //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
-    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), mOptions->mBasisSetNumbering);
+    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), cc::UTF8, mOptions->mBasisSetNumbering);
     for (const auto & e : mOptions->mExternals) {
         re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
     }

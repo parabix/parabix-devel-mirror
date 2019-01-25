@@ -630,14 +630,18 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
 }
 
-RE_Compiler::RE_Compiler(PabloBlock * scope, cc::CC_Compiler & ccCompiler, cc::BitNumbering basisSetNumbering)
+RE_Compiler::RE_Compiler(PabloBlock * scope,
+                         cc::CC_Compiler & ccCompiler,
+                         const cc::Alphabet & indexingAlphabet,
+                         cc::BitNumbering basisSetNumbering)
 : mEntryScope(scope)
 , mCCCompiler(ccCompiler)
+, mIndexingAlphabet(indexingAlphabet)
+, mBasisSetNumbering(basisSetNumbering)
 , mLineBreak(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
-, mCompiledName(&mBaseMap)
-, mBasisSetNumbering(basisSetNumbering) {
+, mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
     mLineBreak = pb.createZeroes();  // default so "^/$" matches start/end of text only
     mNonFinalName = makeName("u8NonFinal", makeAlt({makeByte(0xC2, 0xF4),
