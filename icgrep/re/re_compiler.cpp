@@ -345,31 +345,31 @@ MarkerType RE_Compiler::compileRep(Rep * const rep, MarkerType marker, PabloBuil
 }
 
 /*
-   Given a stream |repeated_j| marking positions associated with |j| conecutive matches to an item
-   compute a stream marking |repeat_count| consecutive occurrences of such items.
+   Given a stream |repeated_j| marking positions associated with |j| consecutive matches to an item
+   of length |match_length| compute a stream marking |repeat_count| consecutive occurrences of such items.
 */
     
-PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const int j, const int repeat_count, PabloAST * const indexStream, PabloBuilder & pb) {
+PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const int j, const int repeat_count, const int match_length, PabloAST * const indexStream, PabloBuilder & pb) {
     if (j == repeat_count) {
         return repeated_j;
     }
     const int i = std::min(j, repeat_count - j);
     const int k = j + i;
-    if (/*j > IfInsertionGap*/ false) {
+    if (j > IfInsertionGap) {
         Var * repeated = pb.createVar("repeated", pb.createZeroes());
         auto nested = pb.createScope();
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
-        PabloAST * adv_i = nested.createIndexedAdvance(repeated_j, indexStream, i);
+        PabloAST * adv_i = nested.createIndexedAdvance(repeated_j, indexStream, i * match_length);
         PabloAST * repeated_k = nested.createAnd(repeated_j, adv_i, "at" + std::to_string(k) + "of" + std::to_string(repeat_count));
-        nested.createAssign(repeated, consecutive_matches(repeated_k, k, repeat_count, indexStream, nested));
+        nested.createAssign(repeated, consecutive_matches(repeated_k, k, repeat_count, match_length, indexStream, nested));
         pb.createIf(repeated_j, nested);
         mCompiledName = nestedMap.getParent();
         return repeated;
     } else {
-        PabloAST * adv_i = pb.createIndexedAdvance(repeated_j, indexStream, i);
+        PabloAST * adv_i = pb.createIndexedAdvance(repeated_j, indexStream, i * match_length);
         PabloAST * repeated_k = pb.createAnd(repeated_j, adv_i, "at" + std::to_string(k) + "of" + std::to_string(repeat_count));
-        return consecutive_matches(repeated_k, k, repeat_count, indexStream, pb);
+        return consecutive_matches(repeated_k, k, repeat_count, match_length, indexStream, pb);
     }
 }
 
@@ -405,16 +405,17 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that 
         // allow implementation using the log2 technique.
-        if (isByteLength(repeated)) {
+        auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
+        if (lengths.first == lengths.second) {
             PabloAST * cc = markerVar(compile(repeated, pb));
-            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, nullptr, pb);
+            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, lengths.first, nullptr, pb);
             const auto pos = markerPos(marker) == FinalMatchUnit ? lb : lb - 1;
             PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), pos);
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
         else if (isUnicodeUnitLength(repeated)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
-            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, u8Final(pb), pb);
+            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, 1, u8Final(pb), pb);
             const auto pos = markerPos(marker) == FinalMatchUnit ? lb : lb - 1;
             PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), u8Final(pb), pos);
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
@@ -427,7 +428,7 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
                 PabloAST * submatch = markerVar(AdvanceMarker(compile(repeated, pb), FinalPostPositionUnit, pb));
                 // Consecutive submatches require that the symbol following the end of one submatch is the first symbol for
                 // the next submatch.   lb-1 such submatches are required.
-                PabloAST * consecutive_submatch = consecutive_matches(submatch, 1, lb-1, firstCCstream, pb);
+                PabloAST * consecutive_submatch = consecutive_matches(submatch, 1, lb-1, 1, firstCCstream, pb);
                 // Find submatch positions which are lb-2 start symbols forward from the current marker position.
                 PabloAST * base = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
                 PabloAST * marker_fwd = pb.createIndexedAdvance(base, firstCCstream, lb - 1);
