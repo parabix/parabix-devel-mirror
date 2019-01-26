@@ -309,7 +309,11 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         options->setResults(MatchResults);
         if (hasComponent(internalComponents, Component::MoveMatchesToEOL)) {
             re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
-            mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
+            if (isWithinByteTestLimit) {
+                mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
+            } else {
+                suffixRE = re::makeSeq({suffixRE, re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
+            }
         }
         options->setRE(mREs[i]);
         if (internalS2P) {
