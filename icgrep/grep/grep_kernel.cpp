@@ -312,7 +312,7 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 }
 
 void GrepKernelOptions::setNumbering(cc::BitNumbering numbering) {mBasisSetNumbering = numbering;}
-void GrepKernelOptions::setIndexingAlphabet(cc::Alphabet * a) {mIndexingAlphabet = a;}
+void GrepKernelOptions::setIndexingAlphabet(const cc::Alphabet * a) {mIndexingAlphabet = a;}
 void GrepKernelOptions::setRE(RE * e) {mRE = e;}
 void GrepKernelOptions::setPrefixRE(RE * e) {mPrefixRE = e;}
 void GrepKernelOptions::setSource(StreamSet * s) {mSource = s;}
@@ -371,7 +371,7 @@ ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std
     options->streamSetInputBindings(),
     options->streamSetOutputBindings(),
     options->scalarInputBindings(),
-              options->scalarOutputBindings()), mOptions(std::move(options)) {
+    options->scalarOutputBindings()), mOptions(std::move(options)) {
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -388,7 +388,7 @@ void ICGrepKernel::generatePabloMethod() {
         ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
     }
     //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
-    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), cc::UTF8, mOptions->mBasisSetNumbering);
+    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mIndexingAlphabet), mOptions->mBasisSetNumbering);
     for (const auto & e : mOptions->mExternals) {
         re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
     }
@@ -421,7 +421,7 @@ void ICGrepKernel::generatePabloMethod() {
         }
 
         cc::Parabix_CC_Compiler ccc(scope1, basis);
-        RE_Compiler re_compiler(scope1, ccc);
+        RE_Compiler re_compiler(scope1, ccc, *(mOptions->mIndexingAlphabet), mOptions->mBasisSetNumbering);
         scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
         Var * const output = getOutputStreamVar("matches");
         pb.createAssign(pb.createExtract(output, pb.getInteger(0)), final_matches);

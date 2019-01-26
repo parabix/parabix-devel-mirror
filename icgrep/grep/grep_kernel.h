@@ -61,7 +61,7 @@ public:
         mIndexingAlphabet(&cc::Byte),
         mPrefixRE(nullptr) {}
     void setNumbering(cc::BitNumbering numbering);
-    void setIndexingAlphabet(cc::Alphabet * a);
+    void setIndexingAlphabet(const cc::Alphabet * a);
     void setSource(StreamSet * s);
     void setResults(StreamSet * r);
     void addExternal(std::string name, StreamSet * strm);
