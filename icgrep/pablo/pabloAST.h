@@ -72,8 +72,10 @@ public:
         , And
         , Or
         , Xor
-        , Not        
+        , Not
+        // Ternary operations
         , Sel
+        , Ternary
         // Stream operations
         , Advance
         , IndexedAdvance
@@ -270,7 +272,7 @@ protected:
         }
     }
 
-protected:    
+protected:
     const unsigned          mOperands;
     PabloAST ** const       mOperand;
     Statement *             mNext;
@@ -588,7 +590,7 @@ private:
 
     Statement   * mInsertionPoint;
     Statement   * mFirst;
-    Statement   * mLast;    
+    Statement   * mLast;
 };
 
 }

@@ -220,18 +220,30 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             assert (facsimileSpace.denominator() == 1);
             bn.Overflow = overflowSpace.numerator();
             bn.Fasimile = facsimileSpace.numerator();
-            const auto overflowSize = std::max(bn.Overflow, bn.Fasimile);
-
             // compute the buffer size
+            const auto overflowSize = std::max(bn.Overflow, bn.Fasimile);
             const auto bufferMod = overflowSize ? overflowSize : blockWidth;
             const auto bufferSpace = lcm(requiredSpace, bufferMod);
             assert (bufferSpace.denominator() == 1);
             const auto bufferSize = bufferSpace.numerator() * mPipelineKernel->getNumOfThreads();
+            // ensure any Add/RoundUpTo attributes are safely handled
+            unsigned additionalSpace = 0;
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
+                const auto & add = output.findAttribute(AttrId::Add);
+                additionalSpace = boost::lcm(add.amount(), blockWidth);
+            }
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::RoundUpTo))) {
+                const auto & roundUpTo = output.findAttribute(AttrId::RoundUpTo);
+                const auto amount = roundUpTo.amount();
+                const auto roundingSpace = boost::lcm(bufferSize % amount, blockWidth);
+                additionalSpace = std::max(additionalSpace, roundingSpace);
+            }
+            additionalSpace = std::max(overflowSize, additionalSpace);
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             if (dynamic) {
-                buffer = new DynamicBuffer(b, output.getType(), bufferSize, overflowSize);
+                buffer = new DynamicBuffer(b, output.getType(), bufferSize, additionalSpace);
             } else {
-                buffer = new StaticBuffer(b, output.getType(), bufferSize, overflowSize);
+                buffer = new StaticBuffer(b, output.getType(), bufferSize, additionalSpace);
             }
         }
 
@@ -631,17 +643,21 @@ Value * PipelineCompiler::epoch(BuilderRef b,
     Value * address = buffer->getStreamLogicalBasePtr(b.get(), ZERO, blockIndex);
     address = b->CreatePointerCast(address, buffer->getPointerType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        const auto prefix = makeBufferName(mKernelIndex, binding);
-        ExternalBuffer tmp(b, binding.getType());
-        Value * const handle = b->CreateAlloca(tmp.getHandleType(b));
-        tmp.setHandle(b, handle);
-        tmp.setBaseAddress(b.get(), address);
-        Value * const capacity = b->CreateAdd(position, available);
-        tmp.setCapacity(b.get(), capacity);
-        Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
-        Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
-        Value * const C0 = b->CreatePointerCast(B0, A0->getType());
-        b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical start address is incorrect");
+        // This assertion is not thread safe; a dynamic input stream could be expanded between the time that we
+        // take the buffer address and test the assertion here.
+        if (!isa<DynamicBuffer>(buffer) || mPipelineKernel->getNumOfThreads() == 1) {
+            const auto prefix = makeBufferName(mKernelIndex, binding);
+            ExternalBuffer tmp(b, binding.getType());
+            Value * const handle = b->CreateAlloca(tmp.getHandleType(b));
+            tmp.setHandle(b, handle);
+            tmp.setBaseAddress(b.get(), address);
+            Value * const capacity = b->CreateAdd(position, available);
+            tmp.setCapacity(b.get(), capacity);
+            Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
+            Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
+            Value * const C0 = b->CreatePointerCast(B0, A0->getType());
+            b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical start address is incorrect");
+        }
     }
     return address;
 }

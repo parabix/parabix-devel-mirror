@@ -687,16 +687,25 @@ PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) 
     return PointerType::get(Type::getInt8Ty(getContext()), AddressSpace);
 }
 
+
+llvm::Value * CBuilder::CreateAtomicFetchAndAdd(Value * const val, Value * const ptr) {
+    return CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::AcquireRelease);
+}
+
+llvm::Value * CBuilder::CreateAtomicFetchAndSub(Value * const val, Value * const ptr) {
+    return CreateAtomicRMW(AtomicRMWInst::Sub, ptr, val, AtomicOrdering::AcquireRelease);
+}
+
 LoadInst * CBuilder::CreateAtomicLoadAcquire(Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
-    LoadInst * inst = CreateAlignedLoad(ptr, alignment, false);
+    LoadInst * inst = CreateAlignedLoad(ptr, alignment, true);
     inst->setOrdering(AtomicOrdering::Acquire);
     return inst;
 }
 
 StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     const auto alignment = ptr->getType()->getPointerElementType()->getPrimitiveSizeInBits() / 8;
-    StoreInst * inst = CreateAlignedStore(val, ptr, alignment, false);
+    StoreInst * inst = CreateAlignedStore(val, ptr, alignment, true);
     inst->setOrdering(AtomicOrdering::Release);
     return inst;
 }

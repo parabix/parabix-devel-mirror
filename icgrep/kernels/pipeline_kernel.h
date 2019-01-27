@@ -87,7 +87,7 @@ public:
 protected:
 
     PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
-                   std::string && signature, const unsigned numOfThreads,
+                   std::string && signature, const unsigned numOfThreads, const unsigned segmentIncrement,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);
@@ -95,6 +95,10 @@ protected:
     static LLVM_READNONE std::string makeKernelName(const Kernel * const kernel, const unsigned kernelIndex);
 
     static LLVM_READNONE std::string makeBufferName(const Kernel * const kernel, const unsigned kernelIndex, const Binding & binding);
+
+    unsigned getSegmentIncrement() const {
+        return mSegmentIncrement;
+    }
 
     void linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) final;
 
@@ -126,6 +130,7 @@ protected:
 
     mutable std::unique_ptr<PipelineCompiler> mCompiler;
     const unsigned                            mNumOfThreads;
+    const unsigned                            mSegmentIncrement;
     const Kernels                             mKernels;
     CallBindings                              mCallBindings;
     const std::string                         mSignature;

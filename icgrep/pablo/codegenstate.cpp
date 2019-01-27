@@ -252,7 +252,12 @@ Sel * PabloBlock::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST 
 IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, Integer * shiftAmount, const String * const name) {
     return insertAtInsertionPoint(new (mAllocator) IndexedAdvance(expr, indexStream, shiftAmount, name, mAllocator));
 }
-    
+
+/// QUARTERNARY FUNCTIONS
+
+Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name) {
+    return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createScope

@@ -260,6 +260,10 @@ public:
 
     virtual llvm::StoreInst *  CreateAtomicStoreRelease(llvm::Value * val, llvm::Value * ptr);
 
+    llvm::Value * CreateAtomicFetchAndAdd(llvm::Value * val, llvm::Value * ptr);
+
+    llvm::Value * CreateAtomicFetchAndSub(llvm::Value * val, llvm::Value * ptr);
+
     void CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage) {
         return __CreateAssert(CreateIsNotNull(assertion), failureMessage);
     }

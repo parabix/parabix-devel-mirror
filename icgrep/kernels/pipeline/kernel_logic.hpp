@@ -319,8 +319,6 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
 
     // TODO: ZeroExtend attribute must affect the notion of "min" here too.
 
-    // TODO: the pipeline must size the buffer to accommodate any Add/RoundUpTo attribute.
-
     RateValue rateLCM(1);
     bool noPrincipalStream = true;
     for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -481,16 +479,16 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         bool deferred = false;
 
         const Binding & input = mKernel->getInputStreamSetBinding(i);
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, input);
-        b->CallPrintInt(prefix + "_processed", mAlreadyProcessedPhi[i]);
-        b->CallPrintInt(prefix + "_accessible", mLinearInputItemsPhi[i]);
-        #endif
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        const auto prefix = makeBufferName(mKernelIndex, input);
+//        b->CallPrintInt(prefix + "_processed", mAlreadyProcessedPhi[i]);
+//        b->CallPrintInt(prefix + "_accessible", mLinearInputItemsPhi[i]);
+//        #endif
 
         if (mAlreadyProcessedDeferredPhi[i]) {
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_deferred", mAlreadyProcessedDeferredPhi[i]);
-            #endif
+//            #ifdef PRINT_DEBUG_MESSAGES
+//            b->CallPrintInt(prefix + "_deferred", mAlreadyProcessedDeferredPhi[i]);
+//            #endif
             processed = mAlreadyProcessedDeferredPhi[i];
             deferred = true;
         } else {
@@ -521,14 +519,11 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
         PHINode * const produced = mAlreadyProducedPhi[i];
         Value * const writable = mLinearOutputItemsPhi[i];
-
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, output);
-        b->CallPrintInt(prefix + "_produced", produced);
-        b->CallPrintInt(prefix + "_writable", writable);
-        #endif
-
-
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        const auto prefix = makeBufferName(mKernelIndex, output);
+//        b->CallPrintInt(prefix + "_produced", produced);
+//        b->CallPrintInt(prefix + "_writable", writable);
+//        #endif
         if (LLVM_LIKELY(nonManaged)) {
             args.push_back(epoch(b, output, getOutputBuffer(i), produced, writable));
         }
@@ -554,10 +549,6 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         mTerminatedExplicitly = b->getFalse();
     }
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("* " + prefix + "_executed", mNumOfLinearStrides);
-    #endif
-
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mPipelineKernel->getHandle(), CBuilder::Protect::WRITE);
     }
@@ -571,9 +562,10 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
             if (mAlreadyProcessedDeferredPhi[i]) {
                 assert (mReturnedProcessedItemCountPtr[i]);
                 mProcessedDeferredItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
-                #ifdef PRINT_DEBUG_MESSAGES
-                b->CallPrintInt("> " + prefix + "_deferredItemCount", mProcessedDeferredItemCount[i]);
-                #endif
+//                #ifdef PRINT_DEBUG_MESSAGES
+//                const auto prefix = makeBufferName(mKernelIndex, input);
+//                b->CallPrintInt("> " + prefix + "_deferredItemCount", mProcessedDeferredItemCount[i]);
+//                #endif
                 if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
                     const auto prefix = makeBufferName(mKernelIndex, input);
                     Value * const isDeferred = b->CreateICmpULE(mProcessedDeferredItemCount[i], mProcessedItemCount[i]);

@@ -22,6 +22,8 @@ struct RelationshipRef {
 };
 
 const static std::string BRANCH_PREFIX = "@B";
+const static std::string ALL_ZERO_ACTIVE_THREADS = "@A";
+const static std::string NON_ZERO_ACTIVE_THREADS = "@N";
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, RelationshipRef>;
 
@@ -44,7 +46,12 @@ enum : unsigned {
     , INITIAL_GRAPH_SIZE = 5
 };
 
+#define OTHER_BRANCH(TYPE) (TYPE ^ (ALL_ZERO_BRANCH | NON_ZERO_BRANCH))
+
 static_assert (ALL_ZERO_BRANCH < NON_ZERO_BRANCH, "invalid branch type ordering");
+static_assert (OTHER_BRANCH(ALL_ZERO_BRANCH) == NON_ZERO_BRANCH, "invalid branch type ordering");
+static_assert (OTHER_BRANCH(NON_ZERO_BRANCH) == ALL_ZERO_BRANCH, "invalid branch type ordering");
+
 
 class OptimizationBranchCompiler {
 
@@ -79,6 +86,8 @@ private:
     void generateStreamSetBranchMethod(BuilderRef b);
 
     void executeBranch(BuilderRef b, const unsigned branchType, Value * const first, Value * const last);
+
+    void waitFor(BuilderRef b, const unsigned branchType) const;
 
     Value * calculateAccessibleOrWritableItems(BuilderRef b, const Kernel * const kernel, const Binding & binding, Value * const first, Value * const last, Value * const defaultValue) const;
 
@@ -330,6 +339,7 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
     Constant * const BLOCKS_PER_STRIDE = b->getSize(mBranch->getStride() / b->getBitBlockWidth());
+    VectorType * const bitBlockTy = b->getBitBlockType();
 
     BasicBlock * const entry = b->GetInsertBlock();
     BasicBlock * const loopCond = b->CreateBasicBlock("cond");
@@ -340,6 +350,16 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     BasicBlock * const nonZeroPath = b->CreateBasicBlock("nonZeroPath");
     BasicBlock * const allZeroPath = b->CreateBasicBlock("allZeroPath");
     BasicBlock * const exit = b->CreateBasicBlock("exit");
+
+    const RelationshipRef & condRef = getConditionRef(mStreamSetGraph);
+    Value * const numOfConditionStreams = b->getInputStreamSetCount(condRef.Name);
+    Value * const numOfConditionBlocks = b->CreateMul(numOfConditionStreams, BLOCKS_PER_STRIDE);
+
+    // Store the base pointer to our condition stream prior to iterating through it incase
+    // one of the pipeline branches uses the stream internally and we update the processed
+    // item count.
+    Value * const basePtr = b->CreatePointerCast(b->getInputStreamBlockPtr(condRef.Name, ZERO, ZERO), bitBlockTy->getPointerTo());
+    Value * const numOfStrides = mBranch->mNumOfStrides;
     b->CreateBr(loopCond);
 
     b->SetInsertPoint(loopCond);
@@ -351,15 +371,6 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     currentLastIndex->addIncoming(ZERO, entry);
     PHINode * const currentState = b->CreatePHI(boolTy, 3);
     currentState->addIncoming(UndefValue::get(boolTy), entry);
-
-    const RelationshipRef & condRef = getConditionRef(mStreamSetGraph);
-    Value * const numOfConditionStreams = b->getInputStreamSetCount(condRef.Name);
-    Value * const numOfConditionBlocks = b->CreateMul(numOfConditionStreams, BLOCKS_PER_STRIDE);
-
-    Value * const offset = b->CreateMul(currentLastIndex, BLOCKS_PER_STRIDE);
-    Value * basePtr = b->getInputStreamBlockPtr(condRef.Name, ZERO, offset);
-    Type * const BitBlockTy = b->getBitBlockType();
-    basePtr = b->CreatePointerCast(basePtr, BitBlockTy->getPointerTo());
     b->CreateBr(summarizeOneStride);
 
     // Predeclare some phi nodes
@@ -380,17 +391,17 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
         mTerminatedPhi = b->CreatePHI(boolTy, 2);
     }
 
-    Value * const numOfStrides = mBranch->mNumOfStrides;
-
     // OR together every condition block in this stride
     b->SetInsertPoint(summarizeOneStride);
     PHINode * const iteration = b->CreatePHI(sizeTy, 2);
     iteration->addIncoming(ZERO, loopCond);
-    PHINode * const merged = b->CreatePHI(BitBlockTy, 2);
-    merged->addIncoming(Constant::getNullValue(BitBlockTy), loopCond);
-    Value * value = b->CreateBlockAlignedLoad(basePtr, iteration);
-    value = b->CreateOr(value, merged);
-    merged->addIncoming(value, summarizeOneStride);
+    PHINode * const accumulated = b->CreatePHI(bitBlockTy, 2);
+    accumulated->addIncoming(Constant::getNullValue(bitBlockTy), loopCond);
+    Value * offset = b->CreateMul(currentLastIndex, BLOCKS_PER_STRIDE);
+    offset = b->CreateAdd(offset, iteration);
+    Value * condition = b->CreateBlockAlignedLoad(basePtr, offset);
+    condition = b->CreateOr(condition, accumulated);
+    accumulated->addIncoming(condition, summarizeOneStride);
     Value * const nextIteration = b->CreateAdd(iteration, ONE);
     Value * const more = b->CreateICmpNE(nextIteration, numOfConditionBlocks);
     iteration->addIncoming(nextIteration, b->GetInsertBlock());
@@ -401,7 +412,7 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     // Note, however, initially state is "indeterminate" so we silently
     // ignore the first stride unless it is also our last.
     b->SetInsertPoint(checkStride);
-    Value * const nextState = b->bitblock_any(value);
+    Value * const nextState = b->bitblock_any(condition);
     Value * const sameState = b->CreateICmpEQ(nextState, currentState);
     Value * const firstStride = b->CreateICmpEQ(currentLastIndex, ZERO);
     Value * const continuation = b->CreateOr(sameState, firstStride);
@@ -465,6 +476,40 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
 
 }
 
+inline static const std::string & getBranchLockName(const unsigned branchType) {
+    switch (branchType) {
+        case ALL_ZERO_BRANCH: return ALL_ZERO_ACTIVE_THREADS;
+        case NON_ZERO_BRANCH: return NON_ZERO_ACTIVE_THREADS;
+    }
+    llvm_unreachable("unknown branch type!");
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief waitFor
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::waitFor(BuilderRef b, const unsigned branchType) const {
+
+    // wait until we're certain the other branch has completed
+    const auto & name = getBranchLockName(branchType);
+    Value * const threadLockPtr = b->getScalarFieldPtr(name);
+    BasicBlock * const kernelCheck = b->CreateBasicBlock("Check");
+    BasicBlock * const kernelWait = b->CreateBasicBlock("Wait");
+    BasicBlock * const kernelStart = b->CreateBasicBlock("Start");
+    b->CreateBr(kernelCheck);
+
+    b->SetInsertPoint(kernelCheck);
+    Value * const inFlight = b->CreateAtomicLoadAcquire(threadLockPtr);
+    Value * const ready = b->CreateIsNull(inFlight);
+    b->CreateCondBr(ready, kernelStart, kernelWait);
+
+    b->SetInsertPoint(kernelWait);
+    b->CreatePThreadYield();
+    b->CreateBr(kernelCheck);
+
+    b->SetInsertPoint(kernelStart);
+
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callKernel
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -473,9 +518,15 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
                                                Value * const first,
                                                Value * const last) {
 
+    // increment the active thread count for this branch
+    Constant * const ONE = b->getSize(1);
+    const auto & name = getBranchLockName(branchType);
+    Value * const threadLockPtr = b->getScalarFieldPtr(name);
+    b->CreateAtomicFetchAndAdd(ONE, threadLockPtr);
+
+    waitFor(b, OTHER_BRANCH(branchType));
 
     const Kernel * const kernel = mBranches[branchType];
-
     Function * const doSegment = kernel->getDoSegmentFunction(b->getModule());
 
     BasicBlock * incrementItemCounts = nullptr;
@@ -611,6 +662,9 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
         b->CreateBr(kernelExit);
         b->SetInsertPoint(kernelExit);
     }
+
+    // decrement the "number of active threads" count for this branch
+    b->CreateAtomicFetchAndSub(ONE, threadLockPtr);
 
 }
 

@@ -226,7 +226,7 @@ void PabloKernel::generateFinalizeMethod(const std::unique_ptr<kernel::KernelBui
 
 }
 
-String * PabloKernel::makeName(const llvm::StringRef & prefix) const {
+String * PabloKernel::makeName(const llvm::StringRef prefix) const {
     return mSymbolTable->makeString(prefix);
 }
 

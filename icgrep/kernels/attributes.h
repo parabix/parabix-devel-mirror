@@ -15,6 +15,8 @@ struct Attribute {
 
     enum class KindId {
 
+        None,
+
         /** INPUT STREAM ATTRIBUTES **/
 
         LookAhead,
@@ -96,16 +98,21 @@ struct Attribute {
         // requires a the pipeline to intervene and call an optimized "output-less" instance
         // of the kernel prior to calling B.
 
-        ConditionalRegionBegin, ConditionalRegionEnd, /// NOT DONE
+        RegionSelector, /// NOT DONE
 
-        // Some kernels have clearly demarcated regions in which a MultiBlock kernel will
-        // produce useful outputs for only the inputs within those regions. This attribute
-        // instructs the kernel to "zero-fill" the output of any non-selected regions,
-        // skipping strides entirely whenever possible.
+        // If we are only interested in processing data within a selected region, this
+        // attribute instructs the pipeline "skip" any data that is not within a selected
+        // region. Unless we can bound the size of a region, all I/O buffers associated with
+        // this kernel will backed by dynamic buffers.
 
-        // If the same regions are also independent, we can avoid the overhead of "masking
-        // out" the input streams. Otherwise a MultiBlock will use temporary buffers for all
-        // uses of the streams and zero out any non-regions from the data.
+        // NOTE: For any non-selected region, the processed/produced item counts will be
+        // aligned as expected for *countable* rate streams (with zeros written to the
+        // skipped regions.) Non-countable rate streams will process/produce 0 items.
+
+        SupressNonRegionZeroFill, /// NOT DONE
+
+        // The I/O stream will *not* be zero-filled to maintain alignment with the input
+        // when "skipping" a non-selected region.
 
         RequiresPopCountArray, RequiresNegatedPopCountArray,
 
@@ -166,65 +173,14 @@ struct Attribute {
         // (Note: this replaces the concept of swizzling and anticipates that the pipeline
         // will take on the role of automatically inserting the swizzling code necessary).
 
-        ReverseRegionBegin, ReverseRegionEnd, /// NOT DONE
+        ReverseAdapter, /// NOT DONE
 
         // Conceptually, reversing a stream S is simple: {S_1,...,S_n} -> {S_n,...,S_1}.
         // However, this means all of the input data must be computed and stored prior to
-        // executing this kernel. In practice, this is unnecessary as in the context of
-        // text parsing, we're almost always searching for the true starting position of
-        // something ambigious after we've found its end position in some prior kernel.
-
-
-//        Here is a revised definition of SegmentedReverse:
-
-//        Given a stream of data bits S that is considered to be divided into
-//        segments, and a marker stream S having a one bit at the final position
-//        of each segment, the R = SegmentedReverse(S, M) when
-
-//        R_{i} = S_{l + (h - i)}
-//              where l = the maximum j such that j <= i and either j = 0 or M_{j-1} = 1
-//          and where h = the minimum j such that j >= i and either j = length(S) -  or M_j = 1
-//          (l and h are the low and high positions of the segment containing i)
-
-//        This is an invertible operation, so we can apply R to a kernel's input
-//        and then to its output to get a SegmentedReverse version of a kernel
-
-//        A kernel which computes segmented reverse is feasible, but seems complex
-//        to implement, and probably too slow.  I have played around with several
-//        ways of tackling it, no good method yet.
-
-//        If there are multiple segments within a block, we could instead use
-//        the following:
-
-//        BlockSegmentedReverse
-
-//        B_{i} = S_{L + (H - i)}
-//             where l = the maximum j such that j <= i and either j = 0 or M_{j-1} = 1
-//                   h = the minimum j such that j >= i and either j = length(S) -  or M_j = 1
-//                   L = l if l div BlockSize < h divBlockSize, otherwise (i div BlockSize) * BlockSize
-//                   H = h if l div BlockSize < h divBlockSize, otherwise L + BlockSize - 1
-
-//        An alternative way of looking at this is to eliminate all but the first
-//        and last marker positions within a block.
-
-//        The main point is that, if we apply B to inputs, perform the kernel
-//        and the apply B to outputs, we get the same result if we applied R
-//        (assuming that the kernel computations do not cross boundaries in M).
-
-//        This will be more efficient to compute, but still involves overhead
-//        for shifting and combining streams.
-
-//        I think it may be better to focus on the ReverseKernel adapter, that
-//        handles the reverse operations for both input and output.   This actually
-//        gives more flexibility, because, in a multiblock scenario, we can process
-//        the longest sequence of blocks such that both the beginning and end blocks
-//        have a one bit.   If there are any interior blocks with one bits, then
-//        they will be handled automatically without special shifting and masking.
-
-//        By the way, in my designs, I am wanting to have a callable Multiblock
-//        function, so that the Multiblock function for a Reversed Kernel just
-//        does a little work before calling the Multiblock function of the base kernel.
-//        That seems to have disappeared in the current system.
+        // executing the first iteration of this kernel. In practice, this is unnecessary
+        // as in the context of text parsing, we're almost always searching for the true
+        // starting position of something ambigious after we've found its end position by
+        // some prior kernel.
 
 
         SliceOffset, /// NOT DONE
@@ -261,6 +217,15 @@ struct Attribute {
         // Marks that this kernel is belongs to a named family and whether an input scalar
         // should be surpressed from the generated "main" function because it will be bound
         // within it to the appropriate handle/function pointers.
+
+        SynchronizationFree,
+
+        // Indicates this kernel does not require multithreading synchronization to ensure
+        // correct behaviour. This *only* affects the locks surrounding the kernel in the
+        // outer pipeline.
+
+        // NOTE: this means either the kernel must either internally handle synchronization
+        // or that any interleaving of segments is valid.
 
     };
 
@@ -399,12 +364,20 @@ inline Attribute Misaligned() {
     return Attribute(Attribute::KindId::Misaligned, 0);
 }
 
-inline Attribute ConditionalRegionBegin() {
-    return Attribute(Attribute::KindId::ConditionalRegionBegin, 0);
+inline Attribute IndependentRegionBegin(const unsigned streamIndex) {
+    return Attribute(Attribute::KindId::IndependentRegionBegin, streamIndex);
 }
 
-inline Attribute ConditionalRegionEnd() {
-    return Attribute(Attribute::KindId::ConditionalRegionEnd, 0);
+inline Attribute IndependentRegionEnd(const unsigned streamIndex = 0) {
+    return Attribute(Attribute::KindId::IndependentRegionEnd, streamIndex);
+}
+
+inline Attribute RegionSelector(const unsigned streamIndex = 0) {
+    return Attribute(Attribute::KindId::RegionSelector, streamIndex);
+}
+
+inline Attribute SupressNonRegionZeroFill() {
+    return Attribute(Attribute::KindId::SupressNonRegionZeroFill, 0);
 }
 
 inline Attribute CanTerminateEarly() {
@@ -421,6 +394,10 @@ inline Attribute SideEffecting() {
 
 inline Attribute Family() {
     return Attribute(Attribute::KindId::Family, 0);
+}
+
+inline Attribute SynchronizationFree() {
+    return Attribute(Attribute::KindId::SynchronizationFree, 0);
 }
 
 inline Attribute RequiresPopCountArray() {

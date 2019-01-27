@@ -9,7 +9,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief start
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::start(BuilderRef b, Value * const initialSegNo) {
+void PipelineCompiler::start(BuilderRef b) {
 
     // Create the basic blocks for the loop.
     BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -25,7 +25,7 @@ void PipelineCompiler::start(BuilderRef b, Value * const initialSegNo) {
     ConstantInt * const ZERO = b->getSize(0);
 
     mSegNo = b->CreatePHI(sizeTy, 2, "segNo");
-    mSegNo->addIncoming(initialSegNo, entryBlock);
+    mSegNo->addIncoming(mInitialSegNo, entryBlock);
     mProgressCounter = b->CreatePHI(sizeTy, 2, "progressCounter");
     mProgressCounter->addIncoming(ZERO, entryBlock);
     mPipelineProgress = b->getFalse();
@@ -61,6 +61,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     loadBufferHandles(b);
     readInitialItemCounts(b);
+    readConsumedItemCounts(b);
     mKernelEntry = b->GetInsertBlock();
     b->CreateUnlikelyCondBr(initiallyTerminated(b), mKernelExit, mKernelLoopEntry);
 
@@ -76,9 +77,12 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopEntry);
-    readConsumedItemCounts(b);
     checkForSufficientInputDataAndOutputSpace(b);
     determineNumOfLinearStrides(b);
+
+    /// -------------------------------------------------------------------------------------
+    /// KERNEL CALCULATE ITEM COUNTS
+    /// -------------------------------------------------------------------------------------
 
     // TODO: it would be better to try and statically prove whether a kernel will only ever
     // need a single "run" per segment rather than allowing only source kernels to have this
@@ -87,12 +91,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     Value * isFinal = nullptr;
 
     if (mNumOfLinearStrides) {
-
         BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
         BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
-
         isFinal = b->CreateICmpEQ(mNumOfLinearStrides, b->getSize(0));
-
         b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
 
         /// -------------------------------------------------------------------------------------
@@ -112,11 +113,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         b->CreateBr(mKernelLoopCall);
 
     } else {
-
         mNumOfLinearStrides = b->getSize(1);
         calculateNonFinalItemCounts(b);
         b->CreateBr(mKernelLoopCall);
-
     }
 
     /// -------------------------------------------------------------------------------------
@@ -128,7 +127,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     writeCopyBackLogic(b);
 
     BasicBlock * const abnormalTermination =
-            b->CreateBasicBlock(prefix + "_abnormalTermination", mKernelTerminationCheck);
+        b->CreateBasicBlock(prefix + "_abnormalTermination", mKernelTerminationCheck);
 
     // If the kernel explicitly terminates, it must set its processed/produced item counts.
     // Otherwise, the pipeline will update any countable rates, even upon termination.
@@ -165,6 +164,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelLoopExit);
     updateTerminationSignal(mTerminatedPhi);
+    writeRegionComputationLogic(b);
     writeUpdatedItemCounts(b);
     computeFullyProcessedItemCounts(b);
     computeMinimumConsumedItemCounts(b);
@@ -189,11 +189,51 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     readFinalProducedItemCounts(b);
     updateOptionalCycleCounter(b);
     mHalted = mHaltedPhi;
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("--- " + prefix + ".halted ---", mHalted);
-    #endif
     assert (mKernel == mPipeline[mKernelIndex] && b->getKernel() == mKernel);
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief normalTerminationCheck
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const isFinal) {
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    if (isFinal) {
+        const auto numOfInputs = mKernel->getNumOfStreamInputs();
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            mAlreadyProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
+            if (mAlreadyProcessedDeferredPhi[i]) {
+                mAlreadyProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], entryBlock);
+            }
+            mFinalProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
+        }
+        const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            mAlreadyProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
+            mFinalProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
+        }
+        if (mAlreadyProgressedPhi) {
+            mAlreadyProgressedPhi->addIncoming(b->getTrue(), entryBlock);
+        }
+        b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, mKernelLoopEntry);
+    } else { // just exit the loop
+        const auto numOfInputs = mKernel->getNumOfStreamInputs();
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            mUpdatedProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
+            if (mUpdatedProcessedDeferredPhi[i]) {
+                mUpdatedProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], entryBlock);
+            }
+        }
+        const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            mUpdatedProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
+        }
+        mTerminatedPhi->addIncoming(mTerminatedInitially, entryBlock);
+        mHasProgressedPhi->addIncoming(b->getTrue(), entryBlock);
+        mHaltingPhi->addIncoming(mHalted, entryBlock);
+        b->CreateBr(mKernelLoopExit);
+    }
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isParamAddressable
@@ -209,7 +249,7 @@ inline bool isAddressable(const Binding & binding) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::end(BuilderRef b, const unsigned step) {
+Value * PipelineCompiler::end(BuilderRef b) {
 
     // A pipeline will end for one or two reasons:
 
@@ -241,21 +281,19 @@ void PipelineCompiler::end(BuilderRef b, const unsigned step) {
     b->CallPrintInt("+++ pipeline end +++", mSegNo);
     #endif
 
-    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(step));
+    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(mPipelineKernel->getSegmentIncrement()));
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mSegNo->addIncoming(nextSegNo, exitBlock);
     mProgressCounter->addIncoming(newProgressCounter, exitBlock);
     b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
 
     b->SetInsertPoint(mPipelineEnd);
-    mSegNo = nullptr;
     b->setKernel(mPipelineKernel);
-
     writePipelineIOItemCounts(b);
-
     if (mPipelineTerminated) {
         b->CreateStore(terminated, mPipelineTerminated);
     }
+    return mSegNo;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -286,7 +324,10 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
     // Would a simple "reset" be enough?
 
 
-    mTotalItems.resize(num_vertices(mBufferGraph) - mPipelineOutput, nullptr);
+    const auto numOfBuffers = num_vertices(mBufferGraph) - mPipelineOutput;
+
+    mTotalItems.resize(numOfBuffers, nullptr);
+    mPriorConsumedItemCount.resize(numOfBuffers, nullptr);
 
     for (const auto e : make_iterator_range(out_edges(mPipelineInput, mBufferGraph))) {
 
@@ -493,48 +534,6 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
         mFullyProducedItemCount[i] = fullyProduced;
     }
     createPopCountReferenceCounts(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief normalTerminationCheck
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const isFinal) {
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-    if (isFinal) {
-        const auto numOfInputs = mKernel->getNumOfStreamInputs();
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            mAlreadyProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
-            if (mAlreadyProcessedDeferredPhi[i]) {
-                mAlreadyProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], entryBlock);
-            }
-            mFinalProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
-        }
-        const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
-            mAlreadyProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
-            mFinalProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
-        }
-        if (mAlreadyProgressedPhi) {
-            mAlreadyProgressedPhi->addIncoming(b->getTrue(), entryBlock);
-        }
-        b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, mKernelLoopEntry);
-    } else { // just exit the loop
-        const auto numOfInputs = mKernel->getNumOfStreamInputs();
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            mUpdatedProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
-            if (mUpdatedProcessedDeferredPhi[i]) {
-                mUpdatedProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], entryBlock);
-            }
-        }
-        const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
-            mUpdatedProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
-        }
-        mTerminatedPhi->addIncoming(mTerminatedInitially, entryBlock);
-        mHasProgressedPhi->addIncoming(b->getTrue(), entryBlock);
-        mHaltingPhi->addIncoming(mHalted, entryBlock);
-        b->CreateBr(mKernelLoopExit);
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -33,11 +33,11 @@ public:
         return mPb->createOnes(type);
     }
 
-    Var * createVar(const llvm::StringRef & name, llvm::Type * const type = nullptr) {
+    Var * createVar(const llvm::StringRef name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
-    Var * createVar(const llvm::StringRef & name, PabloAST * value) {
+    Var * createVar(const llvm::StringRef name, PabloAST * value) {
         Var * const var = createVar(name, value->getType());
         createAssign(var, value);
         return var;
@@ -53,11 +53,11 @@ public:
         return createExtract(array, getInteger(index));
     }
 
-    Var * createExtract(Var * const array, not_null<Integer *> index, const llvm::StringRef & name) {
+    Var * createExtract(Var * const array, not_null<Integer *> index, const llvm::StringRef name) {
         return createVar(name, createExtract(array, index));
     }
 
-    Var * createExtract(Var * const array, const int64_t index, const llvm::StringRef & name) {
+    Var * createExtract(Var * const array, const int64_t index, const llvm::StringRef name) {
         return createVar(name, createExtract(array, index));
     }
 
@@ -70,14 +70,14 @@ public:
 
     PabloAST * createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount);
 
-    PabloAST * createAdvance(PabloAST * expr, const int64_t shiftAmount, const llvm::StringRef & prefix) {
+    PabloAST * createAdvance(PabloAST * expr, const int64_t shiftAmount, const llvm::StringRef prefix) {
         if (shiftAmount == 0) {
             return expr;
         }
         return createAdvance(expr, mPb->getInteger(shiftAmount), prefix);
     }
 
-    PabloAST * createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix);
+    PabloAST * createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef prefix);
 
     PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, const int64_t shiftAmount) {
         if (shiftAmount == 0) {
@@ -85,18 +85,18 @@ public:
         }
         return createIndexedAdvance(expr, indexStream, mPb->getInteger(shiftAmount));
     }
-    
+
     PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount);
-    
-    PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, const int64_t shiftAmount, const llvm::StringRef & prefix) {
+
+    PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, const int64_t shiftAmount, const llvm::StringRef prefix) {
         if (shiftAmount == 0) {
             return expr;
         }
         return createIndexedAdvance(expr, indexStream, mPb->getInteger(shiftAmount), prefix);
     }
-    
-    PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix);
-    
+
+    PabloAST * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount, const llvm::StringRef prefix);
+
     PabloAST * createLookahead(PabloAST * expr, const int64_t shiftAmount) {
         if (shiftAmount == 0) {
             return expr;
@@ -106,14 +106,14 @@ public:
 
     PabloAST * createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount);
 
-    PabloAST * createLookahead(PabloAST * expr, const int64_t shiftAmount, const llvm::StringRef & prefix) {
+    PabloAST * createLookahead(PabloAST * expr, const int64_t shiftAmount, const llvm::StringRef prefix) {
         if (shiftAmount == 0) {
             return expr;
         }
         return createLookahead(expr, mPb->getInteger(shiftAmount), prefix);
     }
 
-    PabloAST * createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix);
+    PabloAST * createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef prefix);
 
     Assign * createAssign(PabloAST * const variable, PabloAST * const value){
         return mPb->createAssign(variable, value);
@@ -121,11 +121,11 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2);
 
-    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix);
+    PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
 
     PabloAST * createNot(PabloAST * expr);
 
-    PabloAST * createNot(PabloAST * expr, const llvm::StringRef & prefix);
+    PabloAST * createNot(PabloAST * expr, const llvm::StringRef prefix);
 
     PabloAST * createRepeat(const int64_t fieldWidth, const int64_t value) {
         std::stringstream name;
@@ -139,85 +139,97 @@ public:
 
     PabloAST * createRepeat(not_null<Integer *> fieldWidth, PabloAST * value);
 
-    PabloAST * createRepeat(const int64_t fieldWidth, PabloAST * value, const llvm::StringRef & prefix) {
+    PabloAST * createRepeat(const int64_t fieldWidth, PabloAST * value, const llvm::StringRef prefix) {
         return createRepeat(mPb->getInteger(fieldWidth), value, prefix);
     }
 
-    PabloAST * createRepeat(const int64_t fieldWidth, const int64_t value, const llvm::StringRef & prefix) {
+    PabloAST * createRepeat(const int64_t fieldWidth, const int64_t value, const llvm::StringRef prefix) {
         return createRepeat(mPb->getInteger(fieldWidth), mPb->getInteger(value), prefix);
     }
 
-    PabloAST * createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef & prefix);
-    
+    PabloAST * createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef prefix);
+
     PabloAST * createPackL(const int64_t fieldWidth, PabloAST * value) {
         return createPackL(mPb->getInteger(fieldWidth), value);
     }
-    
+
     PabloAST * createPackH(const int64_t fieldWidth, PabloAST * value) {
         return createPackH(mPb->getInteger(fieldWidth), value);
     }
-    
+
     PabloAST * createPackL(not_null<Integer *> fieldWidth, PabloAST * value);
-    
+
     PabloAST * createPackH(not_null<Integer *> fieldWidth, PabloAST * value);
 
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 
-    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix);
+    PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
-    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix);
+    PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
 
     PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass);
 
-    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix);
+    PabloAST * createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef prefix);
 
     PabloAST * createScanThru(PabloAST * from, PabloAST * thru);
 
-    PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix);
+    PabloAST * createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix);
 
     PabloAST * createScanTo(PabloAST * from, PabloAST * to);
 
-    PabloAST * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix);
+    PabloAST * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix);
 
     PabloAST * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru);
 
-    PabloAST * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix);
+    PabloAST * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix);
 
     PabloAST * createAdvanceThenScanTo(PabloAST * from, PabloAST * to);
 
-    PabloAST * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix);
+    PabloAST * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
-    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef & prefix);
+    PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef prefix);
+
+    Ternary * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c) {
+        return createTernary(getInteger(mask), a, b, c);
+    }
+
+    Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c);
+
+    Ternary * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
+        return createTernary(getInteger(mask), a, b, c, prefix);
+    }
+
+    Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix);
 
     PabloAST * createCount(PabloAST * expr);
-    
-    PabloAST * createCount(PabloAST * expr, const llvm::StringRef & prefix);
+
+    PabloAST * createCount(PabloAST * expr, const llvm::StringRef prefix);
 
     PabloAST * createInFile(PabloAST * expr);
-    
-    PabloAST * createInFile(PabloAST * expr, const llvm::StringRef & prefix);
-    
+
+    PabloAST * createInFile(PabloAST * expr, const llvm::StringRef prefix);
+
     PabloAST * createAtEOF(PabloAST * expr);
-    
-    PabloAST * createAtEOF(PabloAST * expr, const llvm::StringRef & prefix);
-    
+
+    PabloAST * createAtEOF(PabloAST * expr, const llvm::StringRef prefix);
+
     PabloAST * createTerminateAt(PabloAST * strm, not_null<Integer *> code);
-    
-    PabloAST * createTerminateAt(PabloAST * strm, not_null<Integer *> code, const llvm::StringRef & prefix);
-    
+
+    PabloAST * createTerminateAt(PabloAST * strm, not_null<Integer *> code, const llvm::StringRef prefix);
+
     PabloAST * createTerminateAt(PabloAST * strm, int64_t code) {
         return createTerminateAt(strm, mPb->getInteger(code));
     }
-    
-    PabloAST * createTerminateAt(PabloAST * strm, int64_t code, const llvm::StringRef & prefix) {
+
+    PabloAST * createTerminateAt(PabloAST * strm, int64_t code, const llvm::StringRef prefix) {
         return createTerminateAt(strm, mPb->getInteger(code), prefix);
     }
-    
+
     PabloAST * createAdd(PabloAST * expr1, PabloAST * expr2);
 
     PabloAST * createSubtract(PabloAST * expr1, PabloAST * expr2);
@@ -241,7 +253,7 @@ public:
     While * createWhile(PabloAST * condition, PabloBuilder & builder) {
         return mPb->createWhile(condition, builder.mPb);
     }
-    
+
     /// Statement Iterator Wrappers
 
     iterator begin() {
@@ -288,7 +300,7 @@ public:
         return mParent;
     }
 
-    String * makeName(const llvm::StringRef & prefix) const {
+    String * makeName(const llvm::StringRef prefix) const {
         return mPb->makeName(prefix);
     }
 

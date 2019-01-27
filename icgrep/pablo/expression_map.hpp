@@ -102,6 +102,7 @@ struct ExpressionTable {
             mUnary.mPredecessor = &(predecessor->mUnary);
             mBinary.mPredecessor = &(predecessor->mBinary);
             mTernary.mPredecessor = &(predecessor->mTernary);
+            mQuaternary.mPredecessor = &(predecessor->mQuaternary);
         }
     }
 
@@ -110,7 +111,8 @@ struct ExpressionTable {
     explicit ExpressionTable(ExpressionTable && other) noexcept
     : mUnary(std::move(other.mUnary))
     , mBinary(std::move(other.mBinary))
-    , mTernary(std::move(other.mTernary)) {
+    , mTernary(std::move(other.mTernary))
+    , mQuaternary(std::move(other.mQuaternary)) {
 
     }
 
@@ -118,6 +120,7 @@ struct ExpressionTable {
         mUnary = std::move(other.mUnary);
         mBinary = std::move(other.mBinary);
         mTernary = std::move(other.mTernary);
+        mQuaternary = std::move(other.mQuaternary);
         return *this;
     }
 
@@ -136,12 +139,18 @@ struct ExpressionTable {
         return mTernary.findOrCall(std::move(functor), typeId, expr1, expr2, expr3, std::forward<Params>(params)...);
     }
 
+    template <class Functor, typename... Params>
+    inline PabloAST * findQuaternaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, void * expr3, void * expr4, Params... params) noexcept {
+        return mQuaternary.findOrCall(std::move(functor), typeId, expr1, expr2, expr3, expr4, std::forward<Params>(params)...);
+    }
+
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) noexcept {
-        switch (stmt->getClassTypeId()) {                     
+        const auto typeId = stmt->getClassTypeId();
+        switch (typeId) {
             case PabloAST::ClassTypeId::Var:
             case PabloAST::ClassTypeId::Not:
-            case PabloAST::ClassTypeId::Count:            
-                return mUnary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0));
+            case PabloAST::ClassTypeId::Count:
+                return mUnary.findOrAdd(stmt, typeId, stmt->getOperand(0));
             case PabloAST::ClassTypeId::And:
             case PabloAST::ClassTypeId::Or:
             case PabloAST::ClassTypeId::Xor:
@@ -153,19 +162,22 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::PackH:
             case PabloAST::ClassTypeId::Extract:
             case PabloAST::ClassTypeId::Repeat:
-                return mBinary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1));
+                return mBinary.findOrAdd(stmt, typeId, stmt->getOperand(0), stmt->getOperand(1));
             case PabloAST::ClassTypeId::Sel:
             case PabloAST::ClassTypeId::IndexedAdvance:
-                return mTernary.findOrAdd(stmt, stmt->getClassTypeId(), stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
+                return mTernary.findOrAdd(stmt, typeId, stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
+            case PabloAST::ClassTypeId::Ternary:
+                return mQuaternary.findOrAdd(stmt, typeId, stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2), stmt->getOperand(3));
             default:
                 return std::make_pair(stmt, true);
         }
     }
 
 private:
-    FixedArgMap<void *>                   mUnary;
-    FixedArgMap<void *, void *>           mBinary;
-    FixedArgMap<void *, void *, void *>   mTernary;
+    FixedArgMap<void *>                         mUnary;
+    FixedArgMap<void *, void *>                 mBinary;
+    FixedArgMap<void *, void *, void *>         mTernary;
+    FixedArgMap<void *, void *, void *, void *> mQuaternary;
 };
 
 }

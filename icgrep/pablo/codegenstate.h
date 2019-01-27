@@ -43,6 +43,7 @@ namespace pablo { class Repeat; }
 namespace pablo { class String; }
 namespace pablo { class Subtract; }
 namespace pablo { class TerminateAt; }
+namespace pablo { class Ternary; }
 namespace pablo { class Var; }
 namespace pablo { class Xor; }
 namespace pablo { class Zeroes; }
@@ -74,28 +75,28 @@ public:
     Advance * createAdvance(PabloAST * expr, Integer * shiftAmount) {
         return createAdvance(expr, shiftAmount, nullptr);
     }
-    
-    Advance * createAdvance(PabloAST * expr, Integer * shiftAmount, const llvm::StringRef & prefix) {
+
+    Advance * createAdvance(PabloAST * expr, Integer * shiftAmount, const llvm::StringRef prefix) {
         return createAdvance(expr, shiftAmount, makeName(prefix));
     }
-    
+
     Advance * createAdvance(PabloAST * expr, Integer * shiftAmount, const String * const name);
-    
+
     IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, Integer * shiftAmount) {
         return createIndexedAdvance(expr, indexStream, shiftAmount, nullptr);
     }
-    
-    IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, Integer * shiftAmount, const llvm::StringRef & prefix) {
+
+    IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, Integer * shiftAmount, const llvm::StringRef prefix) {
         return createIndexedAdvance(expr, indexStream, shiftAmount, makeName(prefix));
     }
-    
+
     IndexedAdvance * createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, Integer * shiftAmount, const String * const name);
-    
+
     Lookahead * createLookahead(PabloAST * expr, Integer * shiftAmount) {
         return createLookahead(expr, shiftAmount, nullptr);
     }
 
-    Lookahead * createLookahead(PabloAST * expr, Integer * shiftAmount, const llvm::StringRef & prefix) {
+    Lookahead * createLookahead(PabloAST * expr, Integer * shiftAmount, const llvm::StringRef prefix) {
         return createLookahead(expr, shiftAmount, makeName(prefix));
     }
 
@@ -113,73 +114,79 @@ public:
         return createNot(expr, nullptr);
     }
 
-    Not * createNot(PabloAST * expr, const llvm::StringRef & prefix) {
+    Not * createNot(PabloAST * expr, const llvm::StringRef prefix) {
         return createNot(expr, makeName(prefix));
     }
 
     Not * createNot(PabloAST * expr, const String * const name);
 
-    Var * createVar(const llvm::StringRef & name, llvm::Type * const type = nullptr) {
+    Var * createVar(const llvm::StringRef name, llvm::Type * const type = nullptr) {
         return createVar(makeName(name), type);
     }
 
     Var * createVar(const String * const name, llvm::Type * const type = nullptr);
 
-    Count * createCount(PabloAST * expr, const llvm::StringRef & prefix) {
+    Count * createCount(PabloAST * expr, const llvm::StringRef prefix) {
         return createCount(expr, makeName(prefix));
     }
 
     Count * createCount(PabloAST * expr, const String * const name = nullptr);
 
-    InFile * createInFile(PabloAST * expr, const llvm::StringRef & prefix) {
+    InFile * createInFile(PabloAST * expr, const llvm::StringRef prefix) {
         return createInFile(expr, makeName(prefix));
     }
 
     InFile * createInFile(PabloAST * expr, const String * const name = nullptr);
 
-    AtEOF * createAtEOF(PabloAST * expr, const llvm::StringRef & prefix) {
+    AtEOF * createAtEOF(PabloAST * expr, const llvm::StringRef prefix) {
         return createAtEOF(expr, makeName(prefix));
     }
-    
+
     AtEOF * createAtEOF(PabloAST * expr, const String * const name = nullptr);
 
     TerminateAt * createTerminateAt(PabloAST * strm, Integer * code) {
         return createTerminateAt(strm, code, nullptr);
     }
-    
-    TerminateAt * createTerminateAt(PabloAST * strm, Integer * code, const llvm::StringRef & prefix) {
+
+    TerminateAt * createTerminateAt(PabloAST * strm, Integer * code, const llvm::StringRef prefix) {
         return createTerminateAt(strm, code, makeName(prefix));
     }
-    
+
     TerminateAt * createTerminateAt(PabloAST * strm, Integer * code, const String * const name);
-    
+
     Extract * createExtract(Var * array, Integer * index);
 
     Assign * createAssign(PabloAST * const var, PabloAST * const value);
 
-    And * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
+    And * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createAnd(expr1, expr2, makeName(prefix));
     }
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
 
-    Or * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
+    Or * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createOr(expr1, expr2, makeName(prefix));
     }
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
 
-    Xor * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
+    Xor * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createXor(expr1, expr2, makeName(prefix));
     }
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
 
-    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef & prefix) {
+    Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef prefix) {
         return createSel(condition, trueExpr, falseExpr, makeName(prefix));
     }
 
     Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const String * const name = nullptr);
+
+    Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name = nullptr);
+
+    Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
+        return createTernary(mask, a, b, c, makeName(prefix));
+    }
 
     Add * createAdd(PabloAST * expr1, PabloAST * expr2);
 
@@ -189,31 +196,31 @@ public:
 
     Equals * createEquals(PabloAST * expr1, PabloAST * expr2);
 
-    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix) {
+    MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef prefix) {
         return createMatchStar(marker, charclass, makeName(prefix));
     }
 
     MatchStar * createMatchStar(PabloAST * marker, PabloAST * charclass, const String * const name = nullptr);
 
-    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
+    ScanThru * createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix) {
         return createScanThru(from, thru, makeName(prefix));
     }
 
     ScanThru * createScanThru(PabloAST * from, PabloAST * thru, const String * const name = nullptr);
 
-    ScanTo * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+    ScanTo * createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix) {
         return createScanTo(from, to, makeName(prefix));
     }
 
     ScanTo * createScanTo(PabloAST * from, PabloAST * to, const String * const name = nullptr);
 
-    AdvanceThenScanThru * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
+    AdvanceThenScanThru * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix) {
         return createAdvanceThenScanThru(from, thru, makeName(prefix));
     }
 
     AdvanceThenScanThru * createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const String * const name = nullptr);
 
-    AdvanceThenScanTo * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+    AdvanceThenScanTo * createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix) {
         return createAdvanceThenScanTo(from, to, makeName(prefix));
     }
 
@@ -223,19 +230,19 @@ public:
 
     While * createWhile(PabloAST * condition, PabloBlock * body);
 
-    Repeat * createRepeat(Integer * fieldWidth, PabloAST * value, const llvm::StringRef & prefix) {
+    Repeat * createRepeat(Integer * fieldWidth, PabloAST * value, const llvm::StringRef prefix) {
         return createRepeat(fieldWidth, value, makeName(prefix));
     }
 
     Repeat * createRepeat(Integer * fieldWidth, PabloAST * value, const String * const name = nullptr);
 
-    PackH * createPackH(Integer * width, PabloAST * value, const llvm::StringRef & prefix) {
+    PackH * createPackH(Integer * width, PabloAST * value, const llvm::StringRef prefix) {
         return createPackH(width, value, makeName(prefix));
     }
 
     PackH * createPackH(Integer * fieldWidth, PabloAST * value, const String * const name = nullptr);
 
-    PackL * createPackL(Integer * fieldWidth, PabloAST * value, const llvm::StringRef & prefix) {
+    PackL * createPackL(Integer * fieldWidth, PabloAST * value, const llvm::StringRef prefix) {
         return createPackL(fieldWidth, value, makeName(prefix));
     }
 
@@ -259,7 +266,7 @@ public:
         mBranch = branch;
     }
 
-    String * makeName(const llvm::StringRef & prefix) const {
+    String * makeName(const llvm::StringRef prefix) const {
         return mParent->makeName(prefix);
     }
 
@@ -293,7 +300,7 @@ protected:
         return expr;
     }
 
-private:        
+private:
     PabloKernel * const         mParent;
     Branch *                    mBranch;
     Allocator &                 mAllocator;

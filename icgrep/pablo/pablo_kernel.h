@@ -122,7 +122,7 @@ public:
         std::free(ptr);
     }
 
-    String * makeName(const llvm::StringRef & prefix) const;
+    String * makeName(const llvm::StringRef prefix) const;
 
     Integer * getInteger(const int64_t value) const;
 

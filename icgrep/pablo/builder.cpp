@@ -49,10 +49,10 @@ struct __##NAME { \
     inline PabloAST * operator()(void * const arg0) { \
         return mPb->create##TYPE(GET(0, ARGS), mPrefix); \
     } \
-    inline __##NAME(PabloBlock * const pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
+    inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
     PabloBlock * const mPb; \
-    const llvm::StringRef & mPrefix; \
+    const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, prefix); \
 return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
@@ -78,10 +78,10 @@ struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1) { \
         return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), mPrefix); \
     } \
-    inline __##NAME(PabloBlock * const pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
+    inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
     PabloBlock * const mPb; \
-    const llvm::StringRef & mPrefix; \
+    const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
 return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
@@ -107,14 +107,44 @@ struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2) { \
         return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), mPrefix); \
     } \
-    inline __##NAME(PabloBlock * const pb, const llvm::StringRef & prefix) : mPb(pb), mPrefix(prefix) {} \
+    inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
     PabloBlock * const mPb; \
-    const llvm::StringRef & mPrefix; \
+    const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
 return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
 }()
+
+#define MAKE_QUATERNARY(TYPE, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
+struct __##NAME { \
+    inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2, void * const arg3) { \
+        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), GET(3, ARGS)); \
+    } \
+    inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
+private: \
+    PabloBlock * const mPb; \
+}; \
+__##NAME functor(mPb); \
+return cast<TYPE>(mExprTable.findQuaternaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
+
+#define MAKE_NAMED_QUATERNARY(TYPE, PREFIX, ARGS...) \
+[&](){ /* immediately invoked lambda */  \
+struct __##NAME { \
+    inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2, void * const arg3) { \
+        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), GET(3, ARGS), mPrefix); \
+    } \
+    inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
+private: \
+    PabloBlock * const mPb; \
+    const llvm::StringRef mPrefix; \
+}; \
+__##NAME functor(mPb, PREFIX); \
+return cast<TYPE>(mExprTable.findQuaternaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+}()
+
 
 PabloAST * PabloBuilder::createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0) {
@@ -123,7 +153,7 @@ PabloAST * PabloBuilder::createAdvance(PabloAST * expr, not_null<Integer *> shif
     return MAKE_BINARY(Advance, expr, shiftAmount.get());
 }
 
-PabloAST * PabloBuilder::createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createAdvance(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef prefix) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0) {
         return expr;
     }
@@ -143,7 +173,7 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
     return MAKE_TERNARY(IndexedAdvance, expr, indexStream, shiftAmount.get());
 }
 
-PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexStream, not_null<Integer *> shiftAmount, const llvm::StringRef prefix) {
     if (isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0) {
         return expr;
     }
@@ -155,7 +185,7 @@ PabloAST * PabloBuilder::createIndexedAdvance(PabloAST * expr, PabloAST * indexS
     }
     return MAKE_NAMED_TERNARY(IndexedAdvance, prefix, expr, indexStream, shiftAmount.get());
 }
-    
+
 Extract * PabloBuilder::createExtract(Var * array, not_null<Integer *> index) {
     return MAKE_BINARY(Extract, array, index.get());
 }
@@ -167,7 +197,7 @@ PabloAST * PabloBuilder::createLookahead(PabloAST * expr, not_null<Integer *> sh
     return MAKE_BINARY(Lookahead, expr, shiftAmount.get());
 }
 
-PabloAST * PabloBuilder::createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef prefix) {
     if (LLVM_UNLIKELY(isa<Zeroes>(expr) || cast<Integer>(shiftAmount.get())->value() == 0)) {
         return expr;
     }
@@ -187,7 +217,7 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     return MAKE_UNARY(Not, expr);
 }
 
-PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef prefix) {
     if (LLVM_UNLIKELY(isa<Ones>(expr))) {
         return createZeroes(expr->getType());
     }
@@ -204,7 +234,7 @@ PabloAST * PabloBuilder::createCount(PabloAST * expr) {
     return MAKE_UNARY(Count, expr);
 }
 
-PabloAST * PabloBuilder::createCount(PabloAST * expr, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createCount(PabloAST * expr, const llvm::StringRef prefix) {
     return MAKE_NAMED_UNARY(Count, prefix, expr);
 }
 
@@ -212,11 +242,11 @@ PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST *
     return MAKE_BINARY(Repeat, fieldWidth.get(), value);
 }
 
-PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value, const llvm::StringRef prefix) {
     return MAKE_NAMED_BINARY(Repeat, prefix, fieldWidth.get(), value);
 }
 
-    
+
 PabloAST * PabloBuilder::createPackL(not_null<Integer *> fieldWidth, PabloAST * value) {
     return MAKE_BINARY(PackL, fieldWidth.get(), value);
 }
@@ -256,7 +286,7 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2) {
     return MAKE_BINARY(And, expr1, expr2);
 }
 
-PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
     if (isa<Zeroes>(expr2) || isa<Ones>(expr1)) {
         return expr2;
     } else if (isa<Zeroes>(expr1) || isa<Ones>(expr2) || equals(expr1, expr2)){
@@ -332,7 +362,7 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
     return MAKE_BINARY(Or, expr1, expr2);
 }
 
-PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return expr2;
     }
@@ -400,7 +430,7 @@ PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
     return MAKE_BINARY(Xor, expr1, expr2);
 }
 
-PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
     if (expr1 == expr2) {
         return createZeroes(expr1->getType());
     } else if (isa<Ones>(expr1)) {
@@ -473,7 +503,7 @@ PabloAST * PabloBuilder::createInFile(PabloAST * expr) {
     return MAKE_UNARY(InFile, expr);
 }
 
-PabloAST * PabloBuilder::createInFile(PabloAST * expr, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createInFile(PabloAST * expr, const llvm::StringRef prefix) {
     if (LLVM_UNLIKELY(isa<InFile>(expr) || isa<Zeroes>(expr))) {
         return expr;
     }
@@ -484,7 +514,7 @@ PabloAST * PabloBuilder::createAtEOF(PabloAST * expr) {
     return MAKE_UNARY(AtEOF, expr);
 }
 
-PabloAST * PabloBuilder::createAtEOF(PabloAST * expr, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createAtEOF(PabloAST * expr, const llvm::StringRef prefix) {
     return MAKE_NAMED_UNARY(AtEOF, prefix, expr);
 }
 
@@ -493,7 +523,7 @@ PabloAST * PabloBuilder::createTerminateAt(PabloAST * strm, not_null<Integer *> 
     return MAKE_BINARY(TerminateAt, strm, code.get());
 }
 
-PabloAST * PabloBuilder::createTerminateAt(PabloAST * strm, not_null<Integer *> code, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createTerminateAt(PabloAST * strm, not_null<Integer *> code, const llvm::StringRef prefix) {
     if (isa<Zeroes>(strm)) return strm;
     return MAKE_NAMED_BINARY(TerminateAt, prefix, strm, code.get());
 }
@@ -504,8 +534,8 @@ PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass
     }
     return MAKE_BINARY(MatchStar, marker, charclass);
 }
-    
-PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef & prefix) {
+
+PabloAST * PabloBuilder::createMatchStar(PabloAST * marker, PabloAST * charclass, const llvm::StringRef prefix) {
     if (isa<Zeroes>(marker) || isa<Zeroes>(charclass)) {
         return marker;
     }
@@ -519,7 +549,7 @@ PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru) {
     return MAKE_BINARY(ScanThru, from, thru);
 }
 
-PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
@@ -533,7 +563,7 @@ PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to) {
     return MAKE_BINARY(ScanTo, from, to);
 }
 
-PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix) {
     if (isa<Zeroes>(from)) {
         return from;
     }
@@ -547,7 +577,7 @@ PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * t
     return MAKE_BINARY(AdvanceThenScanThru, from, thru);
 }
 
-PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix) {
     if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
         return from;
     }
@@ -561,7 +591,7 @@ PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to)
     return MAKE_BINARY(AdvanceThenScanTo, from, to);
 }
 
-PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createAdvanceThenScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix) {
     if (isa<Zeroes>(from)) {
         return from;
     }
@@ -591,7 +621,7 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     return MAKE_TERNARY(Sel, condition, trueExpr, falseExpr);
 }
 
-PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef & prefix) {
+PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef prefix) {
     if (isa<Ones>(condition)) {
         return trueExpr;
     } else if (isa<Zeroes>(condition)){
@@ -613,5 +643,15 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     }
     return MAKE_NAMED_TERNARY(Sel, prefix, condition, trueExpr, falseExpr);
 }
+
+
+Ternary * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c) {
+    return MAKE_QUATERNARY(Ternary, mask, a, b, c);
+}
+
+Ternary * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
+    return MAKE_NAMED_QUATERNARY(Ternary, prefix, mask, a, b, c);
+}
+
 
 }

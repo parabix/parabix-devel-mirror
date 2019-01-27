@@ -43,6 +43,9 @@ using Port = Kernel::Port;
 // TODO: make "namespaced" internal scalars that are automatically grouped into cache-aligned structs
 // within the kernel state to hide the complexity from the user?
 
+// TODO: create a kernel compiler class, similar to the pipeline compiler, to avoid having any state
+// associated with a cached kernel in memory?
+
 const static auto INIT_SUFFIX = "_Init";
 const static auto DO_SEGMENT_SUFFIX = "_DoSegment";
 const static auto TERMINATE_SUFFIX = "_Terminate";
@@ -1017,7 +1020,6 @@ const Kernel::ScalarField & Kernel::getScalarField(const StringRef name) const {
     assert (!mScalarMap.empty());
     const auto f = mScalarMap.find(name);
     if (LLVM_UNLIKELY(f == mScalarMap.end())) {
-        assert (!"could not find scalar!");
         report_fatal_error(getName() + " does not contain scalar: " + name);
     }
     return f->second;

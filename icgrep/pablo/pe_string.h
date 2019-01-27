@@ -17,7 +17,7 @@ public:
     } 
     virtual ~String() { }
 protected:
-    String(llvm::Type * type, const llvm::StringRef & str, Allocator & allocator) noexcept
+    String(llvm::Type * type, const llvm::StringRef str, Allocator & allocator) noexcept
     : PabloAST(ClassTypeId::String, type,  allocator)
     , llvm::StringRef(str.data(), str.size()) {
 

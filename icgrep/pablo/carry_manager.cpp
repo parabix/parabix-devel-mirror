@@ -447,7 +447,6 @@ void CarryManager::leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & 
         PHINode * index = mLoopIndicies.back();
         index->addIncoming(b->CreateAdd(index, b->getSize(1)), resume);
         mLoopIndicies.pop_back();
-
         mNextSummaryTest = nextSummary;
     }
     if (mCarryInfo->hasSummary()) {
@@ -498,7 +497,10 @@ void CarryManager::enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & b
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & b, Value * condition) {
     if (LLVM_LIKELY(mCarryInfo->hasSummary())) {
+        assert ("summary condition cannot be null!" && condition);
         assert ("summary test was not generated" && mNextSummaryTest);
+        assert ("summary condition and test must have the same context!" && &condition->getContext() == &mNextSummaryTest->getContext());
+        assert ("summary condition and test must be equivalent types!" && (condition->getType()->canLosslesslyBitCastTo(mNextSummaryTest->getType())));
         condition = b->simd_or(condition, mNextSummaryTest);
         mNextSummaryTest = nullptr;
     }
@@ -836,11 +838,17 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & b) {
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
+    Constant * const ZERO = b->getInt32(0);
+    Value * indices[3];
+    indices[0] = ZERO;
+    indices[1] = b->getInt32(mCurrentFrameIndex);
     if (mLoopDepth == 0) {
-        mCarryPackPtr = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex)});
+        indices[2] = ZERO;
     } else {
-        mCarryPackPtr = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), mLoopSelector});
+        indices[2] = mLoopSelector;
     }
+    ArrayRef<Value *> ar(indices, 3);
+    mCarryPackPtr = b->CreateGEP(mCurrentFrame, ar);
     Type * const carryTy = b->getBitBlockType();
     assert (mCarryPackPtr->getType()->getPointerElementType() == carryTy);
     Value * const carryIn = b->CreateBlockAlignedLoad(mCarryPackPtr);
@@ -887,9 +895,10 @@ Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBui
             frameTy = frameTy->getStructElementType(0);
         }
     }
-    const unsigned length = (mLoopDepth == 0) ? count : (count + 1);
+
+    const unsigned length = count + 1;
     Value * indicies[length];
-    std::fill(indicies, indicies + count - 1, b->getInt32(0));
+    std::fill(indicies, indicies + length, b->getInt32(0));
     indicies[count - 1] = index;
     if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
@@ -897,6 +906,8 @@ Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBui
 
     ArrayRef<Value *> ar(indicies, length);
     Value * const ptr = b->CreateGEP(mCurrentFrame, ar);
+    assert (ptr->getType()->getPointerElementType() == b->getBitBlockType());
+
     Value * const summary = b->CreateBlockAlignedLoad(ptr);
     if (mLoopDepth != 0 && mCarryInfo->hasExplicitSummary()) {
         Type * const carryTy = b->getBitBlockType();
@@ -909,13 +920,19 @@ Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBui
  * @brief writeCarryOutSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void CarryManager::writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const summary, ConstantInt * index) const {
-    Value * ptr = nullptr;
     assert (mCarryInfo->hasExplicitSummary());
-    if (mLoopDepth > 0) {
-        ptr = b->CreateGEP(mCurrentFrame, {b->getInt32(0), index, mNextLoopSelector});
+    Constant * const ZERO = b->getInt32(0);
+    Value * indices[3];
+    indices[0] = ZERO;
+    indices[1] = index;
+    if (mLoopDepth == 0) {
+        indices[2] = ZERO;
     } else {
-        ptr = b->CreateGEP(mCurrentFrame, {b->getInt32(0), index});
+        indices[2] = mNextLoopSelector;
     }
+    ArrayRef<Value *> ar(indices, 3);
+    Value * ptr = b->CreateGEP(mCurrentFrame, ar);
+    assert (ptr->getType()->getPointerElementType() == b->getBitBlockType());
     b->CreateBlockAlignedStore(summary, ptr);
 }
 
@@ -986,7 +1003,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
 
     const unsigned carryScopeIndex = mCarryScopes++;
     const bool nonCarryCollapsingMode = isNonRegularLanguage(scope);
-    Type * const carryPackType = (loopDepth == 0) ? carryTy : ArrayType::get(carryTy, 2);
+    Type * const carryPackType = ArrayType::get(carryTy, ((loopDepth == 0) ? 1 : 2));
     std::vector<Type *> state;
     for (const Statement * stmt : *scope) {
         if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<IndexedAdvance>(stmt))) {

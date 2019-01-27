@@ -66,18 +66,4 @@ operator^=(EnumType & lhs, EnumType rhs) {
     return lhs = static_cast<EnumType>(static_cast<IntType>(lhs) ^ static_cast<IntType>(rhs));
 }
 
-template<typename EnumType>
-constexpr typename std::enable_if<__EnumFlagSet<EnumType>::enable, EnumType &>::type
-operator++(EnumType & lhs) {
-    using IntType = typename std::underlying_type<EnumType>::type;
-    return lhs = static_cast<EnumType>(static_cast<IntType>(lhs) << 1);
-}
-
-template<typename EnumType>
-constexpr typename std::enable_if<__EnumFlagSet<EnumType>::enable, EnumType &>::type
-operator--(EnumType & lhs) {
-    using IntType = typename std::underlying_type<EnumType>::type;
-    return lhs = static_cast<EnumType>(static_cast<IntType>(lhs) >> 1);
-}
-
 #endif

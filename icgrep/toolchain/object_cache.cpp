@@ -18,6 +18,7 @@
 #endif
 #include <llvm/IR/Verifier.h>
 #include <boost/lexical_cast.hpp>
+#include <system_error>
 
 using namespace llvm;
 using namespace boost;
@@ -178,6 +179,18 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         // Write the object code
         std::error_code EC;
         raw_fd_ostream objFile(objectName, EC, sys::fs::F_None);
+        if (LLVM_UNLIKELY(EC)) {
+            std::string tmp;
+            llvm::raw_string_ostream msg(tmp);
+            msg << "Could not write to "
+                << objectName.str()
+                << " in object cache directory "
+                << mCachePath.str()
+                << ".\n"
+                "Reason: " << EC.message() << "\n\n"
+                "Rerun " << codegen::ProgramName << " with --enable-object-cache=0";
+            report_fatal_error(msg.str());
+        }
         objFile.write(Obj.getBufferStart(), Obj.getBufferSize());
         objFile.close();
 
@@ -336,7 +349,21 @@ inline void ParabixObjectCache::loadCacheSettings() noexcept {
         }
     }
     #endif
-    sys::fs::create_directories(mCachePath);
+
+    using p = sys::fs::perms;
+    const auto permissions = p::owner_read | p::owner_write | p::group_read | p::group_write;
+    const auto err = sys::fs::create_directories(mCachePath, true, permissions);
+
+    if (LLVM_UNLIKELY(err)) {
+        std::string tmp;
+        llvm::raw_string_ostream msg(tmp);
+        msg << "Could not create object cache directory in "
+            << mCachePath.str() << " with read/write permissions.\n"
+            "Reason: " << err.message() << "\n\n"
+            "Rerun " << codegen::ProgramName << " with --enable-object-cache=0";
+        report_fatal_error(msg.str());
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

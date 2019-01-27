@@ -335,7 +335,7 @@ Kernel * PipelineBuilder::makeKernel() {
     }
 
     PipelineKernel * const pk =
-        new PipelineKernel(b, std::move(signature), mNumOfThreads,
+        new PipelineKernel(b, std::move(signature), mNumOfThreads, mNumOfThreads,
                            std::move(pipeline), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));

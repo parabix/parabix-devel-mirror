@@ -17,7 +17,7 @@
 #include <llvm/ADT/STLExtras.h>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -169,6 +169,15 @@ using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, Po
 
 using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
+struct RegionData {
+    AttrId   Type;
+    unsigned Stream;
+    RegionData() : Type(AttrId::None), Stream(0) { }
+    RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
+};
+
+using RegionGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, RegionData>;
+
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
@@ -192,18 +201,18 @@ protected:
 // internal pipeline state construction functions
 
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
-    void generateSingleThreadKernelMethod(BuilderRef b);
-    void generateMultiThreadKernelMethod(BuilderRef b);
+    Value * generateSingleThreadKernelMethod(BuilderRef b);
+    Value * generateMultiThreadKernelMethod(BuilderRef b);
     void acquireCurrentSegment(BuilderRef b);
     void releaseCurrentSegment(BuilderRef b);
     LLVM_READNONE bool requiresSynchronization(const unsigned kernelIndex) const;
 
 // main pipeline functions
 
-    void start(BuilderRef b, Value * const initialSegNo);
+    void start(BuilderRef b);
     void setActiveKernel(BuilderRef b, const unsigned index);
     void executeKernel(BuilderRef b);
-    void end(BuilderRef b, const unsigned step);
+    Value * end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
     void writePipelineIOItemCounts(BuilderRef b);
@@ -211,13 +220,13 @@ protected:
 // internal pipeline functions
 
     LLVM_READNONE StructType * getThreadStateType(BuilderRef b);
-    Value * allocateThreadState(BuilderRef b, const unsigned segOffset);
-    Value * setThreadState(BuilderRef b, Value * threadState);
+    Value * allocateThreadState(BuilderRef b, Value * initialSegNo);
+    void setThreadState(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
     LLVM_READNONE StructType * getLocalStateType(BuilderRef b);
-    void allocateThreadLocalState(BuilderRef b, Value * const localState);
-    void setThreadLocalState(BuilderRef b, Value * const localState);
+    void allocateThreadLocalState(BuilderRef b, Value * const localState, Value * initialSegNo);
+    void readThreadLocalState(BuilderRef b, Value * const localState);
     void deallocateThreadLocalState(BuilderRef b, Value * const localState);
 
     void addTerminationProperties(BuilderRef b);
@@ -350,6 +359,44 @@ protected:
     template <typename LambdaFunction>
     void forEachPopCountReferenceInputPort(const unsigned kernelIndex, LambdaFunction func);
 
+// regioned kernel logic
+
+    void beginRegionLoop(BuilderRef b);
+
+    bool hasRegions() const;
+
+    void writeRegionedKernelCall(BuilderRef b);
+
+
+    RegionGraph makeRegionGraph() const;
+
+    void writeRegionComputationLogic(BuilderRef b);
+
+    void writeRegionComputationLogic(BuilderRef b, const unsigned region);
+
+    LLVM_READNONE bool hasSelectorStream(const unsigned region) const;
+
+    LLVM_READNONE bool hasSeperateStartEndStreams(const unsigned region) const;
+
+    void computeLongestSequenceOfAdjacentRegions(BuilderRef b, const unsigned region);
+
+    void computePotentiallyDisjointRegionSpans(BuilderRef b, const unsigned region);
+
+    void writeRegionSelectionLogic(BuilderRef b,
+                                   Value * const regionEnds, Value * const regionSpans,
+                                   BasicBlock * const checkNextStart, BasicBlock * const checkNextEnd);
+
+
+
+    Value * getSelectorStream();
+
+    Value * getRegionStartConsumedOffset(BuilderRef b, const unsigned region) const;
+
+    Value * getRegionStarts() const;
+    Value * getRegionEnds() const;
+
+    void endRegionLoop(BuilderRef b);
+
 // consumer recording
 
     ConsumerGraph makeConsumerGraph() const;
@@ -456,6 +503,7 @@ protected:
     Kernel *                                    mKernel = nullptr;
 
     // pipeline state
+    Value *                                     mInitialSegNo = nullptr;
     PHINode *                                   mSegNo = nullptr;
     Value *                                     mHalted = nullptr;
     PHINode *                                   mProgressCounter = nullptr;
@@ -464,11 +512,14 @@ protected:
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
+    BasicBlock *                                mKernelRegionEntryLoop = nullptr;
+    BasicBlock *                                mKernelCalculateItemCounts = nullptr;
     BasicBlock *                                mKernelLoopCall = nullptr;
     BasicBlock *                                mKernelTerminationCheck = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
+    BasicBlock *                                mKernelRegionExitLoopCheck = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
 
@@ -514,12 +565,40 @@ protected:
     std::vector<PHINode *>                      mUpdatedProducedPhi; // exiting the kernel
     std::vector<PHINode *>                      mFullyProducedItemCount; // *after* exiting the kernel
 
+    std::vector<Value *>                        mPriorConsumedItemCount;
+
     // cycle counter state
     Value *                                     mCycleCountStart = nullptr;
 
     // popcount state
     Value *                                     mPopCountState;
     flat_map<unsigned, PopCountData>            mPopCountData;
+
+
+    // regioned kernel logic
+    BasicBlock *                                mRegionIndentificationLoopEntry = nullptr;
+
+//    PHINode *                                   mInitialRegionStartIndex = nullptr;
+//    PHINode *                                   mInitialRegionEndIndex = nullptr;
+//    PHINode *                                   mInitialRegionCurrentIndex = nullptr;
+//    PHINode *                                   mInitialAlreadyProcessed = nullptr;
+//    PHINode *                                   mInRegion = nullptr;
+//    Value *                                     mInitialConditionalCarryIn = nullptr;
+//    PHINode *                                   mConditionalCarryIn = nullptr;
+
+//    PHINode *                                   mRegionStartIndex = nullptr;
+//    PHINode *                                   mAlreadyProcessed = nullptr;
+
+//    PHINode *                                   mRegionEndIndex = nullptr;
+//    PHINode *                                   mRegionCurrentIndex = nullptr;
+//    PHINode *                                   mRegionCarryIn = nullptr;
+//    Value *                                     mRegionCarryOut = nullptr;
+
+//    BasicBlock *                                mProcessRegionSpan = nullptr;
+//    PHINode *                                   mSelectedRegionStart = nullptr;
+//    PHINode *                                   mSelectedRegionEnd = nullptr;
+//    PHINode *                                   mSelectedRegionCurrent = nullptr;
+
 
     // analysis state
     const BufferGraph                           mBufferGraph;
@@ -529,6 +608,7 @@ protected:
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
+    const RegionGraph                           mRegionGraph;
 
 };
 
@@ -623,7 +703,8 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mScalarDependencyGraph(makeScalarDependencyGraph())
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
-, mPopCountGraph(makePopCountGraph()) {
+, mPopCountGraph(makePopCountGraph())
+, mRegionGraph(makeRegionGraph()) {
     initializePopCounts();
 }
 
@@ -707,6 +788,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "cycle_counter_logic.hpp"
 #include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
-
+#include "region_selection_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

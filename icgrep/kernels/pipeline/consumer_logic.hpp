@@ -88,6 +88,7 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
             consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         }
         mConsumedItemCount[port] = consumed;
+        mPriorConsumedItemCount[getBufferIndex(bufferVertex)] = consumed;
     }
     b->setKernel(mKernel);
 }

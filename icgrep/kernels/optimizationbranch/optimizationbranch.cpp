@@ -1,26 +1,8 @@
 #include <kernels/optimizationbranch.h>
 #include "optimizationbranch_compiler.hpp"
 #include <kernels/kernel_builder.h>
-#include <boost/graph/adjacency_list.hpp>
-#include <boost/container/flat_map.hpp>
-#include <llvm/Support/raw_ostream.h>
-#include <toolchain/toolchain.h>
-
-#warning at compilation, this must verify that the I/O rates of the branch permits the rates of the branches
-
-#warning move most of this logic this into the optimizationbranch compiler
-
-using namespace llvm;
-using namespace boost;
-using namespace boost::container;
 
 namespace kernel {
-
-using AttrId = Attribute::KindId;
-
-using ScalarDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, Value *, unsigned>;
-using ScalarVertex = ScalarDependencyGraph::vertex_descriptor;
-using ScalarDependencyMap = flat_map<const Relationship *, ScalarVertex>;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
@@ -72,11 +54,12 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-         {})
+{Binding{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS}, Binding{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS}})
 , mCondition(condition.get())
 , mNonZeroKernel(nonZeroKernel.get())
 , mAllZeroKernel(allZeroKernel.get()) {
-
+   // TODO: need to pass in initial logical segment number to the pipeline branches
+   // addAttribute(SynchronizationFree());
 }
 
 }

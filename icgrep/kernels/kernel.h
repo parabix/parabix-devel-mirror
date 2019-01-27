@@ -417,6 +417,10 @@ protected:
 
     void setStride(unsigned stride) { mStride = stride; }
 
+    LLVM_READNONE bool requiresInitialSegmentNo() const {
+        return getTypeId() == TypeId::Pipeline || getTypeId() == TypeId::OptimizationBranch;
+    }
+
     LLVM_READNONE llvm::Value * getAccessibleInputItems(const llvm::StringRef name) const {
         Port port; unsigned index;
         std::tie(port, index) = getStreamPort(name);
