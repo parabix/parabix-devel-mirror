@@ -375,8 +375,8 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
 
     std::vector<Value *> args;
     args.reserve(mCurrentMethod->arg_size());
-    for (Argument & arg : mCurrentMethod->getArgumentList()) {
-        args.push_back(&arg);
+    for (auto ArgI = mCurrentMethod->arg_begin(); ArgI != mCurrentMethod->arg_end(); ++ArgI) {
+        args.push_back(&(*ArgI));
     }
     setDoSegmentProperties(b, args);
 
