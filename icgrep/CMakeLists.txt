@@ -130,6 +130,7 @@ target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
 target_link_libraries (GrepEngine RegExpCompiler CodeGen)
 target_link_libraries (FileSelect GrepEngine)
 
+#add_executable(jitdemo2 jitdemo2.cpp)
 add_executable(icgrep icgrep.cpp grep_interface.cpp)
 add_executable(u8u16 u8u16.cpp kernels/zeroextend.cpp)
 add_executable(u32u8 u32u8.cpp kernels/pdep_kernel.cpp)
@@ -142,6 +143,7 @@ add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_g
 add_executable(idisa_test idisa_test.cpp)
 add_executable(cachejanitord ${OBJECT_CACHE_DAEMON_SRC})
 
+#target_link_libraries (jitdemo2 ${REQ_LLVM_LIBRARIES})
 target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u32u8 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
@@ -250,9 +252,11 @@ SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -f
 # that prevents addr2line from being able to resolve which line corresponds to the code at run time. This in turn prevents
 # CreateAssert from being able to provide the compilation call stack for each JIT'ed assertion error.
 
-CHECK_CXX_COMPILER_FLAG("-no-pie" COMPILER_SUPPORTS_NO_PIE)
-IF (COMPILER_SUPPORTS_NO_PIE)
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -no-pie")
+IF (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+  CHECK_CXX_COMPILER_FLAG("-no-pie" COMPILER_SUPPORTS_NO_PIE)
+  IF (COMPILER_SUPPORTS_NO_PIE)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -no-pie")
+  ENDIF()
 ENDIF()
 
 UNSET(HAS_ADDRESS_SANITIZER)
@@ -359,7 +363,7 @@ add_custom_target (abc_test
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-  DEPENDS icgrep u8u16 u32u8 base64 editd abc_gen idisa_test)
+  DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test)
 
 add_custom_target (perf_icgrep
   COMMAND python2 perf.py icgrep

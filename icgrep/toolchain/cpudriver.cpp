@@ -297,7 +297,7 @@ void * CPUDriver::finalizeObject(PipelineKernel * const pipeline) {
     #ifndef ORCJIT
     mEngine->finalizeObject();
     #else
-    moduleSet.push_back(std::unique_ptr<Module>(mMainModule);
+    moduleSet.push_back(std::unique_ptr<Module>(mMainModule));
     mCompileLayer->addModuleSet(std::move(moduleSet), make_unique<SectionMemoryManager>(), std::move(Resolver));
     #endif
     // return the compiled main method
