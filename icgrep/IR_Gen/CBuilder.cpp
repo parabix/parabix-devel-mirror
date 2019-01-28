@@ -48,10 +48,6 @@ static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 
 using namespace llvm;
 
-inline static bool is_power_2(const uint64_t n) {
-    return ((n & (n - 1)) == 0) && n;
-}
-
 #ifdef HAS_ADDRESS_SANITIZER
 Value * checkHeapAddress(CBuilder * const b, Value * const Ptr, Value * const Size) {
     Module * const m = b->getModule();

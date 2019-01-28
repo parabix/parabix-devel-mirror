@@ -24,6 +24,11 @@ namespace llvm { class Value; }
 
 class BaseDriver;
 
+
+inline bool is_power_2(const uint64_t n) {
+    return ((n & (n - 1)) == 0) && n;
+}
+
 class CBuilder : public llvm::IRBuilder<> {
 public:
 

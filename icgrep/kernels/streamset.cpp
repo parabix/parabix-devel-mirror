@@ -19,10 +19,6 @@ namespace llvm { class Function; }
 using namespace llvm;
 using IDISA::IDISA_Builder;
 
-inline static bool is_power_2(const uint64_t n) {
-    return ((n & (n - 1)) == 0) && n;
-}
-
 namespace kernel {
 
 inline Value * StreamSetBuffer::getHandle(IDISA_Builder * const /* b */) const {

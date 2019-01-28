@@ -219,10 +219,6 @@ size_t file_size(const int fd) {
 
 #define ALIGNMENT (512 / 8)
 
-inline bool is_power_2(const size_t n) {
-    return ((n & (n - 1)) == 0) && n;
-}
-
 inline size_t round_up_to(const size_t x, const size_t y) {
     assert(is_power_2(y));
     return (x + y - 1) & -y;
