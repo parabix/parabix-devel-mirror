@@ -11,13 +11,13 @@
 #include <toolchain/toolchain.h>
 #include <queue>
 
-#warning if two kernels have an identical signature and take the same inputs, they ought to produce the same outputs unless they are nondeterministic.
+// TODO: if two kernels have an identical signature and take the same inputs, they ought to produce the same outputs unless they are nondeterministic.
 
-#warning the pipeline ordering should be canonicalized to ensure that when multiple kernels could be scheduled the same one will always be chosen.
+// TODO: the pipeline ordering should be canonicalized to ensure that when multiple kernels could be scheduled the same one will always be chosen.
 
-#warning the builders should detect if there is only one kernel in a pipeline / both branches are equivalent and return the single kernel. Modify addOrDeclareMainFunction.
+// TODO: the builders should detect if there is only one kernel in a pipeline / both branches are equivalent and return the single kernel. Modify addOrDeclareMainFunction.
 
-#warning make a templated compile method to automatically validate and cast the main function to the correct type
+// TODO: make a templated compile method to automatically validate and cast the main function to the correct type
 
 using namespace llvm;
 using namespace boost;

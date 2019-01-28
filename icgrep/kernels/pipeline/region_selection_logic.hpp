@@ -776,7 +776,7 @@ RegionGraph PipelineCompiler::makeRegionGraph() const {
             auto setIfAttributeExists = [&](const AttrId attrId, const unsigned index) {
                 if (LLVM_UNLIKELY(input.hasAttribute(attrId))) {
                     const ProcessingRate & rate = input.getRate();
-                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != 1)) {
+                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != RateValue(1))) {
                         report_fatal_error(kernel->getName() + ": region streams must be FixedRate(1).");
                     }
                     if (LLVM_UNLIKELY(cond[index] != 0)) {

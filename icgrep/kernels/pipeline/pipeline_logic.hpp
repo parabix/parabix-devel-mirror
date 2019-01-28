@@ -11,7 +11,7 @@ namespace kernel {
 // function argument, the size is 64-bits. More investigation is needed to determine which
 // versions of LLVM are affected by this bug.
 
-inline LLVM_READNONE bool allocateOnHeap(const BuilderRef b) {
+inline LLVM_READNONE bool allocateOnHeap(BuilderRef b) {
     DataLayout DL(b->getModule());
     return (DL.getPointerSizeInBits() != b->getSizeTy()->getBitWidth());
 }

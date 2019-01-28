@@ -3,7 +3,7 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/Type.h>
+#include <llvm/IR/DerivedTypes.h>
 
 const auto NULL_RELATIONSHIP_ERROR = "cannot set binding relationship to null without a fixed binding type";
 

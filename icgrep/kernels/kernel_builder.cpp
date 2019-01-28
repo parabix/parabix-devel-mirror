@@ -7,10 +7,6 @@
 
 using namespace llvm;
 
-inline static bool is_power_2(const uint64_t n) {
-    return ((n & (n - 1)) == 0) && n;
-}
-
 namespace kernel {
 
 using Port = Kernel::Port;

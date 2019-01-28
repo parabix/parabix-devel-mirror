@@ -160,7 +160,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
     }
 }
 
-#warning make a "CBuffer" class to abstract away the complexity of making these function typedefs.
+//TODO: make a "CBuffer" class to abstract away the complexity of making these function typedefs.
 
 typedef void (*preprocessFunctionType)(char * output_data, size_t * output_produced, size_t output_size, const uint32_t fd);
 

@@ -96,12 +96,6 @@ extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
     reinterpret_cast<MatchAccumulator *>(accum_addr)->finalize_match(buffer_end);
 }
 
-inline static size_t ceil_log2(const size_t v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    assert ("sizeof(size_t) == sizeof(long)" && sizeof(size_t) == sizeof(long));
-    return (sizeof(size_t) * CHAR_BIT) - __builtin_clzl(v - 1UL);
-}
-
 // Grep Engine construction and initialization.
 
 GrepEngine::GrepEngine(BaseDriver &driver) :

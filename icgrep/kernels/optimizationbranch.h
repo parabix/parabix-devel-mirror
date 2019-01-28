@@ -7,7 +7,7 @@ namespace llvm { class Value; }
 
 namespace kernel {
 
-struct OptimizationBranchCompiler;
+class OptimizationBranchCompiler;
 
 class OptimizationBranch final : public Kernel {
     friend class OptimizationBranchBuilder;

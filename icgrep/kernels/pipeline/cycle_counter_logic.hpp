@@ -1,6 +1,6 @@
 #include "pipeline_compiler.hpp"
 
-#warning TODO: Print Total CPU Cycles
+// TODO: Print Total CPU Cycles
 
 namespace kernel {
 

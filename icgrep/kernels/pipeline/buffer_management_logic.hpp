@@ -469,7 +469,7 @@ inline void PipelineCompiler::readFinalProducedItemCounts(BuilderRef b) {
     }
 }
 
-#warning TODO: copyback/copyforward ought to reflect exact num of items; not upper bound of space
+// TODO: copyback/copyforward ought to reflect exact num of items; not upper bound of space
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresCopyBack

@@ -26,10 +26,6 @@ using namespace llvm;
 
 namespace pablo {
 
-inline static bool is_power_2(const unsigned n) {
-    return (n && ((n & (n - 1)) == 0));
-}
-
 inline static unsigned ceil_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
     return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
@@ -48,10 +44,6 @@ inline static unsigned nearest_pow2(const unsigned v) {
 inline static unsigned nearest_multiple(const unsigned n, const unsigned m) {
     assert (is_power_2(m));
     return (n + m - 1U) & ~(m - 1U);
-}
-
-inline static bool is_multiple_of(const unsigned n, const unsigned m) {
-    return nearest_multiple(n, m) == n;
 }
 
 inline static unsigned udiv(const unsigned x, const unsigned y) {

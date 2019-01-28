@@ -430,7 +430,7 @@ bool dominates(const PabloAST * const expr1, const PabloAST * const expr2) noexc
  * 6. Assign a, t           6 << 1, 2, 3, 4, 5, 6
  ** ------------------------------------------------------------------------------------------------------------- */
 bool postdominates(const PabloAST * const expr1, const PabloAST * const expr2) noexcept {
-    throw std::runtime_error("not implemented yet!");
+    llvm::report_fatal_error("not implemented yet!");
 }
 
 }

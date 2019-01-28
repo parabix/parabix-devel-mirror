@@ -32,6 +32,8 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME(MustExplicitlyTerminate);
         NAME(SideEffecting);
         NAME(Family);
+        NAME(SynchronizationFree);
+        NAME(None);
     }
     #undef NAME
     #undef NAME_AMOUNT
