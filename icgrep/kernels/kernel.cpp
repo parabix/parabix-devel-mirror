@@ -24,7 +24,7 @@
 #endif
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/Support/Debug.h>
-#include <boost/uuid/detail/sha1.hpp>
+#include <util/sha1.hpp>
 #include <llvm/Support/Format.h>
 #include <sstream>
 #include <llvm/Support/raw_ostream.h>
