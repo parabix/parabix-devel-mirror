@@ -26,6 +26,11 @@
 #include <kernels/pipeline_builder.h>
 #include <llvm/IR/Verifier.h>
 #include "llvm/IR/Mangler.h"
+#ifndef ORCJIT
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+#include <llvm/ExecutionEngine/MCJIT.h>
+#endif
+#endif
 #ifdef ORCJIT
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 #include <llvm/ExecutionEngine/Orc/JITSymbol.h>
