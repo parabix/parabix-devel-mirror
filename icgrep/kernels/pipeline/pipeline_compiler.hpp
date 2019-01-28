@@ -378,9 +378,9 @@ protected:
 
     LLVM_READNONE bool hasSeperateStartEndStreams(const unsigned region) const;
 
-    void computeLongestSequenceOfAdjacentRegions(BuilderRef b, const unsigned region);
+    void findLongestSequenceOfAdjacentRegions(BuilderRef b, const unsigned region);
 
-    void computePotentiallyDisjointRegionSpans(BuilderRef b, const unsigned region);
+    void fineSelectedRegions(BuilderRef b, const unsigned region);
 
     void writeRegionSelectionLogic(BuilderRef b,
                                    Value * const regionEnds, Value * const regionSpans,

@@ -540,10 +540,10 @@ void PipelineCompiler::writeRegionComputationLogic(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::writeRegionComputationLogic(BuilderRef b, const unsigned region) {
 
-    if (LLVM_LIKELY(hasSelectorStream(region) || hasSeperateStartEndStreams(region))) {
-        computePotentiallyDisjointRegionSpans(b, region);
+    if (LLVM_LIKELY(hasSelectorStream(region))) {
+        fineSelectedRegions(b, region);
     } else {
-        computeLongestSequenceOfAdjacentRegions(b, region);
+        findLongestSequenceOfAdjacentRegions(b, region);
     }
 
 
@@ -565,11 +565,10 @@ Value * PipelineCompiler::getRegionStartConsumedOffset(BuilderRef /* b */, const
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computePotentiallyDisjointRegionSpans
+ * @brief fineSelectedRegions
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::computePotentiallyDisjointRegionSpans(BuilderRef b, const unsigned region) {
+inline void PipelineCompiler::fineSelectedRegions(BuilderRef b, const unsigned region) {
 #if 0
-
     BasicBlock * const loopEntry = b->CreateBasicBlock("regionIdentificationLoop");
     BasicBlock * const checkEnds = b->CreateBasicBlock("regionCheckEnds");
     BasicBlock * const checkNext = b->CreateBasicBlock("regionCheckNext");
@@ -579,7 +578,6 @@ inline void PipelineCompiler::computePotentiallyDisjointRegionSpans(BuilderRef b
     IntegerType * const fwTy = sizeTy; // b->getIntNTy(fieldWidth);
     const unsigned numOfFields = b->getBitBlockWidth() / fieldWidth;
     VectorType * const fwVecTy = b->fwVectorType(fieldWidth);
-    Constant * const ZEROES = Constant::getNullValue(fwVecTy);
 
 
     Value * const initialRegionConsumedOffset = getRegionStartConsumedOffset(b, region);
@@ -624,16 +622,15 @@ inline void PipelineCompiler::computePotentiallyDisjointRegionSpans(BuilderRef b
     Value * const regionEndPtr = b->CreateGEP(regionEndBuffer, regionEndIndexPhi);
     b->CreateStore(regionEndPtr, regionEnds);
 
-    Value * selectors = nullptr;
-    if (LLVM_LIKELY(hasSelectorStream(region))) {
-        selectors = getSelectorStream();
-        // Use MatchStar(conditional, regionSpan) to ensure any conditional selectors are aligned with the region ends.
-        selectors = b->simd_and(selectors, regionSpans);
-        Value * selectorCarryOut, * partialSelectorSpan;
-        std::tie(selectorCarryOut, partialSelectorSpan) = b->bitblock_add_with_carry(selectors, regionSpan, selectorCarryIn);
-        selectorCarryIn->addIncoming(selectorCarryOut, checkNext);
-        selectors = b->CreateOr(b->CreateXor(partialSelectorSpan, regionSpans), selectors);
-    }
+    Value * selectors = getSelectorStream();
+
+    // Use MatchStar(conditional, regionSpan) to ensure any conditional selectors are aligned with the region ends.
+    selectors = b->simd_and(selectors, regionSpan);
+    Value * selectorCarryOut, * partialSelectorSpan;
+    std::tie(selectorCarryOut, partialSelectorSpan) = b->bitblock_add_with_carry(selectors, regionSpan, selectorCarryIn);
+    selectorCarryIn->addIncoming(selectorCarryOut, checkNext);
+    selectors = b->CreateOr(b->CreateXor(partialSelectorSpan, regionSpans), selectors);
+
     Value * const anyEnds = b->bitblock_any(regionEnds);
     b->CreateCondBr(anyEnds, checkEnds, checkNext);
 
@@ -643,7 +640,7 @@ inline void PipelineCompiler::computePotentiallyDisjointRegionSpans(BuilderRef b
     for (unsigned i = 1; i < numOfFields; i *= 2) {
         partialSum = b->simd_add(fieldWidth, partialSum, b->mvmd_slli(fieldWidth, partialSum, i));
     }
-    Value * const finalSum = b->mvmd_extract(fieldWidth, partialSum, numOfFields - 1);
+    Value * const finalSum = b->CreateExtractElement(regions, partialSum - 1);
     Value * const nextRegionEndOffset = b->CreateAdd(regionEndOffsetPhi, finalSum);
 
     Constant * const fieldWidthMask = b->getSize(fieldWidth - 1);
@@ -653,42 +650,47 @@ inline void PipelineCompiler::computePotentiallyDisjointRegionSpans(BuilderRef b
     partialSum = b->mvmd_slli(fieldWidth, partialSum, 1);
     partialSum = b->simd_add(fieldWidth, pendingSum, splatPending);
 
-    if (LLVM_LIKELY(hasSelectorStream(region))) {
+    // extract the pending selectors into 32/64-bit lanes
 
-        // extract the pending selectors
+    Value * pendingSelectors = b->simd_pext(fieldWidth, selectors, regionEnds);
 
-        Value * pendingSelectors = b->simd_pext(fieldWidth, selectors, regionEnds);
+    // pack the pending selectors into a "region selection bit-queue"
 
-        // pack the pending selectors into a "region selection bit-queue"
+    Constant * const intFieldMask = ConstantInt::get(fwTy, fieldWidth - 1);
+    Constant * splatFieldMask = ConstantVector::getSplat(numOfFields, intFieldMask);
+    Value * const shifts = b->simd_and(partialSum, splatFieldMask);
 
-        Constant * const intFieldMask = ConstantInt::get(fwTy, fieldWidth - 1);
-        Constant * splatFieldMask = ConstantVector::getSplat(numOfFields, intFieldMask);
-        Value * const offsets = b->simd_and(partialSum, splatFieldMask);
+    Value * selectorFields = b->simd_sllv(fieldWidth, pendingSelectors, shifts);
 
-        Value * currentSelectorFields = b->simd_sllv(fieldWidth, pendingSelectors, offsets);
+    Constant * const intFieldWidth = ConstantInt::get(fwTy, fieldWidth);
+    Constant * const splatFieldWidth = ConstantVector::getSplat(numOfFields, intFieldWidth);
+    Value * const backShifts = b->simd_sub(fieldWidth, splatFieldWidth, shifts);
 
-        Constant * const intFieldWidth = ConstantInt::get(fwTy, fieldWidth);
-        Constant * const splatFieldWidth = ConstantVector::getSplat(numOfFields, intFieldWidth);
-        Value * const backShift = b->simd_sub(fieldWidth, splatFieldWidth, offsets);
+    Value * nextSelectorFields = b->simd_srlv(fieldWidth, pendingSelectors, backShifts);
 
-        Value * nextSelectorFields = b->simd_srlv(fieldWidth, pendingSelectors, backShift);
+    Value * shiftedSelectorFields = b->mvmd_slli(fieldWidth, nextSelectorFields, 1);
 
-        Value * const regionEndIdx = b->CreateLShr(regionEndOffsetPhi, std::log2(FieldWidth));
+    selectorFields = b->CreateOr(selectorFields, shiftedSelectorFields);
 
-        Value * pendingA = b->mvmd_sll(fieldWidth, currentSelectorFields, regionEndIdx);
-        pendingA = b->CreateOr(pendingA, pendingRegion);
-        Value * const nextRegionEndIdx, b->CreateAdd(regionEndIdx, b->getSize(1));
-        Value * const pendingB = b->mvmd_sll(fieldWidth, nextSelectorFields, nextRegionEndIdx);
-        pendingA = b->CreateOr(pendingA, pendingB);
-
-        // then deposit them in a selected region start stream
-
-
-
-
-    } else {
-
+    Value * fieldNo = b->simd_srli(fieldWidth, partialSum, std::log2(fieldWidth));
+    Value * newRegion = UndefValue::get(fwVecTy);
+    for (unsigned i = 0; i < numOfFields; ++i) {
+        Constant * const selected = ConstantVector::getSplat(numOfFields, ConstantInt::get(fwTy, i));
+        Value * const selectedMask = b->simd_eq(fieldWidth, fieldNo, selected);
+        Value * regions = b->CreateAnd(selectorFields, selectedMask);
+        for (unsigned i = 1; i < numOfFields; i *= 2) {
+            regions = b->simd_or(fieldWidth, regions, b->mvmd_slli(fieldWidth, regions, i));
+        }
+        Value * field = b->CreateExtractElement(regions, numOfFields - 1);
+        newRegion = b->CreateInsertElement(newRegion, field, i);
     }
+    newRegion = b->CreateOr(newRegion, pendingRegion);
+
+    // then deposit them in a selected region start stream
+
+
+
+
 
 
     // then fill in the region span stream using SpanTo(selectedRegion, regionEnds)
@@ -705,9 +707,9 @@ inline void PipelineCompiler::computePotentiallyDisjointRegionSpans(BuilderRef b
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeLongestSequenceOfAdjacentRegions
+ * @brief findLongestSequenceOfAdjacentRegions
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::computeLongestSequenceOfAdjacentRegions(BuilderRef b, const unsigned region) {
+inline void PipelineCompiler::findLongestSequenceOfAdjacentRegions(BuilderRef b, const unsigned region) {
 
 }
 

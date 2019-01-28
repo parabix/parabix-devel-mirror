@@ -190,9 +190,6 @@ Value * PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     ConstantInt * const ZERO = b->getInt32(0);
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
 
-//    DataLayout DL(m);
-//    Type * intRetValTy = DL.getIntPtrType(voidPtrTy);
-
     FunctionType * const threadFuncType = FunctionType::get(b->getVoidTy(), {voidPtrTy}, false);
     const auto threadName = mPipelineKernel->getName() + "_DoSegmentThread";
     Function * const threadFunc = Function::Create(threadFuncType, Function::InternalLinkage, threadName, m);

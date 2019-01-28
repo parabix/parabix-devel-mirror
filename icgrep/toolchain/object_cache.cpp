@@ -182,11 +182,9 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         if (LLVM_UNLIKELY(EC)) {
             std::string tmp;
             llvm::raw_string_ostream msg(tmp);
-            msg << "Could not write to "
+            msg << "Could not write to \""
                 << objectName.str()
-                << " in object cache directory "
-                << mCachePath.str()
-                << ".\n"
+                << "\" in object cache directory.\n\n"
                 "Reason: " << EC.message() << "\n\n"
                 "Rerun " << codegen::ProgramName << " with --enable-object-cache=0";
             report_fatal_error(msg.str());
@@ -357,8 +355,8 @@ inline void ParabixObjectCache::loadCacheSettings() noexcept {
     if (LLVM_UNLIKELY(err)) {
         std::string tmp;
         llvm::raw_string_ostream msg(tmp);
-        msg << "Could not create object cache directory in "
-            << mCachePath.str() << " with read/write permissions.\n"
+        msg << "Could not create object cache directory \""
+            << mCachePath.str() << "\" with read/write permissions.\n\n"
             "Reason: " << err.message() << "\n\n"
             "Rerun " << codegen::ProgramName << " with --enable-object-cache=0";
         report_fatal_error(msg.str());
