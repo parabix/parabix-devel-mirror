@@ -45,7 +45,8 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
     IntegerType * T = b->getIntNTy(mScanwordBitWidth);
     Module * const m = b->getModule();
 
-    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", b->getVoidTy(), T, b->getInt32Ty(), T, nullptr));
+    FunctionType * scanTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty(), T}, false);
+    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", scanTy));
     scanFunc->setCallingConv(CallingConv::C);
     Function::arg_iterator args = scanFunc->arg_begin();
 
@@ -56,7 +57,8 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
     Value * basePos = &*(args++);
     basePos->setName("basePos");
 
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", b->getVoidTy(), T, b->getInt32Ty(), nullptr);
+    FunctionType * fTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty()}, false);
+    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", fTy);
     BasicBlock * entryBlock = BasicBlock::Create(b->getContext(), "entry", scanFunc, 0);
     BasicBlock * matchesCondBlock = BasicBlock::Create(b->getContext(), "matchesCond", scanFunc, 0);
     BasicBlock * matchesLoopBlock = BasicBlock::Create(b->getContext(), "matchesLoop", scanFunc, 0);

@@ -41,8 +41,8 @@ void preprocessPipeline(CPUEngineInstance & pxDriver){
     Module * m = iBuilder->getModule();
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const inputType = iBuilder->getInt8PtrTy();
-
-    Function * const mainFn = cast<Function>(m->getOrInsertFunction("Main", iBuilder->getVoidTy(), inputType, size_ty, inputType, nullptr));
+    FunctionType * mainTy = FunctionType::get(iBuilder->getVoidTy(), {inputType, size_ty, inputType}, false);
+    Function * const mainFn = cast<Function>(m->getOrInsertFunction("Main", mainTy));
     mainFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", mainFn, 0));
     Function::arg_iterator args = mainFn->arg_begin();

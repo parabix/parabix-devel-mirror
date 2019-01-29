@@ -12,7 +12,7 @@ TraceTool::TraceTool(IDISA::IDISA_Builder * b, unsigned log2TraceBufSize)
 , mLog2TraceBufSize(log2TraceBufSize)
 , mTraceVarCount(0) {
 
-    llvm::Type * entryType = llvm::StructType::get(iBuilder->getInt8Ty()->getPointerTo(), iBuilder->getSizeTy(), nullptr);
+    llvm::Type * entryType = llvm::StructType::get(iBuilder->getInt8Ty()->getPointerTo(), iBuilder->getSizeTy());
     llvm::Type * bufferType = llvm::ArrayType::get(entryType, 1 << mLog2TraceBufSize);
     mTraceBufferPtr = iBuilder->CreateAlloca(bufferType);
     mTraceIndexPtr = iBuilder->CreateAlloca(iBuilder->getInt32Ty());

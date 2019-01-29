@@ -43,7 +43,7 @@ void editdGPUKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
     std::vector<std::vector<int>> calculated(mPatternLen, std::vector<int>(mEditDistance + 1, 0));
 
     Module * m = idb->getModule();
-    Function * bidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", int32ty, nullptr));
+    Function * bidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.ctaid.x", FunctionType::get(int32ty, {})));
     Value * bid = idb->CreateCall(bidFunc);
     Value * pattStartPtr = idb->CreateGEP(pattBuf, idb->CreateMul(groupLen, bid));
 

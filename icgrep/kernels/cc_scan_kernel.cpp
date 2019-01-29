@@ -46,7 +46,8 @@ Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBui
 
     Module * const m = iBuilder->getModule();
 
-    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), T, nullptr));
+    FunctionType * scanTy = FunctionType::get(iBuilder->getVoidTy(), {T, iBuilder->getInt32Ty(), T}, false);
+    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", scanTy));
     scanFunc->setCallingConv(CallingConv::C);
     Function::arg_iterator args = scanFunc->arg_begin();
 
@@ -57,7 +58,8 @@ Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBui
     Value * basePos = &*(args++);
     basePos->setName("basePos");
 
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", iBuilder->getVoidTy(), T, iBuilder->getInt32Ty(), nullptr);
+    FunctionType * fTy = FunctionType::get(iBuilder->getVoidTy(), {T, iBuilder->getInt32Ty()}, false);
+    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", fTy);
 
     BasicBlock * entryBlock = BasicBlock::Create(m->getContext(), "entry", scanFunc, 0);
 
