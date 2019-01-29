@@ -211,7 +211,11 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 
         sys::path::replace_extension(objectName, KERNEL_FILE_EXTENSION);
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
         WriteBitcodeToFile(H.get(), kernelFile);
+#else
+        WriteBitcodeToFile(*H, kernelFile);
+#endif
         kernelFile.close();
         if (codegen::TraceObjectCache) {
             errs() << "Wrote cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";

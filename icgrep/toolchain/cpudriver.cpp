@@ -21,6 +21,10 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 #endif
 #include <llvm/Transforms/Utils/Local.h>
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Utils.h>
+#endif
 #include <toolchain/object_cache.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline_builder.h>
@@ -225,7 +229,13 @@ inline void CPUDriver::preparePassManager() {
         } else {
             mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Utils.h>
+        if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, TargetMachine::CGFT_AssemblyFile))) {
+#else
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
+#endif
             report_fatal_error("LLVM error: could not add emit assembly pass");
         }
     }

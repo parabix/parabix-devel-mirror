@@ -930,7 +930,11 @@ std::string Kernel::makeSignature(const std::unique_ptr<KernelBuilder> & b) {
         generateKernel(b);
         std::string tmp;
         raw_string_ostream signature(tmp);
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
         WriteBitcodeToFile(getModule(), signature);
+#else
+        WriteBitcodeToFile(*(getModule()), signature);
+#endif
         return signature.str();
     } else {
         return getModule()->getModuleIdentifier();

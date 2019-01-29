@@ -165,7 +165,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 typedef void (*preprocessFunctionType)(char * output_data, size_t * output_produced, size_t output_size, const uint32_t fd);
 
 static char * chStream;
-static size_t size;
+static size_t fsize;
 
 class PreprocessKernel final: public pablo::PabloKernel {
 public:
@@ -231,11 +231,11 @@ char * preprocess(preprocessFunctionType preprocess) {
         std::cerr << "Error: cannot open " << fileName << " for processing.\n";
         exit(-1);
     }
-    size = file_size(fd);
+    fsize = file_size(fd);
 
     // Given a 8-bit bytestream of length n, we need space for 4 bitstreams of length n ...
     AlignedAllocator<char, ALIGNMENT> alloc;
-    const size_t n = round_up_to(size, 8 * ALIGNMENT);
+    const size_t n = round_up_to(fsize, 8 * ALIGNMENT);
     chStream = alloc.allocate((4 * n) / 8);
     size_t length = 0;
     preprocess(chStream, &length, n, fd);
@@ -399,7 +399,7 @@ void * DoEditd(void *)
 
         CPUDriver pxDriver("editd");
         auto editd = editdPipeline(pxDriver, pattGroups[groupIdx]);
-        editd(chStream, size);
+        editd(chStream, fsize);
 
         count_mutex.lock();
         groupIdx = groupCount;
@@ -441,7 +441,7 @@ int main(int argc, char *argv[]) {
 
         CPUDriver pxDriver("editd");
         auto editd = editdPipeline(pxDriver, pattVector);
-        editd(chStream, size);
+        editd(chStream, fsize);
         std::cout << "total matches is " << matchList.size() << std::endl;
     }
     else{
@@ -455,7 +455,7 @@ int main(int argc, char *argv[]) {
                     for (int j=0; j<groupSize; j++){
                         pattern += pattVector[i+j];
                     }
-                    editd_ptr(chStream, size, pattern.c_str());
+                    editd_ptr(chStream, fsize, pattern.c_str());
                 }
             }
             else {
@@ -463,7 +463,7 @@ int main(int argc, char *argv[]) {
 
                     CPUDriver pxDriver("editd");
                     auto editd = editdPipeline(pxDriver, pattGroups[i]);
-                    editd(chStream, size);
+                    editd(chStream, fsize);
                 }
             }
         }
