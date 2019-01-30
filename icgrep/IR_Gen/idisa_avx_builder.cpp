@@ -454,18 +454,6 @@ std::string IDISA_AVX512F_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 512 ? "AVX512F_" + std::to_string(mBitBlockWidth) : "AVX512BW";
 }
 
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
-#define AVX512_MASKZ_PERMUTE_INTRINSIC(i) Intrinsic::x86_avx512_maskz_vpermt##i
-#define AVX512_MASK_PERMUTE_INTRINSIC(i) Intrinsic::x86_avx512_mask_vpermt##i
-#define AVX512_MASKZ_INTRINSIC(i) Intrinsic::x86_avx512_maskz_##i
-#define AVX512_MASK_INTRINSIC(i) Intrinsic::x86_avx512_mask_##i
-#else
-#define AVX512_MASKZ_PERMUTE_INTRINSIC(i) Intrinsic::x86_avx512_vpermi##i
-#define AVX512_MASK_PERMUTE_INTRINSIC(i) Intrinsic::x86_avx512_vpermi##i
-#define AVX512_MASKZ_INTRINSIC(i) Intrinsic::x86_avx512_##i
-#define AVX512_MASK_INTRINSIC(i) Intrinsic::x86_avx512_##i
-#endif
-
 llvm::Value * IDISA_AVX512F_Builder::hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) {
     if ((mBitBlockWidth == 512) && (fw == 16)) {
 
@@ -528,7 +516,11 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
     return CreateZExt(CreateBitCast(CreateZExtOrTrunc(bitmask, getIntNTy(field_count)), maskTy), resultTy);
 #else
     if (mBitBlockWidth == 512 && fw == 64) {
-        Value * broadcastFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_INTRINSIC(broadcasti64x4_512));
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
+        Value * broadcastFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_broadcasti64x4_512);
+#else
+        Value * broadcastFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_broadcasti64x4_512);
+#endif
         Value * broadcastMask = CreateZExtOrTrunc(bitmask, getInt8Ty());
         
         const unsigned int srcFieldCount = 8;
@@ -561,15 +553,8 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm
     }
     Constant * indexVec = ConstantVector::get({indexes, fieldCount});
     Value * permuteVec = CreateAdd(indexVec, simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy)));
-    Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
     if (mBitBlockWidth == 512) {
-        Value * permuteFunc = nullptr;
-        if (fw == 64) permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_q_512));
-        else if (fw == 32) permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_d_512));
-        if (permuteFunc) {
-            Value * shifted = CreateCall(permuteFunc, {permuteVec, fwCast(fw, a), fwCast(fw, allZeroes()), mask});
-            return shifted;
-        }
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, a), fwCast(fw, allZeroes()), permuteVec));
     }
     return IDISA_Builder::mvmd_srl(fw, a, shift, safe);
 }
@@ -583,55 +568,46 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm
     }
     Constant * indexVec = ConstantVector::get({indexes, fieldCount});
     Value * permuteVec = CreateSub(indexVec, simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy)));
-    Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
     if (mBitBlockWidth == 512) {
-        Value * permuteFunc = nullptr;
-        if (fw == 64) permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_q_512));
-        else if (fw == 32) permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_d_512));
-        if (permuteFunc) {
-            Value * shifted = CreateCall(permuteFunc, {permuteVec, fwCast(fw, allZeroes()), fwCast(fw, a), mask});
-            return shifted;
-        }
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, allZeroes()), fwCast(fw, a), permuteVec));
     }
     return IDISA_Builder::mvmd_sll(fw, a, shift);
 }
 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle(unsigned fw, llvm::Value * data_table, llvm::Value * index_vector) {
-    const unsigned fieldCount = mBitBlockWidth/fw;
-    if (mBitBlockWidth == 512 && fw == 32) {
-        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_d_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, data_table), fwCast(fw, data_table), mask});
-    }
-    if (mBitBlockWidth == 512 && fw == 64) {
-        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_q_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, data_table), fwCast(fw, data_table), mask});
-    }
-    if (mBitBlockWidth == 512 && fw == 16 && hostCPUFeatures.hasAVX512BW) {
-        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_hi_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, data_table), fwCast(fw, data_table), mask});
+    if (mBitBlockWidth == 512 && ((fw == 64) || (fw == 32) | (fw == 16))) {
+        return mvmd_shuffle2(fw, data_table, data_table, index_vector);
     }
     return IDISA_Builder::mvmd_shuffle(fw, data_table, index_vector);
 }
 
+
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
+#define AVX512_MASK_PERMUTE_INTRINSIC(i) Intrinsic::x86_avx512_mask_vpermt2##i
+#else
+#define AVX512_MASK_PERMUTE_INTRINSIC(i) Intrinsic::x86_avx512_vpermi2##i
+#endif
+
 llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * table0, llvm::Value * table1, llvm::Value * index_vector) {
-    const unsigned fieldCount = mBitBlockWidth/fw;
-    if (mBitBlockWidth == 512 && fw == 32) {
-        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_d_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, table0), fwCast(fw, table1), mask});
-    }
-    if (mBitBlockWidth == 512 && fw == 64) {
-        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(2var_q_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, table0), fwCast(fw, table1), mask});
-    }
-    if (mBitBlockWidth == 512 && fw == 16 && hostCPUFeatures.hasAVX512BW) {
-        Value * permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_hi_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, table0), fwCast(fw, table1), mask});
+    if (mBitBlockWidth == 512) {
+        Value * permuteFunc = nullptr;
+        if (mBitBlockWidth == 512 && fw == 32) {
+            permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(var_d_512));
+        }
+        if (mBitBlockWidth == 512 && fw == 64) {
+            permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(var_q_512));
+        }
+        if (mBitBlockWidth == 512 && fw == 16 && hostCPUFeatures.hasAVX512BW) {
+            permuteFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_PERMUTE_INTRINSIC(var_hi_512));
+        }
+        if (permuteFunc) {
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
+            Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
+            return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, table0), fwCast(fw, table1), mask});
+#else
+            return CreateCall(permuteFunc, {fwCast(fw, table0), fwCast(fw, index_vector), fwCast(fw, table1)});
+#endif
+        }
     }
     return IDISA_Builder::mvmd_shuffle2(fw, table0, table1, index_vector);
 }
@@ -655,20 +631,8 @@ Value * IDISA_AVX512F_Builder:: mvmd_slli(unsigned fw, llvm::Value * a, unsigned
     } else if (((shift % 2) == 0) && (fw < 32)) {
         return mvmd_slli(2 * fw, a, shift / 2);
     }
-    const unsigned fieldCount = mBitBlockWidth/fw;
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
-        // Mask with 1 bit per field indicating which fields are not zeroed out.
-        Type * fwTy = getIntNTy(fw);
-        Constant * fieldMask = ConstantInt::get(getIntNTy(fieldCount), (1 << fieldCount) - (1 << shift));
-        Value * permute_func = nullptr;
-        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_d_512));
-        else permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_hi_512));
-        Constant * indices[fieldCount];
-        for (unsigned i = 0; i < fieldCount; i++) {
-            indices[i] = i < shift ? UndefValue::get(fwTy) : ConstantInt::get(fwTy, i - shift);
-        }
-        Value * args[4] = {ConstantVector::get({indices, fieldCount}), fwCast(fw, a), UndefValue::get(fwVectorType(fw)), fieldMask};
-        return bitCast(CreateCall(permute_func, args));
+        return mvmd_dslli(fw, a, allZeroes(), shift);
     } else {
         unsigned field32_shift = (shift * fw) / 32;
         unsigned bit_shift = (shift * fw) % 32;
@@ -687,16 +651,12 @@ Value * IDISA_AVX512F_Builder:: mvmd_dslli(unsigned fw, llvm::Value * a, llvm::V
     const unsigned fieldCount = mBitBlockWidth/fw;
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
         Type * fwTy = getIntNTy(fw);
-        Value * permute_func = nullptr;
-        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_d_512));
-        else permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_hi_512));
         Constant * indices[fieldCount];
         for (unsigned i = 0; i < fieldCount; i++) {
             indices[i] = ConstantInt::get(fwTy, i + fieldCount - shift);
         }
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
-        Value * args[4] = {ConstantVector::get({indices, fieldCount}), fwCast(fw, b), fwCast(fw, a), mask};
-        return bitCast(CreateCall(permute_func, args));
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get({indices, fieldCount})));
+
     } else {
         unsigned field32_shift = (shift * fw) / 32;
         unsigned bit_shift = (shift * fw) % 32;
@@ -782,7 +742,7 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         // Merge the bytes.
         Value * byte_merge = esimd_mergeh(8, a, b);
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)        
-        Value * shufFn = Intrinsic::getDeclaration(getModule(),  AVX512_MASK_INTRINSIC(pshuf_b_512));
+        Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pshuf_b_512);
         // Make a shuffle table that translates the lower 4 bits of each byte in
         // order to spread out the bits: xxxxdcba => .d.c.b.a
         // We use two copies of the table for the AVX2 _mm256_shuffle_epi8
@@ -801,17 +761,12 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     }
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Value * permute_func = nullptr;
-        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_d_512));
-        else permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_hi_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
         Constant * Idxs[fieldCount];
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[2 * i] = getInt32(i + fieldCount / 2); // selects elements from first reg.
             Idxs[2 * i + 1] = getInt32(i + fieldCount / 2 + fieldCount); // selects elements from second reg.
         }
-        Value * args[4] = {ConstantVector::get({Idxs, fieldCount}), fwCast(fw, b), fwCast(fw, a), mask};
-        return bitCast(CreateCall(permute_func, args));
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, fieldCount})));
     }
     if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
@@ -842,7 +797,7 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Value * byte_merge = esimd_mergel(8, a, b);
         
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)        
-        Value * shufFn = Intrinsic::getDeclaration(getModule(),  AVX512_MASK_INTRINSIC(pshuf_b_512));
+        Value * shufFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pshuf_b_512);
         // Make a shuffle table that translates the lower 4 bits of each byte in
         // order to spread out the bits: xxxxdcba => .d.c.b.a
         // We use two copies of the table for the AVX2 _mm256_shuffle_epi8
@@ -861,17 +816,12 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     }
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Value * permute_func = nullptr;
-        if (fw == 32) permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_d_512));
-        else permute_func = Intrinsic::getDeclaration(getModule(), AVX512_MASKZ_PERMUTE_INTRINSIC(2var_hi_512));
-        Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
         Constant * Idxs[fieldCount];
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[2 * i] = getInt32(i); // selects elements from first reg.
             Idxs[2 * i + 1] = getInt32(i + fieldCount); // selects elements from second reg.
         }
-        Value * args[4] = {ConstantVector::get({Idxs, fieldCount}), fwCast(fw, b), fwCast(fw, a), mask};
-        return bitCast(CreateCall(permute_func, args));
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, fieldCount})));
     }
     if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
@@ -902,7 +852,11 @@ Value * IDISA_AVX512F_Builder::simd_if(unsigned fw, Value * cond, Value * a, Val
 }
 
 Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Value * c) {
-    Value * ternLogicFn = Intrinsic::getDeclaration(getModule(),  AVX512_MASK_INTRINSIC(pternlog_d_512));
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
+    Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pternlog_d_512);
+#else
+    Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_pternlog_d_512);
+#endif
     Constant * simd_mask = ConstantInt::get(getInt32Ty(), mask);
     Constant * writemask = ConstantInt::getAllOnesValue(getInt16Ty());
     Value * args[5] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask, writemask};
