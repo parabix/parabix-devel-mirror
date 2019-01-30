@@ -602,6 +602,7 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * table0, 
         }
         if (permuteFunc) {
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
+            const unsigned fieldCount = mBitBlockWidth/fw;
             Constant * mask = ConstantInt::getAllOnesValue(getIntNTy(fieldCount));
             return CreateCall(permuteFunc, {fwCast(fw, index_vector), fwCast(fw, table0), fwCast(fw, table1), mask});
 #else
