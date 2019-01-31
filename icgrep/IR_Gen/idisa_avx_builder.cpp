@@ -456,29 +456,11 @@ std::string IDISA_AVX512F_Builder::getBuilderUniqueName() {
 
 llvm::Value * IDISA_AVX512F_Builder::hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) {
     if ((mBitBlockWidth == 512) && (fw == 16)) {
-
-        const unsigned int field_count = 64;
-        Constant * Idxs[field_count];
-
-        for (unsigned int i = 0; i < field_count; i++) {
-            Idxs[i] = getInt32(i);
-        }
-
-        llvm::Value * pmovfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_wb_512);
-        llvm::Value * mask = getInt32(-1);
-        llvm::Constant * shuffleMask = ConstantVector::get({Idxs, 64});
-        llvm::Constant * src = UndefValue::get(VectorType::get(getInt8Ty(), 32));
-
         a = fwCast(fw, a);
         a = IDISA_Builder::simd_srli(fw, a, fw/2);
-        a = CreateCall(pmovfunc, {a, src, mask});
         b = fwCast(fw, b);
         b = IDISA_Builder::simd_srli(fw, b, fw/2);
-        b = CreateCall(pmovfunc, {b, src, mask});
-
-        llvm::Value * c = CreateShuffleVector(a, b, shuffleMask);
-        c = bitCast(c);
-        return c;
+        return hsimd_packl(fw, a, b);
     }
     return IDISA_Builder::hsimd_packh(fw, a, b);
 }
@@ -491,17 +473,10 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, l
         for (unsigned int i = 0; i < field_count; i++) {
             Idxs[i] = getInt32(i);
         }
-
-        llvm::Value * pmovfunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pmov_wb_512);
-        llvm::Value * mask = getInt32(-1);
         llvm::Constant * shuffleMask = ConstantVector::get({Idxs, 64});
-        llvm::Constant * src = UndefValue::get(VectorType::get(getInt8Ty(), 32));
-        a = fwCast(fw, a);
-        a = CreateCall(pmovfunc, {a, src, mask});
-        b = fwCast(fw, b);
-        b = CreateCall(pmovfunc, {b, src, mask});
-
-        llvm::Value * c = CreateShuffleVector(a, b, shuffleMask);
+        Value * a1 = CreateTrunc(fwCast(fw, a), VectorType::get(getInt8Ty(), 32));
+        Value * b1 = CreateTrunc(fwCast(fw, b), VectorType::get(getInt8Ty(), 32));
+        llvm::Value * c = CreateShuffleVector(a1, b1, shuffleMask);
         c = bitCast(c);
         return c;
     }
@@ -612,14 +587,23 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * table0, 
     }
     return IDISA_Builder::mvmd_shuffle2(fw, table0, table1, index_vector);
 }
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(9, 0, 0)
+#define AVX512_MASK_COMPRESS_INTRINSIC_64 Intrinsic::x86_avx512_mask_compress_q_512
+#define AVX512_MASK_COMPRESS_INTRINSIC_32 Intrinsic::x86_avx512_mask_compress_d_512
+#else
+#define AVX512_MASK_COMPRESS_INTRINSIC_64 Intrinsic::x86_avx512_mask_compress
+#define AVX512_MASK_COMPRESS_INTRINSIC_32 Intrinsic::x86_avx512_mask_compress
+#endif
 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
     if (mBitBlockWidth == 512 && fw == 32) {
-        Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_d_512);
+        Value * compressFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_COMPRESS_INTRINSIC_32);
+        compressFunc->print(llvm::errs(), false);
         return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateZExtOrTrunc(select_mask, getInt16Ty())});
     }
     if (mBitBlockWidth == 512 && fw == 64) {
-        Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_q_512);
+        Value * compressFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_COMPRESS_INTRINSIC_64);
+        compressFunc->print(llvm::errs(), false);
         return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), CreateZExtOrTrunc(select_mask, getInt8Ty())});
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
@@ -853,14 +837,15 @@ Value * IDISA_AVX512F_Builder::simd_if(unsigned fw, Value * cond, Value * a, Val
 }
 
 Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Value * c) {
+    Constant * simd_mask = ConstantInt::get(getInt32Ty(), mask);
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
     Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pternlog_d_512);
-#else
-    Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_pternlog_d_512);
-#endif
-    Constant * simd_mask = ConstantInt::get(getInt32Ty(), mask);
     Constant * writemask = ConstantInt::getAllOnesValue(getInt16Ty());
     Value * args[5] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask, writemask};
+#else
+    Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_pternlog_d_512);
+    Value * args[4] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask};
+#endif
     Value * rslt = CreateCall(ternLogicFn, args);
     return rslt;
 }
