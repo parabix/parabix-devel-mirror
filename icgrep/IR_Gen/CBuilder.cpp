@@ -9,7 +9,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/TypeBuilder.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/raw_ostream.h>
@@ -675,7 +674,7 @@ Value * CBuilder::CreateMProtect(Value * addr, Value * size, const Protect prote
 }
 
 IntegerType * LLVM_READNONE CBuilder::getIntAddrTy() const {
-    return TypeBuilder<intptr_t, false>::get(getContext());
+    return IntegerType::get(getContext(), sizeof(intptr_t) * 8);
 }
 
 PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) const {
@@ -792,7 +791,7 @@ Value * CBuilder::CreateRemoveCall(Value * path) {
 }
 
 Type * CBuilder::getPThreadTy() {
-    return getSizeTy();//TypeBuilder<pthread_t, false>::get(getContext());
+    return IntegerType::get(getContext(), sizeof(pthread_t) * 8);
 }
 
 Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
@@ -997,7 +996,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMess
         }
     } else if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Module * const m = getModule();
-        Type * const stackTy = TypeBuilder<uintptr_t, false>::get(getContext());
+        Type * const stackTy = IntegerType::get(getContext(), sizeof(uintptr_t) * 8);
         PointerType * const stackPtrTy = stackTy->getPointerTo();
         PointerType * const int8PtrTy = getInt8PtrTy();
         Function * function = m->getFunction("assert");
@@ -1473,7 +1472,7 @@ unsigned CBuilder::getPageSize() {
 CBuilder::CBuilder(LLVMContext & C)
 : IRBuilder<>(C)
 , mCacheLineAlignment(64)
-, mSizeType(TypeBuilder<size_t, false>::get(C))
+, mSizeType(IntegerType::get(getContext(), sizeof(size_t) * 8))
 , mFILEtype(nullptr)
 , mDriver(nullptr) {
 

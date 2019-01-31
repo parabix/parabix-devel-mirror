@@ -7,7 +7,6 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 #include <kernels/kernel_builder.h>
-#include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <grep/grep_engine.h>
 

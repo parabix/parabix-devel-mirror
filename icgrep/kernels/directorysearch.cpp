@@ -7,6 +7,7 @@
 #include <sys/syscall.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
+#include <IR_Gen/TypeBuilder.h>
 
 #define FIRST_NONSYSTEM_INODE 11
 
