@@ -4326,7 +4326,7 @@ namespace UCD {
         857160, 857183, 857206, 857229, 857252, 857275, 857298, 857321,
         857344, 857367, 857390, 857413, 857436, 857459, 857482, 857505,
         857528, 857551, 857574, 857597, 857620, 857643, 857666};
-        const static char string_buffer LLVM_ALIGNAS(32) [857856] = u8R"__(SPACE
+        const static char string_buffer LLVM_ALIGNAS(64) [857856] = u8R"__(SPACE
 EXCLAMATION MARK
 QUOTATION MARK
 NUMBER SIGN
@@ -41619,7 +41619,7 @@ VARIATION SELECTOR-256
         23089, 23093, 23097, 23101, 23105, 23109, 23113, 23118, 23122,
         23127, 23132, 23137, 23141, 23145, 23149, 23153, 23157, 23161,
         23165, 23169, 23174};
-        const static char string_buffer LLVM_ALIGNAS(32) [23296] = u8R"__( 
+        const static char string_buffer LLVM_ALIGNAS(64) [23296] = u8R"__( 
  ̈
 a
  ̄
@@ -48431,7 +48431,7 @@ DJ
         5159, 5164, 5169, 5174, 5179, 5184, 5189, 5194, 5199, 5204, 5209,
         5214, 5219, 5224, 5229, 5234, 5239, 5244, 5249, 5254, 5259, 5264,
         5269, 5274, 5279, 5284, 5289, 5294, 5299, 5304, 5309};
-        const static char string_buffer LLVM_ALIGNAS(32) [5376] = u8R"__(A
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(A
 B
 C
 D
@@ -50344,7 +50344,7 @@ S
         5126, 5131, 5136, 5141, 5146, 5151, 5156, 5161, 5166, 5171, 5176,
         5181, 5186, 5191, 5196, 5201, 5206, 5211, 5216, 5221, 5226, 5231,
         5236, 5241};
-        const static char string_buffer LLVM_ALIGNAS(32) [5376] = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(a
 b
 c
 d
@@ -52241,7 +52241,7 @@ k
         4985, 4990, 4995, 5000, 5005, 5010, 5015, 5020, 5025, 5030, 5035,
         5040, 5045, 5050, 5055, 5060, 5065, 5070, 5075, 5080, 5085, 5090,
         5095, 5100, 5105, 5110, 5115, 5120, 5125};
-        const static char string_buffer LLVM_ALIGNAS(32) [5376] = u8R"__(A
+        const static char string_buffer LLVM_ALIGNAS(64) [5376] = u8R"__(A
 B
 C
 D
@@ -53895,7 +53895,7 @@ S
 
 
         const unsigned buffer_length = 4417;
-        const static char string_buffer LLVM_ALIGNAS(32) [4608] = u8R"__(0
+        const static char string_buffer LLVM_ALIGNAS(64) [4608] = u8R"__(0
 1
 2
 3

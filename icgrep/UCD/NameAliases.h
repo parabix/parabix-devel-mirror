@@ -76,7 +76,7 @@ namespace UCD {
         2477, 2483, 2489, 2495, 2501, 2507, 2513, 2519, 2525, 2531, 2537,
         2543, 2549, 2555, 2561, 2567, 2573, 2579, 2585, 2591, 2597, 2603,
         2609, 2615, 2621, 2627, 2633, 2639, 2645, 2651, 2657, 2663};
-        const static char string_buffer LLVM_ALIGNAS(32) [2816] = u8R"__(NUL
+        const static char string_buffer LLVM_ALIGNAS(64) [2816] = u8R"__(NUL
 SOH
 STX
 ETX

@@ -51,7 +51,7 @@ namespace UCD {
         282, 286, 290, 294, 298, 302, 306, 310, 314, 318, 322, 326, 330,
         334, 338, 342, 346, 350, 354, 358, 362, 366, 370, 374, 378, 382,
         386, 390, 394, 398, 402, 406};
-        const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__(ß
+        const static char string_buffer LLVM_ALIGNAS(64) [512] = u8R"__(ß
 i̇
 ŉ
 ǰ
@@ -213,7 +213,7 @@ i̇
         406, 411, 416, 421, 428, 433, 440, 447, 452, 459, 466, 473, 478,
         483, 490, 496, 501, 506, 511, 518, 523, 526, 529, 532, 536, 540,
         543, 546, 551, 556, 561, 566, 571};
-        const static char string_buffer LLVM_ALIGNAS(32) [768] = u8R"__(SS
+        const static char string_buffer LLVM_ALIGNAS(64) [768] = u8R"__(SS
 İ
 ʼN
 J̌
@@ -375,7 +375,7 @@ ST
         308, 312, 317, 322, 329, 333, 340, 347, 352, 359, 366, 373, 378,
         383, 390, 396, 400, 405, 410, 417, 421, 424, 427, 430, 434, 438,
         441, 444, 449, 454, 459, 464, 469};
-        const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__(Ss
+        const static char string_buffer LLVM_ALIGNAS(64) [512] = u8R"__(Ss
 İ
 ʼN
 J̌

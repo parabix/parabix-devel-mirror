@@ -1627,7 +1627,7 @@ namespace UCD {
         23502, 23506, 23510, 23514, 23518, 23522, 23527, 23531, 23536,
         23541, 23546, 23550, 23554, 23558, 23562, 23566, 23570, 23574,
         23578, 23583};
-        const static char string_buffer LLVM_ALIGNAS(32) [23808] = u8R"__(a
+        const static char string_buffer LLVM_ALIGNAS(64) [23808] = u8R"__(a
 b
 c
 d
