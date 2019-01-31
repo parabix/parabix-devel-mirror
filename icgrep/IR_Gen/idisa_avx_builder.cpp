@@ -596,15 +596,27 @@ llvm::Value * IDISA_AVX512F_Builder::mvmd_shuffle2(unsigned fw, Value * table0, 
 #endif
 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) {
+    unsigned fieldCount = mBitBlockWidth/fw;
+    Value * mask = CreateZExtOrTrunc(select_mask, getIntNTy(fieldCount));
     if (mBitBlockWidth == 512 && fw == 32) {
-        Value * compressFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_COMPRESS_INTRINSIC_32);
-        compressFunc->print(llvm::errs(), false);
-        return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateZExtOrTrunc(select_mask, getInt16Ty())});
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(9, 0, 0)
+        Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_d_512);
+        return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), mask});
+#else
+        Type * maskTy = VectorType::get(getInt1Ty(), fieldCount);
+        Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress, fwVectorType(fw));
+        return CreateCall(compressFunc, {fwCast(32, a), fwCast(32, allZeroes()), CreateBitCast(mask, maskTy)});
+#endif
     }
     if (mBitBlockWidth == 512 && fw == 64) {
-        Value * compressFunc = Intrinsic::getDeclaration(getModule(), AVX512_MASK_COMPRESS_INTRINSIC_64);
-        compressFunc->print(llvm::errs(), false);
-        return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), CreateZExtOrTrunc(select_mask, getInt8Ty())});
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(9, 0, 0)
+        Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress_q_512);
+        return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), mask});
+#else
+        Type * maskTy = VectorType::get(getInt1Ty(), fieldCount);
+        Value * compressFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_compress, fwVectorType(fw));
+        return CreateCall(compressFunc, {fwCast(64, a), fwCast(64, allZeroes()), CreateBitCast(mask, maskTy)});
+#endif
     }
     return IDISA_Builder::mvmd_compress(fw, a, select_mask);
 }
