@@ -262,7 +262,9 @@ void CPUDriver::generateUncachedKernels() {
         mCachedKernel.emplace_back(kernel.release());
     }
     mUncachedKernel.clear();
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
     llvm::reportAndResetTimings();
+#endif
     llvm::PrintStatistics();
 }
 
