@@ -126,7 +126,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
     }
     PabloAST * nextPos = markerVar(marker);
     const cc::Alphabet * a = cc->getAlphabet();
-    if (a == &cc::Byte) {
+    if ((a == &cc::Byte) || (a == &cc::UTF8)) {
         if (marker.pos == FinalMatchUnit) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
@@ -151,7 +151,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         }
         unsigned i = 0;
         while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
-        if (i == mAlphabets.size()) llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler");
+        if (i == mAlphabets.size()) llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, indexingAlphabet = " + mIndexingAlphabet.getName());
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
 }
