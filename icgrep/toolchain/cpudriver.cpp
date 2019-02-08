@@ -60,6 +60,7 @@
 #else
 #include <llvm/IR/PassTimingInfo.h>
 #endif
+#include <llvm/Support/ManagedStatic.h>
 #ifndef NDEBUG
 #define IN_DEBUG_MODE true
 #else
@@ -262,10 +263,6 @@ void CPUDriver::generateUncachedKernels() {
         mCachedKernel.emplace_back(kernel.release());
     }
     mUncachedKernel.clear();
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
-    llvm::reportAndResetTimings();
-#endif
-    llvm::PrintStatistics();
 }
 
 void * CPUDriver::finalizeObject(PipelineKernel * const pipeline) {
@@ -343,6 +340,7 @@ CPUDriver::~CPUDriver() {
     delete mEngine;
     #endif
     delete mTarget;
+    llvm_shutdown();
 }
 
 
