@@ -236,7 +236,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
     // For simple regular expressions with a small number of characters, we
     // can bypass transposition and use the Direct CC compiler.
-    const auto isSimple = (numOfREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB);
+    const auto isSimple = (numOfREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB) && mUnicodeProperties.empty();
     const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
     const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
     const auto internalS2P = isSimple && (isWithinByteTestLimit || hasTriCC);
@@ -310,6 +310,18 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             }
         }
         options->setRE(mREs[i]);
+        std::set<re::Name *> props;
+        re::gatherUnicodeProperties(mREs[i], props);
+        for (const auto & p : props) {
+            auto name = p->getFullName();
+            const auto f = propertyStream.find(name);
+            if (f != propertyStream.end()) {
+                options->addExternal(name, f->second);
+            }
+        }
+        if (hasGCB[i]) { assert (GCB_stream);
+            options->addExternal("\\b{g}", GCB_stream);
+        }
         if (internalS2P) {
             if (!isWithinByteTestLimit) {
                 if (MultithreadedSimpleRE) {
@@ -333,21 +345,6 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             options->addExternal("UTF8_nonfinal", RequiredStreams);
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
                 options->addExternal("UTF8_LB", LineBreakStream);
-            }
-            std::set<re::Name *> UnicodeProperties;
-            if (PropertyKernels) {
-                re::gatherUnicodeProperties(mREs[i], UnicodeProperties);
-                for (const auto & p : UnicodeProperties) {
-                    auto name = p->getFullName();
-                    const auto f = propertyStream.find(name);
-                    if (LLVM_UNLIKELY(f == propertyStream.end())) {
-                        report_fatal_error(name + " not found");
-                    }
-                    options->addExternal(name, f->second);
-                }
-            }
-            if (hasGCB[i]) { assert (GCB_stream);
-                options->addExternal("\\b{g}", GCB_stream);
             }
             if (CC_Multiplexing) {
                 const auto UnicodeSets = re::collectCCs(mREs[i], cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});

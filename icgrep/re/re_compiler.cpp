@@ -182,7 +182,7 @@ inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker,
 }
 
 inline MarkerType RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
-    const auto & nameString = name->getName();
+    const auto & nameString = name->getFullName();
     MarkerType m;
     if (LLVM_LIKELY(mCompiledName->get(name, m))) {
         return m;
