@@ -70,7 +70,7 @@ using namespace kernel;
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
-static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(false));
+static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(true));
 static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
 const unsigned DefaultByteCClimit = 6;
 
@@ -564,9 +564,6 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstr
     close(fileDescriptor);
     if (accum.binaryFileSignalled()) {
         accum.mResultStr.clear();
-        if (!mSuppressFileMessages) {
-            accum.mResultStr << "Binary file " << fileName << " skipped.\n";
-        }
     }
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;
