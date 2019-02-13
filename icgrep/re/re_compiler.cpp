@@ -608,11 +608,19 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
     }
 }
 
-pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
-    MarkerType m;
-    auto f = mExternalNameMap.find("UTF8_nonfinal");
+pablo::PabloAST * RE_Compiler::u8Final(pablo::PabloBuilder & pb) {
+    auto f = mExternalNameMap.find("UTF8_index");
     if (f!= mExternalNameMap.end()) {
         return f->second;
+    }
+    return pb.createNot(u8NonFinal(pb));
+}
+
+pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
+    MarkerType m;
+    auto f = mExternalNameMap.find("UTF8_index");
+    if (f!= mExternalNameMap.end()) {
+        return pb.createNot(f->second);
     }
     if (LLVM_LIKELY(mCompiledName->get(mNonFinalName, m))) {
         return markerVar(m);
@@ -620,10 +628,6 @@ pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
     m = compile(mNonFinalName->getDefinition(), pb);
     mCompiledName->add(mNonFinalName, m);
     return markerVar(m);
-}
-
-pablo::PabloAST * RE_Compiler::u8Final(pablo::PabloBuilder & pb) {
-    return pb.createNot(u8NonFinal(pb));
 }
 
     

@@ -247,7 +247,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
 
     StreamSet * SourceStream = ByteStream;
-    StreamSet * const RequiredStreams = P->CreateStreamSet();
+    StreamSet * const U8index = P->CreateStreamSet();
     StreamSet * UnicodeLB = nullptr;
     std::map<std::string, StreamSet *> propertyStream;
     StreamSet * GCB_stream = nullptr;
@@ -268,11 +268,11 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         UnicodeLB = P->CreateStreamSet();
         StreamSet * const LineFeedStream = P->CreateStreamSet();
         P->CreateKernelCall<LineFeedKernelBuilder>(SourceStream, LineFeedStream);
-        P->CreateKernelCall<RequiredStreams_UTF8>(SourceStream, LineFeedStream, RequiredStreams, UnicodeLB);
+        P->CreateKernelCall<RequiredStreams_UTF8>(SourceStream, LineFeedStream, U8index, UnicodeLB);
         LineBreakStream = UnicodeLB;
     }
     else if (!internalS2P) {
-        P->CreateKernelCall<UTF8_nonFinal>(SourceStream, RequiredStreams);
+        P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
             P->CreateKernelCall<LineFeedKernelBuilder>(SourceStream, LineBreakStream);
         } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
@@ -291,7 +291,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
     if (hasComponent(mRequiredComponents, Component::GraphemeClusterBoundary)) {
         GCB_stream = P->CreateStreamSet();
-        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, RequiredStreams, GCB_stream);
+        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, U8index, GCB_stream);
     }
 
     for(unsigned i = 0; i < numOfREs; ++i) {
@@ -342,7 +342,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             Kernel * LB_nullK = P->CreateKernelCall<CharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream, callbackObject);
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
         } else {
-            options->addExternal("UTF8_nonfinal", RequiredStreams);
+            options->addExternal("UTF8_index", U8index);
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
                 options->addExternal("UTF8_LB", LineBreakStream);
             }

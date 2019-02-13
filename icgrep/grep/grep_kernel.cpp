@@ -66,7 +66,7 @@ void UnicodeLineBreakKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(UTF8_LB, pb.getInteger(0)), breakStream);
 }
 
-void UTF8_nonFinal::generatePabloMethod() {
+void UTF8_index::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
@@ -146,16 +146,17 @@ void UTF8_nonFinal::generatePabloMethod() {
     //pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
     //PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
 
-    Var * const required = getOutputStreamVar("nonFinal");
-    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
+    Var * const u8index = getOutputStreamVar("u8index");
+    PabloAST * u8final = pb.createInFile(pb.createNot(nonFinal));
+    pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u8final);
 }
 
-UTF8_nonFinal::UTF8_nonFinal(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8nonFinal)
-: PabloKernel(kb, "UTF8_nonFinal" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
+UTF8_index::UTF8_index(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8index)
+: PabloKernel(kb, "UTF8_index_" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
 // input
 {Binding{"source", Source}},
 // output
-{Binding{"nonFinal", u8nonFinal}}) {
+{Binding{"u8index", u8index}}) {
 
 }
 
@@ -259,8 +260,9 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
     pb.createAssign(nonFinal, pb.createOr(nonFinal, CRLF));
 
-    Var * const required = getOutputStreamVar("nonFinal");
-    pb.createAssign(pb.createExtract(required, pb.getInteger(0)), nonFinal);
+    Var * const u8index = getOutputStreamVar("u8index");
+    PabloAST * u8final = pb.createNot(nonFinal);
+    pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u8final);
     pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);
 }
 
@@ -270,7 +272,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 {Binding{"source", Source},
  Binding{"lf", LineFeedStream, FixedRate(), LookAhead(1)}},
 // output
-{Binding{"nonFinal", RequiredStreams, FixedRate()},
+{Binding{"u8index", RequiredStreams, FixedRate()},
  Binding{"UnicodeLB", UnicodeLB, FixedRate()}}) {
 
 }
