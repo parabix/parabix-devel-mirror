@@ -513,7 +513,7 @@ protected:
     PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;
     Value *                                     mPipelineTerminated = nullptr;
-    TerminatorInst *                            mPipelineEntryBranch = nullptr;
+    BranchInst *                                mPipelineEntryBranch = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
