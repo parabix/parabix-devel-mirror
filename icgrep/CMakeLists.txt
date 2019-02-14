@@ -7,6 +7,7 @@ enable_testing()
 set (icgrep_VERSION_MAJOR 1)
 set (icgrep_VERSION_MINOR 6)
 
+
 option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
@@ -187,6 +188,11 @@ else()
       endif()
     endif()
   endif()
+endif()
+
+check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
+if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
 endif()
 
 #Disable RunTime Type Information

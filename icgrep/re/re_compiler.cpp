@@ -126,7 +126,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
     }
     PabloAST * nextPos = markerVar(marker);
     const cc::Alphabet * a = cc->getAlphabet();
-    if (a == &cc::Byte) {
+    if ((a == &cc::Byte) || (a == &cc::UTF8)) {
         if (marker.pos == FinalMatchUnit) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
@@ -151,7 +151,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         }
         unsigned i = 0;
         while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
-        if (i == mAlphabets.size()) llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler");
+        if (i == mAlphabets.size()) llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, indexingAlphabet = " + mIndexingAlphabet.getName());
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
 }
@@ -182,7 +182,7 @@ inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker,
 }
 
 inline MarkerType RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
-    const auto & nameString = name->getName();
+    const auto & nameString = name->getFullName();
     MarkerType m;
     if (LLVM_LIKELY(mCompiledName->get(name, m))) {
         return m;
@@ -608,11 +608,19 @@ inline void RE_Compiler::AlignMarkers(MarkerType & m1, MarkerType & m2, PabloBui
     }
 }
 
-pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
-    MarkerType m;
-    auto f = mExternalNameMap.find("UTF8_nonfinal");
+pablo::PabloAST * RE_Compiler::u8Final(pablo::PabloBuilder & pb) {
+    auto f = mExternalNameMap.find("UTF8_index");
     if (f!= mExternalNameMap.end()) {
         return f->second;
+    }
+    return pb.createNot(u8NonFinal(pb));
+}
+
+pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
+    MarkerType m;
+    auto f = mExternalNameMap.find("UTF8_index");
+    if (f!= mExternalNameMap.end()) {
+        return pb.createNot(f->second);
     }
     if (LLVM_LIKELY(mCompiledName->get(mNonFinalName, m))) {
         return markerVar(m);
@@ -620,10 +628,6 @@ pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
     m = compile(mNonFinalName->getDefinition(), pb);
     mCompiledName->add(mNonFinalName, m);
     return markerVar(m);
-}
-
-pablo::PabloAST * RE_Compiler::u8Final(pablo::PabloBuilder & pb) {
-    return pb.createNot(u8NonFinal(pb));
 }
 
     

@@ -117,7 +117,7 @@ namespace UCD {
         1574, 1578, 1582, 1586, 1590, 1594, 1598, 1602, 1606, 1610, 1614,
         1618, 1622, 1626, 1630, 1634, 1638, 1642, 1646, 1650, 1654, 1658,
         1662};
-        const static char string_buffer LLVM_ALIGNAS(32) [1792] = u8R"__()
+        const static char string_buffer LLVM_ALIGNAS(64) [1792] = u8R"__()
 (
 >
 <

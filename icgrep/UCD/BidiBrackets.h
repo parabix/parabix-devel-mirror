@@ -70,7 +70,7 @@ namespace UCD {
         328, 332, 336, 340, 344, 348, 352, 356, 360, 364, 368, 372, 376,
         380, 384, 388, 392, 396, 400, 404, 408, 412, 416, 420, 424, 428,
         432, 436, 440, 444, 448, 452, 456, 460, 464, 468};
-        const static char string_buffer LLVM_ALIGNAS(32) [512] = u8R"__()
+        const static char string_buffer LLVM_ALIGNAS(64) [512] = u8R"__()
 (
 ]
 [

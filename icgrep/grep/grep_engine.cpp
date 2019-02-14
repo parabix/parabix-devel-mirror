@@ -70,7 +70,7 @@ using namespace kernel;
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
-static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(false));
+static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(true));
 static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
 const unsigned DefaultByteCClimit = 6;
 
@@ -236,7 +236,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
     // For simple regular expressions with a small number of characters, we
     // can bypass transposition and use the Direct CC compiler.
-    const auto isSimple = (numOfREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB);
+    const auto isSimple = (numOfREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB) && mUnicodeProperties.empty();
     const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
     const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
     const auto internalS2P = isSimple && (isWithinByteTestLimit || hasTriCC);
@@ -247,7 +247,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
 
     StreamSet * SourceStream = ByteStream;
-    StreamSet * const RequiredStreams = P->CreateStreamSet();
+    StreamSet * const U8index = P->CreateStreamSet();
     StreamSet * UnicodeLB = nullptr;
     std::map<std::string, StreamSet *> propertyStream;
     StreamSet * GCB_stream = nullptr;
@@ -268,11 +268,11 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         UnicodeLB = P->CreateStreamSet();
         StreamSet * const LineFeedStream = P->CreateStreamSet();
         P->CreateKernelCall<LineFeedKernelBuilder>(SourceStream, LineFeedStream);
-        P->CreateKernelCall<RequiredStreams_UTF8>(SourceStream, LineFeedStream, RequiredStreams, UnicodeLB);
+        P->CreateKernelCall<RequiredStreams_UTF8>(SourceStream, LineFeedStream, U8index, UnicodeLB);
         LineBreakStream = UnicodeLB;
     }
     else if (!internalS2P) {
-        P->CreateKernelCall<UTF8_nonFinal>(SourceStream, RequiredStreams);
+        P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
             P->CreateKernelCall<LineFeedKernelBuilder>(SourceStream, LineBreakStream);
         } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
@@ -291,7 +291,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
     if (hasComponent(mRequiredComponents, Component::GraphemeClusterBoundary)) {
         GCB_stream = P->CreateStreamSet();
-        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, RequiredStreams, GCB_stream);
+        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, U8index, GCB_stream);
     }
 
     for(unsigned i = 0; i < numOfREs; ++i) {
@@ -310,6 +310,18 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             }
         }
         options->setRE(mREs[i]);
+        std::set<re::Name *> props;
+        re::gatherUnicodeProperties(mREs[i], props);
+        for (const auto & p : props) {
+            auto name = p->getFullName();
+            const auto f = propertyStream.find(name);
+            if (f != propertyStream.end()) {
+                options->addExternal(name, f->second);
+            }
+        }
+        if (hasGCB[i]) { assert (GCB_stream);
+            options->addExternal("\\b{g}", GCB_stream);
+        }
         if (internalS2P) {
             if (!isWithinByteTestLimit) {
                 if (MultithreadedSimpleRE) {
@@ -330,24 +342,9 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             Kernel * LB_nullK = P->CreateKernelCall<CharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream, callbackObject);
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
         } else {
-            options->addExternal("UTF8_nonfinal", RequiredStreams);
+            options->addExternal("UTF8_index", U8index);
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
                 options->addExternal("UTF8_LB", LineBreakStream);
-            }
-            std::set<re::Name *> UnicodeProperties;
-            if (PropertyKernels) {
-                re::gatherUnicodeProperties(mREs[i], UnicodeProperties);
-                for (const auto & p : UnicodeProperties) {
-                    auto name = p->getFullName();
-                    const auto f = propertyStream.find(name);
-                    if (LLVM_UNLIKELY(f == propertyStream.end())) {
-                        report_fatal_error(name + " not found");
-                    }
-                    options->addExternal(name, f->second);
-                }
-            }
-            if (hasGCB[i]) { assert (GCB_stream);
-                options->addExternal("\\b{g}", GCB_stream);
             }
             if (CC_Multiplexing) {
                 const auto UnicodeSets = re::collectCCs(mREs[i], cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});
@@ -564,9 +561,6 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstr
     close(fileDescriptor);
     if (accum.binaryFileSignalled()) {
         accum.mResultStr.clear();
-        if (!mSuppressFileMessages) {
-            accum.mResultStr << "Binary file " << fileName << " skipped.\n";
-        }
     }
     if (accum.mLineCount > 0) grepMatchFound = true;
     return accum.mLineCount;

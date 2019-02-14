@@ -180,14 +180,16 @@ static cl::opt<int, true> MaxCountOption("m", cl::location(MaxCountFlag),
                                          cl::desc("Process only the first <num> matches per file3."),
                                          cl::cat(Output_Options), cl::Grouping);
 static cl::alias MaxCountAlias("max-count", cl::desc("Alias for -m"), cl::aliasopt(MaxCountOption));
-    
-ColoringType ColorFlag;
+
+ColoringType ColorFlag = neverColor;
+#if 0
 static cl::opt<ColoringType, true> Color("color", cl::desc("Set colorization of the output"), cl::location(ColorFlag), cl::cat(Output_Options), cl::init(neverColor),
                                  cl::values(clEnumValN(alwaysColor, "always", "Enable colorization"),
                                             clEnumValN(autoColor,   "auto", "Colorize output to stdout"),
                                             clEnumValN(neverColor,  "never", "Disable colorization")
                                             CL_ENUM_VAL_SENTINEL));
 static cl::alias ColorAlias("colour", cl::desc("Alias for -color"), cl::aliasopt(Color));
+#endif
 //
 // Handler for errors reported through llvm::report_fatal_error.  Report
 // and signal error the InternalFailure exit code.

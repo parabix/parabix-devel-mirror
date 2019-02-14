@@ -25,10 +25,10 @@ std::string base64(std::string to_encode) {
 }
 
 
-UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name, StreamSet *BasisBits, StreamSet * property)
+UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name, StreamSet * Source, StreamSet * property)
 : PabloKernel(iBuilder,
-"UCD:" + base64(property_value_name->getFullName().c_str()),
-{Binding{"basis", BasisBits}},
+"UCD:" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()) + base64(property_value_name->getFullName().c_str()),
+{Binding{"source", Source}},
 {Binding{"property_stream", property}}),
   mName(property_value_name) {
 
@@ -36,8 +36,14 @@ UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr
 
 void UnicodePropertyKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
-    UCD::UCDCompiler ucdCompiler(ccc);
+    std::unique_ptr<cc::CC_Compiler> ccc;
+    bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
+    if (useDirectCC) {
+        ccc = llvm::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = llvm::make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("source"));
+    }
+    UCD::UCDCompiler ucdCompiler(*ccc.get());
     UCD::UCDCompiler::NameMap nameMap;
     nameMap.emplace(mName, nullptr);
     ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
