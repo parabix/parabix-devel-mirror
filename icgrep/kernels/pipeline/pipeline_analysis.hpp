@@ -235,7 +235,7 @@ void PipelineCompiler::removeRedundantKernels(RelationshipGraph & G, const Kerne
             streams.resize(numOfStreams);
             scalars.resize(n - numOfStreams);
 
-            KernelId id(std::move(k->getName()), streams, scalars);
+            KernelId id(k->getName(), streams, scalars);
 
             const auto f = Ids.emplace(std::move(id), i);
             if (LLVM_UNLIKELY(!f.second)) {
