@@ -1,0 +1,3 @@
+<greptest>
+<grepcase regexp="\p{Greek}" datafile="arwiki-20150901-pages-articles.xml" flags="-c -thread-num=1" grepcount="13315"/>
+</greptest>

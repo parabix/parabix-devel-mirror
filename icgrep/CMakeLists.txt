@@ -284,6 +284,12 @@ add_test(
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
 
+if (EXISTS /usr/local/data/arwiki-20150901-pages-articles.xml)
+add_test (NAME perf_test_1
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND python greptest.py -d /usr/local/data/ -t ${PROJECT_SOURCE_DIR}/../QA/perftest.xml ${CMAKE_BINARY_DIR}/icgrep)
+endif()
+
 add_test(
   NAME abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
