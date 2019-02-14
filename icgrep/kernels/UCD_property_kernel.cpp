@@ -4,6 +4,7 @@
  */
 
 #include "UCD_property_kernel.h"
+#include <kernels/kernel.h>
 #include <re/re_toolchain.h>
 #include <re/re_name.h>
 #include <cc/cc_compiler.h>
@@ -12,22 +13,13 @@
 #include <kernels/kernel_builder.h>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
-#include <boost/archive/iterators/base64_from_binary.hpp>
-#include <boost/archive/iterators/transform_width.hpp>
 
 using namespace kernel;
 using namespace pablo;
-using namespace boost::archive::iterators;
-
-std::string base64(std::string to_encode) {
-    typedef base64_from_binary< transform_width<std::string::const_iterator, 6, 8> > base64_t;
-    return std::string(base64_t(to_encode.begin()), base64_t(to_encode.end()));
-}
-
 
 UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name, StreamSet * Source, StreamSet * property)
 : PabloKernel(iBuilder,
-"UCD:" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()) + base64(property_value_name->getFullName().c_str()),
+"UCD:" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()) + getStringHash(property_value_name->getFullName()),
 {Binding{"source", Source}},
 {Binding{"property_stream", property}}),
   mName(property_value_name) {
