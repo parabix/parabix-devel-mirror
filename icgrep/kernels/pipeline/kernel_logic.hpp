@@ -675,7 +675,10 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
     Value * ptr = nullptr;
     if (addressable || rate.isBounded() || rate.isUnknown()) {
         if (mNumOfAddressableItemCount == mAddressableItemCountPtr.size()) {
-            AllocaInst * const aic = new AllocaInst(b->getSizeTy(), "AddressableItemCount", mPipelineEntryBranch);
+            BasicBlock * bb = b->GetInsertBlock();
+            b->SetInsertPoint(mPipelineEntryBranch);
+            AllocaInst * const aic = b->CreateAlloca(b->getSizeTy(), nullptr, "AddressableItemCount");
+            b->SetInsertPoint(bb);
             mAddressableItemCountPtr.push_back(aic);
         }
         ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
