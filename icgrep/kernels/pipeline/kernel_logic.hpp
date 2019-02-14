@@ -763,7 +763,7 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
-        Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
+        Value * const mask = b->bitblock_mask_to(maskOffset);
         BasicBlock * const entry = b->GetInsertBlock();
         BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);
         BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
