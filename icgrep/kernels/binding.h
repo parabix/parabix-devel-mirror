@@ -17,6 +17,7 @@ struct Binding : public AttributeSet {
 
     friend class Kernel;
     friend class PipelineBuilder;
+    friend class PipelineCompiler;
     friend class PipelineKernel;
 
     // TODO: use templatized var-args to simplify the constructors? would need to default in the processing rate and verify only one was added.

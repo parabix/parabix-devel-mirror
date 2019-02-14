@@ -167,6 +167,8 @@ public:
     //  Create a call to:  int unlink(const char *path);
     llvm::Value * CreateUnlinkCall(llvm::Value * path);
 
+    llvm::Value * CreatePosixFAllocate(llvm::Value * fileDescriptor, llvm::Value * offset, llvm::Value * len);
+
     // llvm::Value * CreateFileSize(llvm::Value * fileDescriptor);
 
     llvm::Value * CreateFSync(llvm::Value * fileDescriptor);
@@ -386,8 +388,12 @@ public:
     llvm::CallInst * CreateSRandCall(llvm::Value * randomSeed);
     llvm::CallInst * CreateRandCall();
 
-    void setDriver(BaseDriver * const driver) {
-        mDriver = driver;
+    void setDriver(BaseDriver & driver) {
+        mDriver = &driver;
+    }
+
+    BaseDriver & getDriver() const {
+        return *mDriver;
     }
 
 protected:

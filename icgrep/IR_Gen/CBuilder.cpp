@@ -245,6 +245,21 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
     return CreateCall(unlinkFunc, path);
 }
 
+Value * CBuilder::CreatePosixFAllocate(llvm::Value * fileDescriptor, llvm::Value * offset, llvm::Value * len) {
+#if defined(__APPLE__) || defined(_WIN32)
+    return nullptr;
+#elif defined(__linux__)
+    Module * const m = getModule();
+    IntegerType * sizeTy = getSizeTy();
+    Function * fPosixFAllocate = m->getFunction("posix_fallocate");
+    if (fPosixFAllocate == nullptr) {
+        FunctionType * fty = FunctionType::get(sizeTy, {getInt32Ty(), sizeTy, sizeTy}, false);
+        fPosixFAllocate = Function::Create(fty, Function::ExternalLinkage, "posix_fallocate", m);
+    }
+    return CreateCall(fPosixFAllocate, {fileDescriptor, offset, len});
+#endif
+}
+
 Value * CBuilder::CreateFSync(Value * fileDescriptor) {
     Module * const m = getModule();
     Function * fSync = m->getFunction("fsync");

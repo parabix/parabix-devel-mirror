@@ -73,7 +73,7 @@ protected:
 
 
     // Internal pipeline constructor uses a zero-length tag struct to prevent
-    // overloading errors. This paramater will be dropped by the compiler.
+    // overloading errors. This parameter will be dropped by the compiler.
     struct Internal {};
     PipelineBuilder(Internal, BaseDriver & driver,
                     Bindings stream_inputs, Bindings stream_outputs,
@@ -83,8 +83,6 @@ protected:
     virtual Kernel * makeKernel();
 
     Kernel * initializeKernel(Kernel * const kernel);
-
-    void addInputScalar(llvm::Type * type, std::string name);
 
 protected:
 

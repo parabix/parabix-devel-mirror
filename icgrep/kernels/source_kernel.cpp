@@ -371,10 +371,11 @@ void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
         Constant * const ZERO = b->getSize(0);
         const StreamSetBuffer * const sourceBuffer = getOutputStreamSetBuffer("sourceBuffer");
         Value * const fromIndex = b->CreateUDiv(consumedItems, BLOCK_WIDTH);
-        readStart = sourceBuffer->getStreamBlockPtr(b.get(), ZERO, fromIndex);
+        Value * const sourceBufferBaseAddress = sourceBuffer->getBaseAddress(b.get());
+        readStart = sourceBuffer->getStreamBlockPtr(b.get(), sourceBufferBaseAddress, ZERO, fromIndex);
         Value * const toIndex = b->CreateUDivCeil(fileItems, BLOCK_WIDTH);
         // since we know this is an ExternalBuffer, we don't need to consider any potential modulus calculations.
-        readEnd = sourceBuffer->getStreamBlockPtr(b.get(), ZERO, toIndex);
+        readEnd = sourceBuffer->getStreamBlockPtr(b.get(), sourceBufferBaseAddress, ZERO, toIndex);
     } else {
         // make sure our copy is block-aligned
         Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));

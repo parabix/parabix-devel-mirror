@@ -15,7 +15,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME_AMOUNT(LookBehind);
         NAME(Principal);
         NAME(Deferred);
-        NAME(ZeroExtend);
+        NAME(ZeroExtended);
         NAME_AMOUNT(IndependentRegionBegin); NAME_AMOUNT(IndependentRegionEnd);
         NAME_AMOUNT(RegionSelector);
         NAME(SupressNonRegionZeroFill);
@@ -33,6 +33,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME(SideEffecting);
         NAME(Family);
         NAME(SynchronizationFree);
+        NAME(InfrequentlyUsed);
         NAME(None);
     }
     #undef NAME

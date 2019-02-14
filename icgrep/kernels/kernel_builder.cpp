@@ -93,7 +93,7 @@ Value * KernelBuilder::getInputStreamBlockPtr(const std::string & name, Value * 
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
-    return buf->getStreamBlockPtr(this, streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(this, buf->getBaseAddress(this), streamIndex, blockIndex);
 }
 
 Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * const streamIndex, Value * const packIndex, Value * const blockOffset) {
@@ -103,7 +103,7 @@ Value * KernelBuilder::getInputStreamPackPtr(const std::string & name, Value * c
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
-    return buf->getStreamPackPtr(this, streamIndex, blockIndex, packIndex);
+    return buf->getStreamPackPtr(this, buf->getBaseAddress(this), streamIndex, blockIndex, packIndex);
 }
 
 Value * KernelBuilder::loadInputStreamBlock(const std::string & name, Value * const streamIndex, Value * const blockOffset) {
@@ -126,7 +126,7 @@ Value * KernelBuilder::getOutputStreamBlockPtr(const std::string & name, Value *
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
-    return buf->getStreamBlockPtr(this, streamIndex, blockIndex);
+    return buf->getStreamBlockPtr(this, buf->getBaseAddress(this), streamIndex, blockIndex);
 }
 
 Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * streamIndex, Value * packIndex, Value * blockOffset) {
@@ -136,7 +136,7 @@ Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * 
     if (blockOffset) {
         blockIndex = CreateAdd(blockIndex, CreateZExtOrTrunc(blockOffset, blockIndex->getType()));
     }
-    return buf->getStreamPackPtr(this, streamIndex, blockIndex, packIndex);
+    return buf->getStreamPackPtr(this, buf->getBaseAddress(this), streamIndex, blockIndex, packIndex);
 }
 
 StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * blockOffset, Value * toStore) {

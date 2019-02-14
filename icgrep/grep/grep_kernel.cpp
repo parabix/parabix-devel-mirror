@@ -370,10 +370,12 @@ std::string GrepKernelOptions::getSignature() {
 
 ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::unique_ptr<GrepKernelOptions> options)
 : PabloKernel(b, "ic" + getStringHash(options->getSignature()),
-    options->streamSetInputBindings(),
-    options->streamSetOutputBindings(),
-    options->scalarInputBindings(),
-    options->scalarOutputBindings()), mOptions(std::move(options)) {
+options->streamSetInputBindings(),
+options->streamSetOutputBindings(),
+options->scalarInputBindings(),
+options->scalarOutputBindings()),
+mOptions(std::move(options)) {
+    addAttribute(InfrequentlyUsed());
 }
 
 std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
@@ -458,7 +460,7 @@ ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder
 makeInputBindings(Source, externals),
 // output
 {Binding{"matches", matches, FixedRate(), Add1()}}) {
-
+    addAttribute(InfrequentlyUsed());
 }
 
 std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {

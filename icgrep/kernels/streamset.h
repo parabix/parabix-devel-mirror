@@ -80,9 +80,9 @@ public:
         return getHandleType(b)->getPointerTo(getAddressSpace());
     }
 
-    virtual llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
+    virtual llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex) const;
 
-    virtual llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
+    virtual llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const;
 
     virtual llvm::Value * getStreamSetCount(IDISA::IDISA_Builder * const b) const;
 
@@ -98,7 +98,7 @@ public:
 
     virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const;
 
-    virtual llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
+    virtual llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
     void setHandle(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const handle);
 
@@ -139,11 +139,11 @@ public:
 
     void releaseBuffer(const std::unique_ptr<KernelBuilder> & b) const override;
 
-    llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
+    llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
 
-    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
 
     llvm::Value * getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 
@@ -208,11 +208,11 @@ public:
 
     void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * capacity) const override;
 
-    llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
+    llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
 
-    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const override;
 
@@ -277,11 +277,11 @@ protected:
 
     void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * capacity) const override;
 
-    llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
+    llvm::Value * getStreamPackPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex, llvm::Value * packIndex) const override;
 
-    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
+    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
 
     llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const override;
 

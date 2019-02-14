@@ -140,6 +140,16 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << ", ";
             print(sto->getScanTo(), out);
             out << ")";
+        } else if (const Ternary * tern = dyn_cast<Ternary>(stmt)) {
+            out << " = pablo.Ternary(";
+            print(tern->getMask(), out);
+            out << ", ";
+            print(tern->getA(), out);
+            out << ", ";
+            print(tern->getB(), out);
+            out << ", ";
+            print(tern->getC(), out);
+            out << ")";
         } else if (const Count * count = dyn_cast<Count>(stmt)) {
             out << " = pablo.Count(";
             print(count->getExpr(), out);

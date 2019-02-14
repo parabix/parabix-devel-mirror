@@ -49,7 +49,6 @@ public:
 
     llvm::ModulePass * createTracePass(kernel::KernelBuilder * kb, llvm::StringRef to_trace);
 
-
 private:
 
     std::string getMangledName(std::string s);

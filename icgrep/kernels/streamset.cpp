@@ -47,14 +47,14 @@ inline void StreamSetBuffer::assertValidStreamIndex(IDISA_Builder * const b, Val
     }
 }
 
-Value * StreamSetBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
+Value * StreamSetBuffer::getStreamBlockPtr(IDISA_Builder * const b, llvm::Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     assertValidStreamIndex(b, streamIndex);
-    return b->CreateGEP(getBaseAddress(b), {blockIndex, streamIndex});
+    return b->CreateGEP(baseAddress, {blockIndex, streamIndex});
 }
 
-Value * StreamSetBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
+Value * StreamSetBuffer::getStreamPackPtr(IDISA_Builder * const b, llvm::Value * const baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
     assertValidStreamIndex(b, streamIndex);
-    return b->CreateGEP(getBaseAddress(b), {blockIndex, streamIndex, packIndex});
+    return b->CreateGEP(baseAddress, {blockIndex, streamIndex, packIndex});
 }
 
 Value * StreamSetBuffer::getStreamSetCount(IDISA_Builder * const b) const {
@@ -175,18 +175,18 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
     }
 }
 
-Value * ExternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
+Value * ExternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     //assertValidBlockIndex(b, blockIndex);
-    return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, blockIndex);
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, blockIndex);
 }
 
-Value * ExternalBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
+Value * ExternalBuffer::getStreamPackPtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
     //assertValidBlockIndex(b, blockIndex);
-    return StreamSetBuffer::getStreamPackPtr(b, streamIndex, blockIndex, packIndex);
+    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, blockIndex, packIndex);
 }
 
-Value * ExternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * const streamIndex, Value * /* blockIndex */) const {
-    return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, b->getSize(0));
+Value * ExternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * baseAddress, Value * const streamIndex, Value * /* blockIndex */) const {
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, b->getSize(0));
 }
 
 // Static Buffer
@@ -251,17 +251,17 @@ Value * StaticBuffer::getOverflowAddress(IDISA_Builder * const b) const {
     return b->CreateGEP(getBaseAddress(b), b->getSize(mCapacity));
 }
 
-Value * StaticBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
-    return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, modByCapacity(b, blockIndex));
+Value * StaticBuffer::getStreamBlockPtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, modByCapacity(b, blockIndex));
 }
 
-Value * StaticBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
-    return StreamSetBuffer::getStreamPackPtr(b, streamIndex, modByCapacity(b, blockIndex), packIndex);
+Value * StaticBuffer::getStreamPackPtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
+    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, modByCapacity(b, blockIndex), packIndex);
 }
 
-Value * StaticBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
+Value * StaticBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     Value * const baseBlockIndex = b->CreateSub(modByCapacity(b, blockIndex), blockIndex);
-    return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, baseBlockIndex);
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, baseBlockIndex);
 }
 
 Value * StaticBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const absolutePosition) const {
@@ -359,17 +359,17 @@ Value * DynamicBuffer::modByCapacity(IDISA_Builder * const b, Value * const offs
     }
 }
 
-Value * DynamicBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
-    return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, modByCapacity(b, blockIndex));
+Value * DynamicBuffer::getStreamBlockPtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, modByCapacity(b, blockIndex));
 }
 
-Value * DynamicBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
-    return StreamSetBuffer::getStreamPackPtr(b, streamIndex, modByCapacity(b, blockIndex), packIndex);
+Value * DynamicBuffer::getStreamPackPtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
+    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, modByCapacity(b, blockIndex), packIndex);
 }
 
-Value * DynamicBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * const streamIndex, Value * const blockIndex) const {
+Value * DynamicBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, llvm::Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     Value * const baseBlockIndex = b->CreateSub(modByCapacity(b, blockIndex), blockIndex);
-    return StreamSetBuffer::getStreamBlockPtr(b, streamIndex, baseBlockIndex);
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, baseBlockIndex);
 }
 
 Value * DynamicBuffer::getRawItemPointer(IDISA_Builder * const b, Value * absolutePosition) const {

@@ -5,6 +5,8 @@
 #include <boost/graph/topological_sort.hpp>
 #include <boost/graph/edmonds_karp_max_flow.hpp>
 
+#define DISABLE_TERMINATION_SIGNAL_COUNTING_VARIABLES
+
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -26,17 +28,23 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     const auto lastCall = firstCall + numOfCalls;
     const auto n = mPipelineOutput + 1;
 
-    // TODO: if the lower bound of an input is 0 or a the input is zero-extended,
-    // how would this affect termination?
-
     TerminationGraph G(n);
 
     // 1) copy and summarize producer -> consumer relations from the buffer graph
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         for (auto buffer : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto bufferVertex = target(buffer, mBufferGraph);
-            for (auto consumer : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-                const auto j = target(consumer, mBufferGraph);
+            for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+                const auto inputPort = mBufferGraph[e].inputPort();
+                // If a stream has a lower bound of 0 or is zero extended, it does not directly
+                // affect when the consumer terminates.
+                const auto j = target(e, mBufferGraph);
+                const Kernel * const consumer = mPipeline[j];
+                const Binding & input = consumer->getInputStreamSetBinding(inputPort);
+                const auto mayConsumeNoInput = consumer->getLowerBound(input) == RateValue{0};
+                if (LLVM_UNLIKELY(mayConsumeNoInput || input.hasAttribute(AttrId::ZeroExtended))) {
+                    continue;
+                }
                 add_edge(i, j, G);
             }
         }
@@ -94,14 +102,27 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
         sources.reset();
     }
 
-    // 5) remove any incoming edges to a kernel that may terminate;
+    // TODO: Reevaulate the "counting" concept. The current system is error prone
+    // with some thread interleaving of u32u8 that I have yet to characterize.
+    // TODO: Try placing counters on seperate cache lines.
+    #ifdef DISABLE_TERMINATION_SIGNAL_COUNTING_VARIABLES
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        const bool test = has_child(i, mPipelineOutput, G);
+        clear_vertex(i, G);
+        if (test) {
+            add_edge(i, mPipelineOutput, G);
+        }
+    }
+    #else
+
+    // 5) remove any incoming edges to a kernel that may terminate or have
+    // inputs from multiple (non-transitively dependent) sources.
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         const Kernel * const kernel = mPipeline[i];
-        if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::CanTerminateEarly))) {
+        if (kernel->hasAttribute(AttrId::CanTerminateEarly)) {
             clear_in_edges(i, G);
         }
     }
-
     // Compute the minimum vertex-disjoint path cover through G, where we consider only
     // kernel nodes and any kernel that may terminate has its in-edges removed. The
     // number of paths is the number of counters required. The ∑ ceil(log2(path length)
@@ -173,6 +194,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
 
     assert ("did not construct the full path cover?" && m == 0);
+    #endif
 
     // Record the path distance to indicate the value to check
     unsigned pathCount = 0;
@@ -226,7 +248,7 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
     b->setKernel(mPipelineKernel);
     Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(pathId));
     b->setKernel(mKernel);
-    Value * const signal = b->CreateLoad(ptr, true);
+    Value * signal = b->CreateLoad(ptr, true);
     mTerminationSignals[pathId] = signal;
     mTerminatedInitially = signal;
     return hasKernelTerminated(b, mKernelIndex);
@@ -237,7 +259,7 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const unsigned kernel) const {
     // any pipeline input streams are considered produced by the P_{in} vertex.
-    if (LLVM_UNLIKELY(kernel == 0)) {
+    if (LLVM_UNLIKELY(kernel == mPipelineInput)) {
         return mPipelineKernel->isFinal();
     } else {
         const auto pathId = mTerminationGraph[kernel];
@@ -266,12 +288,15 @@ Constant * PipelineCompiler::getTerminationSignal(BuilderRef b, const unsigned k
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief producerTerminated
+ * @brief isClosed
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::producerTerminated(BuilderRef b, const unsigned inputPort) const {
-    const auto buffer = getInputBufferVertex(inputPort);
-    const auto producer = parent(buffer, mBufferGraph);
-    return hasKernelTerminated(b, producer);
+Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned inputPort) {
+    if (mIsInputClosed[inputPort] == nullptr) {
+        const auto buffer = getInputBufferVertex(inputPort);
+        const auto producer = parent(buffer, mBufferGraph);
+        mIsInputClosed[inputPort] = hasKernelTerminated(b, producer);
+    }
+    return mIsInputClosed[inputPort];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -288,8 +313,41 @@ inline void PipelineCompiler::setTerminated(BuilderRef b) const {
     b->setKernel(mPipelineKernel);
     const auto pathId = mTerminationGraph[mKernelIndex];
     Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(pathId));
+    Constant * const signal = getTerminationSignal(b, mKernelIndex);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * const priorSignal = b->CreateLoad(ptr, true);
+        Value * const expectedPriorSignal = ConstantExpr::getSub(signal, b->getSize(1));
+        Value * const valid = b->CreateICmpEQ(priorSignal, expectedPriorSignal);
+        const auto prefix = makeKernelName(mKernelIndex);
+        b->CreateAssert(valid, prefix + " prior termination signal is invalid");
+    }
+
+    b->CreateStore(signal, ptr, true);
     b->setKernel(mKernel);
-    b->CreateStore(getTerminationSignal(b, mKernelIndex), ptr, true);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadTerminationSignals
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::loadTerminationSignals(BuilderRef b) {
+//    const auto n = mTerminationSignals.size();
+//    for (unsigned i = 0; i < n; ++i) {
+//        Value * const signal = b->getScalarField(TERMINATION_PREFIX + std::to_string(i));
+////        mTerminationSignalPtr[i] = b->CreateAlloca(signal->getType());
+////        b->CreateStore(signal, mTerminationSignalPtr[i]);
+//        mTerminationSignals[i] = signal;
+//    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief storeTerminationSignals
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::storeTerminationSignals(BuilderRef b) {
+//    const auto n = mTerminationSignals.size();
+//    for (unsigned i = 0; i < n; ++i) {
+//        Value * const global = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(i));
+//        b->CreateStore(mTerminationSignals[i], global);
+//    }
 }
 
 }

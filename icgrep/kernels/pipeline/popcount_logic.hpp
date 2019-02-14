@@ -147,7 +147,8 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
         negativeSum->addIncoming(ZERO, popCountExpandExit);
 
         const StreamSetBuffer * const buffer = getOutputBuffer(bufferPort);
-        Value * const dataPtr = buffer->getStreamBlockPtr(b.get(), ZERO, sourceIndex);
+        Value * const baseAddress = buffer->getBaseAddress(b.get());
+        Value * const dataPtr = buffer->getStreamBlockPtr(b.get(), baseAddress, ZERO, sourceIndex);
         Value * markers = b->CreateBlockAlignedLoad(dataPtr);
 
         // If this popcount field is only used for negated rates, just invert the markers.
@@ -673,7 +674,7 @@ inline bool PipelineCompiler::popCountReferenceCanUseConsumedItemCount(const uns
     for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
         const auto port = mBufferGraph[e].inputPort();
         const auto kernelVertex = target(e, mBufferGraph);
-        Kernel * const consumer = mPipeline[kernelVertex];
+        const Kernel * const consumer = mPipeline[kernelVertex];
         const Binding & input = consumer->getInputStreamSetBinding(port);
         if (input.isDeferred() || !input.getRate().isFixed()) {
             return false;

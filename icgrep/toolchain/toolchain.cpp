@@ -20,7 +20,7 @@ using namespace llvm;
 #endif
 
 namespace codegen {
-    
+
 inline unsigned getPageSize() {
     return boost::interprocess::mapped_region::get_page_size();
 }

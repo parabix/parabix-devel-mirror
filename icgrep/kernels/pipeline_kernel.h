@@ -47,9 +47,6 @@ public:
 
     using CallBindings = std::vector<CallBinding>;
 
-    template <typename Value>
-    using StreamSetBufferMap = boost::container::flat_map<const StreamSetBuffer *, Value>;
-
     const std::string getName() const final;
 
     bool isCachable() const final { return true; }
@@ -91,10 +88,6 @@ protected:
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);
-
-    static LLVM_READNONE std::string makeKernelName(const Kernel * const kernel, const unsigned kernelIndex);
-
-    static LLVM_READNONE std::string makeBufferName(const Kernel * const kernel, const unsigned kernelIndex, const Binding & binding);
 
     unsigned getSegmentIncrement() const {
         return mSegmentIncrement;

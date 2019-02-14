@@ -7,14 +7,13 @@
 #include <queue>
 #include <iostream>
 
-template <typename Graph>
-inline std::vector<unsigned> lexicalOrdering(Graph && G, const llvm::Twine error) {
+template <typename Graph, typename Vec>
+inline void lexicalOrdering(Graph && G, Vec & L, const llvm::Twine error) {
 
     using Vertex = typename boost::graph_traits<Graph>::vertex_descriptor;
     using Queue = std::priority_queue<Vertex, std::vector<Vertex>, std::greater<Vertex>>;
 
     // Use a Kahn's algorithm with a priority queue to get a lexographic ordering.
-    std::vector<unsigned> L;
     const auto count = boost::num_vertices(G);
     L.reserve(count);
     Queue Q;
@@ -39,10 +38,6 @@ inline std::vector<unsigned> lexicalOrdering(Graph && G, const llvm::Twine error
     if (LLVM_UNLIKELY(boost::num_edges(G) != 0)) {
         llvm::report_fatal_error(error);
     }
-
-
-
-    return L;
 }
 
 #endif // LEXOGRAPHIC_ORDERING_HPP

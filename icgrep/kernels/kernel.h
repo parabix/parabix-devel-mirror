@@ -152,6 +152,8 @@ public:
 
     unsigned getStride() const { return mStride; }
 
+    void setStride(const unsigned stride) { mStride = stride; }
+
     LLVM_READNONE const Bindings & getInputStreamSetBindings() const {
         return mInputStreamSets;
     }
@@ -414,8 +416,6 @@ protected:
     virtual void setOutputScalarAt(const unsigned i, Scalar * value);
 
     virtual std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b);
-
-    void setStride(unsigned stride) { mStride = stride; }
 
     LLVM_READNONE bool requiresInitialSegmentNo() const {
         return getTypeId() == TypeId::Pipeline || getTypeId() == TypeId::OptimizationBranch;

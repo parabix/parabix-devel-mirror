@@ -67,19 +67,6 @@ void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> &
     mCompiler->generateKernelMethod(b);
 }
 
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief finalizeInstance
-// ** ------------------------------------------------------------------------------------------------------------- */
-//Value * PipelineKernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b) {
-//    Value * result = b->CreateCall(getTerminateFunction(b->getModule()), { mHandle });
-//    mHandle = nullptr;
-//    if (LLVM_LIKELY(mOutputScalars.empty())) {
-//        assert ("pipeline termination must have output scalars or a void return type!" && result->getType()->isVoidTy());
-//        result = nullptr;
-//    }
-//    return result;
-//}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -243,36 +230,6 @@ void PipelineKernel::setInputScalarAt(const unsigned i, Scalar * const value) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
     mOutputScalars[i].setRelationship(value);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeKernelName
- ** ------------------------------------------------------------------------------------------------------------- */
-std::string PipelineKernel::makeKernelName(const Kernel * const kernel, const unsigned kernelIndex) {
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    out << '@';
-    out << kernel->getName();
-    out << '.';
-    out << kernelIndex;
-    out.flush();
-    return tmp;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeBufferName
- ** ------------------------------------------------------------------------------------------------------------- */
-std::string PipelineKernel::makeBufferName(const Kernel * const kernel, const unsigned kernelIndex, const Binding & binding) {
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    out << '@';
-    out << kernel->getName();
-    out << '_';
-    out << binding.getName();
-    out << '.';
-    out << kernelIndex;
-    out.flush();
-    return tmp;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

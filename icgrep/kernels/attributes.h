@@ -71,7 +71,7 @@ struct Attribute {
         // as Deferred provides the pipeline with a stronger guarantee when it comes to
         // buffer size calculations.
 
-        ZeroExtend, /// NOT DONE
+        ZeroExtended,
 
         // If the available item count of an input stream is less than some other input
         // stream(s), the stream will be zero-extended to the length of the larger stream.
@@ -80,7 +80,7 @@ struct Attribute {
 
         // NOTE: zero-extended streams are not considered by the pipeline when ascertaining
         // whether it is entering the final segment. At least one input stream must not be
-        // zero-extended and a stream cannot have both Principal and ZeroExtend attributes.
+        // zero-extended and a stream may not have both Principal and ZeroExtend attributes.
 
         IndependentRegionBegin, IndependentRegionEnd, /// NOT DONE
 
@@ -227,6 +227,10 @@ struct Attribute {
         // NOTE: this means either the kernel must either internally handle synchronization
         // or that any interleaving of segments is valid.
 
+        InfrequentlyUsed,
+
+        // This kernel is infrequently used and should be compiled with O1 instead of O3.
+
     };
 
     KindId getKind() const {
@@ -339,6 +343,10 @@ inline Attribute Principal() {
     return Attribute(Attribute::KindId::Principal, 0);
 }
 
+inline Attribute ZeroExtended() {
+    return Attribute(Attribute::KindId::ZeroExtended, 0);
+}
+
 inline Attribute LookAhead(const unsigned k) {
     return Attribute(Attribute::KindId::LookAhead, k);
 }
@@ -400,6 +408,10 @@ inline Attribute SynchronizationFree() {
     return Attribute(Attribute::KindId::SynchronizationFree, 0);
 }
 
+inline Attribute InfrequentlyUsed() {
+    return Attribute(Attribute::KindId::InfrequentlyUsed, 0);
+}
+
 inline Attribute RequiresPopCountArray() {
     return Attribute(Attribute::KindId::RequiresPopCountArray, 0);
 }
@@ -407,6 +419,9 @@ inline Attribute RequiresPopCountArray() {
 inline Attribute RequiresNegatedPopCountArray() {
     return Attribute(Attribute::KindId::RequiresNegatedPopCountArray, 0);
 }
+
+
+
 
 }
 #endif // ATTRIBUTES_H

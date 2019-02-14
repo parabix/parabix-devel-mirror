@@ -9,11 +9,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <toolchain/toolchain.h>
-#include <queue>
-
-// TODO: if two kernels have an identical signature and take the same inputs, they ought to produce the same outputs unless they are nondeterministic.
-
-// TODO: the pipeline ordering should be canonicalized to ensure that when multiple kernels could be scheduled the same one will always be chosen.
 
 // TODO: the builders should detect if there is only one kernel in a pipeline / both branches are equivalent and return the single kernel. Modify addOrDeclareMainFunction.
 
@@ -50,17 +45,10 @@ enum class VertexType { Kernel, StreamSet, Scalar };
 
 using AttrId = Attribute::KindId;
 
-struct PipelineVertexData {
-    bool active;
-    VertexType type;
-    PipelineVertexData() : active(false), type(VertexType::Kernel) { }
-};
-
-using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, PipelineVertexData, unsigned>;
+using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, VertexType, unsigned>;
 
 using Vertex = Graph::vertex_descriptor;
 using Map = flat_map<const Relationship *, Vertex>;
-using Queue = std::queue<Vertex>;
 
 inline const Relationship * getRelationship(not_null<const Relationship *> r) {
     return r.get();
@@ -91,9 +79,8 @@ void enumerateProducerBindings(const VertexType type, const Vertex producerVerte
                    " produce the same stream.";
             throw std::runtime_error(out.str());
         }
-        const auto bufferVertex = add_vertex(G);
+        const auto bufferVertex = add_vertex(type, G);
         M.emplace(rel, bufferVertex);
-        G[bufferVertex].type = type;
         add_edge(bufferVertex, producerVertex, i, G); // buffer -> producer ordering
     }
 }
@@ -107,67 +94,9 @@ void enumerateConsumerBindings(const VertexType type, const Vertex consumerVerte
         const auto f = M.find(rel); assert (f != M.end());
         const auto bufferVertex = f->second;
         assert (bufferVertex < num_vertices(G));
-        assert (G[bufferVertex].type == type);
+        assert (G[bufferVertex] == type);
         add_edge(consumerVertex, bufferVertex, i, G); // consumer -> buffer ordering
     }
-}
-
-void markActiveKernels(const Vertex initial, Queue & Q, Graph & G) {
-    assert (Q.empty());
-    if (G[initial].active) return;
-    G[initial].active = true;
-    auto u = initial;
-    for (;;) {
-        for (const auto e : make_iterator_range(out_edges(u, G))) {
-            const auto v = target(e, G);
-            if (G[v].active) {
-                continue;
-            }
-            G[v].active = true;
-            Q.push(v);
-        }
-        if (Q.empty()) {
-            break;
-        }
-        u = Q.front();
-        Q.pop();
-    }
-}
-
-inline void markActiveKernels(const unsigned numOfKernels, const unsigned numOfCalls, const Vertex pipelineVertex, const PipelineKernel::Kernels & K, Graph & G) {
-    Queue Q;
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        if (K[i]->hasAttribute(AttrId::SideEffecting)) {
-            markActiveKernels(vertex(i, G), Q, G);
-        }
-    }
-    for (unsigned i = 0; i < numOfCalls; ++i) {
-        markActiveKernels(vertex(numOfKernels + i, G), Q, G);
-    }
-    markActiveKernels(pipelineVertex, Q, G);
-}
-
-inline void clearUnmarkedVertices(const Vertex pipelineVertex, Graph & G) {
-    G[pipelineVertex].active = false;
-    for (auto i : make_iterator_range(vertices(G))) {
-        if (LLVM_UNLIKELY(!G[i].active)) {
-            clear_vertex(i, G);
-        }
-    }
-}
-
-inline std::vector<Vertex> getTopologicalOrdering(const unsigned limit, Graph & G) {
-    // now take a topological ordering of the graph
-    std::vector<Vertex> ordering;
-    ordering.reserve(limit);
-    auto inserter = make_function_output_iterator([&](const Vertex i) {
-        if (i < limit && G[i].active) {
-            ordering.push_back(i);
-        }
-    });
-    topological_sort(G, inserter);
-    assert (ordering.size() <= limit);
-    return ordering;
 }
 
 inline char getRelationshipType(const VertexType type) {
@@ -185,7 +114,7 @@ inline char getRelationshipType(const VertexType type) {
  *
  * Add any attributes from a set of kernels
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned addKernelProperties(const std::vector<Kernel *> & kernels, Kernel * const output) {
+void addKernelProperties(const std::vector<Kernel *> & kernels, Kernel * const output) {
     unsigned mustTerminate = 0;
     bool canTerminate = false;
     bool sideEffecting = false;
@@ -214,7 +143,7 @@ unsigned addKernelProperties(const std::vector<Kernel *> & kernels, Kernel * con
     if (sideEffecting) {
         output->addAttribute(SideEffecting());
     }
-    return stride;
+    output->setStride(stride);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -232,115 +161,97 @@ Kernel * PipelineBuilder::makeKernel() {
 
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
-    const auto pipelineVertex = numOfKernels + numOfCalls;
+    const auto pipelineInput = 0U;
+    const auto firstKernel = 1U;
+    const auto firstCall = firstKernel + numOfKernels;
+    const auto pipelineOutput = firstCall + numOfCalls;
 
-    Graph G(pipelineVertex + 1);
+    Graph G(pipelineOutput + 1);
     Map M;
 
-    enumerateProducerBindings(VertexType::Scalar, pipelineVertex, mInputScalars, G, M, mKernels);
-    enumerateProducerBindings(VertexType::StreamSet, pipelineVertex, mInputStreamSets, G, M, mKernels);
+    enumerateProducerBindings(VertexType::Scalar, pipelineInput, mInputScalars, G, M, mKernels);
+    enumerateProducerBindings(VertexType::StreamSet, pipelineInput, mInputStreamSets, G, M, mKernels);
     for (unsigned i = 0; i < numOfKernels; ++i) {
-        enumerateProducerBindings(VertexType::Scalar, i, mKernels[i]->getOutputScalarBindings(), G, M, mKernels);
-        enumerateProducerBindings(VertexType::StreamSet, i, mKernels[i]->getOutputStreamSetBindings(), G, M, mKernels);
-    }
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        enumerateConsumerBindings(VertexType::Scalar, i, mKernels[i]->getInputScalarBindings(), G, M);
-        enumerateConsumerBindings(VertexType::StreamSet, i, mKernels[i]->getInputStreamSetBindings(), G, M);
+        const Kernel * const k = mKernels[i];
+        enumerateConsumerBindings(VertexType::Scalar, firstKernel + i, k->getInputScalarBindings(), G, M);
+        enumerateConsumerBindings(VertexType::StreamSet, firstKernel + i, k->getInputStreamSetBindings(), G, M);
+        enumerateProducerBindings(VertexType::Scalar, firstKernel + i, k->getOutputScalarBindings(), G, M, mKernels);
+        enumerateProducerBindings(VertexType::StreamSet, firstKernel + i, k->getOutputStreamSetBindings(), G, M, mKernels);
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        enumerateConsumerBindings(VertexType::Scalar, numOfKernels + i, mCallBindings[i].Args, G, M);
+        enumerateConsumerBindings(VertexType::Scalar, firstCall + i, mCallBindings[i].Args, G, M);
     }
-    enumerateConsumerBindings(VertexType::Scalar, pipelineVertex, mOutputScalars, G, M);
-    enumerateConsumerBindings(VertexType::StreamSet, pipelineVertex, mOutputStreamSets, G, M);
-
-    clear_in_edges(pipelineVertex, G);
-    markActiveKernels(numOfKernels, numOfCalls, pipelineVertex, mKernels, G);
-    clearUnmarkedVertices(pipelineVertex, G);
-
-    const auto ordering = getTopologicalOrdering(numOfKernels + numOfCalls, G);
+    enumerateConsumerBindings(VertexType::Scalar, pipelineOutput, mOutputScalars, G, M);
+    enumerateConsumerBindings(VertexType::StreamSet, pipelineOutput, mOutputStreamSets, G, M);
 
     std::string signature;
+    signature.reserve(1024);
     raw_string_ostream out(signature);
 
     out << 'P' << mNumOfThreads;
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         out << "+CYC";
     }
-    for (auto i : ordering) {
-        if (LLVM_LIKELY(i < numOfKernels)) {
-            const auto & k = mKernels[i];
-            out << "_K";
-            if (k->hasFamilyName()) {
-                out << k->getFamilyName();
-            } else {
-                out << k->getName();
-            }
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        const auto & k = mKernels[i];
+        out << "_K";
+        if (k->hasFamilyName()) {
+            out << k->getFamilyName();
         } else {
-            const auto j = i - numOfKernels;
-            assert (j < numOfCalls);
-            out << "_C" << mCallBindings[j].Name;
+            out << k->getName();
         }
     }
 
-    std::vector<unsigned> index(numOfKernels + numOfCalls);
-
-    unsigned j = 0;
-    for (unsigned i : ordering) {
-        index[i] = j++;
+    for (unsigned i = 0; i < numOfCalls; ++i) {
+        const auto j = i - firstCall;
+        assert (j < numOfCalls);
+        out << "_C" << mCallBindings[j].Name;
     }
 
-    const auto firstRelationship = pipelineVertex + 1;
+    const auto firstRelationship = pipelineOutput + 1;
     const auto lastRelationship = num_vertices(G);
 
     for (auto i = firstRelationship; i != lastRelationship; ++i) {
         if (LLVM_UNLIKELY(out_degree(i, G) == 0)) continue;
-        const PipelineVertexData & vd = G[i];
-        assert (vd.active);
-        out << '@' << getRelationshipType(vd.type);
+        out << '@' << getRelationshipType(G[i]);
         const auto e = out_edge(i, G);
         const auto j = target(e, G);
-        assert (j < numOfKernels);
-        const auto s = index[j];
-        assert (s != std::numeric_limits<unsigned>::max());
-        out << s << '.' << G[e];
+        out << j << '.' << G[e];
         for (const auto e : make_iterator_range(in_edges(i, G))) {
-            const auto j = source(e, G);
-            assert (j < pipelineVertex);
-            const auto t = index[j];
-            assert (t != std::numeric_limits<unsigned>::max());
-            out << '_' << t << '.' << G[e];
+            const auto k = source(e, G);
+            out << '_' << k << '.' << G[e];
         }
     }
     out.flush();
 
-    Kernels pipeline;
-    pipeline.reserve(ordering.size());
-
     const auto & b = mDriver.getBuilder();
-    Type * const addrPtrTy = b->getVoidPtrTy();
-    for (auto i : ordering) {
-        if (LLVM_LIKELY(i < numOfKernels)) {
-            Kernel * const k = mKernels[i];
-            if (k->hasFamilyName()) {
-                const auto kn = PipelineKernel::makeKernelName(k, index[i] + 1);
-                if (LLVM_LIKELY(k->isStateful())) {
-                    addInputScalar(addrPtrTy, kn);
-                }
-                addInputScalar(addrPtrTy, kn + INITIALIZE_FUNCTION_POINTER_SUFFIX);
-                addInputScalar(addrPtrTy, kn + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
-                addInputScalar(addrPtrTy, kn + FINALIZE_FUNCTION_POINTER_SUFFIX);
+    Type * const voidPtrTy = b->getVoidPtrTy();
+    Constant * const voidPtrVal = Constant::getNullValue(voidPtrTy);
+
+    auto addInputScalar = [&](std::string name) {
+        mInputScalars.emplace_back(name, CreateConstant(voidPtrVal), FixedRate(1), Family());
+    };
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        Kernel * const k = mKernels[i];
+        if (k->hasFamilyName()) {
+            const std::string prefix = "F" + std::to_string(i);
+            if (LLVM_LIKELY(k->isStateful())) {
+                addInputScalar(prefix);
             }
-            pipeline.emplace_back(k);
+            addInputScalar(prefix + INITIALIZE_FUNCTION_POINTER_SUFFIX);
+            addInputScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
+            addInputScalar(prefix + FINALIZE_FUNCTION_POINTER_SUFFIX);
         }
     }
 
     PipelineKernel * const pk =
         new PipelineKernel(b, std::move(signature), mNumOfThreads, mNumOfThreads,
-                           std::move(pipeline), std::move(mCallBindings),
+                           std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));
 
-    pk->setStride(addKernelProperties(pk->getKernels(), pk));
+    addKernelProperties(pk->getKernels(), pk);
 
     return pk;
 }
@@ -452,18 +363,10 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
                                    std::move(mInputStreamSets), std::move(mOutputStreamSets),
                                    std::move(mInputScalars), std::move(mOutputScalars));
 
-    br->setStride(addKernelProperties({nonZero, allZero}, br));
+    addKernelProperties({nonZero, allZero}, br);
 
     return br;
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeMainFunction
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineBuilder::addInputScalar(llvm::Type * type, std::string name) {
-    mInputScalars.emplace_back(name, CreateConstant(Constant::getNullValue(type)), FixedRate(1), Family());
-}
-
 
 Scalar * PipelineBuilder::getInputScalar(const std::string & name) {
     for (Binding & input : mInputScalars) {

@@ -1260,7 +1260,7 @@ inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         name += "_MP";
     }
-    name += "_O" + std::to_string((int)codegen::OptLevel);
+//    name += "_O" + std::to_string((int)codegen::OptLevel);
     return name;
 }
 

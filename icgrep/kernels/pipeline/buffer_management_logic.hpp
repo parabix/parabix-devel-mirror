@@ -77,6 +77,13 @@ void PipelineCompiler::enumerateBufferConsumerBindings(const Port type, const un
     }
 }
 
+void PipelineCompiler::insertImplicitBufferConsumerInput(const Port type, const unsigned consumer, const StreamSet * input, BufferGraph & G, BufferMap & M) const {
+    input = cast<StreamSet>(getRelationship(input));
+    const auto f = M.find(input); assert (f != M.end());
+    const auto buffer = f->second;
+    add_edge(buffer, consumer, BufferRateData{StreamPort{type, -1U}, 1, 1}, G); // buffer -> consumer ordering
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
  *
@@ -91,16 +98,16 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     BufferGraph G(mLastKernel + 1);
     BufferMap M;
 
-    // make an edge from each producing kernel to a buffer vertex
     enumerateBufferProducerBindings(Port::Input, mPipelineInput, mPipelineKernel->getInputStreamSetBindings(), G, M);
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        enumerateBufferProducerBindings(Port::Output, i, mPipeline[i]->getOutputStreamSetBindings(), G, M);
+        const Kernel * const p = mPipeline[i];
+        enumerateBufferConsumerBindings(Port::Input, i, p->getInputStreamSetBindings(), G, M);
+        const auto f = mKernelRegions.find(p);
+        if (LLVM_UNLIKELY(f != mKernelRegions.end())) {
+            insertImplicitBufferConsumerInput(Port::Input, i, f->second, G, M);
+        }
+        enumerateBufferProducerBindings(Port::Output, i, p->getOutputStreamSetBindings(), G, M);
     }
-    // make an edge from each buffer to its consuming kernel(s)
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        enumerateBufferConsumerBindings(Port::Input, i, mPipeline[i]->getInputStreamSetBindings(), G, M);
-    }
-    // make an edge from a buffer vertex to each pipeline output
     enumerateBufferConsumerBindings(Port::Output, mPipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);
 
     const auto lastBuffer = num_vertices(G);
@@ -162,6 +169,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = BufferType::External;
     }
 
+
     // then construct the rest
     for (unsigned i = firstBuffer; i != lastBuffer; ++i) {
 
@@ -197,7 +205,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue facsimileSpace{0};
 
             bool dynamic = false;
-
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
                 requiredSpace = lcm(requiredSpace, consumerRate.Maximum);
@@ -225,7 +232,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             const auto bufferMod = overflowSize ? overflowSize : blockWidth;
             const auto bufferSpace = lcm(requiredSpace, bufferMod);
             assert (bufferSpace.denominator() == 1);
-            const auto bufferSize = bufferSpace.numerator() * mPipelineKernel->getNumOfThreads();
+            const auto threads = mPipelineKernel->getNumOfThreads();
+            assert (threads > 0);
+            const auto segmentSize = bufferSpace.numerator();
+            // TODO: investigate whether this affects thrashing
+            const auto additional = std::max(threads > 1 ? 1U : 0U, ((bn.Fasimile + segmentSize - 1) / segmentSize));
+            const auto bufferSize = segmentSize * (threads + additional);
             // ensure any Add/RoundUpTo attributes are safely handled
             unsigned additionalSpace = 0;
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
@@ -280,7 +292,9 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
     const auto lastBuffer = num_vertices(G);
 
     for (unsigned i = firstBuffer; i != lastBuffer; ++i) {
-        out << "v" << i << " [label=\"";
+        out << "v" << i << " [label=\""
+               "(" << i << ") ";
+
         const BufferNode & bn = G[i];
         if (bn.Buffer == nullptr) {
             out << '?';
@@ -303,7 +317,9 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         out << "v" << s << " -> v" << t;
         const BufferRateData & pd = G[e];
 
-        out << " [label=\"(" << pd.Port.second << ") ";
+        out << " [label=\"#"
+            << pd.Port.second << ": ";
+
         if (pd.Minimum.denominator() > 1 || pd.Maximum.denominator() > 1) {
             out << pd.Minimum.numerator() << "/" << pd.Minimum.denominator()
                 << " - "
@@ -423,6 +439,9 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+        if (output.isDeferred()) {
+            mInitiallyProducedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+        }
     }
     b->setKernel(mKernel);
 }
@@ -430,22 +449,25 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeUpdatedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
+inline void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const bool final) {
     b->setKernel(mPipelineKernel);
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = mKernel->getInputStreamSetBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
-        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProcessedPhi[i]);
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, final ? mFinalProcessedPhi[i] : mUpdatedProcessedPhi[i]);
         if (input.isDeferred()) {
-            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProcessedDeferredPhi[i]);
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, final ? mFinalProcessedPhi[i] : mUpdatedProcessedDeferredPhi[i]);
         }
     }
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = mKernel->getOutputStreamSetBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
-        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProducedPhi[i]);
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, final ? mFinalProducedPhi[i] : mUpdatedProducedPhi[i]);
+        if (output.isDeferred()) {
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, final ? mFinalProducedPhi[i] : mUpdatedProducedDeferredPhi[i]);
+        }
     }
     b->setKernel(mKernel);
 }
@@ -458,7 +480,7 @@ inline void PipelineCompiler::readFinalProducedItemCounts(BuilderRef b) {
         const auto bufferVertex = target(e, mBufferGraph);
         const auto outputPort = mBufferGraph[e].outputPort();
         Value * fullyProduced = mFullyProducedItemCount[outputPort];
-        mTotalItems[getBufferIndex(bufferVertex)] = fullyProduced;
+        mLocallyAvailableItems[getBufferIndex(bufferVertex)] = fullyProduced;
         initializeConsumedItemCount(bufferVertex, fullyProduced);
         initializePopCountReferenceItemCount(b, bufferVertex, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
@@ -635,31 +657,23 @@ Value * PipelineCompiler::epoch(BuilderRef b,
                                 const Binding & binding,
                                 const StreamSetBuffer * const buffer,
                                 Value * const position,
-                                Value * const available) const {
+                                Value * const zeroExtended) const {
 
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
+    PointerType * const bufferType = buffer->getPointerType();
     Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
-    Value * address = buffer->getStreamLogicalBasePtr(b.get(), ZERO, blockIndex);
-    address = b->CreatePointerCast(address, buffer->getPointerType());
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        // This assertion is not thread safe; a dynamic input stream could be expanded between the time that we
-        // take the buffer address and test the assertion here.
-        if (!isa<DynamicBuffer>(buffer) || mPipelineKernel->getNumOfThreads() == 1) {
-            const auto prefix = makeBufferName(mKernelIndex, binding);
-            ExternalBuffer tmp(b, binding.getType());
-            Value * const handle = b->CreateAlloca(tmp.getHandleType(b));
-            tmp.setHandle(b, handle);
-            tmp.setBaseAddress(b.get(), address);
-            Value * const capacity = b->CreateAdd(position, available);
-            tmp.setCapacity(b.get(), capacity);
-            Value * const A0 = buffer->getStreamBlockPtr(b.get(), ZERO, blockIndex);
-            Value * const B0 = tmp.getStreamBlockPtr(b.get(), ZERO, blockIndex);
-            Value * const C0 = b->CreatePointerCast(B0, A0->getType());
-            b->CreateAssert(b->CreateICmpEQ(A0, C0), prefix + ": logical start address is incorrect");
-        }
+    Value * baseAddress = buffer->getBaseAddress(b.get());
+    baseAddress = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
+    if (zeroExtended) {
+        // prepareLocalZeroExtendSpace guarantees this will be large enough to satisfy the kernel
+        ExternalBuffer tmp(b, binding.getType());
+        Value * zeroExtension = b->CreatePointerCast(mZeroExtendBufferPhi, bufferType);
+        zeroExtension = tmp.getStreamBlockPtr(b.get(), zeroExtension, ZERO, b->CreateNeg(blockIndex));
+        baseAddress = b->CreateSelect(zeroExtended, zeroExtension, baseAddress);
     }
-    return address;
+    baseAddress = b->CreatePointerCast(baseAddress, bufferType);
+    return baseAddress;
 }
 
 

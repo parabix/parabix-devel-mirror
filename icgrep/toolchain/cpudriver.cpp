@@ -113,7 +113,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
     }
 
     mTarget = builder.selectTarget();
-
     if (mTarget == nullptr) {
         throw std::runtime_error("Could not selectTarget");
     }
@@ -142,7 +141,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
     mMainModule->setTargetTriple(triple);
     mMainModule->setDataLayout(DL);
     iBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
-    iBuilder->setDriver(this);
+    iBuilder->setDriver(*this);
     iBuilder->setModule(mMainModule);
 }
 
@@ -235,8 +234,6 @@ inline void CPUDriver::preparePassManager() {
             mASMOutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
         }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-#include <llvm/Transforms/InstCombine/InstCombine.h>
-#include <llvm/Transforms/Utils.h>
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, nullptr, TargetMachine::CGFT_AssemblyFile))) {
 #else
         if (LLVM_UNLIKELY(mTarget->addPassesToEmitFile(*mPassManager, *mASMOutputStream, TargetMachine::CGFT_AssemblyFile))) {
@@ -262,9 +259,9 @@ void CPUDriver::generateUncachedKernels() {
         mCachedKernel.emplace_back(kernel.release());
     }
     mUncachedKernel.clear();
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
     llvm::reportAndResetTimings();
-#endif
+    #endif
     llvm::PrintStatistics();
 }
 
@@ -296,36 +293,65 @@ void * CPUDriver::finalizeObject(PipelineKernel * const pipeline) {
         });
     #endif
 
-    iBuilder->setModule(mMainModule);
-    // write/declare the "main" method
-    const auto method = pipeline->hasStaticMain() ? PipelineKernel::DeclareExternal : PipelineKernel::AddInternal;
-    Function * const main = pipeline->addOrDeclareMainFunction(iBuilder, method);
-
     #ifdef ORCJIT
-    std::vector<std::unique_ptr<Module>> moduleSet;
-    moduleSet.reserve(mCachedKernel.size());
+    using ModuleSet = std::vector<std::unique_ptr<Module>>;
+    #else
+    using ModuleSet = std::vector<Module *>;
     #endif
+
+    // write/declare the "main" method
+    ModuleSet O1;
+    ModuleSet O3;
+
+    Module * const mainModule = new Module("main", *mContext);
+    iBuilder->setModule(mainModule);
     for (const auto & kernel : mCachedKernel) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
         }
         kernel->addKernelDeclarations(iBuilder);
-        #ifndef ORCJIT
-        mEngine->addModule(std::unique_ptr<Module>(kernel->getModule()));
-        #else
-        moduleSet.push_back(std::unique_ptr<Module>(kernel->getModule()));
-        #endif
+        if (LLVM_UNLIKELY(kernel->hasAttribute(kernel::Attribute::KindId::InfrequentlyUsed))) {
+            O1.emplace_back(kernel->getModule());
+        } else {
+            O3.emplace_back(kernel->getModule());
+        }
     }
+    const auto method = pipeline->hasStaticMain() ? PipelineKernel::DeclareExternal : PipelineKernel::AddInternal;
+    Function * const main = pipeline->addOrDeclareMainFunction(iBuilder, method);
     mCachedKernel.clear();
+
+    #ifndef ORCJIT
+    if (!O1.empty()) {
+        mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
+        for (const auto & m : O1) {
+            mEngine->addModule(std::unique_ptr<Module>(m));
+        }
+        mEngine->finalizeObject();
+    }
+    if (!O3.empty()) {
+        mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Aggressive);
+        for (const auto & m : O3) {
+            mEngine->addModule(std::unique_ptr<Module>(m));
+        }
+        mEngine->finalizeObject();
+    }
+    #endif
+
     // compile any uncompiled kernel/method
     #ifndef ORCJIT
+    // write/declare the "main" method
+    mEngine->addModule(std::unique_ptr<Module>(mainModule));
     mEngine->finalizeObject();
     #else
     moduleSet.push_back(std::unique_ptr<Module>(mMainModule));
     mCompileLayer->addModuleSet(std::move(moduleSet), make_unique<SectionMemoryManager>(), std::move(Resolver));
     #endif
+
+
+
     // return the compiled main method
     #ifndef ORCJIT
+    iBuilder->setModule(mMainModule);
     return mEngine->getPointerToFunction(main);
     #else
     auto MainSym = mCompileLayer->findSymbol(getMangledName(main->getName()), false);

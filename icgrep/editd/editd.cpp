@@ -267,7 +267,7 @@ PatternKernel::PatternKernel(const std::unique_ptr<KernelBuilder> & b, const std
 {{"pat", pat}},
 {{"E", E}})
 , mPatterns(patterns) {
-
+    addAttribute(InfrequentlyUsed());
 }
 
 std::string PatternKernel::makeSignature(const std::unique_ptr<KernelBuilder> &) {

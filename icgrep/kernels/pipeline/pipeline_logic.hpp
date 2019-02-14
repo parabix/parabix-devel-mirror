@@ -104,10 +104,15 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     mScalarCache.clear();
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        Kernel * const kernel = mPipeline[i];
-        if (kernel->isStateful() && !kernel->hasFamilyName()) {
-            Value * const handle = kernel->createInstance(b);
-            b->setScalarField(makeKernelName(i), handle);
+        const Kernel * const kernel = mPipeline[i];
+        if (kernel->isStateful()) {
+            if (kernel->hasFamilyName()) {
+
+
+            } else {
+                Value * const handle = kernel->createInstance(b);
+                b->setScalarField(makeKernelName(i), handle);
+            }
         }
     }
     constructBuffers(b);
@@ -410,7 +415,7 @@ bool PipelineCompiler::requiresSynchronization(const unsigned kernelIndex) const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getScalar(BuilderRef b, const ScalarDependencyGraph::vertex_descriptor scalar) {
+Value * PipelineCompiler::getScalar(BuilderRef b, const RelationshipGraph::vertex_descriptor scalar) {
     const auto f = mScalarCache.find(scalar);
     if (LLVM_UNLIKELY(f != mScalarCache.end())) {
         return f->second;
@@ -420,8 +425,9 @@ Value * PipelineCompiler::getScalar(BuilderRef b, const ScalarDependencyGraph::v
     const auto j = mScalarDependencyGraph[producer];
     Value * value = nullptr;
     if (i == mPipelineInput) {
-        if (LLVM_UNLIKELY(j == -1U)) {
-            value = mScalarDependencyGraph[scalar]->value();
+        if (LLVM_UNLIKELY(j == SCALAR_CONSTANT)) {
+            const Relationship * const rel = mScalarDependencyGraph[scalar].Relationship;
+            value = cast<ScalarConstant>(rel)->value();
         } else {
             const Binding & input = mPipelineKernel->getInputScalarBinding(j);
             value = b->getScalarField(input.getName());
@@ -513,22 +519,29 @@ inline void PipelineCompiler::deallocateThreadState(BuilderRef b, Value * const 
 }
 
 enum : unsigned {
-    SEGMENT_OFFSET_INDEX = 0
-    , POP_COUNT_STRUCT_INDEX = 1
-    , TERMINATION_SIGNAL_INDEX = 2
+    SEGMENT_OFFSET_INDEX
+    , POP_COUNT_STRUCT_INDEX
+    , ZERO_EXTENDED_BUFFER_INDEX
+    , ZERO_EXTENDED_SPACE_INDEX
+    , TERMINATION_SIGNAL_INDEX
+// --------------------------------
+    , THREAD_LOCAL_COUNT
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getLocalStateType
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
-    std::vector<Type *> fields(3);
+    std::vector<Type *> fields(THREAD_LOCAL_COUNT);
+    Type * const emptyTy = StructType::get(b->getContext());
     fields[SEGMENT_OFFSET_INDEX] = b->getSizeTy();
     fields[POP_COUNT_STRUCT_INDEX] = getPopCountThreadLocalStateType(b);
+    fields[ZERO_EXTENDED_BUFFER_INDEX] = mHasZeroExtendedStream ? b->getVoidPtrTy() : emptyTy;
+    fields[ZERO_EXTENDED_SPACE_INDEX] = mHasZeroExtendedStream ? b->getSizeTy() : emptyTy;
     if (mPipelineKernel->getNumOfThreads() != 1 && mPipelineKernel->canSetTerminateSignal()) {
         fields[TERMINATION_SIGNAL_INDEX] = b->getInt1Ty();
     } else {
-        fields[TERMINATION_SIGNAL_INDEX] = StructType::get(b->getContext());
+        fields[TERMINATION_SIGNAL_INDEX] = emptyTy;
     }
     return StructType::get(b->getContext(), fields);
 }
@@ -555,6 +568,12 @@ inline void PipelineCompiler::readThreadLocalState(BuilderRef b, Value * const l
     mInitialSegNo = b->CreateLoad(b->CreateGEP(localState, indices));
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     mPopCountState = b->CreateGEP(localState, indices);
+    if (mHasZeroExtendedStream) {
+        indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
+        mZeroExtendBuffer = b->CreateGEP(localState, indices);
+        indices[1] = b->getInt32(ZERO_EXTENDED_SPACE_INDEX);
+        mZeroExtendSpace = b->CreateGEP(localState, indices);
+    }
     if (mPipelineKernel->canSetTerminateSignal()) {
         if (mPipelineKernel->getNumOfThreads() != 1) {
             indices[1] = b->getInt32(TERMINATION_SIGNAL_INDEX);
@@ -569,11 +588,15 @@ inline void PipelineCompiler::readThreadLocalState(BuilderRef b, Value * const l
  * @brief deallocateThreadLocalState
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::deallocateThreadLocalState(BuilderRef b, Value * const localState) {
+    assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
     std::vector<Value *> indices(2);
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-    assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
     deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
+    if (mHasZeroExtendedStream) {
+        indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
+        b->CreateFree(b->CreateLoad(b->CreateGEP(localState, indices)));
+    }
     if (mPipelineTerminated && mPipelineKernel->getNumOfThreads() != 1) {
         indices[1] = b->getInt32(TERMINATION_SIGNAL_INDEX);
         Value * terminated = b->CreateLoad(b->CreateGEP(localState, indices));

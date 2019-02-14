@@ -17,16 +17,20 @@ namespace kernel {
 void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
-    Value * bytesToDo = b->getAccessibleItemCount("codeUnitBuffer");
+    Value * length = b->getAccessibleItemCount("codeUnitBuffer");
     if (LLVM_UNLIKELY(mCodeUnitWidth > 8)) {
-        bytesToDo = b->CreateMul(bytesToDo, b->getSize(mCodeUnitWidth / 8));
+        Constant * const scale = b->getSize(mCodeUnitWidth / 8);
+        length = b->CreateMul(length, scale);
     } else if (LLVM_UNLIKELY(mCodeUnitWidth < 8)) {
-        bytesToDo = b->CreateUDiv(bytesToDo, b->getSize(8 / mCodeUnitWidth));
+        Constant * const scale = b->getSize(8 / mCodeUnitWidth);
+        length = b->CreateUDiv(length, scale);
     }
-    b->CreateWriteCall(b->getInt32(STDOUT_FILENO), codeUnitBuffer, bytesToDo);
+    Constant * const stdOutFd = b->getInt32(STDOUT_FILENO);
+    b->CreateWriteCall(stdOutFd, codeUnitBuffer, length);
 }
 
 void StdOutKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+
 }
 
 StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * codeUnitBuffer)
@@ -111,11 +115,11 @@ void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b)
 void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
     BasicBlock * const hasTemporaryFile = b->CreateBasicBlock("hasTemporaryFile");
     BasicBlock * const exit = b->CreateBasicBlock("exit");
+    Value * const fileDescriptor = b->getScalarField("fileDescriptor");
     Value * const temporaryFileName = b->getScalarField("temporaryFileName");
     b->CreateLikelyCondBr(b->CreateIsNotNull(temporaryFileName), hasTemporaryFile, exit);
 
     b->SetInsertPoint(hasTemporaryFile);
-    Value * const fileDescriptor = b->getScalarField("fileDescriptor");
     b->CreateCloseCall(fileDescriptor);
     Value * const fileName = b->getScalarField("fileName");
     b->CreateRenameCall(temporaryFileName, fileName);

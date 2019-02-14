@@ -37,80 +37,490 @@ void printGraph(const Graph & G, raw_ostream & out) {
 
 #endif
 
-namespace {
+template <typename Array>
+void PipelineCompiler::enumerateRelationshipProducerBindings(const RelationshipVertex producer,
+                                                             const Array & array,
+                                                             RelationshipGraph & G, RelationshipMap & M) const {
+    const auto n = array.size();
+    for (unsigned i = 0; i < n; ++i) {
+        const Relationship * const rel = getRelationship(array[i]);
+        assert (M.count(rel) == 0);
+        const auto scalar = add_vertex(G);
+        G[scalar].Relationship = rel;
+        add_edge(producer, scalar, i, G);
+        M.emplace(rel, scalar);
+    }
+}
 
-    using ScalarDependencyMap = RelationshipMap<ScalarDependencyGraph::vertex_descriptor>;
+RelationshipVertex PipelineCompiler::makeIfConstant(const Relationship * const rel,
+                                                    RelationshipGraph & G, RelationshipMap & M) const {
+    const auto f = M.find(rel);
+    if (LLVM_LIKELY(f != M.end())) {
+        return f->second;
+    } else if (LLVM_LIKELY(isa<ScalarConstant>(rel))) {
+        const auto scalar = add_vertex(G);
+        G[scalar].Relationship = cast<ScalarConstant>(rel);
+        add_edge(0, scalar, SCALAR_CONSTANT, G);
+        M.emplace(rel, scalar);
+        return scalar;
+    } else {
+        report_fatal_error("unknown scalar value");
+    }
+}
 
-    void enumerateScalarProducerBindings(const unsigned producer, const Bindings & bindings,
-                                         ScalarDependencyGraph & G, ScalarDependencyMap & M) {
-        const auto n = bindings.size();
-        for (unsigned i = 0; i < n; ++i) {
-            const Relationship * const rel = getRelationship(bindings[i]);
-            assert (M.count(rel) == 0);
-            const auto scalar = add_vertex(nullptr, G);
-            add_edge(producer, scalar, i, G);
-            M.emplace(rel, scalar);
+template <typename Array>
+void PipelineCompiler::enumerateRelationshipConsumerBindings(const RelationshipVertex consumer,
+                                                             const Array & array,
+                                                             RelationshipGraph & G, RelationshipMap & M) const {
+    const auto n = array.size();
+    for (unsigned i = 0; i < n; ++i) {
+        const auto scalar = makeIfConstant(getRelationship(array[i]), G, M);
+        assert (scalar < num_vertices(G));
+        add_edge(scalar, consumer, i, G);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipelineList
+ ** ------------------------------------------------------------------------------------------------------------- */
+Kernels PipelineCompiler::makePipelineList(BuilderRef b) {
+
+    // copy the list of internal kernels and add in any implicit kernels
+    Kernels kernels(mPipelineKernel->getKernels());
+    addRegionSelectorKernels(b, kernels);
+
+    const auto numOfKernels = kernels.size();
+    const auto firstKernel = 1U;
+    const auto lastKernel = numOfKernels;
+    const auto pipelineOutput = lastKernel + 1;
+
+    const auto & call = mPipelineKernel->getCallBindings();
+    const auto numOfCalls = call.size();
+    const auto firstCall = pipelineOutput + 1;
+    const auto initialSize = firstCall + numOfCalls;
+
+    RelationshipGraph G(initialSize);
+
+    G[0].Kernel = mPipelineKernel;
+    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+        G[i].Kernel = kernels[i - firstKernel];
+    }
+    G[pipelineOutput].Kernel = mPipelineKernel;
+
+    /// ------------------------------------------------------------------------------------------
+    /// Generate the full I/O relationship graph
+    /// ------------------------------------------------------------------------------------------
+
+    RelationshipMap M;
+    enumerateRelationshipProducerBindings(0, mPipelineKernel->getInputScalarBindings(), G, M);
+    enumerateRelationshipProducerBindings(0, mPipelineKernel->getInputStreamSetBindings(), G, M);
+    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+        const Kernel * k = kernels[i - firstKernel];
+        enumerateRelationshipProducerBindings(i, k->getOutputStreamSetBindings(), G, M);
+        enumerateRelationshipConsumerBindings(i, k->getInputScalarBindings(), G, M);
+    }
+    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+        const Kernel * k = kernels[i - firstKernel];
+        enumerateRelationshipConsumerBindings(i, k->getInputStreamSetBindings(), G, M);
+        enumerateRelationshipProducerBindings(i, k->getOutputScalarBindings(), G, M);
+    }
+    for (unsigned i = 0; i < numOfCalls; ++i) {
+        enumerateRelationshipConsumerBindings(firstCall + i, call[i].Args, G, M);
+    }
+    enumerateRelationshipConsumerBindings(pipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
+    enumerateRelationshipConsumerBindings(pipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);
+
+    removeRedundantKernels(G, kernels);
+
+    /// ------------------------------------------------------------------------------------------
+    /// Remove any kernel whose outputs are not consumed by any kernel
+    /// ------------------------------------------------------------------------------------------
+
+    const auto firstBuffer = initialSize;
+    const auto lastBuffer = num_vertices(G);
+
+    for (auto i = firstBuffer; i < lastBuffer; ++i) {
+        if (LLVM_UNLIKELY(out_degree(i, G) == 0)) {
+            clear_in_edges(i, G);
         }
     }
 
-    ScalarDependencyGraph::vertex_descriptor makeIfConstant(const Relationship * const rel,
-                                                            ScalarDependencyGraph & G, ScalarDependencyMap & M) {
-        const auto f = M.find(rel);
-        if (LLVM_LIKELY(f != M.end())) {
-            return f->second;
-        } else if (LLVM_LIKELY(isa<ScalarConstant>(rel))) {
-            const auto scalar = add_vertex(cast<ScalarConstant>(rel), G);
-            add_edge(0, scalar, -1U, G);
-            M.emplace(rel, scalar);
-            return scalar;
-        } else {
-            report_fatal_error("unknown scalar value");
+    for (auto i = firstKernel; i <= lastKernel; ++i) {
+        if (LLVM_UNLIKELY(out_degree(i, G) == 0)) {
+            const Kernel * const kernel = G[i].Kernel;
+            if (kernel && !kernel->hasAttribute(AttrId::SideEffecting)) {
+                G[i].Kernel = nullptr;
+            }
         }
     }
 
-    template <typename Array>
-    void enumerateScalarConsumerBindings(const unsigned consumer, const Array & array,
-                                         ScalarDependencyGraph & G, ScalarDependencyMap & M) {
-        const auto n = array.size();
-        for (unsigned i = 0; i < n; ++i) {
-            const auto scalar = makeIfConstant(getRelationship(array[i]), G, M);
-            assert (scalar < num_vertices(G));
-            add_edge(scalar, consumer, i, G);
+    /// ------------------------------------------------------------------------------------------
+    /// Compute the lexographical ordering of G
+    /// ------------------------------------------------------------------------------------------
+
+    std::vector<unsigned> O;
+
+    lexicalOrdering(std::move(G), O, "pipeline contains a cycle!");
+
+    Kernels pipeline;
+    pipeline.reserve(pipelineOutput + 1);
+    for (const auto i : O) {
+        if (i < pipelineOutput && G[i].Kernel) {
+            pipeline.push_back(const_cast<Kernel *>(G[i].Kernel));
+        }
+    }
+    pipeline.push_back(mPipelineKernel);
+    return pipeline;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief removeRedundantKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::removeRedundantKernels(RelationshipGraph & G, const Kernels & kernels) {
+
+    using Vector = std::vector<unsigned>;
+
+    struct KernelId {
+        const std::string Id;
+        const Vector Scalars;
+        const Vector Streams;
+
+        KernelId(const std::string && id, const Vector & streams, const Vector & scalars)
+        : Id(id), Scalars(scalars), Streams(streams) {
+
+        }
+        bool operator<(const KernelId & other) const {
+            const auto diff = Id.compare(other.Id);
+            if (LLVM_LIKELY(diff != 0)) {
+                return diff < 0;
+            } else {
+                return (Scalars < other.Scalars) || (Streams < other.Streams);
+            }
+        }
+    };
+
+    std::map<KernelId, unsigned> Ids;
+
+    Vector scalars;
+    Vector streams;
+
+    const auto firstKernel = 1U;
+    const auto lastKernel = kernels.size();
+
+    for (;;) {
+        bool unmodified = true;
+        Ids.clear();
+        for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+            const Kernel * k = kernels[i - firstKernel];
+            // We cannot reason about a family of kernels
+            if (k->hasFamilyName()) {
+                continue;
+            }
+
+            const auto n = in_degree(i, G);
+            streams.resize(n);
+            scalars.resize(n);
+            unsigned numOfStreams = 0;
+
+            for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                unsigned port = G[e];
+                const auto relationship = source(e, G);
+                if (isa<StreamSet>(G[relationship])) {
+                    streams[port] = relationship;
+                    ++numOfStreams;
+                } else {
+                    scalars[port] = relationship;
+                }
+            }
+            streams.resize(numOfStreams);
+            scalars.resize(n - numOfStreams);
+
+            KernelId id(std::move(k->getName()), streams, scalars);
+
+            const auto f = Ids.emplace(std::move(id), i);
+            if (LLVM_UNLIKELY(!f.second)) {
+                // We already have an identical kernel; replace kernel i with kernel j
+                bool error = false;
+                const auto j = f.first->second;
+                const auto m = out_degree(j, G);
+
+                if (LLVM_UNLIKELY(out_degree(i, G) != m)) {
+                    error = true;
+                } else {
+                    // Collect all of the output information from kernel j.
+                    streams.resize(m);
+                    scalars.resize(m);
+                    unsigned numOfStreams = 0;
+                    for (const auto & e : make_iterator_range(out_edges(j, G))) {
+                        unsigned port = G[e];
+                        const auto relationship = target(e, G);
+                        if (isa<StreamSet>(G[relationship].Relationship)) {
+                            streams[port] = relationship;
+                            ++numOfStreams;
+                        } else {
+                            scalars[port] = relationship;
+                        }
+                    }
+                    streams.resize(numOfStreams);
+                    const auto numOfScalars = n - numOfStreams;
+                    scalars.resize(numOfScalars);
+
+                    // Replace the consumers of kernel i's outputs with j's.
+                    for (const auto & e : make_iterator_range(out_edges(i, G))) {
+                        unsigned port = G[e];
+                        const auto original = target(e, G);
+                        const Relationship * const a = G[original].Relationship;
+                        unsigned replacement = 0;
+                        if (isa<StreamSet>(a)) {
+                            replacement = streams[port];
+                        } else {
+                            replacement = scalars[port];
+                        }
+                        const Relationship * const b = G[replacement].Relationship;
+                        if (LLVM_UNLIKELY(a->getType() != b->getType())) {
+                            error = true;
+                            break;
+                        }
+                        mRelationshipRemapping.emplace(a, b);
+                        for (const auto & e : make_iterator_range(out_edges(original, G))) {
+                            const auto inputPort = G[e];
+                            const auto consumer = target(e, G);
+                            add_edge(replacement, consumer, inputPort, G);
+                        }
+                        clear_out_edges(original, G);
+                    }
+                    clear_vertex(i, G);
+                    G[i].Kernel = nullptr;
+                    unmodified = false;
+                }
+                if (LLVM_UNLIKELY(error)) {
+                    report_fatal_error(k->getName() + " is ambiguous: multiple I/O layouts have the same name");
+                }
+            }
+        }
+        if (unmodified) {
+            break;
         }
     }
 
-} // end of anonymous namespace
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addRegionSelectorKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels) {
+
+    enum : unsigned {
+        REGION_START = 0
+        , REGION_END = 1
+        , SELECTOR = 2
+    };
+
+    using Condition = std::array<std::pair<StreamSet *, unsigned>, 3>; // {selector, start, end} x {streamset, streamIndex}
+
+    using RSK = RegionSelectionKernel;
+    using Demarcators = RSK::Demarcators;
+    using Starts = RSK::Starts;
+    using Ends = RSK::Ends;
+    using Selectors = RSK::Selectors;
+
+    // TODO: when we support sequentially dependent regions, make sure to test that the start/end are
+    // of the same type.
+
+    auto hasSelector = [](const Condition & c) {
+        return std::get<0>(c[SELECTOR]) != nullptr;
+    };
+
+    auto hasIndependentStartEndStreams = [](const Condition & c) {
+        return (c[REGION_START] != c[REGION_END]);
+    };
+
+    auto missingRegionStartOrEnd = [](const Condition & c) {
+        return std::get<0>(c[REGION_START]) == nullptr || std::get<0>(c[REGION_END]) == nullptr;
+    };
+
+    BaseDriver & driver = b->getDriver();
+
+    const auto numOfKernels = kernels.size();
+
+    flat_map<Condition, StreamSet *> alreadyCreated;
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        Kernel * const kernel = kernels[i];
+        Condition cond{};
+        bool hasRegions = false;
+        const Bindings & inputs = kernel->getInputStreamSetBindings();
+        for (unsigned j = 0; j < inputs.size(); ++j) {
+            const Binding & input = inputs[j];
+            auto setIfAttributeExists = [&](const AttrId attrId, const unsigned index) {
+                if (LLVM_UNLIKELY(input.hasAttribute(attrId))) {
+                    const ProcessingRate & rate = input.getRate();
+                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != RateValue(1))) {
+                        report_fatal_error(kernel->getName() + ": region streams must be FixedRate(1).");
+                    }
+                    if (LLVM_UNLIKELY(std::get<0>(cond[index]) != nullptr)) {
+                        std::string tmp;
+                        raw_string_ostream msg(tmp);
+                        msg << kernel->getName()
+                            << " cannot have multiple region ";
+                        switch (attrId) {
+                            case AttrId::RegionSelector:
+                                msg << "selector"; break;
+                            case AttrId::IndependentRegionBegin:
+                                msg << "start"; break;
+                            case AttrId::IndependentRegionEnd:
+                                msg << "end"; break;
+                            default: llvm_unreachable("unknown region attribute type");
+                        }
+                        msg << " attributes";
+                        report_fatal_error(msg.str());
+                    }
+                    const Attribute & region = input.findAttribute(attrId);
+                    Relationship * const rel = input.getRelationship();
+                    cond[index] = std::make_pair(cast<StreamSet>(rel), region.amount());
+                    hasRegions = true;
+                }
+            };
+            setIfAttributeExists(AttrId::RegionSelector, SELECTOR);
+            setIfAttributeExists(AttrId::IndependentRegionBegin, REGION_START);
+            setIfAttributeExists(AttrId::IndependentRegionEnd, REGION_END);
+        }
+
+        if (LLVM_UNLIKELY(hasRegions)) {
+            const auto f = alreadyCreated.find(cond);
+            StreamSet * regionSpans = nullptr;
+            if (LLVM_LIKELY(f == alreadyCreated.end())) {
+                if (missingRegionStartOrEnd(cond)) {
+                    report_fatal_error(kernel->getName() + " must have both a region start and end");
+                }
+                RSK * selector = nullptr;
+                if (hasSelector(cond)) {
+                    regionSpans = driver.CreateStreamSet();
+                    if (hasIndependentStartEndStreams(cond)) {
+                        selector = new RSK(b, Starts{cond[REGION_START]}, Ends{cond[REGION_END]}, Selectors{cond[SELECTOR]}, regionSpans);
+                    } else {
+                        selector = new RSK(b, Demarcators{cond[REGION_START]}, Selectors{cond[SELECTOR]}, regionSpans);
+                    }
+                } else if (hasIndependentStartEndStreams(cond)) {
+                    regionSpans = driver.CreateStreamSet();
+                    selector = new RSK(b, Starts{cond[REGION_START]}, Ends{cond[REGION_END]}, regionSpans);
+                } else { // regions span the entire input space; ignore this one
+                    continue;
+                }
+                // Add the kernel to the pipeline
+                driver.addKernel(selector);
+                kernels.push_back(selector);
+                // Mark the region selectors for this kernel
+                mKernelRegions.emplace(kernel, regionSpans);
+                alreadyCreated.emplace(cond, regionSpans);
+            } else { // we've already created the correct region span
+                regionSpans = f->second; assert (regionSpans);
+            }
+            mKernelRegions.emplace(kernel, regionSpans);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasZeroExtendedStream
+ *
+ * Determine whether there are any zero extend attributes on any kernel and verify that they are legal.
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::hasZeroExtendedStream() const {
+
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
+
+    bool hasZeroExtendedStream = false;
+
+    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        const Kernel * const kernel = mPipeline[i];
+        const auto numOfInputs = kernel->getNumOfStreamInputs();
+
+        Graph G(numOfInputs + 1);
+
+        // enumerate the input relations
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            const Binding & input = kernel->getInputStreamSetBinding(i);
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
+                add_edge(i, numOfInputs, G);
+                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
+                    report_fatal_error(kernel->getName() + "." + input.getName() +
+                                       " cannot have both ZeroExtend and Principal attributes");
+                }
+            }
+            const ProcessingRate & rate = input.getRate();
+            if (LLVM_UNLIKELY(rate.hasReference())) {
+                Port port; unsigned j;
+                std::tie(port, j) = kernel->getStreamPort(rate.getReference());
+                assert ("input stream cannot refer to an output stream" && port == Port::Input);
+                add_edge(j, i, G);
+            }
+        }
+
+        if (LLVM_LIKELY(in_degree(numOfInputs, G) == 0)) {
+            continue;
+        }
+
+        if (LLVM_UNLIKELY(in_degree(numOfInputs, G) == numOfInputs)) {
+            report_fatal_error(kernel->getName() + " requires at least one non-zero-extended input");
+        }
+
+        // generate a transitive closure to identify all inputs dependent on a zero-extended
+        // stream to ensure at least one input is bounded by stream length.
+        std::vector<unsigned> ordering;
+        ordering.reserve(numOfInputs + 1);
+        topological_sort(G, std::back_inserter(ordering));
+        for (unsigned u : ordering) {
+            for (auto e : make_iterator_range(in_edges(u, G))) {
+                const auto s = source(e, G);
+                for (auto f : make_iterator_range(out_edges(u, G))) {
+                    add_edge(s, target(f, G), G);
+                }
+            }
+        }
+
+        if (LLVM_UNLIKELY(in_degree(numOfInputs, G) == numOfInputs)) {
+            report_fatal_error(kernel->getName() + " requires at least one non-zero-extended input"
+                                                   " that does not refer to a zero-extended input");
+        }
+
+        hasZeroExtendedStream = true;
+    }
+
+    return hasZeroExtendedStream;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeScalarDependencyGraph
  *
  * producer -> buffer/scalar -> consumer
  ** ------------------------------------------------------------------------------------------------------------- */
-ScalarDependencyGraph PipelineCompiler::makeScalarDependencyGraph() const {
+RelationshipGraph PipelineCompiler::makeScalarDependencyGraph() const {
 
     const auto & call = mPipelineKernel->getCallBindings();
     const auto numOfCalls = call.size();
     const auto firstCall = mPipelineOutput + 1;
     const auto initialSize = firstCall + numOfCalls;
 
-    ScalarDependencyGraph G(initialSize);
-    ScalarDependencyMap M;
+    RelationshipGraph G(initialSize);
+    RelationshipMap M;
 
-    enumerateScalarProducerBindings(mPipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
+    enumerateRelationshipProducerBindings(mPipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
     // verify each scalar input of the kernel is an input to the pipeline
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        enumerateScalarConsumerBindings(i, mPipeline[i]->getInputScalarBindings(), G, M);
+        enumerateRelationshipConsumerBindings(i, mPipeline[i]->getInputScalarBindings(), G, M);
     }
     // enumerate the output scalars
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        enumerateScalarProducerBindings(i, mPipeline[i]->getOutputScalarBindings(), G, M);
+        enumerateRelationshipProducerBindings(i, mPipeline[i]->getOutputScalarBindings(), G, M);
     }
     // enumerate the call bindings
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        enumerateScalarConsumerBindings(firstCall + i, call[i].Args, G, M);
+        enumerateRelationshipConsumerBindings(firstCall + i, call[i].Args, G, M);
     }
     // enumerate the pipeline outputs
-    enumerateScalarConsumerBindings(mPipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
+    enumerateRelationshipConsumerBindings(mPipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
 
     return G;
 }
@@ -120,7 +530,7 @@ namespace {
     template <typename Graph, typename Vertex = typename graph_traits<Graph>::vertex_descriptor>
     bool add_edge_if_no_induced_cycle(const Vertex s, const Vertex t, Graph & G) {
         // If s-t exists, skip adding this edge
-        if (edge(s, t, G).second) {
+        if (edge(s, t, G).second || s == t) {
             return true;
         }
         // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
@@ -156,12 +566,12 @@ namespace {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePortDependencyGraph
+ * @brief determineEvaluationOrderOfKernelIO
  *
  * Returns a lexographically sorted list of ports s.t. the inputs will be ordered as close as possible (baring
  * any constraints) to the kernel's original I/O ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
+void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
@@ -193,6 +603,32 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
             add_edge(j + ((port == Port::Output) ? numOfInputs : 0), (i + numOfInputs), G);
         }
     }
+
+    // check any zeroextended inputs last
+    SmallVector<unsigned, 16> zext(numOfInputs);
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
+            zext.push_back(i);
+        }
+    }
+    const auto n = zext.size();
+    if (LLVM_UNLIKELY(n > 0)) {
+        zext.push_back(numOfInputs); // sentinal
+        for (unsigned i = 0, j = 0; i < numOfInputs; ++i) {
+            if (zext[j] == i) {
+                ++j;
+                continue;
+            } else {
+                for (unsigned k = 0; k < n; ++k) {
+                    const auto t = zext[k];
+                    if (i == t) continue;
+                    add_edge_if_no_induced_cycle(i, zext[k], G);
+                }
+            }
+        }
+    }
+
     // check any pipeline input first
     if (out_degree(mPipelineInput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -223,6 +659,7 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
             }
         }
     }
+
     // check any dynamic buffer last
     std::vector<unsigned> D;
     D.reserve(numOfOutputs);
@@ -250,7 +687,9 @@ std::vector<unsigned> PipelineCompiler::lexicalOrderingOfStreamIO() const {
     // TODO: add additional constraints on input ports to indicate the ones
     // likely to have fewest number of strides?
 
-    return lexicalOrdering(std::move(G), mKernel->getName() + " has cyclic port dependencies.");
+    mPortEvaluationOrder.clear();
+
+    lexicalOrdering(std::move(G), mPortEvaluationOrder, mKernel->getName() + " has cyclic port dependencies.");
 }
 
 namespace {
@@ -281,6 +720,10 @@ inline LLVM_READNONE RateValue maximumConsumed(const Kernel * const kernel, cons
 #endif
 
 }
+
+
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeConsumerGraph
  *

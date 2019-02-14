@@ -4,6 +4,7 @@
 #include <kernels/pipeline_kernel.h>
 #include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
+#include <kernels/pipeline/regionselectionkernel.h>
 #include <toolchain/toolchain.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
@@ -15,9 +16,10 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/STLExtras.h>
+#include <util/slab_allocator.h>
 #include <queue>
 
-// #define PRINT_DEBUG_MESSAGES
+//#define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -102,9 +104,9 @@ struct BufferRateData {
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
 
 template <typename vertex_descriptor>
-using RelationshipMap = flat_map<const Relationship *, vertex_descriptor>;
+using RelMap = flat_map<const Relationship *, vertex_descriptor>;
 
-using BufferMap = RelationshipMap<BufferGraph::vertex_descriptor>;
+using BufferMap = RelMap<BufferGraph::vertex_descriptor>;
 
 struct ConsumerNode {
     Value * Consumed = nullptr;
@@ -121,9 +123,20 @@ using KernelMap = flat_map<const Kernel *, Value>;
 
 using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
 
-using ScalarDependencyGraph = adjacency_list<vecS, vecS, bidirectionalS, const ScalarConstant *, unsigned>;
+union RelationshipNode {
+    const kernel::Kernel * Kernel = nullptr;
+    const kernel::Relationship * Relationship;
 
-using ScalarCache = flat_map<ScalarDependencyGraph::vertex_descriptor, Value *>;
+    RelationshipNode() = default;
+    RelationshipNode(kernel::Kernel * kernel) : Kernel(kernel) { }
+    RelationshipNode(kernel::Relationship * relationship) : Relationship(relationship) { }
+};
+
+using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, unsigned>;
+using RelationshipVertex = RelationshipGraph::vertex_descriptor;
+using RelationshipMap = RelMap<RelationshipVertex>;
+
+using ScalarCache = flat_map<RelationshipGraph::vertex_descriptor, Value *>;
 
 struct OverflowRequirement {
     unsigned copyBack;
@@ -176,7 +189,9 @@ struct RegionData {
     RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
 };
 
-using RegionGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, RegionData>;
+using RegionGraph = adjacency_list<vecS, vecS, bidirectionalS, const Relationship *, RegionData>;
+
+using RelationshipRemapping = flat_map<const Relationship *, const Relationship *>;
 
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_PREFIX = "@TERM";
@@ -185,7 +200,15 @@ const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
 
+#define SCALAR_CONSTANT (-1U)
+
 class PipelineCompiler {
+
+    template <typename T>
+    using Vec = SmallVector<T, 16>;
+
+    using PortOrderVec = SmallVector<unsigned, 32>;
+
 public:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel);
@@ -246,9 +269,11 @@ protected:
     void determineNumOfLinearStrides(BuilderRef b);
     void calculateNonFinalItemCounts(BuilderRef b);
     void calculateFinalItemCounts(BuilderRef b);
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, std::vector<Value *> & args) const;
+
+    void prepareLocalZeroExtendSpace(BuilderRef b);
 
     void writeKernelCall(BuilderRef b);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, std::vector<Value *> & args);
 
     void normalTerminationCheck(BuilderRef b, Value * const isFinal);
 
@@ -263,7 +288,7 @@ protected:
 
     void updatePhisAfterTermination(BuilderRef b);
 
-    void zeroFillPartiallyWrittenOutputStreams(BuilderRef b);
+    void clearUnwrittenOutputData(BuilderRef b);
 
     void computeMinimumConsumedItemCounts(BuilderRef b);
     void writeFinalConsumedItemCounts(BuilderRef b);
@@ -275,9 +300,9 @@ protected:
 
     void loadItemCountsOfCountableRateStreams(BuilderRef b);
 
-    void writeUpdatedItemCounts(BuilderRef b);
+    void writeUpdatedItemCounts(BuilderRef b, const bool final);
 
-    Value * getScalar(BuilderRef b, const ScalarDependencyGraph::vertex_descriptor scalar);
+    Value * getScalar(BuilderRef b, const RelationshipGraph::vertex_descriptor scalar);
 
 // intra-kernel functions
 
@@ -286,7 +311,7 @@ protected:
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
     Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
-    static Value * getMaximumStrideLength(BuilderRef b, const Kernel * kernel, const Binding & binding);
+    Value * getMaximumStrideLength(BuilderRef b, const Binding & binding);
     Value * calculateNumOfLinearItems(BuilderRef b, const Binding & binding);
     Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
@@ -294,23 +319,24 @@ protected:
     Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow);
     Value * calculateBufferExpansionSize(BuilderRef b, const unsigned outputPort);
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
-    Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
+    Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
-    Value * getTotalItemCount(BuilderRef b, const unsigned inputPort) const;
+    Value * getLocallyAvailableItemCount(BuilderRef b, const unsigned inputPort) const;
     void resetMemoizedFields();
 
 // termination functions
 
     Value * hasKernelTerminated(BuilderRef b, const unsigned kernel) const;
-
     LLVM_READNONE Constant * getTerminationSignal(BuilderRef b, const unsigned kernel) const;
-
-    Value * producerTerminated(BuilderRef b, const unsigned inputPort) const;
+    Value * isClosed(BuilderRef b, const unsigned inputPort);
     Value * initiallyTerminated(BuilderRef b);
     void setTerminated(BuilderRef b) const;
     Value * pipelineTerminated(BuilderRef b) const;
     void updateTerminationSignal(Value * const signal);
+
+    void loadTerminationSignals(BuilderRef b);
+    void storeTerminationSignals(BuilderRef b);
 
 // pop-count functions
 
@@ -359,44 +385,6 @@ protected:
     template <typename LambdaFunction>
     void forEachPopCountReferenceInputPort(const unsigned kernelIndex, LambdaFunction func);
 
-// regioned kernel logic
-
-    void beginRegionLoop(BuilderRef b);
-
-    bool hasRegions() const;
-
-    void writeRegionedKernelCall(BuilderRef b);
-
-
-    RegionGraph makeRegionGraph() const;
-
-    void writeRegionComputationLogic(BuilderRef b);
-
-    void writeRegionComputationLogic(BuilderRef b, const unsigned region);
-
-    LLVM_READNONE bool hasSelectorStream(const unsigned region) const;
-
-    LLVM_READNONE bool hasSeperateStartEndStreams(const unsigned region) const;
-
-    void findLongestSequenceOfAdjacentRegions(BuilderRef b, const unsigned region);
-
-    void fineSelectedRegions(BuilderRef b, const unsigned region);
-
-    void writeRegionSelectionLogic(BuilderRef b,
-                                   Value * const regionEnds, Value * const regionSpans,
-                                   BasicBlock * const checkNextStart, BasicBlock * const checkNextEnd);
-
-
-
-    Value * getSelectorStream();
-
-    Value * getRegionStartConsumedOffset(BuilderRef b, const unsigned region) const;
-
-    Value * getRegionStarts() const;
-    Value * getRegionEnds() const;
-
-    void endRegionLoop(BuilderRef b);
-
 // consumer recording
 
     ConsumerGraph makeConsumerGraph() const;
@@ -411,6 +399,7 @@ protected:
     BufferGraph makeBufferGraph(BuilderRef b);
     void enumerateBufferProducerBindings(const Port type, const unsigned producer, const Bindings & bindings, BufferGraph & G, BufferMap & M) const;
     void enumerateBufferConsumerBindings(const Port type, const unsigned consumer, const Bindings & bindings, BufferGraph & G, BufferMap & M) const;
+    void insertImplicitBufferConsumerInput(const Port type, const unsigned consumer, const StreamSet * input, BufferGraph & G, BufferMap & M) const;
     BufferRateData getBufferRateData(const StreamPort port, const Kernel * const kernel, const Binding & binding) const;
 
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
@@ -423,7 +412,7 @@ protected:
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getFacsimile(const unsigned bufferVertex) const;
     BufferType getOutputBufferType(const unsigned outputPort) const;
-    Value * epoch(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position, Value * const available) const;
+    Value * epoch(BuilderRef b, const Binding &binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtended = nullptr) const;
 
 // cycle counter functions
 
@@ -435,9 +424,15 @@ protected:
 
 // analysis functions
 
-    std::vector<unsigned> lexicalOrderingOfStreamIO() const;
+    Kernels makePipelineList(BuilderRef b);
+    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels);
+    void removeRedundantKernels(RelationshipGraph & G, const Kernels & kernels);
+
+    bool hasZeroExtendedStream() const;
+
+    void determineEvaluationOrderOfKernelIO();
     TerminationGraph makeTerminationGraph();
-    ScalarDependencyGraph makeScalarDependencyGraph() const;
+    RelationshipGraph makeScalarDependencyGraph() const;
     PipelineIOGraph makePipelineIOGraph() const;
 
 // misc. functions
@@ -447,6 +442,7 @@ protected:
     Value * getDoSegmentFunction(BuilderRef b) const;
     Value * getFinalizeFunction(BuilderRef b) const;
 
+    LLVM_READNONE std::string makeFamilyPrefix(const unsigned kernelIndex) const;
     LLVM_READNONE std::string makeKernelName(const unsigned kernelIndex) const;
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
 
@@ -464,6 +460,10 @@ protected:
     LLVM_READNONE bool isPipelineOutput(const unsigned kernelIndex, const unsigned outputPort) const;
     LLVM_READNONE bool nestedPipeline() const;
 
+    const Relationship * getRelationship(not_null<const Relationship *> r) const;
+
+    const Relationship * getRelationship(const Binding & b) const;
+
     static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const StreamPort port) {
         if (port.first == Port::Input) {
             return kernel->getInputStreamSetBinding(port.second);
@@ -472,6 +472,14 @@ protected:
         }
         llvm_unreachable("unknown port binding type!");
     }
+
+    template <typename Array>
+    void enumerateRelationshipProducerBindings(const RelationshipVertex producer, const Array & array, RelationshipGraph & G, RelationshipMap & M) const;
+
+    RelationshipVertex makeIfConstant(const Relationship * const rel, RelationshipGraph & G, RelationshipMap & M) const;
+
+    template <typename Array>
+    void enumerateRelationshipConsumerBindings(const RelationshipVertex consumer, const Array & array, RelationshipGraph & G, RelationshipMap & M) const;
 
     void printBufferGraph(const BufferGraph & G, raw_ostream & out);
 
@@ -493,22 +501,19 @@ protected:
 
     PipelineKernel * const                      mPipelineKernel;
 
-    const Kernels                               mPipeline;
-    static constexpr unsigned                   mPipelineInput = 0;
-    static constexpr unsigned                   mFirstKernel = 1;
-    const unsigned                              mLastKernel;
-    const unsigned                              mPipelineOutput;
-
     unsigned                                    mKernelIndex = 0;
     Kernel *                                    mKernel = nullptr;
 
     // pipeline state
     Value *                                     mInitialSegNo = nullptr;
+    Value *                                     mZeroExtendBuffer = nullptr;
+    Value *                                     mZeroExtendSpace = nullptr;
     PHINode *                                   mSegNo = nullptr;
     Value *                                     mHalted = nullptr;
-    PHINode *                                   mProgressCounter = nullptr;
+    PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;
     Value *                                     mPipelineTerminated = nullptr;
+    TerminatorInst *                            mPipelineEntryBranch = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
@@ -523,6 +528,12 @@ protected:
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
 
+    SmallVector<AllocaInst *, 32>               mAddressableItemCountPtr;
+
+    SmallVector<Value *, 64>                    mPriorConsumedItemCount;
+    SmallVector<Value *, 64>                    mLocallyAvailableItems;
+    SmallVector<Value *, 16>                    mTerminationSignals;
+
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
     PHINode *                                   mHaltingPhi = nullptr;
@@ -533,39 +544,43 @@ protected:
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
-    std::vector<unsigned>                       mPortOrdering;
-    std::vector<Value *>                        mTotalItems;
+    SmallVector<unsigned, 32>                   mPortEvaluationOrder;
+    unsigned                                    mNumOfAddressableItemCount = 0;
 
-    std::vector<Value *>                        mTerminationSignals;
+    Vec<Value *>                                mIsInputClosed;
+    Vec<Value *>                                mIsInputZeroExtended;
+    PHINode *                                   mZeroExtendBufferPhi = nullptr;
 
-    std::vector<Value *>                        mInitiallyProcessedItemCount; // *before* entering the kernel
-    std::vector<Value *>                        mInitiallyProcessedDeferredItemCount;
-    std::vector<PHINode *>                      mAlreadyProcessedPhi; // entering the segment loop
-    std::vector<PHINode *>                      mAlreadyProcessedDeferredPhi;
-    std::vector<Value *>                        mInputStrideLength;
-    std::vector<Value *>                        mAccessibleInputItems;
-    std::vector<PHINode *>                      mLinearInputItemsPhi;
-    std::vector<Value *>                        mReturnedProcessedItemCountPtr; // written by the kernel
-    std::vector<Value *>                        mProcessedItemCount; // exiting the segment loop
-    std::vector<Value *>                        mProcessedDeferredItemCount;
-    std::vector<PHINode *>                      mFinalProcessedPhi; // exiting after termination
-    std::vector<PHINode *>                      mUpdatedProcessedPhi; // exiting the kernel
-    std::vector<PHINode *>                      mUpdatedProcessedDeferredPhi;
-    std::vector<Value *>                        mFullyProcessedItemCount; // *after* exiting the kernel
+    Vec<Value *>                                mInitiallyProcessedItemCount; // *before* entering the kernel
+    Vec<Value *>                                mInitiallyProcessedDeferredItemCount;
+    Vec<PHINode *>                              mAlreadyProcessedPhi; // entering the segment loop
+    Vec<PHINode *>                              mAlreadyProcessedDeferredPhi;
+    Vec<Value *>                                mInputStrideLength;
+    Vec<Value *>                                mAccessibleInputItems;
+    Vec<PHINode *>                              mLinearInputItemsPhi;
+    Vec<Value *>                                mReturnedProcessedItemCountPtr; // written by the kernel
+    Vec<Value *>                                mProcessedItemCount; // exiting the segment loop
+    Vec<Value *>                                mProcessedDeferredItemCount;
+    Vec<PHINode *>                              mFinalProcessedPhi; // exiting after termination
+    Vec<PHINode *>                              mUpdatedProcessedPhi; // exiting the kernel
+    Vec<PHINode *>                              mUpdatedProcessedDeferredPhi;
+    Vec<Value *>                                mFullyProcessedItemCount; // *after* exiting the kernel
 
-    std::vector<Value *>                        mInitiallyProducedItemCount; // *before* entering the kernel
-    std::vector<PHINode *>                      mAlreadyProducedPhi; // entering the segment loop
-    std::vector<Value *>                        mOutputStrideLength;
-    std::vector<Value *>                        mWritableOutputItems;
-    std::vector<Value *>                        mConsumedItemCount;
-    std::vector<PHINode *>                      mLinearOutputItemsPhi;
-    std::vector<Value *>                        mReturnedProducedItemCountPtr; // written by the kernel
-    std::vector<Value *>                        mProducedItemCount; // exiting the segment loop
-    std::vector<PHINode *>                      mFinalProducedPhi; // exiting after termination
-    std::vector<PHINode *>                      mUpdatedProducedPhi; // exiting the kernel
-    std::vector<PHINode *>                      mFullyProducedItemCount; // *after* exiting the kernel
-
-    std::vector<Value *>                        mPriorConsumedItemCount;
+    Vec<Value *>                                mInitiallyProducedItemCount; // *before* entering the kernel
+    Vec<Value *>                                mInitiallyProducedDeferredItemCount;
+    Vec<PHINode *>                              mAlreadyProducedPhi; // entering the segment loop
+    Vec<PHINode *>                              mAlreadyProducedDeferredPhi;
+    Vec<Value *>                                mOutputStrideLength;
+    Vec<Value *>                                mWritableOutputItems;
+    Vec<Value *>                                mConsumedItemCount;
+    Vec<PHINode *>                              mLinearOutputItemsPhi;
+    Vec<Value *>                                mReturnedProducedItemCountPtr; // written by the kernel
+    Vec<Value *>                                mProducedItemCount; // exiting the segment loop
+    Vec<Value *>                                mProducedDeferredItemCount;
+    Vec<PHINode *>                              mFinalProducedPhi; // exiting after termination
+    Vec<PHINode *>                              mUpdatedProducedPhi; // exiting the kernel
+    Vec<PHINode *>                              mUpdatedProducedDeferredPhi;
+    Vec<PHINode *>                              mFullyProducedItemCount; // *after* exiting the kernel
 
     // cycle counter state
     Value *                                     mCycleCountStart = nullptr;
@@ -574,41 +589,27 @@ protected:
     Value *                                     mPopCountState;
     flat_map<unsigned, PopCountData>            mPopCountData;
 
-
-    // regioned kernel logic
-    BasicBlock *                                mRegionIndentificationLoopEntry = nullptr;
-
-//    PHINode *                                   mInitialRegionStartIndex = nullptr;
-//    PHINode *                                   mInitialRegionEndIndex = nullptr;
-//    PHINode *                                   mInitialRegionCurrentIndex = nullptr;
-//    PHINode *                                   mInitialAlreadyProcessed = nullptr;
-//    PHINode *                                   mInRegion = nullptr;
-//    Value *                                     mInitialConditionalCarryIn = nullptr;
-//    PHINode *                                   mConditionalCarryIn = nullptr;
-
-//    PHINode *                                   mRegionStartIndex = nullptr;
-//    PHINode *                                   mAlreadyProcessed = nullptr;
-
-//    PHINode *                                   mRegionEndIndex = nullptr;
-//    PHINode *                                   mRegionCurrentIndex = nullptr;
-//    PHINode *                                   mRegionCarryIn = nullptr;
-//    Value *                                     mRegionCarryOut = nullptr;
-
-//    BasicBlock *                                mProcessRegionSpan = nullptr;
-//    PHINode *                                   mSelectedRegionStart = nullptr;
-//    PHINode *                                   mSelectedRegionEnd = nullptr;
-//    PHINode *                                   mSelectedRegionCurrent = nullptr;
-
-
     // analysis state
+    flat_map<const Kernel *, const StreamSet *> mKernelRegions;
+    RelationshipRemapping                       mRelationshipRemapping;
+    const Kernels                               mPipeline;
+    static constexpr unsigned                   mPipelineInput = 0;
+    static constexpr unsigned                   mFirstKernel = 1;
+    const unsigned                              mLastKernel;
+    const unsigned                              mPipelineOutput;
+    const bool                                  mHasZeroExtendedStream;
+
+
+    // RegionGraph                                 mRegionGraph;
+
     const BufferGraph                           mBufferGraph;
     ConsumerGraph                               mConsumerGraph;
-    const ScalarDependencyGraph                 mScalarDependencyGraph;
+    const RelationshipGraph                     mScalarDependencyGraph;
     ScalarCache                                 mScalarCache;
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
-    const RegionGraph                           mRegionGraph;
+
 
 };
 
@@ -676,35 +677,20 @@ inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePipelineList
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Kernels makePipelineList(PipelineKernel * const pk) {
-    const Kernels & P = pk->getKernels();
-    const auto n = P.size();
-    Kernels L(n + 2);
-    L[0] = pk;
-    for (unsigned i = 0; i != n; ++i) {
-        L[i + 1] = P[i];
-    }
-    L[n + 1] = pk;
-    return L;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
 : mPipelineKernel(pipelineKernel)
-, mPipeline(makePipelineList(pipelineKernel))
+, mPipeline(makePipelineList(b))
 , mLastKernel(mPipeline.size() - 1)
 , mPipelineOutput(mLastKernel)
+, mHasZeroExtendedStream(hasZeroExtendedStream())
 , mBufferGraph(makeBufferGraph(b))
 , mConsumerGraph(makeConsumerGraph())
 , mScalarDependencyGraph(makeScalarDependencyGraph())
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
-, mPopCountGraph(makePopCountGraph())
-, mRegionGraph(makeRegionGraph()) {
+, mPopCountGraph(makePopCountGraph()) {
     initializePopCounts();
 }
 
@@ -725,30 +711,64 @@ inline LLVM_READNONE RateValue lowerBound(not_null<const Kernel *> kernel, const
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeFamilyPrefix
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline LLVM_READNONE std::string PipelineCompiler::makeFamilyPrefix(const unsigned kernelIndex) const {
+    const Kernel * k = mPipeline[kernelIndex];
+    const Kernels & K = mPipelineKernel->getKernels();
+    const auto f = std::find(K.begin(), K.end(), k);
+    assert (f != K.end());
+    const auto i = std::distance(K.begin(), f);
+    return "F" + std::to_string(i);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernelName
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned kernelIndex) const {
-    return PipelineKernel::makeKernelName(mPipeline[kernelIndex], kernelIndex);
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    out << '@';
+    out << mPipeline[kernelIndex]->getName();
+    out << '.';
+    out << kernelIndex;
+    out.flush();
+    return tmp;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeBufferName
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernelIndex, const Binding & binding) const {
-    return PipelineKernel::makeBufferName(mPipeline[kernelIndex], kernelIndex, binding);
+    std::string tmp;
+    raw_string_ostream out(tmp);
+    out << '@';
+    out << mPipeline[kernelIndex]->getName();
+    out << '_';
+    out << binding.getName();
+    out << '.';
+    out << kernelIndex;
+    out.flush();
+    return tmp;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Relationship * getRelationship(not_null<const Relationship *> r) {
-    return r.get();
+inline const Relationship * PipelineCompiler::getRelationship(not_null<const Relationship *> r) const {
+    const Relationship * rel = r.get();
+    const auto f = mRelationshipRemapping.find(rel);
+    if (LLVM_LIKELY(f == mRelationshipRemapping.end())) {
+        return rel;
+    } else {
+        return f->second;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Relationship * getRelationship(const Binding & b) {
+inline const Relationship * PipelineCompiler::getRelationship(const Binding & b) const {
     return getRelationship(b.getRelationship());
 }
 
@@ -788,6 +808,5 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "cycle_counter_logic.hpp"
 #include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
-#include "region_selection_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

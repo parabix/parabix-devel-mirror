@@ -23,7 +23,7 @@ unsigned getVectorBitWidth(Value * a) {
     if (isa<IntegerType>(aTy)) return aTy->getPrimitiveSizeInBits();
     return cast<VectorType>(aTy)->getBitWidth();
 }
-    
+
 VectorType * IDISA_Builder::fwVectorType(const unsigned fw) {
     return VectorType::get(getIntNTy(fw), mBitBlockWidth / fw);
 }
@@ -314,7 +314,7 @@ Value * IDISA_Builder::mvmd_dsll(unsigned fw, Value * a, Value * b, Value * shif
     if (fw < 8) UnsupportedFieldWidthError(fw, "mvmd_dsll");
     const auto field_count = mBitBlockWidth/fw;
     Type * fwTy = getIntNTy(fw);
-    
+
     Constant * Idxs[field_count];
     for (unsigned i = 0; i < field_count; i++) {
         Idxs[i] = ConstantInt::get(fwTy, i + field_count);
@@ -373,7 +373,7 @@ Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "srai");
     return CreateAShr(fwCast(fw, a), shift);
 }
-    
+
 Value * IDISA_Builder::simd_sllv(unsigned fw, Value * v, Value * shifts) {
     if (fw >= 8) return CreateShl(fwCast(fw, v), fwCast(fw, shifts));
     Value * w = v;
@@ -565,7 +565,7 @@ Value * IDISA_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Va
     Value * not_a_bc = CreateAnd(CreateNot(a), bc_lo);
     return CreateOr(a_bc, not_a_bc);
 }
-    
+
 Value * IDISA_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     if (fw < 8) {
         if (getVectorBitWidth(a) > mNativeBitBlockWidth) {
@@ -756,7 +756,7 @@ Value * IDISA_Builder::mvmd_dslli(unsigned fw, Value * a, Value * b, unsigned sh
 Value * IDISA_Builder::mvmd_shuffle(unsigned fw, Value * table, Value * index_vector) {
     UnsupportedFieldWidthError(fw, "mvmd_shuffle");
 }
-    
+
 Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1, Value * index_vector) {
     //  Use two shuffles, with selection by the bit value within the shuffle_table.
     const auto field_count = mBitBlockWidth/fw;
@@ -766,7 +766,7 @@ Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1
     Value * rslt= simd_or(simd_and(mvmd_shuffle(fw, table0, idx), simd_not(selectMask)), simd_and(mvmd_shuffle(fw, table1, idx), selectMask));
     return rslt;
 }
-    
+
 
 Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * a, Value * select_mask) {
     UnsupportedFieldWidthError(fw, "mvmd_compress");
@@ -786,6 +786,19 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_add_with_carry(Value * a, Va
     return std::pair<Value *, Value *>(bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1)), bitCast(sum));
 }
 
+// full subtract producing {borrowOut, difference}
+std::pair<llvm::Value *, llvm::Value *> IDISA_Builder::bitblock_subtract_with_borrow(llvm::Value * a, llvm::Value * b, llvm::Value * borrowIn) {
+    Value * gen = simd_and(a, b);
+    Value * prop = simd_or(a, b);
+    Value * partial = simd_sub(mBitBlockWidth, simd_sub(mBitBlockWidth, a, b), borrowIn);
+    Value * b1 = simd_or(gen, simd_and(prop, partial));
+    b1 = simd_srli(mBitBlockWidth, b1, mBitBlockWidth - 1);
+    Value * difference = simd_sub(mBitBlockWidth, partial, b1);
+    Value * borrowOut = simd_or(gen, simd_and(prop, difference));
+    return std::make_pair(borrowOut, difference);
+}
+
+
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
     Value * shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
@@ -800,17 +813,19 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
     const unsigned bitWidth = getSizeTy()->getBitWidth();
     Type * const iBitBlock = getIntNTy(getBitBlockWidth());
     Value * const shiftVal = getSize(shiftAmount);
-    Value * extracted_bits = simd_pext(bitWidth, strm, index_strm);
-    Value * ix_popcounts = simd_popcount(bitWidth, index_strm);
+    Value * const extracted_bits = simd_pext(bitWidth, strm, index_strm);
+    Value * const ix_popcounts = simd_popcount(bitWidth, index_strm);
     const auto n = getBitBlockWidth() / bitWidth;
     VectorType * const vecTy = VectorType::get(getSizeTy(), n);
+
+    Value * carryOut = nullptr;
+    Value * result = UndefValue::get(vecTy);
     if (LLVM_LIKELY(shiftAmount < bitWidth)) {
         Value * carry = mvmd_extract(bitWidth, shiftIn, 0);
-        Value * result = UndefValue::get(vecTy);
         for (unsigned i = 0; i < n; i++) {
             Value * ix_popcnt = mvmd_extract(bitWidth, ix_popcounts, i);
             Value * bits = mvmd_extract(bitWidth, extracted_bits, i);
-            Value * adv = CreateOr(CreateShl(bits, shiftAmount), carry);
+            Value * adv = CreateOr(CreateShl(bits, shiftVal), carry);
             // We have two cases depending on whether the popcount of the index pack is < shiftAmount or not.
             Value * popcount_small = CreateICmpULT(ix_popcnt, shiftVal);
             Value * carry_if_popcount_small =
@@ -820,14 +835,12 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
             carry = CreateSelect(popcount_small, carry_if_popcount_small, carry_if_popcount_large);
             result = mvmd_insert(bitWidth, result, adv, i);
         }
-        Value * carryOut = mvmd_insert(bitWidth, allZeroes(), carry, 0);
-        return std::pair<Value *, Value *>{bitCast(carryOut), simd_pdep(bitWidth, result, index_strm)};
+        carryOut = mvmd_insert(bitWidth, allZeroes(), carry, 0);
     }
     else if (shiftAmount <= mBitBlockWidth) {
         // The shift amount is always greater than the popcount of the individual
         // elements that we deal with.   This simplifies some of the logic.
         Value * carry = CreateBitCast(shiftIn, iBitBlock);
-        Value * result = UndefValue::get(vecTy);
         for (unsigned i = 0; i < n; i++) {
             Value * ix_popcnt = mvmd_extract(bitWidth, ix_popcounts, i);
             Value * bits = mvmd_extract(bitWidth, extracted_bits, i);  // All these bits are shifted out (appended to carry).
@@ -835,14 +848,13 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
             carry = CreateLShr(carry, CreateZExt(ix_popcnt, iBitBlock)); // Remove the carry bits consumed, make room for new bits.
             carry = CreateOr(carry, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(CreateSub(shiftVal, ix_popcnt), iBitBlock)));
         }
-        return std::pair<Value *, Value *>{bitCast(carry), simd_pdep(bitWidth, result, index_strm)};
+        carryOut = carry;
     }
     else {
         // The shift amount is greater than the total popcount.   We will consume popcount
         // bits from the shiftIn value only, and produce a carry out value of the selected bits.
         Value * carry = CreateBitCast(shiftIn, iBitBlock);
-        Value * result = UndefValue::get(vecTy);
-        Value * carryOut = ConstantInt::getNullValue(iBitBlock);
+        carryOut = ConstantInt::getNullValue(iBitBlock);
         Value * generated = getSize(0);
         for (unsigned i = 0; i < n; i++) {
             Value * ix_popcnt = mvmd_extract(bitWidth, ix_popcounts, i);
@@ -852,8 +864,8 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_indexed_advance(Value * strm
             carryOut = CreateOr(carryOut, CreateShl(CreateZExt(bits, iBitBlock), CreateZExt(generated, iBitBlock)));
             generated = CreateAdd(generated, ix_popcnt);
         }
-        return std::pair<Value *, Value *>{bitCast(carryOut), simd_pdep(bitWidth, result, index_strm)};
     }
+    return std::pair<Value *, Value *>{bitCast(carryOut), simd_pdep(bitWidth, result, index_strm)};
 }
 
 Value * IDISA_Builder::bitblock_mask_from(Value * const position, const bool safe) {
@@ -874,7 +886,7 @@ Value * IDISA_Builder::bitblock_mask_from(Value * const position, const bool saf
     Value * const fullFieldWidthMasks = CreateSExt(CreateICmpUGT(posBaseVec, positionVec), fwVectorType(fieldWidth));
     Constant * const FIELD_ONES = ConstantInt::getAllOnesValue(getSizeTy());
     Value * const bitField = CreateShl(FIELD_ONES, CreateAnd(pos, getSize(fieldWidth - 1)));
-    Value * const fieldNo = CreateLShr(pos, getSize(std::log2(fieldWidth)));   
+    Value * const fieldNo = CreateLShr(pos, getSize(std::log2(fieldWidth)));
     Value * result = CreateInsertElement(fullFieldWidthMasks, bitField, fieldNo);
     if (!safe) { // if the originalPos doesn't match the moddedPos then the originalPos must exceed the block width.
         Constant * const VECTOR_ZEROES = Constant::getNullValue(fwVectorType(fieldWidth));
@@ -946,7 +958,7 @@ Value * IDISA_Builder::simd_and(Value * a, Value * b, StringRef s) {
 Value * IDISA_Builder::simd_or(Value * a, Value * b, StringRef s) {
     return a->getType() == b->getType() ? CreateOr(a, b, s) : CreateOr(bitCast(a), bitCast(b), s);
 }
-    
+
 Value * IDISA_Builder::simd_xor(Value * a, Value * b, StringRef s) {
     return a->getType() == b->getType() ? CreateXor(a, b, s) : CreateXor(bitCast(a), bitCast(b), s);
 }
