@@ -126,8 +126,33 @@ public:
     virtual llvm::Value * simd_min(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_umin(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_if(unsigned fw, llvm::Value * cond, llvm::Value * a, llvm::Value * b);
-    llvm::Value * simd_binary(unsigned char mask, llvm::Value * a, llvm::Value * b);
-    virtual llvm::Value * simd_ternary(unsigned char mask, llvm::Value * a, llvm::Value * b, llvm::Value * c);
+    //
+    // Return a logic expression in terms of bitwise And, Or and Not for an
+    // arbitrary two-operand boolean function corresponding to a 4-bit truth table mask.
+    // The 4-bit mask dcba specifies the two-operand function fn defined by
+    // the following table.
+    //  bit_1  bit_0   fn
+    //    0      0     a
+    //    0      1     b
+    //    1      0     c
+    //    1      1     d
+    llvm::Value * simd_binary(unsigned char mask, llvm::Value * bit_1, llvm::Value * bit_0);
+    
+    //
+    // Return a logic expression in terms of bitwise And, Or and Not for an
+    // arbitrary three-operand boolean function corresponding to an 8-bit truth table mask.
+    // The 8-bit mask hgfedcba specifies the three-operand function fn defined by
+    // the following table.
+    //  bit_2  bit_1  bit_0   fn
+    //    0      0      0     a
+    //    0      0      1     b
+    //    0      1      0     c
+    //    0      1      1     d
+    //    1      0      0     e
+    //    1      0      1     f
+    //    1      1      0     g
+    //    1      1      1     h
+    virtual llvm::Value * simd_ternary(unsigned char mask, llvm::Value * bit_2, llvm::Value * bit_1, llvm::Value * bit_0);
 
     virtual llvm::Value * simd_slli(unsigned fw, llvm::Value * a, unsigned shift);
     virtual llvm::Value * simd_srli(unsigned fw, llvm::Value * a, unsigned shift);

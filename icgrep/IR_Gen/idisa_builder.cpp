@@ -520,30 +520,34 @@ Value * IDISA_Builder::simd_if(unsigned fw, Value * cond, Value * a, Value * b) 
     }
 }
 
-Value * IDISA_Builder::simd_binary(unsigned char mask, Value * a, Value * b) {
-    // Form the 4-bit table for based on the bitwise values from a and b
-    // a b | mask = 0b1000
-    // 0 0 | 0
-    // 0 1 | 0
-    // 1 0 | 0
-    // 1 1 | 1
-    switch(mask) {
-        case 0b00000000: return allZeroes();
-        case 0b00000001: return CreateNot(CreateOr(a, b));
-        case 0b00000010: return CreateAnd(CreateNot(a), b);
-        case 0b00000011: return CreateNot(a);
-        case 0b00000100: return CreateAnd(a, CreateNot(b));
-        case 0b00000101: return CreateNot(b);
-        case 0b00000110: return CreateXor(a, b);
-        case 0b00000111: return CreateNot(CreateAnd(a, b));
-        case 0b00001000: return CreateAnd(a, b);
-        case 0b00001001: return CreateNot(CreateXor(a, b));
-        case 0b00001010: return b;
-        case 0b00001011: return CreateOr(CreateNot(a), b);
-        case 0b00001100: return a;
-        case 0b00001101: return CreateOr(a, CreateNot(b));
-        case 0b00001110: return CreateOr(a, b);
-        case 0b00001111: return allOnes();
+//
+// Return a logic expression in terms of bitwise And, Or and Not for an
+// arbitrary two-operand binary function corresponding to a 4-bit truth table mask.
+// The 4-bit mask xyzw specifies the two-operand function fn defined by
+// the following table.
+//  bit_1  bit_0   fn
+//    0      0     w
+//    0      1     z
+//    1      0     y
+//    1      1     x
+Value * IDISA_Builder::simd_binary(unsigned char truth_table_mask, Value * bit_1, Value * bit_0) {
+    switch(truth_table_mask) {
+        case 0x00: return allZeroes();
+        case 0x01: return CreateNot(CreateOr(bit_1, bit_0));
+        case 0x02: return CreateAnd(CreateNot(bit_1), bit_0);
+        case 0x03: return CreateNot(bit_1);
+        case 0x04: return CreateAnd(bit_1, CreateNot(bit_0));
+        case 0x05: return CreateNot(bit_0);
+        case 0x06: return CreateXor(bit_1, bit_0);
+        case 0x07: return CreateNot(CreateAnd(bit_1, bit_0));
+        case 0x08: return CreateAnd(bit_1, bit_0);
+        case 0x09: return CreateNot(CreateXor(bit_1, bit_0));
+        case 0x0A: return bit_0;
+        case 0x0B: return CreateOr(CreateNot(bit_1), bit_0);
+        case 0x0C: return bit_1;
+        case 0x0D: return CreateOr(bit_1, CreateNot(bit_0));
+        case 0x0E: return CreateOr(bit_1, bit_0);
+        case 0x0F: return allOnes();
         default: report_fatal_error("simd_binary mask is in wrong format!");
     }
 }
