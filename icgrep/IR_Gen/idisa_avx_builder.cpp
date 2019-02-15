@@ -650,11 +650,11 @@ Value * IDISA_AVX512F_Builder:: mvmd_dslli(unsigned fw, llvm::Value * a, llvm::V
     const unsigned fieldCount = mBitBlockWidth/fw;
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
         Type * fwTy = getIntNTy(fw);
-        Constant * indices[fieldCount];
+        SmallVector<Constant *, 16> indices(fieldCount);
         for (unsigned i = 0; i < fieldCount; i++) {
             indices[i] = ConstantInt::get(fwTy, i + fieldCount - shift);
         }
-        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get({indices, fieldCount})));
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get(indices)));
 
     } else {
         unsigned field32_shift = (shift * fw) / 32;

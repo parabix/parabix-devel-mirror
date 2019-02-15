@@ -57,5 +57,5 @@ RE * replaceCC(RE * re, CC * toReplace, RE * replacement) {
         re = makeGroup(g->getMode(), replaceCC(g->getRE(), toReplace, replacement), g->getSense());
     }
     return re;
-};
+}
 }

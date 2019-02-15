@@ -236,11 +236,11 @@ llvm::Value * IDISA_SSSE3_Builder::mvmd_shuffle(unsigned fw, llvm::Value * data_
         unsigned half_fw = fw/2;
         unsigned field_count = mBitBlockWidth/half_fw;
         // Build a ConstantVector of alternating 0 and 1 values.
-        Constant * Idxs[field_count];
+        SmallVector<Constant *, 16> Idxs(field_count);
         for (unsigned int i = 0; i < field_count; i++) {
             Idxs[i] = ConstantInt::get(getIntNTy(fw/2), i & 1);
         }
-        Constant * splat01 = ConstantVector::get({Idxs, field_count});
+        Constant * splat01 = ConstantVector::get(Idxs);
         
         Value * half_fw_indexes = simd_or(idx, mvmd_slli(half_fw, idx, 1));
         half_fw_indexes = simd_add(fw, simd_add(fw, half_fw_indexes, half_fw_indexes), splat01);
