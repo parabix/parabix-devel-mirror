@@ -356,7 +356,7 @@ void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
 void S2P_PabloKernel::generatePabloMethod() {
     pablo::PabloBlock * const pb = getEntryScope();
     const unsigned steps = std::log2(mCodeUnitWidth);
-    std::vector<PabloAST *> streamSet[steps + 1];
+    SmallVector<std::vector<PabloAST *>, 8> streamSet(steps + 1);
     for (unsigned i = 0; i <= steps; i++) {
         streamSet[i].resize(1<<i);
     }

@@ -119,12 +119,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     // compute how much data each kernel could consume/produce per iteration.
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         if (LLVM_LIKELY(in_degree(i, G) > 0)) {
-
             RateValue lower{std::numeric_limits<unsigned>::max()};
             RateValue upper{std::numeric_limits<unsigned>::max()};
-
             BufferNode & kn = G[i];
-
             for (const auto ce : make_iterator_range(in_edges(i, G))) {
                 // current consuming edge of this buffer
                 const BufferRateData & cd = G[ce];
@@ -139,16 +136,13 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const auto max = div_by_non_zero(pd.Maximum, cd.Minimum);
                 upper = std::min(upper, max);
             }
-
             kn.Lower = lower;
             kn.Upper = upper;
-
             for (const auto e : make_iterator_range(out_edges(i, G))) {
                 BufferRateData & rd = G[e];
                 rd.Minimum = lower * rd.Minimum;
                 rd.Maximum = upper * rd.Maximum;
             }
-
         }
     }
 
@@ -273,7 +267,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
  * @brief printBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out) {
-
 
     out << "digraph G {\n"
            "v" << mPipelineInput << " [label=\"P_{in}\" shape=box];\n";

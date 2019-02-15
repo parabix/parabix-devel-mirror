@@ -217,7 +217,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
 
     const auto numOfREs = mREs.size();
-    bool hasGCB[numOfREs];
+    SmallVector<bool, 4> hasGCB(numOfREs);
     bool anyGCB = false;
 
     for(unsigned i = 0; i < numOfREs; ++i) {
@@ -240,7 +240,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
     const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
     const auto internalS2P = isSimple && (isWithinByteTestLimit || hasTriCC);
-    
+
     Component internalComponents = Component::NoComponents;
     if (internalS2P && hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
         setComponent(internalComponents, Component::MoveMatchesToEOL);
@@ -251,7 +251,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     StreamSet * UnicodeLB = nullptr;
     std::map<std::string, StreamSet *> propertyStream;
     StreamSet * GCB_stream = nullptr;
-    
+
     if (!internalS2P) {
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
         if (PabloTransposition) {

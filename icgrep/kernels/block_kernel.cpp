@@ -128,12 +128,11 @@ void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     if (mStrideLoopTarget) {
         MDBuilder mdb(b->getContext());
         const auto destinations = mStrideLoopBranch->getNumDestinations();
-        uint32_t weights[destinations];
+        SmallVector<uint32_t, 16> weights(destinations);
         for (unsigned i = 0; i < destinations; ++i) {
             weights[i] = (mStrideLoopBranch->getDestination(i) == segmentDone) ? 100 : 1;
         }
-        ArrayRef<uint32_t> bw(weights, destinations);
-        mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(bw));
+        mStrideLoopBranch->setMetadata(LLVMContext::MD_prof, mdb.createBranchWeights(weights));
     }
 
 }

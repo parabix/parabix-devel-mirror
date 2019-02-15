@@ -89,7 +89,7 @@ void PabloAST::replaceAllUsesWith(PabloAST * const expr) noexcept {
     if (LLVM_UNLIKELY(this == expr)) {
         return;
     }
-    Statement * replacement[mUsers.size()];
+    SmallVector<Statement *, 16> replacement(mUsers.size());
     Users::size_type replacements = 0;
     PabloAST * last = nullptr;
     for (PabloAST * user : mUsers) {
@@ -206,14 +206,14 @@ void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setOperand
  ** ------------------------------------------------------------------------------------------------------------- */
-void Statement::setOperand(const unsigned index, PabloAST * const value) {    
+void Statement::setOperand(const unsigned index, PabloAST * const value) {
     assert ("Operand cannot be null!" && value);
     assert (index < getNumOperands());
     PabloAST * const prior = getOperand(index);
     assert ("Operand cannot be null!" && prior);
     if (LLVM_UNLIKELY(prior == value)) {
         return;
-    }      
+    }
     if (LLVM_UNLIKELY(prior->getType() != value->getType())) {
         std::string tmp;
         raw_string_ostream out(tmp);

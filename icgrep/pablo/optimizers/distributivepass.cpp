@@ -233,13 +233,13 @@ protected:
                     // been used more recently. Take note to update the correct vertex if an
                     // ANDC can be used instead.
 
-                    Vertex input[n];
+                    SmallVector<Vertex, 16> input(n);
                     unsigned i = 0;
                     for (auto e : make_iterator_range(in_edges(u, G))) {
                         input[i++] = source(e, G);
                     }
 
-                    std::sort(input, input + n, [this](const Vertex v, const Vertex w) {
+                    std::sort(input.begin(), input.end(), [this](const Vertex v, const Vertex w) {
                         return getLastUsageTime(v) < getLastUsageTime(w);
                     });
 
@@ -271,8 +271,8 @@ protected:
             }
             assert (value);
             setUnmodified(u);
-            setValue(u, value);            
-        }        
+            setValue(u, value);
+        }
         return value;
     }
 
@@ -537,7 +537,7 @@ repeat: getReverseTopologicalOrdering();
         assert (getType(u) == typeId);
         assert (isAssociative(typeId));
 
-        Vertex removed[out_degree(u, G)];
+        SmallVector<Vertex, 16> removed(out_degree(u, G));
         unsigned n = 0;
         for (auto ei : make_iterator_range(out_edges(u, G))) {
             const auto v = target(ei, G);
@@ -578,7 +578,7 @@ repeat: getReverseTopologicalOrdering();
         assert (in_degree(u, G) > 1);
 
         const auto l = in_degree(u, G);
-        Vertex negation[l];
+        SmallVector<Vertex, 16> negation(l);
         unsigned n = 0, m = 0;
         for (const auto e : make_iterator_range(in_edges(u, G))) {
             const auto v = source(e, G);
@@ -608,9 +608,9 @@ repeat: getReverseTopologicalOrdering();
                 for (const auto e : make_iterator_range(out_edges(u, G))) {
                     add_edge(x, target(e, G), G[e], G);
                 }
-                clear_out_edges(u, G);                
+                clear_out_edges(u, G);
                 add_edge(u, x, 0, G);
-                assert(hasValidOperandIndicies(u));                
+                assert(hasValidOperandIndicies(u));
                 return x;
             }
         }
@@ -652,7 +652,7 @@ repeat: getReverseTopologicalOrdering();
         assert (getType(u) == typeId);
         assert (isDistributive(typeId));
 
-        Vertex A[in_degree(u, G)];
+        SmallVector<Vertex, 16> A(in_degree(u, G));
         unsigned n = 0;
         for (const auto e : make_iterator_range(in_edges(u, G))) {
             const auto v = source(e, G);
@@ -699,7 +699,7 @@ repeat: getReverseTopologicalOrdering();
         assert (getType(u) == typeId);
         assert (isDistributive(typeId));
 
-        Vertex A[in_degree(u, G)];
+        SmallVector<Vertex, 16> A(in_degree(u, G));
         unsigned n = 0;
         for (const auto ei : make_iterator_range(in_edges(u, G))) {
             const auto v = source(ei, G);
@@ -756,7 +756,7 @@ repeat: getReverseTopologicalOrdering();
     bool processConstant(const Vertex u, const TypeId typeId) {
 
         const auto l = out_degree(u, G);
-        Vertex modification[l];
+        SmallVector<Vertex, 16> modification(l);
         unsigned n = 0;
         unsigned m = 0;
 
@@ -957,7 +957,7 @@ repeat: getReverseTopologicalOrdering();
                     const auto n = in_degree(u, G);
                     assert (n > 1);
                     const auto innerTypeId = oppositeTypeId(getType(u));
-                    Vertex D[n];
+                    SmallVector<Vertex, 16> D(n);
                     unsigned count = 0;
                     for (const auto ei : make_iterator_range(in_edges(u, G))) {
                         const auto v = source(ei, G);
@@ -1423,12 +1423,12 @@ private:
                 }
                 return false;
             } else if (isAssociative(typeId)) {
-                Vertex V[n];
+                SmallVector<Vertex, 16> V(n);
                 unsigned i = 0;
                 for (auto e : make_iterator_range(in_edges(u, G))) {
                     V[i++] = source(e, G);
                 }
-                std::sort(V, V + n);
+                std::sort(V.begin(), V.end());
                 for (unsigned i = 1; i != n; ++i) {
                     if (LLVM_UNLIKELY(V[i - 1] == V[i])) {
                         if (report) {
@@ -1438,8 +1438,8 @@ private:
                     }
                 }
             } else if (requiredOperands(typeId) == n) {
-                bool used[n];
-                std::fill_n(used, n, false);
+                SmallVector<bool, 16> used(n);
+                std::fill_n(used.begin(), n, false);
                 for (auto e : make_iterator_range(in_edges(u, G))) {
                     const auto i = G[e];
                     if (LLVM_UNLIKELY(i >= n)) {
@@ -1538,7 +1538,7 @@ private:
     void removeVertex(const Vertex u) {
         assert (isLive(u));
         setDead(u);
-        clear_vertex(u, G);        
+        clear_vertex(u, G);
     }
 
     /** ------------------------------------------------------------------------------------------------------------- *
@@ -1773,8 +1773,8 @@ private:
                     return getValue(u, G) == getValue(v, G);
                 }
                 if (in_degree(v, G) == n) {
-                    Vertex adjA[n];
-                    Vertex adjB[n];
+                    SmallVector<Vertex, 16> adjA(n);
+                    SmallVector<Vertex, 16> adjB(n);
                     auto ei = std::get<0>(in_edges(u, G));
                     auto ej = std::get<0>(in_edges(v, G));
                     // if this is an associative op, order doesn't matter
@@ -1783,8 +1783,8 @@ private:
                             adjA[i] = source(*ei, G);
                             adjB[i] = source(*ej, G);
                         }
-                        assert(std::is_sorted(adjA, adjA + n));
-                        assert(std::is_sorted(adjB, adjB + n));
+                        assert(std::is_sorted(adjA.begin(), adjA.end()));
+                        assert(std::is_sorted(adjB.begin(), adjB.end()));
                     } else { // otherwise consider the order indicated by the edges
                         for (unsigned i = 0; i < n; ++i, ++ei, ++ej) {
                             adjA[G[*ei]] = source(*ei, G);

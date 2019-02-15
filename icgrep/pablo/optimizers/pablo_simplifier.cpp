@@ -235,9 +235,10 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
 
         const auto escaped = br->getEscaped();
         const auto n = escaped.size();
-        PabloAST * variable[n];
-        PabloAST * incoming[n];
-        PabloAST * outgoing[n];
+
+        SmallVector<PabloAST *, 16> variable(n);
+        SmallVector<PabloAST *, 16> incoming(n);
+        SmallVector<PabloAST *, 16> outgoing(n);
         for (unsigned i = 0; i < n; ++i) {
             variable[i] = escaped[i];
             incoming[i] = vt->get(variable[i]);
@@ -482,10 +483,10 @@ void strengthReduction(PabloBlock * const block) {
                     op->eraseFromParent(false);
                 }
             }
-        } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt))) {            
+        } else if (LLVM_UNLIKELY(isa<ScanThru>(stmt))) {
             ScanThru * const outer = cast<ScanThru>(stmt);
             if (LLVM_UNLIKELY(isa<Advance>(outer->getScanFrom()))) {
-                // Replace ScanThru(Advance(x,n),y) with ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x                
+                // Replace ScanThru(Advance(x,n),y) with ScanThru(Advance(x, n - 1), Advance(x, n - 1) | y), where Advance(x, 0) = x
                 Advance * const inner = cast<Advance>(outer->getScanFrom());
                 if (LLVM_UNLIKELY(inner->getNumUses() == 1)) {
                     PabloAST * stream = inner->getExpression();

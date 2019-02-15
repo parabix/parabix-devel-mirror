@@ -686,14 +686,14 @@ inline void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> 
         resultType = b->getVoidTy();
     } else {
         const auto n = mOutputScalars.size();
-        Type * outputType[n];
+        SmallVector<Type *, 16> outputType(n);
         for (unsigned i = 0; i < n; ++i) {
             outputType[i] = mOutputScalars[i].getType();
         }
         if (n == 1) {
             resultType = outputType[0];
         } else {
-            resultType = StructType::get(b->getContext(), ArrayRef<Type *>(outputType, n));
+            resultType = StructType::get(b->getContext(), outputType);
         }
     }
     std::vector<Type *> params;

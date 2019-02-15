@@ -17,8 +17,8 @@ void twistByPDEP(const std::unique_ptr <kernel::KernelBuilder> &b, Value *inputB
     Function *PDEPFunc = Intrinsic::getDeclaration(b->getModule(), Intrinsic::x86_bmi_pdep_64);
     uint64_t pdepBaseMask = twistWidth == 2? 0x5555555555555555 : 0x1111111111111111;
 
+    SmallVector<Value *, 16> currentInput(twistWidth);
     for (unsigned i = 0; i < b->getBitBlockWidth() / 64; i++) {
-        Value *currentInput[twistWidth];
         for (unsigned iIndex = 0; iIndex < twistWidth; iIndex++) {
             currentInput[iIndex] = b->CreateExtractElement(inputBlocks[iIndex], i);
         }
@@ -53,8 +53,7 @@ TwistByPDEPKernel::TwistByPDEPKernel(const std::unique_ptr <kernel::KernelBuilde
 }
 
 void TwistByPDEPKernel::generateDoBlockMethod(const std::unique_ptr <kernel::KernelBuilder> &b) {
-    Value *inputBlocks[mTwistWidth];
-
+    SmallVector<Value *, 16> inputBlocks(mTwistWidth);
     for (unsigned i = 0; i < mTwistWidth; i++) {
         if (i < mNumberOfInputStream) {
             inputBlocks[i] = b->loadInputStreamBlock("basisBits", b->getInt32(i));
@@ -65,7 +64,7 @@ void TwistByPDEPKernel::generateDoBlockMethod(const std::unique_ptr <kernel::Ker
 
     Value *outputBasePtr = b->CreatePointerCast(b->getOutputStreamBlockPtr("byteStream", b->getSize(0)),
                                                 b->getInt64Ty()->getPointerTo());
-    twistByPDEP(b, inputBlocks, mTwistWidth, outputBasePtr);
+    twistByPDEP(b, inputBlocks.data(), mTwistWidth, outputBasePtr);
 }
 
 
@@ -84,8 +83,7 @@ mTwistWidth(outputStream->getFieldWidth()) {
 }
 
 void TwistMultipleByPDEPKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &b) {
-    Value * input[mTwistWidth];
-
+    SmallVector<Value *, 16> input(mTwistWidth);
     unsigned k = 0;
     for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
         const auto m = getInputStreamSet(i)->getNumElements();
@@ -101,7 +99,7 @@ void TwistMultipleByPDEPKernel::generateDoBlockMethod(const std::unique_ptr<kern
 
     Value *outputBasePtr = b->CreatePointerCast(b->getOutputStreamBlockPtr("byteStream", b->getSize(0)),
                                                 b->getInt64Ty()->getPointerTo());
-    twistByPDEP(b, input, mTwistWidth, outputBasePtr);
+    twistByPDEP(b, input.data(), mTwistWidth, outputBasePtr);
 }
 
 }

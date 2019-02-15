@@ -737,16 +737,16 @@ inline Value * CarryManager::longAdvanceCarryInCarryOut(const std::unique_ptr<ke
                 Value * stream = b->CreateBitCast(advanced, bitBlockTy);
                 if (LLVM_LIKELY(i == summarySize)) {
                     const auto n = bitBlockTy->getVectorNumElements();
-                    Constant * mask[n];
+                    SmallVector<Constant *, 16> mask(n);
                     const auto m = udiv(summaryBlocks, laneWidth);
                     if (m) {
-                        std::fill_n(mask, m, ConstantInt::getAllOnesValue(laneTy));
+                        std::fill_n(mask.data(), m, ConstantInt::getAllOnesValue(laneTy));
                     }
                     mask[m] = ConstantInt::get(laneTy, (1UL << (summaryBlocks & (laneWidth - 1))) - 1UL);
                     if (n > m) {
-                        std::fill_n(mask + m + 1, n - m, UndefValue::get(laneTy));
+                        std::fill_n(mask.data() + m + 1, n - m, UndefValue::get(laneTy));
                     }
-                    stream = b->CreateAnd(stream, ConstantVector::get(ArrayRef<Constant *>(mask, n)));
+                    stream = b->CreateAnd(stream, ConstantVector::get(mask));
                     addToCarryOutSummary(b, stream);
                     b->CreateBlockAlignedStore(stream, ptr);
                     break;
@@ -880,17 +880,15 @@ Value * CarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBui
             frameTy = frameTy->getStructElementType(0);
         }
     }
-
     const unsigned length = count + 1;
-    Value * indicies[length];
-    std::fill(indicies, indicies + length, b->getInt32(0));
+    SmallVector<Value *, 16> indicies(length);
+    std::fill(indicies.begin(), indicies.end(), b->getInt32(0));
     indicies[count - 1] = index;
     if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
     }
 
-    ArrayRef<Value *> ar(indicies, length);
-    Value * const ptr = b->CreateGEP(mCurrentFrame, ar);
+    Value * const ptr = b->CreateGEP(mCurrentFrame, indicies);
     assert (ptr->getType()->getPointerElementType() == b->getBitBlockType());
 
     Value * const summary = b->CreateBlockAlignedLoad(ptr);

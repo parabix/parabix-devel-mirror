@@ -56,7 +56,7 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     // Construct a list of indexes in  the form
     // 0, 1, 2, 2, 3, 4, 5, 5, 6, 7, 8, 8, ...
     unsigned sourceByteIndex = 0;
-    unsigned expand3_4_index[PACK_SIZE];
+    SmallVector<unsigned, 64> expand3_4_index(PACK_SIZE);
     for (unsigned i = 0; i < PACK_SIZE; i++) {
         expand3_4_index[i] = sourceByteIndex;
         if (i % 4 != 2) sourceByteIndex++;

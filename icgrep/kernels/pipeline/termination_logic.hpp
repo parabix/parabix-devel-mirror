@@ -107,11 +107,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     // TODO: Try placing counters on seperate cache lines.
     #ifdef DISABLE_TERMINATION_SIGNAL_COUNTING_VARIABLES
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        const bool test = has_child(i, mPipelineOutput, G);
-        clear_vertex(i, G);
-        if (test) {
-            add_edge(i, mPipelineOutput, G);
-        }
+        remove_out_edge_if(i, [&](Edge e) { return target(e, G) != mPipelineOutput; }, G);
     }
     #else
 

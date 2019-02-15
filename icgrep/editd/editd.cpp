@@ -469,7 +469,7 @@ int main(int argc, char *argv[]) {
         }
         else{
             const unsigned numOfThreads = Threads;
-            pthread_t threads[numOfThreads];
+            SmallVector<pthread_t, 8> threads(numOfThreads);
             groupCount = 0;
 
             for(unsigned long i = 0; i < numOfThreads; ++i){

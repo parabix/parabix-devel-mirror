@@ -59,7 +59,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
         Value * aVec = fwCast(fw / 2, a);
         Value * bVec = fwCast(fw / 2, b);
         const auto field_count = 2 * mBitBlockWidth / fw;
-        Constant * Idxs[field_count];
+        SmallVector<Constant *, 32> Idxs(field_count);
         const auto H = (field_count / 2);
         const auto Q = (field_count / 4);
         for (unsigned i = 0; i < Q; i++) {
@@ -68,8 +68,9 @@ Value * IDISA_AVX2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
             Idxs[i + H] = getInt32((2 * i) + H);
             Idxs[i + H + Q] = getInt32((2 * i) + 1 + H);
         }
-        Value * shufa = CreateShuffleVector(aVec, aVec, ConstantVector::get({Idxs, field_count}));
-        Value * shufb = CreateShuffleVector(bVec, bVec, ConstantVector::get({Idxs, field_count}));
+        Constant * const IdxVec = ConstantVector::get(Idxs);
+        Value * shufa = CreateShuffleVector(aVec, aVec, IdxVec);
+        Value * shufb = CreateShuffleVector(bVec, bVec, IdxVec);
         return hsimd_packh(mBitBlockWidth / 2, shufa, shufb);
     }
     // Otherwise use default SSE logic.
@@ -81,7 +82,7 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         Value * aVec = fwCast(fw / 2, a);
         Value * bVec = fwCast(fw / 2, b);
         const auto field_count = 2 * mBitBlockWidth / fw;
-        Constant * Idxs[field_count];
+        SmallVector<Constant *, 16> Idxs(field_count);
         const auto H = (field_count / 2);
         const auto Q = (field_count / 4);
         for (unsigned i = 0; i < Q; i++) {
@@ -90,8 +91,9 @@ Value * IDISA_AVX2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
             Idxs[i + H] = getInt32((2 * i) + H);
             Idxs[i + H + Q] = getInt32((2 * i) + H + 1);
         }
-        Value * shufa = CreateShuffleVector(aVec, aVec, ConstantVector::get({Idxs, field_count}));
-        Value * shufb = CreateShuffleVector(bVec, bVec, ConstantVector::get({Idxs, field_count}));
+        Constant * const IdxVec = ConstantVector::get(Idxs);
+        Value * shufa = CreateShuffleVector(aVec, aVec, IdxVec);
+        Value * shufb = CreateShuffleVector(bVec, bVec, IdxVec);
         return hsimd_packl(mBitBlockWidth / 2, shufa, shufb);
     }
     // Otherwise use default SSE logic.
@@ -335,11 +337,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::V
         Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
         const unsigned fieldCount = mBitBlockWidth/fw;
         Type * fieldTy = getIntNTy(fw);
-        Constant * indexes[fieldCount];
+        SmallVector<Constant *, 16> indexes(fieldCount);
         for (unsigned int i = 0; i < fieldCount; i++) {
             indexes[i] = ConstantInt::get(fieldTy, i);
         }
-        Constant * indexVec = ConstantVector::get({indexes, fieldCount});
+        Constant * indexVec = ConstantVector::get(indexes);
         Constant * fieldCountSplat = ConstantVector::getSplat(fieldCount, ConstantInt::get(fieldTy, fieldCount));
         Value * shiftSplat = simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy));
         Value * permuteVec = CreateAdd(indexVec, shiftSplat);
@@ -363,11 +365,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
         Value * permuteFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx2_permd);
         const unsigned fieldCount = mBitBlockWidth/fw;
         Type * fieldTy = getIntNTy(fw);
-        Constant * indexes[fieldCount];
+        SmallVector<Constant *, 16> indexes(fieldCount);
         for (unsigned int i = 0; i < fieldCount; i++) {
             indexes[i] = ConstantInt::get(fieldTy, i);
         }
-        Constant * indexVec = ConstantVector::get({indexes, fieldCount});
+        Constant * indexVec = ConstantVector::get(indexes);
         Value * shiftSplat = simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy));
         Value * permuteVec = CreateSub(indexVec, shiftSplat);
         // Negative indexes are for fields that must be zeroed.  Convert the
@@ -381,7 +383,7 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::V
     return IDISA_Builder::mvmd_sll(fw, a, shift, safe);
 }
 
-    
+
 llvm::Value * IDISA_AVX2_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llvm::Value * index_vector) {
     if (mBitBlockWidth == 256 && fw > 32) {
         const unsigned fieldCount = mBitBlockWidth/fw;
@@ -391,11 +393,11 @@ llvm::Value * IDISA_AVX2_Builder::mvmd_shuffle(unsigned fw, llvm::Value * a, llv
         unsigned half_fw = fw/2;
         unsigned field_count = mBitBlockWidth/half_fw;
         // Build a ConstantVector of alternating 0 and 1 values.
-        Constant * Idxs[field_count];
+        SmallVector<Constant *, 16> Idxs(field_count);
         for (unsigned int i = 0; i < field_count; i++) {
             Idxs[i] = ConstantInt::get(getIntNTy(fw/2), i & 1);
         }
-        Constant * splat01 = ConstantVector::get({Idxs, field_count});
+        Constant * splat01 = ConstantVector::get(Idxs);
         Value * half_fw_indexes = simd_or(idx, mvmd_slli(half_fw, idx, 1));
         half_fw_indexes = simd_add(fw, simd_add(fw, half_fw_indexes, half_fw_indexes), splat01);
         Value * rslt = mvmd_shuffle(half_fw, a, half_fw_indexes);
@@ -497,24 +499,24 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
         Value * broadcastFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_broadcasti64x4_512);
 #endif
         Value * broadcastMask = CreateZExtOrTrunc(bitmask, getInt8Ty());
-        
+
         const unsigned int srcFieldCount = 8;
         Constant * srcArr[srcFieldCount];
         for (unsigned int i = 0; i < srcFieldCount; i++) {
             srcArr[i] = getInt64(0);
         }
         Constant * src = ConstantVector::get({srcArr, srcFieldCount});
-        
+
         const unsigned int aFieldCount = 4;
         Constant * aArr[aFieldCount];
         for (unsigned int i = 0; i < aFieldCount; i++) {
             aArr[i] = getInt64(1);
         }
         Constant * a = ConstantVector::get({aArr, aFieldCount});
-        
+
         return CreateCall(broadcastFunc, {a, src, broadcastMask});
     }
-    
+
     return IDISA_Builder::esimd_bitspread(fw, bitmask);
 #endif
 }
@@ -522,26 +524,26 @@ llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * 
 llvm::Value * IDISA_AVX512F_Builder::mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) {
     const unsigned fieldCount = mBitBlockWidth/fw;
     Type * fieldTy = getIntNTy(fw);
-    Constant * indexes[fieldCount];
+    SmallVector<Constant *, 16> indexes(fieldCount);
     for (unsigned int i = 0; i < fieldCount; i++) {
         indexes[i] = ConstantInt::get(fieldTy, i);
     }
-    Constant * indexVec = ConstantVector::get({indexes, fieldCount});
+    Constant * indexVec = ConstantVector::get(indexes);
     Value * permuteVec = CreateAdd(indexVec, simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy)));
     if (mBitBlockWidth == 512) {
         return bitCast(mvmd_shuffle2(fw, fwCast(fw, a), fwCast(fw, allZeroes()), permuteVec));
     }
     return IDISA_Builder::mvmd_srl(fw, a, shift, safe);
 }
- 
+
 llvm::Value * IDISA_AVX512F_Builder::mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) {
     const unsigned fieldCount = mBitBlockWidth/fw;
     Type * fieldTy = getIntNTy(fw);
-    Constant * indexes[fieldCount];
+    SmallVector<Constant *, 16> indexes(fieldCount);
     for (unsigned int i = 0; i < fieldCount; i++) {
         indexes[i] = ConstantInt::get(fieldTy, fieldCount + i);
     }
-    Constant * indexVec = ConstantVector::get({indexes, fieldCount});
+    Constant * indexVec = ConstantVector::get(indexes);
     Value * permuteVec = CreateSub(indexVec, simd_fill(fw, CreateZExtOrTrunc(shift, fieldTy)));
     if (mBitBlockWidth == 512) {
         return bitCast(mvmd_shuffle2(fw, fwCast(fw, allZeroes()), fwCast(fw, a), permuteVec));
@@ -692,33 +694,33 @@ llvm::Value * IDISA_AVX512F_Builder::simd_popcount(unsigned fw, llvm::Value * a)
             m1Arr[i] = getInt64(0x5555555555555555);
         }
         m1 = ConstantVector::get({m1Arr, 8});
-        
+
         Constant * m2Arr[8];
         llvm::Constant * m2;
         for (unsigned int i = 0; i < 8; i++) {
             m2Arr[i] = getInt64(0x3333333333333333);
         }
         m2 = ConstantVector::get({m2Arr, 8});
-        
+
         Constant * m4Arr[8];
         llvm::Constant * m4;
         for (unsigned int i = 0; i < 8; i++) {
             m4Arr[i] = getInt64(0x0f0f0f0f0f0f0f0f);
         }
         m4 = ConstantVector::get({m4Arr, 8});
-        
+
         Constant * h01Arr[8];
         llvm::Constant * h01;
         for (unsigned int i = 0; i < 8; i++) {
             h01Arr[i] = getInt64(0x0101010101010101);
         }
         h01 = ConstantVector::get({h01Arr, 8});
-        
+
         a = simd_sub(fw, a, simd_and(simd_srli(fw, a, 1), m1));
         a = simd_add(fw, simd_and(a, m2), simd_and(simd_srli(fw, a, 2), m2));
         a = simd_and(simd_add(fw, a, simd_srli(fw, a, 4)), m4);
         return simd_srli(fw, simd_mult(fw, a, h01), 56);
-        
+
     }
     return IDISA_Builder::simd_popcount(fw, a);
 }
@@ -738,7 +740,7 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
         // Merge the bytes.
         Value * byte_merge = esimd_mergeh(8, a, b);
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)        
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
         Value * shufFn = Intrinsic::getDeclaration(getModule(),  Intrinsic::x86_avx512_mask_pshuf_b_512);
         // Make a shuffle table that translates the lower 4 bits of each byte in
         // order to spread out the bits: xxxxdcba => .d.c.b.a
@@ -758,20 +760,20 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
     }
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Constant * Idxs[fieldCount];
+        SmallVector<Constant *, 16> Idxs(fieldCount);
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[2 * i] = getInt32(i + fieldCount / 2); // selects elements from first reg.
             Idxs[2 * i + 1] = getInt32(i + fieldCount / 2 + fieldCount); // selects elements from second reg.
         }
-        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, fieldCount})));
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get(Idxs)));
     }
     if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Constant * Idxs[fieldCount/2];
+        SmallVector<Constant *, 8> Idxs(fieldCount/2);
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[i] = getInt32(i+fieldCount/2); // selects elements from first reg.
         }
-        Constant * high_indexes = ConstantVector::get({Idxs, fieldCount/2});
+        Constant * high_indexes = ConstantVector::get(Idxs);
         Value * a_high = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), high_indexes);
         Value * b_high = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), high_indexes);
         Value * a_ext = CreateZExt(a_high, fwVectorType(16));
@@ -792,8 +794,8 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Constant * interleave_table = bit_interleave_byteshuffle_table(fw);
         // Merge the bytes.
         Value * byte_merge = esimd_mergel(8, a, b);
-        
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)        
+
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
         Value * shufFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pshuf_b_512);
         // Make a shuffle table that translates the lower 4 bits of each byte in
         // order to spread out the bits: xxxxdcba => .d.c.b.a
@@ -813,20 +815,20 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
     }
     if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Constant * Idxs[fieldCount];
+        SmallVector<Constant *, 16> Idxs(fieldCount);
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[2 * i] = getInt32(i); // selects elements from first reg.
             Idxs[2 * i + 1] = getInt32(i + fieldCount); // selects elements from second reg.
         }
-        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get({Idxs, fieldCount})));
+        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get(Idxs)));
     }
     if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
         const unsigned fieldCount = mBitBlockWidth/fw;
-        Constant * Idxs[fieldCount/2];
+        SmallVector<Constant *, 8> Idxs(fieldCount/2);
         for (unsigned i = 0; i < fieldCount / 2; i++) {
             Idxs[i] = getInt32(i); // selects elements from first reg.
         }
-        Constant * low_indexes = ConstantVector::get({Idxs, fieldCount/2});
+        Constant * low_indexes = ConstantVector::get(Idxs);
         Value * a_low = CreateShuffleVector(fwCast(8, a), UndefValue::get(fwVectorType(8)), low_indexes);
         Value * b_low = CreateShuffleVector(fwCast(8, b), UndefValue::get(fwVectorType(8)), low_indexes);
         Value * a_ext = CreateZExt(a_low, fwVectorType(16));
@@ -869,11 +871,11 @@ void IDISA_AVX512F_Builder::getAVX512Features() {
         hostCPUFeatures.hasAVX512BW = features.lookup("avx512bw");
         hostCPUFeatures.hasAVX512DQ = features.lookup("avx512dq");
         hostCPUFeatures.hasAVX512VL = features.lookup("avx512vl");
-        
+
         //hostCPUFeatures.hasAVX512VBMI, hostCPUFeatures.hasAVX512VBMI2,
         //hostCPUFeatures.hasAVX512VPOPCNTDQ have not been tested as we
         //did not have hardware support. It should work in theory (tm)
-        
+
         hostCPUFeatures.hasAVX512VBMI = features.lookup("avx512_vbmi");
         hostCPUFeatures.hasAVX512VBMI2 = features.lookup("avx512_vbmi2");
         hostCPUFeatures.hasAVX512VPOPCNTDQ = features.lookup("avx512_vpopcntdq");

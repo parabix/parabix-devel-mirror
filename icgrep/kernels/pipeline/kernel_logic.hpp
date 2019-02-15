@@ -323,9 +323,9 @@ inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const uns
 inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b) {
     assert (mNumOfLinearStrides);
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
-    Value * linearInputItems[numOfInputs];
+    SmallVector<Value *, 16> linearInputItems(numOfInputs);
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-    Value * linearOutputItems[numOfOutputs];
+    SmallVector<Value *, 16> linearOutputItems(numOfOutputs);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         linearInputItems[i] = calculateNumOfLinearItems(b, mKernel->getInputStreamSetBinding(i));
     }
@@ -346,10 +346,9 @@ inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     const auto numOfInputs = mKernel->getNumOfStreamInputs();
-    Value * accessibleItems[numOfInputs];
+    SmallVector<Value *, 16> accessibleItems(numOfInputs);
     const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-    Value * pendingItems[numOfOutputs];
-
+    SmallVector<Value *, 16> pendingItems(numOfOutputs);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         accessibleItems[i] = addLookahead(b, i, mAccessibleInputItems[i]);
     }
@@ -743,16 +742,21 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         // Determine the maximum lookahead dependency on this stream and zero fill
         // the appropriate number of additional blocks.
         unsigned maximumLookahead = 0;
+        RateValue strideLength{mKernel->getUpperBound(output) * mKernel->getStride()};
         const auto bufferVertex = getOutputBufferVertex(i);
         for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
             const auto inputPort = mBufferGraph[e].inputPort();
             const Kernel * const consumer = mPipeline[target(e, mBufferGraph)];
             const Binding & input = consumer->getInputStreamSetBinding(inputPort);
+            const auto upperBound = consumer->getUpperBound(input) * consumer->getStride();
+            strideLength = std::max(strideLength, upperBound);
             if (LLVM_UNLIKELY(input.hasLookahead())) {
                 maximumLookahead = std::max(maximumLookahead, input.getLookahead());
             }
         }
+        const auto numOfBlocks = ceiling(strideLength * itemWidth) >> log2BlockWidth;
         const auto numOfAdditionalBlocks = ((maximumLookahead * itemWidth) + (blockWidth - 1)) >> log2BlockWidth;
+        const auto blocksToZero = numOfBlocks + numOfAdditionalBlocks;
 
         const auto prefix = makeBufferName(mKernelIndex, output);
 
@@ -801,12 +805,13 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         b->CreateCondBr(notDone, maskLoop, maskExit);
 
         b->SetInsertPoint(maskExit);
-        // If we have any lookahead dependencies, just zero out the number of blocks we could potentially touch,
-        // assuming that our prior block was completely used. At worst, this will needlessly clear the overflow.
-        if (numOfAdditionalBlocks) {
-            const auto width = ((blockWidth * numOfAdditionalBlocks * itemWidth) / 8);
-            Value * bytes = b->CreateMul(numOfStreams, b->getSize(width));
-            Value * ptr = buffer->getStreamBlockPtr(b.get(), baseAddress, streamIndex, b->CreateAdd(blockIndex, ONE));
+        // Zero out any blocks we could potentially touch
+        if (blocksToZero) {
+            Constant * const MAX_BLOCKS = b->getSize((blockWidth * blocksToZero) / 8);
+            Value * const nextBlockIndex = b->CreateAdd(blockIndex, ONE);
+            Value * const ptr = buffer->getStreamBlockPtr(b.get(), baseAddress, ZERO, nextBlockIndex);
+            Value * const remainingBlocks = b->CreateSub(MAX_BLOCKS, b->CreateURem(nextBlockIndex, MAX_BLOCKS));
+            Value * const bytes = b->CreateMul(numOfStreams, remainingBlocks);
             b->CreateMemZero(ptr, bytes, blockWidth / 8);
         }
     }

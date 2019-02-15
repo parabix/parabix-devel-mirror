@@ -13,7 +13,7 @@ namespace pablo {
 
 String * SymbolGenerator::makeString(const llvm::StringRef prefix) noexcept {
     auto f = mPrefixMap.find(prefix);
-    if (f == mPrefixMap.end()) {   
+    if (f == mPrefixMap.end()) {
         char * const data = mAllocator.allocate<char>(prefix.size() + 1);
         std::memcpy(data, prefix.data(), prefix.size());
         data[prefix.size()] = '\0';
@@ -31,22 +31,23 @@ String * SymbolGenerator::makeString(const llvm::StringRef prefix) noexcept {
             digits *= 10;
             length += 1;
         }
-        char name[length];
-        std::memcpy(name, prefix.data(), prefix.size());
-        char * p = name + length - 1;
+
+        llvm::SmallVector<char, 256> name(length);
+        std::memcpy(name.data(), prefix.data(), prefix.size());
+        char * p = name.data() + length - 1;
         while (count) {
             *p-- = (count % 10) + '0';
             count /= 10;
         }
         *p = '_';
-        return makeString(llvm::StringRef(name, length));
+        return makeString(llvm::StringRef(name.data(), length));
     }
 }
 
 Integer * SymbolGenerator::getInteger(const IntTy value) noexcept {
     auto f = mIntegerMap.find(value);
     Integer * result;
-    if (f == mIntegerMap.end()) {        
+    if (f == mIntegerMap.end()) {
         result = new (mAllocator) Integer(value, llvm::IntegerType::getInt64Ty(mContext), mAllocator);
         assert (result->value() == value);
         mIntegerMap.emplace(value, result);

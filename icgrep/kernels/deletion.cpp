@@ -230,7 +230,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     PHINode * blockOffsetPhi = b->CreatePHI(sizeTy, 2);
     PHINode * outputBlockPhi = b->CreatePHI(sizeTy, 2);
     PHINode * pendingItemsPhi = b->CreatePHI(fwTy, 2);
-    PHINode * pendingDataPhi[mStreamCount];
+    SmallVector<PHINode *, 16> pendingDataPhi(mStreamCount);
     blockOffsetPhi->addIncoming(ZERO, entry);
     outputBlockPhi->addIncoming(ZERO, entry);
     pendingItemsPhi->addIncoming(pendingItemCount, entry);

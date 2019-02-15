@@ -14,9 +14,8 @@ void untwistByPEXT(const std::unique_ptr <kernel::KernelBuilder> &b, Value* inpu
         outputBlocks[i] = ConstantVector::getNullValue(b->getBitBlockType());
     }
 
+    SmallVector<Value *, 16> currentOutput(twistWidth);
     for (unsigned i = 0; i < b->getBitBlockWidth() / 64; i++) {
-        Value* currentOutput[twistWidth];
-
         for (unsigned iIndex = 0; iIndex < twistWidth; iIndex++) {
             currentOutput[iIndex] = b->getInt64(0);
         }
@@ -64,9 +63,9 @@ UntwistByPEXTKernel::UntwistByPEXTKernel(const std::unique_ptr<kernel::KernelBui
 
 void UntwistByPEXTKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &b) {
     Value* inputBasePtr = b->CreatePointerCast(b->getInputStreamBlockPtr("byteStream", b->getSize(0)), b->getInt64Ty()->getPointerTo());
-    Value* outputBlocks[mTwistWidth];
 
-    untwistByPEXT(b, inputBasePtr, mTwistWidth, outputBlocks);
+    SmallVector<Value *, 16> outputBlocks(mTwistWidth);
+    untwistByPEXT(b, inputBasePtr, mTwistWidth, outputBlocks.data());
 
     for (unsigned i = 0; i < mNumberOfOutputStream; i++) {
         b->storeOutputStreamBlock("basisBits", b->getInt32(i), outputBlocks[i]);
@@ -94,9 +93,8 @@ UntwistMultipleByPEXTKernel::UntwistMultipleByPEXTKernel(const std::unique_ptr<k
 void UntwistMultipleByPEXTKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &b) {
     Value* inputBasePtr = b->CreatePointerCast(b->getInputStreamBlockPtr("byteStream", b->getSize(0)), b->getInt64Ty()->getPointerTo());
 
-    Value* outputBlocks[mTwistWidth];
-
-    untwistByPEXT(b, inputBasePtr, mTwistWidth, outputBlocks);
+    SmallVector<Value *, 16> outputBlocks(mTwistWidth);
+    untwistByPEXT(b, inputBasePtr, mTwistWidth, outputBlocks.data());
 
     for (unsigned i = 0, k = 0; i < getNumOfStreamOutputs(); i++) {
         const auto m = getOutputStreamSet(i)->getNumElements();

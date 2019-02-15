@@ -176,7 +176,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * processedSourceItems = b->getProcessedItemCount("source");
     Value * initialSourceOffset = b->CreateURem(processedSourceItems, bwConst);
 
-    Value * pendingData[mSelectedStreamCount];
+    SmallVector<Value *, 16> pendingData(mSelectedStreamCount);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         pendingData[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), ZERO);
     }
@@ -186,7 +186,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->SetInsertPoint(expandLoop);
     PHINode * blockNoPhi = b->CreatePHI(b->getSizeTy(), 2);
     PHINode * pendingOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
-    PHINode * pendingDataPhi[mSelectedStreamCount];
+    SmallVector<PHINode *, 16> pendingDataPhi(mSelectedStreamCount);
     blockNoPhi->addIncoming(ZERO, entry);
     pendingOffsetPhi->addIncoming(initialSourceOffset, entry);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
@@ -240,7 +240,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * const srcBlockNo = b->CreateUDiv(newPendingOffset, bwConst);
 
     // Now load and process source streams.
-    Value * sourceData[mSelectedStreamCount];
+    SmallVector<Value *, 16> sourceData(mSelectedStreamCount);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         sourceData[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), srcBlockNo);
         Value * A = b->simd_srlv(mFieldWidth, b->mvmd_dsll(mFieldWidth, sourceData[i], pendingDataPhi[i], field_offset_lo), bit_offset);

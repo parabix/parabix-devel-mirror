@@ -497,7 +497,6 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
  * producer -> buffer/scalar -> consumer
  ** ------------------------------------------------------------------------------------------------------------- */
 RelationshipGraph PipelineCompiler::makeScalarDependencyGraph() const {
-
     const auto & call = mPipelineKernel->getCallBindings();
     const auto numOfCalls = call.size();
     const auto firstCall = mPipelineOutput + 1;
@@ -962,6 +961,7 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
  * @brief makePipelineIOGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
+
     PipelineIOGraph G((mPipelineOutput - mPipelineInput) + 1);
     for (const auto e : make_iterator_range(out_edges(mPipelineInput, mBufferGraph))) {
         const auto buffer = target(e, mBufferGraph);

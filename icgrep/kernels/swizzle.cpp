@@ -103,8 +103,8 @@ void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
     const auto inputStreamsPerSet = ceil_udiv(mBitStreamCount, getNumOfStreamInputs());
     const auto outputStreamsPerSet = ceil_udiv(mBitStreamCount, getNumOfStreamOutputs());
 
-    Value * sourceBlocks[swizzleFactor];
-    Value * targetBlocks[swizzleFactor];
+    SmallVector<Value *, 16> sourceBlocks(swizzleFactor);
+    SmallVector<Value *, 16> targetBlocks(swizzleFactor);
     for (unsigned grp = 0; grp < swizzleGroups; grp++) {
         // First load all the data.
         for (unsigned i = 0; i < swizzleFactor; i++) {
