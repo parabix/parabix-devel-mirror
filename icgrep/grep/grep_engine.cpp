@@ -15,6 +15,8 @@
 #include <kernels/UCD_property_kernel.h>
 #include <kernels/grapheme_kernel.h>
 #include <kernels/linebreak_kernel.h>
+#include <kernels/deletion.h>
+#include <kernels/pdep_kernel.h>
 #include <kernels/streams_merge.h>
 #include <kernels/source_kernel.h>
 #include <kernels/s2p_kernel.h>
@@ -70,6 +72,7 @@ using namespace kernel;
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
+static cl::opt<bool> UnicodeIndexing("UnicodeIndexing", cl::desc("Enable Unicode indexing."), cl::init(false));
 static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(true));
 static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
 const unsigned DefaultByteCClimit = 6;
@@ -358,10 +361,25 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                     StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
                     P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), SourceStream, CharClasses);
                     options->addAlphabet(mpx, CharClasses);
+                    if (UnicodeIndexing) {
+                        StreamSet * fieldCompressedCCs = P->CreateStreamSet(mpx_basis.size());
+                        StreamSet * compressedCCs = P->CreateStreamSet(mpx_basis.size());
+                        const unsigned compressFieldWidth = sizeof(size_t) * 8;
+                        P->CreateKernelCall<FieldCompressKernel>(compressFieldWidth, CharClasses, U8index, fieldCompressedCCs);
+                        P->CreateKernelCall<StreamCompressKernel>(fieldCompressedCCs, U8index, compressedCCs, compressFieldWidth);
+                        options->setIndexingAlphabet(&cc::Unicode);
+                    }
                 }
             }
         }
         P->CreateKernelCall<ICGrepKernel>(std::move(options));
+        if (UnicodeIndexing) {
+            StreamSet * const expanded = P->CreateStreamSet(1);
+            StreamSet * const UTF8_results = P->CreateStreamSet(1);
+            P->CreateKernelCall<StreamExpandKernel>(MatchResults, 0, U8index, expanded);
+            P->CreateKernelCall<FieldDepositKernel>(U8index, expanded, UTF8_results);
+            MatchResultsBufs[i] = UTF8_results;
+        }
     }
 
     StreamSet * Matches = MatchResultsBufs[0];
