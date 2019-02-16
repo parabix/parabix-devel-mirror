@@ -49,7 +49,7 @@ namespace re {
     
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
-    mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler>(mEntryScope, basis_set, mBasisSetNumbering));
+    mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler>(mEntryScope, basis_set));
 }
 
 void RE_Compiler::addPrecompiled(std::string precompiledName, PabloAST * precompiledStream) {
@@ -637,12 +637,10 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
 
 RE_Compiler::RE_Compiler(PabloBlock * scope,
                          cc::CC_Compiler & ccCompiler,
-                         const cc::Alphabet & indexingAlphabet,
-                         cc::BitNumbering basisSetNumbering)
+                         const cc::Alphabet & indexingAlphabet)
 : mEntryScope(scope)
 , mCCCompiler(ccCompiler)
 , mIndexingAlphabet(indexingAlphabet)
-, mBasisSetNumbering(basisSetNumbering)
 , mLineBreak(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)

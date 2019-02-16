@@ -67,7 +67,7 @@ StreamSet * LZ4GrepByteStreamGenerator::twist(const StreamSets & inputStreams, c
     if (twistWidth == 2 || twistWidth == 4) {
         mPipeline->CreateKernelCall<TwistMultipleByPDEPKernel>(inputStreams, twistedOutput);
     } else if (twistWidth == 8) {
-        mPipeline->CreateKernelCall<P2SMultipleStreamsKernel>(inputStreams, twistedOutput, cc::BitNumbering::BigEndian);
+        mPipeline->CreateKernelCall<P2SMultipleStreamsKernel>(inputStreams, twistedOutput);
     } else {
         llvm::report_fatal_error("Twist: Unsupported twistWidth " + std::to_string(twistWidth));
     }
@@ -99,7 +99,7 @@ StreamSets LZ4GrepByteStreamGenerator::untwist(StreamSet * inputStream, const un
         if (twistWidth == 2 || twistWidth == 4) {
             mPipeline->CreateKernelCall<UntwistMultipleByPEXTKernel>(inputStream, retBuffers);
         } else if (twistWidth == 8) {
-            mPipeline->CreateKernelCall<S2PMultipleStreamsKernel>(inputStream, retBuffers, cc::BitNumbering::BigEndian, true);
+            mPipeline->CreateKernelCall<S2PMultipleStreamsKernel>(inputStream, retBuffers);
         } else {
             llvm::report_fatal_error("Twist: Unsupported twistWidth " + std::to_string(twistWidth));;
         }

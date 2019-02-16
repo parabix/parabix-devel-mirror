@@ -151,7 +151,7 @@ void LZ4GrepBaseGenerator::initREs(RE * re) {
 
 StreamSet * LZ4GrepBaseGenerator::linefeedStreamFromUncompressedBits(StreamSet *uncompressedBasisBits) {
     StreamSet * const LineFeedStream = mPipeline->CreateStreamSet(1, 1);
-    mPipeline->CreateKernelCall<LineFeedKernelBuilder>(uncompressedBasisBits, LineFeedStream, BitNumbering::BigEndian);
+    mPipeline->CreateKernelCall<LineFeedKernelBuilder>(uncompressedBasisBits, LineFeedStream);
     return LineFeedStream;
 }
 
@@ -211,7 +211,7 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
 
         StreamSet * CharClasses = mPipeline->CreateStreamSet(mpxCCs.size());
 
-        mPipeline->CreateKernelCall<CharClassesKernel>(std::move(mpxCCs), compressedBitStream, CharClasses, BitNumbering::BigEndian);
+        mPipeline->CreateKernelCall<CharClassesKernel>(std::move(mpxCCs), compressedBitStream, CharClasses);
 
         if (!requireNonFinal) {
             // We do not need to decompress U8 NonFinal Stream is all of the character class in target regular expression is byte length
@@ -231,7 +231,6 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
                 std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
                 options->addAlphabet(mpx, uncompressedCharClasses);
                 options->setSource(fakeMatchCopiedBits);
-                options->setNumbering(BitNumbering::BigEndian);
                 options->setRE(mpxU8FinalRe);
                 options->setResults(u8FinalStream);
                 mPipeline->CreateKernelCall<ICGrepKernel>(std::move(options));
@@ -243,7 +242,6 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
 
                 std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
                 options->setSource(compressedBitStream);
-                options->setNumbering(BitNumbering::BigEndian);
                 options->setRE(u8NonFinalRe);
                 options->setResults(compressedNonFinalStream);
                 mPipeline->CreateKernelCall<ICGrepKernel>(std::move(options));
@@ -269,7 +267,7 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
         auto mpx_basis = mpx->getMultiplexedCCs();
         StreamSet * const CharClasses = mPipeline->CreateStreamSet(mpx_basis.size());
 
-        mPipeline->CreateKernelCall<ByteClassesKernel>(std::move(mpx_basis), compressedBitStream, CharClasses, BitNumbering::BigEndian);
+        mPipeline->CreateKernelCall<ByteClassesKernel>(std::move(mpx_basis), compressedBitStream, CharClasses);
 
         uncompressedCharClasses = decompressBitStream(compressedByteStream, CharClasses);
         auto fakeStreams = generateFakeStreams(uncompressedCharClasses, std::vector<unsigned>{8, 1});
@@ -287,7 +285,6 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
 
     optionsLF->addAlphabet(mpx, uncompressedCharClasses);
     optionsLF->setSource(fakeMatchCopiedBits);
-    optionsLF->setNumbering(BitNumbering::BigEndian);
     optionsLF->setRE(transformedLF);
     optionsLF->setResults(LineBreakStream);
     mPipeline->CreateKernelCall<ICGrepKernel>(std::move(optionsLF));
@@ -295,7 +292,6 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::multiplexingGrep(RE * 
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
     options->addAlphabet(mpx, uncompressedCharClasses);
     options->setSource(fakeMatchCopiedBits);
-    options->setNumbering(BitNumbering::BigEndian);
     options->addExternal("UTF8_nonfinal", u8NoFinalStream);
     options->setRE(mRE);
     options->setResults(MatchResults);
@@ -332,12 +328,11 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::grep(RE * re, StreamSe
         mRE = transformCCs(mpx, mRE);
         auto mpx_basis = mpx->getMultiplexedCCs();
         StreamSet * const CharClasses = mPipeline->CreateStreamSet(mpx_basis.size());
-        mPipeline->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), uncompressedBasisBits, CharClasses, BitNumbering::BigEndian);
+        mPipeline->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), uncompressedBasisBits, CharClasses);
 
         std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
         options->addAlphabet(mpx, CharClasses);
         options->setSource(uncompressedBasisBits);
-        options->setNumbering(BitNumbering::BigEndian);
         options->setRE(mRE);
         options->setResults(MatchResults);
         mPipeline->CreateKernelCall<ICGrepKernel>(std::move(options));
@@ -352,7 +347,6 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::grep(RE * re, StreamSe
         }
         std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
         options->setSource(uncompressedBasisBits);
-        options->setNumbering(BitNumbering::BigEndian);
         options->setRE(mRE);
         options->setResults(MatchResults);
         mPipeline->CreateKernelCall<ICGrepKernel>(std::move(options));

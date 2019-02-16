@@ -13,12 +13,10 @@
 
 namespace cc {
     
-// Set of parallel bit streams may be numbered using either the
-// LittleEndian (right-to-left) or BigEndian (left-to-right) conventions.
-enum class BitNumbering {LittleEndian, BigEndian};
+enum class ByteNumbering {LittleEndian, BigEndian};
 
-inline std::string numberingSuffix(BitNumbering numbering) {
-    return (numbering == BitNumbering::LittleEndian) ? "-LE" : "-BE";
+inline std::string numberingSuffix(ByteNumbering numbering) {
+    return (numbering == ByteNumbering::LittleEndian) ? "-LE" : "-BE";
 }
 
 //

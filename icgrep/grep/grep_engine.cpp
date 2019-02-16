@@ -258,7 +258,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             P->CreateKernelCall<S2P_PabloKernel>(SourceStream, BasisBits);
         } else {
             //P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-            Kernel * s2pK = P->CreateKernelCall<S2PKernel>(SourceStream, BasisBits, cc::BitNumbering::LittleEndian, callbackObject);
+            Kernel * s2pK = P->CreateKernelCall<S2PKernel>(SourceStream, BasisBits, callbackObject);
             mGrepDriver.LinkFunction(s2pK, "signal_dispatcher", kernel::signal_dispatcher);
         }
         SourceStream = BasisBits;

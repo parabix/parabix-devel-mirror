@@ -68,7 +68,7 @@ MainFunctionType generatePipeline(CPUDriver & pxDriver) {
     P->CreateKernelCall<MemorySourceKernel>(inputStream, fileSize, ByteStream);
 
     // Input stream is not aligned due to the offset.
-    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits, cc::BitNumbering::LittleEndian, /*aligned = */ false);
+    P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
 
     P->CreateKernelCall<ParabixCharacterClassKernelBuilder>("extenders", std::vector<re::CC *>{re::makeCC(0xFF)}, BasisBits, Extenders);
 

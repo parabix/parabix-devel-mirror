@@ -32,13 +32,13 @@ StreamSet* LZ4BaseGenerator::loadByteStream() {
 
 StreamSet* LZ4BaseGenerator::s2p(StreamSet* byteStream) {
     StreamSet * const basisBits = mPipeline->CreateStreamSet(8, 1);
-    mPipeline->CreateKernelCall<S2PKernel>(byteStream, basisBits, cc::BitNumbering::BigEndian);
+    mPipeline->CreateKernelCall<S2PKernel>(byteStream, basisBits);
     return basisBits;
 }
 
 StreamSet* LZ4BaseGenerator::p2s(StreamSet* bitStream) {
     StreamSet * const byteStream = mPipeline->CreateStreamSet(1, 8);
-    mPipeline->CreateKernelCall<P2SKernel>(bitStream, byteStream, cc::BitNumbering::BigEndian);
+    mPipeline->CreateKernelCall<P2SKernel>(bitStream, byteStream);
     return byteStream;
 }
 

@@ -26,10 +26,9 @@ namespace cc {
     : mBuilder(scope) {
     }
 
-Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet, cc::BitNumbering basisSetNumbering)
+Parabix_CC_Compiler::Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet)
 : CC_Compiler(scope)
 , mEncodingBits(basisBitSet.size())
-, mBasisSetNumbering(basisSetNumbering)
 , mBasisBit(basisBitSet) {
     mEncodingMask = (static_cast<unsigned>(1) << mEncodingBits) - static_cast<unsigned>(1);
 }
@@ -227,9 +226,7 @@ inline PabloAST * Parabix_CC_Compiler::char_or_range_expr(const codepoint_t lo, 
 template<typename PabloBlockOrBuilder>
 inline PabloAST * Parabix_CC_Compiler::getBasisVar(const unsigned i, PabloBlockOrBuilder & pb) const {
     assert (i < mEncodingBits);
-    if (mBasisSetNumbering == cc::BitNumbering::BigEndian)
-        return mBasisBit[mEncodingBits - i - 1];
-    else return mBasisBit[i];
+    return mBasisBit[i];
 }
 
     

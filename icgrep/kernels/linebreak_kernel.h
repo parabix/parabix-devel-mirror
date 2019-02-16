@@ -15,14 +15,13 @@ namespace kernel {
 
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     unsigned mNumOfStreams;
     unsigned mStreamFieldWidth;
-    cc::BitNumbering mBasisSetNumbering;
 };
 
 

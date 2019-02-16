@@ -39,17 +39,16 @@ inline std::string signature(const std::vector<re::CC *> & ccs) {
     }
 }
 
-CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC, cc::BitNumbering bn)
+CharClassesSignature::CharClassesSignature(const std::vector<CC *> &ccs, bool useDirectCC)
 : mUseDirectCC(useDirectCC),
-  mSignature((useDirectCC ? "d" : "p") + numberingSuffix(bn) + signature(ccs)) {
+  mSignature((useDirectCC ? "d" : "p") + signature(ccs)) {
 }
 
 
-CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses, cc::BitNumbering basisNumbering)
-: CharClassesSignature(ccs, BasisBits->getNumElements() == 1, basisNumbering)
+CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses)
+: CharClassesSignature(ccs, BasisBits->getNumElements() == 1)
 , PabloKernel(iBuilder, "cc" + getStringHash(mSignature), {Binding{"basis", BasisBits}}, {Binding{"charclasses", CharClasses}})
-, mCCs(std::move(ccs))
-, mBasisSetNumbering(basisNumbering) {
+, mCCs(std::move(ccs)) {
 
 }
 
@@ -63,7 +62,7 @@ void CharClassesKernel::generatePabloMethod() {
     if (mUseDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 
@@ -81,11 +80,6 @@ void CharClassesKernel::generatePabloMethod() {
     } else {
         ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     }
-    if (mBasisSetNumbering == cc::BitNumbering::BigEndian) {
-        // The first UnicodeSet in the vector ccs represents the last bit of the
-        // character class basis bit streams.
-        std::reverse(names.begin(), names.end());
-    }
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]); 
         if (t != nameMap.end()) {
@@ -101,12 +95,10 @@ void CharClassesKernel::generatePabloMethod() {
 ByteClassesKernel::ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> &iBuilder,
                                      std::vector<re::CC *> && ccs,
                                      StreamSet * inputStream,
-                                     StreamSet * CharClasses,
-                                     BitNumbering basisNumbering):
-CharClassesSignature(ccs, inputStream->getNumElements() == 1, basisNumbering)
+                                     StreamSet * CharClasses):
+CharClassesSignature(ccs, inputStream->getNumElements() == 1)
 , PabloKernel(iBuilder, "ByteClassesKernel_" + getStringHash(mSignature), {Binding{"basis", inputStream}}, {Binding{"charclasses", CharClasses}})
-, mCCs(std::move(ccs))
-, mBasisSetNumbering(basisNumbering) {
+, mCCs(std::move(ccs)) {
 
 }
 
@@ -120,7 +112,7 @@ void ByteClassesKernel::generatePabloMethod() {
     if (mUseDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 
@@ -132,12 +124,6 @@ void ByteClassesKernel::generatePabloMethod() {
         nameMap.emplace(name, ccc->compileCC(mCCs[i]));
         names.push_back(name);
 
-    }
-
-    if (mBasisSetNumbering == cc::BitNumbering::BigEndian) {
-        // The first UnicodeSet in the vector ccs represents the last bit of the
-        // character class basis bit streams.
-        std::reverse(names.begin(), names.end());
     }
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]);

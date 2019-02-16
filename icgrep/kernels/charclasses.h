@@ -14,7 +14,7 @@ namespace re { class RE; class CC; }
 namespace kernel {
 
 struct CharClassesSignature {
-    CharClassesSignature(const std::vector<re::CC *> & ccs, bool useDirectCC, cc::BitNumbering basisNumbering);
+    CharClassesSignature(const std::vector<re::CC *> & ccs, bool useDirectCC);
 protected:
     const bool mUseDirectCC;
     const std::string mSignature;
@@ -22,7 +22,7 @@ protected:
 
 class CharClassesKernel : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses);
     bool hasSignature() const override { return true; }
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
     bool isCachable() const override { return true; }
@@ -30,14 +30,12 @@ protected:
     void generatePabloMethod() override;
 protected:
     std::vector<re::CC *> mCCs;
-    cc::BitNumbering mBasisSetNumbering;
-
 };
 
 
 class ByteClassesKernel: public CharClassesSignature, public pablo::PabloKernel {
 public:
-    ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * inputStream, StreamSet * CharClasses, cc::BitNumbering basisNumbering = cc::BitNumbering::LittleEndian);
+    ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * inputStream, StreamSet * CharClasses);
     bool hasSignature() const override { return true; }
     std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
     bool isCachable() const override { return true; }
@@ -45,7 +43,6 @@ protected:
     void generatePabloMethod() override;
 protected:
     std::vector<re::CC *> mCCs;
-    cc::BitNumbering mBasisSetNumbering;
 };
 
 

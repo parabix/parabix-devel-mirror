@@ -53,8 +53,7 @@ public:
 
     RE_Compiler(pablo::PabloBlock * scope,
                 cc::CC_Compiler & ccCompiler,
-                const cc::Alphabet & indexingAlphabet = cc::Byte,
-                cc::BitNumbering basisSetNumbering = cc::BitNumbering::LittleEndian);
+                const cc::Alphabet & indexingAlphabet = cc::Byte);
     
     //
     // The CCs (character classes) within a regular expression are generally
@@ -147,7 +146,6 @@ private:
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     cc::CC_Compiler &                               mCCCompiler;
     const cc::Alphabet &                            mIndexingAlphabet;
-    cc::BitNumbering                                mBasisSetNumbering;
     pablo::PabloAST *                               mLineBreak;
     re::Name *                                      mNonFinalName;
     pablo::PabloAST *                               mWhileTest;

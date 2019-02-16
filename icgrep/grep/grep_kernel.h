@@ -57,10 +57,8 @@ public:
     using Externals = std::vector<std::pair<std::string, StreamSet *>>;
     using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
     GrepKernelOptions() :
-        mBasisSetNumbering(cc::BitNumbering::LittleEndian),
         mIndexingAlphabet(&cc::Byte),
         mPrefixRE(nullptr) {}
-    void setNumbering(cc::BitNumbering numbering);
     void setIndexingAlphabet(const cc::Alphabet * a);
     void setSource(StreamSet * s);
     void setResults(StreamSet * r);
@@ -77,7 +75,6 @@ protected:
     std::string getSignature();
 
 private:
-    cc::BitNumbering mBasisSetNumbering;
     const cc::Alphabet * mIndexingAlphabet;
     StreamSet * mSource;
     StreamSet * mResults;

@@ -36,7 +36,7 @@ void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
-void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[], cc::BitNumbering basisNumbering) {
+void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
     // Little-endian bit number is used for variables.
     Value * bit66442200[4];
     Value * bit77553311[4];
@@ -56,23 +56,15 @@ void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value
         s2p_step(iBuilder, bit77553311[2*j], bit77553311[2*j+1],
                  iBuilder->simd_himask(4), 2, bit77773333[j], bit55551111[j]);
     }
-    if (basisNumbering == cc::BitNumbering::LittleEndian) {
-        s2p_step(iBuilder, bit44440000[0], bit44440000[1], iBuilder->simd_himask(8), 4, output[4], output[0]);
-        s2p_step(iBuilder, bit55551111[0], bit55551111[1], iBuilder->simd_himask(8), 4, output[5], output[1]);
-        s2p_step(iBuilder, bit66662222[0], bit66662222[1], iBuilder->simd_himask(8), 4, output[6], output[2]);
-        s2p_step(iBuilder, bit77773333[0], bit77773333[1], iBuilder->simd_himask(8), 4, output[7], output[3]);
-    }
-    else {
-        s2p_step(iBuilder, bit44440000[0], bit44440000[1], iBuilder->simd_himask(8), 4, output[3], output[7]);
-        s2p_step(iBuilder, bit55551111[0], bit55551111[1], iBuilder->simd_himask(8), 4, output[2], output[6]);
-        s2p_step(iBuilder, bit66662222[0], bit66662222[1], iBuilder->simd_himask(8), 4, output[1], output[5]);
-        s2p_step(iBuilder, bit77773333[0], bit77773333[1], iBuilder->simd_himask(8), 4, output[0], output[4]);
-    }
+    s2p_step(iBuilder, bit44440000[0], bit44440000[1], iBuilder->simd_himask(8), 4, output[4], output[0]);
+    s2p_step(iBuilder, bit55551111[0], bit55551111[1], iBuilder->simd_himask(8), 4, output[5], output[1]);
+    s2p_step(iBuilder, bit66662222[0], bit66662222[1], iBuilder->simd_himask(8), 4, output[6], output[2]);
+    s2p_step(iBuilder, bit77773333[0], bit77773333[1], iBuilder->simd_himask(8), 4, output[7], output[3]);
 }
 
 /* Alternative transposition model, but small field width packs are problematic. */
 #if 0
-void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[], cc::BitNumbering basisNumbering) {
+void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
     Value * hi_nybble[4];
     Value * lo_nybble[4];
     for (unsigned i = 0; i<4; i++) {
@@ -91,25 +83,14 @@ void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[],
         pair32[i] = iBuilder->hsimd_packh(4, lo_nybble[2*i], lo_nybble[2*i+1]);
         pair10[i] = iBuilder->hsimd_packl(4, lo_nybble[2*i], lo_nybble[2*i+1]);
     }
-    if (basisNumbering == cc::BitNumbering::LittleEndian) {
-        output[7] = iBuilder->hsimd_packh(2, pair76[0], pair76[1]);
-        output[6] = iBuilder->hsimd_packl(2, pair76[0], pair76[1]);
-        output[5] = iBuilder->hsimd_packh(2, pair54[0], pair54[1]);
-        output[4] = iBuilder->hsimd_packl(2, pair54[0], pair54[1]);
-        output[3] = iBuilder->hsimd_packh(2, pair32[0], pair32[1]);
-        output[2] = iBuilder->hsimd_packl(2, pair32[0], pair32[1]);
-        output[1] = iBuilder->hsimd_packh(2, pair10[0], pair10[1]);
-        output[0] = iBuilder->hsimd_packl(2, pair10[0], pair10[1]);
-    } else {
-        output[0] = iBuilder->hsimd_packh(2, pair76[0], pair76[1]);
-        output[1] = iBuilder->hsimd_packl(2, pair76[0], pair76[1]);
-        output[2] = iBuilder->hsimd_packh(2, pair54[0], pair54[1]);
-        output[3] = iBuilder->hsimd_packl(2, pair54[0], pair54[1]);
-        output[4] = iBuilder->hsimd_packh(2, pair32[0], pair32[1]);
-        output[5] = iBuilder->hsimd_packl(2, pair32[0], pair32[1]);
-        output[6] = iBuilder->hsimd_packh(2, pair10[0], pair10[1]);
-        output[7] = iBuilder->hsimd_packl(2, pair10[0], pair10[1]);
-    }
+    output[7] = iBuilder->hsimd_packh(2, pair76[0], pair76[1]);
+    output[6] = iBuilder->hsimd_packl(2, pair76[0], pair76[1]);
+    output[5] = iBuilder->hsimd_packh(2, pair54[0], pair54[1]);
+    output[4] = iBuilder->hsimd_packl(2, pair54[0], pair54[1]);
+    output[3] = iBuilder->hsimd_packh(2, pair32[0], pair32[1]);
+    output[2] = iBuilder->hsimd_packl(2, pair32[0], pair32[1]);
+    output[1] = iBuilder->hsimd_packh(2, pair10[0], pair10[1]);
+    output[0] = iBuilder->hsimd_packl(2, pair10[0], pair10[1]);
 }
 #endif
 
@@ -140,7 +121,7 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
         bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
     }
     Value * basisbits[8];
-    s2p(kb, bytepack, basisbits, mBasisSetNumbering);
+    s2p(kb, bytepack, basisbits);
     for (unsigned i = 0; i < mNumOfStreams; ++i) {
         kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
@@ -211,20 +192,18 @@ Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
 S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b,
                      StreamSet * const codeUnitStream,
                      StreamSet * const BasisBits,
-                     const cc::BitNumbering numbering,
                      Scalar * signalNullObject)
-: MultiBlockKernel(b, (signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements()) + cc::numberingSuffix(numbering)
+: MultiBlockKernel(b, (signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements())
 , {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
 , makeOutputBindings(BasisBits, signalNullObject)
 , makeInputScalarBindings(signalNullObject), {}, {})
-, mBasisSetNumbering(numbering)
 , mAbortOnNull(signalNullObject != nullptr)
 , mNumOfStreams(BasisBits->getNumElements()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
     if (mAbortOnNull) addAttribute(CanTerminateEarly());
 }
 
-inline std::string makeMultiS2PName(const StreamSets & outputStreams, const cc::BitNumbering basisNumbering, const bool aligned) {
+inline std::string makeMultiS2PName(const StreamSets & outputStreams, const bool aligned) {
     std::string buffer;
     raw_string_ostream out(buffer);
     out << "s2p";
@@ -233,7 +212,6 @@ inline std::string makeMultiS2PName(const StreamSets & outputStreams, const cc::
         out << outputStreams[i]->getNumElements();
     }
     out << (aligned ? "a" : "u");
-    out << cc::numberingSuffix(basisNumbering);
     out.flush();
     return buffer;
 }
@@ -241,13 +219,11 @@ inline std::string makeMultiS2PName(const StreamSets & outputStreams, const cc::
 S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
         StreamSet * codeUnitStream,
         const StreamSets & outputStreams,
-        const cc::BitNumbering basisNumbering,
         const bool aligned)
-: MultiBlockKernel(b, makeMultiS2PName(outputStreams, basisNumbering, aligned),
+: MultiBlockKernel(b, makeMultiS2PName(outputStreams, aligned),
 // input
 {Binding{"byteStream", codeUnitStream}},
 {}, {}, {}, {}),
-mBasisSetNumbering(basisNumbering),
 mAligned(aligned) {
     for (unsigned i = 0; i < outputStreams.size(); i++) {
         mOutputStreamSets.emplace_back("basisBits_" + std::to_string(i), outputStreams[i]);
@@ -277,7 +253,7 @@ void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
         }
     }
     Value * basisbits[8];
-    s2p(b, bytepack, basisbits, mBasisSetNumbering);
+    s2p(b, bytepack, basisbits);
 
     unsigned k = 0;
     for (unsigned i = 0; i < getNumOfStreamOutputs(); ++i) {
@@ -295,13 +271,10 @@ void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 }
 
 
-S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering numbering)
-: MultiBlockKernel(b, "s2p_21" + cc::numberingSuffix(numbering),
+S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
+: MultiBlockKernel(b, "s2p_21",
 {Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
-{Binding{"basisBits", BasisBits}}, {}, {}, {})
-, mBasisSetNumbering(numbering) {
-
-}
+    {Binding{"basisBits", BasisBits}}, {}, {}, {})  {}
 
 void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
@@ -339,12 +312,11 @@ void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     #endif
     }
     Value * basisbits[24];
-    s2p(kb, u32byte0, basisbits, cc::BitNumbering::LittleEndian);
-    s2p(kb, u32byte1, &basisbits[8], cc::BitNumbering::LittleEndian);
-    s2p(kb, u32byte2, &basisbits[16], cc::BitNumbering::LittleEndian);
+    s2p(kb, u32byte0, basisbits);
+    s2p(kb, u32byte1, &basisbits[8]);
+    s2p(kb, u32byte2, &basisbits[16]);
     for (unsigned i = 0; i < 21; ++i) {
-        const unsigned bitIdx = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? i : 21 - i;
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[bitIdx]);
+        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
@@ -371,18 +343,16 @@ void S2P_PabloKernel::generatePabloMethod() {
         streamWidth = streamWidth/2;
     }
     for (unsigned bit = 0; bit < mCodeUnitWidth; bit++) {
-        const unsigned bitIndex = mBasisSetNumbering == cc::BitNumbering::LittleEndian ? bit : mCodeUnitWidth-1-bit;
-        pb->createAssign(pb->createExtract(getOutputStreamVar("basisBits"), pb->getInteger(bitIndex)), streamSet[steps][bit]);
+        pb->createAssign(pb->createExtract(getOutputStreamVar("basisBits"), pb->getInteger(bit)), streamSet[steps][bit]);
     }
 }
 
-S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits, cc::BitNumbering numbering)
-: PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitStream->getFieldWidth()) + cc::numberingSuffix(numbering),
+S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
+: PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitStream->getFieldWidth()),
 // input
 {Binding{"codeUnitStream", codeUnitStream}},
 // output
 {Binding{"basisBits", BasisBits}}),
-mBasisSetNumbering(numbering),
 mCodeUnitWidth(codeUnitStream->getFieldWidth()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
 }

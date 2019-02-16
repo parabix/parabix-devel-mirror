@@ -313,7 +313,6 @@ RequiredStreams_UTF16::RequiredStreams_UTF16(const std::unique_ptr<kernel::Kerne
 
 }
 
-void GrepKernelOptions::setNumbering(cc::BitNumbering numbering) {mBasisSetNumbering = numbering;}
 void GrepKernelOptions::setIndexingAlphabet(const cc::Alphabet * a) {mIndexingAlphabet = a;}
 void GrepKernelOptions::setRE(RE * e) {mRE = e;}
 void GrepKernelOptions::setPrefixRE(RE * e) {mPrefixRE = e;}
@@ -389,10 +388,10 @@ void ICGrepKernel::generatePabloMethod() {
     if (useDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
     }
     //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
-    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mIndexingAlphabet), mOptions->mBasisSetNumbering);
+    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mIndexingAlphabet));
     for (const auto & e : mOptions->mExternals) {
         re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
     }
@@ -425,7 +424,7 @@ void ICGrepKernel::generatePabloMethod() {
         }
 
         cc::Parabix_CC_Compiler ccc(scope1, basis);
-        RE_Compiler re_compiler(scope1, ccc, *(mOptions->mIndexingAlphabet), mOptions->mBasisSetNumbering);
+        RE_Compiler re_compiler(scope1, ccc, *(mOptions->mIndexingAlphabet));
         scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
         Var * const output = getOutputStreamVar("matches");
         pb.createAssign(pb.createExtract(output, pb.getInteger(0)), final_matches);

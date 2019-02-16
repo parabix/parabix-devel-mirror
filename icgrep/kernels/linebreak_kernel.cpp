@@ -23,14 +23,13 @@ using namespace re;
 using namespace llvm;
 using namespace IDISA;
 
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream, cc::BitNumbering basisNumbering)
+LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream)
 : PabloKernel(b, "lf" + std::to_string(BasisBits->getNumElements()) + "x" + std::to_string(BasisBits->getFieldWidth()),
 // input
 {Binding{"basis", BasisBits}},
 {Binding{"lf", LineFeedStream}}),
     mNumOfStreams(BasisBits->getNumElements()),
-    mStreamFieldWidth(BasisBits->getFieldWidth()),
-    mBasisSetNumbering(basisNumbering)
+    mStreamFieldWidth(BasisBits->getFieldWidth())
 {
 }
 
@@ -40,7 +39,7 @@ void LineFeedKernelBuilder::generatePabloMethod() {
     if (mNumOfStreams == 1) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"), mBasisSetNumbering);
+        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
     }
     PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
