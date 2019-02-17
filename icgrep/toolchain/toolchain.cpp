@@ -98,7 +98,11 @@ static cl::opt<unsigned, true> GroupNumOption("group-num", cl::location(GroupNum
 
 std::string TraceOption = "";
 static cl::opt<std::string, true> TraceValueOption("trace", cl::location(TraceOption),
-                                            cl::desc("Instrument programs to trace values beginning prefix"), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
+                                            cl::desc("The char"), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
+
+std::string CCCOption = "";
+static cl::opt<std::string, true> CCTypeOption("ccc-type", cl::location(CCCOption), cl::init("binary"),
+                                            cl::desc("The character class compiler"), cl::value_desc("[binary, ternary]"));
 
 CodeGenOpt::Level OptLevel;
 

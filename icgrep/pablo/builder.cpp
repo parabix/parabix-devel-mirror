@@ -316,6 +316,16 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llv
     return MAKE_NAMED_BINARY(And, prefix, expr1, expr2);
 }
 
+PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
+    return createTernary(0x80, expr1, expr2, expr3);
+}
+
+PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    return createTernary(0x80, expr1, expr2, expr3, prefix);
+}
+
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
     if (isa<Zeroes>(expr1) || isa<Ones>(expr2)){
         return expr2;
@@ -406,6 +416,16 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm
         std::swap(expr1, expr2);
     }
     return MAKE_NAMED_BINARY(Or, prefix, expr1, expr2);
+}
+
+PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
+    return createTernary(0xFE, expr1, expr2, expr3);
+}
+
+PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    return createTernary(0xFE, expr1, expr2, expr3, prefix);
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {

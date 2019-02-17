@@ -9,6 +9,7 @@
 
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <cc/cc_kernel.h>
 #include <kernels/deletion.h>
 #include <kernels/kernel_builder.h>
@@ -85,7 +86,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * delmask = main.createVar("delmask", zeroes);
     Var * error_mask = main.createVar("error_mask", zeroes);
 
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), u8_bits);
 
     // The logic for processing non-ASCII bytes will be embedded within an if-hierarchy.
     PabloAST * nonASCII = ccc.compileCC(makeByte(0x80, 0xFF));

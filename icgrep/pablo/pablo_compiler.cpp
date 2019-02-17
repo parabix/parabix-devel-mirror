@@ -602,6 +602,12 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
                 }
                 b->CreateStore(P, b->CreateGEP(value, {ZERO, b->getInt32(i)}));
             }
+        } else if (const Ternary * const p = dyn_cast<Ternary>(stmt)) {
+            unsigned char const mask = cast<Integer>(stmt->getOperand(0))->value();
+            Value * const op0 = compileExpression(b, stmt->getOperand(1));
+            Value * const op1 = compileExpression(b, stmt->getOperand(2));
+            Value * const op2 = compileExpression(b, stmt->getOperand(3));
+            value = b->simd_ternary(mask, op0, op1, op2);
         } else {
             std::string tmp;
             raw_string_ostream out(tmp);

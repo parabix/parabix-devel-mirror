@@ -123,6 +123,10 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
 
+    PabloAST * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
+
+    PabloAST * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
+
     PabloAST * createNot(PabloAST * expr);
 
     PabloAST * createNot(PabloAST * expr, const llvm::StringRef prefix);
@@ -165,6 +169,10 @@ public:
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2);
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
+
+    PabloAST * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
+
+    PabloAST * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 

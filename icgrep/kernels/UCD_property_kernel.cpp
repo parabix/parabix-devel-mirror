@@ -8,6 +8,7 @@
 #include <re/re_toolchain.h>
 #include <re/re_name.h>
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <UCD/ucd_compiler.hpp>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
@@ -16,6 +17,7 @@
 
 using namespace kernel;
 using namespace pablo;
+using namespace cc;
 
 UnicodePropertyKernelBuilder::UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::Name * property_value_name, StreamSet * Source, StreamSet * property)
 : PabloKernel(iBuilder,
@@ -33,7 +35,7 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
     if (useDirectCC) {
         ccc = llvm::make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = llvm::make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("source"));
+        ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
     UCD::UCDCompiler ucdCompiler(*ccc.get());
     UCD::UCDCompiler::NameMap nameMap;

@@ -13,6 +13,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <kernels/kernel_builder.h>
@@ -183,7 +184,7 @@ PreprocessKernel::PreprocessKernel(const std::unique_ptr<KernelBuilder> & b, Str
 
 void PreprocessKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
     PabloAST * A = ccc.compileCC(re::makeCC(re::makeCC(0x41), re::makeCC(0x61)));
     PabloAST * C = ccc.compileCC(re::makeCC(re::makeCC(0x43), re::makeCC(0x63)));
     PabloAST * T = ccc.compileCC(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)));
