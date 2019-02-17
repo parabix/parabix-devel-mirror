@@ -77,12 +77,14 @@ void PipelineCompiler::enumerateBufferConsumerBindings(const Port type, const un
     }
 }
 
+/*
 void PipelineCompiler::insertImplicitBufferConsumerInput(const Port type, const unsigned consumer, const StreamSet * input, BufferGraph & G, BufferMap & M) const {
     input = cast<StreamSet>(getRelationship(input));
     const auto f = M.find(input); assert (f != M.end());
     const auto buffer = f->second;
-    add_edge(buffer, consumer, BufferRateData{StreamPort{type, -1U}, 1, 1}, G); // buffer -> consumer ordering
+    add_edge(buffer, consumer, BufferRateData{StreamPort{type, IMPLICIT_STREAM_SET}, 1, 1}, G); // buffer -> consumer ordering
 }
+*/
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
@@ -102,10 +104,10 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
         const Kernel * const p = mPipeline[i];
         enumerateBufferConsumerBindings(Port::Input, i, p->getInputStreamSetBindings(), G, M);
-        const auto f = mKernelRegions.find(p);
-        if (LLVM_UNLIKELY(f != mKernelRegions.end())) {
-            insertImplicitBufferConsumerInput(Port::Input, i, f->second, G, M);
-        }
+//        const auto f = mKernelRegions.find(p);
+//        if (LLVM_UNLIKELY(f != mKernelRegions.end())) {
+//            insertImplicitBufferConsumerInput(Port::Input, i, f->second, G, M);
+//        }
         enumerateBufferProducerBindings(Port::Output, i, p->getOutputStreamSetBindings(), G, M);
     }
     enumerateBufferConsumerBindings(Port::Output, mPipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);

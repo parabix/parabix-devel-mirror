@@ -5,7 +5,6 @@
 #include <llvm/Support/DynamicLibrary.h>           // for LoadLibraryPermanently
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
 #include <llvm/ExecutionEngine/RTDyldMemoryManager.h>
-
 #include <llvm/IR/LegacyPassManager.h>             // for PassManager
 #include <llvm/IR/IRPrintingPasses.h>
 #include <llvm/InitializePasses.h>                 // for initializeCodeGencd .
@@ -17,10 +16,13 @@
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Utils/Local.h>
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
 #include <llvm/Transforms/Scalar/GVN.h>
 #endif
-#include <llvm/Transforms/Utils/Local.h>
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
+#include <llvm/Transforms/Scalar/SROA.h>
+#endif
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Utils.h>
@@ -200,6 +202,9 @@ inline void CPUDriver::preparePassManager() {
     }
     mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
+    mPassManager->add(createSROAPass());                       // Promote elements whose addresses are not taken of aggregate alloca to registers.
+    #endif
     mPassManager->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
     mPassManager->add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
     mPassManager->add(createInstructionCombiningPass());       // Simple peephole optimizations and bit-twiddling.

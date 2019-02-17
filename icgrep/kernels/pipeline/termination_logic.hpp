@@ -19,9 +19,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() {
 
-    using Vertex = TerminationGraph::vertex_descriptor;
     using Edge = TerminationGraph::edge_descriptor;
-    using VertexVector = std::vector<Vertex>;
 
     const auto numOfCalls = mPipelineKernel->getCallBindings().size();
     const auto firstCall = mPipelineOutput + 1;
@@ -75,18 +73,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
 
     // generate a transitive closure
-    VertexVector ordering;
-    ordering.reserve(n);
-    topological_sort(G, std::back_inserter(ordering));
-
-    for (unsigned u : ordering) {
-        for (auto e : make_iterator_range(in_edges(u, G))) {
-            const auto s = source(e, G);
-            for (auto f : make_iterator_range(out_edges(u, G))) {
-                add_edge(s, target(f, G), G);
-            }
-        }
-    }
+    transitive_closure_dag(G);
 
     // then take the transitive reduction
     dynamic_bitset<> sources(n, false);

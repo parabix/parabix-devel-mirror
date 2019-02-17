@@ -2,7 +2,6 @@
 #include "lexographic_ordering.hpp"
 #include <boost/graph/topological_sort.hpp>
 #include <util/extended_boost_graph_containers.h>
-#include <boost/graph/topological_sort.hpp>
 
 namespace kernel {
 
@@ -37,122 +36,147 @@ void printGraph(const Graph & G, raw_ostream & out) {
 
 #endif
 
-template <typename Array>
-void PipelineCompiler::enumerateRelationshipProducerBindings(const RelationshipVertex producer,
-                                                             const Array & array,
-                                                             RelationshipGraph & G, RelationshipMap & M) const {
-    const auto n = array.size();
-    for (unsigned i = 0; i < n; ++i) {
-        const Relationship * const rel = getRelationship(array[i]);
-        assert (M.count(rel) == 0);
-        const auto scalar = add_vertex(G);
-        G[scalar].Relationship = rel;
-        add_edge(producer, scalar, i, G);
-        M.emplace(rel, scalar);
-    }
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getRelationship
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Relationship * getRelationship(not_null<const Relationship *> r) {
+    return r.get();
 }
 
-RelationshipVertex PipelineCompiler::makeIfConstant(const Relationship * const rel,
-                                                    RelationshipGraph & G, RelationshipMap & M) const {
-    const auto f = M.find(rel);
-    if (LLVM_LIKELY(f != M.end())) {
-        return f->second;
-    } else if (LLVM_LIKELY(isa<ScalarConstant>(rel))) {
-        const auto scalar = add_vertex(G);
-        G[scalar].Relationship = cast<ScalarConstant>(rel);
-        add_edge(0, scalar, SCALAR_CONSTANT, G);
-        M.emplace(rel, scalar);
-        return scalar;
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getRelationship
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Relationship * getRelationship(const Binding & b) {
+    return getRelationship(b.getRelationship());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOrFindRelationship
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Graph, typename Map>
+inline unsigned addOrFindRelationship(const Relationship * const value, Graph & G, Map & M) {
+    const auto f = M.find(value);
+    if (LLVM_LIKELY(f == M.end())) {
+        const auto v = add_vertex(G);
+        G[v].Relationship = value;
+        M.emplace(value, v);
+        return v;
     } else {
-        report_fatal_error("unknown scalar value");
-    }
-}
-
-template <typename Array>
-void PipelineCompiler::enumerateRelationshipConsumerBindings(const RelationshipVertex consumer,
-                                                             const Array & array,
-                                                             RelationshipGraph & G, RelationshipMap & M) const {
-    const auto n = array.size();
-    for (unsigned i = 0; i < n; ++i) {
-        const auto scalar = makeIfConstant(getRelationship(array[i]), G, M);
-        assert (scalar < num_vertices(G));
-        add_edge(scalar, consumer, i, G);
+        return f->second;
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePipelineList
+ * @brief addProducerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-Kernels PipelineCompiler::makePipelineList(BuilderRef b) {
+template <typename Array, typename Graph, typename Map>
+void addProducerRelationships(const unsigned producer, const Array & array, Graph & G, Map & M) {
+    const auto n = array.size();
+    for (unsigned i = 0; i < n; ++i) {
+        const auto relationship = addOrFindRelationship(getRelationship(array[i]), G, M);
+        add_edge(producer, relationship, i, G);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addIfConstantOrFindRelationship
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Graph, typename Map>
+inline unsigned addIfConstantOrFindRelationship(const Relationship * const value, Graph & G, Map & M) {
+    const auto f = M.find(value);
+    if (LLVM_LIKELY(f != M.end())) {
+        return f->second;
+    } else if (value->isConstant()) {
+        const auto relationship = addOrFindRelationship(value, G, M);
+        add_edge(0, relationship, SCALAR_CONSTANT, G);
+        return relationship;
+    } else {
+        llvm_unreachable("consumer has no producer!");
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addConsumerRelationships
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Array, typename Graph, typename Map>
+void addConsumerRelationships(const unsigned consumer, const Array & array, Graph & G, Map & M) {
+    const auto n = array.size();
+    for (unsigned i = 0; i < n; ++i) {
+        const auto relationship = addIfConstantOrFindRelationship(getRelationship(array[i]), G, M);
+        add_edge(relationship, consumer, i, G);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addImplicitConsumerRelationship
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Graph, typename Map>
+void addImplicitConsumerRelationship(const unsigned codeId, const unsigned consumer, const ImplicitRelationships & R, Graph & G, Map & M) {
+    const Kernel * const kernel = G[consumer].Kernel; assert (kernel);
+    const auto f = R.find(kernel);
+    if (LLVM_UNLIKELY(f != R.end())) {
+        const auto relationship = addIfConstantOrFindRelationship(getRelationship(f->second), G, M);
+        add_edge(relationship, consumer, codeId, G);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipelineGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b) const {
 
     // copy the list of internal kernels and add in any implicit kernels
     Kernels kernels(mPipelineKernel->getKernels());
-    addRegionSelectorKernels(b, kernels);
 
-    const auto numOfKernels = kernels.size();
+    ImplicitRelationships regions;
+    addRegionSelectorKernels(b, kernels, regions);
+
+    const auto pipelineInput = 0U;
     const auto firstKernel = 1U;
-    const auto lastKernel = numOfKernels;
+    const auto lastKernel = kernels.size();
     const auto pipelineOutput = lastKernel + 1;
 
     const auto & call = mPipelineKernel->getCallBindings();
     const auto numOfCalls = call.size();
     const auto firstCall = pipelineOutput + 1;
-    const auto initialSize = firstCall + numOfCalls;
+    const auto lastCall = firstCall + numOfCalls;
+    const auto initialSize = lastCall + 1;
+
+    /// ------------------------------------------------------------------------------------------
+    /// Construct the initial relationship graph G for this pipeline
+    /// ------------------------------------------------------------------------------------------
 
     RelationshipGraph G(initialSize);
 
-    G[0].Kernel = mPipelineKernel;
+    G[pipelineInput].Kernel = mPipelineKernel;
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         G[i].Kernel = kernels[i - firstKernel];
     }
     G[pipelineOutput].Kernel = mPipelineKernel;
 
-    /// ------------------------------------------------------------------------------------------
-    /// Generate the full I/O relationship graph
-    /// ------------------------------------------------------------------------------------------
-
     RelationshipMap M;
-    enumerateRelationshipProducerBindings(0, mPipelineKernel->getInputScalarBindings(), G, M);
-    enumerateRelationshipProducerBindings(0, mPipelineKernel->getInputStreamSetBindings(), G, M);
+    addProducerRelationships(pipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
+    addProducerRelationships(pipelineInput, mPipelineKernel->getInputStreamSetBindings(), G, M);
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * k = kernels[i - firstKernel];
-        enumerateRelationshipProducerBindings(i, k->getOutputStreamSetBindings(), G, M);
-        enumerateRelationshipConsumerBindings(i, k->getInputScalarBindings(), G, M);
-    }
-    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
-        const Kernel * k = kernels[i - firstKernel];
-        enumerateRelationshipConsumerBindings(i, k->getInputStreamSetBindings(), G, M);
-        enumerateRelationshipProducerBindings(i, k->getOutputScalarBindings(), G, M);
+        addConsumerRelationships(i, k->getInputStreamSetBindings(), G, M);
+        addConsumerRelationships(i, k->getInputScalarBindings(), G, M);
+        addImplicitConsumerRelationship(IMPLICIT_REGION_SELECTOR, i, regions, G, M);
+        addProducerRelationships(i, k->getOutputStreamSetBindings(), G, M);
+        addProducerRelationships(i, k->getOutputScalarBindings(), G, M);
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        enumerateRelationshipConsumerBindings(firstCall + i, call[i].Args, G, M);
+        addConsumerRelationships(firstCall + i, call[i].Args, G, M);
     }
-    enumerateRelationshipConsumerBindings(pipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
-    enumerateRelationshipConsumerBindings(pipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);
-
-    removeRedundantKernels(G, kernels);
+    addConsumerRelationships(pipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
+    addConsumerRelationships(pipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);
 
     /// ------------------------------------------------------------------------------------------
-    /// Remove any kernel whose outputs are not consumed by any kernel
+    /// Pipeline optimizations
     /// ------------------------------------------------------------------------------------------
 
-    const auto firstBuffer = initialSize;
-    const auto lastBuffer = num_vertices(G);
-
-    for (auto i = firstBuffer; i < lastBuffer; ++i) {
-        if (LLVM_UNLIKELY(out_degree(i, G) == 0)) {
-            clear_in_edges(i, G);
-        }
-    }
-
-    for (auto i = firstKernel; i <= lastKernel; ++i) {
-        if (LLVM_UNLIKELY(out_degree(i, G) == 0)) {
-            const Kernel * const kernel = G[i].Kernel;
-            if (kernel && !kernel->hasAttribute(AttrId::SideEffecting)) {
-                G[i].Kernel = nullptr;
-            }
-        }
-    }
+    combineDuplicateKernels(G, kernels);
+    removeUnusedKernels(G, kernels);
 
     /// ------------------------------------------------------------------------------------------
     /// Compute the lexographical ordering of G
@@ -160,23 +184,197 @@ Kernels PipelineCompiler::makePipelineList(BuilderRef b) {
 
     std::vector<unsigned> O;
 
-    lexicalOrdering(std::move(G), O, "pipeline contains a cycle!");
+    lexical_ordering(G, O, "pipeline contains a cycle!");
 
-    Kernels pipeline;
-    pipeline.reserve(pipelineOutput + 1);
+    Vec<unsigned, 64> ordering;
     for (const auto i : O) {
-        if (i < pipelineOutput && G[i].Kernel) {
-            pipeline.push_back(const_cast<Kernel *>(G[i].Kernel));
+        if (firstKernel <= i && i <= lastKernel && G[i].Kernel) {
+            ordering.push_back(i);
         }
     }
-    pipeline.push_back(mPipelineKernel);
-    return pipeline;
+
+    /// ------------------------------------------------------------------------------------------
+    /// Transcribe the pipeline graph based on the lexical ordering, accounting for any auxillary
+    /// kernels and subsituted kernels/relationships.
+    /// ------------------------------------------------------------------------------------------
+
+    const auto n = ordering.size();
+    PipelineGraph P(n + numOfCalls + 3);
+    P.LastKernel = n;
+    P.PipelineOutput = n + 1;
+    P.FirstCall = numOfCalls ? (n + 2) : 0;
+    P.LastCall = P.FirstCall + numOfCalls;
+    P.FirstRelationship = n + numOfCalls + 3;
+
+    SmallVector<unsigned, 64> remapping(initialSize);
+
+    // record the new numbering of our active kernels
+    remapping[pipelineInput] = P.PipelineInput;
+    P[P.PipelineInput].Kernel = mPipelineKernel;
+    for (unsigned i = 0; i < n; ++i) {
+        const auto j = ordering[i];
+        remapping[j] = firstKernel + i;
+        P[firstKernel + i].Kernel = G[j].Kernel;
+    }
+    remapping[pipelineOutput] = P.PipelineOutput;
+    P[P.PipelineOutput].Kernel = mPipelineKernel;
+
+    // record the new numbering of our function calls
+    for (unsigned i = 0; i < numOfCalls; ++i) {
+        remapping[firstCall + i] = P.FirstCall + i;
+    }
+    const auto firstRelationship = initialSize;
+    const auto lastRelationship = num_vertices(G);
+    for (unsigned i = firstRelationship; i < lastRelationship; ++i) {
+        if (LLVM_LIKELY(in_degree(i, G) != 0)) {
+            const auto e = in_edge(i, G);
+            const auto producer = remapping[source(e, G)];
+            const auto relationship = add_vertex(P);
+            P[relationship].Relationship = G[i].Relationship;
+            add_edge(producer, relationship, G[e], P);
+            for (const auto & e : make_iterator_range(out_edges(i, G))) {
+                const auto consumer = remapping[target(e, G)];
+                add_edge(relationship, consumer, G[e], P);
+            }
+        }
+    }
+    P.LastRelationship = num_vertices(P);
+    return P;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief removeRedundantKernels
+ * @brief makePipelineList
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::removeRedundantKernels(RelationshipGraph & G, const Kernels & kernels) {
+Kernels PipelineCompiler::makePipelineList() const {
+    // temporary refactoring step
+    const auto n = mPipelineGraph.PipelineOutput;
+    Kernels kernels(mPipelineGraph.PipelineOutput + 1);
+    for (unsigned i = mPipelineGraph.PipelineInput; i <= n; ++i) {
+        kernels[i] = const_cast<Kernel *>(mPipelineGraph[i].Kernel);
+    }
+    return kernels;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addRegionSelectorKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions) const {
+
+    enum : unsigned {
+        REGION_START = 0
+        , REGION_END = 1
+        , SELECTOR = 2
+    };
+
+    using Condition = std::array<std::pair<StreamSet *, unsigned>, 3>; // {selector, start, end} x {streamset, streamIndex}
+
+    using RSK = RegionSelectionKernel;
+    using Demarcators = RSK::Demarcators;
+    using Starts = RSK::Starts;
+    using Ends = RSK::Ends;
+    using Selectors = RSK::Selectors;
+
+    // TODO: when we support sequentially dependent regions, make sure to test that the start/end are
+    // of the same type.
+
+    auto hasSelector = [](const Condition & c) {
+        return std::get<0>(c[SELECTOR]) != nullptr;
+    };
+
+    auto hasIndependentStartEndStreams = [](const Condition & c) {
+        return (c[REGION_START] != c[REGION_END]);
+    };
+
+    auto missingRegionStartOrEnd = [](const Condition & c) {
+        return std::get<0>(c[REGION_START]) == nullptr || std::get<0>(c[REGION_END]) == nullptr;
+    };
+
+    BaseDriver & driver = b->getDriver();
+
+    const auto numOfKernels = kernels.size();
+
+    flat_map<Condition, StreamSet *> alreadyCreated;
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        Kernel * const kernel = kernels[i];
+        Condition cond{};
+        bool hasRegions = false;
+        const Bindings & inputs = kernel->getInputStreamSetBindings();
+        for (unsigned j = 0; j < inputs.size(); ++j) {
+            const Binding & input = inputs[j];
+            auto setIfAttributeExists = [&](const AttrId attrId, const unsigned index) {
+                if (LLVM_UNLIKELY(input.hasAttribute(attrId))) {
+                    const ProcessingRate & rate = input.getRate();
+                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != RateValue(1))) {
+                        report_fatal_error(kernel->getName() + ": region streams must be FixedRate(1).");
+                    }
+                    if (LLVM_UNLIKELY(std::get<0>(cond[index]) != nullptr)) {
+                        std::string tmp;
+                        raw_string_ostream msg(tmp);
+                        msg << kernel->getName()
+                            << " cannot have multiple region ";
+                        switch (attrId) {
+                            case AttrId::RegionSelector:
+                                msg << "selector"; break;
+                            case AttrId::IndependentRegionBegin:
+                                msg << "start"; break;
+                            case AttrId::IndependentRegionEnd:
+                                msg << "end"; break;
+                            default: llvm_unreachable("unknown region attribute type");
+                        }
+                        msg << " attributes";
+                        report_fatal_error(msg.str());
+                    }
+                    const Attribute & region = input.findAttribute(attrId);
+                    Relationship * const rel = input.getRelationship();
+                    cond[index] = std::make_pair(cast<StreamSet>(rel), region.amount());
+                    hasRegions = true;
+                }
+            };
+            setIfAttributeExists(AttrId::RegionSelector, SELECTOR);
+            setIfAttributeExists(AttrId::IndependentRegionBegin, REGION_START);
+            setIfAttributeExists(AttrId::IndependentRegionEnd, REGION_END);
+        }
+
+        if (LLVM_UNLIKELY(hasRegions)) {
+            const auto f = alreadyCreated.find(cond);
+            StreamSet * regionSpans = nullptr;
+            if (LLVM_LIKELY(f == alreadyCreated.end())) {
+                if (missingRegionStartOrEnd(cond)) {
+                    report_fatal_error(kernel->getName() + " must have both a region start and end");
+                }
+                RSK * selector = nullptr;
+                if (hasSelector(cond)) {
+                    regionSpans = driver.CreateStreamSet();
+                    if (hasIndependentStartEndStreams(cond)) {
+                        selector = new RSK(b, Starts{cond[REGION_START]}, Ends{cond[REGION_END]}, Selectors{cond[SELECTOR]}, regionSpans);
+                    } else {
+                        selector = new RSK(b, Demarcators{cond[REGION_START]}, Selectors{cond[SELECTOR]}, regionSpans);
+                    }
+                } else if (hasIndependentStartEndStreams(cond)) {
+                    regionSpans = driver.CreateStreamSet();
+                    selector = new RSK(b, Starts{cond[REGION_START]}, Ends{cond[REGION_END]}, regionSpans);
+                } else { // regions span the entire input space; ignore this one
+                    continue;
+                }
+                // Add the kernel to the pipeline
+                driver.addKernel(selector);
+                kernels.push_back(selector);
+                // Mark the region selectors for this kernel
+                regions.emplace(kernel, regionSpans);
+                alreadyCreated.emplace(cond, regionSpans);
+            } else { // we've already created the correct region span
+                regionSpans = f->second; assert (regionSpans);
+            }
+            regions.emplace(kernel, regionSpans);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief combineDuplicateKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels) const {
 
     using Vector = std::vector<unsigned>;
 
@@ -281,7 +479,6 @@ void PipelineCompiler::removeRedundantKernels(RelationshipGraph & G, const Kerne
                             error = true;
                             break;
                         }
-                        mRelationshipRemapping.emplace(a, b);
                         for (const auto & e : make_iterator_range(out_edges(original, G))) {
                             const auto inputPort = G[e];
                             const auto consumer = target(e, G);
@@ -302,122 +499,51 @@ void PipelineCompiler::removeRedundantKernels(RelationshipGraph & G, const Kerne
             break;
         }
     }
-
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addRegionSelectorKernels
+ * @brief removeUnusedKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels) {
+inline void PipelineCompiler::removeUnusedKernels(RelationshipGraph & G, const Kernels & kernels) const {
 
-    enum : unsigned {
-        REGION_START = 0
-        , REGION_END = 1
-        , SELECTOR = 2
-    };
+    const auto firstKernel = 1U;
+    const auto lastKernel = kernels.size();
+    const auto pipelineOutput = lastKernel + 1;
 
-    using Condition = std::array<std::pair<StreamSet *, unsigned>, 3>; // {selector, start, end} x {streamset, streamIndex}
+    const auto & call = mPipelineKernel->getCallBindings();
+    const auto numOfCalls = call.size();
+    const auto firstCall = pipelineOutput + 1;
+    const auto lastCall = firstCall + numOfCalls;
 
-    using RSK = RegionSelectionKernel;
-    using Demarcators = RSK::Demarcators;
-    using Starts = RSK::Starts;
-    using Ends = RSK::Ends;
-    using Selectors = RSK::Selectors;
-
-    // TODO: when we support sequentially dependent regions, make sure to test that the start/end are
-    // of the same type.
-
-    auto hasSelector = [](const Condition & c) {
-        return std::get<0>(c[SELECTOR]) != nullptr;
-    };
-
-    auto hasIndependentStartEndStreams = [](const Condition & c) {
-        return (c[REGION_START] != c[REGION_END]);
-    };
-
-    auto missingRegionStartOrEnd = [](const Condition & c) {
-        return std::get<0>(c[REGION_START]) == nullptr || std::get<0>(c[REGION_END]) == nullptr;
-    };
-
-    BaseDriver & driver = b->getDriver();
-
-    const auto numOfKernels = kernels.size();
-
-    flat_map<Condition, StreamSet *> alreadyCreated;
-
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        Kernel * const kernel = kernels[i];
-        Condition cond{};
-        bool hasRegions = false;
-        const Bindings & inputs = kernel->getInputStreamSetBindings();
-        for (unsigned j = 0; j < inputs.size(); ++j) {
-            const Binding & input = inputs[j];
-            auto setIfAttributeExists = [&](const AttrId attrId, const unsigned index) {
-                if (LLVM_UNLIKELY(input.hasAttribute(attrId))) {
-                    const ProcessingRate & rate = input.getRate();
-                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != RateValue(1))) {
-                        report_fatal_error(kernel->getName() + ": region streams must be FixedRate(1).");
-                    }
-                    if (LLVM_UNLIKELY(std::get<0>(cond[index]) != nullptr)) {
-                        std::string tmp;
-                        raw_string_ostream msg(tmp);
-                        msg << kernel->getName()
-                            << " cannot have multiple region ";
-                        switch (attrId) {
-                            case AttrId::RegionSelector:
-                                msg << "selector"; break;
-                            case AttrId::IndependentRegionBegin:
-                                msg << "start"; break;
-                            case AttrId::IndependentRegionEnd:
-                                msg << "end"; break;
-                            default: llvm_unreachable("unknown region attribute type");
-                        }
-                        msg << " attributes";
-                        report_fatal_error(msg.str());
-                    }
-                    const Attribute & region = input.findAttribute(attrId);
-                    Relationship * const rel = input.getRelationship();
-                    cond[index] = std::make_pair(cast<StreamSet>(rel), region.amount());
-                    hasRegions = true;
-                }
-            };
-            setIfAttributeExists(AttrId::RegionSelector, SELECTOR);
-            setIfAttributeExists(AttrId::IndependentRegionBegin, REGION_START);
-            setIfAttributeExists(AttrId::IndependentRegionEnd, REGION_END);
+    RelationshipGraph T(G);
+    const auto sink = add_vertex(T);
+    for (auto i = firstKernel; i <= lastKernel; ++i) {
+        const Kernel * const kernel = G[i].Kernel;
+        if (kernel->hasAttribute(AttrId::SideEffecting)) {
+            add_edge(i, sink, 0, T);
         }
+    }
+    for (unsigned i = pipelineOutput; i <= lastCall; ++i) {
+        add_edge(i, sink, 0, T);
+    }
+    transitive_closure_dag(T);
+    dynamic_bitset<> active(lastKernel + 1, false);
+    for (const auto & e : make_iterator_range(in_edges(sink, T))) {
+        const auto k = source(e, G);
+        if (k <= lastKernel) {
+            active.set(k);
+        }
+    }
 
-        if (LLVM_UNLIKELY(hasRegions)) {
-            const auto f = alreadyCreated.find(cond);
-            StreamSet * regionSpans = nullptr;
-            if (LLVM_LIKELY(f == alreadyCreated.end())) {
-                if (missingRegionStartOrEnd(cond)) {
-                    report_fatal_error(kernel->getName() + " must have both a region start and end");
-                }
-                RSK * selector = nullptr;
-                if (hasSelector(cond)) {
-                    regionSpans = driver.CreateStreamSet();
-                    if (hasIndependentStartEndStreams(cond)) {
-                        selector = new RSK(b, Starts{cond[REGION_START]}, Ends{cond[REGION_END]}, Selectors{cond[SELECTOR]}, regionSpans);
-                    } else {
-                        selector = new RSK(b, Demarcators{cond[REGION_START]}, Selectors{cond[SELECTOR]}, regionSpans);
-                    }
-                } else if (hasIndependentStartEndStreams(cond)) {
-                    regionSpans = driver.CreateStreamSet();
-                    selector = new RSK(b, Starts{cond[REGION_START]}, Ends{cond[REGION_END]}, regionSpans);
-                } else { // regions span the entire input space; ignore this one
-                    continue;
-                }
-                // Add the kernel to the pipeline
-                driver.addKernel(selector);
-                kernels.push_back(selector);
-                // Mark the region selectors for this kernel
-                mKernelRegions.emplace(kernel, regionSpans);
-                alreadyCreated.emplace(cond, regionSpans);
-            } else { // we've already created the correct region span
-                regionSpans = f->second; assert (regionSpans);
+    // Remove every inactive kernel by removing the Kernel pointer and
+    // deleting all I/O relationships, including its produced outputs.
+    for (auto i = firstKernel; i <= lastKernel; ++i) {
+        if (LLVM_UNLIKELY(!active.test(i))) {
+            G[i].Kernel = nullptr;
+            for (const auto & e : make_iterator_range(out_edges(i, G))) {
+                clear_out_edges(target(e, G), G);
             }
-            mKernelRegions.emplace(kernel, regionSpans);
+            clear_vertex(i, G);
         }
     }
 }
@@ -425,7 +551,9 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels)
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasZeroExtendedStream
  *
- * Determine whether there are any zero extend attributes on any kernel and verify that they are legal.
+ * Determine whether there are any zero extend attributes on any kernel and verify that every kernel with
+ * zero extend attributes have at least one input that is not transitively dependent on a zero extended
+ * input stream.
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::hasZeroExtendedStream() const {
 
@@ -466,19 +594,8 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
             report_fatal_error(kernel->getName() + " requires at least one non-zero-extended input");
         }
 
-        // generate a transitive closure to identify all inputs dependent on a zero-extended
-        // stream to ensure at least one input is bounded by stream length.
-        std::vector<unsigned> ordering;
-        ordering.reserve(numOfInputs + 1);
-        topological_sort(G, std::back_inserter(ordering));
-        for (unsigned u : ordering) {
-            for (auto e : make_iterator_range(in_edges(u, G))) {
-                const auto s = source(e, G);
-                for (auto f : make_iterator_range(out_edges(u, G))) {
-                    add_edge(s, target(f, G), G);
-                }
-            }
-        }
+        // Identify all transitive dependencies on zero-extended inputs
+        transitive_closure_dag(G);
 
         if (LLVM_UNLIKELY(in_degree(numOfInputs, G) == numOfInputs)) {
             report_fatal_error(kernel->getName() + " requires at least one non-zero-extended input"
@@ -505,63 +622,23 @@ RelationshipGraph PipelineCompiler::makeScalarDependencyGraph() const {
     RelationshipGraph G(initialSize);
     RelationshipMap M;
 
-    enumerateRelationshipProducerBindings(mPipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
+    addProducerRelationships(mPipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
     // verify each scalar input of the kernel is an input to the pipeline
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        enumerateRelationshipConsumerBindings(i, mPipeline[i]->getInputScalarBindings(), G, M);
+        addConsumerRelationships(i, mPipeline[i]->getInputScalarBindings(), G, M);
     }
     // enumerate the output scalars
     for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        enumerateRelationshipProducerBindings(i, mPipeline[i]->getOutputScalarBindings(), G, M);
+        addProducerRelationships(i, mPipeline[i]->getOutputScalarBindings(), G, M);
     }
     // enumerate the call bindings
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        enumerateRelationshipConsumerBindings(firstCall + i, call[i].Args, G, M);
+        addConsumerRelationships(firstCall + i, call[i].Args, G, M);
     }
     // enumerate the pipeline outputs
-    enumerateRelationshipConsumerBindings(mPipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
+    addConsumerRelationships(mPipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
 
     return G;
-}
-
-namespace {
-
-    template <typename Graph, typename Vertex = typename graph_traits<Graph>::vertex_descriptor>
-    bool add_edge_if_no_induced_cycle(const Vertex s, const Vertex t, Graph & G) {
-        // If s-t exists, skip adding this edge
-        if (edge(s, t, G).second || s == t) {
-            return true;
-        }
-        // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
-        const auto d = in_degree(s, G);
-        if (d != 0) {
-            dynamic_bitset<> V(num_vertices(G));
-            std::queue<Vertex> Q;
-            // do a BFS to search for a t-s path
-            Q.push(t);
-            for (;;) {
-                const auto u = Q.front();
-                Q.pop();
-                for (auto e : make_iterator_range(out_edges(u, G))) {
-                    const auto v = target(e, G);
-                    if (LLVM_UNLIKELY(v == s)) {
-                        // we found a t-s path
-                        return false;
-                    }
-                    assert ("G was not initially acyclic!" && v != s);
-                    if (LLVM_LIKELY(V.test(v))) {
-                        V.set(v);
-                        Q.push(v);
-                    }
-                }
-                if (Q.empty()) {
-                    break;
-                }
-            }
-        }
-        add_edge(s, t, G);
-        return true;
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -688,7 +765,7 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 
     mPortEvaluationOrder.clear();
 
-    lexicalOrdering(std::move(G), mPortEvaluationOrder, mKernel->getName() + " has cyclic port dependencies.");
+    lexical_ordering(G, mPortEvaluationOrder, Twine{mKernel->getName(), " has cyclic port dependencies."});
 }
 
 namespace {

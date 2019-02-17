@@ -88,7 +88,6 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile) {
     assert (inputPort < mAccessibleInputItems.size());
-    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
     Value * const processed = mAlreadyProcessedPhi[inputPort];
@@ -107,6 +106,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
 
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
 
+    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
         // switching to a "zeroed buffer". The size of the buffer will be determined by the final
@@ -132,7 +132,6 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
                         mKernel->getName() + "_" + input.getName() +
                         ": processed count exceeds total count");
     }
-
     return accessible;
 }
 
@@ -615,7 +614,6 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeKernelName(mKernelIndex);
     b->CallPrintInt("* " + prefix + "_executing", mNumOfLinearStrides);
-    b->CreateFSync(b->getInt32(STDERR_FILENO));
     #endif
 
     mTerminatedExplicitly = b->CreateCall(getDoSegmentFunction(b), args);

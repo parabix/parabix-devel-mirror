@@ -106,6 +106,9 @@ using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, Buffe
 template <typename vertex_descriptor>
 using RelMap = flat_map<const Relationship *, vertex_descriptor>;
 
+
+using AuxillaryStreamGraph = adjacency_list<vecS, vecS, bidirectionalS>;
+
 using BufferMap = RelMap<BufferGraph::vertex_descriptor>;
 
 struct ConsumerNode {
@@ -189,9 +192,19 @@ struct RegionData {
     RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
 };
 
-using RegionGraph = adjacency_list<vecS, vecS, bidirectionalS, const Relationship *, RegionData>;
+struct PipelineGraph : public RelationshipGraph {
+    static constexpr unsigned PipelineInput = 0;
+    static constexpr unsigned FirstKernel = 1;
+    unsigned LastKernel = 0;
+    unsigned PipelineOutput = 0;
+    unsigned FirstCall = 0;
+    unsigned LastCall = 0;
+    unsigned FirstRelationship = 0;
+    unsigned LastRelationship = 0;
+    PipelineGraph(const unsigned n) : RelationshipGraph(n) { }
+};
 
-using RelationshipRemapping = flat_map<const Relationship *, const Relationship *>;
+using ImplicitRelationships = flat_map<const Kernel *, const StreamSet *>;
 
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_PREFIX = "@TERM";
@@ -202,12 +215,12 @@ const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
 
 #define SCALAR_CONSTANT (-1U)
 
+#define IMPLICIT_REGION_SELECTOR (-1U)
+
 class PipelineCompiler {
 
-    template <typename T>
-    using Vec = SmallVector<T, 16>;
-
-    using PortOrderVec = SmallVector<unsigned, 32>;
+    template <typename T, unsigned n = 16>
+    using Vec = SmallVector<T, n>;
 
 public:
 
@@ -422,11 +435,14 @@ protected:
     void printOptionalCycleCounter(BuilderRef b);
     const Binding & selectPrincipleCycleCountBinding(const unsigned i) const;
 
-// analysis functions
+// pipeline analysis functions
 
-    Kernels makePipelineList(BuilderRef b);
-    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels);
-    void removeRedundantKernels(RelationshipGraph & G, const Kernels & kernels);
+    PipelineGraph makePipelineGraph(BuilderRef b) const;
+    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions) const;
+    void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels) const;
+    void removeUnusedKernels(RelationshipGraph & G, const Kernels & kernels) const;
+
+    Kernels makePipelineList() const;
 
     bool hasZeroExtendedStream() const;
 
@@ -460,10 +476,6 @@ protected:
     LLVM_READNONE bool isPipelineOutput(const unsigned kernelIndex, const unsigned outputPort) const;
     LLVM_READNONE bool nestedPipeline() const;
 
-    const Relationship * getRelationship(not_null<const Relationship *> r) const;
-
-    const Relationship * getRelationship(const Binding & b) const;
-
     static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const StreamPort port) {
         if (port.first == Port::Input) {
             return kernel->getInputStreamSetBinding(port.second);
@@ -472,14 +484,6 @@ protected:
         }
         llvm_unreachable("unknown port binding type!");
     }
-
-    template <typename Array>
-    void enumerateRelationshipProducerBindings(const RelationshipVertex producer, const Array & array, RelationshipGraph & G, RelationshipMap & M) const;
-
-    RelationshipVertex makeIfConstant(const Relationship * const rel, RelationshipGraph & G, RelationshipMap & M) const;
-
-    template <typename Array>
-    void enumerateRelationshipConsumerBindings(const RelationshipVertex consumer, const Array & array, RelationshipGraph & G, RelationshipMap & M) const;
 
     void printBufferGraph(const BufferGraph & G, raw_ostream & out);
 
@@ -527,12 +531,10 @@ protected:
     BasicBlock *                                mKernelRegionExitLoopCheck = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
-
-    SmallVector<AllocaInst *, 32>               mAddressableItemCountPtr;
-
-    SmallVector<Value *, 64>                    mPriorConsumedItemCount;
-    SmallVector<Value *, 64>                    mLocallyAvailableItems;
-    SmallVector<Value *, 16>                    mTerminationSignals;
+    Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
+    Vec<Value *, 64>                            mPriorConsumedItemCount;
+    Vec<Value *, 64>                            mLocallyAvailableItems;
+    Vec<Value *, 16>                            mTerminationSignals;
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
@@ -544,7 +546,7 @@ protected:
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
-    SmallVector<unsigned, 32>                   mPortEvaluationOrder;
+    Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
 
     Vec<Value *>                                mIsInputClosed;
@@ -590,9 +592,9 @@ protected:
     flat_map<unsigned, PopCountData>            mPopCountData;
 
     // analysis state
-    flat_map<const Kernel *, const StreamSet *> mKernelRegions;
-    RelationshipRemapping                       mRelationshipRemapping;
+    const PipelineGraph                         mPipelineGraph;
     const Kernels                               mPipeline;
+
     static constexpr unsigned                   mPipelineInput = 0;
     static constexpr unsigned                   mFirstKernel = 1;
     const unsigned                              mLastKernel;
@@ -600,7 +602,7 @@ protected:
     const bool                                  mHasZeroExtendedStream;
 
 
-    // RegionGraph                                 mRegionGraph;
+
 
     const BufferGraph                           mBufferGraph;
     ConsumerGraph                               mConsumerGraph;
@@ -681,7 +683,8 @@ inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
 : mPipelineKernel(pipelineKernel)
-, mPipeline(makePipelineList(b))
+, mPipelineGraph(makePipelineGraph(b))
+, mPipeline(makePipelineList())
 , mLastKernel(mPipeline.size() - 1)
 , mPipelineOutput(mLastKernel)
 , mHasZeroExtendedStream(hasZeroExtendedStream())
@@ -750,26 +753,6 @@ inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned
     out << kernelIndex;
     out.flush();
     return tmp;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getRelationship
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Relationship * PipelineCompiler::getRelationship(not_null<const Relationship *> r) const {
-    const Relationship * rel = r.get();
-    const auto f = mRelationshipRemapping.find(rel);
-    if (LLVM_LIKELY(f == mRelationshipRemapping.end())) {
-        return rel;
-    } else {
-        return f->second;
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getRelationship
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Relationship * PipelineCompiler::getRelationship(const Binding & b) const {
-    return getRelationship(b.getRelationship());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
