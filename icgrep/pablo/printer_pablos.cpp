@@ -142,7 +142,7 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << ")";
         } else if (const Ternary * tern = dyn_cast<Ternary>(stmt)) {
             out << " = pablo.Ternary(";
-            print(tern->getMask(), out);
+            out.write_hex(tern->getMask()->value());
             out << ", ";
             print(tern->getA(), out);
             out << ", ";

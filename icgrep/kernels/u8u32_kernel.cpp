@@ -9,6 +9,7 @@
 #include <pablo/pe_var.h>           // for Var
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <pablo/builder.hpp>
 #include <llvm/IR/Module.h>
 #include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
@@ -24,7 +25,7 @@ void U8U32KernelBuilder::generatePabloMethod() {
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: 32 u8-indexed streams, + delmask stream + error stream
     
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), u8_bits);
     
     Zeroes * zeroes = main.createZeroes();
 

@@ -181,6 +181,7 @@ const String & Statement::getName() const {
             MAKE_PREFIX(Repeat, "repeat");
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
+            MAKE_PREFIX(Ternary, "ternary");
             default: llvm_unreachable("invalid statement type");
         }
         #undef MAKE_PREFIX

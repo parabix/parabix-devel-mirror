@@ -164,11 +164,23 @@ public:
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
 
+    Ternary * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+        return createAnd3(expr1, expr2, expr3, makeName(prefix));
+    }
+
+    Ternary * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
+
     Or * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createOr(expr1, expr2, makeName(prefix));
     }
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
+
+    Ternary * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+        return createOr3(expr1, expr2, expr3, makeName(prefix));
+    }
+
+    Ternary * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createXor(expr1, expr2, makeName(prefix));

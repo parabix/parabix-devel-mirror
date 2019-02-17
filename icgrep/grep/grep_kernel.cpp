@@ -24,6 +24,7 @@
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_pack.h>
 #include <cc/cc_compiler.h>         // for CC_Compiler
+#include <cc/cc_compiler_target.h>
 #include <cc/alphabet.h>
 #include <cc/multiplex_CCs.h>
 #include <re/re_compiler.h>
@@ -45,7 +46,7 @@ UnicodeLineBreakKernel::UnicodeLineBreakKernel(const std::unique_ptr<kernel::Ker
 
 void UnicodeLineBreakKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
     UCD::UCDCompiler ucdCompiler(ccc);
     Name * breakChars = re::makeName("breakChars", makeCC(makeCC(makeCC(0x0A, 0x0D), makeCC(0x85)), makeCC(0x2028,0x2029)));
     UCD::UCDCompiler::NameMap nameMap;
@@ -73,7 +74,7 @@ void UTF8_index::generatePabloMethod() {
     if (useDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("source"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
 
     Zeroes * const ZEROES = pb.createZeroes();
@@ -167,7 +168,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     if (useDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("source"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
 
     PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
@@ -279,7 +280,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 
 void RequiredStreams_UTF16::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
 
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]
@@ -388,7 +389,7 @@ void ICGrepKernel::generatePabloMethod() {
     if (useDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
     RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mIndexingAlphabet));
@@ -423,7 +424,7 @@ void ICGrepKernel::generatePabloMethod() {
             basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
         }
 
-        cc::Parabix_CC_Compiler ccc(scope1, basis);
+        cc::Parabix_CC_Compiler_Builder ccc(scope1, basis);
         RE_Compiler re_compiler(scope1, ccc, *(mOptions->mIndexingAlphabet));
         scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
         Var * const output = getOutputStreamVar("matches");
@@ -500,7 +501,7 @@ void ByteBitGrepKernel::generatePabloMethod() {
         basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
     }
 
-    cc::Parabix_CC_Compiler ccc(scope1, basis);
+    cc::Parabix_CC_Compiler_Builder ccc(scope1, basis);
     RE_Compiler re_compiler(scope1, ccc);
     scope1->createAssign(final_matches, re_compiler.compile(mSuffixRE, prefixMatches));
     Var * const output = getOutputStreamVar("matches");

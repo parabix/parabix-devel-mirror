@@ -7,6 +7,7 @@
 #include <IR_Gen/idisa_target.h>
 #include <boost/filesystem.hpp>
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline_builder.h>
 #include <kernels/s2p_kernel.h>
@@ -74,6 +75,7 @@ uint64_t TotalBytes = 0;
 
 using namespace pablo;
 using namespace kernel;
+using namespace cc;
 
 //  The callback routine that records counts in progress.
 //
@@ -112,7 +114,7 @@ void WordCountKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (CountWords || CountChars) {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("countable"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("countable"));
     } else {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     }

@@ -6,6 +6,7 @@
 #include "cc_kernel.h"
 #include <re/re_cc.h>
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -45,12 +46,12 @@ Bindings CharacterClassKernelBuilder::makeInputScalarBindings(Scalar * signalNul
 
 void CharacterClassKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
+    std::unique_ptr<cc::CC_Compiler> ccc;
     bool useDirectCC = getInput(0)->getType()->getArrayNumElements() == 1;
     if (useDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("sourceStream"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("sourceStream"));
     }
     Var * outputVar = getOutputStreamVar("ccStream");
     PabloAST * nonNull = nullptr;

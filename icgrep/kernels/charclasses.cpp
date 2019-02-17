@@ -8,6 +8,7 @@
 #include <kernels/kernel_builder.h>
 #include <UCD/ucd_compiler.hpp>
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <re/re_name.h>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
@@ -58,11 +59,11 @@ std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::Kerne
 
 void CharClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
+    std::unique_ptr<cc::CC_Compiler> ccc;
     if (mUseDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 
@@ -108,11 +109,11 @@ std::string ByteClassesKernel::makeSignature(const std::unique_ptr<kernel::Kerne
 
 void ByteClassesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
+    std::unique_ptr<cc::CC_Compiler> ccc;
     if (mUseDirectCC) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     unsigned n = mCCs.size();
 

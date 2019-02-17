@@ -117,9 +117,25 @@ And * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const String * c
     return insertAtInsertionPoint(new (mAllocator) And(expr1->getType(), expr1, expr2, name, mAllocator));
 }
 
+Ternary * PabloBlock::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    CHECK_SAME_TYPE(expr2, expr3);
+    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
+    return createTernary(getInteger(0x80), expr1, expr2, expr3, name);
+}
+
 Or * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const String * const name) {
     CHECK_SAME_TYPE(expr1, expr2);
     return insertAtInsertionPoint(new (mAllocator) Or(expr1->getType(), expr1, expr2, name, mAllocator));
+}
+
+Ternary * PabloBlock::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    CHECK_SAME_TYPE(expr2, expr3);
+    //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
+    return createTernary(getInteger(0xFE), expr1, expr2, expr3, name);
 }
 
 Xor * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const String * const name) {

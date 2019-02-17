@@ -10,6 +10,7 @@
 #include <pablo/pe_var.h>           // for Var
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <pablo/builder.hpp>
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/kernel_builder.h>
@@ -39,7 +40,7 @@ void LineFeedKernelBuilder::generatePabloMethod() {
     if (mNumOfStreams == 1) {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler>(getEntryScope(), getInputStreamSet("basis"));
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
     PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
@@ -58,7 +59,7 @@ LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::Ker
 
 void LineBreakKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
 
     Integer * const ZERO = pb.getInteger(0);
 

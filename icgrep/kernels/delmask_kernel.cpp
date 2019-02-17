@@ -9,6 +9,7 @@
 #include <pablo/pe_var.h>           // for Var
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
 #include <pablo/builder.hpp>
 #include <llvm/IR/Module.h>
 #include <pablo/pablo_toolchain.h> 
@@ -24,7 +25,7 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     std::vector<PabloAST *> u8_bits = getInputStreamSet("u8bit");
     //  output: delmask stream + error stream
     
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), u8_bits);
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), u8_bits);
     
     Zeroes * zeroes = main.createZeroes();
 
