@@ -346,7 +346,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
         } else {
             options->addExternal("UTF8_index", U8index);
-            if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+            if (mGrepRecordBreak == GrepRecordBreakKind::Unicode  && !UnicodeIndexing) {
                 options->addExternal("UTF8_LB", LineBreakStream);
             }
             if (CC_Multiplexing) {
@@ -367,6 +367,13 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                         const unsigned compressFieldWidth = sizeof(size_t) * 8;
                         P->CreateKernelCall<FieldCompressKernel>(compressFieldWidth, CharClasses, U8index, fieldCompressedCCs);
                         P->CreateKernelCall<StreamCompressKernel>(fieldCompressedCCs, U8index, compressedCCs, compressFieldWidth);
+                        StreamSet * fieldCompressedLB = P->CreateStreamSet();
+                        StreamSet * compressedLB = P->CreateStreamSet();
+                        P->CreateKernelCall<FieldCompressKernel>(compressFieldWidth, LineBreakStream, U8index, fieldCompressedLB);
+                        P->CreateKernelCall<StreamCompressKernel>(fieldCompressedLB, U8index, compressedLB, compressFieldWidth);
+                        if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+                            options->addExternal("UTF8_LB", compressedLB);
+                        }
                         options->setIndexingAlphabet(&cc::Unicode);
                     }
                 }
