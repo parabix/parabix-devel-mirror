@@ -7,6 +7,7 @@
 #include <re/re_toolchain.h>
 #include <re/re_name.h>
 #include <cc/cc_compiler.h>         // for CC_Compiler
+#include <cc/cc_compiler_target.h>
 #include <UCD/ucd_compiler.hpp>
 #include <re/re_compiler.h>
 #include <re/grapheme_clusters.h>
@@ -34,7 +35,7 @@ GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<ker
 
 void GraphemeClusterBreakKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"));
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
     UCD::UCDCompiler ucdCompiler(ccc);
     re::RE_Compiler re_compiler(getEntryScope(), ccc);
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();

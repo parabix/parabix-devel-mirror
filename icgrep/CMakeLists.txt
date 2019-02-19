@@ -109,7 +109,7 @@ SET (RE_PARSERS_SRC re/parsers/PCRE_parser.cpp re/parsers/ERE_parser.cpp re/pars
 add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_SRC} ${IDISA_SRC})
 add_library(PabloADT ${PABLO_SRC})
 # CCADT is the core library for representing and compiling character classes
-add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp cc/cc_kernel.cpp)
+add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/cc_compiler_target.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp cc/cc_kernel.cpp)
 # RegExpADT is the core library for representing, parsing and printing regular expressions
 add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/re_empty_set.cpp re/printer_re.cpp re/re_utility.cpp)
 add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp re/re_contextual_simplification.cpp)
@@ -374,6 +374,10 @@ add_custom_target (abc_test
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+  DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test)
+
+add_custom_target (check-ternary
+  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -ccc-type="ternary"
   DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test)
 
 add_custom_target (perf_icgrep
