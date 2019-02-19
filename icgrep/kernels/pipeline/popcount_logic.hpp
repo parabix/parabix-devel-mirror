@@ -492,7 +492,7 @@ inline void PipelineCompiler::allocatePopCountArrays(BuilderRef b, Value * const
         return;
     }
 
-    const auto firstBuffer = mLastKernel + 1;
+    const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer <= lastBuffer);
 
@@ -541,7 +541,7 @@ inline void PipelineCompiler::deallocatePopCountArrays(BuilderRef b, Value * con
     if (num_edges(mPopCountGraph) == 0) {
         return;
     }
-    const auto firstBuffer = mLastKernel + 1;
+    const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer <= lastBuffer);
     Constant * const POSITIVE_ARRAY = b->getInt32(POSITIVE_ARRAY_INDEX);
@@ -570,7 +570,7 @@ inline void PipelineCompiler::deallocatePopCountArrays(BuilderRef b, Value * con
  * @brief initializePopCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializePopCounts() {
-    const auto firstBuffer = mLastKernel + 1;
+    const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer < lastBuffer);
     for (auto i = firstBuffer; i != lastBuffer; ++i) {
@@ -585,7 +585,7 @@ inline void PipelineCompiler::initializePopCounts() {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getPopCountThreadLocalStateType(BuilderRef b) {
 
-    const auto firstBuffer = mLastKernel + 1;
+    const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     assert (firstBuffer < lastBuffer);
 

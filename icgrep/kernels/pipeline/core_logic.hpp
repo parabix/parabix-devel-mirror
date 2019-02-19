@@ -304,7 +304,7 @@ Value * PipelineCompiler::end(BuilderRef b) {
 inline Value * PipelineCompiler::pipelineTerminated(BuilderRef b) const {
     Value * terminated = b->getTrue();
     // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges(mPipelineOutput, mTerminationGraph))) {
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mTerminationGraph))) {
         const auto kernel = source(e, mTerminationGraph);
         terminated = b->CreateAnd(terminated, hasKernelTerminated(b, kernel));
     }
@@ -326,12 +326,12 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
     // Would a simple "reset" be enough?
 
 
-    const auto numOfBuffers = num_vertices(mBufferGraph) - mPipelineOutput;
+    const auto numOfBuffers = num_vertices(mBufferGraph) - PipelineOutput;
 
     mLocallyAvailableItems.resize(numOfBuffers, nullptr);
     mPriorConsumedItemCount.resize(numOfBuffers, nullptr);
 
-    for (const auto e : make_iterator_range(out_edges(mPipelineInput, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
 
         const auto buffer = target(e, mBufferGraph);
         const auto inputPort = mBufferGraph[e].inputPort();
@@ -353,7 +353,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         }
     }
 
-    for (const auto e : make_iterator_range(in_edges(mPipelineOutput, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto buffer = source(e, mBufferGraph);
         const auto outputPort = mBufferGraph[e].outputPort();
 
@@ -378,16 +378,16 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writePipelineIOItemCounts(BuilderRef b) {
 
-    for (const auto e : make_iterator_range(out_edges(mPipelineInput, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto inputPort = mBufferGraph[e].inputPort();
         const Binding & input = mPipelineKernel->getInputStreamSetBinding(inputPort);
         Value * const ptr = mPipelineKernel->getProcessedInputItemsPtr(inputPort);
-        const auto prefix = makeBufferName(mPipelineInput, input);
+        const auto prefix = makeBufferName(PipelineInput, input);
         Value * const consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         b->CreateStore(consumed, ptr);
     }
 
-    for (const auto e : make_iterator_range(in_edges(mPipelineOutput, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto externalPort = mBufferGraph[e].outputPort();
         const auto buffer = source(e, mBufferGraph);
         const auto pe = in_edge(buffer, mBufferGraph);

@@ -54,7 +54,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
         // If the out-degree for this buffer is zero, then we've proven that its consumption rate
         // is identical to its production rate.
         const auto comsumedItemCountMatchesProducedItemCount = (out_degree(bufferVertex, mConsumerGraph) == 0);
-        const auto isPipelineInput = (kernelIndex == mPipelineInput);
+        const auto isPipelineInput = (kernelIndex == PipelineInput);
         if (LLVM_UNLIKELY(comsumedItemCountMatchesProducedItemCount && !isPipelineInput)) {
             continue;
         }

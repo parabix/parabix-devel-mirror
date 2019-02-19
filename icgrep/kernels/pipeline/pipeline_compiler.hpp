@@ -9,6 +9,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/adjacency_matrix.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 //#include <boost/serialization/strong_typedef.hpp>
 #include <boost/math/common_factor_rt.hpp>
@@ -106,9 +107,6 @@ using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, Buffe
 template <typename vertex_descriptor>
 using RelMap = flat_map<const Relationship *, vertex_descriptor>;
 
-
-using AuxillaryStreamGraph = adjacency_list<vecS, vecS, bidirectionalS>;
-
 using BufferMap = RelMap<BufferGraph::vertex_descriptor>;
 
 struct ConsumerNode {
@@ -129,10 +127,12 @@ using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigne
 union RelationshipNode {
     const kernel::Kernel * Kernel = nullptr;
     const kernel::Relationship * Relationship;
+    llvm::Function * Callee;
 
     RelationshipNode() = default;
     RelationshipNode(kernel::Kernel * kernel) : Kernel(kernel) { }
     RelationshipNode(kernel::Relationship * relationship) : Relationship(relationship) { }
+    RelationshipNode(llvm::Function * callee) : Callee(callee) { }
 };
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, unsigned>;
@@ -192,16 +192,19 @@ struct RegionData {
     RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
 };
 
-struct PipelineGraph : public RelationshipGraph {
-    static constexpr unsigned PipelineInput = 0;
-    static constexpr unsigned FirstKernel = 1;
+struct PipelineGraph {
+    static constexpr unsigned PipelineInput = 0U;
+    static constexpr unsigned FirstKernel = 1U;
     unsigned LastKernel = 0;
     unsigned PipelineOutput = 0;
     unsigned FirstCall = 0;
     unsigned LastCall = 0;
-    unsigned FirstRelationship = 0;
-    unsigned LastRelationship = 0;
-    PipelineGraph(const unsigned n) : RelationshipGraph(n) { }
+    unsigned FirstScalar = 0;
+    unsigned LastScalar = 0;
+    unsigned FirstStreamSet = 0;
+    unsigned LastStreamSet = 0;
+    RelationshipGraph Graph;
+    PipelineGraph(const unsigned n) : Graph(n) { }
 };
 
 using ImplicitRelationships = flat_map<const Kernel *, const StreamSet *>;
@@ -233,6 +236,8 @@ public:
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
 
 protected:
+
+    PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraph && P);
 
 // internal pipeline state construction functions
 
@@ -437,10 +442,10 @@ protected:
 
 // pipeline analysis functions
 
-    PipelineGraph makePipelineGraph(BuilderRef b) const;
-    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions) const;
-    void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels) const;
-    void removeUnusedKernels(RelationshipGraph & G, const Kernels & kernels) const;
+    static LLVM_READNONE PipelineGraph makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
+    static void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions);
+    static void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels);
+    static void removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall);
 
     Kernels makePipelineList() const;
 
@@ -591,19 +596,22 @@ protected:
     Value *                                     mPopCountState;
     flat_map<unsigned, PopCountData>            mPopCountData;
 
-    // analysis state
-    const PipelineGraph                         mPipelineGraph;
+    // pipeline state
+    const RelationshipGraph                     mPipelineGraph;
+    static constexpr unsigned                   PipelineInput = 0;
+    static constexpr unsigned                   FirstKernel = 1;
+    const unsigned                              LastKernel;
+    const unsigned                              PipelineOutput;
+    const unsigned                              FirstCall;
+    const unsigned                              LastCall;
+    const unsigned                              FirstScalar;
+    const unsigned                              LastScalar;
+    const unsigned                              FirstStreamSet;
+    const unsigned                              LastStreamSet;
+    const bool                                  mHasZeroExtendedStream;
     const Kernels                               mPipeline;
 
-    static constexpr unsigned                   mPipelineInput = 0;
-    static constexpr unsigned                   mFirstKernel = 1;
-    const unsigned                              mLastKernel;
-    const unsigned                              mPipelineOutput;
-    const bool                                  mHasZeroExtendedStream;
-
-
-
-
+    // analysis state
     const BufferGraph                           mBufferGraph;
     ConsumerGraph                               mConsumerGraph;
     const RelationshipGraph                     mScalarDependencyGraph;
@@ -678,16 +686,34 @@ inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
     return false;
 }
 
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
+: PipelineCompiler(b, pipelineKernel, makePipelineGraph(b, pipelineKernel)) {
+    // Use a delegating constructor to compute the pipeline graph data once and pass it to
+    // the compiler. Although a const function attribute ought to suffice, gcc 8.2 does not
+    // resolve it correctly and clang requires -O2 or better.
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraph && P)
 : mPipelineKernel(pipelineKernel)
-, mPipelineGraph(makePipelineGraph(b))
-, mPipeline(makePipelineList())
-, mLastKernel(mPipeline.size() - 1)
-, mPipelineOutput(mLastKernel)
+, mPipelineGraph(std::move(P.Graph))
+, LastKernel(P.LastKernel)
+, PipelineOutput(P.PipelineOutput)
+, FirstCall(P.FirstCall)
+, LastCall(P.LastCall)
+, FirstScalar(P.FirstScalar)
+, LastScalar(P.LastScalar)
+, FirstStreamSet(P.FirstStreamSet)
+, LastStreamSet(P.LastStreamSet)
 , mHasZeroExtendedStream(hasZeroExtendedStream())
+, mPipeline(makePipelineList())
 , mBufferGraph(makeBufferGraph(b))
 , mConsumerGraph(makeConsumerGraph())
 , mScalarDependencyGraph(makeScalarDependencyGraph())
@@ -791,5 +817,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "cycle_counter_logic.hpp"
 #include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
+#include "scalar_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

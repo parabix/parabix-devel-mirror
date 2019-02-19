@@ -15,7 +15,7 @@ inline void reset(Vec & vec, const unsigned n) {
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
-    assert (index >= mFirstKernel && index < mLastKernel);
+    assert (index >= FirstKernel && index <= LastKernel);
     mKernelIndex = index;
     mKernel = mPipeline[index];
     b->setKernel(mPipelineKernel);

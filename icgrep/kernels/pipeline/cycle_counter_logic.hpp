@@ -63,7 +63,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         Value* FP_100 = ConstantFP::get(b->getDoubleTy(), 100.0);
         Value* totalCycles = b->getSize(0);
         b->setKernel(mPipelineKernel);
-        for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
             const auto prefix = makeKernelName(i);
             Value * const counterPtr = b->getScalarFieldPtr(prefix + CYCLE_COUNT_SUFFIX);
             Value * const cycles = b->CreateLoad(counterPtr);
@@ -71,7 +71,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         }
         Value* fTotalCycle = b->CreateUIToFP(totalCycles, b->getDoubleTy());
 
-        for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
 
             const Binding & binding = selectPrincipleCycleCountBinding(i);
             Value * const items = b->getScalarField(makeBufferName(i, binding) + ITEM_COUNT_SUFFIX);

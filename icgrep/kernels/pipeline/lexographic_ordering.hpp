@@ -5,11 +5,13 @@
 #include <boost/graph/topological_sort.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/ADT/SmallVector.h>
 #include <vector>
 #include <queue>
 #include <numeric>
 
 using namespace boost;
+using namespace llvm;
 
 template <typename Graph, typename Vec>
 void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
@@ -53,7 +55,7 @@ void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
 template <typename Graph>
 inline void transitive_closure_dag(Graph & G) {
     // Simple topological closure for DAGs
-    std::vector<unsigned> ordering;
+    SmallVector<unsigned, 256> ordering;
     ordering.reserve(num_vertices(G));
     topological_sort(G, std::back_inserter(ordering));
     for (unsigned u : ordering) {

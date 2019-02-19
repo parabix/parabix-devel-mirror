@@ -22,14 +22,14 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     using Edge = TerminationGraph::edge_descriptor;
 
     const auto numOfCalls = mPipelineKernel->getCallBindings().size();
-    const auto firstCall = mPipelineOutput + 1;
+    const auto firstCall = PipelineOutput + 1;
     const auto lastCall = firstCall + numOfCalls;
-    const auto n = mPipelineOutput + 1;
+    const auto n = PipelineOutput + 1;
 
     TerminationGraph G(n);
 
     // 1) copy and summarize producer -> consumer relations from the buffer graph
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         for (auto buffer : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto bufferVertex = target(buffer, mBufferGraph);
             for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
@@ -49,26 +49,26 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
 
     // 2) copy and summarize any output scalars of the pipeline or any calls
-    for (unsigned i = mPipelineOutput; i < lastCall; ++i) {
+    for (unsigned i = PipelineOutput; i < lastCall; ++i) {
         for (auto relationship : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
             const auto relationshipVertex = source(relationship, mScalarDependencyGraph);
             for (auto producer : make_iterator_range(in_edges(relationshipVertex, mScalarDependencyGraph))) {
                 const auto kernel = source(producer, mScalarDependencyGraph);
-                assert ("cannot occur" && kernel != mPipelineOutput);
-                add_edge(kernel, mPipelineOutput, G);
+                assert ("cannot occur" && kernel != PipelineOutput);
+                add_edge(kernel, PipelineOutput, G);
             }
         }
     }
 
     // 3) remove any incoming edges to a kernel that must explicitly terminate;
     // 4) create a k_i -> P_out edge for every kernel with a side effect attribute
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = mPipeline[i];
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::MustExplicitlyTerminate))) {
             clear_in_edges(i, G);
         }
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::SideEffecting))) {
-            add_edge(i, mPipelineOutput, G);
+            add_edge(i, PipelineOutput, G);
         }
     }
 
@@ -77,7 +77,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
 
     // then take the transitive reduction
     dynamic_bitset<> sources(n, false);
-    for (unsigned u = mPipelineOutput; u--; ) {
+    for (unsigned u = PipelineOutput; u--; ) {
         for (auto e : make_iterator_range(in_edges(u, G))) {
             sources.set(source(e, G), true);
         }
@@ -93,8 +93,8 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     // with some thread interleaving of u32u8 that I have yet to characterize.
     // TODO: Try placing counters on seperate cache lines.
     #ifdef DISABLE_TERMINATION_SIGNAL_COUNTING_VARIABLES
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        remove_out_edge_if(i, [&](Edge e) { return target(e, G) != mPipelineOutput; }, G);
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        remove_out_edge_if(i, [&](Edge e) { return target(e, G) != PipelineOutput; }, G);
     }
     #else
 
@@ -181,7 +181,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
 
     // Record the path distance to indicate the value to check
     unsigned pathCount = 0;
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         if (in_degree(i, G) == 0) {
             unsigned j = i, k = 0;
             while (LLVM_LIKELY(out_degree(j, G) != 0)) {
@@ -192,9 +192,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
             }
             // If this path is not pipeline sink, add an edge to
             // record its final distance.
-            if (j < mLastKernel) {
+            if (j <= LastKernel) {
                 G[j] = pathCount;
-                add_edge(j, mPipelineInput, ++k, G);
+                add_edge(j, PipelineInput, ++k, G);
             }
             ++pathCount;
         }
@@ -205,9 +205,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     mTerminationSignals.resize(pathCount, nullptr);
 
     assert ("a pipeline with no sinks ought to produce no observable data"
-            && in_degree(mPipelineOutput, G) > 0);
+            && in_degree(PipelineOutput, G) > 0);
     assert ("termination graph construction error?"
-            && out_degree(mPipelineOutput, G) == 0);
+            && out_degree(PipelineOutput, G) == 0);
 
     return G;
 }
@@ -242,7 +242,7 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const unsigned kernel) const {
     // any pipeline input streams are considered produced by the P_{in} vertex.
-    if (LLVM_UNLIKELY(kernel == mPipelineInput)) {
+    if (LLVM_UNLIKELY(kernel == PipelineInput)) {
         return mPipelineKernel->isFinal();
     } else {
         const auto pathId = mTerminationGraph[kernel];

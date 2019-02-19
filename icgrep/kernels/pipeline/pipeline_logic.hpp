@@ -40,8 +40,8 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // TODO: look into improving cache locality/false sharing of this struct
     b->setKernel(mPipelineKernel);
     addTerminationProperties(b);
-    addConsumerKernelProperties(b, mPipelineInput);
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    addConsumerKernelProperties(b, PipelineInput);
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
@@ -103,7 +103,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     mScalarCache.clear();
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = mPipeline[i];
         if (kernel->isStateful()) {
             if (kernel->hasFamilyName()) {
@@ -117,7 +117,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     }
     constructBuffers(b);
     std::vector<Value *> args;
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
         const auto hasHandle = mKernel->isStateful() ? 1U : 0U;
         args.resize(hasHandle + in_degree(i, mScalarDependencyGraph));
@@ -169,7 +169,7 @@ Value * PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     allocateThreadLocalState(b, localState, b->getSize(0));
     readThreadLocalState(b, localState);
     start(b);
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
         executeKernel(b);
     }
@@ -244,7 +244,7 @@ Value * PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // generate the pipeline logic for this thread
     mPipelineKernel->initializeLocalScalarValues(b);
     start(b);
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
         acquireCurrentSegment(b);
         executeKernel(b);
@@ -278,7 +278,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     mScalarCache.clear();
     printOptionalCycleCounter(b);
     std::vector<Value *> params;
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
         loadBufferHandles(b);
         params.clear();
@@ -289,44 +289,6 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         mScalarCache.emplace(i, result);
     }
     releaseBuffers(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getFinalOutputScalars
- ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
-    const auto & calls = mPipelineKernel->getCallBindings();
-    const auto numOfCalls = calls.size();
-    std::vector<Value *> args;
-    b->setKernel(mPipelineKernel);
-    const auto firstCall = mPipelineOutput + 1;
-    for (unsigned k = 0; k < numOfCalls; ++k) {
-        writeOutputScalars(b, firstCall + k, args);
-        Function * const f = cast<Function>(calls[k].Callee);
-        auto i = f->arg_begin();
-        for (auto j = args.begin(); j != args.end(); ++i, ++j) {
-            assert (i != f->arg_end());
-            *j = b->CreateZExtOrTrunc(*j, i->getType());
-        }
-        assert (i == f->arg_end());
-        Value * const result = b->CreateCall(f, args);
-        mScalarCache.emplace(firstCall + k, result);
-    }
-    writeOutputScalars(b, mPipelineOutput, args);
-    return args;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeOutputScalars
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args) {
-    const auto n = in_degree(index, mScalarDependencyGraph);
-    args.resize(n);
-    for (const auto e : make_iterator_range(in_edges(index, mScalarDependencyGraph))) {
-        const auto scalar = source(e, mScalarDependencyGraph);
-        const auto k = mScalarDependencyGraph[e];
-        args[k] = getScalar(b, scalar);
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -341,7 +303,7 @@ void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
         b->setKernel(mPipelineKernel);
         const auto prefix = makeKernelName(mKernelIndex);
         const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-        const unsigned waitingOnIdx = serialize ? (mLastKernel - 1) : mKernelIndex;
+        const unsigned waitingOnIdx = serialize ? LastKernel : mKernelIndex;
         const auto waitingOn = makeKernelName(waitingOnIdx);
         Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_SUFFIX);
         BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
@@ -410,42 +372,6 @@ bool PipelineCompiler::requiresSynchronization(const unsigned kernelIndex) const
     }
     return false;
 #endif
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getScalar
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getScalar(BuilderRef b, const RelationshipGraph::vertex_descriptor scalar) {
-    const auto f = mScalarCache.find(scalar);
-    if (LLVM_UNLIKELY(f != mScalarCache.end())) {
-        return f->second;
-    }
-    const auto producer = in_edge(scalar, mScalarDependencyGraph);
-    const auto i = source(producer, mScalarDependencyGraph);
-    const auto j = mScalarDependencyGraph[producer];
-    Value * value = nullptr;
-    if (i == mPipelineInput) {
-        if (LLVM_UNLIKELY(j == SCALAR_CONSTANT)) {
-            const Relationship * const rel = mScalarDependencyGraph[scalar].Relationship;
-            value = cast<ScalarConstant>(rel)->value();
-        } else {
-            const Binding & input = mPipelineKernel->getInputScalarBinding(j);
-            value = b->getScalarField(input.getName());
-        }
-    } else { // output scalar of some kernel
-        Value * const outputScalars = getScalar(b, i);
-        if (LLVM_UNLIKELY(outputScalars == nullptr)) {
-            report_fatal_error("Internal error: pipeline is unable to locate valid output scalar");
-        }
-        if (outputScalars->getType()->isAggregateType()) {
-            value = b->CreateExtractValue(outputScalars, {j});
-        } else { assert (j == 0 && "scalar type is not an aggregate");
-            value = outputScalars;
-        }
-    }
-    assert (value);
-    mScalarCache.emplace(scalar, value);
-    return value;
 }
 
 enum : unsigned {

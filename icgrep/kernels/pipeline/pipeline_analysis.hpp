@@ -18,9 +18,9 @@ namespace kernel {
  * @brief printBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Graph>
-void printGraph(const Graph & G, raw_ostream & out) {
+void printGraph(const Graph & G, raw_ostream & out, const StringRef name = "G") {
 
-    out << "digraph G {\n";
+    out << "digraph " << name << " {\n";
     for (auto v : make_iterator_range(vertices(G))) {
         out << "v" << v << " [label=\"" << v << "\"];\n";
     }
@@ -120,26 +120,33 @@ void addImplicitConsumerRelationship(const unsigned codeId, const unsigned consu
     }
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b) const {
+PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel) {
+
+    enum : unsigned {
+        SCALAR,
+        STREAM,
+        RELATIONSHIP_COUNT
+    };
 
     // copy the list of internal kernels and add in any implicit kernels
-    Kernels kernels(mPipelineKernel->getKernels());
+    Kernels kernels(pipelineKernel->getKernels());
 
-    ImplicitRelationships regions;
-    addRegionSelectorKernels(b, kernels, regions);
+    ImplicitRelationships regionSelectors;
+    addRegionSelectorKernels(b, kernels, regionSelectors);
 
     const auto pipelineInput = 0U;
     const auto firstKernel = 1U;
     const auto lastKernel = kernels.size();
     const auto pipelineOutput = lastKernel + 1;
 
-    const auto & call = mPipelineKernel->getCallBindings();
+    const auto & call = pipelineKernel->getCallBindings();
     const auto numOfCalls = call.size();
     const auto firstCall = pipelineOutput + 1;
-    const auto lastCall = firstCall + numOfCalls;
+    const auto lastCall = pipelineOutput + numOfCalls;
     const auto initialSize = lastCall + 1;
 
     /// ------------------------------------------------------------------------------------------
@@ -148,35 +155,53 @@ PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b) const {
 
     RelationshipGraph G(initialSize);
 
-    G[pipelineInput].Kernel = mPipelineKernel;
+    G[pipelineInput].Kernel = pipelineKernel;
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         G[i].Kernel = kernels[i - firstKernel];
     }
-    G[pipelineOutput].Kernel = mPipelineKernel;
-
+    G[pipelineOutput].Kernel = pipelineKernel;
     RelationshipMap M;
-    addProducerRelationships(pipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
-    addProducerRelationships(pipelineInput, mPipelineKernel->getInputStreamSetBindings(), G, M);
+
+    // Enumerate all scalars first to make it easy to decide whether the relationship
+    // is a scalar or a streamset.
+    unsigned firstRelationship[RELATIONSHIP_COUNT];
+    unsigned lastRelationship[RELATIONSHIP_COUNT];
+    firstRelationship[SCALAR] = initialSize;
+    addProducerRelationships(pipelineInput, pipelineKernel->getInputScalarBindings(), G, M);
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * k = kernels[i - firstKernel];
-        addConsumerRelationships(i, k->getInputStreamSetBindings(), G, M);
         addConsumerRelationships(i, k->getInputScalarBindings(), G, M);
-        addImplicitConsumerRelationship(IMPLICIT_REGION_SELECTOR, i, regions, G, M);
-        addProducerRelationships(i, k->getOutputStreamSetBindings(), G, M);
+    }
+    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+        const Kernel * k = kernels[i - firstKernel];
         addProducerRelationships(i, k->getOutputScalarBindings(), G, M);
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
+        G[firstCall + i].Callee = cast<Function>(call[i].Callee);
         addConsumerRelationships(firstCall + i, call[i].Args, G, M);
     }
-    addConsumerRelationships(pipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
-    addConsumerRelationships(pipelineOutput, mPipelineKernel->getOutputStreamSetBindings(), G, M);
+    addConsumerRelationships(pipelineOutput, pipelineKernel->getOutputScalarBindings(), G, M);
+
+    lastRelationship[SCALAR] = num_vertices(G) - 1;
+    firstRelationship[STREAM] = lastRelationship[SCALAR] + 1;
+
+    // Now enumerate all streamsets
+    addProducerRelationships(pipelineInput, pipelineKernel->getInputStreamSetBindings(), G, M);
+    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+        const Kernel * k = kernels[i - firstKernel];
+        addConsumerRelationships(i, k->getInputStreamSetBindings(), G, M);
+        addImplicitConsumerRelationship(IMPLICIT_REGION_SELECTOR, i, regionSelectors, G, M);
+        addProducerRelationships(i, k->getOutputStreamSetBindings(), G, M);
+    }
+    addConsumerRelationships(pipelineOutput, pipelineKernel->getOutputStreamSetBindings(), G, M);
+    lastRelationship[STREAM] = num_vertices(G) - 1;
 
     /// ------------------------------------------------------------------------------------------
     /// Pipeline optimizations
     /// ------------------------------------------------------------------------------------------
 
     combineDuplicateKernels(G, kernels);
-    removeUnusedKernels(G, kernels);
+    removeUnusedKernels(G, lastKernel, lastCall);
 
     /// ------------------------------------------------------------------------------------------
     /// Compute the lexographical ordering of G
@@ -193,72 +218,69 @@ PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b) const {
         }
     }
 
+    assert (ordering.size() >= 1);
+    assert (ordering.size() <= kernels.size());
+
     /// ------------------------------------------------------------------------------------------
     /// Transcribe the pipeline graph based on the lexical ordering, accounting for any auxillary
     /// kernels and subsituted kernels/relationships.
     /// ------------------------------------------------------------------------------------------
 
     const auto n = ordering.size();
-    PipelineGraph P(n + numOfCalls + 3);
-    P.LastKernel = n;
-    P.PipelineOutput = n + 1;
-    P.FirstCall = numOfCalls ? (n + 2) : 0;
-    P.LastCall = P.FirstCall + numOfCalls;
-    P.FirstRelationship = n + numOfCalls + 3;
+    PipelineGraph P(n + 2 + numOfCalls);
+    P.LastKernel = P.PipelineInput + n;
+    P.PipelineOutput = P.LastKernel + 1;
+    P.FirstCall = P.PipelineOutput + 1;
+    P.LastCall = P.PipelineOutput + numOfCalls;
 
-    SmallVector<unsigned, 64> remapping(initialSize);
+    SmallVector<unsigned, 64> subsitution(initialSize, 0);
 
     // record the new numbering of our active kernels
-    remapping[pipelineInput] = P.PipelineInput;
-    P[P.PipelineInput].Kernel = mPipelineKernel;
+    subsitution[pipelineInput] = P.PipelineInput;
+    P.Graph[P.PipelineInput].Kernel = pipelineKernel;
     for (unsigned i = 0; i < n; ++i) {
-        const auto j = ordering[i];
-        remapping[j] = firstKernel + i;
-        P[firstKernel + i].Kernel = G[j].Kernel;
+        const auto j = ordering[i]; assert (G[j].Kernel);
+        assert ("duplicate subsitution?" && j > 0 && subsitution[j] == 0);
+        subsitution[j] = P.FirstKernel + i;
+        assert (subsitution[j] > P.PipelineInput && subsitution[j] < P.PipelineOutput);
+        P.Graph[P.FirstKernel + i].Kernel = G[j].Kernel;
     }
-    remapping[pipelineOutput] = P.PipelineOutput;
-    P[P.PipelineOutput].Kernel = mPipelineKernel;
+    subsitution[pipelineOutput] = P.PipelineOutput;
+    P.Graph[P.PipelineOutput].Kernel = pipelineKernel;
 
     // record the new numbering of our function calls
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        remapping[firstCall + i] = P.FirstCall + i;
+        subsitution[firstCall + i] = P.FirstCall + i;
+        P.Graph[P.FirstCall + i].Callee = G[firstCall + i].Callee;
     }
-    const auto firstRelationship = initialSize;
-    const auto lastRelationship = num_vertices(G);
-    for (unsigned i = firstRelationship; i < lastRelationship; ++i) {
-        if (LLVM_LIKELY(in_degree(i, G) != 0)) {
-            const auto e = in_edge(i, G);
-            const auto producer = remapping[source(e, G)];
-            const auto relationship = add_vertex(P);
-            P[relationship].Relationship = G[i].Relationship;
-            add_edge(producer, relationship, G[e], P);
-            for (const auto & e : make_iterator_range(out_edges(i, G))) {
-                const auto consumer = remapping[target(e, G)];
-                add_edge(relationship, consumer, G[e], P);
+    unsigned numOfActiveRelationships[RELATIONSHIP_COUNT] = {0, 0};
+    for (unsigned k = 0; k < RELATIONSHIP_COUNT; ++k) {
+        for (unsigned i = firstRelationship[k]; i <= lastRelationship[k]; ++i) {
+            if (LLVM_LIKELY(in_degree(i, G) != 0)) {
+                numOfActiveRelationships[k]++;
+                const auto e = in_edge(i, G);
+                const auto producer = subsitution[source(e, G)];
+                const auto relationship = add_vertex(P.Graph);
+                P.Graph[relationship].Relationship = G[i].Relationship;
+                add_edge(producer, relationship, G[e], P.Graph);
+                for (const auto & e : make_iterator_range(out_edges(i, G))) {
+                    const auto consumer = subsitution[target(e, G)];
+                    add_edge(relationship, consumer, G[e], P.Graph);
+                }
             }
         }
     }
-    P.LastRelationship = num_vertices(P);
+    P.FirstScalar = P.LastCall + 1;
+    P.LastScalar = P.LastCall + numOfActiveRelationships[SCALAR];
+    P.FirstStreamSet = P.LastScalar + 1;
+    P.LastStreamSet = P.LastScalar + numOfActiveRelationships[STREAM];
     return P;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePipelineList
- ** ------------------------------------------------------------------------------------------------------------- */
-Kernels PipelineCompiler::makePipelineList() const {
-    // temporary refactoring step
-    const auto n = mPipelineGraph.PipelineOutput;
-    Kernels kernels(mPipelineGraph.PipelineOutput + 1);
-    for (unsigned i = mPipelineGraph.PipelineInput; i <= n; ++i) {
-        kernels[i] = const_cast<Kernel *>(mPipelineGraph[i].Kernel);
-    }
-    return kernels;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addRegionSelectorKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions) const {
+void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions) {
 
     enum : unsigned {
         REGION_START = 0
@@ -374,7 +396,7 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief combineDuplicateKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels) const {
+void PipelineCompiler::combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels) {
 
     using Vector = std::vector<unsigned>;
 
@@ -504,32 +526,33 @@ void PipelineCompiler::combineDuplicateKernels(RelationshipGraph & G, const Kern
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief removeUnusedKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::removeUnusedKernels(RelationshipGraph & G, const Kernels & kernels) const {
+inline void PipelineCompiler::removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall) {
 
     const auto firstKernel = 1U;
-    const auto lastKernel = kernels.size();
     const auto pipelineOutput = lastKernel + 1;
-
-    const auto & call = mPipelineKernel->getCallBindings();
-    const auto numOfCalls = call.size();
     const auto firstCall = pipelineOutput + 1;
-    const auto lastCall = firstCall + numOfCalls;
 
-    RelationshipGraph T(G);
-    const auto sink = add_vertex(T);
+    adjacency_matrix<directedS> M(num_vertices(G));
+    for (const auto & e : make_iterator_range(edges(G))) {
+        add_edge(source(e, G), target(e, G), M);
+    }
+
     for (auto i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * const kernel = G[i].Kernel;
         if (kernel->hasAttribute(AttrId::SideEffecting)) {
-            add_edge(i, sink, 0, T);
+            add_edge(i, pipelineOutput, M);
         }
     }
-    for (unsigned i = pipelineOutput; i <= lastCall; ++i) {
-        add_edge(i, sink, 0, T);
+
+    for (unsigned i = firstCall; i <= lastCall; ++i) {
+        add_edge(i, pipelineOutput, M);
     }
-    transitive_closure_dag(T);
-    dynamic_bitset<> active(lastKernel + 1, false);
-    for (const auto & e : make_iterator_range(in_edges(sink, T))) {
-        const auto k = source(e, G);
+
+    transitive_closure_dag(M);
+
+    dynamic_bitset<> active(pipelineOutput, false);
+    for (const auto & e : make_iterator_range(in_edges(pipelineOutput, M))) {
+        const auto k = source(e, M);
         if (k <= lastKernel) {
             active.set(k);
         }
@@ -561,8 +584,8 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
 
     bool hasZeroExtendedStream = false;
 
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        const Kernel * const kernel = mPipeline[i];
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = mPipelineGraph[i].Kernel; assert (kernel);
         const auto numOfInputs = kernel->getNumOfStreamInputs();
 
         Graph G(numOfInputs + 1);
@@ -608,37 +631,17 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
     return hasZeroExtendedStream;
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeScalarDependencyGraph
- *
- * producer -> buffer/scalar -> consumer
+ * @brief makePipelineList
  ** ------------------------------------------------------------------------------------------------------------- */
-RelationshipGraph PipelineCompiler::makeScalarDependencyGraph() const {
-    const auto & call = mPipelineKernel->getCallBindings();
-    const auto numOfCalls = call.size();
-    const auto firstCall = mPipelineOutput + 1;
-    const auto initialSize = firstCall + numOfCalls;
-
-    RelationshipGraph G(initialSize);
-    RelationshipMap M;
-
-    addProducerRelationships(mPipelineInput, mPipelineKernel->getInputScalarBindings(), G, M);
-    // verify each scalar input of the kernel is an input to the pipeline
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        addConsumerRelationships(i, mPipeline[i]->getInputScalarBindings(), G, M);
+Kernels PipelineCompiler::makePipelineList() const {
+    // temporary refactoring step
+    Kernels kernels(PipelineOutput + 1);
+    for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
+        kernels[i] = const_cast<Kernel *>(mPipelineGraph[i].Kernel);
     }
-    // enumerate the output scalars
-    for (unsigned i = mFirstKernel; i < mLastKernel; ++i) {
-        addProducerRelationships(i, mPipeline[i]->getOutputScalarBindings(), G, M);
-    }
-    // enumerate the call bindings
-    for (unsigned i = 0; i < numOfCalls; ++i) {
-        addConsumerRelationships(firstCall + i, call[i].Args, G, M);
-    }
-    // enumerate the pipeline outputs
-    addConsumerRelationships(mPipelineOutput, mPipelineKernel->getOutputScalarBindings(), G, M);
-
-    return G;
+    return kernels;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -706,10 +709,10 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
     }
 
     // check any pipeline input first
-    if (out_degree(mPipelineInput, mBufferGraph)) {
+    if (out_degree(PipelineInput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto buffer = getInputBufferVertex(i);
-            if (LLVM_UNLIKELY(is_parent(buffer, mPipelineInput, mBufferGraph))) {
+            if (LLVM_UNLIKELY(is_parent(buffer, PipelineInput, mBufferGraph))) {
                 for (unsigned j = 0; j < i; ++j) {
                     add_edge_if_no_induced_cycle(i, j, G);
                 }
@@ -721,10 +724,10 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
     }
 
     // ... and check any pipeline output first
-    if (in_degree(mPipelineOutput, mBufferGraph)) {
+    if (in_degree(PipelineOutput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto buffer = getOutputBufferVertex(i);
-            if (LLVM_UNLIKELY(has_child(buffer, mPipelineOutput, mBufferGraph))) {
+            if (LLVM_UNLIKELY(has_child(buffer, PipelineOutput, mBufferGraph))) {
                 const auto k = firstOutput + i;
                 for (unsigned j = 0; j < k; ++j) {
                     add_edge_if_no_induced_cycle(k, j, G);
@@ -807,7 +810,7 @@ inline LLVM_READNONE RateValue maximumConsumed(const Kernel * const kernel, cons
  ** ------------------------------------------------------------------------------------------------------------- */
 ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
 
-    const auto firstBuffer = mPipelineOutput + 1;
+    const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
     ConsumerGraph G(lastBuffer);
 
@@ -937,7 +940,7 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
     PopCountGraph G(num_vertices(mBufferGraph));
     Map M;
 
-    for (unsigned kernelVertex = mFirstKernel; kernelVertex < mLastKernel; ++kernelVertex) {
+    for (unsigned kernelVertex = FirstKernel; kernelVertex <= LastKernel; ++kernelVertex) {
         const Kernel * const kernel = mPipeline[kernelVertex];
         const auto numOfInputs = kernel->getNumOfStreamInputs();
         const auto numOfOutputs = kernel->getNumOfStreamOutputs();
@@ -1039,19 +1042,19 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
  ** ------------------------------------------------------------------------------------------------------------- */
 PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
 
-    PipelineIOGraph G((mPipelineOutput - mPipelineInput) + 1);
-    for (const auto e : make_iterator_range(out_edges(mPipelineInput, mBufferGraph))) {
+    PipelineIOGraph G((PipelineOutput - PipelineInput) + 1);
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto buffer = target(e, mBufferGraph);
         for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
             const auto consumer = target(e, mBufferGraph);
-            add_edge(mPipelineInput, consumer, mBufferGraph[e].inputPort(), G);
+            add_edge(PipelineInput, consumer, mBufferGraph[e].inputPort(), G);
         }
     }
-    for (const auto e : make_iterator_range(in_edges(mPipelineOutput, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto buffer = source(e, mBufferGraph);
         for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
             const auto producer = source(e, mBufferGraph);
-            add_edge(producer, mPipelineOutput, mBufferGraph[e].outputPort(), G);
+            add_edge(producer, PipelineOutput, mBufferGraph[e].outputPort(), G);
         }
     }
     return G;
