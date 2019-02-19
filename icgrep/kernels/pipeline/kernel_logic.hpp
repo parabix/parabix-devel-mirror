@@ -936,10 +936,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const Binding 
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const unsigned inputPort) const {
     const auto bufferVertex = getInputBufferVertex(inputPort);
-    Value * avail = mLocallyAvailableItems[getBufferIndex(bufferVertex)];
-
-
-    return avail;
+    return mLocallyAvailableItems[getBufferIndex(bufferVertex)];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1092,7 +1089,7 @@ void PipelineCompiler::itemCountSanityCheck(BuilderRef b, const Binding & bindin
  * @brief resetMemoizedFields
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::resetMemoizedFields() {
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
     reset(mIsInputClosed, numOfInputs);
     reset(mIsInputZeroExtended, numOfInputs);
     reset(mInitiallyProcessedItemCount, numOfInputs);
@@ -1109,7 +1106,7 @@ void PipelineCompiler::resetMemoizedFields() {
     reset(mUpdatedProcessedPhi, numOfInputs);
     reset(mUpdatedProcessedDeferredPhi, numOfInputs);
     reset(mFullyProcessedItemCount, numOfInputs);
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
     reset(mInitiallyProducedItemCount, numOfOutputs);
     reset(mInitiallyProducedDeferredItemCount, numOfOutputs);
     reset(mAlreadyProducedPhi, numOfOutputs);

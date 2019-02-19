@@ -18,6 +18,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/STLExtras.h>
 #include <util/slab_allocator.h>
+#include <algorithm>
 #include <queue>
 
 //#define PRINT_DEBUG_MESSAGES
@@ -82,11 +83,25 @@ inline unsigned OutputPort(const StreamPort port) {
     return port.second;
 }
 
+// std::reference_wrapper does not allow zero init
+struct BindingRef {
+    BindingRef() noexcept : binding(nullptr) {}
+    BindingRef(const Binding & ref) noexcept : binding(&ref) {}
+    BindingRef(const Binding * const ref) noexcept : binding(ref) {}
+    operator const Binding & () const noexcept {
+        assert (binding && "was not set!");
+        return *binding;
+    }
+private:
+    const Binding * binding;
+};
+
 struct BufferRateData {
 
     StreamPort Port;
-    RateValue Minimum;
-    RateValue Maximum;
+    BindingRef Binding;
+    RateValue  Minimum;
+    RateValue  Maximum;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -98,8 +113,9 @@ struct BufferRateData {
 
     BufferRateData() = default;
 
-    BufferRateData(StreamPort port, RateValue min, RateValue max)
-    : Port(port), Minimum(min), Maximum(max) { }
+    BufferRateData(StreamPort port, BindingRef binding, RateValue min, RateValue max)
+    : Port(port), Binding(binding), Minimum(min), Maximum(max) { }
+
 };
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
@@ -192,7 +208,7 @@ struct RegionData {
     RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
 };
 
-struct PipelineGraph {
+struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
     static constexpr unsigned FirstKernel = 1U;
     unsigned LastKernel = 0;
@@ -204,7 +220,7 @@ struct PipelineGraph {
     unsigned FirstStreamSet = 0;
     unsigned LastStreamSet = 0;
     RelationshipGraph Graph;
-    PipelineGraph(const unsigned n) : Graph(n) { }
+    PipelineGraphBundle(const unsigned n) : Graph(n) { }
 };
 
 using ImplicitRelationships = flat_map<const Kernel *, const StreamSet *>;
@@ -219,6 +235,7 @@ const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
 #define SCALAR_CONSTANT (-1U)
 
 #define IMPLICIT_REGION_SELECTOR (-1U)
+#define IS_EXPLICIT_PORT(x) (LLVM_LIKELY((x) < IMPLICIT_REGION_SELECTOR)) // Is x < MIN(IMPLICIT PORTS)
 
 class PipelineCompiler {
 
@@ -237,7 +254,7 @@ public:
 
 protected:
 
-    PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraph && P);
+    PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P);
 
 // internal pipeline state construction functions
 
@@ -415,10 +432,6 @@ protected:
 // buffer analysis/management functions
 
     BufferGraph makeBufferGraph(BuilderRef b);
-    void enumerateBufferProducerBindings(const Port type, const unsigned producer, const Bindings & bindings, BufferGraph & G, BufferMap & M) const;
-    void enumerateBufferConsumerBindings(const Port type, const unsigned consumer, const Bindings & bindings, BufferGraph & G, BufferMap & M) const;
-    void insertImplicitBufferConsumerInput(const Port type, const unsigned consumer, const StreamSet * input, BufferGraph & G, BufferMap & M) const;
-    BufferRateData getBufferRateData(const StreamPort port, const Kernel * const kernel, const Binding & binding) const;
 
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
@@ -442,7 +455,7 @@ protected:
 
 // pipeline analysis functions
 
-    static LLVM_READNONE PipelineGraph makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
+    static LLVM_READNONE PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
     static void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions);
     static void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels);
     static void removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall);
@@ -470,16 +483,14 @@ protected:
     LLVM_READNONE unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
     unsigned getInputBufferVertex(const unsigned inputPort) const;
     StreamSetBuffer * getInputBuffer(const unsigned inputPort) const;
+    const BindingRef getInputBinding(const unsigned outputPort) const;
 
     LLVM_READNONE unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     unsigned getOutputBufferVertex(const unsigned outputPort) const;
     StreamSetBuffer * getOutputBuffer(const unsigned outputPort) const;
+    const BindingRef getOutputBinding(const unsigned outputPort) const;
 
     LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
-
-    LLVM_READNONE bool isPipelineInput(const unsigned kernelIndex, const unsigned inputPort) const;
-    LLVM_READNONE bool isPipelineOutput(const unsigned kernelIndex, const unsigned outputPort) const;
-    LLVM_READNONE bool nestedPipeline() const;
 
     static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const StreamPort port) {
         if (port.first == Port::Input) {
@@ -701,7 +712,7 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraph && P)
+inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P)
 : mPipelineKernel(pipelineKernel)
 , mPipelineGraph(std::move(P.Graph))
 , LastKernel(P.LastKernel)

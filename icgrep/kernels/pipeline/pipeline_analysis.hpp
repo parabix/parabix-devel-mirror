@@ -124,7 +124,7 @@ void addImplicitConsumerRelationship(const unsigned codeId, const unsigned consu
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel) {
+PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel) {
 
     enum : unsigned {
         SCALAR,
@@ -227,7 +227,7 @@ PipelineGraph PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKernel *
     /// ------------------------------------------------------------------------------------------
 
     const auto n = ordering.size();
-    PipelineGraph P(n + 2 + numOfCalls);
+    PipelineGraphBundle P(n + 2 + numOfCalls);
     P.LastKernel = P.PipelineInput + n;
     P.PipelineOutput = P.LastKernel + 1;
     P.FirstCall = P.PipelineOutput + 1;
@@ -654,43 +654,52 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
     const auto firstOutput = numOfInputs;
     const auto numOfPorts = numOfInputs + numOfOutputs;
+
 
     Graph G(numOfPorts);
 
     // enumerate the input relations
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+
+    SmallVector<unsigned, 16> zext(numOfInputs);
+
+    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+        const BufferRateData & bd = mBufferGraph[e];
+        const auto port = bd.inputPort();
+        const Binding & input = bd.Binding;
         const ProcessingRate & rate = input.getRate();
         if (rate.hasReference()) {
-            Port port; unsigned j;
-            std::tie(port, j) = mKernel->getStreamPort(rate.getReference());
-            assert ("input stream cannot refer to an output stream" && port == Port::Input);
-            add_edge(j, i, G);
+            Port portType; unsigned ref;
+            std::tie(portType, ref) = mKernel->getStreamPort(rate.getReference());
+            assert ("input stream cannot refer to an output stream" && portType == Port::Input);
+            add_edge(ref, port, G);
+        }
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
+            zext.push_back(port);
         }
     }
+    assert (std::is_sorted(zext.begin(), zext.end()));
+
     // and then enumerate the output relations
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+    for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const BufferRateData & bd = mBufferGraph[e];
+        const auto port = bd.outputPort();
+        const Binding & output = bd.Binding;
         const ProcessingRate & rate = output.getRate();
         if (rate.hasReference()) {
-            Port port; unsigned j;
-            std::tie(port, j) = mKernel->getStreamPort(rate.getReference());
-            add_edge(j + ((port == Port::Output) ? numOfInputs : 0), (i + numOfInputs), G);
+            Port portType; unsigned ref;
+            std::tie(portType, ref) = mKernel->getStreamPort(rate.getReference());
+            if (LLVM_UNLIKELY(portType == Port::Output)) {
+                ref += firstOutput;
+            }
+            add_edge(ref, firstOutput + port, G);
         }
     }
 
     // check any zeroextended inputs last
-    SmallVector<unsigned, 16> zext(numOfInputs);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
-            zext.push_back(i);
-        }
-    }
     const auto n = zext.size();
     if (LLVM_UNLIKELY(n > 0)) {
         zext.push_back(numOfInputs); // sentinal
