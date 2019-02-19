@@ -83,12 +83,15 @@ inline unsigned OutputPort(const StreamPort port) {
     return port.second;
 }
 
-// std::reference_wrapper does not allow zero init
+// NOTE: std::reference_wrapper does not allow zero init, required by boost graph
 struct BindingRef {
     BindingRef() noexcept : binding(nullptr) {}
     BindingRef(const Binding & ref) noexcept : binding(&ref) {}
     BindingRef(const Binding * const ref) noexcept : binding(ref) {}
     operator const Binding & () const noexcept {
+        return get();
+    }
+    const Binding & get() const noexcept {
         assert (binding && "was not set!");
         return *binding;
     }
@@ -308,7 +311,7 @@ protected:
     void prepareLocalZeroExtendSpace(BuilderRef b);
 
     void writeKernelCall(BuilderRef b);
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, std::vector<Value *> & args);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, Vec<Value *, 64> &args);
 
     void normalTerminationCheck(BuilderRef b, Value * const isFinal);
 
@@ -451,7 +454,7 @@ protected:
     void startOptionalCycleCounter(BuilderRef b);
     void updateOptionalCycleCounter(BuilderRef b);
     void printOptionalCycleCounter(BuilderRef b);
-    const Binding & selectPrincipleCycleCountBinding(const unsigned i) const;
+    const Binding & selectPrincipleCycleCountBinding(const unsigned kernel) const;
 
 // pipeline analysis functions
 
@@ -483,12 +486,20 @@ protected:
     LLVM_READNONE unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
     unsigned getInputBufferVertex(const unsigned inputPort) const;
     StreamSetBuffer * getInputBuffer(const unsigned inputPort) const;
-    const BindingRef getInputBinding(const unsigned outputPort) const;
+    LLVM_READNONE const Binding & getInputBinding(const unsigned kernelVertex, const unsigned inputPort) const;
+    const Binding & getInputBinding(const unsigned inputPort) const;
+    LLVM_READNONE const BufferGraph::edge_descriptor getInput(const unsigned kernelVertex, const unsigned outputPort) const;
+
 
     LLVM_READNONE unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     unsigned getOutputBufferVertex(const unsigned outputPort) const;
     StreamSetBuffer * getOutputBuffer(const unsigned outputPort) const;
-    const BindingRef getOutputBinding(const unsigned outputPort) const;
+    LLVM_READNONE const Binding & getOutputBinding(const unsigned kernelVertex, const unsigned outputPort) const;
+    const Binding & getOutputBinding(const unsigned outputPort) const;
+    LLVM_READNONE const BufferGraph::edge_descriptor getOutput(const unsigned kernelVertex, const unsigned outputPort) const;
+
+    LLVM_READNONE unsigned getNumOfStreamInputs(const unsigned kernel) const;
+    LLVM_READNONE unsigned getNumOfStreamOutputs(const unsigned kernel) const;
 
     LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
 
@@ -619,11 +630,16 @@ protected:
     const unsigned                              LastScalar;
     const unsigned                              FirstStreamSet;
     const unsigned                              LastStreamSet;
-    const bool                                  mHasZeroExtendedStream;
     const Kernels                               mPipeline;
 
     // analysis state
+
+    std::vector<Binding>                        ImplicitBindings; // <- change to graph property
     const BufferGraph                           mBufferGraph;
+
+    const bool                                  mHasZeroExtendedStream;
+
+
     ConsumerGraph                               mConsumerGraph;
     const RelationshipGraph                     mScalarDependencyGraph;
     ScalarCache                                 mScalarCache;
@@ -723,9 +739,9 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , LastScalar(P.LastScalar)
 , FirstStreamSet(P.FirstStreamSet)
 , LastStreamSet(P.LastStreamSet)
-, mHasZeroExtendedStream(hasZeroExtendedStream())
 , mPipeline(makePipelineList())
 , mBufferGraph(makeBufferGraph(b))
+, mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
 , mScalarDependencyGraph(makeScalarDependencyGraph())
 , mPipelineIOGraph(makePipelineIOGraph())

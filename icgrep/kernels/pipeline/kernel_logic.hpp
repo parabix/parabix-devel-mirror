@@ -37,7 +37,7 @@ inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::checkForSufficientInputDataAndOutputSpace(BuilderRef b) {
     assert (b->getKernel() == mKernel);
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (const auto i : mPortEvaluationOrder) {
         if (i < numOfInputs) {
             checkForSufficientInputData(b, i);
@@ -59,7 +59,7 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     Value * const accessible = getAccessibleInputItems(b, inputPort, true);
     Value * const strideLength = getInputStrideLength(b, inputPort);
     Value * const requiredInput = addLookahead(b, inputPort, strideLength);
-    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
+    const Binding & input = getInputBinding(inputPort);
     const auto prefix = makeBufferName(mKernelIndex, input);
     Value * const hasEnough = b->CreateICmpUGE(accessible, requiredInput);
     Value * const sufficientInput = b->CreateOr(hasEnough, isClosed(b, inputPort));
@@ -106,7 +106,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
 
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
 
-    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
+    const Binding & input = getInputBinding(inputPort);
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
         // switching to a "zeroed buffer". The size of the buffer will be determined by the final
@@ -146,7 +146,7 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
     Value * const writable = getWritableOutputItems(b, outputPort, true);
     Value * const strideLength = getOutputStrideLength(b, outputPort);
-    const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+    const Binding & output = getOutputBinding(outputPort);
     const auto prefix = makeBufferName(mKernelIndex, output);
     Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
     #ifdef PRINT_DEBUG_MESSAGES
@@ -194,14 +194,14 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond
     // reference is an internal stream that can progress still and it is the internal stream
     // that is insufficient.
 
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         mUpdatedProcessedPhi[i]->addIncoming(mAlreadyProcessedPhi[i], exitBlock);
         if (mUpdatedProcessedDeferredPhi[i]) {
             mUpdatedProcessedDeferredPhi[i]->addIncoming(mAlreadyProcessedDeferredPhi[i], exitBlock);
         }
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         mUpdatedProducedPhi[i]->addIncoming(mAlreadyProducedPhi[i], exitBlock);
     }
@@ -213,7 +213,7 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow) {
     assert (outputPort < mWritableOutputItems.size());
-    const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+    const Binding & output = getOutputBinding(outputPort);
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
     Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
     Value * const consumed = mConsumedItemCount[outputPort]; assert (consumed);
@@ -242,7 +242,7 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
  * @brief determineNumOfLinearStrides
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     mNumOfLinearStrides = nullptr;
     for (const auto i : mPortEvaluationOrder) {
         Value * strides = nullptr;
@@ -259,7 +259,7 @@ inline void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
  * @brief getNumOfAccessibleStrides
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort) {
-    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
+    const Binding & input = getInputBinding(inputPort);
     const ProcessingRate & rate = input.getRate();
     Value * numOfStrides = nullptr;
     Value * const accessible = mAccessibleInputItems[inputPort];
@@ -298,7 +298,7 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
 inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const unsigned outputPort) {
     Value * numOfStrides = nullptr;
     if (LLVM_LIKELY(getOutputBufferType(outputPort) != BufferType::Managed)) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+        const Binding & output = getOutputBinding(outputPort);
         const ProcessingRate & rate = output.getRate();
         Value * const writable = mWritableOutputItems[outputPort];
         if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
@@ -321,15 +321,15 @@ inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const uns
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b) {
     assert (mNumOfLinearStrides);
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
-    SmallVector<Value *, 16> linearInputItems(numOfInputs);
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-    SmallVector<Value *, 16> linearOutputItems(numOfOutputs);
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> linearInputItems(numOfInputs);
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> linearOutputItems(numOfOutputs);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        linearInputItems[i] = calculateNumOfLinearItems(b, mKernel->getInputStreamSetBinding(i));
+        linearInputItems[i] = calculateNumOfLinearItems(b, getInputBinding(i));
     }
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        linearOutputItems[i] = calculateNumOfLinearItems(b, mKernel->getOutputStreamSetBinding(i));
+        linearOutputItems[i] = calculateNumOfLinearItems(b, getOutputBinding(i));
     }
     BasicBlock * const exitBlock = b->GetInsertBlock();
     for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -344,10 +344,10 @@ inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b) {
  * @brief calculateFinalItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
-    SmallVector<Value *, 16> accessibleItems(numOfInputs);
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
-    SmallVector<Value *, 16> pendingItems(numOfOutputs);
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> accessibleItems(numOfInputs);
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> pendingItems(numOfOutputs);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         accessibleItems[i] = addLookahead(b, i, mAccessibleInputItems[i]);
     }
@@ -361,7 +361,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     RateValue rateLCM(1);
     bool noPrincipalStream = true;
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed()) {
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
@@ -375,7 +375,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
 
     bool hasFixedRateOutput = false;
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
         if (rate.isFixed()) {
             rateLCM = lcm(rateLCM, rate.getRate());
@@ -386,7 +386,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     Value * minScaledInverseOfAccessibleInput = nullptr;
     if (hasFixedRateOutput) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const Binding & input = mKernel->getInputStreamSetBinding(i);
+            const Binding & input = getInputBinding(i);
             const ProcessingRate & rate = input.getRate();
             if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
                 Value * const scaledInverseOfAccessibleInput =
@@ -399,7 +399,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     }
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
         Value * writable = nullptr;
         if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
@@ -445,7 +445,7 @@ inline Value * PipelineCompiler::calculateBufferExpansionSize(BuilderRef b, cons
  * @brief expandOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target) {
-    const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+    const Binding & output = getOutputBinding(outputPort);
     const auto prefix = makeBufferName(mKernelIndex, output);
     BasicBlock * const expand = b->CreateBasicBlock(prefix + "_expandOutputBuffer", target);
     BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -475,7 +475,7 @@ inline void PipelineCompiler::expandOutputBuffer(BuilderRef b, const unsigned ou
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
     if (mHasZeroExtendedStream) {
-        const auto numOfInputs = mKernel->getNumOfStreamInputs();
+        const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
         mZeroExtendBufferPhi = nullptr;
         Value * requiredSpace = nullptr;
         for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -483,7 +483,7 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
                 const auto bufferVertex = getInputBufferVertex(i);
                 const BufferNode & bn = mBufferGraph[bufferVertex];
 
-                const Binding & input = mKernel->getInputStreamSetBinding(i);
+                const Binding & input = getInputBinding(i);
                 Value * requiredBytes = mLinearInputItemsPhi[i]; assert (requiredBytes);
                 Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
                 requiredBytes = b->CreateRoundUp(requiredBytes, BLOCK_WIDTH);
@@ -540,8 +540,8 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
  * @brief writeKernelCall
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
 
     mNumOfAddressableItemCount = 0;
 
@@ -551,7 +551,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     b->setKernel(mPipelineKernel);
 
-    std::vector<Value *> args;
+    Vec<Value *, 64> args;
     args.reserve((numOfInputs + numOfOutputs) * 4 + 2);
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
@@ -563,7 +563,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         PHINode * processed = nullptr;
         bool deferred = false;
 
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         if (mAlreadyProcessedDeferredPhi[i]) {
             processed = mAlreadyProcessedDeferredPhi[i];
             deferred = true;
@@ -593,7 +593,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto nonManaged = getOutputBufferType(i) != BufferType::Managed;
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         PHINode * const produced = mAlreadyProducedPhi[i];
         Value * const writable = mLinearOutputItemsPhi[i];
        if (LLVM_LIKELY(nonManaged)) {
@@ -627,7 +627,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     // calculate or read the item counts (assuming this kernel did not terminate)
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount()) {
             mProcessedItemCount[i] = b->CreateAdd(mAlreadyProcessedPhi[i], mLinearInputItemsPhi[i]);
@@ -645,7 +645,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         }
     }
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
         if (rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount()) {
             mProducedItemCount[i] = b->CreateAdd(mAlreadyProducedPhi[i], mLinearOutputItemsPhi[i]);
@@ -664,7 +664,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
                                           const bool addressable,
                                           PHINode * const itemCount,
-                                          std::vector<Value *> & args) {
+                                          Vec<Value *, 64> &args) {
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
@@ -691,17 +691,17 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
  * @brief loadItemCountsOfCountableRateStreams
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::loadItemCountsOfCountableRateStreams(BuilderRef b) {
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (mReturnedProcessedItemCountPtr[i] && (rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount())) {
             mProcessedItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
         }
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
         if (mReturnedProducedItemCountPtr[i] && (rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount())) {
             mProducedItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
@@ -727,9 +727,9 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     Constant * const ONE = b->getSize(1);
     Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
 
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         if (LLVM_UNLIKELY(output.hasAttribute(AttrId::ManagedBuffer))) {
             continue;
         }
@@ -743,11 +743,9 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         RateValue strideLength{mKernel->getUpperBound(output) * mKernel->getStride()};
         const auto bufferVertex = getOutputBufferVertex(i);
         for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-            const auto inputPort = mBufferGraph[e].inputPort();
-            const Kernel * const consumer = mPipeline[target(e, mBufferGraph)];
-            const Binding & input = consumer->getInputStreamSetBinding(inputPort);
-            const auto upperBound = consumer->getUpperBound(input) * consumer->getStride();
-            strideLength = std::max(strideLength, upperBound);
+            const BufferRateData & rd = mBufferGraph[e];
+            const Binding & input = rd.Binding;
+            strideLength = std::max(strideLength, rd.Maximum);
             if (LLVM_UNLIKELY(input.hasLookahead())) {
                 maximumLookahead = std::max(maximumLookahead, input.getLookahead());
             }
@@ -819,9 +817,9 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
  * @brief computeFullyProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         Value * processed = nullptr;
         if (mUpdatedProcessedDeferredPhi[i]) {
             processed = mUpdatedProcessedDeferredPhi[i];
@@ -843,9 +841,9 @@ inline void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     // it's consumers has a non-Fixed rate that does not have a matching BlockSize
     // attribute.
 
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         Value * produced = truncateBlockSize(b, output, mUpdatedProducedPhi[i]);
         mFullyProducedItemCount[i]->addIncoming(produced, mKernelLoopExitPhiCatch);
     }
@@ -963,7 +961,7 @@ inline Value * PipelineCompiler::subtractLookahead(BuilderRef b, const unsigned 
  * @brief getLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
 Constant * PipelineCompiler::getLookahead(BuilderRef b, const unsigned inputPort) const {
-    const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
+    const Binding & input = getInputBinding(inputPort);
     if (LLVM_UNLIKELY(input.hasLookahead())) {
         return b->getSize(input.getLookahead());
     }
@@ -1045,7 +1043,7 @@ inline Value * PipelineCompiler::getFinalizeFunction(BuilderRef b) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        const Binding & input = mKernel->getInputStreamSetBinding(inputPort);
+        const Binding & input = getInputBinding(inputPort);
         Value * const expected = b->CreateAdd(mAlreadyProcessedPhi[inputPort], mLinearInputItemsPhi[inputPort]);
         itemCountSanityCheck(b, input, "processed", processed, expected);
     }
@@ -1056,7 +1054,7 @@ inline void PipelineCompiler::verifyInputItemCount(BuilderRef b, Value * process
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::verifyOutputItemCount(BuilderRef b, Value * produced, const unsigned outputPort) const {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+        const Binding & output = getOutputBinding(outputPort);
         Value * const expected = b->CreateAdd(mAlreadyProducedPhi[outputPort], mLinearOutputItemsPhi[outputPort]);
         itemCountSanityCheck(b, output, "produced", produced, expected);
     }

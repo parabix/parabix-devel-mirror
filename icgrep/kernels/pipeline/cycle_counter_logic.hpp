@@ -46,12 +46,20 @@ inline void PipelineCompiler::updateOptionalCycleCounter(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief selectPrincipleCycleCountBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned i) const {
-    const Kernel * const kernel = mPipeline[i];
-    if (LLVM_UNLIKELY(kernel->getNumOfStreamInputs() == 0)) {
-        return kernel->getOutputStreamSetBinding(0);
+inline const Binding & PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned kernel) const {
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    if (numOfInputs == 0) {
+        return getOutputBinding(kernel, 0);
     } else {
-        return kernel->getInputStreamSetBinding(0);
+        unsigned portNum = 0;
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            const Binding & input = getInputBinding(i);
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
+                portNum = i;
+                break;
+            }
+        }
+        return getInputBinding(kernel, portNum);
     }
 }
 
@@ -76,18 +84,18 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             const Binding & binding = selectPrincipleCycleCountBinding(i);
             Value * const items = b->getScalarField(makeBufferName(i, binding) + ITEM_COUNT_SUFFIX);
 
-            const auto numOfInputs = mKernel->getNumOfStreamInputs();
+            const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
             for (unsigned i = 0; i < numOfInputs; ++i) {
-                const Binding & input = mKernel->getInputStreamSetBinding(i);
+                const Binding & input = getInputBinding(i);
                 const auto prefix = makeBufferName(mKernelIndex, input);
                 mInitiallyProcessedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
                 if (input.isDeferred()) {
                     mInitiallyProcessedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
                 }
             }
-            const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+            const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
             for (unsigned i = 0; i < numOfOutputs; ++i) {
-                const Binding & output = mKernel->getOutputStreamSetBinding(i);
+                const Binding & output = getOutputBinding(i);
                 const auto prefix = makeBufferName(mKernelIndex, output);
                 mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
             }

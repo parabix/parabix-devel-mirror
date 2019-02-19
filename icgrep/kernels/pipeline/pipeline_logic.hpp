@@ -73,9 +73,9 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     // item count in the kernel.
 
     // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
-    const auto numOfInputs = kernel->getNumOfStreamInputs();
+    const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(kernelIndex, i);
         const auto prefix = makeBufferName(kernelIndex, input);
         if (input.isDeferred()) {
             mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
@@ -83,9 +83,9 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
-    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = out_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(kernelIndex, i);
         const auto prefix = makeBufferName(kernelIndex, output);
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
@@ -356,16 +356,16 @@ bool PipelineCompiler::requiresSynchronization(const unsigned kernelIndex) const
     if (LLVM_LIKELY(kernel->isStateful())) {
         return true;
     }
-    const auto numOfInputs = kernel->getNumOfStreamInputs();
+    const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(kernelIndex, i);
         if (!input.getRate().isFixed()) {
             return true;
         }
     }
-    const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = out_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(kernelIndex, i);
         if (!output.getRate().isFixed()) {
             return true;
         }

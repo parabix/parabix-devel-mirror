@@ -17,6 +17,120 @@ const auto REFERENCE_PROCESSED_COUNT = "PopRefProc";
 
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePopCountGraph
+ *
+ * Kernel -> Port -> Buffer ordering. Edge between a Kernel and a port indicates the port # of the source
+ * items stream. Edges between a port and buffer state the ref port #. The kernel and buffer vertices are
+ * aligned with the BufferGraph. Any buffer vertex with an in-degree > 0 is the reference of a pop count
+ * rate stream.
+ ** ------------------------------------------------------------------------------------------------------------- */
+PopCountGraph PipelineCompiler::makePopCountGraph() const {
+
+    using Vertex = PopCountGraph::vertex_descriptor;
+    using Map = flat_map<unsigned, Vertex>;
+
+    PopCountGraph G(num_vertices(mBufferGraph));
+    Map M;
+
+    for (unsigned kernelVertex = FirstKernel; kernelVertex <= LastKernel; ++kernelVertex) {
+        const Kernel * const kernel = mPipeline[kernelVertex];
+        const auto numOfInputs = in_degree(kernelVertex, mBufferGraph);
+        const auto numOfOutputs = out_degree(kernelVertex, mBufferGraph);
+
+        auto insertPopCountDependency = [&](
+                const CountingType type,
+                const unsigned refPort,
+                const unsigned srcPort) {
+            // check if we've already created a vertex for the ref port ...
+            const auto f = M.find(refPort);
+            if (LLVM_UNLIKELY(f != M.end())) {
+                const auto refPortVertex = f->second;
+                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, srcPort}, G);
+                // update the ref -> buffer edge with the counting type
+                G[out_edge(refPortVertex, G)].Type |= type;
+            } else { // ... otherwise map a new vertex to it.
+
+                // verify the reference stream is a Fixed rate stream
+                if (LLVM_LIKELY(srcPort != refPort)) {
+                    const Binding & refBinding = getInputBinding(kernelVertex, refPort);
+                    if (LLVM_UNLIKELY(refBinding.isDeferred() || !refBinding.getRate().isFixed())) {
+                        std::string tmp;
+                        raw_string_ostream msg(tmp);
+                        msg << kernel->getName();
+                        msg << ": pop count reference ";
+                        msg << refBinding.getName();
+                        msg << " must be a non-deferred Fixed rate stream";
+                        report_fatal_error(msg.str());
+                    }
+                }
+
+                const auto refPortVertex = add_vertex(G);
+                M.emplace(refPort, refPortVertex);
+                add_edge(kernelVertex, refPortVertex, PopCountEdge{type, srcPort}, G);
+
+                // determine which buffer this port refers to by inspecting the buffer graph
+                const auto bufferVertex = getInputBufferVertex(kernelVertex, refPort);
+                add_edge(refPortVertex, bufferVertex, PopCountEdge{type, refPort}, G);
+            }
+        };
+
+        auto addPopCountDependency = [&](
+            const unsigned portIndex,
+            const Binding & binding) {
+            const ProcessingRate & rate = binding.getRate();
+            if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+                // determine which port this I/O port refers to
+                Port portType; unsigned refPort;
+                std::tie(portType, refPort) = kernel->getStreamPort(rate.getReference());
+                // verify the reference stream is an input port
+                if (LLVM_UNLIKELY(portType != Port::Input)) {
+                    std::string tmp;
+                    raw_string_ostream msg(tmp);
+                    msg << kernel->getName();
+                    msg << ": pop count rate for ";
+                    msg << binding.getName();
+                    msg << " cannot refer to an output stream";
+                    report_fatal_error(msg.str());
+                }
+                const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
+                insertPopCountDependency(type, refPort, portIndex);
+            }
+        };
+
+        auto checkRequiredArray = [&](
+            const unsigned portIndex,
+            const Binding & binding) {
+
+            CountingType type = CountingType::Unknown;
+            if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::RequiresPopCountArray))) {
+                type = CountingType::Positive;
+            }
+            if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+                type |= CountingType::Negative;
+            }
+            if (LLVM_UNLIKELY(type != CountingType::Unknown)) {
+                insertPopCountDependency(type, portIndex, portIndex);
+            }
+        };
+
+        for (unsigned j = 0; j < numOfInputs; ++j) {
+            const auto & input = getInputBinding(kernelVertex, j);
+            addPopCountDependency(j, input);
+            checkRequiredArray(j, input);
+        }
+        const auto firstOutput = numOfInputs;
+        for (unsigned j = 0; j < numOfOutputs; ++j) {
+            const auto & output = getOutputBinding(kernelVertex, j);
+            addPopCountDependency(firstOutput + j, output);
+        }
+        M.clear();
+    }
+
+    return G;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writePopCountComputationLogic
  *
@@ -29,7 +143,7 @@ inline void PipelineCompiler::writePopCountComputationLogic(BuilderRef b) {
 
         const auto producerLink = in_edge(bufferVertex, mBufferGraph);
         const auto bufferPort = mBufferGraph[producerLink].outputPort();
-        const Binding & output = mKernel->getOutputStreamSetBinding(bufferPort);
+        const Binding & output = getOutputBinding(bufferPort);
 
         const auto prefix = makeBufferName(mKernelIndex, output) + "_genPopCount";
         BasicBlock * const popCountBuild =
@@ -360,7 +474,7 @@ inline Value * PipelineCompiler::getPopCountNextBaseOffset(BuilderRef b, const u
         return mConsumedItemCount[outputPort];
     } else {
         b->setKernel(mPipelineKernel);
-        const Binding & output = mKernel->getOutputStreamSetBinding(outputPort);
+        const Binding & output = getOutputBinding(outputPort);
         const auto bufferName = makeBufferName(mKernelIndex, output);
         const auto fieldName = bufferName + REFERENCE_PROCESSED_COUNT;
         Value * const processed = b->getScalarField(fieldName);
@@ -425,7 +539,7 @@ inline void PipelineCompiler::updatePopCountReferenceCounts(BuilderRef b) {
             // Have we encountered all of the pop count refs? If so, update the scalar field.
             // NOTE: we cannot get here if this ref uses the consumed items as its ref item count.
             if (++pc.Encountered == in_degree(bufferVertex, mPopCountGraph)) {
-                const Binding & output = mKernel->getOutputStreamSetBinding(inputPort);
+                const Binding & output = getOutputBinding(inputPort);
                 const auto bufferName = makeBufferName(mKernelIndex, output);
                 b->setKernel(mPipelineKernel);
                 b->setScalarField(bufferName + REFERENCE_PROCESSED_COUNT, pc.Processed);
@@ -643,7 +757,7 @@ RateValue PipelineCompiler::popCountReferenceFieldWidth(const unsigned bufferVer
         const auto refPort = mPopCountGraph[e].Port;
         const auto kernelVertex = parent(source(e, mPopCountGraph), mPopCountGraph);
         const Kernel * const k = mPipeline[kernelVertex];
-        const Binding & b = k->getInputStreamSetBinding(refPort);
+        const Binding & b = getInputBinding(kernelVertex, refPort);
         assert (b.getRate().isFixed());
         RateValue sw = lowerBound(k, b);
         if (first) {
@@ -673,9 +787,8 @@ inline bool PipelineCompiler::popCountReferenceCanUseConsumedItemCount(const uns
     // we can still use it.
     for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
         const auto port = mBufferGraph[e].inputPort();
-        const auto kernelVertex = target(e, mBufferGraph);
-        const Kernel * const consumer = mPipeline[kernelVertex];
-        const Binding & input = consumer->getInputStreamSetBinding(port);
+        const auto consumer = target(e, mBufferGraph);
+        const Binding & input = getInputBinding(consumer, port);
         if (input.isDeferred() || !input.getRate().isFixed()) {
             return false;
         }

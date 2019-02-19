@@ -38,7 +38,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
                 // affect when the consumer terminates.
                 const auto j = target(e, mBufferGraph);
                 const Kernel * const consumer = mPipeline[j];
-                const Binding & input = consumer->getInputStreamSetBinding(inputPort);
+                const Binding & input = getInputBinding(j, inputPort);
                 const auto mayConsumeNoInput = consumer->getLowerBound(input) == RateValue{0};
                 if (LLVM_UNLIKELY(mayConsumeNoInput || input.hasAttribute(AttrId::ZeroExtended))) {
                     continue;

@@ -203,7 +203,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const isFinal) {
     BasicBlock * const entryBlock = b->GetInsertBlock();
     if (isFinal) {
-        const auto numOfInputs = mKernel->getNumOfStreamInputs();
+        const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             mAlreadyProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
             if (mAlreadyProcessedDeferredPhi[i]) {
@@ -211,7 +211,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
             }
             mFinalProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
         }
-        const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+        const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             mAlreadyProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
             mFinalProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
@@ -221,14 +221,14 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
         }
         b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, mKernelLoopEntry);
     } else { // just exit the loop
-        const auto numOfInputs = mKernel->getNumOfStreamInputs();
+        const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             mUpdatedProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
             if (mUpdatedProcessedDeferredPhi[i]) {
                 mUpdatedProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], entryBlock);
             }
         }
-        const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+        const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             mUpdatedProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
             if (mUpdatedProducedDeferredPhi[i]) {
@@ -343,11 +343,9 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         Value * const processed = b->CreateLoad(inPtr);
 
         for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
-            const auto inputPort = mBufferGraph[e].inputPort();
+            const BufferRateData & rd = mBufferGraph[e];
             const auto kernelIndex = target(e, mBufferGraph);
-            const Kernel * const kernel = mPipeline[kernelIndex];
-            const Binding & input = kernel->getInputStreamSetBinding(inputPort);
-            const auto prefix = makeBufferName(kernelIndex, input);
+            const auto prefix = makeBufferName(kernelIndex, rd.Binding);
             Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
             b->CreateStore(processed, ptr);
         }
@@ -379,24 +377,21 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 void PipelineCompiler::writePipelineIOItemCounts(BuilderRef b) {
 
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const auto inputPort = mBufferGraph[e].inputPort();
-        const Binding & input = mPipelineKernel->getInputStreamSetBinding(inputPort);
-        Value * const ptr = mPipelineKernel->getProcessedInputItemsPtr(inputPort);
-        const auto prefix = makeBufferName(PipelineInput, input);
+        const BufferRateData & rd = mBufferGraph[e];
+        Value * const ptr = mPipelineKernel->getProcessedInputItemsPtr(rd.inputPort());
+        const auto prefix = makeBufferName(PipelineInput, rd.Binding);
         Value * const consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         b->CreateStore(consumed, ptr);
     }
 
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const auto externalPort = mBufferGraph[e].outputPort();
+        const BufferRateData & external = mBufferGraph[e];
         const auto buffer = source(e, mBufferGraph);
         const auto pe = in_edge(buffer, mBufferGraph);
-        const auto internalPort = mBufferGraph[pe].outputPort();
+        const BufferRateData & internal = mBufferGraph[pe];
         const auto producer = source(pe, mBufferGraph);
-        const Kernel * const kernel = mPipeline[producer];
-        const Binding & output = kernel->getOutputStreamSetBinding(internalPort);
-        Value * const ptr = mPipelineKernel->getProducedOutputItemsPtr(externalPort);
-        const auto prefix = makeBufferName(producer, output);
+        Value * const ptr = mPipelineKernel->getProducedOutputItemsPtr(external.outputPort());
+        const auto prefix = makeBufferName(producer, internal.Binding);
         Value * const produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         b->CreateStore(produced, ptr);
     }
@@ -408,10 +403,10 @@ void PipelineCompiler::writePipelineIOItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopEntry);
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     Type * const sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
         mAlreadyProcessedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProcessed");
         mAlreadyProcessedPhi[i]->addIncoming(mInitiallyProcessedItemCount[i], mKernelEntry);
@@ -420,9 +415,9 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
             mAlreadyProcessedDeferredPhi[i]->addIncoming(mInitiallyProcessedDeferredItemCount[i], mKernelEntry);
         }
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         mAlreadyProducedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProduced");
         mAlreadyProducedPhi[i]->addIncoming(mInitiallyProducedItemCount[i], mKernelEntry);
@@ -439,16 +434,16 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopCall);
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     Type * const sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
         mLinearInputItemsPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyAccessible");
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         mLinearOutputItemsPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyWritable");
     }
@@ -459,16 +454,16 @@ inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelTerminated);
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     Type * const sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
         mFinalProcessedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_finalProcessed");
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         mFinalProducedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_finalProduced");
     }
@@ -485,18 +480,18 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     mTerminatedPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminated");
     mHasProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgress");
     mHaltingPhi = b->CreatePHI(boolTy, 2, prefix + "_halting");
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = mKernel->getInputStreamSetBinding(i);
+        const Binding & input = getInputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
         mUpdatedProcessedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessed");
         if (mAlreadyProcessedDeferredPhi[i]) {
             mUpdatedProcessedDeferredPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessedDeferred");
         }
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         mUpdatedProducedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_updatedProduced");
     }
@@ -525,9 +520,9 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     mPipelineProgress = pipelineProgress;
 
     createConsumedPhiNodes(b);
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = mKernel->getOutputStreamSetBinding(i);
+        const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
         PHINode * const fullyProduced = b->CreatePHI(sizeTy, 2, prefix + "_fullyProduced");
         fullyProduced->addIncoming(mInitiallyProducedItemCount[i], mKernelEntry);
@@ -544,7 +539,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     mTerminatedPhi->addIncoming(getTerminationSignal(b, mKernelIndex), exitBlock);
     mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
     mHaltingPhi->addIncoming(mHalted, exitBlock);
-    const auto numOfInputs = mKernel->getNumOfStreamInputs();
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * const totalCount = getLocallyAvailableItemCount(b, i);
         mUpdatedProcessedPhi[i]->addIncoming(totalCount, exitBlock);
@@ -552,7 +547,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
             mUpdatedProcessedDeferredPhi[i]->addIncoming(totalCount, exitBlock);
         }
     }
-    const auto numOfOutputs = mKernel->getNumOfStreamOutputs();
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         mUpdatedProducedPhi[i]->addIncoming(mFinalProducedPhi[i], exitBlock);
         if (mUpdatedProducedDeferredPhi[i]) {
