@@ -64,6 +64,7 @@ public:
     //  The ordinal position of the character whose Unicode codepoint value is ucp.
     unsigned fromUnicode(const UCD::codepoint_t ucp) const;
 
+    const unsigned getCommon() const {return mUnicodeCommon;}
     const unsigned getSize() const override {return mUnicodeCommon + mAboveCommon.size();}
 
 protected:
