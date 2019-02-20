@@ -18,52 +18,40 @@ namespace kernel {
  * work has finished.
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() {
-
     using Edge = TerminationGraph::edge_descriptor;
 
-    const auto numOfCalls = mPipelineKernel->getCallBindings().size();
-    const auto firstCall = PipelineOutput + 1;
-    const auto lastCall = firstCall + numOfCalls;
-    const auto n = PipelineOutput + 1;
-
-    TerminationGraph G(n);
+    TerminationGraph G(PipelineOutput + 1);
 
     // 1) copy and summarize producer -> consumer relations from the buffer graph
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        for (auto buffer : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const auto bufferVertex = target(buffer, mBufferGraph);
-            for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-                const auto inputPort = mBufferGraph[e].inputPort();
-                // If a stream has a lower bound of 0 or is zero extended, it does not directly
-                // affect when the consumer terminates.
-                const auto j = target(e, mBufferGraph);
-                const Kernel * const consumer = mPipeline[j];
-                const Binding & input = getInputBinding(j, inputPort);
-                const auto mayConsumeNoInput = consumer->getLowerBound(input) == RateValue{0};
-                if (LLVM_UNLIKELY(mayConsumeNoInput || input.hasAttribute(AttrId::ZeroExtended))) {
-                    continue;
-                }
-                add_edge(i, j, G);
+    for (unsigned consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
+        for (const auto & e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
+            const auto buffer = source(e, mBufferGraph);
+            const auto producer = parent(buffer, mBufferGraph);
+            const BufferRateData & rd = mBufferGraph[e];
+            const Binding & input = rd.Binding;
+            const auto mayConsumeNoInput = (rd.Minimum.numerator() == 0) && (consumer != PipelineOutput);
+            if (LLVM_UNLIKELY(mayConsumeNoInput || input.hasAttribute(AttrId::ZeroExtended))) {
+                continue;
             }
+            add_edge(producer, consumer, G);
         }
     }
+    clear_out_edges(PipelineInput, G);
 
-    // 2) copy and summarize any output scalars of the pipeline or any calls
-    for (unsigned i = PipelineOutput; i < lastCall; ++i) {
-        for (auto relationship : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
-            const auto relationshipVertex = source(relationship, mScalarDependencyGraph);
-            for (auto producer : make_iterator_range(in_edges(relationshipVertex, mScalarDependencyGraph))) {
-                const auto kernel = source(producer, mScalarDependencyGraph);
-                assert ("cannot occur" && kernel != PipelineOutput);
-                add_edge(kernel, PipelineOutput, G);
-            }
+    // 2) copy and summarize any output scalars of the pipeline
+    for (const auto & relationship : make_iterator_range(in_edges(PipelineOutput, mScalarDependencyGraph))) {
+        const auto r = source(relationship, mScalarDependencyGraph);
+        for (const auto & producer : make_iterator_range(in_edges(r, mScalarDependencyGraph))) {
+            const auto k = source(producer, mScalarDependencyGraph);
+            assert ("cannot occur" && k != PipelineOutput);
+            add_edge(k, PipelineOutput, G);
         }
     }
 
     // 3) remove any incoming edges to a kernel that must explicitly terminate;
     // 4) create a k_i -> P_out edge for every kernel with a side effect attribute
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = mPipeline[i];
+        const Kernel * const kernel = getKernel(i);
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::MustExplicitlyTerminate))) {
             clear_in_edges(i, G);
         }
@@ -76,7 +64,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     transitive_closure_dag(G);
 
     // then take the transitive reduction
-    dynamic_bitset<> sources(n, false);
+    dynamic_bitset<> sources(PipelineOutput + 1, false);
     for (unsigned u = PipelineOutput; u--; ) {
         for (auto e : make_iterator_range(in_edges(u, G))) {
             sources.set(source(e, G), true);

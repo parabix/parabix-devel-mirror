@@ -17,7 +17,7 @@ inline void reset(Vec & vec, const unsigned n) {
 inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
     assert (index >= FirstKernel && index <= LastKernel);
     mKernelIndex = index;
-    mKernel = mPipeline[index];
+    mKernel = getKernel(index);
     b->setKernel(mPipelineKernel);
     if (LLVM_LIKELY(mKernel->isStateful())) {
         Value * handle = nullptr;
@@ -881,8 +881,8 @@ Value * PipelineCompiler::getOutputStrideLength(BuilderRef b, const unsigned out
  * @brief getInitialStrideLength
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getInitialStrideLength(BuilderRef b, const StreamPort port) {
-    const Binding & binding = getBinding(mKernel, port);
-    const ProcessingRate & rate = binding.getRate();
+    const auto & binding = getBinding(port);
+    const auto & rate = binding.getRate();
     if (LLVM_LIKELY(rate.isFixed() || rate.isBounded())) {
         return b->getSize(ceiling(mKernel->getUpperBound(binding) * mKernel->getStride()));
     } else if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
@@ -899,7 +899,7 @@ Value * PipelineCompiler::getInitialStrideLength(BuilderRef b, const StreamPort 
  * @brief getMaximumStrideLength
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getMaximumStrideLength(BuilderRef b, const Binding & binding) {
-    const ProcessingRate & rate = binding.getRate();
+    const auto & rate = binding.getRate();
     if (LLVM_LIKELY(rate.isFixed() || rate.isBounded() || rate.isPopCount() || rate.isNegatedPopCount())) {
         return b->getSize(ceiling(mKernel->getUpperBound(binding) * mKernel->getStride()));
     } else if (LLVM_LIKELY(rate.isUnknown())) {

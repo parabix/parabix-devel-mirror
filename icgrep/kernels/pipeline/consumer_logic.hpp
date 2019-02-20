@@ -197,24 +197,23 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addConsumerKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const unsigned kernelIndex) {
+inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const unsigned kernel) {
     IntegerType * const sizeTy = b->getSizeTy();
-    for (const auto & e : make_iterator_range(out_edges(kernelIndex, mBufferGraph))) {
-        const auto bufferVertex = target(e, mBufferGraph);
+    for (const auto & e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+        const auto buffer = target(e, mBufferGraph);
         // If the out-degree for this buffer is zero, then we've proven that its consumption rate
         // is identical to its production rate.
-        const auto comsumedItemCountMatchesProducedItemCount = (out_degree(bufferVertex, mConsumerGraph) == 0);
-        const auto isPipelineInput = (kernelIndex == PipelineInput);
-        if (LLVM_UNLIKELY(comsumedItemCountMatchesProducedItemCount && !isPipelineInput)) {
+        const auto comsumedItemCountMatchesProducedItemCount = (out_degree(buffer, mConsumerGraph) == 0);
+        if (LLVM_UNLIKELY(comsumedItemCountMatchesProducedItemCount && (kernel != PipelineInput))) {
             continue;
         }
         const BufferRateData & rd = mBufferGraph[e];
-        const auto prefix = makeBufferName(kernelIndex, rd.Binding);
-//        if (LLVM_UNLIKELY(isPipelineInput)) {
-//            mPipelineKernel->addLocalScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
-//        } else {
+        const auto prefix = makeBufferName(kernel, rd.Binding);
+        if (LLVM_UNLIKELY(kernel == PipelineInput)) {
+            mPipelineKernel->addLocalScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+        } else {
             mPipelineKernel->addInternalScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
-//        }
+        }
     }
 }
 
@@ -278,11 +277,10 @@ inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
  * @brief setConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned buffer, not_null<Value *> consumed) const {
-    const auto pe = in_edge(buffer, mConsumerGraph);
-    const auto producerVertex = source(pe, mConsumerGraph);
-    const Kernel * const producer = mPipeline[producerVertex];
-    const Binding & binding = getBinding(producer, mConsumerGraph[pe]);
-    const auto prefix = makeBufferName(producerVertex, binding);
+    const auto pe = in_edge(buffer, mBufferGraph);
+    const auto producerVertex = source(pe, mBufferGraph);
+    const BufferRateData & rd = mBufferGraph[pe];
+    const auto prefix = makeBufferName(producerVertex, rd.Binding);
     b->setScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
 }
 

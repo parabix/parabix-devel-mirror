@@ -173,11 +173,11 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     addProducerRelationships(pipelineInput, pipelineKernel->getInputScalarBindings(), G, M);
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * k = kernels[i - firstKernel];
-        addConsumerRelationships(i, k->getInputScalarBindings(), G, M);
+        addProducerRelationships(i, k->getOutputScalarBindings(), G, M);
     }
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * k = kernels[i - firstKernel];
-        addProducerRelationships(i, k->getOutputScalarBindings(), G, M);
+        addConsumerRelationships(i, k->getInputScalarBindings(), G, M);
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
         G[firstCall + i].Callee = cast<Function>(call[i].Callee);
@@ -192,9 +192,12 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     addProducerRelationships(pipelineInput, pipelineKernel->getInputStreamSetBindings(), G, M);
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * k = kernels[i - firstKernel];
+        addProducerRelationships(i, k->getOutputStreamSetBindings(), G, M);
+    }
+    for (unsigned i = firstKernel; i <= lastKernel; ++i) {
+        const Kernel * k = kernels[i - firstKernel];
         addConsumerRelationships(i, k->getInputStreamSetBindings(), G, M);
         addImplicitConsumerRelationship(IMPLICIT_REGION_SELECTOR, i, regionSelectors, G, M);
-        addProducerRelationships(i, k->getOutputStreamSetBindings(), G, M);
     }
     addConsumerRelationships(pipelineOutput, pipelineKernel->getOutputStreamSetBindings(), G, M);
     lastRelationship[STREAM] = num_vertices(G) - 1;
@@ -632,19 +635,6 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
     }
 
     return hasZeroExtendedStream;
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePipelineList
- ** ------------------------------------------------------------------------------------------------------------- */
-Kernels PipelineCompiler::makePipelineList() const {
-    // temporary refactoring step
-    Kernels kernels(PipelineOutput + 1);
-    for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
-        kernels[i] = const_cast<Kernel *>(mPipelineGraph[i].Kernel);
-    }
-    return kernels;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

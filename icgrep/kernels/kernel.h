@@ -256,7 +256,7 @@ public:
         return mInputScalars;
     }
 
-    Binding & getInputScalarBinding(const unsigned i) {
+    const Binding & getInputScalarBinding(const unsigned i) const {
         assert (i < mInputScalars.size());
         return mInputScalars[i];
     }
@@ -289,7 +289,7 @@ public:
         return mOutputScalars;
     }
 
-    Binding & getOutputScalarBinding(const unsigned i) {
+    const Binding & getOutputScalarBinding(const unsigned i) const {
         assert (i < mInputScalars.size());
         return mOutputScalars[i];
     }
@@ -326,7 +326,7 @@ public:
         return mHandle;
     }
 
-    void setHandle(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const instance);
+    void setHandle(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const handle) const;
 
     llvm::Module * setModule(llvm::Module * const module);
 
@@ -551,7 +551,7 @@ protected:
 
     mutable bool                    mIsGenerated;
 
-    llvm::Value *                   mHandle;
+    mutable llvm::Value *           mHandle;
     llvm::Module *                  mModule;
     llvm::StructType *              mKernelStateType;
 

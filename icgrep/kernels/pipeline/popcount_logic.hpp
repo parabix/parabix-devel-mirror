@@ -35,7 +35,7 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
     Map M;
 
     for (unsigned kernelVertex = FirstKernel; kernelVertex <= LastKernel; ++kernelVertex) {
-        const Kernel * const kernel = mPipeline[kernelVertex];
+        const Kernel * const kernel = getKernel(kernelVertex);
         const auto numOfInputs = in_degree(kernelVertex, mBufferGraph);
         const auto numOfOutputs = out_degree(kernelVertex, mBufferGraph);
 
@@ -558,9 +558,8 @@ void PipelineCompiler::addPopCountScalarsToPipelineKernel(BuilderRef b, const un
         const PopCountData & pc = getPopCountData(bufferVertex);
         if (LLVM_UNLIKELY(!pc.UsesConsumedCount)) {
             const auto e = in_edge(bufferVertex, mBufferGraph);
-            const auto port = mBufferGraph[e].outputPort();
-            const Binding & output = mPipeline[index]->getOutputStreamSetBinding(port);
-            const auto bufferName = makeBufferName(index, output);
+            const BufferRateData & rd = mBufferGraph[e];
+            const auto bufferName = makeBufferName(index, rd.Binding);
             mPipelineKernel->addInternalScalar(b->getSizeTy(), bufferName + REFERENCE_PROCESSED_COUNT);
         }
     });
@@ -756,7 +755,7 @@ RateValue PipelineCompiler::popCountReferenceFieldWidth(const unsigned bufferVer
     for (const auto e : make_iterator_range(in_edges(bufferVertex, mPopCountGraph))) {
         const auto refPort = mPopCountGraph[e].Port;
         const auto kernelVertex = parent(source(e, mPopCountGraph), mPopCountGraph);
-        const Kernel * const k = mPipeline[kernelVertex];
+        const Kernel * const k = getKernel(kernelVertex);
         const Binding & b = getInputBinding(kernelVertex, refPort);
         assert (b.getRate().isFixed());
         RateValue sw = lowerBound(k, b);

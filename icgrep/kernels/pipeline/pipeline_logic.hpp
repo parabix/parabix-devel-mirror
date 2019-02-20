@@ -55,7 +55,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex) {
-    const Kernel * const kernel = mPipeline[kernelIndex];
+    const Kernel * const kernel = getKernel(kernelIndex);
     IntegerType * const sizeTy = b->getSizeTy();
 
     // TODO: if we've proven we do not need synchronization then we've already proven that
@@ -104,7 +104,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     mScalarCache.clear();
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = mPipeline[i];
+        const Kernel * const kernel = getKernel(i);
         if (kernel->isStateful()) {
             if (kernel->hasFamilyName()) {
 
@@ -341,7 +341,7 @@ inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
  * @brief requiresSynchronization
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::requiresSynchronization(const unsigned kernelIndex) const {
-    const Kernel * const kernel = mPipeline[kernelIndex];
+    const Kernel * const kernel = getKernel(kernelIndex);
     if (kernel->hasAttribute(AttrId::SynchronizationFree)) {
         return false;
     }

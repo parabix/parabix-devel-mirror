@@ -191,7 +191,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     readFinalProducedItemCounts(b);
     updateOptionalCycleCounter(b);
     mHalted = mHaltedPhi;
-    assert (mKernel == mPipeline[mKernelIndex] && b->getKernel() == mKernel);
+    assert (mKernel == getKernel(mKernelIndex) && b->getKernel() == mKernel);
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("* " + prefix + ".madeProgress", mPipelineProgress);
     #endif
@@ -359,11 +359,9 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         Value * const produced = b->CreateLoad(outPtr);
 
         for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
-            const auto inputPort = mBufferGraph[e].outputPort();
+            const BufferRateData & rd = mBufferGraph[e];
             const auto kernelIndex = source(e, mBufferGraph);
-            const Kernel * const kernel = mPipeline[kernelIndex];
-            const Binding & output = kernel->getOutputStreamSetBinding(inputPort);
-            const auto prefix = makeBufferName(kernelIndex, output);
+            const auto prefix = makeBufferName(kernelIndex, rd.Binding);
             Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
             b->CreateStore(produced, ptr);
         }

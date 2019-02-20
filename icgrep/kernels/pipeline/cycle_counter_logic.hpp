@@ -107,7 +107,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
             Value * percentage = b->CreateFDiv(b->CreateFMul(fCycles, FP_100), fTotalCycle);
 
-            const Kernel * const kernel = mPipeline[i];
+            const Kernel * const kernel = getKernel(i);
             const auto formatString = kernel->getName() + ": %7.2e items processed;"
                                                           "  %7.2e CPU cycles,"
                                                           "  %6.2f cycles per item,"

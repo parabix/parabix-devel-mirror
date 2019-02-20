@@ -77,7 +77,7 @@ void enumerateProducerBindings(const VertexType type, const Vertex producerVerte
             out << "Both " << K[existingProducer]->getName() <<
                    " and " << K[producerVertex]->getName() <<
                    " produce the same stream.";
-            throw std::runtime_error(out.str());
+            report_fatal_error(out.str());
         }
         const auto bufferVertex = add_vertex(type, G);
         M.emplace(rel, bufferVertex);
@@ -86,12 +86,29 @@ void enumerateProducerBindings(const VertexType type, const Vertex producerVerte
 }
 
 template <typename Array>
-void enumerateConsumerBindings(const VertexType type, const Vertex consumerVertex, const Array & array, Graph & G, Map & M) {
+void enumerateConsumerBindings(const VertexType type, const Vertex consumerVertex, const Array & array, Graph & G, Map & M, const Kernels & K) {
     const auto n = array.size();
     for (unsigned i = 0; i < n; ++i) {
         const Relationship * const rel = getRelationship(array[i]);
         if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
-        const auto f = M.find(rel); assert (f != M.end());
+        const auto f = M.find(rel);
+        if (LLVM_UNLIKELY(f == M.end())) {
+            std::string tmp;
+            raw_string_ostream out(tmp);
+            if (consumerVertex < K.size()) {
+                const Kernel * const consumer = K[consumerVertex];
+                const Binding & input = ((type == VertexType::Scalar)
+                                           ? consumer->getInputScalarBinding(i)
+                                           : consumer->getInputStreamSetBinding(i));
+                out << "input " << i << " (" << input.getName() << ") of ";
+                out << "kernel " << consumer->getName();
+            } else { // TODO: function calls should retain name
+                out << "argument " << i << " of ";
+                out << "function call " << (consumerVertex - K.size() + 1);
+            }
+            out << " is not a constant, produced by a kernel or an input to the pipeline";
+            report_fatal_error(out.str());
+        }
         const auto bufferVertex = f->second;
         assert (bufferVertex < num_vertices(G));
         assert (G[bufferVertex] == type);
@@ -161,8 +178,8 @@ Kernel * PipelineBuilder::makeKernel() {
 
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
-    const auto pipelineInput = 0U;
-    const auto firstKernel = 1U;
+    constexpr auto pipelineInput = 0U;
+    constexpr auto firstKernel = 1U;
     const auto firstCall = firstKernel + numOfKernels;
     const auto pipelineOutput = firstCall + numOfCalls;
 
@@ -173,16 +190,19 @@ Kernel * PipelineBuilder::makeKernel() {
     enumerateProducerBindings(VertexType::StreamSet, pipelineInput, mInputStreamSets, G, M, mKernels);
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const Kernel * const k = mKernels[i];
-        enumerateConsumerBindings(VertexType::Scalar, firstKernel + i, k->getInputScalarBindings(), G, M);
-        enumerateConsumerBindings(VertexType::StreamSet, firstKernel + i, k->getInputStreamSetBindings(), G, M);
         enumerateProducerBindings(VertexType::Scalar, firstKernel + i, k->getOutputScalarBindings(), G, M, mKernels);
         enumerateProducerBindings(VertexType::StreamSet, firstKernel + i, k->getOutputStreamSetBindings(), G, M, mKernels);
     }
-    for (unsigned i = 0; i < numOfCalls; ++i) {
-        enumerateConsumerBindings(VertexType::Scalar, firstCall + i, mCallBindings[i].Args, G, M);
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+        const Kernel * const k = mKernels[i];
+        enumerateConsumerBindings(VertexType::Scalar, firstKernel + i, k->getInputScalarBindings(), G, M, mKernels);
+        enumerateConsumerBindings(VertexType::StreamSet, firstKernel + i, k->getInputStreamSetBindings(), G, M, mKernels);
     }
-    enumerateConsumerBindings(VertexType::Scalar, pipelineOutput, mOutputScalars, G, M);
-    enumerateConsumerBindings(VertexType::StreamSet, pipelineOutput, mOutputStreamSets, G, M);
+    for (unsigned i = 0; i < numOfCalls; ++i) {
+        enumerateConsumerBindings(VertexType::Scalar, firstCall + i, mCallBindings[i].Args, G, M, mKernels);
+    }
+    enumerateConsumerBindings(VertexType::Scalar, pipelineOutput, mOutputScalars, G, M, mKernels);
+    enumerateConsumerBindings(VertexType::StreamSet, pipelineOutput, mOutputStreamSets, G, M, mKernels);
 
     std::string signature;
     signature.reserve(1024);

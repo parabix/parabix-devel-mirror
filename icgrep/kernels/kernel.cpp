@@ -53,7 +53,7 @@ const static auto TERMINATE_SUFFIX = "_Terminate";
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::setHandle(const std::unique_ptr<KernelBuilder> & b, Value * const handle) {
+void Kernel::setHandle(const std::unique_ptr<KernelBuilder> & b, Value * const handle) const {
     assert ("handle cannot be null!" && handle);
     assert ("handle must be a pointer!" && handle->getType()->isPointerTy());
     assert ("handle must be a kernel state object!" && (handle->getType()->getPointerElementType() == mKernelStateType));

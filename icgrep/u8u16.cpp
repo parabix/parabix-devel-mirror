@@ -362,7 +362,8 @@ u8u16FunctionType generatePipeline2(CPUDriver & pxDriver) {
         "nonASCII", std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
 
     auto B = P->CreateOptimizationBranch(nonAscii,
-        {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}}, {Binding{"u16bytes", u16bytes, BoundedRate(0, 1)}});
+        {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}},
+        {Binding{"u16bytes", u16bytes, BoundedRate(0, 1)}});
 
     makeAllAsciiBranch(B->getAllZeroBranch(), ByteStream, u16bytes);
 

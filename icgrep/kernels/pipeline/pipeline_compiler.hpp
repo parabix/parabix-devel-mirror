@@ -463,8 +463,6 @@ protected:
     static void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels);
     static void removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall);
 
-    Kernels makePipelineList() const;
-
     bool hasZeroExtendedStream() const;
 
     void determineEvaluationOrderOfKernelIO();
@@ -503,14 +501,9 @@ protected:
 
     LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
 
-    static LLVM_READNONE const Binding & getBinding(const Kernel * kernel, const StreamPort port) {
-        if (port.first == Port::Input) {
-            return kernel->getInputStreamSetBinding(port.second);
-        } else if (port.first == Port::Output) {
-            return kernel->getOutputStreamSetBinding(port.second);
-        }
-        llvm_unreachable("unknown port binding type!");
-    }
+    LLVM_READNONE const Binding & getBinding(const StreamPort port) const;
+    LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
+
 
     void printBufferGraph(const BufferGraph & G, raw_ostream & out);
 
@@ -533,7 +526,7 @@ protected:
     PipelineKernel * const                      mPipelineKernel;
 
     unsigned                                    mKernelIndex = 0;
-    Kernel *                                    mKernel = nullptr;
+    const Kernel *                              mKernel = nullptr;
 
     // pipeline state
     Value *                                     mInitialSegNo = nullptr;
@@ -618,7 +611,7 @@ protected:
     Value *                                     mPopCountState;
     flat_map<unsigned, PopCountData>            mPopCountData;
 
-    // pipeline state
+    // analysis state
     const RelationshipGraph                     mPipelineGraph;
     static constexpr unsigned                   PipelineInput = 0;
     static constexpr unsigned                   FirstKernel = 1;
@@ -630,23 +623,17 @@ protected:
     const unsigned                              LastScalar;
     const unsigned                              FirstStreamSet;
     const unsigned                              LastStreamSet;
-    const Kernels                               mPipeline;
-
-    // analysis state
 
     std::vector<Binding>                        ImplicitBindings; // <- change to graph property
     const BufferGraph                           mBufferGraph;
 
     const bool                                  mHasZeroExtendedStream;
-
-
     ConsumerGraph                               mConsumerGraph;
     const RelationshipGraph                     mScalarDependencyGraph;
     ScalarCache                                 mScalarCache;
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
-
 
 };
 
@@ -739,7 +726,6 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , LastScalar(P.LastScalar)
 , FirstStreamSet(P.FirstStreamSet)
 , LastStreamSet(P.LastStreamSet)
-, mPipeline(makePipelineList())
 , mBufferGraph(makeBufferGraph(b))
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
@@ -770,7 +756,7 @@ inline LLVM_READNONE RateValue lowerBound(not_null<const Kernel *> kernel, const
  * @brief makeFamilyPrefix
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE std::string PipelineCompiler::makeFamilyPrefix(const unsigned kernelIndex) const {
-    const Kernel * k = mPipeline[kernelIndex];
+    const Kernel * k = getKernel(kernelIndex);
     const Kernels & K = mPipelineKernel->getKernels();
     const auto f = std::find(K.begin(), K.end(), k);
     assert (f != K.end());
@@ -785,7 +771,7 @@ inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned
     std::string tmp;
     raw_string_ostream out(tmp);
     out << '@';
-    out << mPipeline[kernelIndex]->getName();
+    out << getKernel(kernelIndex)->getName();
     out << '.';
     out << kernelIndex;
     out.flush();
@@ -799,7 +785,7 @@ inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned
     std::string tmp;
     raw_string_ostream out(tmp);
     out << '@';
-    out << mPipeline[kernelIndex]->getName();
+    out << getKernel(kernelIndex)->getName();
     out << '_';
     out << binding.getName();
     out << '.';
