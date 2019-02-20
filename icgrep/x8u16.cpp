@@ -25,6 +25,7 @@
 #include <pablo/pe_zeroes.h>
 #include <toolchain/cpudriver.h>
 #include <toolchain/toolchain.h>
+#include <llvm/Support/raw_ostream.h>
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -59,7 +60,7 @@ std::pair<std::vector<CC *>, std::vector<CC *>> transcoderClasses(cc::UnicodeMap
     unsigned common = a.getCommon();
     unsigned total = a.getSize();
     if (total != 256) llvm::report_fatal_error("Not single byte extended ASCII");
-    unsigned K = std::log2(common);
+    unsigned K = 8;
     unsigned M = 16;
     std::vector<CC *> bitXfrmClasses;
     bitXfrmClasses.reserve(K);
@@ -156,10 +157,9 @@ void TranscoderKernelBuilder::generatePabloMethod() {
         PabloAST * outStrm = ccc.compileCC(outputBitClasses[i]);
         pb.createAssign(pb.createExtract(outputVar, K + i), outStrm);
     }
-    for (unsigned i = outputBitClasses.size(); i < 16; i++) {
-        pb.createAssign(pb.createExtract(outputVar, K + i), pb.createZeroes());
+    for (unsigned i = K + outputBitClasses.size(); i < 16; i++) {
+        pb.createAssign(pb.createExtract(outputVar, i), pb.createZeroes());
     }
-    
 }
 
 typedef void (*x8u16FunctionType)(uint32_t fd, const char *);
