@@ -1,0 +1,2 @@
+This directory contains files from WHATWG, downloaded using:
+wget -r -l2 -nd https://encoding.spec.whatwg.org/
