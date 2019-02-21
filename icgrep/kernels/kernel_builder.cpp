@@ -9,7 +9,7 @@ using namespace llvm;
 
 namespace kernel {
 
-using Port = Kernel::Port;
+using PortType = Kernel::PortType;
 
 Value * KernelBuilder::getScalarFieldPtr(const StringRef fieldName) {
     return mKernel->getScalarFieldPtr(*this, fieldName);

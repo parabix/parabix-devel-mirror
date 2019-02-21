@@ -25,7 +25,7 @@ using namespace llvm;
 
 namespace kernel {
 
-using Port = Kernel::Port;
+using PortType = Kernel::PortType;
 using StreamPort = Kernel::StreamSetPort;
 using AttrId = Attribute::KindId;
 using RateId = ProcessingRate::KindId;

@@ -179,15 +179,13 @@ void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<Ker
 Value * BlockOrientedKernel::getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b,
                                                       const ProcessingRate & rate) {
     assert (rate.isPopCount() || rate.isNegatedPopCount());
-    Port refPort;
-    unsigned refIndex = 0;
-    std::tie(refPort, refIndex) = getStreamPort(rate.getReference());
-    assert (refPort == Port::Input);
+    const auto refPort = getStreamPort(rate.getReference());
+    assert (refPort.Type == PortType::Input);
     Value * array = nullptr;
     if (rate.isNegatedPopCount()) {
-        array = mNegatedPopCountRateArray[refIndex];
+        array = mNegatedPopCountRateArray[refPort.Number];
     } else {
-        array = mPopCountRateArray[refIndex];
+        array = mPopCountRateArray[refPort.Number];
     }
     assert (array && "missing pop count array attribute");
     Value * const currentSum = b->CreateLoad(b->CreateGEP(array, mStrideBlockIndex));
@@ -385,12 +383,10 @@ void BlockOrientedKernel::annotateInputBindingsWithPopCountArrayAttributes() {
     auto checkPopCount = [&](const Binding & binding) {
         const ProcessingRate & rate = binding.getRate();
         if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
-            Kernel::Port type;
-            unsigned refPort;
-            std::tie(type, refPort) = getStreamPort(rate.getReference());
-            assert ("pop count rate cannot refer to an output stream" && (type == Kernel::Port::Input));
+            const auto refPort = getStreamPort(rate.getReference());
+            assert ("pop count rate cannot refer to an output stream" && (refPort.Type == PortType::Input));
             const auto targetType = rate.isPopCount() ? POSITIVE : NEGATIVE;
-            add_edge(refPort, targetType, G);
+            add_edge(refPort.Number, targetType, G);
         }
     };
 

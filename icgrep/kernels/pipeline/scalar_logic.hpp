@@ -10,15 +10,14 @@ namespace kernel {
  *
  * producer -> buffer/scalar -> consumer
  ** ------------------------------------------------------------------------------------------------------------- */
-RelationshipGraph PipelineCompiler::makeScalarDependencyGraph() const {
-    RelationshipGraph G(LastScalar + 1);
+ScalarGraph PipelineCompiler::makeScalarDependencyGraph() const {
+    ScalarGraph G(LastScalar + 1);
     for (unsigned i = FirstScalar; i <= LastScalar; ++i) {
-        G[i].Relationship = mPipelineGraph[i].Relationship;
         for (const auto & e : make_iterator_range(in_edges(i, mPipelineGraph))) {
-            add_edge(source(e, mPipelineGraph), i, mPipelineGraph[e], G);
+            add_edge(source(e, mPipelineGraph), i, mPipelineGraph[e].Number, G);
         }
         for (const auto & e : make_iterator_range(out_edges(i, mPipelineGraph))) {
-            add_edge(i, target(e, mPipelineGraph), mPipelineGraph[e], G);
+            add_edge(i, target(e, mPipelineGraph), mPipelineGraph[e].Number, G);
         }
     }
     return G;
@@ -30,17 +29,16 @@ RelationshipGraph PipelineCompiler::makeScalarDependencyGraph() const {
 std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
     std::vector<Value *> args;
     b->setKernel(mPipelineKernel);
-    for (unsigned k = FirstCall; k <= LastCall; ++k) {
-        writeOutputScalars(b, k, args);
-        Function * const f = mPipelineGraph[k].Callee; assert (f);
+    for (unsigned call = FirstCall; call <= LastCall; ++call) {
+        writeOutputScalars(b, call, args);
+        Function * const f = mPipelineGraph[call].Callee; assert (f);
         auto i = f->arg_begin();
         for (auto j = args.begin(); j != args.end(); ++i, ++j) {
             assert (i != f->arg_end());
             *j = b->CreateZExtOrTrunc(*j, i->getType());
         }
         assert (i == f->arg_end());
-        Value * const result = b->CreateCall(f, args);
-        mScalarCache.emplace(k, result);
+        mScalarValue[call] = b->CreateCall(f, args);
     }
     writeOutputScalars(b, PipelineOutput, args);
     return args;
@@ -50,11 +48,11 @@ std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
  * @brief writeOutputScalars
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args) {
-    const auto n = in_degree(index, mScalarDependencyGraph);
+    const auto n = in_degree(index, mScalarGraph);
     args.resize(n);
-    for (const auto e : make_iterator_range(in_edges(index, mScalarDependencyGraph))) {
-        const auto scalar = source(e, mScalarDependencyGraph);
-        const auto k = mScalarDependencyGraph[e];
+    for (const auto e : make_iterator_range(in_edges(index, mScalarGraph))) {
+        const auto scalar = source(e, mScalarGraph);
+        const auto k = mScalarGraph[e];
         args[k] = getScalar(b, scalar);
     }
 }
@@ -62,18 +60,42 @@ void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, st
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getScalar(BuilderRef b, const RelationshipGraph::vertex_descriptor scalar) {
-    const auto f = mScalarCache.find(scalar);
-    if (LLVM_UNLIKELY(f != mScalarCache.end())) {
-        return f->second;
+Value * PipelineCompiler::getScalar(BuilderRef b, const unsigned index) {
+    Value * value = mScalarValue[index];
+    if (value) {
+        return value;
     }
-    const auto producer = in_edge(scalar, mScalarDependencyGraph);
-    const auto i = source(producer, mScalarDependencyGraph);
-    const auto j = mScalarDependencyGraph[producer];
-    Value * value = nullptr;
+    if (LLVM_UNLIKELY(in_degree(index, mScalarGraph) == 0)) {
+        assert (index >= FirstScalar && index <= LastScalar);
+        const Relationship * const rel = mPipelineGraph[index].Relationship; assert (rel);
+        value = cast<ScalarConstant>(rel)->value();
+    } else {
+        const auto producer = in_edge(index, mScalarGraph);
+        const auto i = source(producer, mScalarGraph);
+        const auto j = mScalarGraph[producer];
+        if (i == PipelineInput) {
+            const Binding & input = mPipelineKernel->getInputScalarBinding(j);
+            value = b->getScalarField(input.getName());
+        } else { // output scalar of some kernel
+            Value * const outputScalars = getScalar(b, i);
+            if (LLVM_UNLIKELY(outputScalars == nullptr)) {
+                report_fatal_error("Internal error: pipeline is unable to locate valid output scalar");
+            }
+            if (outputScalars->getType()->isAggregateType()) {
+                value = b->CreateExtractValue(outputScalars, {j});
+            } else { assert (j == 0 && "scalar type is not an aggregate");
+                value = outputScalars;
+            }
+        }
+    }
+    /*
+    const auto producer = in_edge(index, mScalarGraph);
+    const auto i = source(producer, mScalarGraph);
+    const auto j = mScalarGraph[producer];
     if (i == PipelineInput) {
         if (LLVM_UNLIKELY(j == SCALAR_CONSTANT)) {
-            const Relationship * const rel = mScalarDependencyGraph[scalar].Relationship; assert (rel);
+            assert (index >= FirstScalar && index <= LastScalar);
+            const Relationship * const rel = mPipelineGraph[index].Relationship; assert (rel);
             value = cast<ScalarConstant>(rel)->value();
         } else {
             const Binding & input = mPipelineKernel->getInputScalarBinding(j);
@@ -90,8 +112,9 @@ Value * PipelineCompiler::getScalar(BuilderRef b, const RelationshipGraph::verte
             value = outputScalars;
         }
     }
+    */
     assert (value);
-    mScalarCache.emplace(scalar, value);
+    mScalarValue[index] = value;
     return value;
 }
 

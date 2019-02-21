@@ -857,7 +857,7 @@ Value * PipelineCompiler::getInputStrideLength(BuilderRef b, const unsigned inpu
     if (mInputStrideLength[inputPort]) {
         return mInputStrideLength[inputPort];
     } else {
-        Value * const strideLength = getInitialStrideLength(b, StreamPort{Port::Input, inputPort});
+        Value * const strideLength = getInitialStrideLength(b, StreamPort{PortType::Input, inputPort});
         mInputStrideLength[inputPort] = strideLength;
         return strideLength;
     }
@@ -871,7 +871,7 @@ Value * PipelineCompiler::getOutputStrideLength(BuilderRef b, const unsigned out
     if (mOutputStrideLength[outputPort]) {
         return mOutputStrideLength[outputPort];
     } else {
-        Value * const strideLength = getInitialStrideLength(b, StreamPort{Port::Output, outputPort});
+        Value * const strideLength = getInitialStrideLength(b, StreamPort{PortType::Output, outputPort});
         mOutputStrideLength[outputPort] = strideLength;
         return strideLength;
     }

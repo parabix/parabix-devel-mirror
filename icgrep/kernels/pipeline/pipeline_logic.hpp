@@ -102,7 +102,9 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
  * @brief generateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
-    mScalarCache.clear();
+
+    std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
+
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
         if (kernel->isStateful()) {
@@ -115,19 +117,20 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             }
         }
     }
+
     constructBuffers(b);
     std::vector<Value *> args;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
         const auto hasHandle = mKernel->isStateful() ? 1U : 0U;
-        args.resize(hasHandle + in_degree(i, mScalarDependencyGraph));
+        args.resize(hasHandle + in_degree(i, mScalarGraph));
         if (LLVM_LIKELY(hasHandle)) {
             args[0] = mKernel->getHandle();
         }
         b->setKernel(mPipelineKernel);
-        for (const auto ce : make_iterator_range(in_edges(i, mScalarDependencyGraph))) {
-            const auto j = mScalarDependencyGraph[ce] + hasHandle;
-            const auto scalar = source(ce, mScalarDependencyGraph);
+        for (const auto ce : make_iterator_range(in_edges(i, mScalarGraph))) {
+            const auto j = mScalarGraph[ce] + hasHandle;
+            const auto scalar = source(ce, mScalarGraph);
             args[j] = getScalar(b, scalar);
         }
         b->setKernel(mKernel);
@@ -150,7 +153,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
-    mScalarCache.clear();
+    std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
     readPipelineIOItemCounts(b);
     if (mPipelineKernel->getNumOfThreads() == 1) {
         generateSingleThreadKernelMethod(b);
@@ -275,7 +278,7 @@ Value * PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
  * @brief generateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
-    mScalarCache.clear();
+    std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
     printOptionalCycleCounter(b);
     std::vector<Value *> params;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -285,8 +288,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         if (LLVM_LIKELY(mKernel->isStateful())) {
             params.push_back(mKernel->getHandle());
         }
-        Value * const result = b->CreateCall(getFinalizeFunction(b), params);
-        mScalarCache.emplace(i, result);
+        mScalarValue[i] = b->CreateCall(getFinalizeFunction(b), params);
     }
     releaseBuffers(b);
 }

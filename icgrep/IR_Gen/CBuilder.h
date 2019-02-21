@@ -271,11 +271,11 @@ public:
 
     llvm::Value * CreateAtomicFetchAndSub(llvm::Value * val, llvm::Value * ptr);
 
-    void CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage) {
+    void CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage) {
         return __CreateAssert(CreateIsNotNull(assertion), failureMessage);
     }
 
-    void CreateAssertZero(llvm::Value * assertion, const llvm::Twine & failureMessage) {
+    void CreateAssertZero(llvm::Value * assertion, const llvm::Twine failureMessage) {
         return __CreateAssert(CreateIsNull(assertion), failureMessage);
     }
 
@@ -406,7 +406,7 @@ protected:
 
     virtual std::string getKernelName() const = 0;
 
-    void __CreateAssert(llvm::Value * assertion, const llvm::Twine & failureMessage);
+    void __CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage);
 
 protected:
 

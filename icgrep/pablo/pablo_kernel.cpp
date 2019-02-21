@@ -26,31 +26,28 @@ using namespace llvm;
 namespace pablo {
 
 Var * PabloKernel::getInputStreamVar(const std::string & name) {
-    Port port; unsigned index;
-    std::tie(port, index) = getStreamPort(name);
-    assert (port == Port::Input);
-    return mInputs[index];
+    const auto port = getStreamPort(name);
+    assert (port.Type == PortType::Input);
+    return mInputs[port.Number];
 }
 
 std::vector<PabloAST *> PabloKernel::getInputStreamSet(const std::string & name) {
-    unsigned index; Port port;
-    std::tie(port, index) = getStreamPort(name);
-    assert (port == Port::Input);
-    const Binding & input = getInputStreamSetBinding(index);
+    const auto port = getStreamPort(name);
+    assert (port.Type == PortType::Input);
+    const Binding & input = getInputStreamSetBinding(port.Number);
     const auto numOfStreams = IDISA::getNumOfStreams(input.getType());
     std::vector<PabloAST *> inputSet(numOfStreams);
     for (unsigned i = 0; i < numOfStreams; i++) {
-        inputSet[i] = mEntryScope->createExtract(mInputs[index], mEntryScope->getInteger(i));
+        inputSet[i] = mEntryScope->createExtract(mInputs[port.Number], mEntryScope->getInteger(i));
     }
     return inputSet;
 }
 
 
 Var * PabloKernel::getOutputStreamVar(const std::string & name) {
-    Port port; unsigned index;
-    std::tie(port, index) = getStreamPort(name);
-    assert (port == Port::Output);
-    return mOutputs[index];
+    const auto port = getStreamPort(name);
+    assert (port.Type == PortType::Output);
+    return mOutputs[port.Number];
 }
 
 Var * PabloKernel::getOutputScalarVar(const std::string & name) {

@@ -39,7 +39,7 @@ namespace kernel {
 
 #include <util/enum_flags.hpp>
 
-using Port = Kernel::Port;
+using PortType = Kernel::PortType;
 using StreamPort = Kernel::StreamSetPort;
 using AttrId = Attribute::KindId;
 using RateValue = ProcessingRate::RateValue;
@@ -51,6 +51,37 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
+
+
+union RelationshipNode {
+    const kernel::Kernel * Kernel = nullptr;
+    const kernel::Relationship * Relationship;
+    llvm::Function * Callee;
+
+    RelationshipNode() = default;
+    RelationshipNode(kernel::Kernel * kernel) : Kernel(kernel) { }
+    RelationshipNode(kernel::Relationship * relationship) : Relationship(relationship) { }
+    RelationshipNode(llvm::Function * callee) : Callee(callee) { }
+};
+
+struct RelationshipType : public StreamPort {
+
+    enum Id : unsigned {
+        Explicit = 0
+        , Constant = 1
+        , ImplicitRegionSelector = 2
+    };
+
+    Id Relationship;
+
+    RelationshipType() : StreamPort(), Relationship(Explicit) { }
+    RelationshipType & operator = (const RelationshipType &) = default;
+    RelationshipType(PortType type, unsigned number, Id relationship = Explicit) : StreamSetPort(type, number), Relationship(relationship) { }
+    RelationshipType(StreamPort port) : StreamSetPort(port), Relationship(Explicit) { }
+};
+
+using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType>;
+
 
 enum class BufferType : unsigned {
     Internal = 0
@@ -74,13 +105,13 @@ struct BufferNode {
 };
 
 inline unsigned InputPort(const StreamPort port) {
-    assert (port.first == Kernel::Port::Input);
-    return port.second;
+    assert (port.Type == PortType::Input);
+    return port.Number;
 }
 
 inline unsigned OutputPort(const StreamPort port) {
-    assert (port.first == Kernel::Port::Output);
-    return port.second;
+    assert (port.Type == PortType::Output);
+    return port.Number;
 }
 
 // NOTE: std::reference_wrapper does not allow zero init, required by boost graph
@@ -101,7 +132,7 @@ private:
 
 struct BufferRateData {
 
-    StreamPort Port;
+    RelationshipType Port;
     BindingRef Binding;
     RateValue  Minimum;
     RateValue  Maximum;
@@ -116,7 +147,7 @@ struct BufferRateData {
 
     BufferRateData() = default;
 
-    BufferRateData(StreamPort port, BindingRef binding, RateValue min, RateValue max)
+    BufferRateData(RelationshipType port, BindingRef binding, RateValue min, RateValue max)
     : Port(port), Binding(binding), Minimum(min), Maximum(max) { }
 
 };
@@ -143,22 +174,16 @@ using KernelMap = flat_map<const Kernel *, Value>;
 
 using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
 
-union RelationshipNode {
-    const kernel::Kernel * Kernel = nullptr;
-    const kernel::Relationship * Relationship;
-    llvm::Function * Callee;
+#define SCALAR_CONSTANT (-1U)
 
-    RelationshipNode() = default;
-    RelationshipNode(kernel::Kernel * kernel) : Kernel(kernel) { }
-    RelationshipNode(kernel::Relationship * relationship) : Relationship(relationship) { }
-    RelationshipNode(llvm::Function * callee) : Callee(callee) { }
-};
+#define IMPLICIT_REGION_SELECTOR (-1U)
 
-using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, unsigned>;
+#define IS_EXPLICIT_PORT(x) (LLVM_LIKELY((x) < IMPLICIT_REGION_SELECTOR))
+
 using RelationshipVertex = RelationshipGraph::vertex_descriptor;
 using RelationshipMap = RelMap<RelationshipVertex>;
 
-using ScalarCache = flat_map<RelationshipGraph::vertex_descriptor, Value *>;
+using ScalarGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 struct OverflowRequirement {
     unsigned copyBack;
@@ -235,11 +260,6 @@ const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
 
-#define SCALAR_CONSTANT (-1U)
-
-#define IMPLICIT_REGION_SELECTOR (-1U)
-#define IS_EXPLICIT_PORT(x) (LLVM_LIKELY((x) < IMPLICIT_REGION_SELECTOR)) // Is x < MIN(IMPLICIT PORTS)
-
 class PipelineCompiler {
 
     template <typename T, unsigned n = 16>
@@ -305,6 +325,9 @@ protected:
     void checkForSufficientInputDataAndOutputSpace(BuilderRef b);
     void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target, Value * const halting);
     void determineNumOfLinearStrides(BuilderRef b);
+
+    void enterRegionSpan(BuilderRef b);
+
     void calculateNonFinalItemCounts(BuilderRef b);
     void calculateFinalItemCounts(BuilderRef b);
 
@@ -312,6 +335,8 @@ protected:
 
     void writeKernelCall(BuilderRef b);
     Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, Vec<Value *, 64> &args);
+
+    void exitRegionSpan(BuilderRef b);
 
     void normalTerminationCheck(BuilderRef b, Value * const isFinal);
 
@@ -340,7 +365,8 @@ protected:
 
     void writeUpdatedItemCounts(BuilderRef b, const bool final);
 
-    Value * getScalar(BuilderRef b, const RelationshipGraph::vertex_descriptor scalar);
+    void writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args);
+    Value * getScalar(BuilderRef b, const unsigned index);
 
 // intra-kernel functions
 
@@ -467,7 +493,7 @@ protected:
 
     void determineEvaluationOrderOfKernelIO();
     TerminationGraph makeTerminationGraph();
-    RelationshipGraph makeScalarDependencyGraph() const;
+    ScalarGraph makeScalarDependencyGraph() const;
     PipelineIOGraph makePipelineIOGraph() const;
 
 // misc. functions
@@ -506,8 +532,6 @@ protected:
 
 
     void printBufferGraph(const BufferGraph & G, raw_ostream & out);
-
-    void writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args);
 
     void verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const;
 
@@ -565,9 +589,13 @@ protected:
     PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
+    PHINode *                                   mFirstRegionPhi = nullptr;
+    PHINode *                                   mLastRegionPhi = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
     Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
+
+
 
     Vec<Value *>                                mIsInputClosed;
     Vec<Value *>                                mIsInputZeroExtended;
@@ -629,15 +657,15 @@ protected:
 
     const bool                                  mHasZeroExtendedStream;
     ConsumerGraph                               mConsumerGraph;
-    const RelationshipGraph                     mScalarDependencyGraph;
-    ScalarCache                                 mScalarCache;
+    ScalarGraph                                 mScalarGraph;
+    Vec<Value *>                                mScalarValue;
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
 
 };
 
-const StreamPort PipelineCompiler::FAKE_CONSUMER{Port::Input, std::numeric_limits<unsigned>::max()};
+const StreamPort PipelineCompiler::FAKE_CONSUMER{PortType::Input, std::numeric_limits<unsigned>::max()};
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
 
@@ -729,7 +757,8 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mBufferGraph(makeBufferGraph(b))
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
-, mScalarDependencyGraph(makeScalarDependencyGraph())
+, mScalarGraph(makeScalarDependencyGraph())
+, mScalarValue(LastScalar + 1)
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
 , mPopCountGraph(makePopCountGraph()) {
@@ -831,5 +860,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
 #include "scalar_logic.hpp"
+#include "region_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

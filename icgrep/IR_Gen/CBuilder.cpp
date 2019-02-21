@@ -1004,7 +1004,7 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 }
 #endif
 
-void CBuilder::__CreateAssert(Value * const assertion, const Twine & failureMessage) {
+void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage) {
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
         if (LLVM_UNLIKELY(cast<Constant>(assertion)->isNullValue())) {
             report_fatal_error(failureMessage);

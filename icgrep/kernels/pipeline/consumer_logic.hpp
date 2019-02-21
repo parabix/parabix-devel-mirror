@@ -169,7 +169,7 @@ inline void PipelineCompiler::initializeConsumedItemCount(const unsigned bufferV
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
-        if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
+        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
         const auto bufferVertex = source(e, mConsumerGraph);
         ConsumerNode & cn = mConsumerGraph[bufferVertex];
         if (LLVM_LIKELY(cn.PhiNode == nullptr)) {
@@ -185,7 +185,7 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
-        if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
+        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
         const auto inputPort = InputPort(mConsumerGraph[e]);
         Value * const processed = mFullyProcessedItemCount[inputPort];
         const auto bufferVertex = source(e, mConsumerGraph);
@@ -252,7 +252,7 @@ inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
         const auto buffer = source(e, mConsumerGraph);
         buffers.insert(buffer);
-        if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
+        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
         ConsumerNode & cn = mConsumerGraph[buffer];
         if (LLVM_LIKELY(cn.PhiNode != nullptr)) {
             cn.PhiNode->addIncoming(cn.Consumed, mKernelLoopExitPhiCatch);

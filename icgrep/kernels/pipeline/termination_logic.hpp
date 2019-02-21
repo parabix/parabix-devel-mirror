@@ -39,10 +39,10 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     clear_out_edges(PipelineInput, G);
 
     // 2) copy and summarize any output scalars of the pipeline
-    for (const auto & relationship : make_iterator_range(in_edges(PipelineOutput, mScalarDependencyGraph))) {
-        const auto r = source(relationship, mScalarDependencyGraph);
-        for (const auto & producer : make_iterator_range(in_edges(r, mScalarDependencyGraph))) {
-            const auto k = source(producer, mScalarDependencyGraph);
+    for (const auto & relationship : make_iterator_range(in_edges(PipelineOutput, mScalarGraph))) {
+        const auto r = source(relationship, mScalarGraph);
+        for (const auto & producer : make_iterator_range(in_edges(r, mScalarGraph))) {
+            const auto k = source(producer, mScalarGraph);
             assert ("cannot occur" && k != PipelineOutput);
             add_edge(k, PipelineOutput, G);
         }

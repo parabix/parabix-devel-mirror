@@ -57,7 +57,10 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     // construct the base buffer graph with edges sorted by port number
     assert (PipelineOutput < FirstScalar);
     assert (LastScalar < FirstStreamSet);
-    SmallVector<std::pair<unsigned, unsigned>, 16> ports;
+
+
+
+    SmallVector<std::pair<RelationshipType, unsigned>, 16> ports;
     for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
         const Kernel * const kernel = mPipelineGraph[i].Kernel; assert (kernel);
 
@@ -73,17 +76,17 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             };
 
         // note: explicit lambda return type required for refs
-        auto getBinding = [&](const StreamPort port) -> const Binding & {
-            if (port.first == Port::Input) {
-                return kernel->getInputStreamSetBinding(port.second);
-            } else if (port.first == Port::Output) {
-                return kernel->getOutputStreamSetBinding(port.second);
+        auto getBinding = [&](const RelationshipType port) -> const Binding & {
+            if (port.Type == PortType::Input) {
+                return kernel->getInputStreamSetBinding(port.Number);
+            } else if (port.Type == PortType::Output) {
+                return kernel->getOutputStreamSetBinding(port.Number);
             }
             llvm_unreachable("unknown port binding type!");
         };
 
-        auto getBindingOrAddImplicit = [&](const StreamPort port) -> const Binding & {
-            const auto portNum = port.second;
+        auto getBindingOrAddImplicit = [&](const RelationshipType port) -> const Binding & {
+            const auto portNum = port.Number;
             if (IS_EXPLICIT_PORT(portNum)) {
                 return getBinding(port);
             } else if (portNum == IMPLICIT_REGION_SELECTOR) {
@@ -93,7 +96,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             llvm_unreachable("unknown implicit port type?");
         };
 
-        auto getBufferRateData = [&](const StreamPort port, const Binding & binding) {
+        auto getBufferRateData = [&](const RelationshipType port, const Binding & binding) {
             const auto ub = upperBound(kernel, binding);
             const auto lb = isConsistentRate(binding) ? ub : lowerBound(kernel, binding);
             return BufferRateData{port, binding, lb, ub};
@@ -106,14 +109,14 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             if (k < FirstStreamSet) continue;
             const auto buffer = firstBuffer + k - FirstStreamSet;
             assert (firstBuffer <= buffer && buffer <= lastBuffer);
-            const auto portNum = mPipelineGraph[e]; assert (IS_EXPLICIT_PORT(portNum));
+            const auto portNum = mPipelineGraph[e];
             ports.emplace_back(portNum, buffer);
         }
         std::sort(ports.begin(), ports.end());
         for (const auto & e : ports) {
-            unsigned portNum, buffer;
-            std::tie(portNum, buffer) = e;
-            const StreamPort port{i == PipelineOutput ? Port::Output : Port::Input, portNum};
+            RelationshipType port;
+            unsigned buffer;
+            std::tie(port, buffer) = e;
             add_edge(buffer, i, getBufferRateData(port, getBinding(port)), G);
         }
         ports.clear();
@@ -131,9 +134,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         }
         std::sort(ports.begin(), ports.end());
         for (const auto & e : ports) {
-            unsigned portNum, buffer;
-            std::tie(portNum, buffer) = e;
-            const StreamPort port{i == PipelineInput ? Port::Input : Port::Output, portNum};
+            RelationshipType port;
+            unsigned buffer;
+            std::tie(port, buffer) = e;
             add_edge(i, buffer, getBufferRateData(port, getBindingOrAddImplicit(port)), G);
         }
         ports.clear();
@@ -329,7 +332,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferRateData & pd = G[e];
 
         out << " [label=\"#"
-            << pd.Port.second << ": ";
+            << pd.Port.Number << ": ";
 
         if (pd.Minimum.denominator() > 1 || pd.Maximum.denominator() > 1) {
             out << pd.Minimum.numerator() << "/" << pd.Minimum.denominator()
@@ -791,10 +794,10 @@ inline unsigned PipelineCompiler::getNumOfStreamOutputs(const unsigned kernel) c
  * @brief getBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 const Binding & PipelineCompiler::getBinding(const StreamPort port) const {
-    if (port.first == Port::Input) {
-        return getInputBinding(port.second);
-    } else if (port.first == Port::Output) {
-        return getOutputBinding(port.second);
+    if (port.Type == PortType::Input) {
+        return getInputBinding(port.Number);
+    } else if (port.Type == PortType::Output) {
+        return getOutputBinding(port.Number);
     }
     llvm_unreachable("unknown port binding type!");
 }

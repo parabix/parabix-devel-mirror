@@ -82,10 +82,9 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
             const ProcessingRate & rate = binding.getRate();
             if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
                 // determine which port this I/O port refers to
-                Port portType; unsigned refPort;
-                std::tie(portType, refPort) = kernel->getStreamPort(rate.getReference());
+                const StreamPort refPort = kernel->getStreamPort(rate.getReference());
                 // verify the reference stream is an input port
-                if (LLVM_UNLIKELY(portType != Port::Input)) {
+                if (LLVM_UNLIKELY(refPort.Type != PortType::Input)) {
                     std::string tmp;
                     raw_string_ostream msg(tmp);
                     msg << kernel->getName();
@@ -95,7 +94,7 @@ PopCountGraph PipelineCompiler::makePopCountGraph() const {
                     report_fatal_error(msg.str());
                 }
                 const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
-                insertPopCountDependency(type, refPort, portIndex);
+                insertPopCountDependency(type, refPort.Number, portIndex);
             }
         };
 
@@ -430,10 +429,9 @@ Value * PipelineCompiler::getNumOfLinearPopCountItems(BuilderRef b, const Bindin
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCompiler::getPopCountReferencePort(const Kernel * kernel, const ProcessingRate & rate) const {
     assert (rate.isPopCount() || rate.isNegatedPopCount());
-    Port refPort; unsigned refPortNum;
-    std::tie(refPort, refPortNum) = kernel->getStreamPort(rate.getReference());
-    assert (refPort == Port::Input);
-    return refPortNum;
+    const StreamPort refPort = kernel->getStreamPort(rate.getReference());
+    assert (refPort.Type == PortType::Input);
+    return refPort.Number;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

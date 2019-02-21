@@ -38,7 +38,7 @@ using AttrId = Attribute::KindId;
 using RateValue = ProcessingRate::RateValue;
 using RateId = ProcessingRate::KindId;
 using StreamPort = Kernel::StreamSetPort;
-using Port = Kernel::Port;
+using PortType = Kernel::PortType;
 
 // TODO: make "namespaced" internal scalars that are automatically grouped into cache-aligned structs
 // within the kernel state to hide the complexity from the user?
@@ -136,11 +136,11 @@ void Kernel::addScalarToMap(const StringRef name, const ScalarType scalarType, c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addScalarToMap
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addStreamToMap(const StringRef name, const Port port, const unsigned index) {
-    const auto r = mStreamSetMap.insert(std::make_pair(name, std::make_pair(port, index)));
+void Kernel::addStreamToMap(const StringRef name, const PortType type, const unsigned number) {
+    const auto r = mStreamSetMap.insert(std::make_pair(name, StreamSetPort{type, number}));
     if (LLVM_UNLIKELY(!r.second)) {
         const StreamPort & sf = r.first->second;
-        if (LLVM_UNLIKELY(sf.first != port || sf.second != index)) {
+        if (LLVM_UNLIKELY(sf.Type != type || sf.Number != number)) {
             report_fatal_error(getName() + " already contains stream " + name);
         }
     }
@@ -482,11 +482,10 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             processed = *arg++;
         } else { // isRelative
             const ProcessingRate & rate = input.getRate();
-            Port port; unsigned index;
-            std::tie(port, index) = getStreamPort(rate.getReference());
-            assert (port == Port::Input && index < i);
-            assert (mProcessedInputItemPtr[index]);
-            Value * const ref = b->CreateLoad(mProcessedInputItemPtr[index]);
+            const auto port = getStreamPort(rate.getReference());
+            assert (port.Type == PortType::Input && port.Number < i);
+            assert (mProcessedInputItemPtr[port.Number]);
+            Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
             processed = b->CreateMul2(ref, rate.getRate());
         }
         AllocaInst * const processedItems = b->CreateAlloca(sizeTy);
@@ -562,11 +561,10 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             // be set independently. Should they be independent at early termination?
 
             const ProcessingRate & rate = output.getRate();
-            Port port; unsigned index;
-            std::tie(port, index) = getStreamPort(rate.getReference());
-            assert (port == Port::Input || (port == Port::Output && index < i));
-            const auto & items = (port == Port::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
-            Value * const ref = b->CreateLoad(items[index]);
+            const auto port = getStreamPort(rate.getReference());
+            assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
+            const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
+            Value * const ref = b->CreateLoad(items[port.Number]);
             produced = b->CreateMul2(ref, rate.getRate());
         }
         AllocaInst * const producedItems = b->CreateAlloca(sizeTy);
@@ -1111,9 +1109,12 @@ Kernel::StreamSetPort Kernel::getStreamPort(const StringRef name) const {
  * @brief getBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 const Binding & Kernel::getStreamBinding(const StringRef name) const {
-    Port port; unsigned index;
-    std::tie(port, index) = getStreamPort(name);
-    return (port == Port::Input) ? getInputStreamSetBinding(index) : getOutputStreamSetBinding(index);
+    const auto port = getStreamPort(name);
+    if (port.Type == PortType::Input) {
+        return getInputStreamSetBinding(port.Number);
+    } else {
+        return getOutputStreamSetBinding(port.Number);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1193,14 +1194,14 @@ void Kernel::initializeBindings(BaseDriver & driver) {
         if (LLVM_UNLIKELY(input.getRelationship() == nullptr)) {
             report_fatal_error(getName()+ "." + input.getName() + " must be set upon construction");
         }
-        addStreamToMap(input.getName(), Port::Input, i);
+        addStreamToMap(input.getName(), PortType::Input, i);
     }
     for (unsigned i = 0; i < mOutputStreamSets.size(); i++) {
         Binding & output = mOutputStreamSets[i];
         if (LLVM_UNLIKELY(output.getRelationship() == nullptr)) {
             report_fatal_error(getName()+ "." + output.getName() + " must be set upon construction");
         }
-        addStreamToMap(output.getName(), Port::Output, i);
+        addStreamToMap(output.getName(), PortType::Output, i);
     }
     for (unsigned i = 0; i < mInternalScalars.size(); i++) {
         const Binding & internal = mInternalScalars[i];

@@ -85,9 +85,23 @@ public:
 
     using ScalarFieldMap = llvm::StringMap<ScalarField>;
 
-    enum class Port { Input, Output };
+    enum class PortType { Input, Output };
 
-    using StreamSetPort = std::pair<Port, unsigned>;
+    struct StreamSetPort {
+        PortType Type;
+        unsigned Number;
+
+        StreamSetPort() : Type(PortType::Input), Number(0) { }
+        explicit StreamSetPort(PortType Type, unsigned Number) : Type(Type), Number(Number) { }
+
+        bool operator < (const StreamSetPort other) const {
+            if (Type == other.Type) {
+                return Number < other.Number;
+            } else {
+                return Type == PortType::Input;
+            }
+        }
+    };
 
     using StreamSetMap = llvm::StringMap<StreamSetPort>;
 
@@ -165,8 +179,8 @@ public:
 
     LLVM_READNONE const Binding & getInputStreamSetBinding(const llvm::StringRef name) const {
         const auto port = getStreamPort(name);
-        assert (port.first == Port::Input);
-        return getInputStreamSetBinding(port.second);
+        assert (port.Type == PortType::Input);
+        return getInputStreamSetBinding(port.Number);
     }
 
     LLVM_READNONE StreamSet * getInputStreamSet(const unsigned i) const {
@@ -179,8 +193,8 @@ public:
 
     void setInputStreamSet(const llvm::StringRef name, StreamSet * value) {
         const auto port = getStreamPort(name);
-        assert (port.first == Port::Input);
-        setInputStreamSetAt(port.second, value);
+        assert (port.Type == PortType::Input);
+        setInputStreamSetAt(port.Number, value);
     }
 
     LLVM_READNONE unsigned getNumOfStreamInputs() const {
@@ -199,8 +213,8 @@ public:
 
     LLVM_READNONE StreamSetBuffer * getInputStreamSetBuffer(const llvm::StringRef name) const {
         const auto port = getStreamPort(name);
-        assert (port.first == Port::Input);
-        return getInputStreamSetBuffer(port.second);
+        assert (port.Type == PortType::Input);
+        return getInputStreamSetBuffer(port.Number);
     }
 
     LLVM_READNONE const Binding & getOutputStreamSetBinding(const unsigned i) const {
@@ -210,8 +224,8 @@ public:
 
     LLVM_READNONE const Binding & getOutputStreamSetBinding(const llvm::StringRef name) const {
         const auto port = getStreamPort(name);
-        assert (port.first == Port::Output);
-        return getOutputStreamSetBinding(port.second);
+        assert (port.Type == PortType::Output);
+        return getOutputStreamSetBinding(port.Number);
     }
 
     LLVM_READNONE StreamSet * getOutputStreamSet(const unsigned i) const {
@@ -224,8 +238,8 @@ public:
 
     void setOutputStreamSet(const llvm::StringRef name, StreamSet * value) {
         const auto port = getStreamPort(name);
-        assert (port.first == Port::Output);
-        setOutputStreamSetAt(port.second, value);
+        assert (port.Type == PortType::Output);
+        setOutputStreamSetAt(port.Number, value);
     }
 
     const Bindings & getOutputStreamSetBindings() const {
@@ -248,8 +262,8 @@ public:
 
     LLVM_READNONE StreamSetBuffer * getOutputStreamSetBuffer(const llvm::StringRef name) const {
         const auto port = getStreamPort(name);
-        assert (port.first == Port::Output);
-        return getOutputStreamSetBuffer(port.second);
+        assert (port.Type == PortType::Output);
+        return getOutputStreamSetBuffer(port.Number);
     }
 
     const Bindings & getInputScalarBindings() const {
@@ -339,12 +353,11 @@ public:
     }
 
     LLVM_READNONE const StreamSetBuffer * getStreamSetBuffer(const llvm::StringRef name) const {
-        unsigned index; Port port;
-        std::tie(port, index) = getStreamPort(name);
-        if (port == Port::Input) {
-            return getInputStreamSetBuffer(index);
+        const auto port = getStreamPort(name);
+        if (port.Type == PortType::Input) {
+            return getInputStreamSetBuffer(port.Number);
         } else {
-            return getOutputStreamSetBuffer(index);
+            return getOutputStreamSetBuffer(port.Number);
         }
     }
 
@@ -422,10 +435,9 @@ protected:
     }
 
     LLVM_READNONE llvm::Value * getAccessibleInputItems(const llvm::StringRef name) const {
-        Port port; unsigned index;
-        std::tie(port, index) = getStreamPort(name);
-        assert (port == Port::Input);
-        return getAccessibleInputItems(index);
+        const auto port = getStreamPort(name);
+        assert (port.Type == PortType::Input);
+        return getAccessibleInputItems(port.Number);
     }
 
     LLVM_READNONE llvm::Value * getAccessibleInputItems(const unsigned index) const {
@@ -434,10 +446,9 @@ protected:
     }
 
     LLVM_READNONE llvm::Value * getAvailableInputItems(const llvm::StringRef name) const {
-        Port port; unsigned index;
-        std::tie(port, index) = getStreamPort(name);
-        assert (port == Port::Input);
-        return getAvailableInputItems(index);
+        const auto port = getStreamPort(name);
+        assert (port.Type == PortType::Input);
+        return getAvailableInputItems(port.Number);
     }
 
     LLVM_READNONE llvm::Value * getAvailableInputItems(const unsigned index) const {
@@ -454,10 +465,9 @@ protected:
     }
 
     LLVM_READNONE llvm::Value * getProcessedInputItemsPtr(const llvm::StringRef name) const {
-        Port port; unsigned index;
-        std::tie(port, index) = getStreamPort(name);
-        assert (port == Port::Input);
-        return getProcessedInputItemsPtr(index);
+        const auto port = getStreamPort(name);
+        assert (port.Type == PortType::Input);
+        return getProcessedInputItemsPtr(port.Number);
     }
 
     LLVM_READNONE llvm::Value * getProcessedInputItemsPtr(const unsigned index) const {
@@ -465,10 +475,9 @@ protected:
     }
 
     LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const llvm::StringRef name) const {
-        Port port; unsigned index;
-        std::tie(port, index) = getStreamPort(name);
-        assert (port == Port::Output);
-        return getProducedOutputItemsPtr(index);
+        const auto port = getStreamPort(name);
+        assert (port.Type == PortType::Output);
+        return getProducedOutputItemsPtr(port.Number);
     }
 
     LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const unsigned index) const {
@@ -476,10 +485,9 @@ protected:
     }
 
     LLVM_READNONE llvm::Value * getWritableOutputItems(const llvm::StringRef name) const {
-        Port port; unsigned index;
-        std::tie(port, index) = getStreamPort(name);
-        assert (port == Port::Output);
-        return getWritableOutputItems(index);
+        const auto port = getStreamPort(name);
+        assert (port.Type == PortType::Output);
+        return getWritableOutputItems(port.Number);
     }
 
     LLVM_READNONE llvm::Value * getWritableOutputItems(const unsigned index) const {
@@ -487,10 +495,9 @@ protected:
     }
 
     LLVM_READNONE llvm::Value * getConsumedOutputItems(const llvm::StringRef name) const {
-        Port port; unsigned index;
-        std::tie(port, index) = getStreamPort(name);
-        assert (port == Port::Output);
-        return getConsumedOutputItems(index);
+        const auto port = getStreamPort(name);
+        assert (port.Type == PortType::Output);
+        return getConsumedOutputItems(port.Number);
     }
 
     LLVM_READNONE llvm::Value * getConsumedOutputItems(const unsigned index) const {
@@ -533,7 +540,7 @@ private:
 
     void addScalarToMap(const llvm::StringRef name, const ScalarType scalarType, const unsigned index);
 
-    void addStreamToMap(const llvm::StringRef name, const Port port, const unsigned index);
+    void addStreamToMap(const llvm::StringRef name, const PortType type, const unsigned number);
 
     LLVM_READNONE const ScalarField & getScalarField(const llvm::StringRef name) const;
 

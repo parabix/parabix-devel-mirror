@@ -7,6 +7,8 @@ namespace kernel {
 
 using RateValue = ProcessingRate::RateValue;
 using RateId = ProcessingRate::KindId;
+using StreamPort = Kernel::StreamSetPort;
+using PortType = Kernel::PortType;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief lcm
@@ -99,16 +101,16 @@ void ProcessingRate::print(const Kernel * const kernel, llvm::raw_ostream & out)
             break;
     }
     write(mLowerBound, out);
-    const Kernel::StreamSetPort ref = kernel->getStreamPort(mReference);
-    switch (ref.first) {
-        case Kernel::Port::Input:
+    const StreamPort ref = kernel->getStreamPort(mReference);
+    switch (ref.Type) {
+        case PortType::Input:
             out << 'I';
             break;
-        case Kernel::Port::Output:
+        case PortType::Output:
             out << 'O';
             break;
     }
-    out << ref.second;
+    out << ref.Number;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

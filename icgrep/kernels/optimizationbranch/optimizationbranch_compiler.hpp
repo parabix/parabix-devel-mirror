@@ -31,7 +31,7 @@ using RelationshipCache = flat_map<RelationshipGraph::vertex_descriptor, Value *
 
 namespace kernel {
 
-using Port = Kernel::Port;
+using PortType = Kernel::PortType;
 using StreamPort = Kernel::StreamSetPort;
 using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 using AttrId = Attribute::KindId;
@@ -681,15 +681,13 @@ Value * OptimizationBranchCompiler::calculateAccessibleOrWritableItems(BuilderRe
         Value * const numOfStrides = b->CreateSub(last, first);
         return b->CreateMul(numOfStrides, strideLength);
     } else if (rate.isPopCount() || rate.isNegatedPopCount()) {
-        Port refPort;
-        unsigned refIndex = 0;
-        std::tie(refPort, refIndex) = mBranch->getStreamPort(rate.getReference());
-        assert (refPort == Port::Input);
+        const auto refPort = mBranch->getStreamPort(rate.getReference());
+        assert (refPort.Type == PortType::Input);
         Value * array = nullptr;
         if (rate.isNegatedPopCount()) {
-            array = mBranch->mNegatedPopCountRateArray[refIndex];
+            array = mBranch->mNegatedPopCountRateArray[refPort.Number];
         } else {
-            array = mBranch->mPopCountRateArray[refIndex];
+            array = mBranch->mPopCountRateArray[refPort.Number];
         }
         Constant * const ONE = b->getSize(1);
         Value * const currentIndex = b->CreateSub(last, ONE);
