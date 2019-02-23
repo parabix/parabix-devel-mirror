@@ -12,6 +12,14 @@ inline void reset(Vec & vec, const unsigned n) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isPopCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool isPopCount(const Binding & binding) {
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isPopCount() || rate.isNegatedPopCount();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
@@ -182,6 +190,7 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond
     mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
     mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     mHaltingPhi->addIncoming(halting, exitBlock);
+    mNextKernelStrideNumPhi->addIncoming(mKernelStrideNumPhi, exitBlock);
 
     b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
@@ -250,10 +259,9 @@ inline void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort) {
     const Binding & input = getInputBinding(inputPort);
-    const ProcessingRate & rate = input.getRate();
     Value * numOfStrides = nullptr;
     Value * const accessible = mAccessibleInputItems[inputPort];
-    if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+    if (LLVM_UNLIKELY(isPopCount(input))) {
         Value * const inBuffer = getAccessibleInputItems(b, inputPort, false);
         Constant * const lookAhead = getLookahead(b, inputPort);
         numOfStrides = getMaximumNumOfPopCountStrides(b, input, inBuffer, accessible, lookAhead);
@@ -289,9 +297,8 @@ inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const uns
     Value * numOfStrides = nullptr;
     if (LLVM_LIKELY(getOutputBufferType(outputPort) != BufferType::Managed)) {
         const Binding & output = getOutputBinding(outputPort);
-        const ProcessingRate & rate = output.getRate();
         Value * const writable = mWritableOutputItems[outputPort];
-        if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+        if (LLVM_UNLIKELY(isPopCount(output))) {
             Value * const inBuffer = getWritableOutputItems(b, outputPort, false);
             numOfStrides = getMaximumNumOfPopCountStrides(b, output, inBuffer, writable);
         } else {
@@ -392,7 +399,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
         Value * writable = mWritableOutputItems[i];
-        if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+        if (LLVM_UNLIKELY(isPopCount(output))) {
             writable = getMinimumNumOfLinearPopCountItems(b, output);
         } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
             writable = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
@@ -543,6 +550,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
+    args.push_back(mKernelStrideNumPhi); assert (mNumOfLinearStrides);
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 
@@ -675,7 +683,7 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
         ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
         b->CreateStore(itemCount, ptr);
         args.push_back(ptr);
-    } else {
+    } else if (isPopCount(binding)) {
         args.push_back(itemCount);
     }
     return ptr;
@@ -760,7 +768,7 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
-        // Value * const mask = b->bitblock_mask_to(maskOffset);
+
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
         BasicBlock * const entry = b->GetInsertBlock();
         BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);

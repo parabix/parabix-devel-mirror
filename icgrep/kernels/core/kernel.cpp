@@ -247,10 +247,18 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasParam
+ * @brief isPopCount
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool hasParam(const Binding & binding) {
-    return !binding.getRate().isRelative();
+inline bool isPopCount(const Binding & binding) {
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isPopCount() || rate.isNegatedPopCount();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief requiresItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool requiresItemCount(const Binding & binding) {
+    return Kernel::isAddressable(binding) || isPopCount(binding);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -263,40 +271,52 @@ inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder>
     Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, b->getModule());
     doSegment->setCallingConv(CallingConv::C);
     doSegment->setDoesNotThrow();
-    auto args = doSegment->arg_begin();
+
+    auto arg = doSegment->arg_begin();
+    auto setNextArgName = [&](const StringRef name) {
+        assert (arg != doSegment->arg_end());
+        (arg++)->setName(name);
+    };
+
     if (LLVM_LIKELY(isStateful())) {
-        (args++)->setName("handle");
+        setNextArgName("handle");
     }
-    (args++)->setName("numOfStrides");
+    setNextArgName("currentStrideNum");
+    setNextArgName("numOfStrides");
+
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         const Binding & input = mInputStreamSets[i];
-        (args++)->setName(input.getName());
-        if (LLVM_LIKELY(hasParam(input))) {
-            (args++)->setName(input.getName() + "_processed");
+        setNextArgName(input.getName());
+        if (LLVM_LIKELY(requiresItemCount(input))) {
+            setNextArgName(input.getName() + "_processed");
         }
-        (args++)->setName(input.getName() + "_accessible");
+        setNextArgName(input.getName() + "_accessible");
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            (args++)->setName(input.getName() + "_popCountArray");
+            setNextArgName(input.getName() + "_popCountArray");
         }
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            (args++)->setName(input.getName() + "_negatedPopCountArray");
+            setNextArgName(input.getName() + "_negatedPopCountArray");
         }
     }
+
+    const auto canTerminate = canSetTerminateSignal();
+
     for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
         const Binding & output = mOutputStreamSets[i];
         if (LLVM_LIKELY(!isLocalBuffer(output))) {
-            (args++)->setName(output.getName());
+            setNextArgName(output.getName());
         }
-        if (LLVM_LIKELY(hasParam(output))) {
-            (args++)->setName(output.getName() + "_produced");
+        if (LLVM_LIKELY(canTerminate || requiresItemCount(output))) {
+            setNextArgName(output.getName() + "_produced");
         }
         if (LLVM_LIKELY(isLocalBuffer(output))) {
-            (args++)->setName(output.getName() + "_consumed");
+            setNextArgName(output.getName() + "_consumed");
         } else {
-            (args++)->setName(output.getName() + "_writable");
+            setNextArgName(output.getName() + "_writable");
         }
     }
-    assert (args == doSegment->arg_end());
+
+    assert (arg == doSegment->arg_end());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -312,6 +332,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
     if (LLVM_LIKELY(isStateful())) {
         fields.push_back(mKernelStateType->getPointerTo());  // handle
     }
+    fields.push_back(sizeTy); // currentStrideNum
     fields.push_back(sizeTy); // numOfStrides
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         Type * const bufferType = mStreamSetInputBuffers[i]->getType();
@@ -321,8 +342,8 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         const Binding & input = mInputStreamSets[i];
         if (isAddressable(input)) {
             fields.push_back(sizePtrTy); // updatable
-        }  else if (isCountable(input)) {
-            fields.push_back(sizeTy);  // constant
+        } else if (isPopCount(input)) {
+            fields.push_back(sizeTy); // constant
         }
         // accessible input items (after non-deferred processed item count)
         fields.push_back(sizeTy);
@@ -346,7 +367,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         // produced output items
         if (canTerminate || isAddressable(output)) {
             fields.push_back(sizePtrTy); // updatable
-        } else if (isCountable(output)) {
+        } else if (isPopCount(output)) {
             fields.push_back(sizeTy); // constant
         }
         // If this is a local buffer, the next param is its consumed item count;
@@ -416,6 +437,18 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
     mCurrentMethod = nullptr;
     mIsFinal = nullptr;
     mNumOfStrides = nullptr;
+    mCurrentStrideNum = nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief calculateFixedRateMultiple
+ ** ------------------------------------------------------------------------------------------------------------- */
+Constant * Kernel::calculateFixedRateMultiple(const std::unique_ptr<KernelBuilder> & b, const Binding & binding) const {
+    const ProcessingRate & rate = binding.getRate();
+    assert (rate.isFixed());
+    const RateValue & rv = rate.getRate();
+    assert (rv.denominator() == 1);
+    return b->getSize(rv.numerator() * getStride());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -429,7 +462,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     if (LLVM_LIKELY(isStateful())) {
         setHandle(b, *arg++);
     }
-
+    mCurrentStrideNum = *arg++;
     mNumOfStrides = *arg++;
     mIsFinal = b->CreateIsNull(mNumOfStrides);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -476,8 +509,13 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             mUpdatableProcessedInputItemPtr[i] = *arg++;
             processed = b->CreateLoad(mUpdatableProcessedInputItemPtr[i]);
         } else if (LLVM_LIKELY(isCountable(input))) {
-            assert (arg != args.end());
-            processed = *arg++;
+            const ProcessingRate & rate = input.getRate();
+            if (rate.isFixed()) {
+                processed = b->CreateMul(mCurrentStrideNum, calculateFixedRateMultiple(b, input));
+            } else {
+                assert (arg != args.end());
+                processed = *arg++;
+            }
         } else { // isRelative
             const ProcessingRate & rate = input.getRate();
             const auto port = getStreamPort(rate.getReference());
@@ -550,8 +588,13 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             mUpdatableProducedOutputItemPtr[i] = *arg++;
             produced = b->CreateLoad(mUpdatableProducedOutputItemPtr[i]);
         } else if (LLVM_LIKELY(isCountable(output))) {
-            assert (arg != args.end());
-            produced = *arg++;
+            const ProcessingRate & rate = output.getRate();
+            if (rate.isFixed()) {
+                produced = b->CreateMul(mCurrentStrideNum, calculateFixedRateMultiple(b, output));
+            } else {
+                assert (arg != args.end());
+                produced = *arg++;
+            }
         } else { // isRelative
 
             // For now, if something is produced at a relative rate to another stream in a kernel that
@@ -602,9 +645,10 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
 
     std::vector<Value *> props;
     if (LLVM_LIKELY(isStateful())) {
-        props.push_back(mHandle);
+        props.push_back(mHandle); assert (mHandle);
     }
-    props.push_back(mNumOfStrides);
+    props.push_back(mCurrentStrideNum); assert (mCurrentStrideNum);
+    props.push_back(mNumOfStrides); assert (mNumOfStrides);
 
     const auto numOfInputs = getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; i++) {
@@ -1023,8 +1067,8 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
 
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(m);
-    assert (doSegment->arg_size() >= 2);
-    const auto numOfDoSegArgs = doSegment->arg_size() - 2;
+    assert (doSegment->arg_size() >= 3);
+    const auto numOfDoSegArgs = doSegment->arg_size() - 3;
     Function * const terminate = getTerminateFunction(m);
 
     // maintain consistency with the Kernel interface by passing first the stream sets
@@ -1032,12 +1076,13 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
     std::vector<Type *> params;
     params.reserve(numOfDoSegArgs + getNumOfScalarInputs());
 
-    // the first two params of doSegmentare its handle and numOfStrides; the remaining
-    // are the stream set params
-    auto doSegParam = doSegment->arg_begin(); ++doSegParam;
+    // The first three params of doSegment are its handle, currentStrideNum and numOfStrides.
+    // The remaining are the stream set params
+    auto doSegParam = doSegment->arg_begin() + 3;
     const auto doSegEnd = doSegment->arg_end();
-    while (++doSegParam != doSegEnd) {
+    while (doSegParam != doSegEnd) {
         params.push_back(doSegParam->getType());
+        ++doSegParam;
     }
 
     for (const auto & input : getInputScalarBindings()) {
@@ -1067,10 +1112,11 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
 
         std::vector<Value *> segmentArgs(doSegment->arg_size());
         segmentArgs[0] = handle;
-        segmentArgs[1] = b->getSize(0);
+        segmentArgs[1] = b->getSize(0); // currentStrideNum
+        segmentArgs[2] = b->getSize(0); // numOfStrides -> isFinal = True
         for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
             assert (arg != main->arg_end());
-            segmentArgs[i + 2] = &*arg++;
+            segmentArgs[i + 3] = &*arg++;
         }
 
         std::vector<Value *> initArgs(numOfInitArgs + 1);
@@ -1393,6 +1439,7 @@ Kernel::Kernel(const std::unique_ptr<KernelBuilder> & b,
 , mTerminationSignalPtr(nullptr)
 , mIsFinal(nullptr)
 , mNumOfStrides(nullptr)
+, mCurrentStrideNum(nullptr)
 , mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName)))
 , mTypeId(typeId) {
 

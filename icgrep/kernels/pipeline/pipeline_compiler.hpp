@@ -252,6 +252,7 @@ const static std::string ITEM_COUNT_SUFFIX = ".IC";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".ICD";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
+const static std::string STRIDE_NUM_SUFFIX = ".STD";
 
 class PipelineCompiler {
 
@@ -546,7 +547,6 @@ protected:
     const Kernel *                              mKernel = nullptr;
 
     // pipeline state
-    Value *                                     mInitialSegNo = nullptr;
     Value *                                     mZeroExtendBuffer = nullptr;
     Value *                                     mZeroExtendSpace = nullptr;
     PHINode *                                   mSegNo = nullptr;
@@ -574,6 +574,8 @@ protected:
     Vec<Value *, 16>                            mTerminationSignals;
 
     // kernel state
+    Value *                                     mInitialStrideNum = nullptr;
+    PHINode *                                   mKernelStrideNumPhi = nullptr;
     Value *                                     mTerminatedInitially = nullptr;
     PHINode *                                   mHaltingPhi = nullptr;
     PHINode *                                   mHaltedPhi = nullptr;
@@ -582,9 +584,9 @@ protected:
     PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
-    PHINode *                                   mFirstRegionPhi = nullptr;
-    PHINode *                                   mLastRegionPhi = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
+    Value *                                     mNextKernelStrideNum = nullptr;
+    PHINode *                                   mNextKernelStrideNumPhi = nullptr;
     Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
 

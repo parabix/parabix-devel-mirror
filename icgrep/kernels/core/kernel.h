@@ -514,6 +514,9 @@ protected:
         return mConsumedOutputItems[index];
     }
 
+    llvm::Value * getCurrentStrideNum() const {
+        return mCurrentStrideNum;
+    }
 
     LLVM_READNONE llvm::Value * isFinal() const {
         return mIsFinal;
@@ -554,6 +557,8 @@ private:
 
     LLVM_READNONE const ScalarField & getScalarField(const llvm::StringRef name) const;
 
+    LLVM_READNONE llvm::Constant * calculateFixedRateMultiple(const std::unique_ptr<KernelBuilder> & b, const Binding & binding) const;
+
     llvm::Value * getScalarFieldPtr(KernelBuilder & b, const llvm::StringRef name) const;
 
     void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b);
@@ -563,6 +568,10 @@ private:
     llvm::Function * getDoSegmentFunction(llvm::Module * const module) const;
 
     llvm::Function * getTerminateFunction(llvm::Module * const module) const;
+
+    void setCurrentStrideNum(llvm::Value * strideNum) {
+        mCurrentStrideNum = strideNum;
+    }
 
 protected:
 
@@ -586,6 +595,7 @@ protected:
     llvm::Value *                   mTerminationSignalPtr;
     llvm::Value *                   mIsFinal;
     llvm::Value *                   mNumOfStrides;
+    llvm::Value *                   mCurrentStrideNum;
 
     std::vector<llvm::Value *>      mLocalScalarPtr;
 
