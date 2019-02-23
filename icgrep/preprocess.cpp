@@ -15,7 +15,7 @@
 #include <cc/cc_compiler.h>
 #include <IR_Gen/idisa_builder.h>
 #include <IR_Gen/idisa_target.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/source_kernel.h>
 #include <kernels/cc_kernel.h>
 #include <kernels/cc_scan_kernel.h>

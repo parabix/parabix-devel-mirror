@@ -2,7 +2,7 @@
 #define PIPELINE_COMPILER_HPP
 
 #include <kernels/pipeline_kernel.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline/regionselectionkernel.h>
 #include <toolchain/toolchain.h>

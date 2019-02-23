@@ -7,7 +7,7 @@
 #include <iostream>
 #include <string>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 
 #define PHINotChange(b, phi) phi->addIncoming(phi, b->GetInsertBlock())
 

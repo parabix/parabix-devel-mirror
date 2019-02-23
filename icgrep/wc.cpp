@@ -12,7 +12,7 @@
 #include <kernels/pipeline_builder.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>

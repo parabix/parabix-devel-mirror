@@ -4,7 +4,7 @@
 #include <kernels/kernel_builder.h>
 #include <iostream>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 
 using namespace llvm;
 using namespace kernel;

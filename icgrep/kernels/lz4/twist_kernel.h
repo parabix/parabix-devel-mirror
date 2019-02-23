@@ -4,7 +4,7 @@
 #define ICGREP_TWIST_KERNEL_H
 
 
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 
 namespace IDISA { class IDISA_Builder; }
 

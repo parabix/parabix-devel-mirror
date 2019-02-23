@@ -1,6 +1,6 @@
 ﻿#include "object_cache.h"
 #include "object_cache_util.hpp"
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/MemoryBuffer.h>

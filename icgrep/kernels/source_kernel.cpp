@@ -4,7 +4,7 @@
  */
 #include "source_kernel.h"
 #include <kernels/kernel_builder.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <llvm/IR/Module.h>
 #include <sys/stat.h>
 #include <fcntl.h>

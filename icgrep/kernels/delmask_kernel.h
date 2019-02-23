@@ -6,7 +6,6 @@
 #define DELMASK_KERNEL_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
-#include "kernel.h"              // for KernelBuilder
 #include <string>                // for string
 #include <kernels/kernel_builder.h>
 

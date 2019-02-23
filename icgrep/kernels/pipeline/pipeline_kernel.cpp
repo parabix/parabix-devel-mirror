@@ -1,5 +1,4 @@
 #include <kernels/pipeline_kernel.h>
-#include <kernels/relationship.h>
 #include "pipeline_compiler.hpp"
 #include <llvm/IR/Function.h>
 

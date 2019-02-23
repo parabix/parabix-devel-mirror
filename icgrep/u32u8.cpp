@@ -22,7 +22,7 @@
 #include <pablo/pe_zeroes.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/hex_convert.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>

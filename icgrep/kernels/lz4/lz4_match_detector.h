@@ -2,7 +2,7 @@
 #ifndef ICGREP_LZ4_MATCH_DETECTOR_H
 #define ICGREP_LZ4_MATCH_DETECTOR_H
 
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 #include <map>
 #include <vector>
 #include <string>

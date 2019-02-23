@@ -6,7 +6,7 @@
 #include <llvm/IR/Module.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 
 namespace llvm { class Type; }
 

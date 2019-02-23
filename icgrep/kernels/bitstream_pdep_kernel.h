@@ -5,7 +5,7 @@
 #ifndef BITSTREAM_PDEP_KERNEL_H
 #define BITSTREAM_PDEP_KERNEL_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <string>
 

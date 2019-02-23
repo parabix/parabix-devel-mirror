@@ -71,18 +71,20 @@ if(ENABLE_CUDA_COMPILE)
 SET(DRIVER_SRC ${DRIVER_SRC} toolchain/NVPTXDriver.cpp)
 endif()
 
-SET(KERNEL_SRC kernels/attributes.cpp kernels/binding.cpp kernels/relationship.cpp kernels/processing_rate.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel.cpp kernels/streamset.cpp kernels/multiblock_kernel.cpp kernels/block_kernel.cpp)
+SET(KERNEL_SRC kernels/core/attributes.cpp kernels/core/binding.cpp kernels/core/relationship.cpp kernels/core/processing_rate.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/core/kernel.cpp kernels/core/streamset.cpp kernels/core/multiblock_kernel.cpp kernels/core/block_kernel.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/core/kernel_builder.cpp)
+
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/pipeline_kernel.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/regionselectionkernel.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/optimizationbranch/optimizationbranch.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/pipeline_builder.cpp)
+
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/optimizationbranch/optimizationbranch.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/callback.cpp)
 
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/stdout_kernel.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/s2p_kernel.cpp kernels/p2s_kernel.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/deletion.cpp kernels/swizzle.cpp kernels/hex_convert.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/kernel_builder.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)

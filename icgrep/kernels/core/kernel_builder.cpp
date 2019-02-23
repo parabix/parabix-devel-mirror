@@ -1,7 +1,7 @@
-#include "kernel_builder.h"
+#include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
-#include <kernels/kernel.h>
-#include <kernels/streamset.h>
+#include <kernels/core/kernel.h>
+#include <kernels/core/streamset.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/IR/Module.h>
 

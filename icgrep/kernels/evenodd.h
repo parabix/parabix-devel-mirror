@@ -5,8 +5,8 @@
 #ifndef EVEN_ODD_H
 #define EVEN_ODD_H
 
-#include "kernel.h"  // for KernelBuilder
-namespace IDISA { class IDISA_Builder; }  // lines 14-14
+#include <kernels/core/kernel.h>
+namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Value; }
 
 namespace kernel {

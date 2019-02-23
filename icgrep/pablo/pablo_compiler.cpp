@@ -32,7 +32,7 @@
 #include <pablo/carry_manager.h>
 #endif
 #include <kernels/kernel_builder.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Support/raw_os_ostream.h>

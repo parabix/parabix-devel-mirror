@@ -3,7 +3,7 @@
 #define ICGREP_LZ4_AIO_BASE_H
 
 #include <lz4/lz4_base_generator.h>
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 #include <string>
 #include <map>
 #include <vector>

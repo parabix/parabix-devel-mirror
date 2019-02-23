@@ -5,7 +5,7 @@
 #ifndef PDEP_KERNEL_H
 #define PDEP_KERNEL_H
 
-#include "kernel.h"
+#include <kernels/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <string>
 #include <toolchain/driver.h>
@@ -48,7 +48,7 @@ private:
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
 private:
     const unsigned mSwizzleFactor;
-};   
+};
 
 class StreamExpandKernel final : public MultiBlockKernel {
 public:

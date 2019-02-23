@@ -13,7 +13,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <kernels/kernel_builder.h>
 #include <IR_Gen/idisa_target.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/source_kernel.h>
 #include <kernels/hex_convert.h>
 #include <kernels/s2p_kernel.h>

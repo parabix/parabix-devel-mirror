@@ -5,7 +5,7 @@
 #ifndef EDITD_CPU_KERNEL_H
 #define EDITD_CPU_KERNEL_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace llvm { class Module; }
 
@@ -20,7 +20,7 @@ public:
                    const unsigned patternLen, const unsigned groupSize,
                    Scalar * const pattStream,
                    StreamSet * const CCStream, StreamSet * const ResultStream);
-    
+
 
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) override;
@@ -30,10 +30,10 @@ private:
     unsigned mEditDistance;
     unsigned mPatternLen;
     unsigned mGroupSize;
-    
+
 };
 
-    
+
 
 }
 #endif

@@ -5,7 +5,7 @@
 #ifndef EDITD_GPU_KERNEL_H
 #define EDITD_GPU_KERNEL_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace llvm { class Module; }
 
@@ -15,18 +15,18 @@ namespace kernel {
 
 class editdGPUKernel : public BlockOrientedKernel {
 public:
-    
+
     editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize);
-    
-    
+
+
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * remainingBytes) override;
     unsigned mEditDistance;
     unsigned mPatternLen;
     unsigned mGroupSize;
-    
-};   
+
+};
 
 }
 #endif

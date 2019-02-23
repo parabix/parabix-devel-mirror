@@ -2,10 +2,9 @@
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include <kernels/kernel.h>
-
+#include "kernel.h"
+#include "streamset.h"
 #include <toolchain/toolchain.h>
-#include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>

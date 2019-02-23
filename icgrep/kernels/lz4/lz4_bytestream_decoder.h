@@ -7,7 +7,7 @@
 #ifndef LZ4_BYTESTREAM_DECODER_H
 #define LZ4_BYTESTREAM_DECODER_H
 
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 
 namespace IDISA { class IDISA_Builder; }
 

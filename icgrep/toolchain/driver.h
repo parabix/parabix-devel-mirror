@@ -3,9 +3,9 @@
 
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
-#include <kernels/kernel.h>
-#include <kernels/streamset.h>
-#include <kernels/relationship.h>
+#include <kernels/core/kernel.h>
+// #include <kernels/core/streamset.h>
+#include <kernels/core/relationship.h>
 #include <util/slab_allocator.h>
 #include <string>
 #include <vector>

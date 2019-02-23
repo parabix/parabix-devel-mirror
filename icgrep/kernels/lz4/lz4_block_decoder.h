@@ -3,7 +3,7 @@
 #define ICGREP_LZ4_BLOCK_DECODER_NEW_H
 
 
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 #include <map>
 #include <vector>
 #include <string>

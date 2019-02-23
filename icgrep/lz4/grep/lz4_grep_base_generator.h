@@ -5,7 +5,7 @@
 #include "lz4/lz4_base_generator.h"
 
 #include <grep_interface.h>
-#include <kernels/relationship.h>
+#include <kernels/core/relationship.h>
 #include <cc/multiplex_CCs.h>
 #include <string>
 #include <vector>

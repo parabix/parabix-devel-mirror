@@ -3,7 +3,7 @@
 #ifndef ICGREP_UNTWIST_KERNEL_H
 #define ICGREP_UNTWIST_KERNEL_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Value; }

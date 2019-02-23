@@ -2,7 +2,7 @@
 #define OPTIMIZATIONBRANCH_COMPILER_HPP
 
 #include <kernels/optimizationbranch.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>

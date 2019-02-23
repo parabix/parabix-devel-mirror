@@ -9,7 +9,7 @@
 
 #include <map>
 
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 
 namespace llvm {
     class Module;

@@ -6,7 +6,7 @@
 #include "until_n.h"
 #include <llvm/IR/Module.h>
 #include <kernels/kernel_builder.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <toolchain/toolchain.h>
 
 namespace llvm { class Type; }

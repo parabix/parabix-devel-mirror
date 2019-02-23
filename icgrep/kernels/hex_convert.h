@@ -5,13 +5,13 @@
 #ifndef HEX_CONVERT_H
 #define HEX_CONVERT_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace kernel {
 //
-// Convert a byte stream of hexadecimal values into a bit stream. 
+// Convert a byte stream of hexadecimal values into a bit stream.
 // Each hexadecimal input byte generates 4 bits to the output stream.
-// 
+//
 
 class HexToBinary final : public kernel::BlockOrientedKernel {
 public:

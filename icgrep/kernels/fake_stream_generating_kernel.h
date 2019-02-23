@@ -2,7 +2,7 @@
 #ifndef ICGREP_LZ4_FAKE_STREAM_GENERATING_KERNEL_H
 #define ICGREP_LZ4_FAKE_STREAM_GENERATING_KERNEL_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace IDISA { class IDISA_Builder; }
 

@@ -1,7 +1,7 @@
 #ifndef PIPELINE_KERNEL_H
 #define PIPELINE_KERNEL_H
 
-#include "kernel.h"
+#include <kernels/core/kernel.h>
 #include <type_traits>
 #include <functional>
 #include <toolchain/driver.h>

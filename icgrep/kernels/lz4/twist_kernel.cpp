@@ -2,7 +2,7 @@
 
 #include "twist_kernel.h"
 #include <llvm/IR/Intrinsics.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
 #include <llvm/Support/Compiler.h>

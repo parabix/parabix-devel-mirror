@@ -20,7 +20,7 @@
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 #include <kernels/cc_kernel.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/stdout_kernel.h>

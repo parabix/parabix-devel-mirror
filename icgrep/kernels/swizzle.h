@@ -5,7 +5,7 @@
 #ifndef SWIZZLE_H
 #define SWIZZLE_H
 
-#include "kernel.h"
+#include <kernels/core/kernel.h>
 namespace IDISA { class IDISA_Builder; }
 
 

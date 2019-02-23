@@ -6,9 +6,9 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include <kernels/binding.h>
-#include <kernels/relationship.h>
-#include <kernels/streamset.h>
+#include "binding.h"
+#include "relationship.h"
+#include "streamset.h"
 #include <util/not_null.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/Compiler.h>

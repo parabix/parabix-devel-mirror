@@ -1,7 +1,7 @@
 #ifndef REGIONSELECTIONKERNEL_H
 #define REGIONSELECTIONKERNEL_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace kernel {
 

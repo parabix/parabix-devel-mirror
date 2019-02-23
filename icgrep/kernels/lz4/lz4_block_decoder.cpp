@@ -6,7 +6,6 @@
 #include <iostream>
 #include <string>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/streamset.h>
 
 using namespace llvm;
 using namespace kernel;

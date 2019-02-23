@@ -18,7 +18,7 @@
 #include <cc/cc_compiler.h>
 #include <toolchain/toolchain.h>
 #include <cc/cc_kernel.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/cpudriver.h>

@@ -1,8 +1,8 @@
 #ifndef KERNEL_BUILDER_H
 #define KERNEL_BUILDER_H
 
+#include <kernels/core/kernel.h>
 #include <IR_Gen/idisa_builder.h>
-#include <kernels/kernel.h>
 
 namespace kernel {
 

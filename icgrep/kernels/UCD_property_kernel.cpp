@@ -4,7 +4,7 @@
  */
 
 #include "UCD_property_kernel.h"
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 #include <re/re_toolchain.h>
 #include <re/re_name.h>
 #include <cc/cc_compiler.h>

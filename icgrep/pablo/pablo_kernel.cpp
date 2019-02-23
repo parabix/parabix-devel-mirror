@@ -11,7 +11,7 @@
 #include <pablo/pe_ones.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <llvm/IR/Module.h>
 
 #include <pablo/branch.h>

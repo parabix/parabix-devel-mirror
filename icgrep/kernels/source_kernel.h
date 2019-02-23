@@ -1,7 +1,7 @@
 #ifndef SOURCE_KERNEL_H
 #define SOURCE_KERNEL_H
 
-#include "kernel.h"
+#include <kernels/core/kernel.h>
 namespace kernel { class KernelBuilder; }
 
 namespace kernel {

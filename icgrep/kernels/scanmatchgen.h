@@ -5,13 +5,13 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
-#include "kernel.h"
+#include <kernels/core/kernel.h>
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Function; }
 namespace llvm { class Module; }
 
 namespace kernel {
-    
+
 
 class ScanMatchKernel : public MultiBlockKernel {
 public:

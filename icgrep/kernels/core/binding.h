@@ -1,8 +1,8 @@
 #ifndef BINDING_H
 #define BINDING_H
 
-#include <kernels/processing_rate.h>
-#include <kernels/attributes.h>
+#include "processing_rate.h"
+#include "attributes.h"
 #include <llvm/ADT/STLExtras.h>
 
 namespace llvm { class Type; }

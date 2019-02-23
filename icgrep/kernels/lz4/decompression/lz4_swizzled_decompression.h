@@ -3,7 +3,7 @@
 #define ICGREP_LZ4_SWIZZLED_AIO_H
 
 #include "kernels/lz4/decompression/lz4_sequential_decompression_base.h"
-#include "kernels/kernel.h"
+#include <kernels/core/kernel.h>
 #include <string>
 #include <map>
 #include <vector>

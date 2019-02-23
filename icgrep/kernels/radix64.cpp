@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include "radix64.h"
-#include <kernels/streamset.h>
+#include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 
 using namespace llvm;

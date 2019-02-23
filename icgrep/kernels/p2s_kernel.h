@@ -6,7 +6,7 @@
 #define P2S_KERNEL_H
 
 #include <cc/alphabet.h>
-#include "kernel.h"  // for KernelBuilder
+#include <kernels/core/kernel.h>
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {

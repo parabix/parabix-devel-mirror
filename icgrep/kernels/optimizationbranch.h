@@ -1,7 +1,7 @@
 #ifndef OPTIMIZATIONBRANCH_H
 #define OPTIMIZATIONBRANCH_H
 
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 
 namespace llvm { class Value; }
 

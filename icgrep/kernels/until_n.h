@@ -5,7 +5,7 @@
 #ifndef UNTIL_N_H
 #define UNTIL_N_H
 
-#include "kernel.h"
+#include <kernels/core/kernel.h>
 
 namespace kernel {
 

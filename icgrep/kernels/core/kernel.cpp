@@ -6,8 +6,6 @@
 #include "kernel.h"
 #include <toolchain/toolchain.h>
 #include <toolchain/driver.h>
-#include <kernels/relationship.h>
-#include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/DerivedTypes.h>

@@ -5,7 +5,6 @@
 
 #include "kernel.h"
 #include <toolchain/toolchain.h>
-#include <kernels/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>

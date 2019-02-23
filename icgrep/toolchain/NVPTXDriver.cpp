@@ -7,7 +7,7 @@
 #include "NVPTXDriver.h"
 #include <IR_Gen/idisa_target.h>
 #include <kernels/kernel_builder.h>
-#include <kernels/kernel.h>
+#include <kernels/core/kernel.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <toolchain/toolchain.h>
@@ -46,7 +46,7 @@ NVPTXDriver::NVPTXDriver(std::string && moduleName)
 #else
     initializeUnreachableBlockElimLegacyPassPass(*Registry);
 #endif
-    
+
     mMainModule->setDataLayout("e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64");
     mMainModule->setTargetTriple("nvptx64-nvidia-cuda");
 
@@ -148,12 +148,12 @@ void * NVPTXDriver::finalizeObject(Function * mainMethod) {
 
     MDNode * Node = MDNode::get(mMainModule->getContext(),
                                 {llvm::ValueAsMetadata::get(mainFunc),
-                                 MDString::get(mMainModule->getContext(), "kernel"), 
+                                 MDString::get(mMainModule->getContext(), "kernel"),
                                  ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
     NamedMDNode *NMD = mMainModule->getOrInsertNamedMetadata("nvvm.annotations");
     NMD->addOperand(Node);
 
-    PM.run(*mMainModule);  
+    PM.run(*mMainModule);
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::ShowIR))) {
         mMainModule->dump();
