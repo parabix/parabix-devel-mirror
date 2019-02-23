@@ -273,7 +273,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 {Binding{"source", Source},
  Binding{"lf", LineFeedStream, FixedRate(), LookAhead(1)}},
 // output
-{Binding{"u8index", RequiredStreams, FixedRate()},
+{Binding{"u8index", RequiredStreams, FixedRate(), Add1()},
  Binding{"UnicodeLB", UnicodeLB, FixedRate()}}) {
 
 }

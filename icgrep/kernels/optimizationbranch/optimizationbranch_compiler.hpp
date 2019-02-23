@@ -7,10 +7,14 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/ADT/SmallVector.h>
+#include  <array>
 
 using namespace llvm;
 using namespace boost;
 using namespace boost::container;
+
+//#define PRINT_DEBUG_MESSAGES
 
 using StreamSetGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
@@ -91,17 +95,28 @@ private:
 
     Value * calculateAccessibleOrWritableItems(BuilderRef b, const Kernel * const kernel, const Binding & binding, Value * const first, Value * const last, Value * const defaultValue) const;
 
+    void calculateFinalOutputItemCounts(BuilderRef b, Value * const isFinal, const unsigned branchType);
+
     RelationshipGraph makeRelationshipGraph(const RelationshipType type) const;
 
 private:
 
     OptimizationBranch * const          mBranch;
-    const std::vector<const Kernel *>   mBranches;
+    const std::array<const Kernel *, 4> mBranches;
 
     PHINode *                           mTerminatedPhi;
 
+    SmallVector<Value *, 16>            mBaseInputAddress;
+    SmallVector<Value *, 16>            mProcessedInputItemPtr;
+    SmallVector<Value *, 16>            mProcessedInputItems;
+    SmallVector<Value *, 16>            mAccessibleInputItems;
+    SmallVector<Value *, 16>            mPopCountRateArray;
+    SmallVector<Value *, 16>            mNegatedPopCountRateArray;
 
-
+    SmallVector<Value *, 16>            mBaseOutputAddress;
+    SmallVector<Value *, 16>            mProducedOutputItemPtr;
+    SmallVector<Value *, 16>            mProducedOutputItems;
+    SmallVector<Value *, 16>            mWritableOutputItems;
 
     const RelationshipGraph             mStreamSetGraph;
     const RelationshipGraph             mScalarGraph;
@@ -197,46 +212,46 @@ RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const Relati
         add_edge(r, CONDITION_VARIABLE, RelationshipRef{}, G);
     }
 
-    auto findRelationship = [&](const Kernel * kernel, const Binding & binding) {
-        const Relationship * const rel = binding.getRelationship();
-        const auto f = M.find(rel);
-        if (LLVM_UNLIKELY(f == M.end())) {
-            if (LLVM_LIKELY(rel->isConstant())) {
-                const auto x = add_vertex(G);
-                M.emplace(rel, x);
-                return x;
-            } else {
-                std::string tmp;
-                raw_string_ostream msg(tmp);
-                msg << "Branch was not provided a ";
-                if (type == RelationshipType::StreamSet) {
-                    msg << "StreamSet";
-                } else if (type == RelationshipType::Scalar) {
-                    msg << "Scalar";
-                }
-                msg << " binding for "
-                    << kernel->getName()
-                    << '.'
-                    << binding.getName();
-                report_fatal_error(msg.str());
-            }
-        }
-        return f->second;
-    };
-
     auto linkRelationships = [&](const Kernel * const kernel, const Vertex branch) {
+
+        auto findRelationship = [&](const Binding & binding) {
+            const Relationship * const rel = binding.getRelationship();
+            const auto f = M.find(rel);
+            if (LLVM_UNLIKELY(f == M.end())) {
+                if (LLVM_LIKELY(rel->isConstant())) {
+                    const auto x = add_vertex(G);
+                    M.emplace(rel, x);
+                    return x;
+                } else {
+                    std::string tmp;
+                    raw_string_ostream msg(tmp);
+                    msg << "Branch was not provided a ";
+                    if (type == RelationshipType::StreamSet) {
+                        msg << "StreamSet";
+                    } else if (type == RelationshipType::Scalar) {
+                        msg << "Scalar";
+                    }
+                    msg << " binding for "
+                        << kernel->getName()
+                        << '.'
+                        << binding.getName();
+                    report_fatal_error(msg.str());
+                }
+            }
+            return f->second;
+        };
 
         const auto numOfInputs = getNumOfInputBindings(kernel, type);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto & input = getInputBinding(mBranch, type, i);
-            const auto r = findRelationship(kernel, input);
+            const auto r = findRelationship(input);
             add_edge(r, branch, RelationshipRef{i, input.getName()}, G);
         }
 
         const auto numOfOutputs = getNumOfOutputBindings(kernel, type);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto & output = getOutputBinding(kernel, type, i);
-            const auto r = findRelationship(kernel, output);
+            const auto r = findRelationship(output);
             add_edge(branch, r, RelationshipRef{i, output.getName()}, G);
         }
     };
@@ -253,7 +268,7 @@ RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const Relati
 void OptimizationBranchCompiler::addBranchProperties(BuilderRef b) {
     for (unsigned i = ALL_ZERO_BRANCH; i <= NON_ZERO_BRANCH; ++i) {
         const Kernel * const kernel = mBranches[i];
-        if (LLVM_LIKELY(kernel->isStateful())) {
+        if (LLVM_LIKELY(kernel && kernel->isStateful())) {
             Type * handlePtrType = nullptr;
             if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
                 handlePtrType = b->getVoidPtrTy();
@@ -272,7 +287,7 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
     mScalarCache.clear();
     for (unsigned i = ALL_ZERO_BRANCH; i <= NON_ZERO_BRANCH; ++i) {
         const Kernel * const kernel = mBranches[i];
-        if (kernel->isStateful() && !kernel->hasFamilyName()) {
+        if (kernel && kernel->isStateful() && !kernel->hasFamilyName()) {
             Value * const handle = kernel->createInstance(b);
             b->setScalarField(BRANCH_PREFIX + std::to_string(i), handle);
         }
@@ -282,6 +297,7 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
     Value * terminated = b->getFalse();
     for (unsigned i = ALL_ZERO_BRANCH; i <= NON_ZERO_BRANCH; ++i) {
         const Kernel * const kernel = mBranches[i];
+        if (LLVM_UNLIKELY(kernel == nullptr)) continue;
         const auto hasHandle = kernel->isStateful() ? 1U : 0U;
         args.resize(hasHandle + in_degree(i, mScalarGraph));
         if (LLVM_LIKELY(hasHandle)) {
@@ -302,7 +318,7 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
  * @brief loadKernelHandle
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * OptimizationBranchCompiler::loadHandle(BuilderRef b, const unsigned branchType) const {
-    const Kernel * const kernel = mBranches[branchType];
+    const Kernel * const kernel = mBranches[branchType]; assert (kernel);
     Value * handle = nullptr;
     if (LLVM_LIKELY(kernel->isStateful())) {
         handle = b->getScalarField(BRANCH_PREFIX + std::to_string(branchType));
@@ -511,13 +527,21 @@ void OptimizationBranchCompiler::waitFor(BuilderRef b, const unsigned branchType
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reset
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Vec>
+inline void reset(Vec & vec, const unsigned n) {
+    vec.resize(n);
+    std::fill_n(vec.begin(), n, nullptr);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief callKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranchCompiler::executeBranch(BuilderRef b,
                                                const unsigned branchType,
                                                Value * const first,
                                                Value * const last) {
-
     // increment the active thread count for this branch
     Constant * const ONE = b->getSize(1);
     const auto & name = getBranchLockName(branchType);
@@ -527,145 +551,276 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
     waitFor(b, OTHER_BRANCH(branchType));
 
     const Kernel * const kernel = mBranches[branchType];
-    Function * const doSegment = kernel->getDoSegmentFunction(b->getModule());
+    if (LLVM_UNLIKELY(kernel == nullptr)) {
+        report_fatal_error("empty branch not supported yet.");
+    } else {
 
-    BasicBlock * incrementItemCounts = nullptr;
-    BasicBlock * kernelExit = nullptr;
-    if (kernel->canSetTerminateSignal()) {
-        incrementItemCounts = b->CreateBasicBlock("incrementItemCounts");
-        kernelExit = b->CreateBasicBlock("kernelExit");
-    }
+        Value * const handle = loadHandle(b, branchType);
+        // Last can only be 0 if this is the branch's final stride.
+        Value * const isFinal = b->CreateIsNull(last);
 
-    Value * const handle = loadHandle(b, branchType);
-    // Last can only be 0 if this is the branch's final stride.
-    Value * const isFinal = b->CreateIsNull(last);
+        const auto numOfInputs = in_degree(branchType, mStreamSetGraph);
+        reset(mBaseInputAddress, numOfInputs);
+        reset(mProcessedInputItemPtr, numOfInputs);
+        reset(mProcessedInputItems, numOfInputs);
+        reset(mAccessibleInputItems, numOfInputs);
+        reset(mPopCountRateArray, numOfInputs);
+        reset(mNegatedPopCountRateArray, numOfInputs);
 
-    const auto numOfInputs = in_degree(branchType, mStreamSetGraph);
+        for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+            const RelationshipRef & host = mStreamSetGraph[e];
+            const auto & buffer = mBranch->getInputStreamSetBuffer(host.Index);
+            const RelationshipRef & path = mStreamSetGraph[preceding(e, mStreamSetGraph)];
+            const Binding & input = kernel->getInputStreamSetBinding(path.Index);
+            // logical base input address
+            mBaseInputAddress[path.Index] = buffer->getBaseAddress(b.get());
+            // processed input items
+            Value * processed = mBranch->getProcessedInputItemsPtr(host.Index);
+            if (Kernel::isCountable(input)) {
+                mProcessedInputItemPtr[path.Index] = processed;
+                processed = b->CreateLoad(processed);
+            }
+            mProcessedInputItems[path.Index] = processed;
 
-    std::vector<Value *> baseInputAddress(numOfInputs, nullptr);
-    std::vector<Value *> processedInputItemPtr(numOfInputs, nullptr);
-    std::vector<Value *> processedInputItem(numOfInputs, nullptr);
-    std::vector<Value *> accessibleInputItem(numOfInputs, nullptr);
-    std::vector<Value *> popCountRateArray(numOfInputs, nullptr);
-    std::vector<Value *> negatedPopCountRateArray(numOfInputs, nullptr);
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = kernel->getName() + ":" + input.getName();
+            b->CallPrintInt(prefix + "_processedIn", mProcessedInputItems[path.Index]);
+            #endif
 
-    for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
-        const RelationshipRef & host = mStreamSetGraph[e];
-        const auto & buffer = mBranch->getInputStreamSetBuffer(host.Index);
-        const Binding & input = kernel->getInputStreamSetBinding(host.Index);
-        const RelationshipRef & path = mStreamSetGraph[preceding(e, mStreamSetGraph)];
-        // logical base input address
-        baseInputAddress[path.Index] = buffer->getBaseAddress(b.get());
-        // processed input items
-        Value * processed = mBranch->getProcessedInputItemsPtr(path.Index);
-        if (kernel->isCountable(input)) {
-            processedInputItemPtr[path.Index] = processed;
-            processed = b->CreateLoad(processed);
+            // accessible input items (after non-deferred processed item count)
+            Value * const accessible = mBranch->getAccessibleInputItems(path.Index);
+            Value * const provided = calculateAccessibleOrWritableItems(b, kernel, input, first, last, accessible);
+            mAccessibleInputItems[path.Index] = b->CreateSelect(isFinal, accessible, provided);
+
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_accessible", mAccessibleInputItems[path.Index]);
+            #endif
+
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+                mPopCountRateArray[path.Index] = b->CreateGEP(mBranch->mPopCountRateArray[host.Index], first);
+            }
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+                mNegatedPopCountRateArray[path.Index] = b->CreateGEP(mBranch->mNegatedPopCountRateArray[host.Index], first);
+            }
         }
-        processedInputItem[path.Index] = processed;
 
-        // accessible input items (after non-deferred processed item count)
-        Value * const accessible = mBranch->getAccessibleInputItems(path.Index);
-        Value * const provided = calculateAccessibleOrWritableItems(b, kernel, input, first, last, accessible);
-        accessibleInputItem[path.Index] = b->CreateSelect(isFinal, accessible, provided);
+        const auto numOfOutputs = out_degree(branchType, mStreamSetGraph);
+        reset(mBaseOutputAddress, numOfOutputs);
+        reset(mProducedOutputItemPtr, numOfOutputs);
+        reset(mProducedOutputItems, numOfOutputs);
+        reset(mWritableOutputItems, numOfOutputs);
 
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            popCountRateArray[path.Index] = b->CreateGEP(mBranch->mPopCountRateArray[host.Index], first);
+        for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+            const RelationshipRef & host = mStreamSetGraph[e];
+            const auto & buffer = mBranch->getOutputStreamSetBuffer(host.Index);
+            const RelationshipRef & path = mStreamSetGraph[descending(e, mStreamSetGraph)];
+            const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
+            // logical base input address
+            mBaseOutputAddress[path.Index] = buffer->getBaseAddress(b.get());
+            // produced output items
+            Value * produced = mBranch->getProducedOutputItemsPtr(host.Index);
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = kernel->getName() + ":" + output.getName();
+            b->CallPrintInt(prefix + "_producedIn", b->CreateLoad(produced));
+            #endif
+            if (Kernel::isCountable(output)) {
+                mProducedOutputItemPtr[path.Index] = produced;
+                produced = b->CreateLoad(produced);
+            }
+            mProducedOutputItems[path.Index] = produced;
+            Value * const writable = mBranch->getWritableOutputItems(path.Index);
+            Value * const provided = calculateAccessibleOrWritableItems(b, kernel, output, first, last, writable);
+            mWritableOutputItems[path.Index] = b->CreateSelect(isFinal, writable, provided);
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_writable", mWritableOutputItems[path.Index]);
+            #endif
         }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            negatedPopCountRateArray[path.Index] = b->CreateGEP(mBranch->mNegatedPopCountRateArray[host.Index], first);
+
+        calculateFinalOutputItemCounts(b, isFinal, branchType);
+
+        Function * const doSegment = kernel->getDoSegmentFunction(b->getModule());
+        SmallVector<Value *, 64> args;
+        args.reserve(doSegment->arg_size());
+        if (handle) {
+            args.push_back(handle);
         }
-    }
+        Value * const numOfStrides = b->CreateSub(last, first);
+        #ifdef PRINT_DEBUG_MESSAGES
+        b->CallPrintInt(kernel->getName() + "_numOfStrides", numOfStrides);
+        #endif
 
-    const auto numOfOutputs = out_degree(branchType, mStreamSetGraph);
+        args.push_back(numOfStrides);
 
-    std::vector<Value *> baseOutputAddress(numOfOutputs, nullptr);
-    std::vector<Value *> producedOutputItemPtr(numOfOutputs, nullptr);
-    std::vector<Value *> producedOutputItem(numOfOutputs, nullptr);
-    std::vector<Value *> writableOutputItem(numOfInputs, nullptr);
-
-    for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
-        const RelationshipRef & host = mStreamSetGraph[e];
-        const auto & buffer = mBranch->getOutputStreamSetBuffer(host.Index);
-        const Binding & output = kernel->getOutputStreamSetBinding(host.Index);
-        const RelationshipRef & path = mStreamSetGraph[descending(e, mStreamSetGraph)];
-        // logical base input address
-        baseOutputAddress[path.Index] = buffer->getBaseAddress(b.get());
-        // produced output items
-        Value * produced = mBranch->getProducedOutputItemsPtr(path.Index);
-        if (kernel->isCountable(output)) {
-            producedOutputItemPtr[path.Index] = produced;
-            produced = b->CreateLoad(produced);
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            args.push_back(mBaseInputAddress[i]);
+            args.push_back(mProcessedInputItems[i]);
+            args.push_back(mAccessibleInputItems[i]);
+            if (mPopCountRateArray[i]) {
+                args.push_back(mPopCountRateArray[i]);
+            }
+            if (mNegatedPopCountRateArray[i]) {
+                args.push_back(mNegatedPopCountRateArray[i]);
+            }
         }
-        producedOutputItem[path.Index] = produced;
-        Value * const writable = mBranch->getWritableOutputItems(path.Index);
-        Value * const provided = calculateAccessibleOrWritableItems(b, kernel, output, first, last, writable);
-        writableOutputItem[path.Index] = b->CreateSelect(isFinal, writable, provided);
-    }
-
-    std::vector<Value *> args;
-    args.reserve(doSegment->arg_size());
-    if (handle) {
-        args.push_back(handle);
-    }
-    args.push_back(b->CreateSub(last, first)); // numOfStrides
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        args.push_back(baseInputAddress[i]);
-        args.push_back(processedInputItem[i]);
-        args.push_back(accessibleInputItem[i]);
-        if (popCountRateArray[i]) {
-            args.push_back(popCountRateArray[i]);
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            args.push_back(mBaseOutputAddress[i]);
+            args.push_back(mProducedOutputItems[i]);
+            args.push_back(mWritableOutputItems[i]);
         }
-        if (negatedPopCountRateArray[i]) {
-            args.push_back(negatedPopCountRateArray[i]);
+
+        Value * const terminated = b->CreateCall(doSegment, args);
+
+        // TODO: if either of these kernels "share" an output scalar, copy the scalar value from the
+        // branch we took to the state of the branch we avoided. This requires that the branch pipeline
+        // exposes them.
+
+        BasicBlock * const incrementItemCounts = b->CreateBasicBlock("incrementItemCounts");
+        BasicBlock * const kernelExit = b->CreateBasicBlock("kernelExit");
+        if (kernel->canSetTerminateSignal()) {
+            b->CreateUnlikelyCondBr(terminated, kernelExit, incrementItemCounts);
+        } else {
+            b->CreateBr(incrementItemCounts);
         }
-    }
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        args.push_back(baseOutputAddress[i]);
-        args.push_back(producedOutputItem[i]);
-        args.push_back(writableOutputItem[i]);
-    }
-
-    Value * const terminated = b->CreateCall(doSegment, args);
-
-    // TODO: if either of these kernels "share" an output scalar, copy the scalar value from the
-    // branch we took to the state of the branch we avoided. This requires that the branch pipeline
-    // exposes them.
-
-
-    if (incrementItemCounts) {
-        b->CreateUnlikelyCondBr(terminated, kernelExit, incrementItemCounts);
 
         b->SetInsertPoint(incrementItemCounts);
-    }
-
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        if (processedInputItemPtr[i]) {
-            Value * const processed = processedInputItem[i];
-            Value * const itemCount = accessibleInputItem[i];
-            Value * const updatedInputCount = b->CreateAdd(processed, itemCount);
-            b->CreateStore(updatedInputCount, processedInputItemPtr[i]);
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            if (mProcessedInputItemPtr[i]) {
+                Value * const processed = mProcessedInputItems[i];
+                Value * const itemCount = mAccessibleInputItems[i];
+                Value * const updatedInputCount = b->CreateAdd(processed, itemCount);
+                #ifdef PRINT_DEBUG_MESSAGES
+                const Binding & input = kernel->getInputStreamSetBinding(i);
+                b->CallPrintInt(kernel->getName() + "." + input.getName() + "_processedOut", updatedInputCount);
+                #endif
+                b->CreateStore(updatedInputCount, mProcessedInputItemPtr[i]);
+            }
         }
-    }
 
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (producedOutputItemPtr[i]) {
-            Value * const produced = producedOutputItem[i];
-            Value * const itemCount = writableOutputItem[i];
-            Value * const updatedOutputCount = b->CreateAdd(produced, itemCount);
-            b->CreateStore(updatedOutputCount, producedOutputItemPtr[i]);
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            if (mProducedOutputItemPtr[i]) {
+                Value * const produced = mProducedOutputItems[i];
+                Value * const itemCount = mWritableOutputItems[i];
+                Value * const updatedOutputCount = b->CreateAdd(produced, itemCount);
+                #ifdef PRINT_DEBUG_MESSAGES
+                const Binding & output = kernel->getOutputStreamSetBinding(i);
+                b->CallPrintInt(kernel->getName() + "." + output.getName() + "_producedOut", updatedOutputCount);
+                #endif
+                b->CreateStore(updatedOutputCount, mProducedOutputItemPtr[i]);
+            }
         }
-    }
 
-    if (incrementItemCounts) {
-        mTerminatedPhi->addIncoming(terminated, b->GetInsertBlock());
+        if (mTerminatedPhi) {
+            BasicBlock * const exitBlock = b->GetInsertBlock();
+            if (kernel->canSetTerminateSignal()) {
+                mTerminatedPhi->addIncoming(terminated, exitBlock);
+            } else {
+                mTerminatedPhi->addIncoming(b->getFalse(), exitBlock);
+            }
+        }
         b->CreateBr(kernelExit);
+
         b->SetInsertPoint(kernelExit);
     }
 
     // decrement the "number of active threads" count for this branch
     b->CreateAtomicFetchAndSub(ONE, threadLockPtr);
 
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief calculateFinalItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b, Value * const isFinal, const unsigned branchType) {
+
+    using RateValue = ProcessingRate::RateValue;
+
+    const Kernel * const kernel = mBranches[branchType];
+
+    // Record the writable item counts but when determining the number of Fixed writable items calculate:
+
+    //   CEILING(PRINCIPAL_OR_MIN(Accessible Item Count / Fixed Input Rate) * Fixed Output Rate)
+
+    RateValue rateLCM(1);
+    bool noPrincipalStream = true;
+
+    for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+        const RelationshipRef & path = mStreamSetGraph[preceding(e, mStreamSetGraph)];
+        const Binding & input = kernel->getInputStreamSetBinding(path.Index);
+        const ProcessingRate & rate = input.getRate();
+        if (rate.isFixed()) {
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
+                rateLCM = rate.getRate();
+                noPrincipalStream = false;
+                break;
+            }
+            rateLCM = lcm(rateLCM, rate.getRate());
+        }
+    }
+
+    bool hasFixedRateOutput = false;
+    for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+        const RelationshipRef & path = mStreamSetGraph[descending(e, mStreamSetGraph)];
+        const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
+        const ProcessingRate & rate = output.getRate();
+        if (rate.isFixed()) {
+            rateLCM = lcm(rateLCM, rate.getRate());
+            if (mProducedOutputItemPtr[path.Index]) {
+                hasFixedRateOutput = true;
+            }
+        }
+    }
+
+    if (hasFixedRateOutput) {
+
+        BasicBlock * const entry = b->GetInsertBlock();
+        BasicBlock * const calculateFinalItemCounts = b->CreateBasicBlock("calculateFinalItemCounts");
+        BasicBlock * const executeKernel = b->CreateBasicBlock("executeKernel");
+
+        b->CreateUnlikelyCondBr(isFinal, calculateFinalItemCounts, executeKernel);
+
+        b->SetInsertPoint(calculateFinalItemCounts);
+        Value * minScaledInverseOfAccessibleInput = nullptr;
+        for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
+            const RelationshipRef & path = mStreamSetGraph[preceding(e, mStreamSetGraph)];
+            const Binding & input = kernel->getInputStreamSetBinding(path.Index);
+            const ProcessingRate & rate = input.getRate();
+            if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
+                Value * const scaledInverseOfAccessibleInput =
+                    b->CreateMul2(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
+                minScaledInverseOfAccessibleInput =
+                    b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
+            }
+        }
+
+        assert (minScaledInverseOfAccessibleInput);
+
+        const auto numOfOutputs = out_degree(branchType, mStreamSetGraph);
+        SmallVector<Value *, 16> pendingOutputItems(numOfOutputs, nullptr);
+        for (const auto & e : make_iterator_range(out_edges(branchType, mStreamSetGraph))) {
+            const RelationshipRef & path = mStreamSetGraph[descending(e, mStreamSetGraph)];
+            const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
+            const ProcessingRate & rate = output.getRate();
+            if (rate.isFixed() && mProducedOutputItemPtr[path.Index]) {
+                pendingOutputItems[path.Index] = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
+                #ifdef PRINT_DEBUG_MESSAGES
+                const auto prefix = kernel->getName() + ":" + output.getName();
+                b->CallPrintInt(prefix + "_writable'", pendingOutputItems[path.Index]);
+                #endif
+            }
+        }
+        b->CreateBr(executeKernel);
+
+        b->SetInsertPoint(executeKernel);
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            if (pendingOutputItems[i]) {
+                PHINode * const writable = b->CreatePHI(b->getSizeTy(), 2);
+                writable->addIncoming(mWritableOutputItems[i], entry);
+                writable->addIncoming(pendingOutputItems[i], calculateFinalItemCounts);
+                mWritableOutputItems[i] = writable;
+            }
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -715,8 +870,8 @@ inline Value * OptimizationBranchCompiler::getInputScalar(BuilderRef b, const un
     return value;
 }
 
-inline std::vector<const Kernel *> makeBranches(const OptimizationBranch * const branch) {
-    std::vector<const Kernel *> branches(4);
+inline std::array<const Kernel *, 4> makeBranches(const OptimizationBranch * const branch) {
+    std::array<const Kernel *, 4> branches;
     branches[BRANCH_INPUT] = branch;
     branches[ALL_ZERO_BRANCH] = branch->getAllZeroKernel();
     branches[NON_ZERO_BRANCH] = branch->getNonZeroKernel();
@@ -730,7 +885,9 @@ inline std::vector<const Kernel *> makeBranches(const OptimizationBranch * const
 void OptimizationBranchCompiler::generateFinalizeMethod(BuilderRef b) {
     for (unsigned i = ALL_ZERO_BRANCH; i <= NON_ZERO_BRANCH; ++i) {
         const Kernel * const kernel = mBranches[i];
-        kernel->finalizeInstance(b, loadHandle(b, i));
+        if (kernel) {
+            kernel->finalizeInstance(b, loadHandle(b, i));
+        }
     }
 }
 

@@ -86,10 +86,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         };
 
         auto getBindingOrAddImplicit = [&](const RelationshipType port) -> const Binding & {
-            const auto portNum = port.Number;
-            if (IS_EXPLICIT_PORT(portNum)) {
+            if (port.Reason == ReasonType::Explicit) {
                 return getBinding(port);
-            } else if (portNum == IMPLICIT_REGION_SELECTOR) {
+            } else if (port.Reason == ReasonType::ImplicitRegionSelector) {
                 ImplicitBindings.emplace_back("!region_selector", nullptr);
                 return ImplicitBindings.back();
             }

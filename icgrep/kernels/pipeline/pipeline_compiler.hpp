@@ -64,20 +64,19 @@ union RelationshipNode {
     RelationshipNode(llvm::Function * callee) : Callee(callee) { }
 };
 
+enum class ReasonType : unsigned {
+    Explicit = 0
+    , ImplicitRegionSelector = 1
+};
+
 struct RelationshipType : public StreamPort {
 
-    enum Id : unsigned {
-        Explicit = 0
-        , Constant = 1
-        , ImplicitRegionSelector = 2
-    };
+    ReasonType Reason;
 
-    Id Relationship;
-
-    RelationshipType() : StreamPort(), Relationship(Explicit) { }
+    RelationshipType() : StreamPort(), Reason(ReasonType::Explicit) { }
     RelationshipType & operator = (const RelationshipType &) = default;
-    RelationshipType(PortType type, unsigned number, Id relationship = Explicit) : StreamSetPort(type, number), Relationship(relationship) { }
-    RelationshipType(StreamPort port) : StreamSetPort(port), Relationship(Explicit) { }
+    RelationshipType(PortType type, unsigned number, ReasonType reason = ReasonType::Explicit) : StreamSetPort(type, number), Reason(reason) { }
+    RelationshipType(StreamPort port) : StreamSetPort(port), Reason(ReasonType::Explicit) { }
 };
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType>;
@@ -173,12 +172,6 @@ template <typename Value>
 using KernelMap = flat_map<const Kernel *, Value>;
 
 using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
-
-#define SCALAR_CONSTANT (-1U)
-
-#define IMPLICIT_REGION_SELECTOR (-1U)
-
-#define IS_EXPLICIT_PORT(x) (LLVM_LIKELY((x) < IMPLICIT_REGION_SELECTOR))
 
 using RelationshipVertex = RelationshipGraph::vertex_descriptor;
 using RelationshipMap = RelMap<RelationshipVertex>;
@@ -860,6 +853,5 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
 #include "scalar_logic.hpp"
-#include "region_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

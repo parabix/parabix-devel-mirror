@@ -69,11 +69,7 @@
 #endif
 
 using namespace llvm;
-using kernel::Kernel;
-using kernel::PipelineKernel;
-using kernel::StreamSetBuffer;
-using kernel::StreamSetBuffers;
-using kernel::KernelBuilder;
+using namespace kernel;
 
 CPUDriver::CPUDriver(std::string && moduleName)
 : BaseDriver(std::move(moduleName))
@@ -270,7 +266,7 @@ void CPUDriver::generateUncachedKernels() {
     llvm::PrintStatistics();
 }
 
-void * CPUDriver::finalizeObject(PipelineKernel * const pipeline) {
+void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
 
     #ifdef ORCJIT
     auto Resolver = llvm::orc::createLambdaResolver(
@@ -321,7 +317,7 @@ void * CPUDriver::finalizeObject(PipelineKernel * const pipeline) {
             O3.emplace_back(kernel->getModule());
         }
     }
-    const auto method = pipeline->hasStaticMain() ? PipelineKernel::DeclareExternal : PipelineKernel::AddInternal;
+    const auto method = pipeline->hasStaticMain() ? Kernel::DeclareExternal : Kernel::AddInternal;
     Function * const main = pipeline->addOrDeclareMainFunction(iBuilder, method);
     mCachedKernel.clear();
 

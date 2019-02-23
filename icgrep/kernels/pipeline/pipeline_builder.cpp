@@ -24,10 +24,13 @@ namespace kernel {
  * @brief compile()
  ** ------------------------------------------------------------------------------------------------------------- */
 void * ProgramBuilder::compile() {
-    PipelineKernel * const pk = cast<PipelineKernel>(makeKernel());
-    mDriver.addKernel(pk);
+    Kernel * const kernel = makeKernel();
+    if (LLVM_UNLIKELY(kernel == nullptr)) {
+        report_fatal_error("Main pipeline contains no kernels nor function calls.");
+    }
+    mDriver.addKernel(kernel);
     mDriver.generateUncachedKernels();
-    return mDriver.finalizeObject(pk);
+    return mDriver.finalizeObject(kernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -171,6 +174,7 @@ Kernel * PipelineBuilder::makeKernel() {
     mDriver.generateUncachedKernels();
     for (const auto & builder : mNestedBuilders) {
         Kernel * const kernel = builder->makeKernel();
+        if (LLVM_UNLIKELY(kernel == nullptr)) continue;
         mDriver.addKernel(kernel);
         mKernels.push_back(kernel);
     }
@@ -178,6 +182,14 @@ Kernel * PipelineBuilder::makeKernel() {
 
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
+    if (LLVM_UNLIKELY(numOfKernels <= 1 && numOfCalls == 0 && !mRequiresPipeline)) {
+        if (numOfKernels == 0) {
+            return nullptr;
+        } else {
+            return mKernels.back();
+        }
+    }
+
     constexpr auto pipelineInput = 0U;
     constexpr auto firstKernel = 1U;
     const auto firstCall = firstKernel + numOfKernels;
@@ -213,13 +225,7 @@ Kernel * PipelineBuilder::makeKernel() {
         out << "+CYC";
     }
     for (unsigned i = 0; i < numOfKernels; ++i) {
-        const auto & k = mKernels[i];
-        out << "_K";
-        if (k->hasFamilyName()) {
-            out << k->getFamilyName();
-        } else {
-            out << k->getName();
-        }
+        out << "_K" << mKernels[i]->getFamilyName();
     }
 
     for (unsigned i = 0; i < numOfCalls; ++i) {
@@ -265,15 +271,15 @@ Kernel * PipelineBuilder::makeKernel() {
         }
     }
 
-    PipelineKernel * const pk =
+    PipelineKernel * const pipeline =
         new PipelineKernel(b, std::move(signature), mNumOfThreads, mNumOfThreads,
                            std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));
 
-    addKernelProperties(pk->getKernels(), pk);
+    addKernelProperties(pipeline->getKernels(), pipeline);
 
-    return pk;
+    return pipeline;
 }
 
 using AttributeCombineSet = flat_map<AttrId, unsigned>;
@@ -330,44 +336,33 @@ bool combineBindingAttributes(const Bindings & A, const Bindings & B, Bindings &
  ** ------------------------------------------------------------------------------------------------------------- */
 Kernel * OptimizationBranchBuilder::makeKernel() {
 
+    // TODO: the rates of the optimization branches should be determined by
+    // the actual kernels within the branches.
+
     mDriver.generateUncachedKernels();
-
     Kernel * const nonZero = mNonZeroBranch->makeKernel();
-    mDriver.addKernel(nonZero);
-
+    if (nonZero) mDriver.addKernel(nonZero);
     Kernel * const allZero = mAllZeroBranch->makeKernel();
-    mDriver.addKernel(allZero);
-
+    if (allZero) mDriver.addKernel(allZero);
     mDriver.generateUncachedKernels();
 
     std::string name;
     raw_string_ostream out(name);
 
     out << "OB:";
-
-    mCondition->getType()->print(out);
-
+    if (LLVM_LIKELY(isa<StreamSet>(mCondition))) {
+        const StreamSet * const streamSet = cast<StreamSet>(mCondition);
+        out << streamSet->getFieldWidth() << "x" << streamSet->getNumElements();
+    } else {
+        const Scalar * const scalar = cast<Scalar>(mCondition);
+        out << scalar->getFieldWidth();
+    }
     out << ";Z=\"";
-
-    if (nonZero->hasFamilyName()) {
-        out << nonZero->getFamilyName();
-    } else {
-        out << nonZero->getName();
-    }
-
+    if (nonZero) out << nonZero->getFamilyName();
     out << "\";N=\"";
-
-    if (allZero->hasFamilyName()) {
-        out << allZero->getFamilyName();
-    } else {
-        out << allZero->getName();
-    }
-
+    if (allZero) out << allZero->getFamilyName();
     out << "\"";
     out.flush();
-
-    // TODO: if the condition is also one of the normal inputs and the rate is compatible,
-    // we could avoid sending it through.
 
     combineBindingAttributes(nonZero->getInputStreamSetBindings(),
                              allZero->getInputStreamSetBindings(),
@@ -433,9 +428,11 @@ void PipelineBuilder::setOutputScalar(const std::string & name, Scalar * value) 
 
 PipelineBuilder::PipelineBuilder(BaseDriver & driver,
     Bindings && stream_inputs, Bindings && stream_outputs,
-    Bindings && scalar_inputs, Bindings && scalar_outputs, const unsigned numOfThreads)
+    Bindings && scalar_inputs, Bindings && scalar_outputs,
+    const unsigned numOfThreads, const bool requiresPipeline)
 : mDriver(driver)
 , mNumOfThreads(numOfThreads)
+, mRequiresPipeline(requiresPipeline)
 , mInputStreamSets(stream_inputs)
 , mOutputStreamSets(stream_outputs)
 , mInputScalars(scalar_inputs)
@@ -470,11 +467,12 @@ PipelineBuilder::PipelineBuilder(BaseDriver & driver,
 
 PipelineBuilder::PipelineBuilder(Internal, BaseDriver & driver,
     Bindings stream_inputs, Bindings stream_outputs,
-    Bindings scalar_inputs, Bindings scalar_outputs, const unsigned numOfThreads)
+    Bindings scalar_inputs, Bindings scalar_outputs,
+    const unsigned numOfThreads, const bool requiresPipeline)
 : PipelineBuilder(driver,
                   std::move(stream_inputs), std::move(stream_outputs),
                   std::move(scalar_inputs), std::move(scalar_outputs),
-                  numOfThreads) {
+                  numOfThreads, requiresPipeline) {
 
 }
 
@@ -486,7 +484,7 @@ ProgramBuilder::ProgramBuilder(
       driver,
       std::move(stream_inputs), std::move(stream_outputs),
       std::move(scalar_inputs), std::move(scalar_outputs),
-      codegen::ThreadNum) {
+      codegen::ThreadNum, true) {
 
 }
 
@@ -504,12 +502,12 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
                     mInputStreamSets, mOutputStreamSets,
-                    mInputScalars, mOutputScalars, 1)))
+                    mInputScalars, mOutputScalars, 1, false)))
 , mAllZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
                     mInputStreamSets, mOutputStreamSets,
-                    mInputScalars, mOutputScalars, 1))) {
+                    mInputScalars, mOutputScalars, 1, false))) {
 
 }
 

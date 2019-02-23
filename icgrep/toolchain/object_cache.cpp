@@ -238,7 +238,7 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForCachedKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-bool ParabixObjectCache::checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, kernel::Kernel * const kernel) noexcept {
+bool ParabixObjectCache::checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, not_null<kernel::Kernel *> kernel) noexcept {
     return mInstance.get() && mInstance->loadCachedObjectFile(b, kernel);
 }
 

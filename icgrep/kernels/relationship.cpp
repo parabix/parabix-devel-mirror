@@ -22,6 +22,10 @@ unsigned StreamSet::getFieldWidth() const {
     return mType->getArrayElementType()->getVectorElementType()->getIntegerBitWidth();
 }
 
+unsigned Scalar::getFieldWidth() const {
+    return mType->getIntegerBitWidth();
+}
+
 StreamSet::StreamSet(LLVMContext & C, const unsigned NumElements, const unsigned FieldWidth) noexcept
 : Relationship(Relationship::ClassTypeId::StreamSet, getStreamSetTy(C, NumElements, FieldWidth)) {
 

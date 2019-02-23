@@ -43,7 +43,7 @@ public:
 
     void generateUncachedKernels() override;
 
-    void * finalizeObject(kernel::PipelineKernel * const pipeline) override;
+    void * finalizeObject(kernel::Kernel * const pipeline) override;
 
     bool hasExternalFunction(const llvm::StringRef functionName) const override;
 

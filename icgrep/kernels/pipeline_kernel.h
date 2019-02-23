@@ -71,15 +71,7 @@ public:
 
     virtual ~PipelineKernel();
 
-    enum MainMethodGenerationType {
-        AddInternal
-        , DeclareExternal
-        , AddExternal
-    };
-
-    llvm::Function * addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method);
-
-    LLVM_READNONE bool hasStaticMain() const;
+    bool hasStaticMain() const final;
 
 protected:
 

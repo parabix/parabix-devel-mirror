@@ -19,12 +19,12 @@ class CBuilder;
 class BaseDriver {
     friend class CBuilder;
     friend class kernel::ProgramBuilder;
+
+public:
+
     using Kernel = kernel::Kernel;
     using Relationship = kernel::Relationship;
     using Bindings = kernel::Bindings;
-    using OwnedKernels = std::vector<std::unique_ptr<Kernel>>;
-
-public:
 
     std::unique_ptr<kernel::ProgramBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
@@ -36,11 +36,11 @@ public:
 
     kernel::StreamSet * CreateStreamSet(const unsigned NumElements = 1, const unsigned FieldWidth = 1);
 
-    kernel::Scalar * CreateScalar(llvm::Type * scalarType);
+    kernel::Scalar * CreateScalar(not_null<llvm::Type *> scalarType);
 
-    kernel::Scalar * CreateConstant(llvm::Constant * value);
+    kernel::Scalar * CreateConstant(not_null<llvm::Constant *> value);
 
-    void addKernel(Kernel * const kernel);
+    void addKernel(not_null<Kernel *> kernel);
 
     template <typename ExternalFunctionType>
     llvm::Function * LinkFunction(not_null<Kernel *> kb, llvm::StringRef name, ExternalFunctionType & functionPtr) const;
@@ -49,7 +49,7 @@ public:
 
     virtual void generateUncachedKernels() = 0;
 
-    virtual void * finalizeObject(kernel::PipelineKernel * pipeline) = 0;
+    virtual void * finalizeObject(kernel::Kernel * pipeline) = 0;
 
     virtual ~BaseDriver();
 
@@ -72,8 +72,8 @@ protected:
     std::unique_ptr<llvm::LLVMContext>                      mContext;
     llvm::Module * const                                    mMainModule;
     std::unique_ptr<kernel::KernelBuilder>                  iBuilder;
-    OwnedKernels                                            mUncachedKernel;
-    OwnedKernels                                            mCachedKernel;
+    std::vector<std::unique_ptr<Kernel>>                    mUncachedKernel;
+    std::vector<std::unique_ptr<Kernel>>                    mCachedKernel;
     SlabAllocator<>                                         mAllocator;
 };
 

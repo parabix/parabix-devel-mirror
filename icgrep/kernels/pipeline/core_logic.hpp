@@ -80,7 +80,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopEntry);
     checkForSufficientInputDataAndOutputSpace(b);
     determineNumOfLinearStrides(b);
-    enterRegionSpan(b);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL CALCULATE ITEM COUNTS
@@ -127,7 +126,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopCall);
     prepareLocalZeroExtendSpace(b);
     writeKernelCall(b);
-    exitRegionSpan(b);
     writeCopyBackLogic(b);
 
     BasicBlock * const abnormalTermination =

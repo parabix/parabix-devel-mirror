@@ -388,9 +388,9 @@ public:
 
     LLVM_READNONE ProcessingRate::RateValue getUpperBound(const Binding & binding) const;
 
-    LLVM_READNONE bool isCountable(const Binding & binding) const;
+    LLVM_READNONE static bool isCountable(const Binding & binding);
 
-    LLVM_READNONE bool isAddressable(const Binding & binding) const;
+    LLVM_READNONE static bool isAddressable(const Binding & binding);
 
     LLVM_READNONE bool requiresOverflow(const Binding & binding) const;
 
@@ -399,6 +399,16 @@ public:
     virtual void finalizeKernel() { }
 
     void initializeBindings(BaseDriver & driver);
+
+    enum MainMethodGenerationType {
+        AddInternal
+        , DeclareExternal
+        , AddExternal
+    };
+
+    llvm::Function * addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method);
+
+    virtual bool hasStaticMain() const { return true; }
 
     virtual ~Kernel() = 0;
 

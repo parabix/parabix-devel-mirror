@@ -89,9 +89,7 @@ inline unsigned addIfConstantOrFindRelationship(const Relationship * const value
     if (LLVM_LIKELY(f != M.end())) {
         return f->second;
     } else if (value->isConstant()) {
-        const auto constant = addOrFindRelationship(value, G, M);
-        // add_edge(0, constant, {PortType::Input, -1U, RelationshipType::Constant}, G);
-        return constant;
+        return addOrFindRelationship(value, G, M);
     }
     llvm_unreachable("consumer has no producer!");
 }
@@ -112,13 +110,13 @@ void addConsumerRelationships(const PortType portType, const unsigned consumer, 
  * @brief addImplicitConsumerRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Graph, typename Map>
-void addImplicitConsumerRelationship(const RelationshipType::Id relationshipTypeId, const unsigned consumer, const ImplicitRelationships & R, Graph & G, Map & M) {
+void addImplicitConsumerRelationship(const ReasonType reason, const unsigned consumer, const ImplicitRelationships & R, Graph & G, Map & M) {
     const Kernel * const kernel = G[consumer].Kernel; assert (kernel);
     const auto f = R.find(kernel);
     if (LLVM_UNLIKELY(f != R.end())) {
         const auto relationship = addIfConstantOrFindRelationship(getRelationship(f->second), G, M);
         const unsigned portNum = in_degree(consumer, G);
-        add_edge(relationship, consumer, {PortType::Input, portNum, relationshipTypeId}, G);
+        add_edge(relationship, consumer, {PortType::Input, portNum, reason}, G);
     }
 }
 
@@ -194,7 +192,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
         const Kernel * kernel = kernels[i - firstKernel];
         addConsumerRelationships(PortType::Input, i, kernel->getInputStreamSetBindings(), G, M);
-        addImplicitConsumerRelationship(RelationshipType::ImplicitRegionSelector, i, regionSelectors, G, M);
+        addImplicitConsumerRelationship(ReasonType::ImplicitRegionSelector, i, regionSelectors, G, M);
     }
     addConsumerRelationships(PortType::Output, pipelineOutput, pipelineKernel->getOutputStreamSetBindings(), G, M);
     lastRelationship[STREAM] = num_vertices(G) - 1;
@@ -773,19 +771,20 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
 
     PipelineIOGraph G((PipelineOutput - PipelineInput) + 1);
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const auto buffer = target(e, mBufferGraph);
-        for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
-            const auto consumer = target(e, mBufferGraph);
-            add_edge(PipelineInput, consumer, mBufferGraph[e].inputPort(), G);
+    for (const auto & p : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const auto buffer = target(p, mBufferGraph);
+        for (const auto & c : make_iterator_range(out_edges(buffer, mBufferGraph))) {
+            const auto consumer = target(c, mBufferGraph);
+            const BufferRateData & cr = mBufferGraph[c];
+            add_edge(PipelineInput, consumer, cr.Port.Number, G);
         }
     }
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const auto buffer = source(e, mBufferGraph);
-        for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
-            const auto producer = source(e, mBufferGraph);
-            add_edge(producer, PipelineOutput, mBufferGraph[e].outputPort(), G);
-        }
+    for (const auto & c : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+        const auto buffer = source(c, mBufferGraph);
+        const auto & p = in_edge(buffer, mBufferGraph);
+        const auto producer = source(p, mBufferGraph);
+        const BufferRateData & pr = mBufferGraph[p];
+        add_edge(producer, PipelineOutput, pr.Port.Number, G);
     }
     return G;
 }

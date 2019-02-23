@@ -45,8 +45,8 @@ void OptimizationBranch::addKernelDeclarations(const std::unique_ptr<KernelBuild
 OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
     std::string && signature,
     not_null<Relationship *> condition,
-    not_null<Kernel *> nonZeroKernel,
-    not_null<Kernel *> allZeroKernel,
+    Kernel * const nonZeroKernel,
+    Kernel * const allZeroKernel,
     Bindings && stream_inputs,
     Bindings && stream_outputs,
     Bindings && scalar_inputs,
@@ -55,9 +55,9 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
 {Binding{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS}, Binding{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS}})
-, mCondition(condition.get())
-, mNonZeroKernel(nonZeroKernel.get())
-, mAllZeroKernel(allZeroKernel.get()) {
+, mCondition(condition)
+, mNonZeroKernel(nonZeroKernel)
+, mAllZeroKernel(allZeroKernel) {
    // TODO: need to pass in initial logical segment number to the pipeline branches
    // addAttribute(SynchronizationFree());
 }

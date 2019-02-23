@@ -782,7 +782,6 @@ std::string Kernel::getCacheName(const std::unique_ptr<KernelBuilder> & b) const
  ** ------------------------------------------------------------------------------------------------------------- */
 Module * Kernel::setModule(Module * const module) {
     assert (mModule == nullptr || mModule == module);
-    assert (module != nullptr);
     mModule = module;
     return mModule;
 }
@@ -1012,7 +1011,86 @@ Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value
         result = nullptr;
     }
     return result;
+}
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOrDeclareMainFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method) {
+
+    b->setKernel(this);
+
+    addKernelDeclarations(b);
+
+    Module * const m = b->getModule();
+    Function * const doSegment = getDoSegmentFunction(m);
+    assert (doSegment->arg_size() >= 2);
+    const auto numOfDoSegArgs = doSegment->arg_size() - 2;
+    Function * const terminate = getTerminateFunction(m);
+
+    // maintain consistency with the Kernel interface by passing first the stream sets
+    // and then the scalars.
+    std::vector<Type *> params;
+    params.reserve(numOfDoSegArgs + getNumOfScalarInputs());
+
+    // the first two params of doSegmentare its handle and numOfStrides; the remaining
+    // are the stream set params
+    auto doSegParam = doSegment->arg_begin(); ++doSegParam;
+    const auto doSegEnd = doSegment->arg_end();
+    while (++doSegParam != doSegEnd) {
+        params.push_back(doSegParam->getType());
+    }
+
+    for (const auto & input : getInputScalarBindings()) {
+        if (!input.hasAttribute(AttrId::Family)) {
+            params.push_back(input.getType());
+        }
+    }
+
+    const auto numOfInitArgs = params.size() - numOfDoSegArgs;
+
+    // get the finalize method output type and set its return type as this function's return type
+    FunctionType * const mainFunctionType = FunctionType::get(terminate->getReturnType(), params, false);
+
+    const auto linkageType = (method == AddInternal) ? Function::InternalLinkage : Function::ExternalLinkage;
+
+    Function * const main = Function::Create(mainFunctionType, linkageType, getName() + "_main", m);
+    main->setCallingConv(CallingConv::C);
+
+    if (method != DeclareExternal) {
+
+        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", main));
+        auto arg = main->arg_begin();
+
+        // TODO: Even if a kernel is in a family, it may have a different kernel struct. Make sure this works here.
+        Value * const handle = createInstance(b);
+        setHandle(b, handle);
+
+        std::vector<Value *> segmentArgs(doSegment->arg_size());
+        segmentArgs[0] = handle;
+        segmentArgs[1] = b->getSize(0);
+        for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
+            assert (arg != main->arg_end());
+            segmentArgs[i + 2] = &*arg++;
+        }
+
+        std::vector<Value *> initArgs(numOfInitArgs + 1);
+        initArgs[0] = handle;
+        for (unsigned i = 0; i < numOfInitArgs; ++i) {
+            assert (arg != main->arg_end());
+            initArgs[i + 1] = &*arg++;
+        }
+        assert (arg == main->arg_end());
+        // initialize the kernel
+        initializeInstance(b, initArgs);
+        // call the pipeline kernel
+        b->CreateCall(doSegment, segmentArgs);
+        // call and return the final output value(s)
+        b->CreateRet(finalizeInstance(b, handle));
+    }
+
+    return main;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1144,7 +1222,7 @@ RateValue Kernel::getUpperBound(const Binding & binding) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isCountable
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isCountable(const Binding & binding) const {
+bool Kernel::isCountable(const Binding & binding) {
     if (LLVM_UNLIKELY(binding.isDeferred())) {
         return false;
     }
@@ -1155,7 +1233,7 @@ bool Kernel::isCountable(const Binding & binding) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isAddressable
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isAddressable(const Binding & binding) const {
+bool Kernel::isAddressable(const Binding & binding) {
     if (LLVM_UNLIKELY(binding.isDeferred())) {
         return true;
     }

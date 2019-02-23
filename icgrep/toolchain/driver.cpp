@@ -35,7 +35,7 @@ StreamSet * BaseDriver::CreateStreamSet(const unsigned NumElements, const unsign
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief CreateConstant
  ** ------------------------------------------------------------------------------------------------------------- */
-Scalar * BaseDriver::CreateScalar(llvm::Type * scalarType) {
+Scalar * BaseDriver::CreateScalar(not_null<llvm::Type *> scalarType) {
     RelationshipAllocator A(mAllocator);
     return new (A) Scalar(scalarType);
 }
@@ -43,7 +43,7 @@ Scalar * BaseDriver::CreateScalar(llvm::Type * scalarType) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief CreateConstant
  ** ------------------------------------------------------------------------------------------------------------- */
-Scalar * BaseDriver::CreateConstant(llvm::Constant * const value) {
+Scalar * BaseDriver::CreateConstant(not_null<llvm::Constant *> value) {
     RelationshipAllocator A(mAllocator);
     return new (A) ScalarConstant(value);
 }
@@ -51,16 +51,20 @@ Scalar * BaseDriver::CreateConstant(llvm::Constant * const value) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeCache
  ** ------------------------------------------------------------------------------------------------------------- */
-void BaseDriver::addKernel(Kernel * const kernel) {
+void BaseDriver::addKernel(not_null<Kernel *> kernel) {
     kernel->initializeBindings(*this);
-    if (ParabixObjectCache::checkForCachedKernel(iBuilder, kernel)) {
-        assert (kernel->getModule());
-        mCachedKernel.emplace_back(kernel);
-    } else {
-        if (kernel->getModule() == nullptr) {
-            kernel->makeModule(iBuilder);
+    // If the pipeline contained a single kernel, the pipeline builder will return the
+    // original kernel. However, the module for that kernel is already owned by the JIT
+    // engine so we avoid declaring it as cached or uncached.
+    if (LLVM_LIKELY(kernel->getModule() == nullptr)) {
+        if (LLVM_LIKELY(ParabixObjectCache::checkForCachedKernel(iBuilder, kernel))) {
+            mCachedKernel.emplace_back(kernel);
+        } else {
+            if (kernel->getModule() == nullptr) {
+                kernel->makeModule(iBuilder);
+            }
+            mUncachedKernel.emplace_back(kernel);
         }
-        mUncachedKernel.emplace_back(kernel);
     }
 }
 

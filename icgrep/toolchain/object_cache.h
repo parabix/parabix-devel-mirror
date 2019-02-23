@@ -11,6 +11,7 @@
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/ADT/StringRef.h>
 #include <boost/container/flat_map.hpp>
+#include <util/not_null.h>
 #include <string>
 
 namespace llvm { class Module; }
@@ -40,7 +41,7 @@ class ParabixObjectCache final : public llvm::ObjectCache {
 public:
     using Path = llvm::SmallString<128>;
 
-    static bool checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, kernel::Kernel * const kernel) noexcept;
+    static bool checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, not_null<kernel::Kernel *> kernel) noexcept;
 
     static void initializeCacheSystems() noexcept;
 

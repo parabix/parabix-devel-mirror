@@ -88,31 +88,6 @@ Value * PipelineCompiler::getScalar(BuilderRef b, const unsigned index) {
             }
         }
     }
-    /*
-    const auto producer = in_edge(index, mScalarGraph);
-    const auto i = source(producer, mScalarGraph);
-    const auto j = mScalarGraph[producer];
-    if (i == PipelineInput) {
-        if (LLVM_UNLIKELY(j == SCALAR_CONSTANT)) {
-            assert (index >= FirstScalar && index <= LastScalar);
-            const Relationship * const rel = mPipelineGraph[index].Relationship; assert (rel);
-            value = cast<ScalarConstant>(rel)->value();
-        } else {
-            const Binding & input = mPipelineKernel->getInputScalarBinding(j);
-            value = b->getScalarField(input.getName());
-        }
-    } else { // output scalar of some kernel
-        Value * const outputScalars = getScalar(b, i);
-        if (LLVM_UNLIKELY(outputScalars == nullptr)) {
-            report_fatal_error("Internal error: pipeline is unable to locate valid output scalar");
-        }
-        if (outputScalars->getType()->isAggregateType()) {
-            value = b->CreateExtractValue(outputScalars, {j});
-        } else { assert (j == 0 && "scalar type is not an aggregate");
-            value = outputScalars;
-        }
-    }
-    */
     assert (value);
     mScalarValue[index] = value;
     return value;

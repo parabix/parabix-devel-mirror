@@ -97,6 +97,7 @@ public:
     static bool classof(const void *) {
         return false;
     }
+    unsigned getFieldWidth() const;
     Scalar(not_null<llvm::Type *> type) noexcept;
 protected:
     Scalar(const ClassTypeId typeId, llvm::Type *type) noexcept;
