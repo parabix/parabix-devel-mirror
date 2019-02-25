@@ -52,6 +52,16 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
 
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
+// Prior to LLVM 4.0.0, std::array cannot be implicitly converted to a ArrayRef
+template <typename T, unsigned N>
+struct FixedArray : public SmallVector<T, N> {
+    constexpr FixedArray() : SmallVector<T, N>(N) { }
+};
+#else
+template <typename T, unsigned N>
+using FixedArray = std::array<T, N>;
+#endif
 
 union RelationshipNode {
     const kernel::Kernel * Kernel = nullptr;

@@ -390,7 +390,7 @@ enum : unsigned {
  * @brief getThreadStateType
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
-    std::array<Type *, 2> fields;
+    FixedArray<Type *, 2> fields;
     fields[LOCAL_STATE_INDEX] = getLocalStateType(b);
     LLVMContext & C = b->getContext();
     fields[SHARED_STATE_INDEX] = StructType::get(C, mPipelineKernel->getDoSegmentFields(b));
@@ -403,11 +403,11 @@ inline StructType * PipelineCompiler::getThreadStateType(BuilderRef b) {
 inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, Value * initialSegNo) {
     StructType * const threadStructType = getThreadStateType(b);
     Value * const threadState = makeStateObject(b, threadStructType);
-    std::array<Value *, 2> indices1;
+    FixedArray<Value *, 2> indices1;
     indices1[0] = b->getInt32(0);
     indices1[1] = b->getInt32(LOCAL_STATE_INDEX);
     allocateThreadLocalState(b, b->CreateGEP(threadState, indices1), initialSegNo);
-    std::array<Value *, 3> indices2;
+    FixedArray<Value *, 3> indices2;
     const auto props = mPipelineKernel->getDoSegmentProperties(b);
     indices2[0] = indices1[0];
     indices2[1] = b->getInt32(SHARED_STATE_INDEX);
@@ -424,11 +424,11 @@ inline Value * PipelineCompiler::allocateThreadState(BuilderRef b, Value * initi
  * @brief constructThreadState
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setThreadState(BuilderRef b, Value * threadState) {
-    std::array<Value *, 2> indices1;
+    FixedArray<Value *, 2> indices1;
     indices1[0] = b->getInt32(0);
     indices1[1] = b->getInt32(LOCAL_STATE_INDEX);
     readThreadLocalState(b, b->CreateGEP(threadState, indices1));
-    std::array<Value *, 3> indices2;
+    FixedArray<Value *, 3> indices2;
     indices2[0] = indices1[0];
     indices2[1] = b->getInt32(SHARED_STATE_INDEX);
     Type * const kernelStructType = threadState->getType()->getPointerElementType();
@@ -446,7 +446,7 @@ inline void PipelineCompiler::setThreadState(BuilderRef b, Value * threadState) 
  * @brief deallocateThreadLocalSpace
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::deallocateThreadState(BuilderRef b, Value * const threadState) {
-    std::array<Value *, 2> indices;
+    FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(LOCAL_STATE_INDEX);
     deallocateThreadLocalState(b, b->CreateGEP(threadState, indices));
@@ -466,7 +466,7 @@ enum : unsigned {
  * @brief getLocalStateType
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
-    std::array<Type *, THREAD_LOCAL_COUNT> fields;
+    FixedArray<Type *, THREAD_LOCAL_COUNT> fields;
     Type * const emptyTy = StructType::get(b->getContext());
     fields[POP_COUNT_STRUCT_INDEX] = getPopCountThreadLocalStateType(b);
     fields[ZERO_EXTENDED_BUFFER_INDEX] = mHasZeroExtendedStream ? b->getVoidPtrTy() : emptyTy;
@@ -484,7 +484,7 @@ inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::allocateThreadLocalState(BuilderRef b, Value * const localState, Value * initialStrideNum) {
     mPipelineKernel->setCurrentStrideNum(initialStrideNum);
-    std::array<Value *, 2> indices;
+    FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     allocatePopCountArrays(b, b->CreateGEP(localState, indices));
@@ -494,7 +494,7 @@ inline void PipelineCompiler::allocateThreadLocalState(BuilderRef b, Value * con
  * @brief readThreadLocalState
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::readThreadLocalState(BuilderRef b, Value * const localState) {
-    std::array<Value *, 2> indices;
+    FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     mPopCountState = b->CreateGEP(localState, indices);
@@ -519,7 +519,7 @@ inline void PipelineCompiler::readThreadLocalState(BuilderRef b, Value * const l
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::deallocateThreadLocalState(BuilderRef b, Value * const localState) {
     assert (localState->getType()->getPointerElementType() == getLocalStateType(b));
-    std::array<Value *, 2> indices;
+    FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
