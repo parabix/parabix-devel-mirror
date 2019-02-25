@@ -65,6 +65,9 @@ public:
         return CreateCeilUDiv(number, divisor, Name);
     }
 
+    // Round down to a multiple of divisor.
+    llvm::Value * CreateRoundDown(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+
     // Round up to a multiple of divisor.
     llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
 

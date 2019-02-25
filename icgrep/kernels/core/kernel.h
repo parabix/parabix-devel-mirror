@@ -388,10 +388,6 @@ public:
 
     LLVM_READNONE ProcessingRate::RateValue getUpperBound(const Binding & binding) const;
 
-    LLVM_READNONE static bool isCountable(const Binding & binding);
-
-    LLVM_READNONE static bool isAddressable(const Binding & binding);
-
     LLVM_READNONE bool requiresOverflow(const Binding & binding) const;
 
     /* Fill in any generated names / attributes for the kernel if their initialization is dependent on
@@ -518,6 +514,10 @@ protected:
         return mCurrentStrideNum;
     }
 
+    llvm::Value * getNumOfStrides() const {
+        return mNumOfStrides;
+    }
+
     LLVM_READNONE llvm::Value * isFinal() const {
         return mIsFinal;
     }
@@ -556,6 +556,8 @@ private:
     void addStreamToMap(const llvm::StringRef name, const PortType type, const unsigned number);
 
     LLVM_READNONE const ScalarField & getScalarField(const llvm::StringRef name) const;
+
+    LLVM_READNONE bool hasFixedRateBinding() const;
 
     LLVM_READNONE llvm::Constant * calculateFixedRateMultiple(const std::unique_ptr<KernelBuilder> & b, const Binding & binding) const;
 
@@ -596,6 +598,7 @@ protected:
     llvm::Value *                   mIsFinal;
     llvm::Value *                   mNumOfStrides;
     llvm::Value *                   mCurrentStrideNum;
+    llvm::Value *                   mPartialFixedItemCount;
 
     std::vector<llvm::Value *>      mLocalScalarPtr;
 

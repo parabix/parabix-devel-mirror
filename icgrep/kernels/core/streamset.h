@@ -96,7 +96,7 @@ public:
 
     virtual llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const = 0;
 
-    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const;
+    virtual llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     virtual llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
@@ -214,7 +214,7 @@ public:
 
     llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const override;
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
 
     size_t getCapacity() const {
         return mCapacity;
@@ -283,7 +283,7 @@ protected:
 
     llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
 
-    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * absolutePosition) const override;
+    llvm::Value * getRawItemPointer(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex, llvm::Value * absolutePosition) const override;
 
 private:
 

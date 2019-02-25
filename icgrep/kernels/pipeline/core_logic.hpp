@@ -249,18 +249,6 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
     }
 }
 
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isParamAddressable
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isAddressable(const Binding & binding) {
-    if (binding.isDeferred()) {
-        return true;
-    }
-    const ProcessingRate & rate = binding.getRate();
-    return (rate.isBounded() || rate.isUnknown());
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */

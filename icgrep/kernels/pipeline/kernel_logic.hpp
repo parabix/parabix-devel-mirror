@@ -12,14 +12,6 @@ inline void reset(Vec & vec, const unsigned n) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isPopCount
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isPopCount(const Binding & binding) {
-    const ProcessingRate & rate = binding.getRate();
-    return rate.isPopCount() || rate.isNegatedPopCount();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
@@ -261,7 +253,7 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
     const Binding & input = getInputBinding(inputPort);
     Value * numOfStrides = nullptr;
     Value * const accessible = mAccessibleInputItems[inputPort];
-    if (LLVM_UNLIKELY(isPopCount(input))) {
+    if (LLVM_UNLIKELY(isAnyPopCount(input))) {
         Value * const inBuffer = getAccessibleInputItems(b, inputPort, false);
         Constant * const lookAhead = getLookahead(b, inputPort);
         numOfStrides = getMaximumNumOfPopCountStrides(b, input, inBuffer, accessible, lookAhead);
@@ -298,7 +290,7 @@ inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const uns
     if (LLVM_LIKELY(getOutputBufferType(outputPort) != BufferType::Managed)) {
         const Binding & output = getOutputBinding(outputPort);
         Value * const writable = mWritableOutputItems[outputPort];
-        if (LLVM_UNLIKELY(isPopCount(output))) {
+        if (LLVM_UNLIKELY(isAnyPopCount(output))) {
             Value * const inBuffer = getWritableOutputItems(b, outputPort, false);
             numOfStrides = getMaximumNumOfPopCountStrides(b, output, inBuffer, writable);
         } else {
@@ -399,7 +391,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
         Value * writable = mWritableOutputItems[i];
-        if (LLVM_UNLIKELY(isPopCount(output))) {
+        if (LLVM_UNLIKELY(isAnyPopCount(output))) {
             writable = getMinimumNumOfLinearPopCountItems(b, output);
         } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
             writable = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
@@ -546,12 +538,15 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     b->setKernel(mPipelineKernel);
 
     Vec<Value *, 64> args;
-    args.reserve((numOfInputs + numOfOutputs) * 4 + 2);
+    args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
-    args.push_back(mKernelStrideNumPhi); assert (mNumOfLinearStrides);
+    args.push_back(mKernelStrideNumPhi); assert (mKernelStrideNumPhi);
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
+    if (mKernel->hasFixedRateBinding()) {
+        args.push_back(b->getSize(0));
+    }
     for (unsigned i = 0; i < numOfInputs; ++i) {
 
         // calculate the deferred processed item count
@@ -683,7 +678,7 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
         ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
         b->CreateStore(itemCount, ptr);
         args.push_back(ptr);
-    } else if (isPopCount(binding)) {
+    } else if (isAnyPopCount(binding)) {
         args.push_back(itemCount);
     }
     return ptr;
@@ -731,18 +726,16 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
-        if (LLVM_UNLIKELY(output.hasAttribute(AttrId::ManagedBuffer))) {
+        const StreamSetBuffer * const buffer = getOutputBuffer(i);
+        if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
             continue;
         }
-
-        const StreamSetBuffer * const buffer = getOutputBuffer(i);
+        const Binding & output = getOutputBinding(i);
         const auto itemWidth = getItemWidth(buffer->getBaseType());
-
         // Determine the maximum lookahead dependency on this stream and zero fill
         // the appropriate number of additional blocks.
         unsigned maximumLookahead = 0;
-        RateValue strideLength{mKernel->getUpperBound(output) * mKernel->getStride()};
+        RateValue strideLength{0};
         const auto bufferVertex = getOutputBufferVertex(i);
         for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
@@ -752,12 +745,11 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
                 maximumLookahead = std::max(maximumLookahead, input.getLookahead());
             }
         }
-        const auto numOfBlocks = ceiling(strideLength * itemWidth) >> log2BlockWidth;
+        const auto numOfBlocks = ceiling(strideLength) >> log2BlockWidth;
         const auto numOfLookaheadBlocks = ((maximumLookahead * itemWidth) + (blockWidth - 1)) >> log2BlockWidth;
         const auto blocksToZero = numOfBlocks + numOfLookaheadBlocks;
 
         const auto prefix = makeBufferName(mKernelIndex, output);
-
         Value * const produced = mFinalProducedPhi[i];
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
@@ -794,6 +786,9 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             // because they may be within the same cache line.
             Constant * const MAX_PACK_INDEX = b->getSize(itemWidth - 1);
             Value * const remainingPackBytes = b->CreateShl(b->CreateSub(MAX_PACK_INDEX, packIndex), LOG_2_BLOCK_WIDTH);
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);
+            #endif
             Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
             Value * const ptr = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, nextPackIndex);
             b->CreateMemZero(ptr, remainingPackBytes, blockWidth / 8);
@@ -815,6 +810,9 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             remainingBlocks = b->CreateMul(numOfStreams, remainingBlocks);
             Constant * const LOG_2_BYTES_PER_BLOCK = b->getSize(floor_log2(blockWidth / 8));
             Value * const remainingBytes = b->CreateShl(remainingBlocks, LOG_2_BYTES_PER_BLOCK);
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_zeroFill_remainingBytes", remainingBytes);
+            #endif
             b->CreateMemZero(ptr, remainingBytes, blockWidth / 8);
         }
     }

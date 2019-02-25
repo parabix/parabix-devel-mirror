@@ -72,22 +72,29 @@ Value * StreamSetBuffer::getStreamSetCount(IDISA_Builder * const b) const {
  * In the case of a stream whose fields are less than one byte (8 bits) in size, the pointer is to the containing byte.
  * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
  */
-Value * StreamSetBuffer::getRawItemPointer(IDISA_Builder * const b, Value * absolutePosition) const {
+Value * StreamSetBuffer::getRawItemPointer(IDISA_Builder * const b, Value * streamIndex, Value * absolutePosition) const {
     Value * ptr = getBaseAddress(b);
-    Type * const elemTy = mBaseType->getArrayElementType()->getVectorElementType();
-    const auto bw = elemTy->getPrimitiveSizeInBits();
-    assert (is_power_2(bw));
-    if (bw < 8) {
-        Constant * const fw = ConstantInt::get(absolutePosition->getType(), 8 / bw);
+    Type * itemTy = mBaseType->getArrayElementType()->getVectorElementType();
+    const auto itemWidth = itemTy->getPrimitiveSizeInBits();
+    assert (is_power_2(itemWidth));
+    IntegerType * const sizeTy = b->getSizeTy();
+    streamIndex = b->CreateZExt(streamIndex, sizeTy);
+    absolutePosition = b->CreateZExt(absolutePosition, sizeTy);
+
+    if (LLVM_UNLIKELY(itemWidth < 8)) {
+        Constant * const itemsPerByte = b->getSize(8 / itemWidth);
         if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
-            b->CreateAssertZero(b->CreateURem(absolutePosition, fw), "absolutePosition must be byte aligned");
+            b->CreateAssertZero(b->CreateURem(absolutePosition, itemsPerByte), "absolutePosition must be byte aligned");
         }
-        absolutePosition = b->CreateUDiv(absolutePosition, fw);
-        ptr = b->CreatePointerCast(ptr, b->getInt8PtrTy());
-    } else {
-        ptr = b->CreatePointerCast(ptr, elemTy->getPointerTo());
+        absolutePosition = b->CreateUDiv(absolutePosition, itemsPerByte);
+        itemTy = b->getInt8Ty();
     }
-    return b->CreateGEP(ptr, absolutePosition);
+    Constant * const itemsPerVector = ConstantExpr::getUDiv(ConstantExpr::getSizeOf(mType), ConstantExpr::getSizeOf(itemTy));
+    Value * const blockOffset = b->CreateMul(b->CreateRoundDown(absolutePosition, itemsPerVector), getStreamSetCount(b));
+    Value * const streamOffset = b->CreateMul(streamIndex, itemsPerVector);
+    Value * const itemOffset = b->CreateURem(absolutePosition, itemsPerVector);
+    Value * const position = b->CreateAdd(b->CreateAdd(blockOffset, streamOffset), itemOffset);
+    return b->CreateGEP(b->CreatePointerCast(ptr, itemTy->getPointerTo()), position);
 }
 
 Value * StreamSetBuffer::addOverflow(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
@@ -264,8 +271,8 @@ Value * StaticBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, llvm::Val
     return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, baseBlockIndex);
 }
 
-Value * StaticBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const absolutePosition) const {
-    return StreamSetBuffer::getRawItemPointer(b, b->CreateURem(absolutePosition, getCapacity(b)));
+Value * StaticBuffer::getRawItemPointer(IDISA_Builder * const b, Value * streamIndex, Value * absolutePosition) const {
+    return StreamSetBuffer::getRawItemPointer(b, streamIndex, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
 Value * StaticBuffer::getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> & b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
@@ -372,8 +379,8 @@ Value * DynamicBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, llvm::Va
     return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, baseBlockIndex);
 }
 
-Value * DynamicBuffer::getRawItemPointer(IDISA_Builder * const b, Value * absolutePosition) const {
-    return StreamSetBuffer::getRawItemPointer(b, b->CreateURem(absolutePosition, getCapacity(b)));
+Value * DynamicBuffer::getRawItemPointer(IDISA_Builder * const b, Value * streamIndex, Value * absolutePosition) const {
+    return StreamSetBuffer::getRawItemPointer(b, streamIndex, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
 Value * DynamicBuffer::getLinearlyAccessibleItems(const std::unique_ptr<KernelBuilder> &b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {

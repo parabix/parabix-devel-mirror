@@ -74,10 +74,12 @@ void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     BasicBlock * const loop = b->CreateBasicBlock("Loop");
     b->CreateBr(loop);
 
+    // TODO: investigate whether using memcpy + temporary stack buffer for could be more efficient
+    // than short unaligned loads/stores?
+
     b->SetInsertPoint(loop);
     PHINode * const index = b->CreatePHI(sizeTy, 2);
     index->addIncoming(ZERO, entry);
-
     std::vector<Value *> inputBuffer(inputFieldWidth);
     // read the values from the input stream
     Value * const baseInputOffset = b->CreateMul(index, b->getSize(inputFieldWidth));

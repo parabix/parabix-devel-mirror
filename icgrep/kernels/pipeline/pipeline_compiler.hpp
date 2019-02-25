@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -589,8 +589,6 @@ protected:
     PHINode *                                   mNextKernelStrideNumPhi = nullptr;
     Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
-
-
 
     Vec<Value *>                                mIsInputClosed;
     Vec<Value *>                                mIsInputZeroExtended;

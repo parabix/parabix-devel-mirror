@@ -184,12 +184,30 @@ Value * KernelBuilder::getOutputStreamSetCount(const std::string & name) {
 
 Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * absolutePosition) {
     const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
-    return buf->getRawItemPointer(this, absolutePosition);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * const sanityCheck = CreateICmpEQ(buf->getStreamSetCount(this), getSize(1));
+        CreateAssert(sanityCheck, "stream index must be explicit");
+    }
+    return buf->getRawItemPointer(this, getSize(0), absolutePosition);
+}
+
+Value * KernelBuilder::getRawInputPointer(const std::string & name, Value * const streamIndex, Value * absolutePosition) {
+    const StreamSetBuffer * const buf = mKernel->getInputStreamSetBuffer(name);
+    return buf->getRawItemPointer(this, streamIndex, absolutePosition);
 }
 
 Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * absolutePosition) {
     const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
-    return buf->getRawItemPointer(this, absolutePosition);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * const sanityCheck = CreateICmpEQ(buf->getStreamSetCount(this), getSize(1));
+        CreateAssert(sanityCheck, "stream index must be explicit");
+    }
+    return buf->getRawItemPointer(this, getSize(0), absolutePosition);
+}
+
+Value * KernelBuilder::getRawOutputPointer(const std::string & name, Value * const streamIndex, Value * absolutePosition) {
+    const StreamSetBuffer * const buf = mKernel->getOutputStreamSetBuffer(name);
+    return buf->getRawItemPointer(this, streamIndex, absolutePosition);
 }
 
 Value * KernelBuilder::getBaseAddress(const std::string & name) {

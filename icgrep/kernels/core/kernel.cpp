@@ -247,21 +247,6 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isPopCount
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool isPopCount(const Binding & binding) {
-    const ProcessingRate & rate = binding.getRate();
-    return rate.isPopCount() || rate.isNegatedPopCount();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief requiresItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool requiresItemCount(const Binding & binding) {
-    return Kernel::isAddressable(binding) || isPopCount(binding);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
@@ -275,7 +260,8 @@ inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder>
     auto arg = doSegment->arg_begin();
     auto setNextArgName = [&](const StringRef name) {
         assert (arg != doSegment->arg_end());
-        (arg++)->setName(name);
+        arg->setName(name);
+        std::advance(arg, 1);
     };
 
     if (LLVM_LIKELY(isStateful())) {
@@ -283,6 +269,9 @@ inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder>
     }
     setNextArgName("currentStrideNum");
     setNextArgName("numOfStrides");
+    if (hasFixedRateBinding()) {
+        setNextArgName("partialFixedItemCount");
+    }
 
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         const Binding & input = mInputStreamSets[i];
@@ -334,6 +323,9 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
     }
     fields.push_back(sizeTy); // currentStrideNum
     fields.push_back(sizeTy); // numOfStrides
+    if (hasFixedRateBinding()) {
+        fields.push_back(sizeTy); // partialFixedItemCount
+    }
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         Type * const bufferType = mStreamSetInputBuffers[i]->getType();
         // logical base input address
@@ -342,7 +334,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         const Binding & input = mInputStreamSets[i];
         if (isAddressable(input)) {
             fields.push_back(sizePtrTy); // updatable
-        } else if (isPopCount(input)) {
+        } else if (isAnyPopCount(input)) {
             fields.push_back(sizeTy); // constant
         }
         // accessible input items (after non-deferred processed item count)
@@ -367,7 +359,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         // produced output items
         if (canTerminate || isAddressable(output)) {
             fields.push_back(sizePtrTy); // updatable
-        } else if (isPopCount(output)) {
+        } else if (isAnyPopCount(output)) {
             fields.push_back(sizeTy); // constant
         }
         // If this is a local buffer, the next param is its consumed item count;
@@ -464,6 +456,9 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     }
     mCurrentStrideNum = *arg++;
     mNumOfStrides = *arg++;
+    if (hasFixedRateBinding()) {
+        mPartialFixedItemCount = *arg++;
+    }
     mIsFinal = b->CreateIsNull(mNumOfStrides);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mHandle, CBuilder::Protect::WRITE);
@@ -608,6 +603,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             Value * const ref = b->CreateLoad(items[port.Number]);
             produced = b->CreateMul2(ref, rate.getRate());
         }
+
         AllocaInst * const producedItems = b->CreateAlloca(sizeTy);
         b->CreateStore(produced, producedItems);
         mProducedOutputItemPtr[i] = producedItems;
@@ -876,17 +872,6 @@ Function * Kernel::getTerminateFunction(Module * const module) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isStateful
- ** ------------------------------------------------------------------------------------------------------------- */
-LLVM_READNONE bool Kernel::isStateful() const {
-    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
-        llvm_unreachable("kernel state must be constructed prior to calling isStateful");
-    }
-    return !mKernelStateType->isEmptyTy();
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
@@ -1078,11 +1063,12 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
 
     // The first three params of doSegment are its handle, currentStrideNum and numOfStrides.
     // The remaining are the stream set params
-    auto doSegParam = doSegment->arg_begin() + 3;
+    auto doSegParam = doSegment->arg_begin();
+    std::advance(doSegParam, 3);
     const auto doSegEnd = doSegment->arg_end();
     while (doSegParam != doSegEnd) {
         params.push_back(doSegParam->getType());
-        ++doSegParam;
+        std::advance(doSegParam, 1);
     }
 
     for (const auto & input : getInputScalarBindings()) {
@@ -1264,25 +1250,31 @@ RateValue Kernel::getUpperBound(const Binding & binding) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isCountable
+ * @brief isStateful
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isCountable(const Binding & binding) {
-    if (LLVM_UNLIKELY(binding.isDeferred())) {
-        return false;
+LLVM_READNONE bool Kernel::isStateful() const {
+    if (LLVM_UNLIKELY(mKernelStateType == nullptr)) {
+        llvm_unreachable("kernel state must be constructed prior to calling isStateful");
     }
-    const ProcessingRate & rate = binding.getRate();
-    return rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount();
+    return !mKernelStateType->isEmptyTy();
 }
-
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isAddressable
+ * @brief hasFixedRateBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::isAddressable(const Binding & binding) {
-    if (LLVM_UNLIKELY(binding.isDeferred())) {
-        return true;
+bool Kernel::hasFixedRateBinding() const {
+    for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
+        const Binding & input = mInputStreamSets[i];
+        if (input.getRate().isFixed()) {
+            return true;
+        }
     }
-    const ProcessingRate & rate = binding.getRate();
-    return rate.isBounded() || rate.isUnknown();
+    for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
+        const Binding & output = mOutputStreamSets[i];
+        if (output.getRate().isFixed()) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

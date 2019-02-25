@@ -154,6 +154,16 @@ Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, co
     return CreateAdd(CreateUDiv(CreateSub(number, ONE), divisor), ONE, Name);
 }
 
+Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, const Twine & Name) {
+    if (isa<ConstantInt>(divisor)) {
+        const auto d = cast<ConstantInt>(divisor)->getZExtValue();
+        if (is_power_2(d)) {
+            return CreateAnd(number, ConstantExpr::getNeg(cast<ConstantInt>(divisor)));
+        }
+    }
+    return CreateMul(CreateUDiv(number, divisor), divisor, Name);
+}
+
 Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine & Name) {
     if (isa<ConstantInt>(divisor)) {
         const auto d = cast<ConstantInt>(divisor)->getZExtValue();

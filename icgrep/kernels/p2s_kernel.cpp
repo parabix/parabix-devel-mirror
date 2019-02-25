@@ -143,6 +143,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     PointerType * int16PtrTy = b->getInt16Ty()->getPointerTo();
     PointerType * bitBlockPtrTy = b->getBitBlockType()->getPointerTo();
     ConstantInt * blockMask = b->getSize(b->getBitBlockWidth() - 1);
+    ConstantInt * ZERO = b->getInt32(0);
     unsigned const unitsPerRegister = b->getBitBlockWidth()/16;
 
     Value * hi_input[8];
@@ -159,16 +160,15 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     }
     Value * lo_bytes[8];
     p2s(b, lo_input, lo_bytes);
-    Value * const extractionMask = b->loadInputStreamBlock("extractionMask", b->getInt32(0));
+    Value * const extractionMask = b->loadInputStreamBlock("extractionMask", ZERO);
     Value * const fieldCounts = b->simd_popcount(unitsPerRegister, extractionMask);
     Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
-    Value * outputPtr = b->getOutputStreamBlockPtr("i16Stream", b->getInt32(0));
+    Value * outputPtr = b->getOutputStreamBlockPtr("i16Stream", ZERO);
     outputPtr = b->CreatePointerCast(outputPtr, int16PtrTy);
     Value * const i16UnitsGenerated = b->getProducedItemCount("i16Stream"); // units generated to buffer
     outputPtr = b->CreateGEP(outputPtr, b->CreateAnd(i16UnitsGenerated, blockMask));
 
-    Value * offset = b->getInt32(0);
-
+    Value * offset = ZERO;
     for (unsigned j = 0; j < 8; ++j) {
         Value * const merge0 = b->bitCast(b->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
         b->CreateAlignedStore(merge0, b->CreateBitCast(b->CreateGEP(outputPtr, offset), bitBlockPtrTy), 1);
@@ -184,7 +184,6 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
         }
         offset = nextOffset2;
     }
-
     Value * const i16UnitsFinal = b->CreateAdd(i16UnitsGenerated, b->CreateZExt(offset, b->getSizeTy()));
     b->setProducedItemCount("i16Stream", i16UnitsFinal);
 }

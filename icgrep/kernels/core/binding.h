@@ -85,6 +85,45 @@ private:
 
 using Bindings = std::vector<Binding>;
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isCountable
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE inline bool isCountable(const Binding & binding) {
+    if (LLVM_UNLIKELY(binding.isDeferred())) {
+        return false;
+    }
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isAddressable
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE inline bool isAddressable(const Binding & binding) {
+    if (LLVM_UNLIKELY(binding.isDeferred())) {
+        return true;
+    }
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isBounded() || rate.isUnknown();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isAnyPopCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE inline bool isAnyPopCount(const Binding & binding) {
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isPopCount() || rate.isNegatedPopCount();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief requiresItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE inline bool requiresItemCount(const Binding & binding) {
+    return isAddressable(binding) || isAnyPopCount(binding);
+}
+
+
 }
 
 #endif // BINDING_H

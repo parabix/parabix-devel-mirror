@@ -111,6 +111,11 @@ public:
 
     llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * absolutePosition);
 
+
+    llvm::Value * getRawInputPointer(const std::string & name, llvm::Value * const streamIndex, llvm::Value * absolutePosition);
+
+    llvm::Value * getRawOutputPointer(const std::string & name, llvm::Value * const streamIndex, llvm::Value * absolutePosition);
+
     llvm::Value * getBaseAddress(const std::string & name);
 
     void setBaseAddress(const std::string & name, llvm::Value * addr);
