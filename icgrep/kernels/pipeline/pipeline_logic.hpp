@@ -63,20 +63,13 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     // With the inclusion of SynchronizationFree attributes for PipelineKernels, this is
     // no longer true and the test requires greater precision.
 
-    const auto name = makeKernelName(kernelIndex);
     if (requiresSynchronization(kernelIndex)) {
-        mPipelineKernel->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX);
+        mPipelineKernel->addInternalScalar(sizeTy, makeKernelName(kernelIndex) + LOGICAL_SEGMENT_SUFFIX);
     }
-
-    // TODO: if we can statically prove that K * LOGICAL_SEGMENT = STRIDE_NUM, for some
-    // constant K, we only need the LOGICAL_SEGMENT.
-    mPipelineKernel->addInternalScalar(sizeTy, name + STRIDE_NUM_SUFFIX);
 
     // TODO: if an kernel I/O stream is a pipeline I/O and the kernel processes it at the
     // rate the pipeline processes it, can use the local state instead of storing the
     // item count in the kernel.
-
-    // TODO: non deferred item count for fixed rates could be calculated from total # of segments.
     const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfInputs; i++) {
         const Binding & input = getInputBinding(kernelIndex, i);
@@ -91,6 +84,9 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const Binding & output = getOutputBinding(kernelIndex, i);
         const auto prefix = makeBufferName(kernelIndex, output);
+        if (output.isDeferred()) {
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+        }
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
@@ -173,7 +169,7 @@ Value * PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     StructType * const localStateType = getLocalStateType(b);
     Value * const localState = makeStateObject(b, localStateType);
     b->CreateMemZero(localState, ConstantExpr::getSizeOf(localStateType), b->getCacheAlignment());
-    allocateThreadLocalState(b, localState, b->getSize(0));
+    allocateThreadLocalState(b, localState, mPipelineKernel->getInitialLogicalSegmentNumber());
     readThreadLocalState(b, localState);
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -220,14 +216,16 @@ Value * PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     AllocaInst * const pthreads = b->CreateCacheAlignedAlloca(pthreadsTy);
     std::vector<Value *> threadIdPtr(threads);
     std::vector<Value *> threadState(threads);
+
+    Value * const baseSegNo = mPipelineKernel->getInitialLogicalSegmentNumber();
     for (unsigned i = 0; i < threads; ++i) {
-        threadState[i] = allocateThreadState(b, b->getSize(i + 1));
+        threadState[i] = allocateThreadState(b, b->CreateAdd(baseSegNo, b->getSize(i + 1)));
         threadIdPtr[i] = b->CreateGEP(pthreads, {ZERO, b->getInt32(i)});
         b->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState[i]);
     }
 
     // execute the process thread
-    Value * const processState = allocateThreadState(b, b->getSize(0));
+    Value * const processState = allocateThreadState(b, baseSegNo);
     b->CreateCall(threadFunc, b->CreatePointerCast(processState, voidPtrTy));
     deallocateThreadState(b, processState);
 
@@ -247,7 +245,6 @@ Value * PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // -------------------------------------------------------------------------------------------------------------------------
     b->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", threadFunc));
     Value * const threadStruct = b->CreateBitCast(&*(args), getThreadStateType(b)->getPointerTo());
-    Value * const isProcess = b->CreateIsNull(mPipelineKernel->getCurrentStrideNum());
     setThreadState(b, threadStruct);
     // generate the pipeline logic for this thread
     mPipelineKernel->initializeLocalScalarValues(b);
@@ -265,7 +262,7 @@ Value * PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     BasicBlock * const exitThread = b->CreateBasicBlock("ExitThread");
     BasicBlock * const exitFunction = b->CreateBasicBlock("ExitProcessFunction");
     // TODO: to support nested pipelines, we'll need to test whether the thread is the process thread (getpid() == gettid())
-    b->CreateCondBr(isProcess, exitFunction, exitThread);
+    b->CreateCondBr(b->CreateIsNull(mInitialSegNo), exitFunction, exitThread);
     b->SetInsertPoint(exitThread);
     b->CreatePThreadExitCall(nullVoidPtrVal);
     b->CreateBr(exitFunction);
@@ -454,7 +451,8 @@ inline void PipelineCompiler::deallocateThreadState(BuilderRef b, Value * const 
 }
 
 enum : unsigned {
-    POP_COUNT_STRUCT_INDEX
+    SEGMENT_OFFSET_INDEX
+    , POP_COUNT_STRUCT_INDEX
     , ZERO_EXTENDED_BUFFER_INDEX
     , ZERO_EXTENDED_SPACE_INDEX
     , TERMINATION_SIGNAL_INDEX
@@ -468,6 +466,7 @@ enum : unsigned {
 inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
     FixedArray<Type *, THREAD_LOCAL_COUNT> fields;
     Type * const emptyTy = StructType::get(b->getContext());
+    fields[SEGMENT_OFFSET_INDEX] = b->getSizeTy();
     fields[POP_COUNT_STRUCT_INDEX] = getPopCountThreadLocalStateType(b);
     fields[ZERO_EXTENDED_BUFFER_INDEX] = mHasZeroExtendedStream ? b->getVoidPtrTy() : emptyTy;
     fields[ZERO_EXTENDED_SPACE_INDEX] = mHasZeroExtendedStream ? b->getSizeTy() : emptyTy;
@@ -482,10 +481,11 @@ inline StructType * PipelineCompiler::getLocalStateType(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateThreadLocalState
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::allocateThreadLocalState(BuilderRef b, Value * const localState, Value * initialStrideNum) {
-    mPipelineKernel->setCurrentStrideNum(initialStrideNum);
+inline void PipelineCompiler::allocateThreadLocalState(BuilderRef b, Value * const localState, Value * initialSegNo) {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(SEGMENT_OFFSET_INDEX);
+        b->CreateStore(initialSegNo, b->CreateGEP(localState, indices));
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     allocatePopCountArrays(b, b->CreateGEP(localState, indices));
 }
@@ -496,6 +496,8 @@ inline void PipelineCompiler::allocateThreadLocalState(BuilderRef b, Value * con
 inline void PipelineCompiler::readThreadLocalState(BuilderRef b, Value * const localState) {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(SEGMENT_OFFSET_INDEX);
+    mInitialSegNo = b->CreateLoad(b->CreateGEP(localState, indices));
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     mPopCountState = b->CreateGEP(localState, indices);
     if (mHasZeroExtendedStream) {

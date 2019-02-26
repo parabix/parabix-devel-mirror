@@ -182,13 +182,13 @@ Kernel * PipelineBuilder::makeKernel() {
 
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
-    if (LLVM_UNLIKELY(numOfKernels <= 1 && numOfCalls == 0 && !mRequiresPipeline)) {
-        if (numOfKernels == 0) {
-            return nullptr;
-        } else {
-            return mKernels.back();
-        }
-    }
+//    if (LLVM_UNLIKELY(numOfKernels <= 1 && numOfCalls == 0 && !mRequiresPipeline)) {
+//        if (numOfKernels == 0) {
+//            return nullptr;
+//        } else {
+//            return mKernels.back();
+//        }
+//    }
 
     constexpr auto pipelineInput = 0U;
     constexpr auto firstKernel = 1U;
@@ -371,6 +371,8 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     combineBindingAttributes(nonZero->getOutputStreamSetBindings(),
                              allZero->getOutputStreamSetBindings(),
                              mOutputStreamSets);
+
+
 
     OptimizationBranch * const br =
             new OptimizationBranch(mDriver.getBuilder(), std::move(name),

@@ -438,13 +438,7 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, input);
-        const ProcessingRate & rate = input.getRate();
-        Value * processed = nullptr;
-        if (rate.isFixed()) {
-            processed = b->CreateMul(mInitialStrideNum, mKernel->calculateFixedRateMultiple(b, input));
-        } else {
-            processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        }
+        Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         mInitiallyProcessedItemCount[i] = processed;
         if (input.isDeferred()) {
             mInitiallyProcessedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
@@ -454,13 +448,7 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, output);
-        const ProcessingRate & rate = output.getRate();
-        Value * produced = nullptr;
-        if (rate.isFixed()) {
-            produced = b->CreateMul(mInitialStrideNum, mKernel->calculateFixedRateMultiple(b, output));
-        } else {
-            produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        }
+        Value * const produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         mInitiallyProducedItemCount[i] = produced;
         if (output.isDeferred()) {
             mInitiallyProducedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);

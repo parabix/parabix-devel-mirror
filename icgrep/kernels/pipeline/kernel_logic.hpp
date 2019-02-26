@@ -182,7 +182,6 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond
     mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
     mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     mHaltingPhi->addIncoming(halting, exitBlock);
-    mNextKernelStrideNumPhi->addIncoming(mKernelStrideNumPhi, exitBlock);
 
     b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
@@ -542,11 +541,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
-    args.push_back(mKernelStrideNumPhi); assert (mKernelStrideNumPhi);
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
-    if (mKernel->hasFixedRateBinding()) {
-        args.push_back(b->getSize(0));
-    }
     for (unsigned i = 0; i < numOfInputs; ++i) {
 
         // calculate the deferred processed item count
@@ -568,7 +563,8 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
             inputItems = b->CreateAdd(inputItems, diff);
         }
         args.push_back(epoch(b, input, getInputBuffer(i), processed, mIsInputZeroExtended[i]));
-        mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
+        mReturnedProcessedItemCountPtr[i] =
+            addItemCountArg(b, input, deferred, processed, args);
         args.push_back(inputItems); assert (inputItems);
 
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
@@ -588,7 +584,8 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         if (LLVM_LIKELY(nonManaged)) {
             args.push_back(epoch(b, output, getOutputBuffer(i), produced));
         }
-        mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, canTerminate, produced, args);
+        mReturnedProducedItemCountPtr[i] =
+            addItemCountArg(b, output, canTerminate, produced, args);
         if (LLVM_LIKELY(nonManaged)) {
             args.push_back(mLinearOutputItemsPhi[i]);
         } else {
@@ -661,13 +658,13 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
                                           const bool addressable,
                                           PHINode * const itemCount,
-                                          Vec<Value *, 64> &args) {
+                                          Vec<Value *, 64> & args) {
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
     }
     Value * ptr = nullptr;
-    if (addressable || rate.isBounded() || rate.isUnknown()) {
+    if (addressable || isAddressable(binding)) {
         if (mNumOfAddressableItemCount == mAddressableItemCountPtr.size()) {
             BasicBlock * bb = b->GetInsertBlock();
             b->SetInsertPoint(mPipelineEntryBranch);
@@ -678,7 +675,7 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
         ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
         b->CreateStore(itemCount, ptr);
         args.push_back(ptr);
-    } else if (isAnyPopCount(binding)) {
+    } else if (isCountable(binding)) {
         args.push_back(itemCount);
     }
     return ptr;

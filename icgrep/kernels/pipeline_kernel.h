@@ -18,6 +18,7 @@ const static std::string FINALIZE_FUNCTION_POINTER_SUFFIX = "_FIP";
 class PipelineCompiler;
 
 class PipelineKernel : public Kernel {
+    friend class Kernel;
     friend class PipelineCompiler;
     friend class PipelineBuilder;
 public:
@@ -69,6 +70,10 @@ public:
         return mCallBindings;
     }
 
+    llvm::Value * getInitialLogicalSegmentNumber() const {
+        return mInitialLogicalSegmentNumber;
+    }
+
     virtual ~PipelineKernel();
 
     bool hasStaticMain() const final;
@@ -109,6 +114,10 @@ protected:
 
     void setOutputScalarAt(const unsigned i, Scalar * const value) final;
 
+    void setInitialLogicalSegmentNumber(llvm::Value * value) {
+        mInitialLogicalSegmentNumber = value;
+    }
+
     std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) final;
 
 protected:
@@ -116,6 +125,7 @@ protected:
     mutable std::unique_ptr<PipelineCompiler> mCompiler;
     const unsigned                            mNumOfThreads;
     const unsigned                            mSegmentIncrement;
+    llvm::Value *                             mInitialLogicalSegmentNumber;
     const Kernels                             mKernels;
     CallBindings                              mCallBindings;
     const std::string                         mSignature;
