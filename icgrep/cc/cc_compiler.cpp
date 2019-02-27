@@ -236,6 +236,23 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
     return pb.createInFile(expr);
     
 }
+
+PabloAST * Parabix_CC_Compiler::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
+    if (byte_no > 1) {
+        var = builder.createAnd(var, builder.createAdvance(prefix, 1));
+    }
+    return builder.createOr(target, var);
+}
+
+PabloAST * Parabix_CC_Compiler::createUCDSequence(const unsigned byte_no, const unsigned len, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloAST * suffix, PabloBuilder & builder) {
+    if (byte_no > 1) {
+        var = builder.createAnd(builder.createAdvance(prefix, 1), var);
+    }
+    for (unsigned i = byte_no; i != len; ++i) {
+        var = builder.createAnd(suffix, builder.createAdvance(var, 1));
+    }
+    return builder.createOr(target, var);
+}
     
 PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream, PabloBuilder & pb) {
     const Alphabet * a = cc->getAlphabet();
@@ -432,6 +449,21 @@ octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_unio
         }
     }
     return std::make_pair(octets, intervals);
+}
+
+PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
+    if (byte_no <= 1) return builder.createOr(target, var);
+    else return builder.createTernary(builder.getInteger(0xF8), target, var, builder.createAdvance(prefix, 1));
+}
+
+PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no, const unsigned len, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloAST * suffix, PabloBuilder & builder) {
+    if (byte_no > 1) {
+        var = builder.createAnd(builder.createAdvance(prefix, 1), var);
+    }
+    for (unsigned i = byte_no; i != len - 1; ++i) {
+        var = builder.createAnd(suffix, builder.createAdvance(var, 1));
+    }
+    return builder.createTernary(builder.getInteger(0xF8), target, suffix, builder.createAdvance(var, 1));
 }
 
 } // end of namespace cc

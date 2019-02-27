@@ -33,4 +33,12 @@ PabloAST * Parabix_CC_Compiler_Builder::compileCC(const std::string & canonicalN
     return ccc->compileCC(canonicalName, cc, builder);
 }
 
+PabloAST * Parabix_CC_Compiler_Builder::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
+    return ccc->createUCDSequence(byte_no, target, var, prefix, builder);
+}
+
+PabloAST * Parabix_CC_Compiler_Builder::createUCDSequence(const unsigned byte_no, const unsigned len, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloAST * suffix, PabloBuilder & builder) {
+    return ccc->createUCDSequence(byte_no, len, target, var, prefix, suffix, builder);
+}
+
 }

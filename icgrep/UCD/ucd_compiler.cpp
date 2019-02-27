@@ -257,10 +257,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
             // We have a single byte remaining to match for all code points in this CC.
             // Use the byte class compiler to generate matches for these codepoints.
             PabloAST * var = mCodeUnitCompiler.compileCC(makeCC(byteDefinitions(ranges, byte_no, isUTF_16), &Byte), builder);
-            if (byte_no > 1) {
-                var = builder.createAnd(var, builder.createAdvance(makePrefix(lo, byte_no, builder, prefix), 1));
-            }
-            target = builder.createOr(target, var);
+            target = mCodeUnitCompiler.createUCDSequence(byte_no, target, var, makePrefix(lo, byte_no, builder, prefix), builder);
         } else {
             for (auto rg : ranges) {
                 codepoint_t lo, hi;
@@ -279,13 +276,7 @@ PabloAST * UCDCompiler::sequenceGenerator(const RangeList && ranges, const unsig
                         target = sequenceGenerator(mid, hi, byte_no, builder, target, prefix);
                     } else { // we have a prefix group of type (a)
                         PabloAST * var = mCodeUnitCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
-                        if (byte_no > 1) {
-                            var = builder.createAnd(builder.createAdvance(prefix, 1), var);
-                        }
-                        for (unsigned i = byte_no; i != length(lo, isUTF_16); ++i) {
-                            var = builder.createAnd(mSuffixVar, builder.createAdvance(var, 1));
-                        }
-                        target = builder.createOr(target, var);
+                        target = mCodeUnitCompiler.createUCDSequence(byte_no, length(lo, isUTF_16), target, var, prefix, mSuffixVar, builder);
                     }
                 } else { // lbyte == hbyte
                     PabloAST * var = mCodeUnitCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
@@ -328,12 +319,12 @@ PabloAST * UCDCompiler::ifTestCompiler(const codepoint_t lo, const codepoint_t h
     const bool at_hi_boundary = (hi == 0x10FFFF || encodingByte(hi + 1, byte_no, isUTF_16) != hi_byte);
 
     if (at_lo_boundary && at_hi_boundary) {
-	if (!isUTF_16) {
-	    if (lo_byte != hi_byte) {
-		if (lo == 0x80) lo_byte = 0xC0;
-		if (hi == 0x10FFFF) hi_byte = 0xFF;
-	    }
-	}
+        if (!isUTF_16) {
+            if (lo_byte != hi_byte) {
+            if (lo == 0x80) lo_byte = 0xC0;
+            if (hi == 0x10FFFF) hi_byte = 0xFF;
+            }
+        }
         PabloAST * cc = mCodeUnitCompiler.compileCC(makeByte(lo_byte, hi_byte), builder);
         target = builder.createAnd(cc, target);
     } else if (lo_byte == hi_byte) {

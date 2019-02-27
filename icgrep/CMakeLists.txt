@@ -282,6 +282,11 @@ add_test(
   COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
+  NAME greptest_ternary
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ccc-type=ternary")
+
+add_test(
   NAME proptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND python greptest.py -d ${PROJECT_SOURCE_DIR}/../QA -t ${PROJECT_SOURCE_DIR}/../QA/proptest.xml ${CMAKE_BINARY_DIR}/icgrep)
@@ -296,6 +301,16 @@ add_test(
   NAME abc_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
   COMMAND ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
+
+add_test(
+  NAME abc_test_binary
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -byte-CC-limit=0 -enable-object-cache=0 -ccc-type=binary")
+
+add_test(
+  NAME abc_test_ternary
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
+  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -byte-CC-limit=0 -enable-object-cache=0 -ccc-type=ternary")
 
 add_test(
   NAME u8u16_test
@@ -329,9 +344,9 @@ add_test(
 #  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4_decoder
 #)
 
-SET_PROPERTY(TEST greptest PROPERTY TIMEOUT 400)
+SET_PROPERTY(TEST greptest greptest_ternary PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
-SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
+SET_PROPERTY(TEST abc_test abc_test_binary abc_test_ternary PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 
@@ -378,10 +393,6 @@ add_custom_target (abc_test
 
 add_custom_target (check
   COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
-  DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test)
-
-add_custom_target (check-ternary
-  COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure -ccc-type="ternary"
   DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test)
 
 add_custom_target (perf_icgrep

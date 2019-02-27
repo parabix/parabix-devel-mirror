@@ -28,6 +28,13 @@ public:
     }
     virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBlock & block) = 0;
     virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBuilder & builder) = 0;
+    virtual pablo::PabloAST * createUCDSequence(const unsigned byte_no, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloBuilder & builder) {
+        llvm_unreachable("createUCDSequence was not implemented!");
+        return nullptr;
+    }
+    virtual pablo::PabloAST * createUCDSequence(const unsigned byte_no, const unsigned len, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloAST * suffix, pablo::PabloBuilder & builder) {
+        return createUCDSequence(byte_no, target, var, prefix, builder);
+    }
     virtual ~CC_Compiler(){}
 
 protected:
@@ -73,6 +80,8 @@ public:
     Parabix_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet);
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
+    pablo::PabloAST * createUCDSequence(const unsigned byte_no, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloBuilder & builder) override;
+    pablo::PabloAST * createUCDSequence(const unsigned byte_no, const unsigned len, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloAST * suffix, pablo::PabloBuilder & builder) override;
     ~Parabix_CC_Compiler() {}
 
 private:
@@ -104,6 +113,8 @@ public:
     Parabix_Ternary_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet);
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
+    pablo::PabloAST * createUCDSequence(const unsigned byte_no, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloBuilder & builder) override;
+    pablo::PabloAST * createUCDSequence(const unsigned byte_no, const unsigned len, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloAST * suffix, pablo::PabloBuilder & builder) override;
     ~Parabix_Ternary_CC_Compiler() {}
 private:
     template<typename PabloBlockOrBuilder>
