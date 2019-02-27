@@ -182,6 +182,10 @@ Kernel * PipelineBuilder::makeKernel() {
 
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
+
+    // TODO: optimization must be able to synchronize non-SynchronizeFree kernels to
+    // allow the following.
+
 //    if (LLVM_UNLIKELY(numOfKernels <= 1 && numOfCalls == 0 && !mRequiresPipeline)) {
 //        if (numOfKernels == 0) {
 //            return nullptr;
@@ -272,7 +276,7 @@ Kernel * PipelineBuilder::makeKernel() {
     }
 
     PipelineKernel * const pipeline =
-        new PipelineKernel(b, std::move(signature), mNumOfThreads, mNumOfThreads,
+        new PipelineKernel(b, std::move(signature), mNumOfThreads,
                            std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));
@@ -330,6 +334,9 @@ bool combineBindingAttributes(const Bindings & A, const Bindings & B, Bindings &
     }
     return true;
 }
+
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernel
@@ -469,12 +476,11 @@ PipelineBuilder::PipelineBuilder(BaseDriver & driver,
 
 PipelineBuilder::PipelineBuilder(Internal, BaseDriver & driver,
     Bindings stream_inputs, Bindings stream_outputs,
-    Bindings scalar_inputs, Bindings scalar_outputs,
-    const unsigned numOfThreads, const bool requiresPipeline)
+    Bindings scalar_inputs, Bindings scalar_outputs)
 : PipelineBuilder(driver,
                   std::move(stream_inputs), std::move(stream_outputs),
                   std::move(scalar_inputs), std::move(scalar_outputs),
-                  numOfThreads, requiresPipeline) {
+                  1, false) {
 
 }
 
@@ -495,7 +501,7 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
       Relationship * const condition,
       Bindings && stream_inputs, Bindings && stream_outputs,
       Bindings && scalar_inputs, Bindings && scalar_outputs)
-: PipelineBuilder(
+: PipelineBuilder(PipelineBuilder::Internal{},
       driver,
       std::move(stream_inputs), std::move(stream_outputs),
       std::move(scalar_inputs), std::move(scalar_outputs))
@@ -504,12 +510,12 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
                     mInputStreamSets, mOutputStreamSets,
-                    mInputScalars, mOutputScalars, 1, false)))
+                    mInputScalars, mOutputScalars)))
 , mAllZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
                     mInputStreamSets, mOutputStreamSets,
-                    mInputScalars, mOutputScalars, 1, false))) {
+                    mInputScalars, mOutputScalars))) {
 
 }
 

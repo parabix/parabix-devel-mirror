@@ -21,11 +21,15 @@ void PipelineCompiler::start(BuilderRef b) {
     mPipelineEntryBranch = b->CreateBr(mPipelineLoop);
 
     b->SetInsertPoint(mPipelineLoop);
-    mSegNo = b->CreatePHI(b->getSizeTy(), 2, "segNo");
-    mSegNo->addIncoming(mInitialSegNo, entryBlock);
     mMadeProgressInLastSegment = b->CreatePHI(b->getInt1Ty(), 2);
     mMadeProgressInLastSegment->addIncoming(b->getTrue(), entryBlock);
     mPipelineProgress = b->getFalse();
+    // By using an atomic fetch/add here, we gain the ability to dynamically add or
+    // remove threads while still using the segment pipeline parallelism model.
+    // This also allows us to execute nested pipelines without requiring the outer
+    // pipeline to track the current segno.
+    Value * const segNoPtr = b->getScalarFieldPtr(INITIAL_LOGICAL_SEGMENT_NUMBER);
+    mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
     loadTerminationSignals(b);
     mHalted = b->getFalse();
     #ifdef PRINT_DEBUG_MESSAGES
@@ -270,10 +274,10 @@ Value * PipelineCompiler::end(BuilderRef b) {
             "Dead lock detected: pipeline could not progress after two iterations");
     }
 
-    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(mPipelineKernel->getSegmentIncrement()));
+    //Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mMadeProgressInLastSegment->addIncoming(progressedOrFinished, exitBlock);
-    mSegNo->addIncoming(nextSegNo, exitBlock);
+    //mSegNo->addIncoming(nextSegNo, exitBlock);
     b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
 
     b->SetInsertPoint(mPipelineEnd);

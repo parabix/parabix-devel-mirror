@@ -256,14 +256,13 @@ struct PipelineGraphBundle {
 
 using ImplicitRelationships = flat_map<const Kernel *, const StreamSet *>;
 
+const static std::string INITIAL_LOGICAL_SEGMENT_NUMBER = "ILSN";
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
-const static std::string FIXED_ITEM_COUNT_SUFFIX = ".FC";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
-const static std::string STRIDE_NUM_SUFFIX = ".STD";
 
 class PipelineCompiler {
 
@@ -287,8 +286,8 @@ protected:
 // internal pipeline state construction functions
 
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
-    Value * generateSingleThreadKernelMethod(BuilderRef b);
-    Value * generateMultiThreadKernelMethod(BuilderRef b);
+    void generateSingleThreadKernelMethod(BuilderRef b);
+    void generateMultiThreadKernelMethod(BuilderRef b);
     void acquireCurrentSegment(BuilderRef b);
     void releaseCurrentSegment(BuilderRef b);
     LLVM_READNONE bool requiresSynchronization(const unsigned kernelIndex) const;
@@ -306,14 +305,16 @@ protected:
 // internal pipeline functions
 
     LLVM_READNONE StructType * getThreadStateType(BuilderRef b);
-    Value * allocateThreadState(BuilderRef b, Value * initialSegNo);
+    Value * allocateThreadState(BuilderRef b, Value * const threadId = nullptr);
     void setThreadState(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
     LLVM_READNONE StructType * getLocalStateType(BuilderRef b);
-    void allocateThreadLocalState(BuilderRef b, Value * const localState, Value * initialSegNo);
+    void allocateThreadLocalState(BuilderRef b, Value * const localState, Value * const threadId = nullptr);
     void readThreadLocalState(BuilderRef b, Value * const localState);
     void deallocateThreadLocalState(BuilderRef b, Value * const localState);
+
+    inline Value * isProcessThread(BuilderRef b, Value * const threadState) const;
 
     void addTerminationProperties(BuilderRef b);
 
@@ -558,10 +559,9 @@ protected:
     const Kernel *                              mKernel = nullptr;
 
     // pipeline state
-    Value *                                     mInitialSegNo = nullptr;
     Value *                                     mZeroExtendBuffer = nullptr;
     Value *                                     mZeroExtendSpace = nullptr;
-    PHINode *                                   mSegNo = nullptr;
+    Value *                                     mSegNo = nullptr;
     Value *                                     mHalted = nullptr;
     PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;

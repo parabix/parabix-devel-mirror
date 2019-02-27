@@ -58,7 +58,6 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {
-   // TODO: need to pass in initial logical segment number to the pipeline branches
    // addAttribute(SynchronizationFree());
 }
 

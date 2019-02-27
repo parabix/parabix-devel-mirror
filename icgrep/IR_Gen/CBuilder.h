@@ -233,6 +233,9 @@ public:
     //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
     llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
 
+    //  Create a call to:  int pthread_yield(void);
+    llvm::Value * CreatePThreadSelf();
+
     enum class STD_FD {
         STD_IN = STDIN_FILENO
         , STD_OUT = STDOUT_FILENO

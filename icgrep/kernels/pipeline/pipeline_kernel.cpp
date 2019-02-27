@@ -155,16 +155,15 @@ void PipelineKernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
-                               std::string && signature, const unsigned numOfThreads, const unsigned segmentIncrement,
+                               std::string && signature, const unsigned numOfThreads,
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
                                Bindings && scalar_inputs, Bindings && scalar_outputs)
 : Kernel(b, TypeId::Pipeline,
-         "P" + std::to_string(numOfThreads) + "_" + std::to_string(segmentIncrement) + "_" + getStringHash(signature),
+         "P" + std::to_string(numOfThreads) + "_" + getStringHash(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs), {})
 , mNumOfThreads(numOfThreads)
-, mSegmentIncrement(segmentIncrement)
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
 , mSignature(std::move(signature)) {

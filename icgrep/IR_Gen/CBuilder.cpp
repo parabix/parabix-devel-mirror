@@ -868,6 +868,17 @@ Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
 
+Value * CBuilder::CreatePThreadSelf() {
+    Module * const m = getModule();
+    Function * pthreadSelfFunc = m->getFunction("pthread_self");
+    if (pthreadSelfFunc == nullptr) {
+        FunctionType * fty = FunctionType::get(getPThreadTy(), false);
+        pthreadSelfFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_self", m);
+        pthreadSelfFunc->setCallingConv(CallingConv::C);
+    }
+    return CreateCall(pthreadSelfFunc);
+}
+
 void __report_failure(const char * name, const char * msg, const uintptr_t * trace, const uint32_t n) {
     // TODO: look into boost stacktrace, available from version 1.65
     raw_fd_ostream out(STDERR_FILENO, false);

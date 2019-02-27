@@ -70,10 +70,6 @@ public:
         return mCallBindings;
     }
 
-    llvm::Value * getInitialLogicalSegmentNumber() const {
-        return mInitialLogicalSegmentNumber;
-    }
-
     virtual ~PipelineKernel();
 
     bool hasStaticMain() const final;
@@ -81,14 +77,11 @@ public:
 protected:
 
     PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
-                   std::string && signature, const unsigned numOfThreads, const unsigned segmentIncrement,
+                   std::string && signature,
+                   const unsigned numOfThreads,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);
-
-    unsigned getSegmentIncrement() const {
-        return mSegmentIncrement;
-    }
 
     void linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) final;
 
@@ -114,18 +107,12 @@ protected:
 
     void setOutputScalarAt(const unsigned i, Scalar * const value) final;
 
-    void setInitialLogicalSegmentNumber(llvm::Value * value) {
-        mInitialLogicalSegmentNumber = value;
-    }
-
     std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) final;
 
 protected:
 
     mutable std::unique_ptr<PipelineCompiler> mCompiler;
     const unsigned                            mNumOfThreads;
-    const unsigned                            mSegmentIncrement;
-    llvm::Value *                             mInitialLogicalSegmentNumber;
     const Kernels                             mKernels;
     CallBindings                              mCallBindings;
     const std::string                         mSignature;

@@ -65,8 +65,8 @@ public:
     PipelineBuilder(BaseDriver & driver,
                     Bindings && stream_inputs, Bindings && stream_outputs,
                     Bindings && scalar_inputs, Bindings && scalar_outputs,
-                    const unsigned numOfThreads = 1,
-                    const bool requiresPipeline = false);
+                    const unsigned numOfThreads,
+                    const bool requiresPipeline);
 
     virtual ~PipelineBuilder() {}
 
@@ -78,9 +78,7 @@ protected:
     struct Internal {};
     PipelineBuilder(Internal, BaseDriver & driver,
                     Bindings stream_inputs, Bindings stream_outputs,
-                    Bindings scalar_inputs, Bindings scalar_outputs,
-                    const unsigned numOfThreads,
-                    const bool requiresPipeline);
+                    Bindings scalar_inputs, Bindings scalar_outputs);
 
     virtual Kernel * makeKernel();
 

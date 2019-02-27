@@ -267,9 +267,6 @@ inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder>
     if (LLVM_LIKELY(isStateful())) {
         setNextArgName("handle");
     }
-    if (LLVM_UNLIKELY(isa<PipelineKernel>(this))) {
-        setNextArgName("segmentNum");
-    }
     setNextArgName("numOfStrides");
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         const Binding & input = mInputStreamSets[i];
@@ -318,9 +315,6 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
     fields.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
     if (LLVM_LIKELY(isStateful())) {
         fields.push_back(mKernelStateType->getPointerTo());  // handle
-    }
-    if (LLVM_UNLIKELY(isa<PipelineKernel>(this))) {
-        fields.push_back(sizeTy); // segmentNum
     }
     fields.push_back(sizeTy); // numOfStrides
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
@@ -445,9 +439,6 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
 
     if (LLVM_LIKELY(isStateful())) {
         setHandle(b, nextArg());
-    }
-    if (LLVM_UNLIKELY(isa<PipelineKernel>(this))) {
-        cast<PipelineKernel>(this)->setInitialLogicalSegmentNumber(nextArg());
     }
     mNumOfStrides = nextArg();
     mIsFinal = b->CreateIsNull(mNumOfStrides);
@@ -614,9 +605,6 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
     std::vector<Value *> props;
     if (LLVM_LIKELY(isStateful())) {
         props.push_back(mHandle); assert (mHandle);
-    }
-    if (LLVM_UNLIKELY(isa<PipelineKernel>(this))) {
-        props.push_back(cast<PipelineKernel>(this)->getInitialLogicalSegmentNumber());
     }
     props.push_back(mNumOfStrides); assert (mNumOfStrides);
 
@@ -1020,7 +1008,7 @@ Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method) {
 
-    const auto INTERNAL_VARIABLES = isa<PipelineKernel>(this) ? 3 : 2;
+    constexpr auto INTERNAL_VARIABLES = 2;
 
     b->setKernel(this);
 
@@ -1074,11 +1062,7 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
 
         std::vector<Value *> segmentArgs(doSegment->arg_size());
         segmentArgs[0] = handle;
-        Constant * ZERO = b->getSize(0);
-        if (LLVM_LIKELY(isa<PipelineKernel>(this))) {
-            segmentArgs[1] = ZERO;
-        }
-        segmentArgs[INTERNAL_VARIABLES - 1] = ZERO; // numOfStrides -> isFinal = True
+        segmentArgs[1] = b->getSize(0); // numOfStrides -> isFinal = True
         for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
             assert (arg != main->arg_end());
             segmentArgs[i + INTERNAL_VARIABLES] = &*arg++;

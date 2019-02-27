@@ -2,6 +2,7 @@
 #define OPTIMIZATIONBRANCH_COMPILER_HPP
 
 #include <kernels/optimizationbranch.h>
+#include <kernels/pipeline_kernel.h>
 #include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <boost/container/flat_map.hpp>
@@ -9,6 +10,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/SmallVector.h>
 #include  <array>
+
 
 using namespace llvm;
 using namespace boost;
@@ -112,6 +114,8 @@ private:
 
     void enterBranch(BuilderRef b, const unsigned branchType) const;
 
+    void exitBranch(BuilderRef b, const unsigned branchType) const;
+
     Value * calculateAccessibleOrWritableItems(BuilderRef b, const Kernel * const kernel, const Binding & binding, Value * const first, Value * const last, Value * const defaultValue) const;
 
     void calculateFinalOutputItemCounts(BuilderRef b, Value * const isFinal, const unsigned branchType);
@@ -123,6 +127,8 @@ private:
 
     OptimizationBranch * const          mBranch;
     const std::array<const Kernel *, 4> mBranches;
+
+    std::array<Value *, 3>              mActiveThreads;
 
     PHINode *                           mTerminatedPhi;
     BasicBlock *                        mMergePaths;
@@ -300,11 +306,6 @@ void OptimizationBranchCompiler::addBranchProperties(BuilderRef b) {
             }
             mBranch->addInternalScalar(handlePtrType, BRANCH_PREFIX + std::to_string(i));
         }
-
-        if (!kernel->hasAttribute(AttrId::SynchronizationFree)) {
-            mBranch->addInternalScalar(b->getSizeTy(), LOGICAL_SEGMENT_PREFIX + std::to_string(i));
-        }
-
     }
 }
 
@@ -408,9 +409,8 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     Value * const basePtr = b->CreatePointerCast(b->getInputStreamBlockPtr(condRef.Name, ZERO, ZERO), bitBlockTy->getPointerTo());
     Value * const numOfStrides = mBranch->getNumOfStrides();
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("- numOfStrides", numOfStrides);
-    #endif
+    mActiveThreads[ALL_ZERO_BRANCH] = b->getScalarFieldPtr(ALL_ZERO_ACTIVE_THREADS);
+    mActiveThreads[NON_ZERO_BRANCH] = b->getScalarFieldPtr(NON_ZERO_ACTIVE_THREADS);
 
     b->CreateBr(loopCond);
 
@@ -529,97 +529,51 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     b->SetInsertPoint(exit);
 }
 
-inline static const std::string & getBranchLockName(const unsigned branchType) {
-    switch (branchType) {
-        case ALL_ZERO_BRANCH: return ALL_ZERO_ACTIVE_THREADS;
-        case NON_ZERO_BRANCH: return NON_ZERO_ACTIVE_THREADS;
-    }
-    llvm_unreachable("unknown branch type!");
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief enterBranch
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranchCompiler::enterBranch(BuilderRef b, const unsigned branchType) const {
 
-    const Kernel * const kernel = mBranches[branchType];
+    // increment the active thread count for this branch
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
+
+    assert (branchType < mActiveThreads.max_size());
+    assert (OTHER_BRANCH(branchType) < mActiveThreads.max_size());
+    assert (mActiveThreads[branchType]);
+    assert (mActiveThreads[OTHER_BRANCH(branchType)]);
+    assert (mMergePaths);
+
+    b->CreateAtomicFetchAndAdd(ONE, mActiveThreads[branchType]);
+
     // If this kernel is synchronization free, we need only ensure that the other
     // branch is not currently executing.
-
+    const Kernel * const kernel = mBranches[branchType];
+    const auto prefix = kernel->getName();
 
     // wait until we're certain the other branch has completed
-    const auto & name = getBranchLockName(OTHER_BRANCH(branchType));
-    Value * const threadLockPtr = b->getScalarFieldPtr(name);
-
-    const auto prefix = kernel->getName();
-
-    BasicBlock * const kernelCheck = b->CreateBasicBlock(prefix + "_checkOtherBranch", mMergePaths);
-    BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "_waitForOtherBranch", mMergePaths);
+    BasicBlock * const otherWait = b->CreateBasicBlock(prefix + "_waitForOtherBranch", mMergePaths);
     BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "_start", mMergePaths);
-    b->CreateBr(kernelCheck);
+    Value * const otherBranch = b->CreateAtomicLoadAcquire(mActiveThreads[OTHER_BRANCH(branchType)]);
+    b->CreateCondBr(b->CreateICmpEQ(otherBranch, ZERO), kernelStart, otherWait);
 
-    b->SetInsertPoint(kernelCheck);
-    Value * const inFlight = b->CreateAtomicLoadAcquire(threadLockPtr);
-    Value * const ready = b->CreateIsNull(inFlight);
-    b->CreateCondBr(ready, kernelStart, kernelWait);
-
-    b->SetInsertPoint(kernelWait);
+    b->SetInsertPoint(otherWait);
     b->CreatePThreadYield();
-    b->CreateBr(kernelCheck);
-
-    b->SetInsertPoint(kernelStart);
-
-}
-
-#if 0
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief acquireCurrentSegment
- *
- * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous
- * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranchCompiler::acquireCurrentSegment(BuilderRef b, const unsigned branchType) {
-
-    const Kernel * const kernel = mBranches[i];
-    if (kernel == nullptr || kernel->hasAttribute(AttrId::SynchronizationFree)) {
-        return;
-    }
-
-    const auto prefix = kernel->getName();
-    Value * const waitingOnPtr = b->getScalarFieldPtr(LOGICAL_SEGMENT_PREFIX + std::to_string(branchType));
-    BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "_Wait", mPipelineEnd);
-    b->CreateBr(kernelWait);
-
-    b->SetInsertPoint(kernelWait);
-    Value * const processedSegmentCount = b->CreateAtomicLoadAcquire(waitingOnPtr);
-    Value * const ready = b->CreateICmpEQ(mSegNo, processedSegmentCount);
-    BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "_Start", mPipelineEnd);
-    b->CreateCondBr(ready, kernelStart, kernelWait);
+    Value * const nextOtherBranch = b->CreateAtomicLoadAcquire(mActiveThreads[OTHER_BRANCH(branchType)]);
+    b->CreateCondBr(b->CreateICmpEQ(nextOtherBranch, ZERO), kernelStart, otherWait);
 
     b->SetInsertPoint(kernelStart);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief releaseCurrentSegment
- *
- * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
+ * @brief exitBranch
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void OptimizationBranchCompiler::releaseCurrentSegment(BuilderRef b) {
-
-    const Kernel * const kernel = mBranches[i];
-    if (kernel == nullptr || kernel->hasAttribute(AttrId::SynchronizationFree)) {
-        return;
-    }
-
-    Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
-    const auto prefix = makeKernelName(mKernelIndex);
-    Value * const waitingOnPtr = b->getScalarFieldPtr(prefix + LOGICAL_SEGMENT_SUFFIX);
-    b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
-
+void OptimizationBranchCompiler::exitBranch(BuilderRef b, const unsigned branchType) const {
+    // decrement the "number of active threads" count for this branch
+    Constant * const ONE = b->getSize(1);
+    b->CreateAtomicFetchAndSub(ONE, mActiveThreads[branchType]);
 }
 
-#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief reset
@@ -637,12 +591,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
                                                const unsigned branchType,
                                                Value * const first,
                                                Value * const last) {
-    // increment the active thread count for this branch
-    Constant * const ONE = b->getSize(1);
-    const auto & name = getBranchLockName(branchType);
-    Value * const threadLockPtr = b->getScalarFieldPtr(name);
-    b->CreateAtomicFetchAndAdd(ONE, threadLockPtr);
-
     enterBranch(b, branchType);
 
     const Kernel * const kernel = mBranches[branchType];
@@ -825,8 +773,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
         b->SetInsertPoint(kernelExit);
     }
 
-    // decrement the "number of active threads" count for this branch
-    b->CreateAtomicFetchAndSub(ONE, threadLockPtr);
+    exitBranch(b, branchType);
 }
 
 
