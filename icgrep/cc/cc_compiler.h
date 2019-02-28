@@ -53,18 +53,6 @@ protected:
 protected:
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * getBasisVar(const unsigned n, PabloBlockOrBuilder & pb) const;
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * char_test_expr(const re::codepoint_t ch, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * make_range(const re::codepoint_t n1, const re::codepoint_t n2, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
 
 protected:  
     const unsigned                  mEncodingBits;
@@ -87,6 +75,18 @@ public:
 private:
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * charset_expr(const re::CC *cc, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_test_expr(const re::codepoint_t ch, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * make_range(const re::codepoint_t n1, const re::codepoint_t n2, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
 };
     
 
@@ -123,6 +123,18 @@ private:
     pablo::PabloAST * make_octets_expr(const std::vector<octet_pair_t> octets, PabloBlockOrBuilder & pb);
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * make_intervals_expr(const std::vector<re::interval_t> intervals, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_test_expr(const re::codepoint_t ch, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * make_range(const re::codepoint_t n1, const re::codepoint_t n2, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
     octets_intervals_union_t make_octets_intervals_union(const re::CC *cc);
     inline re::codepoint_t octet_base_codepoint(const octet_pair_t & i) {
         return std::get<0>(i);
