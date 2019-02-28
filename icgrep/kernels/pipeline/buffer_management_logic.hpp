@@ -3,6 +3,7 @@
 
 #include "pipeline_compiler.hpp"
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/interprocess/mapped_region.hpp>
 
 // TODO: any buffers that exist only to satisfy the output dependencies are unnecessary.
 // We could prune away kernels if none of their outputs are needed but we'd want some
@@ -64,15 +65,15 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
         const Kernel * const kernel = mPipelineGraph[i].Kernel; assert (kernel);
 
-        std::function<bool(const Binding &)> isConsistentRate = [&](const Binding & binding) {
+        std::function<bool(const Binding &)> dataIsConsumedAtVariableRate = [&](const Binding & binding) {
                 const ProcessingRate & rate = binding.getRate();
                 if (rate.isFixed() || binding.hasAttribute(AttrId::BlockSize)) {
-                    return true;
+                    return false;
                 }
                 if (LLVM_UNLIKELY(rate.isRelative())) {
-                    return isConsistentRate(kernel->getStreamBinding(rate.getReference()));
+                    return dataIsConsumedAtVariableRate(kernel->getStreamBinding(rate.getReference()));
                 }
-                return false;
+                return true;
             };
 
         // note: explicit lambda return type required for refs
@@ -95,9 +96,19 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             llvm_unreachable("unknown implicit port type?");
         };
 
-        auto getBufferRateData = [&](const RelationshipType port, const Binding & binding) {
-            const auto ub = upperBound(kernel, binding);
-            const auto lb = isConsistentRate(binding) ? ub : lowerBound(kernel, binding);
+        auto computeBufferRateBounds = [&](const RelationshipType port, const Binding & binding) {
+            unsigned strideLength = kernel->getStride();
+            if (i == PipelineInput || i == PipelineOutput) {
+                const unsigned pageSize = boost::interprocess::mapped_region::get_page_size();
+                strideLength = boost::lcm(pageSize, strideLength);
+            }
+
+            const RateValue ub = kernel->getUpperBound(binding) * strideLength;
+            RateValue lb{ub};
+            if (dataIsConsumedAtVariableRate(binding)) {
+                lb = kernel->getLowerBound(binding) * strideLength;
+            }
+
             return BufferRateData{port, binding, lb, ub};
         };
 
@@ -116,7 +127,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RelationshipType port;
             unsigned buffer;
             std::tie(port, buffer) = e;
-            add_edge(buffer, i, getBufferRateData(port, getBinding(port)), G);
+            add_edge(buffer, i, computeBufferRateBounds(port, getBinding(port)), G);
         }
         ports.clear();
 
@@ -136,10 +147,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RelationshipType port;
             unsigned buffer;
             std::tie(port, buffer) = e;
-            add_edge(i, buffer, getBufferRateData(port, getBindingOrAddImplicit(port)), G);
+            add_edge(i, buffer, computeBufferRateBounds(port, getBindingOrAddImplicit(port)), G);
         }
         ports.clear();
     }
+
     // Since we do not want to create an artifical bottleneck by constructing output buffers that
     // cannot accommodate the full amount of data we could produce given the expected inputs, the
     // next loop will resize them accordingly.
@@ -185,6 +197,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = BufferType::External;
     }
 
+    const auto isOpenSystem = out_degree(PipelineInput, G) != 0 || in_degree(PipelineOutput, G) != 0;
 
     // then construct the rest
     for (unsigned i = firstBuffer; i <= lastBuffer; ++i) {
@@ -266,7 +279,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             }
             additionalSpace = std::max(overflowSize, additionalSpace);
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
-            if (dynamic) {
+            // However, it is also beneficial
+            if (dynamic || isOpenSystem) {
                 buffer = new DynamicBuffer(b, output.getType(), bufferSize, additionalSpace);
             } else {
                 buffer = new StaticBuffer(b, output.getType(), bufferSize, additionalSpace);
