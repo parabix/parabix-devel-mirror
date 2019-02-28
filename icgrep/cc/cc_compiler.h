@@ -103,6 +103,7 @@ private:
     pablo::PabloAST *               mCodeUnitStream;
 };
 
+enum join_t { JoinAnd, JoinOr };
 
 class Parabix_Ternary_CC_Compiler : public CC_Compiler, public CC_Compiler_Common {
 public:
@@ -136,7 +137,7 @@ private:
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
     template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * joinTerms(std::vector<pablo::PabloAST *> terms, PabloBlockOrBuilder & pb);
+    pablo::PabloAST * joinTerms(std::vector<pablo::PabloAST *> terms, join_t ty, PabloBlockOrBuilder & pb);
     octets_intervals_union_t make_octets_intervals_union(const re::CC *cc);
     inline re::codepoint_t octet_base_codepoint(const octet_pair_t & i) {
         return std::get<0>(i);

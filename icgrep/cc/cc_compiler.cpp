@@ -351,13 +351,12 @@ pablo::PabloAST * Parabix_Ternary_CC_Compiler::charset_expr(const re::CC *cc, Pa
 
 template<typename PabloBlockOrBuilder>
 PabloAST * Parabix_Ternary_CC_Compiler::make_intervals_expr(const std::vector<interval_t> intervals, PabloBlockOrBuilder & pb) {
-    PabloAST * expr = nullptr;
+    std::vector<PabloAST *> terms;
     for (auto i : intervals) {
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
-        expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
+        terms.push_back(temp);
     }
-    if (expr == nullptr) return pb.createZeroes();
-    return expr;
+    return joinTerms(terms, JoinOr, pb);
 }
 
 template<typename PabloBlockOrBuilder>
@@ -380,7 +379,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_octets_expr(const std::vector<octet
             }
         }
     }
-    return joinTerms(terms, pb);
+    return joinTerms(terms, JoinOr, pb);
 }
 
 octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_union(const re::CC *cc) {
@@ -439,7 +438,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::bit_pattern_expr(const unsigned pattern,
         std::vector<PabloAST*> terms;
         for (unsigned i = 0; selected_bits; ++i) {
             unsigned test_bit = static_cast<unsigned>(1) << i;
-            PabloAST * term = pb.createOnes();
+            PabloAST * term = nullptr;
             if (selected_bits & test_bit) {
                 term = getBasisVar(i, pb);
                 if ((pattern & test_bit) == 0) {
@@ -447,26 +446,9 @@ PabloAST * Parabix_Ternary_CC_Compiler::bit_pattern_expr(const unsigned pattern,
                 }
                 selected_bits ^= test_bit;
             }
-            terms.push_back(term);
+            if (term) terms.push_back(term);
         }
-        if (terms.size() > 1) {
-            //Reduce the list so that all of the expressions are contained within a single expression.
-            std::vector<PabloAST*> temp;
-            temp.reserve(terms.size());
-            do {
-                for (unsigned i = 0; i < (terms.size() / 2); i++) {
-                    temp.push_back(pb.createAnd(terms[2 * i], terms[(2 * i) + 1]));
-                }
-                if (terms.size() % 2 == 1) {
-                    temp.push_back(terms.back());
-                }
-                terms.swap(temp);
-                temp.clear();
-            }
-            while (terms.size() > 1);
-        }
-        assert (terms.size() == 1);
-        return terms.front();
+        return joinTerms(terms, JoinAnd, pb);
     }
 }
 
@@ -562,14 +544,18 @@ inline PabloAST * Parabix_Ternary_CC_Compiler::char_or_range_expr(const codepoin
 }
 
 template<typename PabloBlockOrBuilder>
-pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms, PabloBlockOrBuilder & pb) {
+pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms, join_t ty, PabloBlockOrBuilder & pb) {
     if (terms.empty()) return pb.createZeroes();
     //Reduce the list so that all of the expressions are contained within a single expression.
     std::vector<PabloAST *> temp;
     temp.reserve(terms.size());
     do {
         for (unsigned i = 0; i < (terms.size() / 3); i++) {
-            temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
+            if (ty == JoinOr) {
+                temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
+            } else {
+                temp.push_back(pb.createAnd3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
+            }
         }
         for (unsigned i = 0; i < (terms.size() % 3); i++) {
             temp.push_back(terms[terms.size() - i - 1]);
@@ -579,7 +565,11 @@ pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *>
     } while (terms.size() >= 3);
     assert (terms.size() == 2 || terms.size() == 1);
     if (terms.size() == 2) {
-        return pb.createOr(terms.front(), terms.back());
+        if (ty == JoinOr) {
+            return pb.createOr(terms.front(), terms.back());
+        } else {
+            return pb.createAnd(terms.front(), terms.back());
+        }
     } else {
         return terms.front();
     }
