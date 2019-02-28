@@ -380,26 +380,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_octets_expr(const std::vector<octet
             }
         }
     }
-    if (terms.empty()) return pb.createZeroes();
-    //Reduce the list so that all of the expressions are contained within a single expression.
-    std::vector<PabloAST *> temp;
-    temp.reserve(terms.size());
-    do {
-        for (unsigned i = 0; i < (terms.size() / 3); i++) {
-            temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
-        }
-        for (unsigned i = 0; i < (terms.size() % 3); i++) {
-            temp.push_back(terms[terms.size() - i - 1]);
-        }
-        terms.swap(temp);
-        temp.clear();
-    } while (terms.size() >= 3);
-    assert (terms.size() == 2 || terms.size() == 1);
-    if (terms.size() == 2) {
-        return pb.createOr(terms.front(), terms.back());
-    } else {
-        return terms.front();
-    }
+    return joinTerms(terms, pb);
 }
 
 octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_union(const re::CC *cc) {
@@ -566,7 +547,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::LE_Range(const unsigned N, const unsigne
 }
 
 template<typename PabloBlockOrBuilder>
-inline PabloAST * Parabix_Ternary_CC_Compiler::char_test_expr(const codepoint_t ch, PabloBlockOrBuilder &pb) {
+inline PabloAST * Parabix_Ternary_CC_Compiler::char_test_expr(const codepoint_t ch, PabloBlockOrBuilder & pb) {
     return bit_pattern_expr(ch, mEncodingMask, pb);
 }
 
@@ -578,6 +559,30 @@ inline PabloAST * Parabix_Ternary_CC_Compiler::char_or_range_expr(const codepoin
         return make_range(lo, hi, pb);
     }
     llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
+}
+
+template<typename PabloBlockOrBuilder>
+pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms, PabloBlockOrBuilder & pb) {
+    if (terms.empty()) return pb.createZeroes();
+    //Reduce the list so that all of the expressions are contained within a single expression.
+    std::vector<PabloAST *> temp;
+    temp.reserve(terms.size());
+    do {
+        for (unsigned i = 0; i < (terms.size() / 3); i++) {
+            temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
+        }
+        for (unsigned i = 0; i < (terms.size() % 3); i++) {
+            temp.push_back(terms[terms.size() - i - 1]);
+        }
+        terms.swap(temp);
+        temp.clear();
+    } while (terms.size() >= 3);
+    assert (terms.size() == 2 || terms.size() == 1);
+    if (terms.size() == 2) {
+        return pb.createOr(terms.front(), terms.back());
+    } else {
+        return terms.front();
+    }
 }
 
 PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
