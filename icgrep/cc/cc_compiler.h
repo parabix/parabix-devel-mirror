@@ -17,6 +17,9 @@ namespace cc {
 
 class CC_Compiler {
 public:
+    using ClassTypeId = pablo::PabloAST::ClassTypeId;
+    using op3_pair_t = std::pair<ClassTypeId, ClassTypeId>;
+
     virtual pablo::PabloAST * compileCC(const re::CC *cc) {
         return compileCC(cc, mBuilder);
     }
@@ -28,6 +31,7 @@ public:
     }
     virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBlock & block) = 0;
     virtual pablo::PabloAST * compileCC(const std::string & canonicalName, const re::CC *cc, pablo::PabloBuilder & builder) = 0;
+    virtual pablo::PabloAST * createCCOp3(op3_pair_t op3, pablo::PabloAST * expr1, pablo::PabloAST * expr2, pablo::PabloAST * expr3, pablo::PabloBuilder & builder);
     virtual pablo::PabloAST * createUCDSequence(const unsigned byte_no, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloBuilder & builder) {
         llvm_unreachable("createUCDSequence was not implemented!");
         return nullptr;
@@ -39,7 +43,13 @@ public:
 
 protected:
     CC_Compiler(pablo::PabloBlock * scope);
-    pablo::PabloBuilder             mBuilder;
+    pablo::PabloBuilder mBuilder;
+    inline ClassTypeId op3_first(const op3_pair_t & i) {
+        return std::get<0>(i);
+    }
+    inline ClassTypeId op3_second(const op3_pair_t & i) {
+        return std::get<1>(i);
+    }
 };
 
 
@@ -108,11 +118,11 @@ public:
     using CC_Compiler::compileCC;
     using octet_pair_t = std::pair<re::codepoint_t, uint8_t>;
     using octets_intervals_union_t = std::pair<std::vector<octet_pair_t>, std::vector<re::interval_t>>;
-    using ClassTypeId = pablo::PabloAST::ClassTypeId;
 
     Parabix_Ternary_CC_Compiler(pablo::PabloBlock * scope, std::vector<pablo::PabloAST *> basisBitSet);
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBlock & block) override;
     pablo::PabloAST * compileCC(const std::string & name, const re::CC *cc, pablo::PabloBuilder & builder) override;
+    pablo::PabloAST * createCCOp3(op3_pair_t op3, pablo::PabloAST * expr1, pablo::PabloAST * expr2, pablo::PabloAST * expr3, pablo::PabloBuilder & builder) override;
     pablo::PabloAST * createUCDSequence(const unsigned byte_no, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloBuilder & builder) override;
     pablo::PabloAST * createUCDSequence(const unsigned byte_no, const unsigned len, pablo::PabloAST * target, pablo::PabloAST * var, pablo::PabloAST * prefix, pablo::PabloAST * suffix, pablo::PabloBuilder & builder) override;
     ~Parabix_Ternary_CC_Compiler() {}

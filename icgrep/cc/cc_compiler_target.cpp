@@ -41,4 +41,8 @@ PabloAST * Parabix_CC_Compiler_Builder::createUCDSequence(const unsigned byte_no
     return ccc->createUCDSequence(byte_no, len, target, var, prefix, suffix, builder);
 }
 
+pablo::PabloAST * Parabix_CC_Compiler_Builder::createCCOp3(op3_pair_t op3, pablo::PabloAST * expr1, pablo::PabloAST * expr2, pablo::PabloAST * expr3, pablo::PabloBuilder & builder) {
+    return ccc->createCCOp3(op3, expr1, expr2, expr3, builder);
+}
+
 }

@@ -30,6 +30,17 @@ CC_Compiler::CC_Compiler(pablo::PabloBlock * scope)
 : mBuilder(scope) {
 }
 
+pablo::PabloAST * CC_Compiler::createCCOp3(op3_pair_t op3, pablo::PabloAST * expr1, pablo::PabloAST * expr2, pablo::PabloAST * expr3, pablo::PabloBuilder & builder) {
+    ClassTypeId op_fst = op3_first(op3);
+    ClassTypeId op_snd = op3_second(op3);
+    if (op_fst == ClassTypeId::Or && op_snd == ClassTypeId::Or) {
+        return builder.createOr(expr1, builder.createOr(expr2, expr3));
+    }
+
+    llvm_unreachable("ClassTypeId op3 pair is not supported by createCCOp3 method");
+    return nullptr;
+}
+
 CC_Compiler_Common::CC_Compiler_Common(unsigned encodingBits, std::vector<pablo::PabloAST *> basisBit, unsigned encodingMask)
 : mEncodingBits(encodingBits)
 , mBasisBit(basisBit)
@@ -589,6 +600,17 @@ PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no
         var = builder.createAnd(suffix, builder.createAdvance(var, 1));
     }
     return builder.createTernary(builder.getInteger(0xF8), target, suffix, builder.createAdvance(var, 1));
+}
+
+pablo::PabloAST * Parabix_Ternary_CC_Compiler::createCCOp3(op3_pair_t op3, pablo::PabloAST * expr1, pablo::PabloAST * expr2, pablo::PabloAST * expr3, pablo::PabloBuilder & builder) {
+    ClassTypeId op_fst = op3_first(op3);
+    ClassTypeId op_snd = op3_second(op3);
+    if (op_fst == ClassTypeId::Or && op_snd == ClassTypeId::Or) {
+        return builder.createOr3(expr1, expr2, expr3);
+    }
+
+    llvm_unreachable("ClassTypeId op3 pair is not supported by createCCOp3 method");
+    return nullptr;
 }
 
 } // end of namespace cc

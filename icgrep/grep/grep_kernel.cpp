@@ -37,6 +37,9 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
+using ClassTypeId = pablo::PabloAST::ClassTypeId;
+using op3_pair_t = cc::CC_Compiler::op3_pair_t;
+
 UnicodeLineBreakKernel::UnicodeLineBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & kb)
 : PabloKernel(kb,
               "UTF8_LB",
@@ -108,8 +111,8 @@ void UTF8_index::generatePabloMethod() {
     PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
     it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
-    PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
-    it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
+    op3_pair_t op3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
+    it3.createAssign(anyscope, ccc->createCCOp3(op3, anyscope, u8scope32, u8scope33, it3));
     PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
     PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
@@ -220,8 +223,8 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
     it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
-    PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
-    it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
+    op3_pair_t op3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
+    it3.createAssign(anyscope, ccc->createCCOp3(op3, anyscope, u8scope32, u8scope33, it3));
     PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
     PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
