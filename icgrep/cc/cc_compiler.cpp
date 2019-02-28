@@ -484,10 +484,10 @@ PabloAST * Parabix_Ternary_CC_Compiler::GE_Range(const unsigned N, const unsigne
         return pb.createOnes(); //Return a true literal.
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
-        return pb.createOr(pb.createOr(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n, pb));
+        return pb.createOr3(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb), GE_Range(N - 2, n, pb));
     }
     else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
-        return pb.createAnd(pb.createAnd(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n - (3 << (N - 2)), pb));
+        return pb.createAnd3(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb), GE_Range(N - 2, n - (3 << (N - 2)), pb));
     }
     else if (N >= 1)
     {
