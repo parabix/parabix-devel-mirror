@@ -356,7 +356,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_intervals_expr(const std::vector<in
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         terms.push_back(temp);
     }
-    return joinTerms(terms, JoinOr, pb);
+    return joinTerms(terms, ClassTypeId::Or, pb);
 }
 
 template<typename PabloBlockOrBuilder>
@@ -379,7 +379,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_octets_expr(const std::vector<octet
             }
         }
     }
-    return joinTerms(terms, JoinOr, pb);
+    return joinTerms(terms, ClassTypeId::Or, pb);
 }
 
 octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_union(const re::CC *cc) {
@@ -448,7 +448,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::bit_pattern_expr(const unsigned pattern,
             }
             if (term) terms.push_back(term);
         }
-        return joinTerms(terms, JoinAnd, pb);
+        return joinTerms(terms, ClassTypeId::And, pb);
     }
 }
 
@@ -544,14 +544,15 @@ inline PabloAST * Parabix_Ternary_CC_Compiler::char_or_range_expr(const codepoin
 }
 
 template<typename PabloBlockOrBuilder>
-pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms, join_t ty, PabloBlockOrBuilder & pb) {
+pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms, ClassTypeId ty, PabloBlockOrBuilder & pb) {
+    assert(ty == ClassTypeId::And || ty == ClassTypeId::Or);
     if (terms.empty()) return pb.createZeroes();
     //Reduce the list so that all of the expressions are contained within a single expression.
     std::vector<PabloAST *> temp;
     temp.reserve(terms.size());
     do {
         for (unsigned i = 0; i < (terms.size() / 3); i++) {
-            if (ty == JoinOr) {
+            if (ty == ClassTypeId::Or) {
                 temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
             } else {
                 temp.push_back(pb.createAnd3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
@@ -565,7 +566,7 @@ pablo::PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *>
     } while (terms.size() >= 3);
     assert (terms.size() == 2 || terms.size() == 1);
     if (terms.size() == 2) {
-        if (ty == JoinOr) {
+        if (ty == ClassTypeId::Or) {
             return pb.createOr(terms.front(), terms.back());
         } else {
             return pb.createAnd(terms.front(), terms.back());
