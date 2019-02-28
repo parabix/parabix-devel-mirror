@@ -317,6 +317,9 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llv
 }
 
 PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    if (isa<Zeroes>(expr1)) return expr1;
+    if (isa<Zeroes>(expr2)) return expr2;
+    if (isa<Zeroes>(expr3)) return expr3;
     //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
     // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
     return createTernary(0x80, expr1, expr2, expr3);
@@ -419,6 +422,10 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm
 }
 
 PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    if (isa<Ones>(expr1)) return expr1;
+    if (isa<Ones>(expr2)) return expr2;
+    if (isa<Ones>(expr3)) return expr3;
+
     //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
     // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
     return createTernary(0xFE, expr1, expr2, expr3);
