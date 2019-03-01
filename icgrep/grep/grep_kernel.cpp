@@ -280,7 +280,6 @@ void RequiredStreams_UTF16::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
     const op3_pair_t opAndOr3 = std::make_pair(ClassTypeId::And, ClassTypeId::Or);
-    const op3_pair_t opOr3 = std::make_pair(ClassTypeId::And, ClassTypeId::Or);
 
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]

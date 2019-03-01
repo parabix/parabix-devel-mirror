@@ -18,6 +18,9 @@ using namespace kernel;
 using namespace pablo;
 using namespace llvm;
 
+using ClassTypeId = pablo::PabloAST::ClassTypeId;
+using op3_pair_t = cc::CC_Compiler::op3_pair_t;
+
 void DelMaskKernelBuilder::generatePabloMethod() {
     PabloBuilder main(getEntryScope());
     //  input: 8 basis bit streams
@@ -28,6 +31,8 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), u8_bits);
     
     Zeroes * zeroes = main.createZeroes();
+    const op3_pair_t opOrAnd3 = std::make_pair(ClassTypeId::Or, ClassTypeId::And);
+    const op3_pair_t opOr3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
 
     // Outputs
     Var * delmask = main.createVar("delmask", zeroes);
@@ -60,8 +65,9 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     PabloAST * u8scope33 = it3.createAdvance(u8scope32, 1, "u8scope33");
     it3.createAssign(u8scope3X, it3.createOr(u8scope32, u8scope33));
     PabloAST * E0_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(re::makeCC(0xE0), it3), 1), ccc.compileCC(re::makeCC(0x80, 0x9F), it3));
-    PabloAST * ED_invalid = it3.createAnd(it3.createAdvance(ccc.compileCC(re::makeCC(0xED), it3), 1), ccc.compileCC(re::makeCC(0xA0, 0xBF), it3));
-    it3.createAssign(EX_invalid, it3.createOr(E0_invalid, ED_invalid));
+    PabloAST * ED_invalid1 = it3.createAdvance(ccc.compileCC(re::makeCC(0xED), it3), 1);
+    PabloAST * ED_invalid2 = ccc.compileCC(re::makeCC(0xA0, 0xBF), it3);
+    it3.createAssign(EX_invalid, ccc.createCCOp3(opOrAnd3, E0_invalid, ED_invalid1, ED_invalid2, it3));
     it3.createAssign(del3, u8scope32);
     //
     // Four-byte sequences
@@ -77,23 +83,24 @@ void DelMaskKernelBuilder::generatePabloMethod() {
     it4.createAssign(u8scope4nonfinal, it4.createOr(u8scope42, u8scope43));
     it4.createAssign(u8scope4X, it4.createOr(u8scope4nonfinal, u8scope44));
     PabloAST * F0_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(re::makeCC(0xF0), it4), 1), ccc.compileCC(re::makeCC(0x80, 0x8F), it4));
-    PabloAST * F4_invalid = it4.createAnd(it4.createAdvance(ccc.compileCC(re::makeCC(0xF4), it4), 1), ccc.compileCC(re::makeCC(0x90, 0xBF), it4));
-    it4.createAssign(FX_invalid, it4.createOr(F0_invalid, F4_invalid));
+    PabloAST * F4_invalid1 = it4.createAdvance(ccc.compileCC(re::makeCC(0xF4), it4), 1);
+    PabloAST * F4_invalid2 = ccc.compileCC(re::makeCC(0x90, 0xBF), it4);
+    it4.createAssign(FX_invalid, ccc.createCCOp3(opOrAnd3, F0_invalid, F4_invalid1, F4_invalid2, it4));
     it4.createAssign(del4, it4.createOr(u8scope42, u8scope43));
     //
     // Invalid cases
-    PabloAST * anyscope = it.createOr(u8scope22, it.createOr(u8scope3X, u8scope4X), "anyscope");
-    PabloAST * legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    PabloAST * anyscope = ccc.createCCOp3(opOr3, u8scope22, u8scope3X, u8scope4X, it); // "anyscope"
+    PabloAST * legalpfx = ccc.createCCOp3(opOr3, u8pfx2, u8pfx3, u8pfx4, it);
     //  Any scope that does not have a suffix byte, and any suffix byte that is not in
     //  a scope is a mismatch, i.e., invalid UTF-8.
     PabloAST * mismatch = it.createXor(anyscope, u8suffix);
     PabloAST * EF_invalid = it.createOr(EX_invalid, FX_invalid);
     PabloAST * pfx_invalid = it.createXor(u8pfx, legalpfx);
-    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    it.createAssign(u8invalid, ccc.createCCOp3(opOr3, pfx_invalid, mismatch, EF_invalid, it));
     //PabloAST * u8valid = it.createNot(u8invalid, "u8valid");
     it.createAssign(error_mask, u8invalid);
     
-    it.createAssign(delmask, it.createInFile(it.createOr(it.createOr(del3, del4), ccc.compileCC(re::makeCC(0xC0, 0xFF), it))));
+    it.createAssign(delmask, it.createInFile(ccc.createCCOp3(opOr3, del3, del4, ccc.compileCC(re::makeCC(0xC0, 0xFF), it), it)));
     it.createAssign(neg_delmask, it.createInFile(it.createNot(delmask)));
     
     Var * delmask_out = getOutputStreamVar("delMask");
