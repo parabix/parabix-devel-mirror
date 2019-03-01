@@ -279,6 +279,8 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 void RequiredStreams_UTF16::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
+    const op3_pair_t opAndOr3 = std::make_pair(ClassTypeId::And, ClassTypeId::Or);
+    const op3_pair_t opOr3 = std::make_pair(ClassTypeId::And, ClassTypeId::Or);
 
     PabloAST * u16hi_hi_surrogate = ccc.compileCC(makeCC(0xD800, 0xDBFF, &cc::UTF16));    //u16hi_hi_surrogate = [\xD8-\xDB]
     PabloAST * u16hi_lo_surrogate = ccc.compileCC(makeCC(0xDC00, 0xDFFF, &cc::UTF16));    //u16hi_lo_surrogate = [\xDC-\xDF]
@@ -289,12 +291,13 @@ void RequiredStreams_UTF16::generatePabloMethod() {
     PabloAST * u16valid = pb.createNot(u16invalid, "u16valid");
     PabloAST * nonFinal = pb.createAnd(u16hi_hi_surrogate, u16valid, "nonfinal");
 
-    PabloAST * u16single_temp = pb.createOr(ccc.compileCC(makeCC(0x0000, 0xD7FF, &cc::UTF16)), ccc.compileCC(makeCC(0xE000, 0xFFFF, &cc::UTF16)));
-    PabloAST * u16single = pb.createAnd(u16single_temp, pb.createNot(u16invalid));
+    PabloAST * fstUTF16 = ccc.compileCC(makeCC(0x0000, 0xD7FF, &cc::UTF16));
+    PabloAST * sndUTF16 = ccc.compileCC(makeCC(0xE000, 0xFFFF, &cc::UTF16));
+    PabloAST * u16single = ccc.createCCOp3(opAndOr3, pb.createNot(u16invalid), fstUTF16, sndUTF16, pb);
 
     PabloAST * const nonFinalCodeUnits = pb.createExtract(getInput(1), pb.getInteger(0));
     PabloAST * const initial = pb.createOr(u16single, u16hi_hi_surrogate, "initial");
-    PabloAST * const final = pb.createNot(pb.createOr(pb.createOr(u16hi_hi_surrogate, u16invalid), nonFinalCodeUnits), "final");
+    PabloAST * const final = pb.createNot(ccc.createCCOp3(opAndOr3, u16hi_hi_surrogate, u16invalid, nonFinalCodeUnits, pb), "final");
 
     Var * const required = getOutputStreamVar("required");
     pb.createAssign(pb.createExtract(required, pb.getInteger(0)), initial);
