@@ -226,8 +226,9 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
     it3.createAssign(EF_invalid, EX_invalid);
     PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE2), it3), 1), ccc->compileCC(makeByte(0x80), it3));
-    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc->compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
-    it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
+    PabloAST * LS_PS1 = it3.createAdvance(E2_80, 1);
+    PabloAST * LS_PS2 = ccc->compileCC(makeByte(0xA8,0xA9), it3);
+    it3.createAssign(LineBreak, ccc->createCCOp3(opOrAnd3, LineBreak, LS_PS1, LS_PS2, it3));
 
     //
     // Four-byte sequences
@@ -236,24 +237,22 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
     PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
-    PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
-    it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
-    PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
+    it4.createAssign(nonFinal, ccc->createCCOp3(opOr3, nonFinal, u8scope42, u8scope43, it4));
+    PabloAST * const u8scope4X = ccc->createCCOp3(opOr3, u8scope42, u8scope43, u8scope44, it4);
     it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
     PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF0), it4), 1), ccc->compileCC(makeByte(0x80, 0x8F), it4));
     PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
-    PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
-    it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
+    it4.createAssign(EF_invalid, ccc->createCCOp3(opOr3, EF_invalid, F0_invalid, F4_invalid, it4));
 
     //
     // Invalid cases
-    PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    PabloAST * const legalpfx = ccc->createCCOp3(opOr3, u8pfx2, u8pfx3, u8pfx4, it);
     //  Any scope that does not have a suffix byte, and any suffix byte that is not in
     //  a scope is a mismatch, i.e., invalid UTF-8.
     PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
     //
     PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
-    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    it.createAssign(u8invalid, ccc->createCCOp3(opOr3, pfx_invalid, mismatch, EF_invalid, it));
     PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
     //
     //
