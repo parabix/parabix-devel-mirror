@@ -856,7 +856,7 @@ Unterminated</datafile>
 <grepcase regexp="\p{script=/(kata|Hira).ana/}" datafile="hiragana_and_katakana" grepcount="3"/>
 <grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="3"/>
 
-<grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-c -enable-object-cache=0 -enable-segment-pipeline-parallel" grepcount="8"/>
+<grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-c -enable-segment-pipeline-parallel" grepcount="8"/>
 <grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines" grepcount="5"/>
 <grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines=0" grepcount="6"/>
 <grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" datafile="../All_good" grepcount="27"/>

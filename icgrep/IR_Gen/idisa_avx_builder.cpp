@@ -861,7 +861,7 @@ Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value
     Value * args[4] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask};
 #endif
     Value * rslt = CreateCall(ternLogicFn, args);
-    return rslt;
+    return fwCast(64, rslt);
 }
 
 void IDISA_AVX512F_Builder::getAVX512Features() {

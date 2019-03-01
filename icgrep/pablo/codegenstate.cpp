@@ -272,6 +272,7 @@ IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * in
 /// QUARTERNARY FUNCTIONS
 
 Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name) {
+    assert (a->getType() == b->getType() && b->getType() == c->getType());
     return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
 }
 

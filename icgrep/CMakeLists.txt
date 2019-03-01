@@ -284,7 +284,7 @@ add_test(
 add_test(
   NAME greptest_ternary
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ccc-type=ternary")
+  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ccc-type=ternary -enable-object-cache=0")
 
 add_test(
   NAME proptest
