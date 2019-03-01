@@ -82,7 +82,7 @@ void UTF8_index::generatePabloMethod() {
 
     Zeroes * const ZEROES = pb.createZeroes();
     PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
-
+    const op3_pair_t op3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
 
     Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
     Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
@@ -102,7 +102,6 @@ void UTF8_index::generatePabloMethod() {
     it.createIf(u8pfx2, it2);
     it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
 
-
     //
     // Three-byte sequences
     Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
@@ -111,7 +110,6 @@ void UTF8_index::generatePabloMethod() {
     PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
     it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
-    op3_pair_t op3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
     it3.createAssign(anyscope, ccc->createCCOp3(op3, anyscope, u8scope32, u8scope33, it3));
     PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
     PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
@@ -125,24 +123,22 @@ void UTF8_index::generatePabloMethod() {
     PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
     PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
     PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
-    PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
-    it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
-    PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
+    it4.createAssign(nonFinal, ccc->createCCOp3(op3, nonFinal, u8scope42, u8scope43, it4));
+    PabloAST * const u8scope4X = ccc->createCCOp3(op3, u8scope42, u8scope43, u8scope44, it4);
     it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
     PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF0), it4), 1), ccc->compileCC(makeByte(0x80, 0x8F), it4));
     PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
-    PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
-    it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
+    it4.createAssign(EF_invalid, ccc->createCCOp3(op3, EF_invalid, F0_invalid, F4_invalid, it4));
 
     //
     // Invalid cases
-    PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    PabloAST * const legalpfx = ccc->createCCOp3(op3, u8pfx2, u8pfx3, u8pfx4, it);
     //  Any scope that does not have a suffix byte, and any suffix byte that is not in
     //  a scope is a mismatch, i.e., invalid UTF-8.
     PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
     //
     PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
-    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    it.createAssign(u8invalid, ccc->createCCOp3(op3, pfx_invalid, mismatch, EF_invalid, it));
     PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
     //
     //
@@ -192,7 +188,8 @@ void RequiredStreams_UTF8::generatePabloMethod() {
 
     Zeroes * const ZEROES = pb.createZeroes();
     PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
-
+    const op3_pair_t opOrAnd3 = std::make_pair(ClassTypeId::Or, ClassTypeId::And);
+    const op3_pair_t opOr3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
 
     Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
     Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
@@ -211,9 +208,9 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
     it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
-    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc->compileCC(makeByte(0xC2), it2), 1), ccc->compileCC(makeByte(0x85), it2), "NEL");
-    it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
-
+    PabloAST * NEL1 = it2.createAdvance(ccc->compileCC(makeByte(0xC2), it2), 1);
+    PabloAST * NEL2 = ccc->compileCC(makeByte(0x85), it2);
+    it2.createAssign(LineBreak, ccc->createCCOp3(opOrAnd3, LineBreak, NEL1, NEL2, it2));
 
     //
     // Three-byte sequences
@@ -223,8 +220,7 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
     it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
-    op3_pair_t op3 = std::make_pair(ClassTypeId::Or, ClassTypeId::Or);
-    it3.createAssign(anyscope, ccc->createCCOp3(op3, anyscope, u8scope32, u8scope33, it3));
+    it3.createAssign(anyscope, ccc->createCCOp3(opOr3, anyscope, u8scope32, u8scope33, it3));
     PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
     PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);

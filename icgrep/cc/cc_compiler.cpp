@@ -35,6 +35,8 @@ pablo::PabloAST * CC_Compiler::createCCOp3(op3_pair_t op3, pablo::PabloAST * exp
     ClassTypeId op_snd = op3_second(op3);
     if (op_fst == ClassTypeId::Or && op_snd == ClassTypeId::Or) {
         return builder.createOr(expr1, builder.createOr(expr2, expr3));
+    } else if (op_fst == ClassTypeId::Or && op_snd == ClassTypeId::And) {
+        return builder.createOr(expr1, builder.createAnd(expr2, expr3));
     }
 
     llvm_unreachable("ClassTypeId op3 pair is not supported by createCCOp3 method");
@@ -607,6 +609,8 @@ pablo::PabloAST * Parabix_Ternary_CC_Compiler::createCCOp3(op3_pair_t op3, pablo
     ClassTypeId op_snd = op3_second(op3);
     if (op_fst == ClassTypeId::Or && op_snd == ClassTypeId::Or) {
         return builder.createOr3(expr1, expr2, expr3);
+    } else if (op_fst == ClassTypeId::Or && op_snd == ClassTypeId::And) {
+        return builder.createTernary(0xF8, expr1, expr2, expr3);
     }
 
     llvm_unreachable("ClassTypeId op3 pair is not supported by createCCOp3 method");
