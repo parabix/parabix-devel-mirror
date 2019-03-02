@@ -210,10 +210,10 @@ public:
 
     virtual void CreateBaseFunctions() {}
 
-    llvm::Value * simd_and(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
-    llvm::Value * simd_or(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
-    llvm::Value * simd_xor(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
-    llvm::Value * simd_not(llvm::Value * a, llvm::StringRef s = llvm::StringRef());
+    virtual llvm::Value * simd_and(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    virtual llvm::Value * simd_or(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    virtual llvm::Value * simd_xor(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    virtual llvm::Value * simd_not(llvm::Value * a, llvm::StringRef s = llvm::StringRef());
     llvm::Value * fwCast(unsigned fw, llvm::Value * a);
 
     inline llvm::VectorType * getBitBlockType() const {

@@ -91,6 +91,10 @@ public:
     llvm::Value * mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) override;
     llvm::Value * simd_if(unsigned fw, llvm::Value * cond, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * simd_ternary(unsigned char mask, llvm::Value * a, llvm::Value * b, llvm::Value * c) override;
+    llvm::Value * simd_and(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef()) override;
+    llvm::Value * simd_or(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef()) override;
+    llvm::Value * simd_xor(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef()) override;
+    llvm::Value * simd_not(llvm::Value * a, llvm::StringRef s = llvm::StringRef()) override;
 
     ~IDISA_AVX512F_Builder() {
     }

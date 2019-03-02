@@ -864,6 +864,28 @@ Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value
     return bitCast(rslt);
 }
 
+Value * IDISA_AVX512F_Builder::simd_and(Value * a, Value * b, StringRef s) {
+    if (auto *instr = dyn_cast<llvm::BinaryOperator>(a)) {
+        llvm_unreachable("test on bin op");
+    }
+
+    return CreateAnd(a, b);
+}
+
+Value * IDISA_AVX512F_Builder::simd_or(Value * a, Value * b, StringRef s) {
+    // llvm_unreachable("not implemented");
+    // return nullptr;
+    return CreateOr(a, b, s);
+}
+
+Value * IDISA_AVX512F_Builder::simd_xor(Value * a, Value * b, StringRef s) {
+    return CreateXor(a, b, s);
+}
+
+Value * IDISA_AVX512F_Builder::simd_not(Value * a, StringRef s) {
+    return CreateNot(a, s);
+}
+
 void IDISA_AVX512F_Builder::getAVX512Features() {
     llvm::StringMap<bool> features;
     if (llvm::sys::getHostCPUFeatures(features)) {
