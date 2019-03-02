@@ -77,10 +77,10 @@ CPUDriver::CPUDriver(std::string && moduleName)
 #ifndef ORCJIT
 , mEngine(nullptr)
 #endif
-, mPassManager{}
 , mUnoptimizedIROutputStream{}
 , mIROutputStream{}
-, mASMOutputStream{} {
+, mASMOutputStream{}
+, mPassManager{} {
 
     InitializeNativeTarget();
     InitializeNativeTargetAsmPrinter();
