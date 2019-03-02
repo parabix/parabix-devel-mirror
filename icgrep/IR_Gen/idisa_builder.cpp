@@ -558,9 +558,17 @@ Value * IDISA_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Va
 
     unsigned char not_a_mask = mask & 0x0F;
     unsigned char a_mask = (mask >> 4) & 0x0F;
-
     if (a_mask == not_a_mask) return simd_binary(a_mask, b, c);
-    else if ((a_mask ^ not_a_mask) == 0x0F) return CreateXor(a, simd_binary(not_a_mask, b, c));
+
+    unsigned char b_mask = ((mask & 0xC0) >> 4) | ((mask & 0x0C) >> 2);
+    unsigned char not_b_mask = ((mask & 0x30) >> 2) | (mask & 0x03);
+    if (b_mask == not_b_mask) return simd_binary(b_mask, a, c);
+
+    unsigned char c_mask = ((mask & 0x80) >> 4) | ((mask & 0x20) >> 3) | ((mask & 0x08) >> 2) | ((mask & 02) >> 1);
+    unsigned char not_c_mask = ((mask & 0x40) >> 3) | ((mask & 0x10) >> 2) | ((mask & 0x04) >> 1) | (mask & 01);
+    if (c_mask == not_c_mask) return simd_binary(c_mask, a, b);
+
+    if ((a_mask ^ not_a_mask) == 0x0F) return CreateXor(a, simd_binary(not_a_mask, b, c));
 
     Value * bc_hi = simd_binary(a_mask, b, c);
     Value * bc_lo = simd_binary(not_a_mask, b, c);
