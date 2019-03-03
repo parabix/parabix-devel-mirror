@@ -467,6 +467,16 @@ Value * IDISA_Builder::simd_popcount(unsigned fw, Value * a) {
     }
 }
 
+Value * IDISA_Builder::hsimd_partial_sum(unsigned fw, Value * a) {
+    const unsigned vectorWidth = getVectorBitWidth(a);
+    Value * partial_sum = fwCast(fw, a);
+    const auto count = vectorWidth / fw;
+    for (unsigned move = 1; move < count; move *= 2) {
+        partial_sum = simd_add(fw, partial_sum, mvmd_slli(fw, partial_sum, move));
+    }
+    return partial_sum;
+}
+
 Value * IDISA_Builder::simd_cttz(unsigned fw, Value * a) {
     if (fw == 1) {
         return simd_not(a);
