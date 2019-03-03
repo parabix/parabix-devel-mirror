@@ -47,7 +47,7 @@ protected:
                        Bindings && scalar_inputs,
                        Bindings && scalar_outputs);
 
-    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
 
     void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
 

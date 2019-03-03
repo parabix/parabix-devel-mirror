@@ -404,8 +404,6 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
     }
 }
 
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadBufferHandles
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -419,10 +417,14 @@ inline void PipelineCompiler::loadBufferHandles(BuilderRef b) {
         StreamSetBuffer * const buffer = bn.Buffer;
         if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
             b->setKernel(mPipelineKernel);
-            buffer->setHandle(b, b->getScalarFieldPtr(makeBufferName(mKernelIndex, output)));
+            Value * const scalar = b->getScalarFieldPtr(makeBufferName(mKernelIndex, output));
+            buffer->setHandle(b, scalar);
         } else if (bn.Type == BufferType::Managed) {
             b->setKernel(mKernel);
-            buffer->setHandle(b, b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX));
+            assert (mKernel->getHandle());
+            assert (mKernel->getHandle()->getType());
+            Value * const scalar = b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            buffer->setHandle(b, scalar);
         }
         assert (buffer->getHandle());
     }

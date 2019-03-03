@@ -218,8 +218,8 @@ ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & 
 // output scalars
 {},
 // kernel state
-{Binding{b->getSizeTy(), "BlockNo"}
-,Binding{b->getSizeTy(), "LineNum"}}) {
+{InternalScalar{b->getSizeTy(), "BlockNo"}
+,InternalScalar{b->getSizeTy(), "LineNum"}}) {
     addAttribute(SideEffecting());
 }
 

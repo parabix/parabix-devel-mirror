@@ -45,7 +45,7 @@ MultiBlockKernel::MultiBlockKernel(
     Bindings && stream_outputs,
     Bindings && scalar_parameters,
     Bindings && scalar_outputs,
-    Bindings && internal_scalars)
+    InternalScalars && internal_scalars)
 : MultiBlockKernel(b,
     TypeId::MultiBlock,
     std::move(kernelName),
@@ -64,7 +64,7 @@ MultiBlockKernel::MultiBlockKernel(const std::unique_ptr<KernelBuilder> &b,
     Bindings && stream_outputs,
     Bindings && scalar_parameters,
     Bindings && scalar_outputs,
-    Bindings && internal_scalars)
+    InternalScalars && internal_scalars)
 : Kernel(b, typeId,
      std::move(kernelName),
      std::move(stream_inputs),

@@ -97,7 +97,7 @@ protected:
 
     void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) final;
 
-    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
 
     void setInputStreamSetAt(const unsigned i, StreamSet * const value) final;
 

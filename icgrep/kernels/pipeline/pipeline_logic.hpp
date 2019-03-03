@@ -94,7 +94,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     if (LLVM_LIKELY(kernel->isStateful() && !kernel->hasFamilyName())) {
         // if this is a family kernel, it's handle will be passed into the kernel
         // methods rather than stored within the pipeline state
-        PointerType * const handlePtrTy = kernel->getKernelType()->getPointerTo(0);
+        PointerType * const handlePtrTy = kernel->getSharedStateType()->getPointerTo(0);
         mPipelineKernel->addInternalScalar(handlePtrTy, makeKernelName(kernelIndex));
     }
 }
@@ -250,7 +250,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     Value * const threadStruct = b->CreateBitCast(&*(args), processState->getType());
     setThreadState(b, threadStruct);
     // generate the pipeline logic for this thread
-    mPipelineKernel->initializeLocalScalarValues(b);
+    mPipelineKernel->initializeScalarMap(b);
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);

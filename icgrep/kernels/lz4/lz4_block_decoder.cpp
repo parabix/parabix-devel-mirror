@@ -39,13 +39,12 @@ LZ4BlockDecoderKernel::LZ4BlockDecoderKernel(const std::unique_ptr<kernel::Kerne
 {},
 //Internal states:
 {
-Binding{b->getInt1Ty(), "hasSkipHeader"},
-Binding{b->getSizeTy(), "previousOffset"},
-Binding{b->getInt1Ty(), "reachFinalBlock"},
-
-Binding{b->getInt8Ty(), "pendingIsCompressed"},
-Binding{b->getInt64Ty(), "pendingBlockStart"},
-Binding{b->getInt64Ty(), "pendingBlockEnd"},
+InternalScalar{b->getInt1Ty(), "hasSkipHeader"},
+InternalScalar{b->getSizeTy(), "previousOffset"},
+InternalScalar{b->getInt1Ty(), "reachFinalBlock"},
+InternalScalar{b->getInt8Ty(), "pendingIsCompressed"},
+InternalScalar{b->getInt64Ty(), "pendingBlockStart"},
+InternalScalar{b->getInt64Ty(), "pendingBlockEnd"},
 }) {
 
 }

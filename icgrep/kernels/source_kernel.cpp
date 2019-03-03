@@ -487,8 +487,8 @@ MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuild
 {Binding{"fileSource", fileSource}, Binding{"fileItems", fileItems}},
 {},
 // internal scalar
-{Binding{fileSource->getType(), "buffer"}
-,Binding{fileSource->getType(), "ancillaryBuffer"}
+{InternalScalar{fileSource->getType(), "buffer"}
+,InternalScalar{fileSource->getType(), "ancillaryBuffer"}
 })
 , mStreamSetCount(outputStream->getNumElements())
 , mCodeUnitWidth(outputStream->getFieldWidth()) {

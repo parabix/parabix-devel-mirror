@@ -97,7 +97,8 @@ UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> 
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},
 Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
-{}, {}, {Binding{b->getBitBlockType(), "EOFmask"}})
+{}, {},
+{InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}})
 , mDepositFieldWidth(depositFieldWidth) {
 
 }

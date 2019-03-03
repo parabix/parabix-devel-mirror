@@ -52,7 +52,30 @@ Scalar * BaseDriver::CreateConstant(not_null<llvm::Constant *> value) {
  * @brief makeCache
  ** ------------------------------------------------------------------------------------------------------------- */
 void BaseDriver::addKernel(not_null<Kernel *> kernel) {
-    kernel->initializeBindings(*this);
+
+    // Verify the I/O relationships were properly set / defaulted in.
+
+    for (Binding & input : kernel->getInputScalarBindings()) {
+        if (input.getRelationship() == nullptr) {
+            input.setRelationship(CreateScalar(input.getType()));
+        }
+    }
+    for (Binding & input : kernel->getInputStreamSetBindings()) {
+        if (LLVM_UNLIKELY(input.getRelationship() == nullptr)) {
+            llvm::report_fatal_error(kernel->getName()+ "." + input.getName() + " must be set upon construction");
+        }
+    }
+    for (Binding & output : kernel->getOutputStreamSetBindings()) {
+        if (LLVM_UNLIKELY(output.getRelationship() == nullptr)) {
+            llvm::report_fatal_error(kernel->getName()+ "." + output.getName() + " must be set upon construction");
+        }
+    }
+    for (Binding & output : kernel->getOutputScalarBindings()) {
+        if (output.getRelationship() == nullptr) {
+            output.setRelationship(CreateScalar(output.getType()));
+        }
+    }
+
     // If the pipeline contained a single kernel, the pipeline builder will return the
     // original kernel. However, the module for that kernel is already owned by the JIT
     // engine so we avoid declaring it as cached or uncached.

@@ -23,7 +23,7 @@ inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index
         Value * handle = nullptr;
         if (mKernel->hasFamilyName()) {
             handle = b->getScalarField(makeFamilyPrefix(index));
-            handle = b->CreateBitCast(handle, mKernel->getKernelType()->getPointerTo());
+            handle = b->CreateBitCast(handle, mKernel->getSharedStateType()->getPointerTo());
         } else {
             handle = b->getScalarField(makeKernelName(index));
         }

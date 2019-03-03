@@ -421,7 +421,7 @@ BlockOrientedKernel::BlockOrientedKernel(
     Bindings && stream_outputs,
     Bindings && scalar_parameters,
     Bindings && scalar_outputs,
-    Bindings && internal_scalars)
+    InternalScalars && internal_scalars)
 : MultiBlockKernel(b,
     TypeId::BlockOriented,
     std::move(kernelName),

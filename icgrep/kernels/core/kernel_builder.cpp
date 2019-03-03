@@ -12,7 +12,14 @@ namespace kernel {
 using PortType = Kernel::PortType;
 
 Value * KernelBuilder::getScalarFieldPtr(const StringRef fieldName) {
-    return mKernel->getScalarFieldPtr(*this, fieldName);
+    Value * scalar = mKernel->getScalarValuePtr(fieldName);
+    if (LLVM_UNLIKELY(scalar == nullptr)) {
+        FixedArray<Value *, 2> indices;
+        indices[0] = getInt32(0);
+        indices[1] = getInt32(mKernel->getSharedScalarIndex(fieldName));
+        scalar = CreateGEP(mKernel->getHandle(), indices);
+    }
+    return scalar;
 }
 
 Value * KernelBuilder::getScalarField(const StringRef fieldName) {

@@ -52,17 +52,6 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
 
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
-// Prior to LLVM 4.0.0, std::array cannot be implicitly converted to a ArrayRef
-template <typename T, unsigned N>
-struct FixedArray : public SmallVector<T, N> {
-    constexpr FixedArray() : SmallVector<T, N>(N) { }
-};
-#else
-template <typename T, unsigned N>
-using FixedArray = std::array<T, N>;
-#endif
-
 union RelationshipNode {
     const kernel::Kernel * Kernel = nullptr;
     const kernel::Relationship * Relationship;
@@ -122,22 +111,6 @@ inline unsigned OutputPort(const StreamPort port) {
     assert (port.Type == PortType::Output);
     return port.Number;
 }
-
-// NOTE: std::reference_wrapper does not allow zero init, required by boost graph
-struct BindingRef {
-    BindingRef() noexcept : binding(nullptr) {}
-    BindingRef(const Binding & ref) noexcept : binding(&ref) {}
-    BindingRef(const Binding * const ref) noexcept : binding(ref) {}
-    operator const Binding & () const noexcept {
-        return get();
-    }
-    const Binding & get() const noexcept {
-        assert (binding && "was not set!");
-        return *binding;
-    }
-private:
-    const Binding * binding;
-};
 
 struct BufferRateData {
 

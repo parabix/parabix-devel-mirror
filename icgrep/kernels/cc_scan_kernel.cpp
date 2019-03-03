@@ -97,7 +97,7 @@ Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBui
 CCScanKernel::CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamNum)
 : BlockOrientedKernel(b, "CCScan",
               {Binding{b->getStreamSetTy(streamNum), "matchResults"}},
-              {}, {}, {}, {Binding{b->getSizeTy(), "BlockNo"}}),
+              {}, {}, {}, {InternalScalar{b->getSizeTy(), "BlockNo"}}),
 mStreamNum(streamNum),
 mScanwordBitWidth(b->getSizeTy()->getBitWidth()) {
 

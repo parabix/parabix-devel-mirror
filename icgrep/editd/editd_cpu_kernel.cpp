@@ -108,8 +108,8 @@ editdCPUKernel::editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // output scalar
 {},
 // internal scalars
-{Binding{b->getBitBlockType(), "EOFmask"},
- Binding{ArrayType::get(b->getBitBlockType(), (patternLen * groupSize * 4 * ResultStream->getNumElements())), "strideCarry"}}) {
+{InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"},
+ InternalScalar{ScalarType::Internal, ArrayType::get(b->getBitBlockType(), (patternLen * groupSize * 4 * ResultStream->getNumElements())), "strideCarry"}}) {
 
 }
 

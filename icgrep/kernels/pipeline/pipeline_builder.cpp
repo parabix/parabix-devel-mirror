@@ -183,7 +183,7 @@ Kernel * PipelineBuilder::makeKernel() {
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
 
-    // TODO: optimization must be able to synchronize non-SynchronizeFree kernels to
+    // TODO: optimization must be able to synchronize non-InternallySynchronized kernels to
     // allow the following.
 
 //    if (LLVM_UNLIKELY(numOfKernels <= 1 && numOfCalls == 0 && !mRequiresPipeline)) {

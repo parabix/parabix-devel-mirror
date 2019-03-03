@@ -93,7 +93,7 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
     return value;
 }
 
-void PabloKernel::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mSizeTy = b->getSizeTy();
     mStreamTy = b->getStreamTy();
     mSymbolTable.reset(new SymbolGenerator(b->getContext(), mAllocator));
@@ -224,8 +224,8 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 , mSizeTy(nullptr)
 , mStreamTy(nullptr)
 , mContext(nullptr) {
-    addLocalScalar(b->getBitBlockType(), "EOFbit");
-    addLocalScalar(b->getBitBlockType(), "EOFmask");
+    addInternalNonPersistentScalar(b->getBitBlockType(), "EOFbit");
+    addInternalNonPersistentScalar(b->getBitBlockType(), "EOFmask");
 }
 
 PabloKernel::~PabloKernel() { }

@@ -7,7 +7,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void OptimizationBranch::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCompiler = llvm::make_unique<OptimizationBranchCompiler>(this);
     mCompiler->addBranchProperties(b);
 }
@@ -54,7 +54,8 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-{Binding{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS}, Binding{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS}})
+{InternalScalar{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS},
+ InternalScalar{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS}})
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {

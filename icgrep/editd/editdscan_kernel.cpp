@@ -90,7 +90,7 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
 editdScanKernel::editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * matchResults) :
 BlockOrientedKernel(b, "editdScanMatch" + std::to_string(matchResults->getNumElements()),
               {Binding{"matchResults", matchResults}},
-              {}, {}, {}, {Binding{b->getSizeTy(), "BlockNo"}}),
+              {}, {}, {}, {InternalScalar{b->getSizeTy(), "BlockNo"}}),
 mNumElements(matchResults->getNumElements()),
 mScanwordBitWidth(b->getSizeTy()->getBitWidth()) {
     addAttribute(SideEffecting());

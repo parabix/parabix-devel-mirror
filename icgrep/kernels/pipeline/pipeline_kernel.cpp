@@ -11,7 +11,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
     mCompiler->addPipelineKernelProperties(b);
 }
@@ -21,7 +21,7 @@ void PipelineKernel::addInternalKernelProperties(const std::unique_ptr<kernel::K
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> & args) {
     assert (args[0] && "cannot initialize before creation");
-    assert (args[0]->getType()->getPointerElementType() == mKernelStateType);
+    assert (args[0]->getType()->getPointerElementType() == mSharedStateType);
     b->setKernel(this);
 
     // append the kernel pointers for any kernel belonging to a family
