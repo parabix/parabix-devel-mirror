@@ -164,6 +164,7 @@ public:
     virtual llvm::Value * simd_pdep(unsigned fw, llvm::Value * v, llvm::Value * deposit_mask);
 
     virtual llvm::Value * simd_popcount(unsigned fw, llvm::Value * a);
+    virtual llvm::Value * hsimd_partial_sum(unsigned fw, llvm::Value * a);
     virtual llvm::Value * simd_cttz(unsigned fw, llvm::Value * a);
 
     virtual llvm::Value * simd_bitreverse(unsigned fw, llvm::Value * a);

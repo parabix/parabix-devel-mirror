@@ -241,12 +241,7 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     Value * fieldPopCounts = b->simd_popcount(mCompressedFieldWidth, b->loadInputStreamBlock("extractionMask", ZERO, blockOffsetPhi));
     // For each field determine the (partial) sum popcount of all fields up to and
     // including the current field.
-    Value * partialSum = fieldPopCounts;
-    for (unsigned i = 1; i < numFields; i *= 2) {
-        partialSum = b->simd_add(mCompressedFieldWidth, partialSum, b->mvmd_slli(mCompressedFieldWidth, partialSum, i));
-    }
-    // Value * blockPopCount = b->CreateZExtOrTrunc(b->mvmd_extract(mCompressedFieldWidth, partialSum, numFields - 1), fwTy);
-
+    Value * partialSum = b->hsimd_partial_sum(mCompressedFieldWidth, fieldPopCounts);
     Value * blockPopCount = b->mvmd_extract(mCompressedFieldWidth, partialSum, numFields - 1);
 
     //

@@ -466,7 +466,7 @@ std::pair<llvm::Value*, llvm::Value*> LZ4SequentialDecompressionKernel::parseMat
                 b->CreateZExt(b->CreateAnd(tokenValue, BYTE_0F), b->getSizeTy())
                 );
     return std::make_pair(phiExtendMatchEndPos, matchLength);
-};
+}
 
 std::pair<llvm::Value*, llvm::Value*> LZ4SequentialDecompressionKernel::parseMatchInfo2(const std::unique_ptr<KernelBuilder> &b, llvm::Value* matchOffsetBeginPos, llvm::Value* tokenValue) {
 
@@ -543,7 +543,7 @@ std::pair<llvm::Value *, llvm::Value *> LZ4SequentialDecompressionKernel::noExte
     Value* retLiteralMarker = b->CreateSelect(shouldExtendLiteral, b->getInt64(0), currentTokenMarker);
 
     return std::make_pair(literalLength, retLiteralMarker);
-};
+}
 
 std::pair<llvm::Value *, llvm::Value *>
 LZ4SequentialDecompressionKernel::scanThruLiteralLength(const std::unique_ptr<KernelBuilder> &b, llvm::Value *currentTokenMarker,
@@ -605,7 +605,7 @@ inline std::pair<llvm::Value *, llvm::Value *> LZ4SequentialDecompressionKernel:
 
     Value* retMatchMarker = b->CreateSelect(shouldExtendMatch, b->getInt64(0), matchOffsetEndMarker);
     return std::make_pair(matchLength, retMatchMarker);
-};
+}
 
 std::pair<llvm::Value *, llvm::Value *>
 LZ4SequentialDecompressionKernel::scanThruMatchLength(const std::unique_ptr<KernelBuilder> &b, llvm::Value *matchOffsetEndMarker,
