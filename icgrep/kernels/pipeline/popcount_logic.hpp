@@ -558,7 +558,7 @@ void PipelineCompiler::addPopCountScalarsToPipelineKernel(BuilderRef b, const un
             const auto e = in_edge(bufferVertex, mBufferGraph);
             const BufferRateData & rd = mBufferGraph[e];
             const auto bufferName = makeBufferName(index, rd.Binding);
-            mPipelineKernel->addInternalScalar(b->getSizeTy(), bufferName + REFERENCE_PROCESSED_COUNT);
+            mPipelineKernel->addThreadLocalScalar(b->getSizeTy(), bufferName + REFERENCE_PROCESSED_COUNT);
         }
     });
 }
@@ -613,7 +613,7 @@ inline void PipelineCompiler::allocatePopCountArrays(BuilderRef b, Value * const
     Constant * const ZERO = b->getSize(0);
     IntegerType * const sizeTy = b->getSizeTy();
 
-    std::vector<Value *> indices(3);
+    FixedArray<Value *, 3> indices;
     indices[0] = b->getInt32(0);
 
     for (auto i = firstBuffer; i != lastBuffer; ++i) {
@@ -627,6 +627,7 @@ inline void PipelineCompiler::allocatePopCountArrays(BuilderRef b, Value * const
 
             indices[1] = b->getInt32(i);
             indices[2] = CAPACITY;
+
             b->CreateStore(initialSize, b->CreateGEP(popCountState, indices));
 
             if (hasPositivePopCountArray(i)) {

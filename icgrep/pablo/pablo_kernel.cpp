@@ -224,8 +224,8 @@ PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
 , mSizeTy(nullptr)
 , mStreamTy(nullptr)
 , mContext(nullptr) {
-    addInternalNonPersistentScalar(b->getBitBlockType(), "EOFbit");
-    addInternalNonPersistentScalar(b->getBitBlockType(), "EOFmask");
+    addNonPersistentScalar(b->getBitBlockType(), "EOFbit");
+    addNonPersistentScalar(b->getBitBlockType(), "EOFmask");
 }
 
 PabloKernel::~PabloKernel() { }

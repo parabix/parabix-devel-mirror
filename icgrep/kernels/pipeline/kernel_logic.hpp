@@ -1009,7 +1009,7 @@ Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const 
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getInitializationFunction(BuilderRef b) const {
-    Function * const init = mKernel->getInitFunction(b->getModule());
+    Function * const init = mKernel->getInitializeFunction(b->getModule());
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, init->getType(), INITIALIZE_FUNCTION_POINTER_SUFFIX);
     }
@@ -1031,7 +1031,7 @@ inline Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
  * @brief getFinalizeFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getFinalizeFunction(BuilderRef b) const {
-    Function * const term = mKernel->getTerminateFunction(b->getModule());
+    Function * const term = mKernel->getFinalizeFunction(b->getModule());
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, term->getType(), FINALIZE_FUNCTION_POINTER_SUFFIX);
     }

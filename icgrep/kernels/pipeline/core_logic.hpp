@@ -28,7 +28,7 @@ void PipelineCompiler::start(BuilderRef b) {
     // remove threads while still using the segment pipeline parallelism model.
     // This also allows us to execute nested pipelines without requiring the outer
     // pipeline to track the current segno.
-    Value * const segNoPtr = b->getScalarFieldPtr(INITIAL_LOGICAL_SEGMENT_NUMBER);
+    Value * const segNoPtr = b->getScalarFieldPtr(CURRENT_LOGICAL_SEGMENT_NUMBER);
     mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
     loadTerminationSignals(b);
     mHalted = b->getFalse();

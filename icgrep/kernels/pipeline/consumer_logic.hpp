@@ -210,7 +210,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
         const BufferRateData & rd = mBufferGraph[e];
         const auto prefix = makeBufferName(kernel, rd.Binding);
         if (LLVM_UNLIKELY(kernel == PipelineInput)) {
-            mPipelineKernel->addInternalNonPersistentScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+            mPipelineKernel->addNonPersistentScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         } else {
             mPipelineKernel->addInternalScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         }

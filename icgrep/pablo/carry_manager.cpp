@@ -87,8 +87,12 @@ void CarryManager::initializeCarryData(const std::unique_ptr<kernel::KernelBuild
     mCarryMetadata.resize(getScopeCount(mCurrentScope));
 
     Type * const carryStateTy = analyse(b, mCurrentScope);
-
-    kernel->addInternalScalar(carryStateTy, "carries");
+    if (LLVM_UNLIKELY(carryStateTy->isEmptyTy())) {
+        // temporary refactoring step
+        kernel->addNonPersistentScalar(carryStateTy, "carries");
+    } else {
+        kernel->addInternalScalar(carryStateTy, "carries");
+    }
 
     if (mHasLoop) {
         kernel->addInternalScalar(b->getInt32Ty(), "selector");

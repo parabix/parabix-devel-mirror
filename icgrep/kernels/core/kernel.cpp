@@ -33,10 +33,6 @@ using namespace boost;
 
 namespace kernel {
 
-const std::string SHARED_SUFFIX = "_shared_state";
-
-const std::string THREAD_LOCAL_SUFFIX = "_thread_local";
-
 using AttrId = Attribute::KindId;
 using RateValue = ProcessingRate::RateValue;
 using RateId = ProcessingRate::KindId;
@@ -50,9 +46,14 @@ using PortType = Kernel::PortType;
 // TODO: create a kernel compiler class, similar to the pipeline compiler, to avoid having any state
 // associated with a cached kernel in memory?
 
-const static auto INIT_SUFFIX = "_Init";
+const static auto INITIALIZE_SUFFIX = "_Initialize";
+const static auto INITIALIZE_THREAD_LOCAL_SUFFIX = "_InitializeThreadLocal";
 const static auto DO_SEGMENT_SUFFIX = "_DoSegment";
-const static auto TERMINATE_SUFFIX = "_Terminate";
+const static auto FINALIZE_THREAD_LOCAL_SUFFIX = "_FinalizeThreadLocal";
+const static auto FINALIZE_SUFFIX = "_Finalize";
+
+const static auto SHARED_SUFFIX = "_shared_state";
+const static auto THREAD_LOCAL_SUFFIX = "_thread_local";
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInstance
@@ -89,11 +90,10 @@ inline void reset(Vec & vec, const unsigned n) {
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(mSharedStateType == nullptr)) {
-        llvm_unreachable("Kernel state must be constructed prior to calling addKernelDeclarations");
-    }
     addInitializeDeclaration(b);
+    addInitializeThreadLocalDeclaration(b);
     addDoSegmentDeclaration(b);
+    addFinalizeThreadLocalDeclaration(b);
     addFinalizeDeclaration(b);
     linkExternalMethods(b);
 }
@@ -107,7 +107,9 @@ void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
     b->setModule(mModule);
     addKernelDeclarations(b);
     callGenerateInitializeMethod(b);
+    callGenerateInitializeThreadLocalMethod(b);
     callGenerateDoSegmentMethod(b);
+    callGenerateFinalizeThreadLocalMethod(b);
     callGenerateFinalizeMethod(b);
     addAdditionalFunctions(b);
     mIsGenerated = true;
@@ -116,7 +118,7 @@ void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInitializeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
 
     std::vector<Type *> params;
     if (LLVM_LIKELY(isStateful())) {
@@ -127,7 +129,7 @@ inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder
     }
 
     FunctionType * const initType = FunctionType::get(b->getInt1Ty(), params, false);
-    Function * const initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INIT_SUFFIX, b->getModule());
+    Function * const initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INITIALIZE_SUFFIX, b->getModule());
     initFunc->setCallingConv(CallingConv::C);
     initFunc->setDoesNotThrow();
 
@@ -138,7 +140,7 @@ inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder
         std::advance(arg, 1);
     };
     if (LLVM_LIKELY(isStateful())) {
-        setNextArgName("handle");
+        setNextArgName("shared");
     }
     for (const Binding & binding : mInputScalars) {
         setNextArgName(binding.getName());
@@ -150,10 +152,8 @@ inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder
  * @brief callGenerateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
-    const Kernel * const storedKernel = b->getKernel();
-    b->setKernel(this);
-    Value * const storedHandle = getHandle();
-    mCurrentMethod = getInitFunction(b->getModule());
+    assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
+    mCurrentMethod = getInitializeFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
     auto arg = mCurrentMethod->arg_begin();
     auto nextArg = [&]() {
@@ -162,18 +162,15 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
         std::advance(arg, 1);
         return v;
     };
-    mSharedHandle = nullptr;
     if (LLVM_LIKELY(isStateful())) {
         setHandle(b, nextArg());
     }
-    mThreadLocalHandle = nullptr;
     if (LLVM_LIKELY(isStateful())) {
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
             b->CreateMProtect(mSharedHandle, CBuilder::Protect::WRITE);
         }
-//        b->CreateStore(ConstantAggregateZero::get(mSharedStateType), mSharedHandle);
     }
-    initializeScalarMap(b);
+    initializeScalarMap(b, true);
     for (const auto & binding : mInputScalars) {
         b->setScalarField(binding.getName(), nextArg());
     }
@@ -196,17 +193,75 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
     }
     b->CreateRet(b->CreateLoad(mTerminationSignalPtr));
     mTerminationSignalPtr = nullptr;
-
-    b->setKernel(storedKernel);
-    mSharedHandle = storedHandle;
+    mSharedHandle = nullptr;
+    mThreadLocalHandle = nullptr;
     mCurrentMethod = nullptr;
     mScalarValueMap.clear();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addInitializeThreadLocalDeclaration
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void Kernel::addInitializeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+    if (hasThreadLocal()) {
+        SmallVector<Type *, 2> params;
+        if (LLVM_LIKELY(isStateful())) {
+            params.push_back(mSharedStateType->getPointerTo());
+        }
+        params.push_back(mThreadLocalStateType->getPointerTo());
+
+        FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
+        Function * const func = Function::Create(funcType, GlobalValue::ExternalLinkage, getName() + INITIALIZE_THREAD_LOCAL_SUFFIX, b->getModule());
+        func->setCallingConv(CallingConv::C);
+        func->setDoesNotThrow();
+
+        auto arg = func->arg_begin();
+        auto setNextArgName = [&](const StringRef name) {
+            assert (arg != func->arg_end());
+            arg->setName(name);
+            std::advance(arg, 1);
+        };
+        if (LLVM_LIKELY(isStateful())) {
+            setNextArgName("shared");
+        }
+        setNextArgName("thread_local");
+        assert (arg == func->arg_end());
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callGenerateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void Kernel::callGenerateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    if (hasThreadLocal()) {
+        assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
+        mCurrentMethod = getInitializeThreadLocalFunction(b->getModule());
+        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        auto arg = mCurrentMethod->arg_begin();
+        auto nextArg = [&]() {
+            assert (arg != mCurrentMethod->arg_end());
+            Value * const v = &*arg;
+            std::advance(arg, 1);
+            return v;
+        };
+        if (LLVM_LIKELY(isStateful())) {
+            setHandle(b, nextArg());
+        }
+        mThreadLocalHandle = nextArg();
+        initializeScalarMap(b);
+        generateInitializeThreadLocalMethod(b);
+        b->CreateRetVoid();
+        mSharedHandle = nullptr;
+        mThreadLocalHandle = nullptr;
+        mCurrentMethod = nullptr;
+        mScalarValueMap.clear();
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
 
     Type * const retTy = canSetTerminateSignal() ? b->getInt1Ty() : b->getVoidTy();
     FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
@@ -332,6 +387,7 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
 
     assert (mInputStreamSets.size() == mStreamSetInputBuffers.size());
     assert (mOutputStreamSets.size() == mStreamSetOutputBuffers.size());
+    assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
 
     const Kernel * const storedKernel = b->getKernel();
     b->setKernel(this);
@@ -381,6 +437,7 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
     // Clean up all of the constructed buffers.
     b->setKernel(storedKernel);
     mSharedHandle = storedHandle;
+    mThreadLocalHandle = nullptr;
     mCurrentMethod = nullptr;
     mIsFinal = nullptr;
     mNumOfStrides = nullptr;
@@ -390,20 +447,18 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setDoSegmentProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, const std::vector<Value *> & args) {
+void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, const ArrayRef<Value *> args) {
 
     auto arg = args.begin();
     auto nextArg = [&]() {
         assert (arg != args.end());
-        Value * const v = *arg;
+        Value * const v = *arg; assert (v);
         std::advance(arg, 1);
         return v;
     };
-    mSharedHandle = nullptr;
     if (LLVM_LIKELY(isStateful())) {
         setHandle(b, nextArg());
     }
-    mThreadLocalHandle = nullptr;
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         mThreadLocalHandle = nextArg();
     }
@@ -647,10 +702,70 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
     return props;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addFinalizeThreadLocalDeclaration
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void Kernel::addFinalizeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+    if (hasThreadLocal()) {
+        SmallVector<Type *, 2> params;
+        if (LLVM_LIKELY(isStateful())) {
+            params.push_back(mSharedStateType->getPointerTo());
+        }
+        params.push_back(mThreadLocalStateType->getPointerTo());
+
+        FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
+        Function * const func = Function::Create(funcType, GlobalValue::ExternalLinkage, getName() + FINALIZE_THREAD_LOCAL_SUFFIX, b->getModule());
+        func->setCallingConv(CallingConv::C);
+        func->setDoesNotThrow();
+
+        auto arg = func->arg_begin();
+        auto setNextArgName = [&](const StringRef name) {
+            assert (arg != func->arg_end());
+            arg->setName(name);
+            std::advance(arg, 1);
+        };
+        if (LLVM_LIKELY(isStateful())) {
+            setNextArgName("shared");
+        }
+        setNextArgName("thread_local");
+        assert (arg == func->arg_end());
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callGenerateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    if (hasThreadLocal()) {
+        assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
+        mCurrentMethod = getFinalizeThreadLocalFunction(b->getModule());
+        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        auto arg = mCurrentMethod->arg_begin();
+        auto nextArg = [&]() {
+            assert (arg != mCurrentMethod->arg_end());
+            Value * const v = &*arg;
+            std::advance(arg, 1);
+            return v;
+        };
+        if (LLVM_LIKELY(isStateful())) {
+            setHandle(b, nextArg());
+        }
+        mThreadLocalHandle = nextArg();
+        initializeScalarMap(b);
+        generateFinalizeThreadLocalMethod(b);
+        b->CreateRetVoid();
+        mSharedHandle = nullptr;
+        mThreadLocalHandle = nullptr;
+        mCurrentMethod = nullptr;
+        mScalarValueMap.clear();
+    }
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addFinalizeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
     Type * resultType = nullptr;
     if (mOutputScalars.empty()) {
         resultType = b->getVoidTy();
@@ -671,7 +786,7 @@ inline void Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> 
         params.push_back(mSharedStateType->getPointerTo());
     }
     FunctionType * const terminateType = FunctionType::get(resultType, params, false);
-    Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + TERMINATE_SUFFIX, b->getModule());
+    Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + FINALIZE_SUFFIX, b->getModule());
     terminateFunc->setCallingConv(CallingConv::C);
     terminateFunc->setDoesNotThrow();
     auto args = terminateFunc->arg_begin();
@@ -688,15 +803,15 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
 
     const Kernel * const storedKernel = b->getKernel();
     b->setKernel(this);
-    mCurrentMethod = getTerminateFunction(b->getModule());
+    mCurrentMethod = getFinalizeFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
-    mSharedHandle = nullptr;
+    assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
     if (LLVM_LIKELY(isStateful())) {
         auto args = mCurrentMethod->arg_begin();
         setHandle(b, &*(args++));
         assert (args == mCurrentMethod->arg_end());
     }
-    initializeScalarMap(b);
+    initializeScalarMap(b, true);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle,CBuilder::Protect::WRITE);
     }
@@ -708,7 +823,6 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
             mStreamSetOutputBuffers[i]->setHandle(b, handle);
         }
     }
-    initializeScalarMap(b);
     generateFinalizeMethod(b); // may be overridden by the Kernel subtype
     const auto outputs = getFinalOutputScalars(b);
     if (LLVM_LIKELY(isStateful())) {
@@ -773,13 +887,23 @@ Module * Kernel::makeModule(const std::unique_ptr<KernelBuilder> & b) {
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInitFunction
+ * @brief getInitializeFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getInitFunction(Module * const module) const {
-    const auto name = getName() + INIT_SUFFIX;
-    Function * f = module->getFunction(name);
+Function * Kernel::getInitializeFunction(Module * const module) const {
+    Function * f = module->getFunction(getName() + INITIALIZE_SUFFIX);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm_unreachable("cannot find Initialize function");
+    }
+    return f;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializeThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Function * Kernel::getInitializeThreadLocalFunction(Module * const module) const {
+    Function * f = module->getFunction(getName() + INITIALIZE_THREAD_LOCAL_SUFFIX);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm_unreachable("cannot find Initialize Thread-Local function");
     }
     return f;
 }
@@ -788,8 +912,7 @@ Function * Kernel::getInitFunction(Module * const module) const {
  * @brief getDoSegmentFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::getDoSegmentFunction(Module * const module) const {
-    const auto name = getName() + DO_SEGMENT_SUFFIX;
-    Function * f = module->getFunction(name);
+    Function * f = module->getFunction(getName() + DO_SEGMENT_SUFFIX);
     if (LLVM_UNLIKELY(f == nullptr)) {
         llvm_unreachable("cannot find DoSegment function");
     }
@@ -797,13 +920,23 @@ Function * Kernel::getDoSegmentFunction(Module * const module) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getFinalizeThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Function * Kernel::getFinalizeThreadLocalFunction(Module * const module) const {
+    Function * f = module->getFunction(getName() + FINALIZE_THREAD_LOCAL_SUFFIX);
+    if (LLVM_UNLIKELY(f == nullptr)) {
+        llvm_unreachable("cannot find Finalize Thread-Local function");
+    }
+    return f;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getTerminateFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getTerminateFunction(Module * const module) const {
-    const auto name = getName() + TERMINATE_SUFFIX;
-    Function * f = module->getFunction(name);
+Function * Kernel::getFinalizeFunction(Module * const module) const {
+    Function * f = module->getFunction(getName() + FINALIZE_SUFFIX);
     if (LLVM_UNLIKELY(f == nullptr)) {
-        llvm_unreachable("cannot find Terminate function");
+        llvm_unreachable("cannot find Finalize function");
     }
     return f;
 }
@@ -851,9 +984,6 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
  * @brief prepareKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
-    if (LLVM_UNLIKELY(mSharedStateType != nullptr)) {
-        llvm_unreachable("Cannot call prepareKernel after constructing kernel state type");
-    }
     if (LLVM_UNLIKELY(mStride == 0)) {
         report_fatal_error(getName() + ": stride cannot be 0");
     }
@@ -873,18 +1003,9 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
         llvm_unreachable("Cannot call prepareCachedKernel after constructing kernel state type");
     }
     addBaseKernelProperties(b);
-
-    // If we have an unused state type, it will be optimized out of the cached IR.
-    // Replace it with an empty struct to simplify the other functions.
     Module * const m = getModule();
-    StructType * const emptyTy = StructType::get(m->getContext());
-    auto getStateType = [&](const std::string & suffix) {
-        StructType * ty = m->getTypeByName(getName() + suffix);
-        return (ty != nullptr) ? ty : emptyTy;
-    };
-
-    mSharedStateType = getStateType(SHARED_SUFFIX);
-    mThreadLocalStateType = getStateType(THREAD_LOCAL_SUFFIX);
+    mSharedStateType = m->getTypeByName(getName() + SHARED_SUFFIX);
+    mThreadLocalStateType = m->getTypeByName(getName() + THREAD_LOCAL_SUFFIX);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -935,10 +1056,7 @@ std::string Kernel::getStringHash(const StringRef str) {
  * @brief createInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) const {
-    if (LLVM_UNLIKELY(mSharedStateType == nullptr)) {
-        llvm_unreachable("Kernel state must be constructed prior to calling createInstance");
-    }
-    if (LLVM_LIKELY(isStateful())) {
+    if (isStateful()) {
         Constant * const size = ConstantExpr::getSizeOf(mSharedStateType);
         Value * handle = nullptr;
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -953,15 +1071,55 @@ Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) const {
     return nullptr;
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief createThreadLocalInstance
+ ** ------------------------------------------------------------------------------------------------------------- */
+llvm::Value * Kernel::createThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b) const {
+    if (hasThreadLocal()) {
+        Constant * const size = ConstantExpr::getSizeOf(mThreadLocalStateType);
+        Value * handle = nullptr;
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+            handle = b->CreateAlignedMalloc(size, b->getPageSize());
+            b->CreateMProtect(handle, size, CBuilder::Protect::READ);
+        } else {
+            handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
+        }
+        return b->CreatePointerCast(handle, mThreadLocalStateType->getPointerTo());
+    }
+    llvm_unreachable("createThreadLocalInstance should not be called a kernel without thread-local space");
+    return nullptr;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> &args) {
+void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<Value *> args) {
     assert (args.size() == getNumOfScalarInputs() + 1);
     assert (args[0] && "cannot initialize before creation");
     assert (args[0]->getType()->getPointerElementType() == mSharedStateType);
     b->setKernel(this);
-    Function * const init = getInitFunction(b->getModule());
+    Function * const init = getInitializeFunction(b->getModule());
+    b->CreateCall(init, args);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeThreadLocalInstance
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::initializeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, ArrayRef<Value *> args) {
+    assert (args.size() == isStateful() ? 2 : 1);
+    b->setKernel(this);
+    Function * const init = getInitializeThreadLocalFunction(b->getModule());
+    b->CreateCall(init, args);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief finalizeThreadLocalInstance
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::finalizeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<Value *> args) const {
+    assert (args.size() == isStateful() ? 2 : 1);
+    b->setKernel(this);
+    Function * const init = getFinalizeThreadLocalFunction(b->getModule());
     b->CreateCall(init, args);
 }
 
@@ -970,7 +1128,7 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::v
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value * const handle) const {
     Value * result = nullptr;
-    Function * const termFunc = getTerminateFunction(b->getModule());
+    Function * const termFunc = getFinalizeFunction(b->getModule());
     if (LLVM_LIKELY(isStateful())) {
         result = b->CreateCall(termFunc, { handle });
     } else {
@@ -983,23 +1141,28 @@ Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value
     return result;
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOrDeclareMainFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method) {
 
-    constexpr auto INTERNAL_VARIABLES = 2;
-
     b->setKernel(this);
 
     addKernelDeclarations(b);
 
+    unsigned internalVariables = 1;
+    if (isStateful()) {
+        ++internalVariables;
+    }
+    if (hasThreadLocal()) {
+        ++internalVariables;
+    }
+
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(m);
-    assert (doSegment->arg_size() >= INTERNAL_VARIABLES);
-    const auto numOfDoSegArgs = doSegment->arg_size() - INTERNAL_VARIABLES;
-    Function * const terminate = getTerminateFunction(m);
+    assert (doSegment->arg_size() >= internalVariables);
+    const auto numOfDoSegArgs = doSegment->arg_size() - internalVariables;
+    Function * const terminate = getFinalizeFunction(m);
 
     // maintain consistency with the Kernel interface by passing first the stream sets
     // and then the scalars.
@@ -1009,7 +1172,7 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
     // The first three params of doSegment are its handle, currentStrideNum and numOfStrides.
     // The remaining are the stream set params
     auto doSegParam = doSegment->arg_begin();
-    std::advance(doSegParam, INTERNAL_VARIABLES);
+    std::advance(doSegParam, internalVariables);
     const auto doSegEnd = doSegment->arg_end();
     while (doSegParam != doSegEnd) {
         params.push_back(doSegParam->getType());
@@ -1036,32 +1199,65 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
 
         b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", main));
         auto arg = main->arg_begin();
-
-        // TODO: Even if a kernel is in a family, it may have a different kernel struct. Make sure this works here.
-        Value * const handle = createInstance(b);
-        setHandle(b, handle);
-
-        std::vector<Value *> segmentArgs(doSegment->arg_size());
-        segmentArgs[0] = handle;
-        segmentArgs[1] = b->getSize(0); // numOfStrides -> isFinal = True
-        for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
+        auto nextArg = [&]() {
             assert (arg != main->arg_end());
-            segmentArgs[i + INTERNAL_VARIABLES] = &*arg++;
+            Value * const v = &*arg;
+            std::advance(arg, 1);
+            return v;
+        };
+
+
+        Value * sharedHandle = nullptr;
+        Value * threadLocalHandle = nullptr;
+        if (isStateful()) {
+            sharedHandle = createInstance(b);
+        }
+        if (hasThreadLocal()) {
+            threadLocalHandle = createThreadLocalInstance(b);
+        }
+        SmallVector<Value *, 16> segmentArgs(doSegment->arg_size());
+        unsigned index = 0;
+        if (isStateful()) {
+            segmentArgs[index++] = sharedHandle;
+        }
+        if (hasThreadLocal()) {
+            segmentArgs[index++] = threadLocalHandle;
+        }
+        segmentArgs[index++] = b->getSize(0);  // numOfStrides -> isFinal = True
+        for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
+            segmentArgs[internalVariables + i] = nextArg();
         }
 
-        std::vector<Value *> initArgs(numOfInitArgs + 1);
-        initArgs[0] = handle;
-        for (unsigned i = 0; i < numOfInitArgs; ++i) {
-            assert (arg != main->arg_end());
-            initArgs[i + 1] = &*arg++;
+        if (isStateful()) {
+            SmallVector<Value *, 16> args(numOfInitArgs + 1);
+            args[0] = sharedHandle;
+            for (unsigned i = 0; i < numOfInitArgs; ++i) {
+                args[i + 1] = nextArg();
+            }
+            initializeInstance(b, args);
         }
         assert (arg == main->arg_end());
-        // initialize the kernel
-        initializeInstance(b, initArgs);
-        // call the pipeline kernel
+        if (hasThreadLocal()) {
+            SmallVector<Value *, 2> initArgs;
+            if (LLVM_LIKELY(isStateful())) {
+                initArgs.push_back(sharedHandle);
+            }
+            initArgs.push_back(threadLocalHandle);
+            initializeThreadLocalInstance(b, initArgs);
+        }
         b->CreateCall(doSegment, segmentArgs);
-        // call and return the final output value(s)
-        b->CreateRet(finalizeInstance(b, handle));
+        if (hasThreadLocal()) {
+            SmallVector<Value *, 2> args;
+            if (LLVM_LIKELY(isStateful())) {
+                args.push_back(sharedHandle);
+            }
+            args.push_back(threadLocalHandle);
+            finalizeThreadLocalInstance(b, args);
+        }
+        if (isStateful()) {
+            // call and return the final output value(s)
+            b->CreateRet(finalizeInstance(b, sharedHandle));
+        }
     }
 
     return main;
@@ -1109,6 +1305,7 @@ bool Kernel::requiresOverflow(const Binding & binding) const {
  * @brief constructStateTypes
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::constructStateTypes(const std::unique_ptr<KernelBuilder> & b) {
+
     mSharedStateType = mModule->getTypeByName(getName() + SHARED_SUFFIX);
     mThreadLocalStateType = mModule->getTypeByName(getName() + THREAD_LOCAL_SUFFIX);
     if (LLVM_LIKELY(mSharedStateType == nullptr)) {
@@ -1139,17 +1336,21 @@ inline void Kernel::constructStateTypes(const std::unique_ptr<KernelBuilder> & b
         mSharedStateType = StructType::create(b->getContext(), shared, getName() + SHARED_SUFFIX);
         mThreadLocalStateType = StructType::create(b->getContext(), threadLocal, getName() + THREAD_LOCAL_SUFFIX);
     }
-    assert (isa<StructType>(mSharedStateType));
+    if (mSharedStateType->isEmptyTy()) {
+        mSharedStateType = nullptr;
+    }
+    if (mThreadLocalStateType->isEmptyTy()) {
+        mThreadLocalStateType = nullptr;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeScalarMap
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b) const {
+void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const bool skipThreadLocal) const {
     mScalarValueMap.clear();
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-
     unsigned sharedIndex = 0;
     for (const auto & binding : mInputScalars) {
         indices[1] = b->getInt32(sharedIndex++);
@@ -1168,6 +1369,9 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b) const
     unsigned threadLocalIndex = 0;
     for (const auto & binding : mInternalScalars) {
         Value * scalar = nullptr;
+
+
+
         switch (binding.getScalarType()) {
             case ScalarType::Internal:
                 indices[1] = b->getInt32(sharedIndex++);
@@ -1175,7 +1379,9 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b) const
                 scalar = b->CreateGEP(mSharedHandle, indices);
                 break;
             case ScalarType::ThreadLocal:
-                if (mThreadLocalHandle == nullptr) continue;
+                if (skipThreadLocal) continue;
+                assert (hasThreadLocal());
+                assert (mThreadLocalHandle);
                 indices[1] = b->getInt32(threadLocalIndex++);
                 scalar = b->CreateGEP(mThreadLocalHandle, indices);
                 break;
@@ -1189,7 +1395,7 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b) const
         assert (scalar->getType()->getPointerElementType() == binding.getValueType());
         mScalarValueMap.insert(std::make_pair(binding.getName(), scalar));
     }
-    assert (sharedIndex == mSharedStateType->getStructNumElements());
+    assert (mSharedHandle == nullptr || sharedIndex == mSharedStateType->getStructNumElements());
     assert (mThreadLocalHandle == nullptr || threadLocalIndex == mThreadLocalStateType->getStructNumElements());
 }
 
@@ -1197,18 +1403,17 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b) const
  * @brief makeScalarValuePtr
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned Kernel::getSharedScalarIndex(const llvm::StringRef name) const {
-    assert (mSharedHandle && mSharedHandle->getType()->getPointerElementType() == mSharedStateType);
     unsigned sharedIndex = 0;
     for (const auto & binding : mInputScalars) {
         if (name.equals(binding.getName())) {
-            assert (sharedIndex < mSharedStateType->getStructNumElements());
+            assert (mSharedHandle && sharedIndex < mSharedStateType->getStructNumElements());
             return sharedIndex;
         }
         ++sharedIndex;
     }
     for (const auto & binding : mOutputScalars) {
         if (name.equals(binding.getName())) {
-            assert (sharedIndex < mSharedStateType->getStructNumElements());
+            assert (mSharedHandle && sharedIndex < mSharedStateType->getStructNumElements());
             return sharedIndex;
         }
         ++sharedIndex;
@@ -1217,7 +1422,7 @@ unsigned Kernel::getSharedScalarIndex(const llvm::StringRef name) const {
         switch (binding.getScalarType()) {
             case ScalarType::Internal:
                 if (name.equals(binding.getName())) {
-                    assert (sharedIndex < mSharedStateType->getStructNumElements());
+                    assert (mSharedHandle && sharedIndex < mSharedStateType->getStructNumElements());
                     return sharedIndex;
                 }
                 ++sharedIndex;
@@ -1456,6 +1661,7 @@ Kernel::Kernel(const std::unique_ptr<KernelBuilder> & b,
                InternalScalars && internal_scalars)
 : mIsGenerated(false)
 , mSharedHandle(nullptr)
+, mThreadLocalHandle(nullptr)
 , mModule(nullptr)
 , mSharedStateType(nullptr)
 , mThreadLocalStateType(nullptr)

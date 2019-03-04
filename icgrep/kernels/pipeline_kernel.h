@@ -89,11 +89,15 @@ protected:
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
-    void initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<llvm::Value *> & args) final;
+    void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
+    void initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<llvm::Value *> args) final;
 
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
+    void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) final;
 

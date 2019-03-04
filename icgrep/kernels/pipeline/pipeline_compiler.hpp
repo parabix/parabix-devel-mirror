@@ -229,7 +229,9 @@ struct PipelineGraphBundle {
 
 using ImplicitRelationships = flat_map<const Kernel *, const StreamSet *>;
 
-const static std::string INITIAL_LOGICAL_SEGMENT_NUMBER = "ILSN";
+const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
+const static std::string PIPELINE_THREAD_LOCAL_STATE = "PTL";
+const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IC";
@@ -248,8 +250,10 @@ public:
 
     void addPipelineKernelProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
+    void generateInitializeThreadLocalMethod(BuilderRef b);
     void generateKernelMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
+    void generateFinalizeThreadLocalMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
 
 protected:
@@ -277,16 +281,16 @@ protected:
 
 // internal pipeline functions
 
-    LLVM_READNONE StructType * getThreadStateType(BuilderRef b);
-    Value * allocateThreadState(BuilderRef b, Value * const threadId = nullptr);
-    void setThreadState(BuilderRef b, Value * threadState);
+    LLVM_READNONE StructType * getThreadStateType(BuilderRef b) const;
+    Value * allocateThreadState(BuilderRef b, Value * const threadId);
+    void readThreadState(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
-    LLVM_READNONE StructType * getLocalStateType(BuilderRef b);
+    LLVM_READNONE StructType * getThreadLocalStateType(BuilderRef b);
     void allocateThreadLocalState(BuilderRef b, Value * const localState, Value * const threadId = nullptr);
-    void readThreadLocalState(BuilderRef b, Value * const localState);
+    void bindCompilerVariablesToThreadLocalState(BuilderRef b, Value * const localState);
     void deallocateThreadLocalState(BuilderRef b, Value * const localState);
-
+    Value * readTerminationSignalFromLocalState(BuilderRef b, Value * const localState) const;
     inline Value * isProcessThread(BuilderRef b, Value * const threadState) const;
 
     void addTerminationProperties(BuilderRef b);

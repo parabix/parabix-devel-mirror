@@ -330,7 +330,7 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
             const auto j = ref.Index + hasHandle;
             args[j] = getInputScalar(b, source(e, mScalarGraph));
         }
-        Value * const terminatedOnInit = b->CreateCall(kernel->getInitFunction(m), args);
+        Value * const terminatedOnInit = b->CreateCall(kernel->getInitializeFunction(m), args);
         terminated = b->CreateOr(terminated, terminatedOnInit);
     }
     b->CreateStore(terminated, mBranch->getTerminationSignalPtr());
