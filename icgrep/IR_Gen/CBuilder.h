@@ -438,8 +438,8 @@ llvm::ModulePass * createRemoveRedundantAssertionsPass();
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
 // Prior to LLVM 4.0.0, std::array cannot be implicitly converted to a ArrayRef
 template <typename T, unsigned N>
-struct FixedArray : public SmallVector<T, N> {
-    constexpr FixedArray() : SmallVector<T, N>(N) { }
+struct FixedArray : public llvm::SmallVector<T, N> {
+    constexpr FixedArray() : llvm::SmallVector<T, N>(N) { }
 };
 #else
 template <typename T, unsigned N>
