@@ -1008,10 +1008,21 @@ Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getInitializationFunction(BuilderRef b) const {
+inline Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
     Function * const init = mKernel->getInitializeFunction(b->getModule());
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, init->getType(), INITIALIZE_FUNCTION_POINTER_SUFFIX);
+    }
+    return init;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getInitializeThreadLocalFunction(BuilderRef b) const {
+    Function * const init = mKernel->getInitializeThreadLocalFunction(b->getModule());
+    if (mKernel->hasFamilyName()) {
+        return getFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
     return init;
 }
@@ -1025,6 +1036,17 @@ inline Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
         return getFunctionFromKernelState(b, doSegment->getType(), DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
     }
     return doSegment;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) const {
+    Function * const init = mKernel->getFinalizeThreadLocalFunction(b->getModule());
+    if (mKernel->hasFamilyName()) {
+        return getFunctionFromKernelState(b, init->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+    }
+    return init;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

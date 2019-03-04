@@ -12,7 +12,9 @@ namespace llvm { class Value; }
 namespace kernel {
 
 const static std::string INITIALIZE_FUNCTION_POINTER_SUFFIX = "_IFP";
+const static std::string INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX = "_ITFP";
 const static std::string DO_SEGMENT_FUNCTION_POINTER_SUFFIX = "_SFP";
+const static std::string FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX = "_FTIP";
 const static std::string FINALIZE_FUNCTION_POINTER_SUFFIX = "_FIP";
 
 class PipelineCompiler;

@@ -481,9 +481,11 @@ protected:
 
 // misc. functions
 
-    Value * getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string & suffix) const;
-    Value * getInitializationFunction(BuilderRef b) const;
+    Value * getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string &suffix) const;
+    Value * getInitializeFunction(BuilderRef b) const;
+    Value * getInitializeThreadLocalFunction(BuilderRef b) const;
     Value * getDoSegmentFunction(BuilderRef b) const;
+    Value * getFinalizeThreadLocalFunction(BuilderRef b) const;
     Value * getFinalizeFunction(BuilderRef b) const;
 
     LLVM_READNONE std::string makeFamilyPrefix(const unsigned kernelIndex) const;

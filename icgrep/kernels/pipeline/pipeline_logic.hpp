@@ -70,19 +70,11 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     addTerminationProperties(b);
     addConsumerKernelProperties(b, PipelineInput);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-
         const Kernel * const kernel = getKernel(i);
         if (kernel->hasThreadLocal()) {
-            if (kernel->hasFamilyName()) {
-                // TODO: to support family kernels with threadlocal data, we need a call to some
-                // function to return the number of bytes required.
-                report_fatal_error("thread local not supported by family kernels yet.");
-            } else {
-                const auto prefix = makeKernelName(i);
-                mPipelineKernel->addThreadLocalScalar(kernel->getThreadLocalStateType(), prefix + KERNEL_THREAD_LOCAL_SUFFIX);
-            }
+            const auto prefix = makeKernelName(i);
+            mPipelineKernel->addThreadLocalScalar(kernel->getThreadLocalStateType(), prefix + KERNEL_THREAD_LOCAL_SUFFIX);
         }
-
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
@@ -175,7 +167,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             args[j] = getScalar(b, scalar);
         }
         b->setKernel(mKernel);
-        Value * const terminatedOnInit = b->CreateCall(getInitializationFunction(b), args);
+        Value * const terminatedOnInit = b->CreateCall(getInitializeFunction(b), args);
 
         const auto prefix = makeKernelName(mKernelIndex);
         BasicBlock * const kernelTerminated = b->CreateBasicBlock(prefix + "_terminatedOnInit");
@@ -579,7 +571,6 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
     }
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -589,6 +580,19 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
     allocatePopCountArrays(b, b->CreateGEP(localState, indices));
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = getKernel(i);
+        if (kernel->hasThreadLocal()) {
+            setActiveKernel(b, i);
+            SmallVector<Value *, 2> args;
+            if (LLVM_LIKELY(kernel->isStateful())) {
+                args.push_back(kernel->getHandle());
+            }
+            args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+            Value * const func = getFinalizeThreadLocalFunction(b);
+            b->CreateCall(func, args);
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -603,6 +607,19 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
     if (mHasZeroExtendedStream) {
         indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
         b->CreateFree(b->CreateLoad(b->CreateGEP(localState, indices)));
+    }
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = getKernel(i);
+        if (kernel->hasThreadLocal()) {
+            setActiveKernel(b, i);
+            SmallVector<Value *, 2> args;
+            if (LLVM_LIKELY(kernel->isStateful())) {
+                args.push_back(kernel->getHandle());
+            }
+            args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+            Value * const func = getFinalizeThreadLocalFunction(b);
+            b->CreateCall(func, args);
+        }
     }
 }
 

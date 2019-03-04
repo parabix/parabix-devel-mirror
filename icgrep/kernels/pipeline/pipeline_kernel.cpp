@@ -23,8 +23,9 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
     assert (args[0] && "cannot initialize before creation");
     assert (args[0]->getType()->getPointerElementType() == mSharedStateType);
     b->setKernel(this);
-
     SmallVector<Value *, 64> initArgs(args.begin(), args.end());
+
+    // TODO: move this logic into the main function creation
 
     // append the kernel pointers for any kernel belonging to a family
     Module * const m = b->getModule();
@@ -36,7 +37,13 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
                 initArgs.push_back(b->CreatePointerCast(handle, voidPtrTy));
             }
             initArgs.push_back(b->CreatePointerCast(kernel->getInitializeFunction(m), voidPtrTy));
+            if (kernel->hasThreadLocal()) {
+                initArgs.push_back(b->CreatePointerCast(kernel->getInitializeThreadLocalFunction(m), voidPtrTy));
+            }
             initArgs.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
+            if (kernel->hasThreadLocal()) {
+                initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeThreadLocalFunction(m), voidPtrTy));
+            }
             initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeFunction(m), voidPtrTy));
         }
     }

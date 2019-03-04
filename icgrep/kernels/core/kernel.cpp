@@ -754,6 +754,7 @@ inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<
         mThreadLocalHandle = nextArg();
         initializeScalarMap(b);
         generateFinalizeThreadLocalMethod(b);
+        b->CreateFree(mThreadLocalHandle);
         b->CreateRetVoid();
         mSharedHandle = nullptr;
         mThreadLocalHandle = nullptr;
