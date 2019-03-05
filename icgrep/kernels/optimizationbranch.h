@@ -53,7 +53,11 @@ protected:
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
+    void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
+    void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 

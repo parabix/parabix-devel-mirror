@@ -589,8 +589,7 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
                 args.push_back(kernel->getHandle());
             }
             args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
-            Value * const func = getFinalizeThreadLocalFunction(b);
-            b->CreateCall(func, args);
+            b->CreateCall(getFinalizeThreadLocalFunction(b), args);
         }
     }
 }
@@ -617,10 +616,13 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
                 args.push_back(kernel->getHandle());
             }
             args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
-            Value * const func = getFinalizeThreadLocalFunction(b);
-            b->CreateCall(func, args);
+            b->CreateCall(getFinalizeThreadLocalFunction(b), args);
         }
     }
+    // Since all of the nested kernels thread local state is contained within
+    // this pipeline thread's thread local state, freeing the pipeline's will
+    // also free the inner kernels.
+    b->CreateFree(mPipelineKernel->getThreadLocalHandle());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

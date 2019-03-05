@@ -541,6 +541,9 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
+    if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
+        args.push_back(b->getScalarFieldPtr(makeKernelName(mKernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX));
+    }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 

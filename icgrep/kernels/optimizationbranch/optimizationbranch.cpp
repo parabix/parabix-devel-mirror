@@ -20,10 +20,24 @@ void OptimizationBranch::generateInitializeMethod(const std::unique_ptr<KernelBu
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    mCompiler->generateInitializeThreadLocalMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
     mCompiler->generateKernelMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    mCompiler->generateFinalizeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -55,7 +69,9 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
 {InternalScalar{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS},
- InternalScalar{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS}})
+ InternalScalar{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS},
+ InternalScalar{ScalarType::ThreadLocal, b->getSizeTy()->getPointerTo(), SPAN_BUFFER},
+ InternalScalar{ScalarType::ThreadLocal, b->getSizeTy(), SPAN_CAPACITY}})
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {

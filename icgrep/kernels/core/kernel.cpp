@@ -754,7 +754,6 @@ inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<
         mThreadLocalHandle = nextArg();
         initializeScalarMap(b);
         generateFinalizeThreadLocalMethod(b);
-        b->CreateFree(mThreadLocalHandle);
         b->CreateRetVoid();
         mSharedHandle = nullptr;
         mThreadLocalHandle = nullptr;
@@ -1353,26 +1352,26 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     unsigned sharedIndex = 0;
+    bool noDuplicateFieldNames = true;
     for (const auto & binding : mInputScalars) {
         indices[1] = b->getInt32(sharedIndex++);
         assert (mSharedHandle);
         Value * scalar = b->CreateGEP(mSharedHandle, indices);
         assert (scalar->getType()->getPointerElementType() == binding.getType());
-        mScalarValueMap.insert(std::make_pair(binding.getName(), scalar));
+        const auto inserted = mScalarValueMap.insert(std::make_pair(binding.getName(), scalar)).second;
+        noDuplicateFieldNames &= inserted;
     }
     for (const auto & binding : mOutputScalars) {
         indices[1] = b->getInt32(sharedIndex++);
         assert (mSharedHandle);
         Value * scalar = b->CreateGEP(mSharedHandle, indices);
         assert (scalar->getType()->getPointerElementType() == binding.getType());
-        mScalarValueMap.insert(std::make_pair(binding.getName(), scalar));
+        const auto inserted = mScalarValueMap.insert(std::make_pair(binding.getName(), scalar)).second;
+        noDuplicateFieldNames &= inserted;
     }
     unsigned threadLocalIndex = 0;
     for (const auto & binding : mInternalScalars) {
         Value * scalar = nullptr;
-
-
-
         switch (binding.getScalarType()) {
             case ScalarType::Internal:
                 indices[1] = b->getInt32(sharedIndex++);
@@ -1394,10 +1393,12 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const
             default: llvm_unreachable("I/O scalars cannot be internal");
         }
         assert (scalar->getType()->getPointerElementType() == binding.getValueType());
-        mScalarValueMap.insert(std::make_pair(binding.getName(), scalar));
+        const auto inserted = mScalarValueMap.insert(std::make_pair(binding.getName(), scalar)).second;
+        noDuplicateFieldNames &= inserted;
     }
     assert (mSharedHandle == nullptr || sharedIndex == mSharedStateType->getStructNumElements());
     assert (mThreadLocalHandle == nullptr || threadLocalIndex == mThreadLocalStateType->getStructNumElements());
+    assert (noDuplicateFieldNames);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

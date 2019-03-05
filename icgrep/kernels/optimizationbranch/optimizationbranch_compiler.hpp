@@ -35,6 +35,9 @@ const static std::string LOGICAL_SEGMENT_PREFIX = "L";
 const static std::string ALL_ZERO_ACTIVE_THREADS = "A";
 const static std::string NON_ZERO_ACTIVE_THREADS = "N";
 
+const static std::string SPAN_BUFFER = "SpanBuffer";
+const static std::string SPAN_CAPACITY = "SpanCapacity";
+
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, RelationshipRef>;
 
 using RelationshipCache = flat_map<RelationshipGraph::vertex_descriptor, Value *>;
@@ -74,7 +77,9 @@ public:
 
     void addBranchProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
+    void generateInitializeThreadLocalMethod(BuilderRef b);
     void generateKernelMethod(BuilderRef b);
+    void generateFinalizeThreadLocalMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
 
@@ -334,6 +339,17 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
         terminated = b->CreateOr(terminated, terminatedOnInit);
     }
     b->CreateStore(terminated, mBranch->getTerminationSignalPtr());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
+    Constant * const defaultSize = b->getSize(16);
+    Value * bufferPtr = b->getScalarFieldPtr(SPAN_BUFFER);
+    Value * capacityPtr = b->getScalarFieldPtr(SPAN_CAPACITY);
+    b->CreateStore(b->CreateCacheAlignedMalloc(b->getSizeTy(), defaultSize), bufferPtr);
+    b->CreateStore(defaultSize, capacityPtr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1068,6 +1084,13 @@ inline std::array<const Kernel *, 4> makeBranches(const OptimizationBranch * con
     branches[NON_ZERO_BRANCH] = branch->getNonZeroKernel();
     branches[BRANCH_OUTPUT] = branch;
     return branches;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
+    b->CreateFree(b->getScalarField(SPAN_BUFFER));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

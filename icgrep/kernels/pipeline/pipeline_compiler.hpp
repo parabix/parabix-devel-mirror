@@ -780,8 +780,7 @@ inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned
     std::string tmp;
     raw_string_ostream out(tmp);
     out << '@';
-    out << getKernel(kernelIndex)->getName();
-    out << '.';
+    // out << getKernel(kernelIndex)->getName();
     out << kernelIndex;
     out.flush();
     return tmp;
@@ -794,11 +793,10 @@ inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned
     std::string tmp;
     raw_string_ostream out(tmp);
     out << '@';
-    out << getKernel(kernelIndex)->getName();
-    out << '_';
-    out << binding.getName();
-    out << '.';
+    // out << getKernel(kernelIndex)->getName();
     out << kernelIndex;
+    out << '.';
+    out << binding.getName();
     out.flush();
     return tmp;
 }

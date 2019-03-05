@@ -149,6 +149,9 @@ std::string ProgramName;
 
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {
     AddParabixVersionPrinter();
+
+
+
     codegen::ProgramName = argv[0];
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (hiding.size() != 0) {
