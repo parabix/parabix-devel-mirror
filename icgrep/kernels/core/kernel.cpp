@@ -1517,7 +1517,6 @@ const BindingMapEntry & Kernel::getBinding(const BindingType type, const llvm::S
     report_fatal_error(out.str());
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getStreamPort
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -1538,20 +1537,29 @@ Kernel::StreamSetPort Kernel::getStreamPort(const StringRef name) const {
                 return StreamSetPort(static_cast<PortType>(entry.Type), entry.Index);
             default: break;
         }
+
     } else {
 
-        using BindingsRef = std::reference_wrapper<const Bindings>;
-        std::array<BindingsRef, 2> channels{{mInputStreamSets, mOutputStreamSets}};
-        for (unsigned j = static_cast<unsigned>(PortType::Input); j <= static_cast<unsigned>(PortType::Output); ++j) {
-            const Bindings & bindings = channels[j].get();
+        auto findStreamPort = [&](const BindingType type, const Bindings & bindings) {
             const auto n = bindings.size();
             for (unsigned i = 0; i < n; ++i) {
                 const Binding & binding = bindings[i];
                 if (name.equals(binding.getName())) {
-                    mBindingMap.insert(std::make_pair(name, BindingMapEntry{static_cast<BindingType>(j), i}));
-                    return StreamSetPort(static_cast<PortType>(j), i);
+                    mBindingMap.insert(std::make_pair(name, BindingMapEntry{type, i}));
+                    return i;
                 }
             }
+            return -1U;
+        };
+
+        const auto inputPort = findStreamPort(BindingType::StreamInput, mInputStreamSets);
+        if (inputPort != -1U) {
+            return StreamSetPort(PortType::Input, inputPort);
+        }
+
+        const auto outputPort = findStreamPort(BindingType::StreamOutput, mOutputStreamSets);
+        if (outputPort != -1U) {
+            return StreamSetPort(PortType::Output, outputPort);
         }
     }
 
@@ -1560,7 +1568,6 @@ Kernel::StreamSetPort Kernel::getStreamPort(const StringRef name) const {
     out << "Kernel " << getName() << " does not contain a streamset named " << name;
     report_fatal_error(out.str());
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getBinding
