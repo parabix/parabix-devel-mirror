@@ -115,9 +115,12 @@ public:
     virtual llvm::Value * simd_sub(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_mult(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_eq(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ne(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_gt(unsigned fw, llvm::Value * a, llvm::Value * b);
-    virtual llvm::Value * simd_ugt(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ge(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_lt(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_le(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * simd_ugt(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_ult(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_ule(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * simd_uge(unsigned fw, llvm::Value * a, llvm::Value * b);
@@ -175,6 +178,9 @@ public:
 
     virtual llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b);
+    // Pack signed values with signed/unsigned saturation.
+    virtual llvm::Value * hsimd_packss(unsigned fw, llvm::Value * a, llvm::Value * b);
+    virtual llvm::Value * hsimd_packus(unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b);
     virtual llvm::Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b);
 

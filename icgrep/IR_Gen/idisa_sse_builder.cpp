@@ -27,12 +27,20 @@ Value * IDISA_SSE2_Builder::hsimd_packh(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_SSE2_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
     if ((fw == 16) && (getVectorBitWidth(a) == SSE_width)) {
-        Value * packuswb_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_packuswb_128);
         Value * mask = simd_lomask(16);
-        return CreateCall(packuswb_func, {fwCast(16, simd_and(a, mask)), fwCast(16, simd_and(b, mask))});
+        return hsimd_packus(fw, fwCast(16, simd_and(a, mask)), fwCast(16, simd_and(b, mask)));
     }
     // Otherwise use default logic.
     return IDISA_Builder::hsimd_packl(fw, a, b);
+}
+
+Value * IDISA_SSE2_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
+    if ((fw == 16) && (getVectorBitWidth(a) == SSE_width)) {
+        Value * packuswb_func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse2_packuswb_128);
+        return CreateCall(packuswb_func, {fwCast(16, a), fwCast(16, b)});
+    }
+    // Otherwise use default logic.
+    return IDISA_Builder::hsimd_packus(fw, a, b);
 }
 
 Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {

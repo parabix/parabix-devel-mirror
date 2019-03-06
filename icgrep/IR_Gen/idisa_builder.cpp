@@ -10,6 +10,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
+#include <llvm/ADT/APInt.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
 #include <unistd.h>
@@ -142,13 +143,14 @@ Value * IDISA_Builder::simd_fill(unsigned fw, Value * a) {
 }
 
 Value * IDISA_Builder::simd_add(unsigned fw, Value * a, Value * b) {
+    const unsigned vectorWidth = getVectorBitWidth(a);
     if (fw == 1) {
         return simd_xor(a, b);
     } else if (fw < 8) {
-        Constant * hi_bit_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
-                                                           APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, 1)));
-        Constant * lo_bit_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
-                                                           APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw-1)));
+        Constant * hi_bit_mask = Constant::getIntegerValue(getIntNTy(vectorWidth),
+                                                           APInt::getSplat(vectorWidth, APInt::getHighBitsSet(fw, 1)));
+        Constant * lo_bit_mask = Constant::getIntegerValue(getIntNTy(vectorWidth),
+                                                           APInt::getSplat(vectorWidth, APInt::getLowBitsSet(fw, fw-1)));
         Value * hi_xor = simd_xor(simd_and(a, hi_bit_mask), simd_and(b, hi_bit_mask));
         Value * part_sum = simd_add(32, simd_and(a, lo_bit_mask), simd_and(b, lo_bit_mask));
         return simd_xor(part_sum, hi_xor);
@@ -185,11 +187,25 @@ Value * IDISA_Builder::simd_eq(unsigned fw, Value * a, Value * b) {
     return CreateSExt(CreateICmpEQ(a1, b1), a1->getType());
 }
 
+Value * IDISA_Builder::simd_ne(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) UnsupportedFieldWidthError(fw, "ne");
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpNE(a1, b1), a1->getType());
+}
+
 Value * IDISA_Builder::simd_gt(unsigned fw, Value * a, Value * b) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "gt");
     Value * a1 = fwCast(fw, a);
     Value * b1 = fwCast(fw, b);
     return CreateSExt(CreateICmpSGT(a1, b1), a1->getType());
+}
+
+Value * IDISA_Builder::simd_ge(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) UnsupportedFieldWidthError(fw, "ge");
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    return CreateSExt(CreateICmpSGE(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
@@ -200,7 +216,6 @@ Value * IDISA_Builder::simd_ugt(unsigned fw, Value * a, Value * b) {
         Value * ugt_0 = simd_or(simd_srli(fw, half_ugt, fw/2), simd_and(half_ugt, simd_srli(fw, half_eq, fw/2)));
         return simd_or(ugt_0, simd_slli(32, ugt_0, fw/2));
     }
-    if (fw < 8) UnsupportedFieldWidthError(fw, "ugt");
     Value * a1 = fwCast(fw, a);
     Value * b1 = fwCast(fw, b);
     return CreateSExt(CreateICmpUGT(a1, b1), a1->getType());
@@ -211,6 +226,16 @@ Value * IDISA_Builder::simd_lt(unsigned fw, Value * a, Value * b) {
     Value * a1 = fwCast(fw, a);
     Value * b1 = fwCast(fw, b);
     return CreateSExt(CreateICmpSLT(a1, b1), a1->getType());
+}
+
+Value * IDISA_Builder::simd_le(unsigned fw, Value * a, Value * b) {
+    if (fw < 8) UnsupportedFieldWidthError(fw, "le");
+    Value * a1 = fwCast(fw, a);
+    Value * b1 = fwCast(fw, b);
+    CallPrintRegister("a1", a1);
+    CallPrintRegister("b1", b1);
+    CallPrintRegister("sle", CreateSExt(CreateICmpSLE(a1, b1), a1->getType()));
+    return CreateSExt(CreateICmpSLE(a1, b1), a1->getType());
 }
 
 Value * IDISA_Builder::simd_ult(unsigned fw, Value * a, Value * b) {
@@ -351,25 +376,35 @@ Value * IDISA_Builder::mvmd_srl(unsigned fw, Value * value, Value * shift, const
 }
 
 Value * IDISA_Builder::simd_slli(unsigned fw, Value * a, unsigned shift) {
+    const unsigned vectorWidth = getVectorBitWidth(a);
     if (fw < 16) {
-        Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
-                                                          APInt::getSplat(mBitBlockWidth, APInt::getLowBitsSet(fw, fw-shift)));
+        Constant * value_mask = Constant::getIntegerValue(getIntNTy(vectorWidth),
+                                                          APInt::getSplat(vectorWidth, APInt::getLowBitsSet(fw, fw-shift)));
         return CreateShl(fwCast(32, simd_and(a, value_mask)), shift);
     }
     return CreateShl(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_srli(unsigned fw, Value * a, unsigned shift) {
+    const unsigned vectorWidth = getVectorBitWidth(a);
     if (fw < 16) {
-        Constant * value_mask = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
-                                                          APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw, fw-shift)));
+        Constant * value_mask = Constant::getIntegerValue(getIntNTy(vectorWidth),
+                                                          APInt::getSplat(vectorWidth, APInt::getHighBitsSet(fw, fw-shift)));
         return CreateLShr(fwCast(32, simd_and(a, value_mask)), shift);
     }
     return CreateLShr(fwCast(fw, a), shift);
 }
 
 Value * IDISA_Builder::simd_srai(unsigned fw, Value * a, unsigned shift) {
-    if (fw < 8) UnsupportedFieldWidthError(fw, "srai");
+    const unsigned vectorWidth = getVectorBitWidth(a);
+    if (shift == 0) return a;
+    if (fw < 16) {
+        Constant * sign_mask = Constant::getIntegerValue(getIntNTy(vectorWidth),
+                                                       APInt::getSplat(vectorWidth, APInt::getHighBitsSet(fw, 1)));
+        Value * sign = simd_and(sign_mask, a);
+        if (shift == 1) return simd_or(sign, simd_srli(32, sign, 1));
+        return simd_or(sign, simd_sub(16, sign, simd_srli(16, sign, shift)));
+    }
     return CreateAShr(fwCast(fw, a), shift);
 }
 
@@ -680,6 +715,25 @@ Value * IDISA_Builder::hsimd_packl(unsigned fw, Value * a, Value * b) {
         Idxs[i] = getInt32(2 * i);
     }
     return CreateShuffleVector(aVec, bVec, ConstantVector::get(Idxs));
+}
+
+Value * IDISA_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
+    Constant * top_bit = Constant::getIntegerValue(getIntNTy(mBitBlockWidth),
+                                                  APInt::getSplat(mBitBlockWidth, APInt::getHighBitsSet(fw/2, 1)));
+    Value * hi = hsimd_packh(fw, a, b);
+    Value * lo = hsimd_packl(fw, a, b);
+    Value * bits_that_must_match_sign = simd_if(1, top_bit, lo, hi);
+    Value * sign_mask = simd_srai(fw/2, hi, fw/2 - 1);//simd_ult(fw/2, hi, allZeroes());
+    Value * safe = simd_eq(fw/2, sign_mask, bits_that_must_match_sign);
+    return simd_if(fw/2, safe, lo, simd_eq(1, top_bit, sign_mask));
+}
+
+Value * IDISA_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
+    Value * hi = hsimd_packh(fw, a, b);
+    Value * lo = hsimd_packl(fw, a, b);
+    Value * high_mask = simd_gt(fw/2, hi, allZeroes());
+    Value * low_mask = simd_ge(fw/2, hi, allZeroes());
+    return simd_and(simd_or(high_mask, lo), low_mask);
 }
 
 Value * IDISA_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Value * a, Value * b) {
