@@ -110,6 +110,12 @@ private:
         bool hasAVX512VPOPCNTDQ = false;
     };
     Features hostCPUFeatures;
+
+    llvm::Value * simd_simplify(llvm::Value * a);
+    llvm::Value * mk_simd_and(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * mk_simd_or(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * mk_simd_xor(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * mk_simd_not(llvm::Value * a, llvm::StringRef s = llvm::StringRef());
 };
 #endif
 

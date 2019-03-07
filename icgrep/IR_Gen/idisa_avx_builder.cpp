@@ -879,29 +879,65 @@ Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value
     return bitCast(rslt);
 }
 
-Value * IDISA_AVX512F_Builder::simd_and(Value * a, Value * b, StringRef s) {
+Value * IDISA_AVX512F_Builder::simd_simplify(Value * a) {
     if (auto *instr = dyn_cast<BinaryOperator>(a)) {
         Value *op1 = instr->getOperand(0);
         Value *op2 = instr->getOperand(1);
         Instruction::BinaryOps opcode = instr->getOpcode();
-        if (opcode == Instruction::And) {
-            return simd_ternary(0x80, op1, op2, b);
+        switch (opcode) {
+            case Instruction::And: return mk_simd_and(op1, op2);
+            case Instruction::Or: return mk_simd_or(op1, op2);
+            case Instruction::Xor: return mk_simd_xor(op1, op2);
+            default: break;
         }
     }
+    return a;
+}
 
+Value * IDISA_AVX512F_Builder::mk_simd_and(Value * a, Value * b, StringRef s) {
+    if (auto *instr = dyn_cast<BinaryOperator>(a)) {
+        Value *op1 = instr->getOperand(0);
+        Value *op2 = instr->getOperand(1);
+        Instruction::BinaryOps opcode = instr->getOpcode();
+        if (opcode == Instruction::And) return simd_ternary(0x80, op1, op2, b);
+    } else if (isa<BinaryOperator>(b)) {
+        return mk_simd_and(b, a);
+    }
     return IDISA_AVX2_Builder::simd_and(a, b, s);
 }
 
-Value * IDISA_AVX512F_Builder::simd_or(Value * a, Value * b, StringRef s) {
+Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
+    if (auto *instr = dyn_cast<BinaryOperator>(a)) {
+        Value *op1 = instr->getOperand(0);
+        Value *op2 = instr->getOperand(1);
+        Instruction::BinaryOps opcode = instr->getOpcode();
+        if (opcode == Instruction::Or) return simd_ternary(0xFE, op1, op2, b);
+    }
     return IDISA_AVX2_Builder::simd_or(a, b, s);
 }
 
-Value * IDISA_AVX512F_Builder::simd_xor(Value * a, Value * b, StringRef s) {
+Value * IDISA_AVX512F_Builder::mk_simd_xor(Value * a, Value * b, StringRef s) {
     return IDISA_AVX2_Builder::simd_xor(a, b, s);
 }
 
+Value * IDISA_AVX512F_Builder::mk_simd_not(Value * a, StringRef s) {
+    return simd_xor(a, Constant::getAllOnesValue(a->getType()), s);
+}
+
+Value * IDISA_AVX512F_Builder::simd_and(Value * a, Value * b, StringRef s) {
+    return mk_simd_and(simd_simplify(a), simd_simplify(b), s);
+}
+
+Value * IDISA_AVX512F_Builder::simd_or(Value * a, Value * b, StringRef s) {
+    return mk_simd_or(simd_simplify(a), simd_simplify(b), s);
+}
+
+Value * IDISA_AVX512F_Builder::simd_xor(Value * a, Value * b, StringRef s) {
+    return mk_simd_xor(simd_simplify(a), simd_simplify(b), s);
+}
+
 Value * IDISA_AVX512F_Builder::simd_not(Value * a, StringRef s) {
-    return IDISA_AVX2_Builder::simd_not(a, s);
+    return mk_simd_not(simd_simplify(a), s);
 }
 
 void IDISA_AVX512F_Builder::getAVX512Features() {
