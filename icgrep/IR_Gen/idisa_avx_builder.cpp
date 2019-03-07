@@ -915,18 +915,35 @@ Value * IDISA_AVX512F_Builder::mk_simd_and(Value * a, Value * b, StringRef s) {
         if (opcodea == Instruction::And) return simd_ternary(0x80, opa1, opa2, b);
         // a & (b | c)
         if (opcodea == Instruction::Or) return simd_ternary(0xE0, b, opa1, opa2);
-        // a ^ (b | c)
-        if (opcodea == Instruction::Xor) return simd_ternary(0x1E, b, opa1, opa2);
+        // a & (b ^ c)
+        if (opcodea == Instruction::Xor) return simd_ternary(0x60, b, opa1, opa2);
     }
     return IDISA_AVX2_Builder::simd_and(a, b, s);
 }
 
 Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
-    if (auto *instr = dyn_cast<BinaryOperator>(a)) {
-        Value *op1 = instr->getOperand(0);
-        Value *op2 = instr->getOperand(1);
-        Instruction::BinaryOps opcode = instr->getOpcode();
-        if (opcode == Instruction::Or) return simd_ternary(0xFE, op1, op2, b);
+    if (auto *instra = dyn_cast<BinaryOperator>(a)) {
+        Value *opa1 = instra->getOperand(0);
+        Value *opa2 = instra->getOperand(1);
+        Instruction::BinaryOps opcodea = instra->getOpcode();
+        if (auto *instrb = dyn_cast<BinaryOperator>(a)) {
+            Value *opb2 = instra->getOperand(1);
+            Instruction::BinaryOps opcodeb = instrb->getOpcode();
+            Value * ones = ConstantInt::getAllOnesValue(opa1->getType());
+            // ~a | ~b -> ~ (a & b)
+            if (opcodea == opcodeb && opcodeb == Instruction::Xor && opa2 == ones && opb2 == ones) {
+                return mk_simd_not(mk_simd_and(a, b));
+            // ~a | b -> try to simplify b | ~a
+            } else if (opcodea == Instruction::Xor && opa2 == ones) {
+                return mk_simd_or(b, a);
+            }
+        }
+        // a | b | c
+        if (opcodea == Instruction::Or) return simd_ternary(0xFE, opa1, opa2, b);
+        // a | (b & c)
+        if (opcodea == Instruction::And) return simd_ternary(0xF8, b, opa1, opa2);
+        // a | (b ^ c)
+        if (opcodea == Instruction::Xor) return simd_ternary(0xF6, b, opa1, opa2);
     }
     return IDISA_AVX2_Builder::simd_or(a, b, s);
 }
