@@ -12,7 +12,9 @@ namespace llvm { class Value; }
 namespace kernel {
 
 const static std::string INITIALIZE_FUNCTION_POINTER_SUFFIX = "_IFP";
+const static std::string INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX = "_ITFP";
 const static std::string DO_SEGMENT_FUNCTION_POINTER_SUFFIX = "_SFP";
+const static std::string FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX = "_FTIP";
 const static std::string FINALIZE_FUNCTION_POINTER_SUFFIX = "_FIP";
 
 class PipelineCompiler;
@@ -89,15 +91,19 @@ protected:
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
-    void initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<llvm::Value *> & args) final;
+    void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
+    void initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<llvm::Value *> args) final;
 
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
+    void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
     void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) final;
 
-    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
 
     void setInputStreamSetAt(const unsigned i, StreamSet * const value) final;
 

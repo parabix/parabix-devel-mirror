@@ -211,7 +211,7 @@ ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & 
 // output scalars
 {},
 // kernel state
-{Binding{b->getSizeTy(), "LineNum"}}) {
+{InternalScalar{b->getSizeTy(), "LineNum"}}) {
     addAttribute(SideEffecting());
     setStride(b->getBitBlockWidth() * 2);
 }

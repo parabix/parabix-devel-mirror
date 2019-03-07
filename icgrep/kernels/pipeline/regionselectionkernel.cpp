@@ -9,10 +9,7 @@ namespace kernel {
  * @brief getPopCountAsInt
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * popCountOf(const std::unique_ptr<KernelBuilder> & b, const unsigned fieldWidth, const unsigned numOfFields, Value * const toCount) {
-    Value * partialSum = b->simd_popcount(fieldWidth, toCount);
-    for (unsigned i = 1; i < numOfFields; i *= 2) {
-        partialSum = b->simd_add(fieldWidth, partialSum, b->mvmd_slli(fieldWidth, partialSum, i));
-    }
+    Value * partialSum = b->hsimd_partial_sum(fieldWidth, b->simd_popcount(fieldWidth, toCount));
     return b->CreateExtractElement(partialSum, numOfFields - 1);
 }
 

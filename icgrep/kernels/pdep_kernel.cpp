@@ -221,10 +221,8 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * fieldPopCounts = b->simd_popcount(mFieldWidth, deposit_mask);
     // For each field determine the (partial) sum popcount of all fields prior to
     // the current field.
-    Value * partialSum = fieldPopCounts;
-    for (unsigned i = 1; i < numFields; i *= 2) {
-        partialSum = b->simd_add(mFieldWidth, partialSum, b->mvmd_slli(mFieldWidth, partialSum, i));
-    }
+    
+    Value * partialSum = b->hsimd_partial_sum(mFieldWidth, fieldPopCounts);
     Value * const blockPopCount = b->CreateZExtOrTrunc(b->CreateExtractElement(partialSum, numFields - 1), sizeTy);
     partialSum = b->mvmd_slli(mFieldWidth, partialSum, 1);
 

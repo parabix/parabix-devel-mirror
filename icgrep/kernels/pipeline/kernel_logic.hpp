@@ -23,7 +23,7 @@ inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index
         Value * handle = nullptr;
         if (mKernel->hasFamilyName()) {
             handle = b->getScalarField(makeFamilyPrefix(index));
-            handle = b->CreateBitCast(handle, mKernel->getKernelType()->getPointerTo());
+            handle = b->CreateBitCast(handle, mKernel->getSharedStateType()->getPointerTo());
         } else {
             handle = b->getScalarField(makeKernelName(index));
         }
@@ -541,6 +541,9 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
+    if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
+        args.push_back(b->getScalarFieldPtr(makeKernelName(mKernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX));
+    }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 
@@ -1008,10 +1011,21 @@ Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getInitializationFunction(BuilderRef b) const {
-    Function * const init = mKernel->getInitFunction(b->getModule());
+inline Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
+    Function * const init = mKernel->getInitializeFunction(b->getModule());
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, init->getType(), INITIALIZE_FUNCTION_POINTER_SUFFIX);
+    }
+    return init;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getInitializeThreadLocalFunction(BuilderRef b) const {
+    Function * const init = mKernel->getInitializeThreadLocalFunction(b->getModule());
+    if (mKernel->hasFamilyName()) {
+        return getFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
     return init;
 }
@@ -1028,10 +1042,21 @@ inline Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInitializationThreadLocalFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) const {
+    Function * const init = mKernel->getFinalizeThreadLocalFunction(b->getModule());
+    if (mKernel->hasFamilyName()) {
+        return getFunctionFromKernelState(b, init->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+    }
+    return init;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFinalizeFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getFinalizeFunction(BuilderRef b) const {
-    Function * const term = mKernel->getTerminateFunction(b->getModule());
+    Function * const term = mKernel->getFinalizeFunction(b->getModule());
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, term->getType(), FINALIZE_FUNCTION_POINTER_SUFFIX);
     }

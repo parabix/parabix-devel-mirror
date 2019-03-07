@@ -165,7 +165,7 @@ protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
+    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
 
 private:
 

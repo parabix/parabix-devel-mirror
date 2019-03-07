@@ -30,19 +30,18 @@ unsigned blockSize, bool conditionalDecompression)
  Binding{"isCompressed", blockInfo.isCompress, BoundedRate(0, 1)}, // , AlwaysConsume()
  Binding{"blockStart", blockInfo.blockStart, RateEqualTo("isCompressed")}, // , AlwaysConsume()
  Binding{"blockEnd", blockInfo.blockEnd, RateEqualTo("isCompressed")}}, // , AlwaysConsume()
-                           //Outputs
+// Outputs
 {
 
 },
-                           //Arguments
+// Arguments
 {Binding{"fileSize", fileSize}},
 {},
-                           //Internal states:
+// Internal states:
 {
-                           Binding{b->getSizeTy(), "blockDataIndex"},
-                           Binding{b->getInt64Ty(), "outputPos"},
-
-                           Binding{b->getInt1Ty(), "hasCallInitialization"}
+InternalScalar{b->getSizeTy(), "blockDataIndex"},
+InternalScalar{b->getInt64Ty(), "outputPos"},
+InternalScalar{b->getInt1Ty(), "hasCallInitialization"}
 }),
 mBlockSize(blockSize),
 mConditionalDecompression(conditionalDecompression) {

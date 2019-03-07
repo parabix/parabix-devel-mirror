@@ -65,10 +65,10 @@ private:
     #else
     llvm::ExecutionEngine *                                 mEngine;
     #endif
-    std::unique_ptr<llvm::legacy::PassManager>              mPassManager;
     std::unique_ptr<llvm::raw_fd_ostream>                   mUnoptimizedIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mASMOutputStream;
+    std::unique_ptr<llvm::legacy::PassManager>              mPassManager;
 };
 
 #endif // CPUDRIVER_H

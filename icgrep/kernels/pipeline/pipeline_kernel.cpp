@@ -11,7 +11,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
     mCompiler->addPipelineKernelProperties(b);
 }
@@ -19,10 +19,13 @@ void PipelineKernel::addInternalKernelProperties(const std::unique_ptr<kernel::K
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> & args) {
+void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, ArrayRef<Value *> args) {
     assert (args[0] && "cannot initialize before creation");
-    assert (args[0]->getType()->getPointerElementType() == mKernelStateType);
+    assert (args[0]->getType()->getPointerElementType() == mSharedStateType);
     b->setKernel(this);
+    SmallVector<Value *, 64> initArgs(args.begin(), args.end());
+
+    // TODO: move this logic into the main function creation
 
     // append the kernel pointers for any kernel belonging to a family
     Module * const m = b->getModule();
@@ -31,15 +34,21 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
             PointerType * const voidPtrTy = b->getVoidPtrTy();
             if (LLVM_LIKELY(kernel->isStateful())) {
                 Value * const handle = kernel->createInstance(b);
-                args.push_back(b->CreatePointerCast(handle, voidPtrTy));
+                initArgs.push_back(b->CreatePointerCast(handle, voidPtrTy));
             }
-            args.push_back(b->CreatePointerCast(kernel->getInitFunction(m), voidPtrTy));
-            args.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
-            args.push_back(b->CreatePointerCast(kernel->getTerminateFunction(m), voidPtrTy));
+            initArgs.push_back(b->CreatePointerCast(kernel->getInitializeFunction(m), voidPtrTy));
+            if (kernel->hasThreadLocal()) {
+                initArgs.push_back(b->CreatePointerCast(kernel->getInitializeThreadLocalFunction(m), voidPtrTy));
+            }
+            initArgs.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
+            if (kernel->hasThreadLocal()) {
+                initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeThreadLocalFunction(m), voidPtrTy));
+            }
+            initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeFunction(m), voidPtrTy));
         }
     }
 
-    b->CreateCall(getInitFunction(m), args);
+    b->CreateCall(getInitializeFunction(m), initArgs);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -60,6 +69,13 @@ void PipelineKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    mCompiler->generateInitializeThreadLocalMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
@@ -71,6 +87,13 @@ void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> &
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
     mCompiler->generateFinalizeMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    mCompiler->generateFinalizeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

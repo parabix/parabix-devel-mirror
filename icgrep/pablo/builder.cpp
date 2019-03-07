@@ -29,25 +29,25 @@ using TypeId = PabloAST::ClassTypeId;
 #define GET(I, ...) \
     reinterpret_cast<decltype(BOOST_PP_VARIADIC_ELEM(I, __VA_ARGS__))>(arg##I)
 
-#define MAKE_UNARY(TYPE, ARGS...) \
+#define MAKE_UNARY(TYPE, ...) \
 [&](){ /* immediately invoked lambda */ \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0) { \
-        return mPb->create##TYPE(GET(0, ARGS)); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_NAMED_UNARY(TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_UNARY(TYPE, PREFIX, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0) { \
-        return mPb->create##TYPE(GET(0, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -55,28 +55,28 @@ private: \
     const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, prefix); \
-return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findUnaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_BINARY(TYPE, ARGS...) \
+#define MAKE_BINARY(TYPE, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1) { \
-        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS)); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), GET(1, __VA_ARGS__)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_NAMED_BINARY(TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_BINARY(TYPE, PREFIX, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1) { \
-        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), GET(1, __VA_ARGS__), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -84,28 +84,28 @@ private: \
     const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
-return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findBinaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_TERNARY(TYPE, ARGS...) \
+#define MAKE_TERNARY(TYPE, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2) { \
-        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS)); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), GET(1, __VA_ARGS__), GET(2, __VA_ARGS__)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_NAMED_TERNARY(TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_TERNARY(TYPE, PREFIX, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2) { \
-        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), GET(1, __VA_ARGS__), GET(2, __VA_ARGS__), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -113,28 +113,28 @@ private: \
     const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
-return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findTernaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_QUATERNARY(TYPE, ARGS...) \
+#define MAKE_QUATERNARY(TYPE, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2, void * const arg3) { \
-        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), GET(3, ARGS)); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), GET(1, __VA_ARGS__), GET(2, __VA_ARGS__), GET(3, __VA_ARGS__)); \
     } \
     inline __##NAME(PabloBlock * const pb) : mPb(pb) {} \
 private: \
     PabloBlock * const mPb; \
 }; \
 __##NAME functor(mPb); \
-return cast<TYPE>(mExprTable.findQuaternaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findQuaternaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
-#define MAKE_NAMED_QUATERNARY(TYPE, PREFIX, ARGS...) \
+#define MAKE_NAMED_QUATERNARY(TYPE, PREFIX, ...) \
 [&](){ /* immediately invoked lambda */  \
 struct __##NAME { \
     inline PabloAST * operator()(void * const arg0, void * const arg1, void * const arg2, void * const arg3) { \
-        return mPb->create##TYPE(GET(0, ARGS), GET(1, ARGS), GET(2, ARGS), GET(3, ARGS), mPrefix); \
+        return mPb->create##TYPE(GET(0, __VA_ARGS__), GET(1, __VA_ARGS__), GET(2, __VA_ARGS__), GET(3, __VA_ARGS__), mPrefix); \
     } \
     inline __##NAME(PabloBlock * const pb, const llvm::StringRef prefix) : mPb(pb), mPrefix(prefix) {} \
 private: \
@@ -142,7 +142,7 @@ private: \
     const llvm::StringRef mPrefix; \
 }; \
 __##NAME functor(mPb, PREFIX); \
-return cast<TYPE>(mExprTable.findQuaternaryOrCall(std::move(functor), TypeId::TYPE, ARGS)); \
+return cast<TYPE>(mExprTable.findQuaternaryOrCall(std::move(functor), TypeId::TYPE, __VA_ARGS__)); \
 }()
 
 

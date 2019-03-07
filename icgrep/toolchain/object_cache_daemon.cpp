@@ -96,6 +96,7 @@ inline int runCacheCleanUp(const fs::path cachePath) noexcept {
                         } else {
                             fs::remove(e);
                             syslog(LOG_INFO | LOG_USER, "removing %s", e.c_str());
+                            continue;
                         }
                     }
                     sched_yield();

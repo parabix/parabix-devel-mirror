@@ -187,7 +187,7 @@ UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b, Sca
 // input scalar
 {Binding{"N", maxCount}}, {},
 // internal state
-{Binding{maxCount->getType(), "observed"}}) {
+{InternalScalar{maxCount->getType(), "observed"}}) {
     addAttribute(CanTerminateEarly());
 }
 

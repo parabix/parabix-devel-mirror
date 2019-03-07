@@ -98,12 +98,12 @@ void editdGPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
 
 editdGPUKernel::editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize) :
 BlockOrientedKernel(b, "editd_gpu",
-              {Binding{b->getStreamSetTy(4), "CCStream"}},
-              {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
-              {Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
-              Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4 * groupSize), 0), "strideCarry"}},
-              {},
-              {Binding{b->getBitBlockType(), "EOFmask"}})
+{Binding{b->getStreamSetTy(4), "CCStream"}},
+{Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},
+{Binding{PointerType::get(b->getInt8Ty(), 1), "pattStream"},
+Binding{PointerType::get(ArrayType::get(b->getBitBlockType(), pattLen * (dist + 1) * 4 * groupSize), 0), "strideCarry"}},
+{},
+{InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}})
 , mEditDistance(dist)
 , mPatternLen(pattLen)
 , mGroupSize(groupSize) {

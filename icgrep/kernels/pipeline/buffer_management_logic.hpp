@@ -404,8 +404,6 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
     }
 }
 
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadBufferHandles
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -419,10 +417,14 @@ inline void PipelineCompiler::loadBufferHandles(BuilderRef b) {
         StreamSetBuffer * const buffer = bn.Buffer;
         if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
             b->setKernel(mPipelineKernel);
-            buffer->setHandle(b, b->getScalarFieldPtr(makeBufferName(mKernelIndex, output)));
+            Value * const scalar = b->getScalarFieldPtr(makeBufferName(mKernelIndex, output));
+            buffer->setHandle(b, scalar);
         } else if (bn.Type == BufferType::Managed) {
             b->setKernel(mKernel);
-            buffer->setHandle(b, b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX));
+            assert (mKernel->getHandle());
+            assert (mKernel->getHandle()->getType());
+            Value * const scalar = b->getScalarFieldPtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            buffer->setHandle(b, scalar);
         }
         assert (buffer->getHandle());
     }
@@ -740,7 +742,7 @@ inline const Binding & PipelineCompiler::getInputBinding(const unsigned inputPor
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const unsigned kernelVertex, const unsigned inputPort) const {
-    assert (in_degree(kernelVertex, mBufferGraph) > inputPort);
+    assert (inputPort < in_degree(kernelVertex, mBufferGraph));
     const auto e = *(in_edges(kernelVertex, mBufferGraph).first + inputPort);
     assert (mBufferGraph[e].inputPort() == inputPort);
     return e;
@@ -785,7 +787,7 @@ inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const unsigned output
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCompiler::getOutput(const unsigned kernelVertex, const unsigned outputPort) const {
-    assert (out_degree(kernelVertex, mBufferGraph) > outputPort);
+    assert (outputPort < out_degree(kernelVertex, mBufferGraph));
     const auto e = *(out_edges(kernelVertex, mBufferGraph).first + outputPort);
     assert (mBufferGraph[e].outputPort() == outputPort);
     return e;

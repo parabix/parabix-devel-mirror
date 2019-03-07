@@ -47,19 +47,18 @@ inline void PipelineCompiler::updateOptionalCycleCounter(BuilderRef b) {
  * @brief selectPrincipleCycleCountBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const Binding & PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned kernel) const {
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    const auto numOfInputs = in_degree(kernel, mBufferGraph);
+    assert (degree(kernel, mBufferGraph));
     if (numOfInputs == 0) {
         return getOutputBinding(kernel, 0);
     } else {
-        unsigned portNum = 0;
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const Binding & input = getInputBinding(i);
+            const Binding & input = getInputBinding(kernel, i);
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                portNum = i;
-                break;
+                return input;
             }
         }
-        return getInputBinding(kernel, portNum);
+        return getInputBinding(kernel, 0);
     }
 }
 
@@ -79,35 +78,19 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         }
         Value* fTotalCycle = b->CreateUIToFP(totalCycles, b->getDoubleTy());
 
-        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        for (unsigned k = FirstKernel; k <= LastKernel; ++k) {
 
-            const Binding & binding = selectPrincipleCycleCountBinding(i);
-            Value * const items = b->getScalarField(makeBufferName(i, binding) + ITEM_COUNT_SUFFIX);
-
-            const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-            for (unsigned i = 0; i < numOfInputs; ++i) {
-                const Binding & input = getInputBinding(i);
-                const auto prefix = makeBufferName(mKernelIndex, input);
-                mInitiallyProcessedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-                if (input.isDeferred()) {
-                    mInitiallyProcessedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-                }
-            }
-            const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-            for (unsigned i = 0; i < numOfOutputs; ++i) {
-                const Binding & output = getOutputBinding(i);
-                const auto prefix = makeBufferName(mKernelIndex, output);
-                mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-            }
+            const auto & binding = selectPrincipleCycleCountBinding(k);
+            Value * const items = b->getScalarField(makeBufferName(k, binding) + ITEM_COUNT_SUFFIX);
 
             Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());
-            const auto name = makeKernelName(i);
+            const auto name = makeKernelName(k);
             Value * const counterPtr = b->getScalarFieldPtr(name + CYCLE_COUNT_SUFFIX);
             Value * cycles = b->CreateLoad(counterPtr);
             Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
             Value * percentage = b->CreateFDiv(b->CreateFMul(fCycles, FP_100), fTotalCycle);
 
-            const Kernel * const kernel = getKernel(i);
+            const Kernel * const kernel = getKernel(k);
             const auto formatString = kernel->getName() + ": %7.2e items processed;"
                                                           "  %7.2e CPU cycles,"
                                                           "  %6.2f cycles per item,"

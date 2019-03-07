@@ -126,7 +126,9 @@ Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const 
             }
         }
     }
-    CreateAssert(divisor, "CreateURem divisor cannot be 0!");
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CreateAssert(divisor, "CreateURem divisor cannot be 0!");
+    }
     return Insert(BinaryOperator::CreateURem(number, divisor), Name);
 }
 
@@ -142,7 +144,9 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
             }
         }
     }
-    CreateAssert(divisor, "CreateUDiv divisor cannot be 0!");
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CreateAssert(divisor, "CreateUDiv divisor cannot be 0!");
+    }
     return Insert(BinaryOperator::CreateUDiv(number, divisor), Name);
 }
 
@@ -433,7 +437,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
         }
         Value * handle = CreateAlloca(voidPtrTy);
         CallInst * success = CreateCall(f, {handle, align, size});
-        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             CreateAssertZero(success, "CreateAlignedMalloc: posix_memalign reported bad allocation");
         }
         ptr = CreateLoad(handle);

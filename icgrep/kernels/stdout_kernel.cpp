@@ -140,8 +140,8 @@ FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * ou
 // output scalars
 {},
 // internal scalars
-{Binding{b->getInt8PtrTy(), "temporaryFileName"},
- Binding{b->getInt32Ty(), "fileDescriptor"}})
+{InternalScalar{b->getInt8PtrTy(), "temporaryFileName"},
+ InternalScalar{b->getInt32Ty(), "fileDescriptor"}})
 , mCodeUnitWidth(codeUnitBuffer->getFieldWidth()) {
     setStride(codegen::SegmentSize);
     addAttribute(SideEffecting());

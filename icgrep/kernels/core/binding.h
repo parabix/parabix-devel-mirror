@@ -66,6 +66,8 @@ struct Binding : public AttributeSet {
         return mValue;
     }
 
+    void setRelationship(Relationship * const value);
+
     LLVM_READNONE unsigned getNumElements() const;
 
     LLVM_READNONE unsigned getFieldWidth() const;
@@ -73,8 +75,6 @@ struct Binding : public AttributeSet {
 protected:
 
     void print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept;
-
-    void setRelationship(Relationship * const value);
 
 private:
     const std::string       mName;

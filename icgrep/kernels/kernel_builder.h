@@ -15,8 +15,6 @@ class KernelBuilder : public virtual IDISA::IDISA_Builder {
 public:
 
     // Get the value of a scalar field for the current instance.
-    llvm::Value * getScalarFieldPtr(llvm::Value * index);
-
     llvm::Value * getScalarFieldPtr(const llvm::StringRef fieldName);
 
     llvm::Value * getScalarField(const llvm::StringRef fieldName);

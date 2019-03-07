@@ -183,7 +183,7 @@ Kernel * PipelineBuilder::makeKernel() {
     const auto numOfKernels = mKernels.size();
     const auto numOfCalls = mCallBindings.size();
 
-    // TODO: optimization must be able to synchronize non-SynchronizeFree kernels to
+    // TODO: optimization must be able to synchronize non-InternallySynchronized kernels to
     // allow the following.
 
 //    if (LLVM_UNLIKELY(numOfKernels <= 1 && numOfCalls == 0 && !mRequiresPipeline)) {
@@ -270,7 +270,13 @@ Kernel * PipelineBuilder::makeKernel() {
                 addInputScalar(prefix);
             }
             addInputScalar(prefix + INITIALIZE_FUNCTION_POINTER_SUFFIX);
+            if (k->hasThreadLocal()) {
+                addInputScalar(prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+            }
             addInputScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
+            if (k->hasThreadLocal()) {
+                addInputScalar(prefix + FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+            }
             addInputScalar(prefix + FINALIZE_FUNCTION_POINTER_SUFFIX);
         }
     }

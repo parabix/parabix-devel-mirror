@@ -22,22 +22,6 @@ namespace kernel {
 
 using StreamSetGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
-// NOTE: std::reference_wrapper does not allow zero init, required by boost graph
-struct BindingRef {
-    BindingRef() noexcept : binding(nullptr) {}
-    BindingRef(const Binding & ref) noexcept : binding(&ref) {}
-    BindingRef(const Binding * const ref) noexcept : binding(ref) {}
-    operator const Binding & () const noexcept {
-        return get();
-    }
-    const Binding & get() const noexcept {
-        assert (binding && "was not set!");
-        return *binding;
-    }
-private:
-    const Binding * binding;
-};
-
 struct RelationshipRef {
     unsigned Index;
     StringRef Name;
@@ -50,6 +34,9 @@ const static std::string BRANCH_PREFIX = "B";
 const static std::string LOGICAL_SEGMENT_PREFIX = "L";
 const static std::string ALL_ZERO_ACTIVE_THREADS = "A";
 const static std::string NON_ZERO_ACTIVE_THREADS = "N";
+
+const static std::string SPAN_BUFFER = "SpanBuffer";
+const static std::string SPAN_CAPACITY = "SpanCapacity";
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, RelationshipRef>;
 
@@ -90,7 +77,9 @@ public:
 
     void addBranchProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
+    void generateInitializeThreadLocalMethod(BuilderRef b);
     void generateKernelMethod(BuilderRef b);
+    void generateFinalizeThreadLocalMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
 
@@ -129,6 +118,15 @@ private:
     const std::array<const Kernel *, 4> mBranches;
 
     std::array<Value *, 3>              mActiveThreads;
+
+    std::array<PHINode *, 3>            mFirstIndex;
+    std::array<PHINode *, 3>            mLastIndex;
+    std::array<PHINode *, 3>            mFlipAfterLast;
+
+
+//    PHINode * const firstAllZeroIndex = b->CreatePHI(sizeTy, 2);
+//    PHINode * const lastAllZeroIndex = b->CreatePHI(sizeTy, 2);
+//    PHINode * const nonZeroAfterAllZero = b->CreatePHI(boolTy, 2);
 
     PHINode *                           mTerminatedPhi;
     BasicBlock *                        mMergePaths;
@@ -302,7 +300,7 @@ void OptimizationBranchCompiler::addBranchProperties(BuilderRef b) {
             if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
                 handlePtrType = b->getVoidPtrTy();
             } else {
-                handlePtrType = kernel->getKernelType()->getPointerTo();
+                handlePtrType = kernel->getSharedStateType()->getPointerTo();
             }
             mBranch->addInternalScalar(handlePtrType, BRANCH_PREFIX + std::to_string(i));
         }
@@ -337,10 +335,21 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
             const auto j = ref.Index + hasHandle;
             args[j] = getInputScalar(b, source(e, mScalarGraph));
         }
-        Value * const terminatedOnInit = b->CreateCall(kernel->getInitFunction(m), args);
+        Value * const terminatedOnInit = b->CreateCall(kernel->getInitializeFunction(m), args);
         terminated = b->CreateOr(terminated, terminatedOnInit);
     }
     b->CreateStore(terminated, mBranch->getTerminationSignalPtr());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
+    Constant * const defaultSize = b->getSize(16);
+    Value * bufferPtr = b->getScalarFieldPtr(SPAN_BUFFER);
+    Value * capacityPtr = b->getScalarFieldPtr(SPAN_CAPACITY);
+    b->CreateStore(b->CreateCacheAlignedMalloc(b->getSizeTy(), defaultSize), bufferPtr);
+    b->CreateStore(defaultSize, capacityPtr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -352,7 +361,7 @@ Value * OptimizationBranchCompiler::loadHandle(BuilderRef b, const unsigned bran
     if (LLVM_LIKELY(kernel->isStateful())) {
         handle = b->getScalarField(BRANCH_PREFIX + std::to_string(branchType));
         if (kernel->hasFamilyName()) {
-            handle = b->CreatePointerCast(handle, kernel->getKernelType()->getPointerTo());
+            handle = b->CreatePointerCast(handle, kernel->getSharedStateType()->getPointerTo());
         }
     }
     return handle;
@@ -375,6 +384,153 @@ void OptimizationBranchCompiler::generateKernelMethod(BuilderRef b) {
 inline const RelationshipRef & getConditionRef(const RelationshipGraph & G) {
     return G[preceding(in_edge(CONDITION_VARIABLE, G), G)];
 }
+
+#if 0
+
+inline bool isConstantOne(const Value * const value) {
+    const ConstantInt * c;
+    return (c = dyn_cast<ConstantInt>(value) && c->isOne());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief findConditionDemarcations
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::findConditionDemarcations(BuilderRef b) {
+
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
+    Constant * const BLOCKS_PER_STRIDE = b->getSize(mBranch->getStride() / b->getBitBlockWidth());
+    VectorType * const bitBlockTy = b->getBitBlockType();
+
+    BasicBlock * const entry = b->GetInsertBlock();
+    BasicBlock * const loopCond = b->CreateBasicBlock("cond");
+
+    BasicBlock * const processStrides = b->CreateBasicBlock("processStrides");
+    BasicBlock * const nonZeroPath = b->CreateBasicBlock("nonZeroPath");
+    BasicBlock * const allZeroPath = b->CreateBasicBlock("allZeroPath");
+
+    const RelationshipRef & condRef = getConditionRef(mStreamSetGraph);
+    const StreamSetBuffer * const condBuffer = mBranch->getInputStreamSetBuffer(condRef.Index);
+
+    Value * const numOfConditionStreams = condBuffer->getStreamSetCount(b.get());
+    Value * const numOfConditionBlocks = b->CreateMul(numOfConditionStreams, BLOCKS_PER_STRIDE);
+
+    // Store the base pointer to our condition stream prior to iterating through it incase
+    // one of the pipeline branches uses the stream internally and we update the processed
+    // item count.
+
+    Value * const basePtr = b->CreatePointerCast(b->getInputStreamBlockPtr(condRef.Name, ZERO, ZERO), bitBlockTy->getPointerTo());
+    Value * const numOfStrides = mBranch->getNumOfStrides();
+
+    b->CreateBr(loopCond);
+
+    b->SetInsertPoint(loopCond);
+    IntegerType * const sizeTy = b->getSizeTy();
+    IntegerType * const boolTy = b->getInt1Ty();
+    PHINode * const currentFirstIndex = b->CreatePHI(sizeTy, 3, "firstStride");
+    currentFirstIndex->addIncoming(ZERO, entry);
+    PHINode * const currentLastIndex = b->CreatePHI(sizeTy, 3, "lastStride");
+    currentLastIndex->addIncoming(ZERO, entry);
+    PHINode * const currentState = b->CreatePHI(boolTy, 3);
+    currentState->addIncoming(UndefValue::get(boolTy), entry);
+
+
+    Value * condition = nullptr;
+    if (isConstantOne(numOfConditionBlocks)) {
+        condition = b->CreateBlockAlignedLoad(basePtr, currentLastIndex);
+    } else { // OR together every condition block in this stride
+        BasicBlock * const summarizeOneStride = b->CreateBasicBlock("summarizeOneStride", processStrides);
+        BasicBlock * const checkStride = b->CreateBasicBlock("checkStride", processStrides);
+
+        b->CreateBr(summarizeOneStride);
+
+        b->SetInsertPoint(summarizeOneStride);
+        PHINode * const iteration = b->CreatePHI(sizeTy, 2);
+        iteration->addIncoming(ZERO, loopCond);
+        PHINode * const accumulated = b->CreatePHI(bitBlockTy, 2);
+        accumulated->addIncoming(Constant::getNullValue(bitBlockTy), loopCond);
+        Value * offset = b->CreateMul(currentLastIndex, BLOCKS_PER_STRIDE);
+        offset = b->CreateAdd(offset, iteration);
+        condition = b->CreateBlockAlignedLoad(basePtr, offset);
+        condition = b->CreateOr(condition, accumulated);
+        accumulated->addIncoming(condition, summarizeOneStride);
+        Value * const nextIteration = b->CreateAdd(iteration, ONE);
+        Value * const more = b->CreateICmpNE(nextIteration, numOfConditionBlocks);
+        iteration->addIncoming(nextIteration, b->GetInsertBlock());
+        b->CreateCondBr(more, summarizeOneStride, checkStride);
+
+        b->SetInsertPoint(checkStride);
+    }
+
+    // Check the merged value of our condition block(s); if it differs from
+    // the prior value or this is our last stride, then process the strides.
+    // Note, however, initially state is "indeterminate" so we silently
+    // ignore the first stride unless it is also our last.
+    Value * const nextState = b->bitblock_any(condition);
+    Value * const sameState = b->CreateICmpEQ(nextState, currentState);
+    Value * const firstStride = b->CreateICmpEQ(currentLastIndex, ZERO);
+    Value * const continuation = b->CreateOr(sameState, firstStride);
+    Value * const nextIndex = b->CreateAdd(currentLastIndex, ONE);
+    Value * const notLastStride = b->CreateICmpULT(nextIndex, numOfStrides);
+    Value * const checkNextStride = b->CreateAnd(continuation, notLastStride);
+    currentLastIndex->addIncoming(nextIndex, checkStride);
+    currentFirstIndex->addIncoming(currentFirstIndex, checkStride);
+    currentState->addIncoming(nextState, checkStride);
+    b->CreateLikelyCondBr(checkNextStride, loopCond, processStrides);
+
+    // Process every stride between [first, last)
+    b->SetInsertPoint(processStrides);
+
+    // state is implicitly "indeterminate" during our first stride
+    Value * const selectedPath = b->CreateSelect(firstStride, nextState, currentState);
+    mFirstIndex[NON_ZERO_BRANCH]->addIncoming(currentFirstIndex, processStrides);
+    mFirstIndex[ALL_ZERO_BRANCH]->addIncoming(currentFirstIndex, processStrides);
+    // When we reach the last (but not necessarily final) stride of this kernel,
+    // we will either "append" the final stride to the current run or complete
+    // the current run then perform one more iteration for the final stride, depending
+    // whether it flips the branch selection state.
+    Value * const nextLast = b->CreateSelect(continuation, numOfStrides, nextIndex);
+    Value * const nextFirst = b->CreateSelect(continuation, numOfStrides, currentLastIndex);
+
+    mLastIndex[NON_ZERO_BRANCH]->addIncoming(nextFirst, processStrides);
+    mLastIndex[ALL_ZERO_BRANCH]->addIncoming(nextFirst, processStrides);
+    Value * finished = b->CreateNot(notLastStride);
+    Value * const flipLastState = b->CreateAnd(finished, b->CreateNot(continuation));
+    mFlipAfterLast[ALL_ZERO_BRANCH]->addIncoming(flipLastState, processStrides);
+    mFlipAfterLast[NON_ZERO_BRANCH]->addIncoming(flipLastState, processStrides);
+    b->CreateCondBr(selectedPath, nonZeroPath, allZeroPath);
+
+    // make the actual calls and take any potential termination signal
+    std::array<BasicBlock *, 3> branchExit;
+
+    b->SetInsertPoint(nonZeroPath);
+    executeBranch(b, NON_ZERO_BRANCH, mFirstIndex[NON_ZERO_BRANCH], mLastIndex[NON_ZERO_BRANCH]);
+    branchExit[NON_ZERO_BRANCH] = b->GetInsertBlock();
+    mFirstIndex[ALL_ZERO_BRANCH]->addIncoming(nextFirst, branchExit[NON_ZERO_BRANCH]);
+    mLastIndex[ALL_ZERO_BRANCH]->addIncoming(nextLast, branchExit[NON_ZERO_BRANCH]);
+    mFlipAfterLast[ALL_ZERO_BRANCH]->addIncoming(b->getFalse(), branchExit[NON_ZERO_BRANCH]);
+    b->CreateUnlikelyCondBr(mFlipAfterLast[NON_ZERO_BRANCH], allZeroPath, mMergePaths);
+
+    b->SetInsertPoint(allZeroPath);
+    executeBranch(b, ALL_ZERO_BRANCH, mFirstIndex[ALL_ZERO_BRANCH], mLastIndex[ALL_ZERO_BRANCH]);
+    branchExit[ALL_ZERO_BRANCH] = b->GetInsertBlock();
+    mFirstIndex[NON_ZERO_BRANCH]->addIncoming(nextFirst, branchExit[ALL_ZERO_BRANCH]);
+    mLastIndex[NON_ZERO_BRANCH]->addIncoming(nextLast, branchExit[ALL_ZERO_BRANCH]);
+    mFlipAfterLast[NON_ZERO_BRANCH]->addIncoming(b->getFalse(), branchExit[ALL_ZERO_BRANCH]);
+    b->CreateUnlikelyCondBr(mFlipAfterLast[ALL_ZERO_BRANCH], nonZeroPath, mMergePaths);
+
+    b->SetInsertPoint(mMergePaths);
+    currentFirstIndex->addIncoming(nextFirst, mMergePaths);
+    currentLastIndex->addIncoming(nextLast, mMergePaths);
+    currentState->addIncoming(nextState, mMergePaths);
+    if (mTerminatedPhi) {
+        finished = b->CreateOr(finished, mTerminatedPhi);
+    }
+    b->CreateLikelyCondBr(finished, exit, loopCond);
+
+}
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateStreamSetBranchMethod
@@ -427,14 +583,14 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
 
     // Predeclare some phi nodes
     b->SetInsertPoint(allZeroPath);
-    PHINode * const firstAllZeroIndex = b->CreatePHI(sizeTy, 2);
-    PHINode * const lastAllZeroIndex = b->CreatePHI(sizeTy, 2);
-    PHINode * const nonZeroAfterAllZero = b->CreatePHI(boolTy, 2);
+    mFirstIndex[ALL_ZERO_BRANCH] = b->CreatePHI(sizeTy, 2);
+    mLastIndex[ALL_ZERO_BRANCH] = b->CreatePHI(sizeTy, 2);
+    mFlipAfterLast[ALL_ZERO_BRANCH] = b->CreatePHI(boolTy, 2);
 
     b->SetInsertPoint(nonZeroPath);
-    PHINode * const firstNonZeroIndex = b->CreatePHI(sizeTy, 2);
-    PHINode * const lastNonZeroIndex = b->CreatePHI(sizeTy, 2);
-    PHINode * const allZeroAfterNonZero = b->CreatePHI(boolTy, 2);
+    mFirstIndex[NON_ZERO_BRANCH] = b->CreatePHI(sizeTy, 2);
+    mLastIndex[NON_ZERO_BRANCH] = b->CreatePHI(sizeTy, 2);
+    mFlipAfterLast[NON_ZERO_BRANCH] = b->CreatePHI(boolTy, 2);
 
     b->SetInsertPoint(mMergePaths);
     mTerminatedPhi = nullptr;
@@ -448,9 +604,13 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     iteration->addIncoming(ZERO, loopCond);
     PHINode * const accumulated = b->CreatePHI(bitBlockTy, 2);
     accumulated->addIncoming(Constant::getNullValue(bitBlockTy), loopCond);
+
     Value * offset = b->CreateMul(currentLastIndex, BLOCKS_PER_STRIDE);
     offset = b->CreateAdd(offset, iteration);
+
     Value * condition = b->CreateBlockAlignedLoad(basePtr, offset);
+
+
     condition = b->CreateOr(condition, accumulated);
     accumulated->addIncoming(condition, summarizeOneStride);
     Value * const nextIteration = b->CreateAdd(iteration, ONE);
@@ -480,8 +640,8 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
 
     // state is implicitly "indeterminate" during our first stride
     Value * const selectedPath = b->CreateSelect(firstStride, nextState, currentState);
-    firstNonZeroIndex->addIncoming(currentFirstIndex, processStrides);
-    firstAllZeroIndex->addIncoming(currentFirstIndex, processStrides);
+    mFirstIndex[NON_ZERO_BRANCH]->addIncoming(currentFirstIndex, processStrides);
+    mFirstIndex[ALL_ZERO_BRANCH]->addIncoming(currentFirstIndex, processStrides);
     // When we reach the last (but not necessarily final) stride of this kernel,
     // we will either "append" the final stride to the current run or complete
     // the current run then perform one more iteration for the final stride, depending
@@ -489,32 +649,32 @@ inline void OptimizationBranchCompiler::generateStreamSetBranchMethod(BuilderRef
     Value * const nextLast = b->CreateSelect(continuation, numOfStrides, nextIndex);
     Value * const nextFirst = b->CreateSelect(continuation, numOfStrides, currentLastIndex);
 
-    lastNonZeroIndex->addIncoming(nextFirst, processStrides);
-    lastAllZeroIndex->addIncoming(nextFirst, processStrides);
+    mLastIndex[NON_ZERO_BRANCH]->addIncoming(nextFirst, processStrides);
+    mLastIndex[ALL_ZERO_BRANCH]->addIncoming(nextFirst, processStrides);
     Value * finished = b->CreateNot(notLastStride);
     Value * const flipLastState = b->CreateAnd(finished, b->CreateNot(continuation));
-    nonZeroAfterAllZero->addIncoming(flipLastState, processStrides);
-    allZeroAfterNonZero->addIncoming(flipLastState, processStrides);
+    mFlipAfterLast[ALL_ZERO_BRANCH]->addIncoming(flipLastState, processStrides);
+    mFlipAfterLast[NON_ZERO_BRANCH]->addIncoming(flipLastState, processStrides);
     b->CreateCondBr(selectedPath, nonZeroPath, allZeroPath);
 
     // make the actual calls and take any potential termination signal
     std::array<BasicBlock *, 3> branchExit;
 
     b->SetInsertPoint(nonZeroPath);
-    executeBranch(b, NON_ZERO_BRANCH, firstNonZeroIndex, lastNonZeroIndex);
+    executeBranch(b, NON_ZERO_BRANCH, mFirstIndex[NON_ZERO_BRANCH], mLastIndex[NON_ZERO_BRANCH]);
     branchExit[NON_ZERO_BRANCH] = b->GetInsertBlock();
-    firstAllZeroIndex->addIncoming(nextFirst, branchExit[NON_ZERO_BRANCH]);
-    lastAllZeroIndex->addIncoming(nextLast, branchExit[NON_ZERO_BRANCH]);
-    nonZeroAfterAllZero->addIncoming(b->getFalse(), branchExit[NON_ZERO_BRANCH]);
-    b->CreateUnlikelyCondBr(allZeroAfterNonZero, allZeroPath, mMergePaths);
+    mFirstIndex[ALL_ZERO_BRANCH]->addIncoming(nextFirst, branchExit[NON_ZERO_BRANCH]);
+    mLastIndex[ALL_ZERO_BRANCH]->addIncoming(nextLast, branchExit[NON_ZERO_BRANCH]);
+    mFlipAfterLast[ALL_ZERO_BRANCH]->addIncoming(b->getFalse(), branchExit[NON_ZERO_BRANCH]);
+    b->CreateUnlikelyCondBr(mFlipAfterLast[NON_ZERO_BRANCH], allZeroPath, mMergePaths);
 
     b->SetInsertPoint(allZeroPath);
-    executeBranch(b, ALL_ZERO_BRANCH, firstAllZeroIndex, lastAllZeroIndex);
+    executeBranch(b, ALL_ZERO_BRANCH, mFirstIndex[ALL_ZERO_BRANCH], mLastIndex[ALL_ZERO_BRANCH]);
     branchExit[ALL_ZERO_BRANCH] = b->GetInsertBlock();
-    firstNonZeroIndex->addIncoming(nextFirst, branchExit[ALL_ZERO_BRANCH]);
-    lastNonZeroIndex->addIncoming(nextLast, branchExit[ALL_ZERO_BRANCH]);
-    allZeroAfterNonZero->addIncoming(b->getFalse(), branchExit[ALL_ZERO_BRANCH]);
-    b->CreateUnlikelyCondBr(nonZeroAfterAllZero, nonZeroPath, mMergePaths);
+    mFirstIndex[NON_ZERO_BRANCH]->addIncoming(nextFirst, branchExit[ALL_ZERO_BRANCH]);
+    mLastIndex[NON_ZERO_BRANCH]->addIncoming(nextLast, branchExit[ALL_ZERO_BRANCH]);
+    mFlipAfterLast[NON_ZERO_BRANCH]->addIncoming(b->getFalse(), branchExit[ALL_ZERO_BRANCH]);
+    b->CreateUnlikelyCondBr(mFlipAfterLast[ALL_ZERO_BRANCH], nonZeroPath, mMergePaths);
 
 
     b->SetInsertPoint(mMergePaths);
@@ -924,6 +1084,13 @@ inline std::array<const Kernel *, 4> makeBranches(const OptimizationBranch * con
     branches[NON_ZERO_BRANCH] = branch->getNonZeroKernel();
     branches[BRANCH_OUTPUT] = branch;
     return branches;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranchCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
+    b->CreateFree(b->getScalarField(SPAN_BUFFER));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

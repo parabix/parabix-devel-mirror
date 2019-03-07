@@ -78,16 +78,6 @@ void P2SMultipleStreamsKernel::generateDoBlockMethod(const std::unique_ptr<kerne
     }
 }
 
-
-inline Value * partial_sum_popcounts(const std::unique_ptr<KernelBuilder> & iBuilder, const unsigned fw, Value * popcounts) {
-    Value * summed_counts = popcounts;
-    const auto count = iBuilder->getBitBlockWidth() / fw;
-    for (unsigned move = 1; move < count; move *= 2) {
-        summed_counts = iBuilder->simd_add(fw, summed_counts, iBuilder->mvmd_slli(fw, summed_counts, move));
-    }
-    return summed_counts;
-}
-
 void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     IntegerType * i32 = b->getInt32Ty();
     PointerType * bitBlockPtrTy = PointerType::get(b->getBitBlockType(), 0);
@@ -101,7 +91,7 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<
     p2s(b, basisBits, bytePack);
 
     Value * const fieldCounts = b->loadInputStreamBlock("fieldCounts", b->getInt32(0));
-    Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
+    Value * unitCounts = b->hsimd_partial_sum(unitsPerRegister, fieldCounts);
 
     Value * output_ptr = b->getOutputStreamBlockPtr("byteStream", b->getInt32(0));
     output_ptr = b->CreatePointerCast(output_ptr, b->getInt8PtrTy());
@@ -162,7 +152,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     p2s(b, lo_input, lo_bytes);
     Value * const extractionMask = b->loadInputStreamBlock("extractionMask", ZERO);
     Value * const fieldCounts = b->simd_popcount(unitsPerRegister, extractionMask);
-    Value * unitCounts = partial_sum_popcounts(b, unitsPerRegister, fieldCounts);
+    Value * unitCounts = b->hsimd_partial_sum(unitsPerRegister, fieldCounts);
     Value * outputPtr = b->getOutputStreamBlockPtr("i16Stream", ZERO);
     outputPtr = b->CreatePointerCast(outputPtr, int16PtrTy);
     Value * const i16UnitsGenerated = b->getProducedItemCount("i16Stream"); // units generated to buffer
@@ -187,9 +177,6 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     Value * const i16UnitsFinal = b->CreateAdd(i16UnitsGenerated, b->CreateZExt(offset, b->getSizeTy()));
     b->setProducedItemCount("i16Stream", i16UnitsFinal);
 }
-
-
-
 
 P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * basisBits, StreamSet * byteStream)
 : BlockOrientedKernel(b, "p2s",

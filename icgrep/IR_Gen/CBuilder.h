@@ -5,6 +5,7 @@
 #ifndef CBUILDER_H
 #define CBUILDER_H
 
+#include <toolchain/toolchain.h>
 #include <IR_Gen/FunctionTypeBuilder.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Constants.h>
@@ -433,5 +434,17 @@ llvm::Function * CBuilder::LinkFunction(llvm::StringRef name, ExternalFunctionTy
 }
 
 llvm::ModulePass * createRemoveRedundantAssertionsPass();
+
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
+// Prior to LLVM 4.0.0, std::array cannot be implicitly converted to a ArrayRef
+template <typename T, unsigned N>
+struct FixedArray : public llvm::SmallVector<T, N> {
+    constexpr FixedArray() : llvm::SmallVector<T, N>(N) { }
+};
+#else
+template <typename T, unsigned N>
+using FixedArray = std::array<T, N>;
+#endif
+
 
 #endif

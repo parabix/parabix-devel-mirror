@@ -47,13 +47,17 @@ protected:
                        Bindings && scalar_inputs,
                        Bindings && scalar_outputs);
 
-    void addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
 
     void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
+    void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
     void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+
+    void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
 
     void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
 

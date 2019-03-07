@@ -7,7 +7,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::addInternalKernelProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void OptimizationBranch::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCompiler = llvm::make_unique<OptimizationBranchCompiler>(this);
     mCompiler->addBranchProperties(b);
 }
@@ -20,10 +20,24 @@ void OptimizationBranch::generateInitializeMethod(const std::unique_ptr<KernelBu
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    mCompiler->generateInitializeThreadLocalMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
     mCompiler->generateKernelMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+    mCompiler->generateFinalizeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -54,7 +68,10 @@ OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-{Binding{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS}, Binding{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS}})
+{InternalScalar{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS},
+ InternalScalar{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS},
+ InternalScalar{ScalarType::ThreadLocal, b->getSizeTy()->getPointerTo(), SPAN_BUFFER},
+ InternalScalar{ScalarType::ThreadLocal, b->getSizeTy(), SPAN_CAPACITY}})
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {
