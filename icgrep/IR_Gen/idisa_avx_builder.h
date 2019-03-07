@@ -43,6 +43,8 @@ public:
     virtual std::string getBuilderUniqueName() override;
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packus(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packss(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b) override;
@@ -77,6 +79,8 @@ public:
     void getAVX512Features();
     llvm::Value * hsimd_packh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packus(unsigned fw, llvm::Value * a, llvm::Value * b) override;
+    llvm::Value * hsimd_packss(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_mergeh(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_mergel(unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * esimd_bitspread(unsigned fw, llvm::Value * bitmask) override;
