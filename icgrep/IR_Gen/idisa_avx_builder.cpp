@@ -912,7 +912,7 @@ Value * IDISA_AVX512F_Builder::mk_simd_and(Value * a, Value * b, StringRef s) {
             }
         }
         // a & b & c
-        if (opcodea == Instruction::And) return simd_ternary(0x80, opa1, opa2, b);
+        if (opcodea == Instruction::And) return simd_ternary(0x80, b, opa1, opa2);
         // a & (b | c)
         if (opcodea == Instruction::Or) return simd_ternary(0xE0, b, opa1, opa2);
         // a & (b ^ c)
@@ -939,7 +939,7 @@ Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
             }
         }
         // a | b | c
-        if (opcodea == Instruction::Or) return simd_ternary(0xFE, opa1, opa2, b);
+        if (opcodea == Instruction::Or) return simd_ternary(0xFE, b, opa1, opa2);
         // a | (b & c)
         if (opcodea == Instruction::And) return simd_ternary(0xF8, b, opa1, opa2);
         // a | (b ^ c)
@@ -949,6 +949,17 @@ Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
 }
 
 Value * IDISA_AVX512F_Builder::mk_simd_xor(Value * a, Value * b, StringRef s) {
+    if (auto *instra = dyn_cast<BinaryOperator>(a)) {
+        Value *opa1 = instra->getOperand(0);
+        Value *opa2 = instra->getOperand(1);
+        Instruction::BinaryOps opcodea = instra->getOpcode();
+        // a ^ b ^ c
+        if (opcodea == Instruction::Xor) return simd_ternary(0x96, opa1, opa2, b);
+        // a ^ (b & c)
+        if (opcodea == Instruction::And) return simd_ternary(0x78, b, opa1, opa2);
+        // a ^ (b | c)
+        if (opcodea == Instruction::Or) return simd_ternary(0x1E, b, opa1, opa2);
+    }
     return IDISA_AVX2_Builder::simd_xor(a, b, s);
 }
 
