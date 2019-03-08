@@ -1027,7 +1027,7 @@ Value * IDISA_AVX512F_Builder::mk_simd_xor(Value * a, Value * b, StringRef s) {
             // ~a ^ ~b -> a ^ b
             if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
                 return mk_simd_xor(extract_not_operand(a), extract_not_operand(b));
-            // ~a | b -> try to simplify b | ~a
+            // ~a ^ b -> try to simplify b ^ ~a
             if (BinaryOperator::isNot(a)) return mk_simd_xor(b, a);
         }
         Value * op1 = instra->getOperand(0);
@@ -1066,10 +1066,11 @@ Value * IDISA_AVX512F_Builder::simd_not(Value * a, StringRef s) {
 Value * IDISA_AVX512F_Builder::extract_not_operand(Value * a) {
     if (auto * instr = dyn_cast<BinaryOperator>(a)) {
         assert(BinaryOperator::isNot(instr));
-        Value * ones = Constant::getAllOnesValue(instr->getType());
         Value * op1 = instr->getOperand(0);
         Value * op2 = instr->getOperand(1);
-        return ones != op1 ? op1 : op2;
+        if (auto * cop1 = dyn_cast<Constant>(op1))
+            return cop1->isAllOnesValue() ? op2 : op1;
+        return op1;
     }
     llvm_unreachable("unexpected operator type");
     return nullptr;
