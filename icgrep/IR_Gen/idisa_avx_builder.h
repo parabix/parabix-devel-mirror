@@ -116,6 +116,7 @@ private:
     llvm::Value * mk_simd_or(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
     llvm::Value * mk_simd_xor(llvm::Value * a, llvm::Value * b, llvm::StringRef s = llvm::StringRef());
     llvm::Value * mk_simd_not(llvm::Value * a, llvm::StringRef s = llvm::StringRef());
+    llvm::Value * extract_not_operand(llvm::Value * a);
 };
 #endif
 

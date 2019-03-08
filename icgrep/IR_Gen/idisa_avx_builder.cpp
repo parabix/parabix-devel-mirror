@@ -880,9 +880,9 @@ Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value
 }
 
 Value * IDISA_AVX512F_Builder::simd_simplify(Value * a) {
-    if (auto *instr = dyn_cast<BinaryOperator>(a)) {
-        Value *op1 = instr->getOperand(0);
-        Value *op2 = instr->getOperand(1);
+    if (auto * instr = dyn_cast<BinaryOperator>(a)) {
+        Value * op1 = instr->getOperand(0);
+        Value * op2 = instr->getOperand(1);
         Instruction::BinaryOps opcode = instr->getOpcode();
         switch (opcode) {
             case Instruction::And: return mk_simd_and(op1, op2);
@@ -895,70 +895,65 @@ Value * IDISA_AVX512F_Builder::simd_simplify(Value * a) {
 }
 
 Value * IDISA_AVX512F_Builder::mk_simd_and(Value * a, Value * b, StringRef s) {
-    if (auto *instra = dyn_cast<BinaryOperator>(a)) {
-        Value *opa1 = instra->getOperand(0);
-        Value *opa2 = instra->getOperand(1);
-        Instruction::BinaryOps opcodea = instra->getOpcode();
-        if (auto *instrb = dyn_cast<BinaryOperator>(a)) {
-            Value *opb2 = instra->getOperand(1);
-            Instruction::BinaryOps opcodeb = instrb->getOpcode();
-            Value * ones = ConstantInt::getAllOnesValue(opa1->getType());
+    if (auto * instra = dyn_cast<BinaryOperator>(a)) {
+        if (auto * instrb = dyn_cast<BinaryOperator>(b)) {
             // ~a & ~b -> ~ (a | b)
-            if (opcodea == opcodeb && opcodeb == Instruction::Xor && opa2 == ones && opb2 == ones) {
-                return mk_simd_not(mk_simd_or(a, b));
+            if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
+                return mk_simd_not(mk_simd_or(extract_not_operand(a), extract_not_operand(b)));
             // ~a & b -> try to simplify b & ~a
-            } else if (opcodea == Instruction::Xor && opa2 == ones) {
-                return mk_simd_and(b, a);
-            }
+            if (BinaryOperator::isNot(a)) return mk_simd_and(b, a);
         }
+        Value * op1 = instra->getOperand(0);
+        Value * op2 = instra->getOperand(1);
+        Instruction::BinaryOps opcodea = instra->getOpcode();
         // a & b & c
-        if (opcodea == Instruction::And) return simd_ternary(0x80, b, opa1, opa2);
+        if (opcodea == Instruction::And) return simd_ternary(0x80, b, op1, op2);
         // a & (b | c)
-        if (opcodea == Instruction::Or) return simd_ternary(0xE0, b, opa1, opa2);
+        if (opcodea == Instruction::Or) return simd_ternary(0xE0, b, op1, op2);
         // a & (b ^ c)
-        if (opcodea == Instruction::Xor) return simd_ternary(0x60, b, opa1, opa2);
+        if (opcodea == Instruction::Xor) return simd_ternary(0x60, b, op1, op2);
     }
     return IDISA_AVX2_Builder::simd_and(a, b, s);
 }
 
 Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
-    if (auto *instra = dyn_cast<BinaryOperator>(a)) {
-        Value *opa1 = instra->getOperand(0);
-        Value *opa2 = instra->getOperand(1);
-        Instruction::BinaryOps opcodea = instra->getOpcode();
-        if (auto *instrb = dyn_cast<BinaryOperator>(a)) {
-            Value *opb2 = instra->getOperand(1);
-            Instruction::BinaryOps opcodeb = instrb->getOpcode();
-            Value * ones = ConstantInt::getAllOnesValue(opa1->getType());
+    if (auto * instra = dyn_cast<BinaryOperator>(a)) {
+        if (auto * instrb = dyn_cast<BinaryOperator>(b)) {
             // ~a | ~b -> ~ (a & b)
-            if (opcodea == opcodeb && opcodeb == Instruction::Xor && opa2 == ones && opb2 == ones) {
-                return mk_simd_not(mk_simd_and(a, b));
+            if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
+                return mk_simd_not(mk_simd_and(extract_not_operand(a), extract_not_operand(b)));
             // ~a | b -> try to simplify b | ~a
-            } else if (opcodea == Instruction::Xor && opa2 == ones) {
-                return mk_simd_or(b, a);
-            }
+            if (BinaryOperator::isNot(a)) return mk_simd_or(b, a);
         }
+        Value * op1 = instra->getOperand(0);
+        Value * op2 = instra->getOperand(1);
+        Instruction::BinaryOps opcode = instra->getOpcode();
         // a | b | c
-        if (opcodea == Instruction::Or) return simd_ternary(0xFE, b, opa1, opa2);
+        if (opcode == Instruction::Or) return simd_ternary(0xFE, b, op1, op2);
         // a | (b & c)
-        if (opcodea == Instruction::And) return simd_ternary(0xF8, b, opa1, opa2);
+        if (opcode == Instruction::And) return simd_ternary(0xF8, b, op1, op2);
         // a | (b ^ c)
-        if (opcodea == Instruction::Xor) return simd_ternary(0xF6, b, opa1, opa2);
+        if (opcode == Instruction::Xor) return simd_ternary(0xF6, b, op1, op2);
     }
     return IDISA_AVX2_Builder::simd_or(a, b, s);
 }
 
 Value * IDISA_AVX512F_Builder::mk_simd_xor(Value * a, Value * b, StringRef s) {
-    if (auto *instra = dyn_cast<BinaryOperator>(a)) {
-        Value *opa1 = instra->getOperand(0);
-        Value *opa2 = instra->getOperand(1);
+    if (auto * instra = dyn_cast<BinaryOperator>(a)) {
+        if (auto * instrb = dyn_cast<BinaryOperator>(b)) {
+            // ~a ^ ~b -> a ^ b
+            if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
+                return mk_simd_xor(extract_not_operand(a), extract_not_operand(b));
+        }
+        Value * op1 = instra->getOperand(0);
+        Value * op2 = instra->getOperand(1);
         Instruction::BinaryOps opcodea = instra->getOpcode();
         // a ^ b ^ c
-        if (opcodea == Instruction::Xor) return simd_ternary(0x96, opa1, opa2, b);
+        if (opcodea == Instruction::Xor) return simd_ternary(0x96, b, op1, op2);
         // a ^ (b & c)
-        if (opcodea == Instruction::And) return simd_ternary(0x78, b, opa1, opa2);
+        if (opcodea == Instruction::And) return simd_ternary(0x78, b, op1, op2);
         // a ^ (b | c)
-        if (opcodea == Instruction::Or) return simd_ternary(0x1E, b, opa1, opa2);
+        if (opcodea == Instruction::Or) return simd_ternary(0x1E, b, op1, op2);
     }
     return IDISA_AVX2_Builder::simd_xor(a, b, s);
 }
@@ -981,6 +976,18 @@ Value * IDISA_AVX512F_Builder::simd_xor(Value * a, Value * b, StringRef s) {
 
 Value * IDISA_AVX512F_Builder::simd_not(Value * a, StringRef s) {
     return mk_simd_not(simd_simplify(a), s);
+}
+
+Value * IDISA_AVX512F_Builder::extract_not_operand(Value * a) {
+    if (auto * instr = dyn_cast<BinaryOperator>(a)) {
+        assert(BinaryOperator::isNot(instr));
+        Value * ones = Constant::getAllOnesValue(instr->getType());
+        Value * op1 = instr->getOperand(0);
+        Value * op2 = instr->getOperand(1);
+        return ones != op1 ? op1 : op2;
+    }
+    llvm_unreachable("unexpected operator type");
+    return nullptr;
 }
 
 void IDISA_AVX512F_Builder::getAVX512Features() {
