@@ -523,8 +523,14 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, l
 
 Value * IDISA_AVX512F_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
     if (hostCPUFeatures.hasAVX512BW && ((fw == 16) || (fw == 32)) && (getVectorBitWidth(a) == AVX512_width)) {
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_mask_packuswb_512 : Intrinsic::x86_avx512_mask_packusdw_512);
+        Constant * mask = Constant::getAllOnesValue(getIntNTy(AVX512_width/(fw/2)));
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b), fwCast(32, allZeroes()), mask});
+#else
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packuswb_512 : Intrinsic::x86_avx512_packusdw_512);
-        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+#endif
         auto field_count = AVX512_width/64;
         SmallVector<Constant *, 16> Idxs(field_count);
         for (unsigned int i = 0; i < field_count/2; i++) {
@@ -532,7 +538,7 @@ Value * IDISA_AVX512F_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
             Idxs[i + field_count/2] = getInt32(2*i + 1);
         }
         llvm::Constant * shuffleMask = ConstantVector::get(Idxs);
-        return bitCast(CreateShuffleVector(packed, UndefValue::get(fwVectorType(64)), shuffleMask));
+        return bitCast(CreateShuffleVector(fwCast(64, packed), UndefValue::get(fwVectorType(64)), shuffleMask));
     }
     // Otherwise use default logic.
     return IDISA_Builder::hsimd_packus(fw, a, b);
@@ -540,8 +546,14 @@ Value * IDISA_AVX512F_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_AVX512F_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
     if (hostCPUFeatures.hasAVX512BW && ((fw == 16) || (fw == 32)) && (getVectorBitWidth(a) == AVX512_width)) {
+#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_mask_packsswb_512 : Intrinsic::x86_avx512_mask_packssdw_512);
+        Constant * mask = Constant::getAllOnesValue(getIntNTy(AVX512_width/(fw/2)));
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b), fwCast(32, allZeroes()), mask});
+#else
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packsswb_512 : Intrinsic::x86_avx512_packssdw_512);
-        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+#endif
         auto field_count = AVX512_width/64;
         SmallVector<Constant *, 16> Idxs(field_count);
         for (unsigned int i = 0; i < field_count/2; i++) {
@@ -549,7 +561,7 @@ Value * IDISA_AVX512F_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
             Idxs[i + field_count/2] = getInt32(2*i + 1);
         }
         llvm::Constant * shuffleMask = ConstantVector::get(Idxs);
-        return bitCast(CreateShuffleVector(packed, UndefValue::get(fwVectorType(64)), shuffleMask));
+        return bitCast(CreateShuffleVector(fwCast(64, packed), UndefValue::get(fwVectorType(64)), shuffleMask));
     }
     // Otherwise use default logic.
     return IDISA_Builder::hsimd_packus(fw, a, b);
