@@ -979,7 +979,7 @@ Value * IDISA_AVX512F_Builder::simd_simplify(Value * a) {
 
 Value * IDISA_AVX512F_Builder::mk_simd_and(Value * a, Value * b, StringRef s) {
     if (auto * instra = dyn_cast<BinaryOperator>(a)) {
-        if (auto * instrb = dyn_cast<BinaryOperator>(b)) {
+        if (isa<BinaryOperator>(b)) {
             // ~a & ~b -> ~ (a | b)
             if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
                 return mk_simd_not(mk_simd_or(extract_not_operand(a), extract_not_operand(b)));
@@ -1001,7 +1001,7 @@ Value * IDISA_AVX512F_Builder::mk_simd_and(Value * a, Value * b, StringRef s) {
 
 Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
     if (auto * instra = dyn_cast<BinaryOperator>(a)) {
-        if (auto * instrb = dyn_cast<BinaryOperator>(b)) {
+        if (isa<BinaryOperator>(b)) {
             // ~a | ~b -> ~ (a & b)
             if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
                 return mk_simd_not(mk_simd_and(extract_not_operand(a), extract_not_operand(b)));
@@ -1023,10 +1023,12 @@ Value * IDISA_AVX512F_Builder::mk_simd_or(Value * a, Value * b, StringRef s) {
 
 Value * IDISA_AVX512F_Builder::mk_simd_xor(Value * a, Value * b, StringRef s) {
     if (auto * instra = dyn_cast<BinaryOperator>(a)) {
-        if (auto * instrb = dyn_cast<BinaryOperator>(b)) {
+        if (isa<BinaryOperator>(b)) {
             // ~a ^ ~b -> a ^ b
             if (BinaryOperator::isNot(a) && BinaryOperator::isNot(b))
                 return mk_simd_xor(extract_not_operand(a), extract_not_operand(b));
+            // ~a | b -> try to simplify b | ~a
+            if (BinaryOperator::isNot(a)) return mk_simd_xor(b, a);
         }
         Value * op1 = instra->getOperand(0);
         Value * op2 = instra->getOperand(1);
