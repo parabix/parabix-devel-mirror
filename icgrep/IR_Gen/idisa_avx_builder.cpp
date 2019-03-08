@@ -182,6 +182,42 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
     return IDISA_SSE_Builder::hsimd_packh_in_lanes(lanes, fw, a, b);
 }
 
+
+Value * IDISA_AVX2_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
+    if (((fw == 32) || (fw == 16)) && (getVectorBitWidth(a) == AVX_width)) {
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packuswb : Intrinsic::x86_avx2_packusdw); 
+        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        auto field_count = AVX_width/64;
+        SmallVector<Constant *, 4> Idxs(field_count);
+        for (unsigned int i = 0; i < field_count/2; i++) {
+            Idxs[i] = getInt32(2*i);
+            Idxs[i + field_count/2] = getInt32(2*i + 1);
+        }
+        llvm::Constant * shuffleMask = ConstantVector::get(Idxs);
+        return bitCast(CreateShuffleVector(packed, UndefValue::get(fwVectorType(64)), shuffleMask));
+    }
+    // Otherwise use default logic.
+    return IDISA_Builder::hsimd_packus(fw, a, b);
+}
+
+Value * IDISA_AVX2_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
+    if (((fw == 32) || (fw == 16)) && (getVectorBitWidth(a) == AVX_width)) {
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packsswb : Intrinsic::x86_avx2_packssdw); 
+        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        auto field_count = AVX_width/64;
+        SmallVector<Constant *, 4> Idxs(field_count);
+        for (unsigned int i = 0; i < field_count/2; i++) {
+            Idxs[i] = getInt32(2*i);
+            Idxs[i + field_count/2] = getInt32(2*i + 1);
+        }
+        llvm::Constant * shuffleMask = ConstantVector::get(Idxs);
+        return bitCast(CreateShuffleVector(packed, UndefValue::get(fwVectorType(64)), shuffleMask));
+    }
+    // Otherwise use default logic.
+    return IDISA_Builder::hsimd_packus(fw, a, b);
+}
+
+
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * e1, Value * e2, Value * carryin) {
     // using LONG_ADD
     Type * carryTy = carryin->getType();
@@ -484,6 +520,41 @@ llvm::Value * IDISA_AVX512F_Builder::hsimd_packl(unsigned fw, llvm::Value * a, l
     }
     return IDISA_Builder::hsimd_packl(fw, a, b);
 }
+
+Value * IDISA_AVX512F_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
+    if (hostCPUFeatures.hasAVX512BW && ((fw == 16) || (fw == 32)) && (getVectorBitWidth(a) == AVX512_width)) {
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packuswb_512 : Intrinsic::x86_avx512_packusdw_512);
+        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        auto field_count = AVX512_width/64;
+        SmallVector<Constant *, 16> Idxs(field_count);
+        for (unsigned int i = 0; i < field_count/2; i++) {
+            Idxs[i] = getInt32(2*i);
+            Idxs[i + field_count/2] = getInt32(2*i + 1);
+        }
+        llvm::Constant * shuffleMask = ConstantVector::get(Idxs);
+        return bitCast(CreateShuffleVector(packed, UndefValue::get(fwVectorType(64)), shuffleMask));
+    }
+    // Otherwise use default logic.
+    return IDISA_Builder::hsimd_packus(fw, a, b);
+}
+
+Value * IDISA_AVX512F_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
+    if (hostCPUFeatures.hasAVX512BW && ((fw == 16) || (fw == 32)) && (getVectorBitWidth(a) == AVX512_width)) {
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packsswb_512 : Intrinsic::x86_avx512_packssdw_512);
+        Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        auto field_count = AVX512_width/64;
+        SmallVector<Constant *, 16> Idxs(field_count);
+        for (unsigned int i = 0; i < field_count/2; i++) {
+            Idxs[i] = getInt32(2*i);
+            Idxs[i + field_count/2] = getInt32(2*i + 1);
+        }
+        llvm::Constant * shuffleMask = ConstantVector::get(Idxs);
+        return bitCast(CreateShuffleVector(packed, UndefValue::get(fwVectorType(64)), shuffleMask));
+    }
+    // Otherwise use default logic.
+    return IDISA_Builder::hsimd_packus(fw, a, b);
+}
+
 
 llvm::Value * IDISA_AVX512F_Builder::esimd_bitspread(unsigned fw, llvm::Value * bitmask) {
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)

@@ -232,8 +232,8 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     const auto threadName = mPipelineKernel->getName() + "_DoSegmentThread";
     Function * const threadFunc = Function::Create(threadFuncType, Function::InternalLinkage, threadName, m);
     threadFunc->setCallingConv(CallingConv::C);
-    auto threadStateArg = threadFunc->arg_begin();
-    threadStateArg->setName("threadState");
+    auto threadStructArg = threadFunc->arg_begin();
+    threadStructArg->setName("threadStruct");
 
     Value * const initialSharedState = mPipelineKernel->getHandle();
     Value * const initialThreadLocal = mPipelineKernel->getThreadLocalHandle();
@@ -307,7 +307,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // MAKE PIPELINE THREAD
     // -------------------------------------------------------------------------------------------------------------------------
     b->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", threadFunc));
-    Value * const threadStruct = b->CreateBitCast(threadStateArg, processState->getType());
+    Value * const threadStruct = b->CreateBitCast(&*threadStructArg, processState->getType());
     assert (isFromCurrentFunction(b, threadStruct));
     readThreadState(b, threadStruct);
     assert (isFromCurrentFunction(b, mPipelineKernel->getHandle()));

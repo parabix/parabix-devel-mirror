@@ -45,7 +45,7 @@ void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
         }
     }
 
-    const auto traversed = std::accumulate(encountered.begin(), encountered.end(), 0);
+    const size_t traversed = std::accumulate(encountered.begin(), encountered.end(), 0);
     if (LLVM_UNLIKELY(traversed != num_edges(G))) {
         llvm::report_fatal_error(error);
     }
