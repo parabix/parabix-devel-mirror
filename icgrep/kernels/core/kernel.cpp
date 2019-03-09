@@ -1624,7 +1624,10 @@ inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
         name += "_EA";
     }
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        name += "_MP";
+        name += "+MP";
+    }
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::DisableIndirectBranch))) {
+        name += "-Ibranch";
     }
 //    name += "_O" + std::to_string((int)codegen::OptLevel);
     return name;

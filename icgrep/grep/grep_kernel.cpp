@@ -353,6 +353,9 @@ Bindings GrepKernelOptions::scalarOutputBindings() {
 std::string GrepKernelOptions::getSignature() {
     if (mSignature == "") {
         mSignature = std::to_string(mSource->getNumElements()) + "x" + std::to_string(mSource->getFieldWidth());
+        if (mSource->getFieldWidth() == 8) {
+            mSignature += ":" + std::to_string(grep::ByteCClimit);
+        }
         mSignature += "/" + mIndexingAlphabet->getName();
         for (auto e: mExternals) {
             mSignature += "_" + e.first;

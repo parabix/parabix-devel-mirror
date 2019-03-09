@@ -303,14 +303,9 @@ add_test(
   COMMAND ./run_abc ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
-  NAME abc_test_binary
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -byte-CC-limit=0 -enable-object-cache=0 -ccc-type=binary")
-
-add_test(
   NAME abc_test_ternary
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -byte-CC-limit=0 -enable-object-cache=0 -ccc-type=ternary")
+  COMMAND ./run_abc "${CMAKE_BINARY_DIR}/icgrep -byte-CC-limit=0 -ccc-type=ternary")
 
 add_test(
   NAME u8u16_test
@@ -346,7 +341,7 @@ add_test(
 
 SET_PROPERTY(TEST greptest greptest_ternary PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
-SET_PROPERTY(TEST abc_test abc_test_binary abc_test_ternary PROPERTY TIMEOUT 100)
+SET_PROPERTY(TEST abc_test abc_test_ternary PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 

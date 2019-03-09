@@ -66,7 +66,8 @@
 using namespace llvm;
 using namespace cc;
 using namespace kernel;
-
+namespace grep {
+    
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
@@ -74,11 +75,10 @@ static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable
 static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
 const unsigned DefaultByteCClimit = 6;
 
-static cl::opt<unsigned> ByteCClimit("byte-CC-limit", cl::desc("Max number of CCs for byte CC pipeline."), cl::init(DefaultByteCClimit));
+unsigned ByteCClimit;
+static cl::opt<unsigned, true> ByteCClimitOption("byte-CC-limit", cl::location(ByteCClimit), cl::desc("Max number of CCs for byte CC pipeline."), cl::init(DefaultByteCClimit));
 
 const auto ENCODING_BITS = 8;
-
-namespace grep {
 
 void GrepCallBackObject::handle_signal(unsigned s) {
     if (static_cast<GrepSignal>(s) == GrepSignal::BinaryFile) {

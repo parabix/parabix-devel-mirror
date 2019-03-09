@@ -12,6 +12,7 @@
 #include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/core/streamset.h>
+#include <toolchain/toolchain.h>
 #include <llvm/IR/Module.h>
 
 #include <pablo/branch.h>
@@ -200,10 +201,28 @@ llvm::IntegerType * PabloKernel::getInt1Ty() const {
 
 static inline std::string && annotateKernelNameWithPabloDebugFlags(std::string && name) {
     if (DebugOptionIsSet(DumpTrace)) {
-        name += "_DumpTrace";
+        name += "+Dump";
+    }
+    if (CompileOptionIsSet(Flatten)) {
+        name += "+Flatten";
     }
     if (CompileOptionIsSet(EnableProfiling)) {
-        name += "_BranchProfiling";
+        name += "+BranchP";
+    }
+    if (CompileOptionIsSet(DisableSimplification)) {
+        name += "-Simp";
+    }
+    if (CompileOptionIsSet(DisableCodeMotion)) {
+        name += "-CodeM";
+    }
+    if (CompileOptionIsSet(EnableDistribution)) {
+        name += "+Dist";
+    }
+    if (CompileOptionIsSet(EnableSchedulingPrePass)) {
+        name += "+Sched";
+    }
+    if (codegen::CCCOption == "ternary") {
+        name += "+ternary";
     }
     return std::move(name);
 }
