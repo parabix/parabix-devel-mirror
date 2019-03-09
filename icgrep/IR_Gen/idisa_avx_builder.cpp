@@ -1048,14 +1048,23 @@ Value * IDISA_AVX512F_Builder::mk_simd_not(Value * a, StringRef s) {
 }
 
 Value * IDISA_AVX512F_Builder::simd_and(Value * a, Value * b, StringRef s) {
+    if (!isa<BinaryOperator>(a) && isa<BinaryOperator>(b)) {
+        return mk_simd_and(simd_simplify(b), simd_simplify(a), s);
+    }
     return mk_simd_and(simd_simplify(a), simd_simplify(b), s);
 }
 
 Value * IDISA_AVX512F_Builder::simd_or(Value * a, Value * b, StringRef s) {
+    if (!isa<BinaryOperator>(a) && isa<BinaryOperator>(b)) {
+        return mk_simd_or(simd_simplify(b), simd_simplify(a), s);
+    }
     return mk_simd_or(simd_simplify(a), simd_simplify(b), s);
 }
 
 Value * IDISA_AVX512F_Builder::simd_xor(Value * a, Value * b, StringRef s) {
+    if (!isa<BinaryOperator>(a) && isa<BinaryOperator>(b)) {
+        return mk_simd_xor(simd_simplify(b), simd_simplify(a), s);
+    }
     return mk_simd_xor(simd_simplify(a), simd_simplify(b), s);
 }
 
