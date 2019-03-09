@@ -199,6 +199,9 @@ inline void CPUDriver::preparePassManager() {
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
         mPassManager->add(createVerifierPass());
     }
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
+    if (AVX512F_available()) mPassManager->add(createTernaryPeepholePass());  // Simple peephole optimizations for AVX-512
+    #endif
     mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
@@ -210,9 +213,6 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
     mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
     mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
-    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
-    if (AVX512F_available()) mPassManager->add(createTernaryPeepholePass());  // Simple peephole optimizations for AVX-512
-    #endif
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
         mPassManager->add(createDeadCodeEliminationPass());

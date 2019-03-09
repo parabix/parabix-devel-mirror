@@ -9,8 +9,8 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instruction.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Transforms/Utils/Local.h"
+#include <llvm/Support/raw_ostream.h>
 using namespace llvm;
 
 #define DEBUG_TYPE "tpph"
@@ -21,32 +21,29 @@ namespace {
   //===--------------------------------------------------------------------===//
   // Ternary Peephole pass implementation
   //
-  struct TernaryPeephole : public BasicBlockPass {
+struct TernaryPeephole : public BasicBlockPass {
     static char ID; // Pass identification, replacement for typeid
     TernaryPeephole() : BasicBlockPass(ID) {
-      initializeTernaryPeepholePass(*PassRegistry::getPassRegistry());
+        initializeTernaryPeepholePass(*PassRegistry::getPassRegistry());
     }
-    bool runOnBasicBlock(BasicBlock &BB) override {
-      if (skipOptnoneFunction(BB))
-        return false;
-      auto *TLIP = getAnalysisIfAvailable<TargetLibraryInfoWrapperPass>();
-      TargetLibraryInfo *TLI = TLIP ? &TLIP->getTLI() : nullptr;
-      bool Changed = false;
-      for (BasicBlock::iterator DI = BB.begin(); DI != BB.end(); ) {
-        Instruction *Inst = &*DI++;
-        if (isInstructionTriviallyDead(Inst, TLI)) {
-          Inst->eraseFromParent();
-          Changed = true;
-          ++PphEliminated;
+    bool runOnBasicBlock(BasicBlock & BB) override {
+        bool changed = false;
+        for (BasicBlock::iterator DI = ++BB.begin(); DI != BB.end();) {
+            // TODO: The pass was not implemented
+            errs() << "instr"; (&*DI)->dump();
+            Instruction * prev_inst = (&*DI) - 1;
+            Instruction * curr_inst = &*DI++;
+            if (prev_inst->isBinaryOp() && curr_inst->isBinaryOp()) {
+                ++PphEliminated;
+            }
         }
-      }
-      return Changed;
+        return changed;
     }
 
-    void getAnalysisUsage(AnalysisUsage &AU) const override {
-      AU.setPreservesCFG();
+    void getAnalysisUsage(AnalysisUsage & AU) const override {
+        AU.setPreservesCFG();
     }
-  };
+};
 }
 
 char TernaryPeephole::ID = 0;
@@ -54,5 +51,6 @@ INITIALIZE_PASS(TernaryPeephole, "tpph",
                 "Peephole Optimization", false, false)
 
 Pass * llvm::createTernaryPeepholePass() {
-  return new TernaryPeephole();
+    return new TernaryPeephole();
 }
+
