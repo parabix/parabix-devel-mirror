@@ -185,7 +185,7 @@ Value * IDISA_AVX2_Builder::hsimd_packh_in_lanes(unsigned lanes, unsigned fw, Va
 
 Value * IDISA_AVX2_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
     if (((fw == 32) || (fw == 16)) && (getVectorBitWidth(a) == AVX_width)) {
-        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packuswb : Intrinsic::x86_avx2_packusdw); 
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packuswb : Intrinsic::x86_avx2_packusdw);
         Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
         auto field_count = AVX_width/64;
         SmallVector<Constant *, 4> Idxs(field_count);
@@ -202,7 +202,7 @@ Value * IDISA_AVX2_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
 
 Value * IDISA_AVX2_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
     if (((fw == 32) || (fw == 16)) && (getVectorBitWidth(a) == AVX_width)) {
-        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packsswb : Intrinsic::x86_avx2_packssdw); 
+        Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx2_packsswb : Intrinsic::x86_avx2_packssdw);
         Value * packed = fwCast(64, CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
         auto field_count = AVX_width/64;
         SmallVector<Constant *, 4> Idxs(field_count);
@@ -529,7 +529,7 @@ Value * IDISA_AVX512F_Builder::hsimd_packus(unsigned fw, Value * a, Value * b) {
         Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b), fwCast(32, allZeroes()), mask});
 #else
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packuswb_512 : Intrinsic::x86_avx512_packusdw_512);
-        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)});
 #endif
         auto field_count = AVX512_width/64;
         SmallVector<Constant *, 16> Idxs(field_count);
@@ -552,7 +552,7 @@ Value * IDISA_AVX512F_Builder::hsimd_packss(unsigned fw, Value * a, Value * b) {
         Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b), fwCast(32, allZeroes()), mask});
 #else
         Value * pack_func = Intrinsic::getDeclaration(getModule(), fw == 16 ? Intrinsic::x86_avx512_packsswb_512 : Intrinsic::x86_avx512_packssdw_512);
-        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)}));
+        Value * packed = CreateCall(pack_func, {fwCast(fw, a), fwCast(fw, b)});
 #endif
         auto field_count = AVX512_width/64;
         SmallVector<Constant *, 16> Idxs(field_count);
