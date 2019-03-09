@@ -272,6 +272,8 @@ IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * in
 /// QUARTERNARY FUNCTIONS
 
 Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name) {
+    CHECK_SAME_TYPE(a, b);
+    CHECK_SAME_TYPE(b, c);
     return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
 }
 

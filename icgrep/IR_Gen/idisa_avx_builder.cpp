@@ -934,6 +934,21 @@ Value * IDISA_AVX512F_Builder::simd_if(unsigned fw, Value * cond, Value * a, Val
 }
 
 Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value * b, Value * c) {
+    if (mask == 0) return allZeroes();
+    else if (mask == 0xFF) return allOnes();
+
+    unsigned char not_a_mask = mask & 0x0F;
+    unsigned char a_mask = (mask >> 4) & 0x0F;
+    if (a_mask == not_a_mask) return IDISA_AVX2_Builder::simd_binary(a_mask, b, c);
+
+    unsigned char b_mask = ((mask & 0xC0) >> 4) | ((mask & 0x0C) >> 2);
+    unsigned char not_b_mask = ((mask & 0x30) >> 2) | (mask & 0x03);
+    if (b_mask == not_b_mask) return IDISA_AVX2_Builder::simd_binary(b_mask, a, c);
+
+    unsigned char c_mask = ((mask & 0x80) >> 4) | ((mask & 0x20) >> 3) | ((mask & 0x08) >> 2) | ((mask & 02) >> 1);
+    unsigned char not_c_mask = ((mask & 0x40) >> 3) | ((mask & 0x10) >> 2) | ((mask & 0x04) >> 1) | (mask & 01);
+    if (c_mask == not_c_mask) return IDISA_AVX2_Builder::simd_binary(c_mask, a, b);
+
     Constant * simd_mask = ConstantInt::get(getInt32Ty(), mask);
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
     Value * ternLogicFn = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_avx512_mask_pternlog_d_512);
@@ -944,7 +959,7 @@ Value * IDISA_AVX512F_Builder::simd_ternary(unsigned char mask, Value * a, Value
     Value * args[4] = {fwCast(32, a), fwCast(32, b), fwCast(32, c), simd_mask};
 #endif
     Value * rslt = CreateCall(ternLogicFn, args);
-    return rslt;
+    return bitCast(rslt);
 }
 
 void IDISA_AVX512F_Builder::getAVX512Features() {
