@@ -68,6 +68,10 @@ bool AVX512BW_available() {
     return false;
 }
 
+bool AVX512F_available() {
+    return getHostCPUFeatures().hasAVX512F;
+}
+
 namespace IDISA {
 
 KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {

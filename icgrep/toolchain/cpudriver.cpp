@@ -1,6 +1,9 @@
 #include "cpudriver.h"
 
 #include <IR_Gen/idisa_target.h>
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
+#include <IR_Gen/ternary_peephole_pass.h>
+#endif
 #include <toolchain/toolchain.h>
 #include <llvm/Support/DynamicLibrary.h>           // for LoadLibraryPermanently
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
@@ -207,6 +210,9 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
     mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
     mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
+    if (AVX512F_available()) mPassManager->add(createTernaryPeepholePass());  // Simple peephole optimizations for AVX-512
+    #endif
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
         mPassManager->add(createDeadCodeEliminationPass());

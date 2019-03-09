@@ -14,6 +14,7 @@ namespace kernel { class KernelBuilder; }
 extern LLVM_READNONE bool BMI2_available();
 extern LLVM_READNONE bool AVX2_available();
 extern LLVM_READNONE bool AVX512BW_available();
+extern LLVM_READNONE bool AVX512F_available();
 
 namespace IDISA {
     
