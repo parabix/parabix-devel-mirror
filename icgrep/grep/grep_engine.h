@@ -24,6 +24,9 @@ class BaseDriver;
 
 
 namespace grep {
+    
+    
+extern unsigned ByteCClimit;
 
 enum class GrepRecordBreakKind {Null, LF, Unicode};
 

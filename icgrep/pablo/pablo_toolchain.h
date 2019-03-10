@@ -19,7 +19,7 @@ extern std::string ShowOptimizedPabloOption;
 extern std::string ShowPabloOption;
 
 enum PabloCompilationFlags {
-    DisableSimplification, DisableCodeMotion, EnableDistribution, EnableSchedulingPrePass, EnableProfiling
+    Flatten, DisableSimplification, DisableCodeMotion, EnableDistribution, EnableSchedulingPrePass, EnableProfiling
 };
     
 const llvm::cl::OptionCategory * pablo_toolchain_flags();

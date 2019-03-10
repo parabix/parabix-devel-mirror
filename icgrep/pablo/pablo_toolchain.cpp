@@ -44,10 +44,9 @@ static cl::opt<std::string, true> OptimizedPabloOutputOption("ShowOptimizedPablo
                                                     cl::desc("Print optimized Pablo code to stderr (by omitting =<filename>) or a file"), cl::value_desc("filename"), cl::cat(PabloOptions));
 sys::fs::OpenFlags PabloOptimizedOutputFileFlag = sys::fs::OpenFlags::F_None;
 
-static cl::opt<bool> Flatten("flatten-if", cl::init(false), cl::desc("Flatten all the Ifs in the Pablo AST"), cl::cat(PabloOptions));
-
 static cl::bits<PabloCompilationFlags> 
-    PabloOptimizationsOptions(cl::values(clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
+    PabloOptimizationsOptions(cl::values(clEnumVal(Flatten, "Flatten all the Ifs in the Pablo AST"),
+                                         clEnumVal(DisableSimplification, "Disable Pablo Simplification pass (not recommended)"),
                                          clEnumVal(DisableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
                                          clEnumVal(EnableDistribution, "Apply distribution law optimization."),                                         
                                          clEnumVal(EnableSchedulingPrePass, "Pablo Statement Scheduling Pre-Pass"),
