@@ -46,6 +46,8 @@ using PortType = Kernel::PortType;
 // TODO: create a kernel compiler class, similar to the pipeline compiler, to avoid having any state
 // associated with a cached kernel in memory?
 
+// TODO: pass item counts using thread local space?
+
 const static auto INITIALIZE_SUFFIX = "_Initialize";
 const static auto INITIALIZE_THREAD_LOCAL_SUFFIX = "_InitializeThreadLocal";
 const static auto DO_SEGMENT_SUFFIX = "_DoSegment";
@@ -152,7 +154,6 @@ inline void Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder
  * @brief callGenerateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
-    assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
     mCurrentMethod = getInitializeFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
     auto arg = mCurrentMethod->arg_begin();
@@ -258,6 +259,46 @@ inline void Kernel::callGenerateInitializeThreadLocalMethod(const std::unique_pt
     }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addBaseKernelProperties
+ *
+ * Base kernel properties are those that the pipeline requires access to and must be in a fixed memory location.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
+
+    // TODO: if a stream has an Expandable or ManagedBuffer attribute or is produced at an Unknown rate,
+    // the pipeline ought to pass the stream as a DynamicBuffer. This will require some coordination between
+    // the pipeline and kernel to ensure both have a consistent view of the buffer and that if either expands,
+    // any other kernel that is (simultaneously) reading from the buffer is unaffected.
+
+    mStreamSetInputBuffers.clear();
+    const auto numOfInputStreams = mInputStreamSets.size();
+    mStreamSetInputBuffers.reserve(numOfInputStreams);
+    for (unsigned i = 0; i < numOfInputStreams; ++i) {
+        const Binding & input = mInputStreamSets[i];
+        mStreamSetInputBuffers.emplace_back(new ExternalBuffer(b, input.getType()));
+    }
+
+    mStreamSetOutputBuffers.clear();
+    const auto numOfOutputStreams = mOutputStreamSets.size();
+    mStreamSetOutputBuffers.reserve(numOfOutputStreams);
+    for (unsigned i = 0; i < numOfOutputStreams; ++i) {
+        const Binding & output = mOutputStreamSets[i];
+        mStreamSetOutputBuffers.emplace_back(new ExternalBuffer(b, output.getType()));
+    }
+
+    // If an output is a managed buffer, store its handle.
+    for (unsigned i = 0; i < getNumOfStreamOutputs(); ++i) {
+        const Binding & output = mOutputStreamSets[i];
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            Type * const handleTy = mStreamSetOutputBuffers[i]->getHandleType(b);
+            addInternalScalar(handleTy, output.getName() + BUFFER_HANDLE_SUFFIX);
+        }
+    }
+
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -280,6 +321,9 @@ inline void Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder>
     }
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         setNextArgName("thread_local");
+    }
+    if (hasAttribute(AttrId::InternallySynchronized)) {
+        setNextArgName("externalSegNo");
     }
     setNextArgName("numOfStrides");
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
@@ -334,8 +378,11 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         fields.push_back(mThreadLocalStateType->getPointerTo());  // handle
     }
-
+    if (hasAttribute(AttrId::InternallySynchronized)) {
+        fields.push_back(sizeTy);
+    }
     fields.push_back(sizeTy); // numOfStrides
+
     for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
         Type * const bufferType = mStreamSetInputBuffers[i]->getType();
         // logical base input address
@@ -376,7 +423,6 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         // otherwise it'll hold its writable output items.
         fields.push_back(sizeTy);
     }
-
     return fields;
 }
 
@@ -387,11 +433,8 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
 
     assert (mInputStreamSets.size() == mStreamSetInputBuffers.size());
     assert (mOutputStreamSets.size() == mStreamSetOutputBuffers.size());
-    assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
 
-    const Kernel * const storedKernel = b->getKernel();
     b->setKernel(this);
-    Value * const storedHandle = getHandle();
     mCurrentMethod = getDoSegmentFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
 
@@ -435,9 +478,9 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
     }
 
     // Clean up all of the constructed buffers.
-    b->setKernel(storedKernel);
-    mSharedHandle = storedHandle;
+    mSharedHandle = nullptr;
     mThreadLocalHandle = nullptr;
+    mExternalSegNo = nullptr;
     mCurrentMethod = nullptr;
     mIsFinal = nullptr;
     mNumOfStrides = nullptr;
@@ -462,13 +505,16 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         mThreadLocalHandle = nextArg();
     }
-    initializeScalarMap(b);
-
+    mExternalSegNo = nullptr;
+    if (hasAttribute(AttrId::InternallySynchronized)) {
+        mExternalSegNo = nextArg();
+    }
     mNumOfStrides = nextArg();
     mIsFinal = b->CreateIsNull(mNumOfStrides);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle, CBuilder::Protect::WRITE);
     }
+    initializeScalarMap(b);
 
     // NOTE: the disadvantage of passing the stream pointers as a parameter is that it becomes more difficult
     // to access a stream set from a LLVM function call. We could create a stream-set aware function creation
@@ -699,6 +745,10 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         }
     }
 
+    if (hasAttribute(AttrId::InternallySynchronized)) {
+        props.push_back(mExternalSegNo);
+    }
+
     return props;
 }
 
@@ -738,7 +788,6 @@ inline void Kernel::addFinalizeThreadLocalDeclaration(const std::unique_ptr<Kern
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
     if (hasThreadLocal()) {
-        assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = getFinalizeThreadLocalFunction(b->getModule());
         b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
         auto arg = mCurrentMethod->arg_begin();
@@ -805,7 +854,6 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
     b->setKernel(this);
     mCurrentMethod = getFinalizeFunction(b->getModule());
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
-    assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
     if (LLVM_LIKELY(isStateful())) {
         auto args = mCurrentMethod->arg_begin();
         setHandle(b, &*(args++));
@@ -942,45 +990,6 @@ Function * Kernel::getFinalizeFunction(Module * const module) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addBaseKernelProperties
- *
- * Base kernel properties are those that the pipeline requires access to and must be in a fixed memory location.
- ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
-
-    // TODO: if a stream has an Expandable or ManagedBuffer attribute or is produced at an Unknown rate,
-    // the pipeline ought to pass the stream as a DynamicBuffer. This will require some coordination between
-    // the pipeline and kernel to ensure both have a consistent view of the buffer and that if either expands,
-    // any other kernel that is (simultaneously) reading from the buffer is unaffected.
-
-    mStreamSetInputBuffers.clear();
-    const auto numOfInputStreams = mInputStreamSets.size();
-    mStreamSetInputBuffers.reserve(numOfInputStreams);
-    for (unsigned i = 0; i < numOfInputStreams; ++i) {
-        const Binding & input = mInputStreamSets[i];
-        mStreamSetInputBuffers.emplace_back(new ExternalBuffer(b, input.getType()));
-    }
-
-    mStreamSetOutputBuffers.clear();
-    const auto numOfOutputStreams = mOutputStreamSets.size();
-    mStreamSetOutputBuffers.reserve(numOfOutputStreams);
-    for (unsigned i = 0; i < numOfOutputStreams; ++i) {
-        const Binding & output = mOutputStreamSets[i];
-        mStreamSetOutputBuffers.emplace_back(new ExternalBuffer(b, output.getType()));
-    }
-
-    // If an output is a managed buffer, store its handle.
-    for (unsigned i = 0; i < numOfOutputStreams; ++i) {
-        const Binding & output = mOutputStreamSets[i];
-        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
-            Type * const handleTy = mStreamSetOutputBuffers[i]->getHandleType(b);
-            addInternalScalar(handleTy, output.getName() + BUFFER_HANDLE_SUFFIX);
-        }
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
@@ -1002,7 +1011,6 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
     if (LLVM_UNLIKELY(mSharedStateType != nullptr)) {
         llvm_unreachable("Cannot call prepareCachedKernel after constructing kernel state type");
     }
-    addBaseKernelProperties(b);
     Module * const m = getModule();
     mSharedStateType = m->getTypeByName(getName() + SHARED_SUFFIX);
     mThreadLocalStateType = m->getTypeByName(getName() + THREAD_LOCAL_SUFFIX);
@@ -1150,18 +1158,21 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
 
     addKernelDeclarations(b);
 
-    unsigned internalVariables = 1;
-    if (isStateful()) {
-        ++internalVariables;
+    unsigned suppliedArgs = 1;
+    if (LLVM_LIKELY(isStateful())) {
+        ++suppliedArgs;
     }
-    if (hasThreadLocal()) {
-        ++internalVariables;
+    if (LLVM_UNLIKELY(hasThreadLocal())) {
+        ++suppliedArgs;
+    }
+    if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
+        ++suppliedArgs;
     }
 
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(m);
-    assert (doSegment->arg_size() >= internalVariables);
-    const auto numOfDoSegArgs = doSegment->arg_size() - internalVariables;
+    assert (doSegment->arg_size() >= suppliedArgs);
+    const auto numOfDoSegArgs = doSegment->arg_size() - suppliedArgs;
     Function * const terminate = getFinalizeFunction(m);
 
     // maintain consistency with the Kernel interface by passing first the stream sets
@@ -1169,10 +1180,10 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
     std::vector<Type *> params;
     params.reserve(numOfDoSegArgs + getNumOfScalarInputs());
 
-    // The first three params of doSegment are its handle, currentStrideNum and numOfStrides.
-    // The remaining are the stream set params
+    // The initial params of doSegment are its shared handle, thread-local handle and numOfStrides.
+    // (assuming the kernel has both handles). The remaining are the stream set params
     auto doSegParam = doSegment->arg_begin();
-    std::advance(doSegParam, internalVariables);
+    std::advance(doSegParam, suppliedArgs);
     const auto doSegEnd = doSegment->arg_end();
     while (doSegParam != doSegEnd) {
         params.push_back(doSegParam->getType());
@@ -1223,11 +1234,13 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
         if (hasThreadLocal()) {
             segmentArgs[index++] = threadLocalHandle;
         }
+        if (hasAttribute(AttrId::InternallySynchronized)) {
+            segmentArgs[index++] = b->getSize(0);
+        }
         segmentArgs[index++] = b->getSize(0);  // numOfStrides -> isFinal = True
         for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
-            segmentArgs[internalVariables + i] = nextArg();
+            segmentArgs[index + i] = nextArg();
         }
-
         if (isStateful()) {
             SmallVector<Value *, 16> args(numOfInitArgs + 1);
             args[0] = sharedHandle;
@@ -1245,6 +1258,7 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
             initArgs.push_back(threadLocalHandle);
             initializeThreadLocalInstance(b, initArgs);
         }
+
         b->CreateCall(doSegment, segmentArgs);
         if (hasThreadLocal()) {
             SmallVector<Value *, 2> args;
@@ -1668,23 +1682,12 @@ Kernel::Kernel(const std::unique_ptr<KernelBuilder> & b,
                Bindings &&scalar_inputs,
                Bindings &&scalar_outputs,
                InternalScalars && internal_scalars)
-: mIsGenerated(false)
-, mSharedHandle(nullptr)
-, mThreadLocalHandle(nullptr)
-, mModule(nullptr)
-, mSharedStateType(nullptr)
-, mThreadLocalStateType(nullptr)
-, mInputStreamSets(std::move(stream_inputs))
+: mInputStreamSets(std::move(stream_inputs))
 , mOutputStreamSets(std::move(stream_outputs))
 , mInputScalars(std::move(scalar_inputs))
 , mOutputScalars(std::move(scalar_outputs))
 , mInternalScalars( std::move(internal_scalars))
-, mCurrentMethod(nullptr)
 , mStride(b->getBitBlockWidth())
-, mTerminationSignalPtr(nullptr)
-, mIsFinal(nullptr)
-, mNumOfStrides(nullptr)
-, mThreadLocalPtr(nullptr)
 , mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName)))
 , mTypeId(typeId) {
 

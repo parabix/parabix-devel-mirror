@@ -42,7 +42,7 @@ static cl::OptionCategory x8u16Options("x8u16 Options", "Transcoding control opt
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(x8u16Options));
 static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>"), cl::cat(x8u16Options));
 
-  
+
 /*  transcoderClasses(sourceCharSet) determines character classes for bitwise
     transformation of streams in a source character set to Unicode equivalents.
     Given that the source character set is encoded in K bits and the maximum
@@ -52,7 +52,7 @@ static cl::opt<std::string> outputFile(cl::Positional, cl::desc("<output file>")
          representing the source characters such that bit i of the Unicode
          representation differs from bit i of the source code representation,
     (b)  for each bit i of the bits from K to M of the Unicode representation,
-         the class of source characters which have that bit set in the Unicode 
+         the class of source characters which have that bit set in the Unicode
          representation.
 */
 
@@ -115,9 +115,9 @@ namespace iso_8859_5 {
         0x0448, 0x0449, 0x044a, 0x044b, 0x044c, 0x044d, 0x044e, 0x044f,
         0x2116, 0x0451, 0x0452, 0x0453, 0x0454, 0x0455, 0x0456, 0x0457,
         0x0458, 0x0459, 0x045a, 0x045b, 0x045c, 0x00a7, 0x045e, 0x045f};
-    
+
     cc::UnicodeMappableAlphabet alphabet("iso-8859-5", 128, codepoints);
-    
+
 }
 
 
@@ -178,13 +178,13 @@ x8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
 
     StreamSet * u16bits = P->CreateStreamSet(16);
-    
+
     P->CreateKernelCall<TranscoderKernelBuilder>(iso_8859_5::alphabet, BasisBits, u16bits);
-    
+
     StreamSet * UTF16_out = P->CreateStreamSet(1, 16);
-    
+
     P->CreateKernelCall<P2S16Kernel>(u16bits, UTF16_out);
-    
+
     Scalar * outputFileName = P->getInputScalar("outputFileName");
     P->CreateKernelCall<FileSink>(outputFileName, UTF16_out);
 

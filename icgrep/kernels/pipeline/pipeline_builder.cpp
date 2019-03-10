@@ -53,11 +53,11 @@ using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, VertexType, unsign
 using Vertex = Graph::vertex_descriptor;
 using Map = flat_map<const Relationship *, Vertex>;
 
-inline const Relationship * getRelationship(not_null<const Relationship *> r) {
+inline Relationship * getRelationship(not_null<Relationship *> r) {
     return r.get();
 }
 
-inline const Relationship * getRelationship(const Binding & b) {
+inline Relationship * getRelationship(const Binding & b) {
     return getRelationship(b.getRelationship());
 }
 
@@ -70,7 +70,7 @@ inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename gra
 void enumerateProducerBindings(const VertexType type, const Vertex producerVertex, const Bindings & bindings, Graph & G, Map & M, const Kernels & K) {
     const auto n = bindings.size();
     for (unsigned i = 0; i < n; ++i) {
-        const Relationship * const rel = getRelationship(bindings[i]);
+        Relationship * const rel = getRelationship(bindings[i]);
         if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
         const auto f = M.find(rel);
         if (LLVM_UNLIKELY(f != M.end())) {
@@ -92,7 +92,7 @@ template <typename Array>
 void enumerateConsumerBindings(const VertexType type, const Vertex consumerVertex, const Array & array, Graph & G, Map & M, const Kernels & K) {
     const auto n = array.size();
     for (unsigned i = 0; i < n; ++i) {
-        const Relationship * const rel = getRelationship(array[i]);
+        Relationship * const rel = getRelationship(array[i]);
         if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
         const auto f = M.find(rel);
         if (LLVM_UNLIKELY(f == M.end())) {
@@ -364,10 +364,10 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
 
     out << "OB:";
     if (LLVM_LIKELY(isa<StreamSet>(mCondition))) {
-        const StreamSet * const streamSet = cast<StreamSet>(mCondition);
+        StreamSet * const streamSet = cast<StreamSet>(mCondition);
         out << streamSet->getFieldWidth() << "x" << streamSet->getNumElements();
     } else {
-        const Scalar * const scalar = cast<Scalar>(mCondition);
+        Scalar * const scalar = cast<Scalar>(mCondition);
         out << scalar->getFieldWidth();
     }
     out << ";Z=\"";
@@ -398,46 +398,48 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     return br;
 }
 
-Scalar * PipelineBuilder::getInputScalar(const std::string & name) {
+Scalar * PipelineBuilder::getInputScalar(const StringRef name) {
     for (Binding & input : mInputScalars) {
-        if (input.getName() == name) {
+        if (name.equals(input.getName())) {
             if (input.getRelationship() == nullptr) {
                 input.setRelationship(mDriver.CreateScalar(input.getType()));
             }
             return cast<Scalar>(input.getRelationship());
         }
     }
-    return nullptr;
+    report_fatal_error("no scalar named " + name);
 }
 
-void PipelineBuilder::setInputScalar(const std::string & name, Scalar * value) {
+void PipelineBuilder::setInputScalar(const StringRef name, Scalar * value) {
     for (Binding & input : mInputScalars) {
-        if (input.getName() == name) {
+        if (name.equals(input.getName())) {
             input.setRelationship(value);
-            break;
+            return;
         }
     }
+    report_fatal_error("no scalar named " + name);
 }
 
-Scalar * PipelineBuilder::getOutputScalar(const std::string & name) {
+Scalar * PipelineBuilder::getOutputScalar(const StringRef name) {
     for (Binding & output : mOutputScalars) {
-        if (output.getName() == name) {
+        if (name.equals(output.getName())) {
             if (output.getRelationship() == nullptr) {
                 output.setRelationship(mDriver.CreateScalar(output.getType()));
             }
             return cast<Scalar>(output.getRelationship());
         }
     }
-    return nullptr;
+    report_fatal_error("no scalar named " + name);
 }
 
-void PipelineBuilder::setOutputScalar(const std::string & name, Scalar * value) {
+void PipelineBuilder::setOutputScalar(const StringRef name, Scalar * value) {
     for (Binding & output : mOutputScalars) {
-        if (output.getName() == name) {
+        if (name.equals(output.getName())) {
             output.setRelationship(value);
-            break;
+            return;
         }
     }
+    report_fatal_error("no scalar named " + name);
 }
 
 

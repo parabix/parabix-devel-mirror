@@ -41,22 +41,38 @@ namespace { // start of anonymous namespace
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Relationship * getRelationship(not_null<const Relationship *> r) {
+inline Relationship * getRelationship(not_null<Relationship *> r) {
     return r.get();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Relationship * getRelationship(const Binding & b) {
+inline Relationship * getRelationship(const Binding & b) {
     return getRelationship(b.getRelationship());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getProcessingRate
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename T>
+inline ProcessingRate getProcessingRate(const T &) {
+    return FixedRate();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getProcessingRate
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <>
+inline ProcessingRate getProcessingRate<Binding>(const Binding & b) {
+    return b.getRate();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOrFindRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Graph, typename Map>
-inline unsigned addOrFindRelationship(const Relationship * const value, Graph & G, Map & M) {
+inline unsigned addOrFindRelationship(Relationship * const value, Graph & G, Map & M) {
     const auto f = M.find(value);
     if (LLVM_LIKELY(f == M.end())) {
         const auto v = add_vertex(G);
@@ -76,7 +92,9 @@ void addProducerRelationships(const PortType portType, const unsigned producer, 
     const auto n = array.size();
     for (unsigned i = 0; i < n; ++i) {
         const auto relationship = addOrFindRelationship(getRelationship(array[i]), G, M);
-        add_edge(producer, relationship, {portType, i}, G);
+        add_edge(producer, relationship, RelationshipType{StreamPort{portType, i},
+                                                          ReasonType::Explicit,
+                                                          getProcessingRate(array[i])}, G);
     }
 }
 
@@ -84,7 +102,7 @@ void addProducerRelationships(const PortType portType, const unsigned producer, 
  * @brief addIfConstantOrFindRelationship
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Graph, typename Map>
-inline unsigned addIfConstantOrFindRelationship(const Relationship * const value, Graph & G, Map & M) {
+inline unsigned addIfConstantOrFindRelationship(Relationship * const value, Graph & G, Map & M) {
     const auto f = M.find(value);
     if (LLVM_LIKELY(f != M.end())) {
         return f->second;
@@ -102,21 +120,24 @@ void addConsumerRelationships(const PortType portType, const unsigned consumer, 
     const auto n = array.size();
     for (unsigned i = 0; i < n; ++i) {
         const auto relationship = addIfConstantOrFindRelationship(getRelationship(array[i]), G, M);
-        add_edge(relationship, consumer, {portType, i}, G);
+        add_edge(relationship, consumer, RelationshipType{StreamPort{portType, i},
+                                                          ReasonType::Explicit,
+                                                          getProcessingRate(array[i])}, G);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addImplicitConsumerRelationship
+ * @brief addImplicitConsumerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Graph, typename Map>
-void addImplicitConsumerRelationship(const ReasonType reason, const unsigned consumer, const ImplicitRelationships & R, Graph & G, Map & M) {
+void addImplicitConsumerRelationships(const unsigned consumer, const Relationships & R, Graph & G, Map & M) {
     const Kernel * const kernel = G[consumer].Kernel; assert (kernel);
     const auto f = R.find(kernel);
     if (LLVM_UNLIKELY(f != R.end())) {
-        const auto relationship = addIfConstantOrFindRelationship(getRelationship(f->second), G, M);
-        const unsigned portNum = in_degree(consumer, G);
-        add_edge(relationship, consumer, {PortType::Input, portNum, reason}, G);
+        for (const auto & e : make_iterator_range(out_edges(f->second, R))) {
+            const auto relationship = addIfConstantOrFindRelationship(getRelationship(R[target(e, R)].Relationship), G, M);
+            add_edge(relationship, consumer, R[e], G);
+        }
     }
 }
 
@@ -136,8 +157,9 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     // copy the list of internal kernels and add in any implicit kernels
     Kernels kernels(pipelineKernel->getKernels());
 
-    ImplicitRelationships regionSelectors;
-    addRegionSelectorKernels(b, kernels, regionSelectors);
+    Relationships implicitRelationships;
+    addRegionSelectorKernels(b, kernels, implicitRelationships);
+    addPopCountKernels(b, kernels, implicitRelationships);
 
     const auto pipelineInput = 0U;
     const auto firstKernel = 1U;
@@ -166,13 +188,13 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     addProducerRelationships(PortType::Input, pipelineInput, pipelineKernel->getInputScalarBindings(), G, M);
     G[pipelineInput].Kernel = pipelineKernel;
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
-        const Kernel * kernel = kernels[i - firstKernel];
+        Kernel * kernel = kernels[i - firstKernel];
         G[i].Kernel = kernel;
         addProducerRelationships(PortType::Output, i, kernel->getOutputScalarBindings(), G, M);
     }
     G[pipelineOutput].Kernel = pipelineKernel;
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
-        const Kernel * kernel = kernels[i - firstKernel];
+        Kernel * kernel = kernels[i - firstKernel];
         addConsumerRelationships(PortType::Input, i, kernel->getInputScalarBindings(), G, M);
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
@@ -186,13 +208,13 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     // Now enumerate all streamsets
     addProducerRelationships(PortType::Input, pipelineInput, pipelineKernel->getInputStreamSetBindings(), G, M);
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
-        const Kernel * kernel = kernels[i - firstKernel];
+        Kernel * kernel = kernels[i - firstKernel];
         addProducerRelationships(PortType::Output, i, kernel->getOutputStreamSetBindings(), G, M);
     }
     for (unsigned i = firstKernel; i <= lastKernel; ++i) {
-        const Kernel * kernel = kernels[i - firstKernel];
+        Kernel * kernel = kernels[i - firstKernel];
         addConsumerRelationships(PortType::Input, i, kernel->getInputStreamSetBindings(), G, M);
-        addImplicitConsumerRelationship(ReasonType::ImplicitRegionSelector, i, regionSelectors, G, M);
+        addImplicitConsumerRelationships(i, implicitRelationships, G, M);
     }
     addConsumerRelationships(PortType::Output, pipelineOutput, pipelineKernel->getOutputStreamSetBindings(), G, M);
     lastRelationship[STREAM] = num_vertices(G) - 1;
@@ -283,7 +305,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addRegionSelectorKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions) {
+void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & regions) {
 
     enum : unsigned {
         REGION_START = 0
@@ -386,15 +408,166 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
                 driver.addKernel(selector);
                 kernels.push_back(selector);
                 // Mark the region selectors for this kernel
-                regions.emplace(kernel, regionSpans);
                 alreadyCreated.emplace(cond, regionSpans);
             } else { // we've already created the correct region span
                 regionSpans = f->second; assert (regionSpans);
             }
-            regions.emplace(kernel, regionSpans);
+            // insert the implicit relationships
+            const auto K = regions.addOrFind(kernel);
+            const auto R = regions.addOrFind(regionSpans);
+            add_edge(K, R, RelationshipType{PortType::Input, -1U, ReasonType::ImplicitRegionSelector}, regions);
         }
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addPopCountKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & implicit) {
+
+
+
+    struct Edge {
+        CountingType Type;
+        StreamPort   Port;
+        Edge() : Type(Unknown), Port() { }
+        Edge(const CountingType type, const StreamPort port) : Type(type), Port(port) { }
+    };
+
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS, Relationship *, Edge>;
+    using Vertex = Graph::vertex_descriptor;
+    using Map = flat_map<Relationship *, Vertex>;
+
+
+
+    const auto numOfKernels = kernels.size();
+
+    Graph G(numOfKernels);
+    Map M;
+
+    for (unsigned i = 0; i < numOfKernels; ++i) {
+
+        const Kernel * const kernel = kernels[i];
+        const auto numOfInputs = kernel->getNumOfStreamInputs();
+        const auto numOfOutputs = kernel->getNumOfStreamOutputs();
+
+        auto addPopCountDependency = [&](
+            const StreamPort port,
+            const Binding & binding) {
+            const ProcessingRate & rate = binding.getRate();
+            if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
+                // determine which port this I/O port refers to
+                const StreamPort refPort = kernel->getStreamPort(rate.getReference());
+                // verify the reference stream is an input port
+                if (LLVM_UNLIKELY(refPort.Type != PortType::Input)) {
+                    std::string tmp;
+                    raw_string_ostream msg(tmp);
+                    msg << kernel->getName();
+                    msg << ": pop count rate for ";
+                    msg << binding.getName();
+                    msg << " cannot refer to an output stream";
+                    report_fatal_error(msg.str());
+                }
+                const Binding & refBinding = kernel->getInputStreamSetBinding(refPort.Number);
+                Relationship * const refStream = refBinding.getRelationship();
+                const auto f = M.find(refStream);
+                Vertex refVertex = 0;
+                if (LLVM_UNLIKELY(f != M.end())) {
+                    refVertex = f->second;
+                } else {
+                    if (LLVM_UNLIKELY(refBinding.isDeferred() || !refBinding.getRate().isFixed())) {
+                        std::string tmp;
+                        raw_string_ostream msg(tmp);
+                        msg << kernel->getName();
+                        msg << ": pop count reference ";
+                        msg << refBinding.getName();
+                        msg << " must be a non-deferred Fixed rate stream";
+                        report_fatal_error(msg.str());
+                    }
+                    refVertex = add_vertex(refStream, G);
+                }
+
+                // NOTE: self-references will be detected later. Ignore the possibility for now.
+
+                const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
+
+                add_edge(i, refVertex, Edge{type, port}, G);
+            }
+        };
+
+        for (unsigned j = 0; j < numOfInputs; ++j) {
+            const auto & input = kernel->getInputStreamSetBinding(j);
+            addPopCountDependency(StreamPort{PortType::Input, j}, input);
+        }
+        for (unsigned j = 0; j < numOfOutputs; ++j) {
+            const auto & output = kernel->getOutputStreamSetBinding(j);
+            addPopCountDependency(StreamPort{PortType::Output, j}, output);
+        }
+    }
+
+    const auto n = num_vertices(G);
+    if (LLVM_LIKELY(n == numOfKernels)) {
+        return;
+    }
+
+    BaseDriver & driver = b->getDriver();
+
+    IntegerType * sizeTy = b->getSizeTy();
+
+    for (auto i = numOfKernels + 1; i < n; ++i) {
+
+        CountingType type = CountingType::Unknown;
+        for (const auto & e : make_iterator_range(in_edges(i, G))) {
+            const Edge & ed = G[e];
+            type |= ed.Type;
+        }
+        assert (type != CountingType::Unknown);
+
+        StreamSet * const input = cast<StreamSet>(G[i]); assert (input);
+
+        Vertex p = 0;
+        StreamSet * positive = nullptr;
+        if (type & CountingType::Positive) {
+            positive = driver.CreateStreamSet(1, sizeTy->getBitWidth());
+            p = implicit.addOrFind(positive);
+        }
+
+        Vertex n = 0;
+        StreamSet * negative = nullptr;
+        if (type & CountingType::Negative) {
+            negative = driver.CreateStreamSet(1, sizeTy->getBitWidth());
+            n = implicit.addOrFind(positive);
+        }
+
+        PopCountKernel * popCount = nullptr;
+        switch (type) {
+            case CountingType::Positive:
+                popCount = new PopCountKernel(b, PopCountKernel::POSITIVE, input, positive);
+                break;
+            case CountingType::Negative:
+                popCount = new PopCountKernel(b, PopCountKernel::NEGATIVE, input, negative);
+                break;
+            case CountingType::Both:
+                popCount = new PopCountKernel(b, PopCountKernel::BOTH, input, positive, negative);
+                break;
+            default: llvm_unreachable("unknown counting type?");
+        }
+        // Add the kernel to the pipeline
+        driver.addKernel(popCount);
+        kernels.push_back(popCount);
+
+        // insert the implicit relationships
+        for (const auto & e : make_iterator_range(in_edges(i, G))) {
+            const Edge & ed = G[e];
+            const auto consumer = implicit.addOrFind(kernels[source(e, G)]);
+            assert (ed.Type == CountingType::Positive || ed.Type == CountingType::Negative);
+            const auto popCount = ed.Type == CountingType::Positive ? p : n;
+            add_edge(consumer, popCount, RelationshipType{ed.Port, ReasonType::ImplicitPopCount}, implicit);
+        }
+    }
+
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief combineDuplicateKernels
@@ -492,14 +665,14 @@ void PipelineCompiler::combineDuplicateKernels(RelationshipGraph & G, const Kern
                     for (const auto & e : make_iterator_range(out_edges(i, G))) {
                         const StreamPort & port = G[e];
                         const auto original = target(e, G);
-                        const Relationship * const a = G[original].Relationship;
+                        Relationship * const a = G[original].Relationship;
                         unsigned replacement = 0;
                         if (isa<StreamSet>(a)) {
                             replacement = streams[port.Number];
                         } else {
                             replacement = scalars[port.Number];
                         }
-                        const Relationship * const b = G[replacement].Relationship;
+                        Relationship * const b = G[replacement].Relationship;
                         if (LLVM_UNLIKELY(a->getType() != b->getType())) {
                             error = true;
                             break;
@@ -789,5 +962,34 @@ PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
     return G;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isPipelineInput
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::isPipelineInput(const unsigned inputPort) const {
+    if (LLVM_LIKELY(in_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
+        return false;
+    }
+    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mPipelineIOGraph))) {
+        if (LLVM_LIKELY(mPipelineIOGraph[e] == inputPort)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isPipelineOutput
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::isPipelineOutput(const unsigned outputPort) const {
+    if (LLVM_LIKELY(out_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
+        return false;
+    }
+    for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mPipelineIOGraph))) {
+        if (LLVM_LIKELY(mPipelineIOGraph[e] == outputPort)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 } // end of namespace

@@ -70,14 +70,7 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     #endif
     mAccessibleInputItems[inputPort] = accessible;
 
-    Value * halting = mHalted;
-    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mPipelineIOGraph))) {
-        if (LLVM_LIKELY(mPipelineIOGraph[e] == inputPort)) {
-            halting = b->getTrue();
-            break;
-        }
-    }
-
+    Value * const halting = isPipelineInput(inputPort) ? b->getTrue() : mHalted;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelLoopCall);
     branchToTargetOrLoopExit(b, sufficientInput, target, halting);
 
@@ -161,13 +154,7 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
     if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer))) {
         expandOutputBuffer(b, outputPort, hasEnough, target);
     } else {
-        Value * halting = mHalted;
-        for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mPipelineIOGraph))) {
-            if (LLVM_LIKELY(mPipelineIOGraph[e] == outputPort)) {
-                halting = b->getTrue();
-                break;
-            }
-        }
+        Value * const halting = isPipelineOutput(outputPort) ? b->getTrue() : mHalted;
         branchToTargetOrLoopExit(b, hasEnough, target, halting);
     }
 
@@ -177,6 +164,8 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
  * @brief branchToTargetOrLoopExit
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target, Value * const halting) {
+
+    #warning make sure the exit releases the item count incase there wasn't enough data for any strides?
 
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
@@ -234,6 +223,10 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
 inline void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     mNumOfLinearStrides = nullptr;
+    if (isKernelDataParallel(mKernelIndex)) {
+        mLastPartialSegment = b->getFalse();
+    }
+    mLastPartialSegment = nullptr;
     for (const auto i : mPortEvaluationOrder) {
         Value * strides = nullptr;
         if (i < numOfInputs) {
@@ -267,6 +260,24 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
     if (mIsInputZeroExtended[inputPort]) {
         numOfStrides = b->CreateSelect(mIsInputZeroExtended[inputPort], mNumOfLinearStrides, numOfStrides);
     }
+    // If this kernel is data parallel, we must determine up front whether this is the
+    // last partial segment.
+
+    // TODO: for popcount rates to work correctly, it may be easier to use a popcount kernel
+    // since I have to compute everything for the entire stream to ensure that I'm not dealing
+    // with a partial stride.
+
+
+
+
+
+//    if (isKernelDataParallel(mKernelIndex)) {
+//        Value * const available = getLocallyAvailableItemCount(b, inputPort);
+
+
+
+//    }
+
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("> " + prefix + "_numOfStrides", numOfStrides);
     #endif
@@ -536,7 +547,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     b->setKernel(mPipelineKernel);
 
-    Vec<Value *, 64> args;
+    ArgVec args;
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
     if (LLVM_LIKELY(mKernel->isStateful())) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
@@ -544,37 +555,68 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
         args.push_back(b->getScalarFieldPtr(makeKernelName(mKernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX));
     }
+
+
+
+
+
+    // If a kernel is internally synchronized, pass the iteration
+    // count. Note: this is not the same as the pipeline's logical
+    // segment number since unless we can prove that a kernel,
+    // regardless of buffer state, will be called only once per
+    // segment, we can only state the iteration count is >= the
+    // segment number.
+
+    // We may hit the same kernel with both threads simultaneously
+    // before the first has finished updating?
+
+    // Can we pass in the outer pipeline's synch num for this kernel
+    // and increment it early? We'd need to pass in a temp one until
+    // we know this is the last iteration of the segment.
+
+    // That requires being able to know apriori what our resulting
+    // state will be after completion for the input positions. We
+    // can rely on the kernel itself to handle output synchronization.
+
+    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
+        Value * const iterationPtr = b->getScalarFieldPtr(makeKernelName(mKernelIndex) + ITERATION_COUNT_SUFFIX);
+        Value * const iterationCount = b->CreateAtomicFetchAndAdd(b->getSize(1), iterationPtr);
+        args.push_back(iterationCount);
+    }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
     for (unsigned i = 0; i < numOfInputs; ++i) {
+        if (isInputExplicit(i)) {
 
-        // calculate the deferred processed item count
-        PHINode * processed = nullptr;
-        bool deferred = false;
+            // calculate the deferred processed item count
+            PHINode * processed = nullptr;
+            bool deferred = false;
 
-        const Binding & input = getInputBinding(i);
-        if (mAlreadyProcessedDeferredPhi[i]) {
-            processed = mAlreadyProcessedDeferredPhi[i];
-            deferred = true;
-        } else {
-            processed = mAlreadyProcessedPhi[i];
-        }
+            const Binding & input = getInputBinding(i);
+            if (mAlreadyProcessedDeferredPhi[i]) {
+                processed = mAlreadyProcessedDeferredPhi[i];
+                deferred = true;
+            } else {
+                processed = mAlreadyProcessedPhi[i];
+            }
 
-        // calculate how many linear items are from the *deferred* position
-        Value * inputItems = mLinearInputItemsPhi[i];
-        if (deferred) {
-            Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
-            inputItems = b->CreateAdd(inputItems, diff);
-        }
-        args.push_back(epoch(b, input, getInputBuffer(i), processed, mIsInputZeroExtended[i]));
-        mReturnedProcessedItemCountPtr[i] =
-            addItemCountArg(b, input, deferred, processed, args);
-        args.push_back(inputItems); assert (inputItems);
+            // calculate how many linear items are from the *deferred* position
+            Value * inputItems = mLinearInputItemsPhi[i];
+            if (deferred) {
+                Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
+                inputItems = b->CreateAdd(inputItems, diff);
+            }
+            args.push_back(epoch(b, input, getInputBuffer(i), processed, mIsInputZeroExtended[i]));
+            mReturnedProcessedItemCountPtr[i] =
+                addItemCountArg(b, input, deferred, processed, args);
+            args.push_back(inputItems); assert (inputItems);
 
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            args.push_back(getPositivePopCountArray(b, i));
-        }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            args.push_back(getNegativePopCountArray(b, i));
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+                args.push_back(getPositivePopCountArray(b, i));
+            }
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+                args.push_back(getNegativePopCountArray(b, i));
+            }
+
         }
     }
 
@@ -654,14 +696,25 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addInternallySynchronizedArg
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::addInternallySynchronizedArg(BuilderRef b, ArgVec & args) {
+    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
+        Value * const iterationPtr = b->getScalarFieldPtr(makeKernelName(mKernelIndex) + ITERATION_COUNT_SUFFIX);
+        Value * const iterationCount = b->CreateAtomicFetchAndAdd(b->getSize(1), iterationPtr);
+        args.push_back(iterationCount);
+    }
+
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addKernelCallArgument
+ * @brief addItemCountArg
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
                                           const bool addressable,
                                           PHINode * const itemCount,
-                                          Vec<Value *, 64> & args) {
+                                          ArgVec & args) {
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
@@ -745,7 +798,8 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
                 maximumLookahead = std::max(maximumLookahead, input.getLookahead());
             }
         }
-        const auto numOfBlocks = ceiling(strideLength) >> log2BlockWidth;
+
+        const auto numOfBlocks = ceiling((strideLength * itemWidth) + (blockWidth - 1)) >> log2BlockWidth;
         const auto numOfLookaheadBlocks = ((maximumLookahead * itemWidth) + (blockWidth - 1)) >> log2BlockWidth;
         const auto blocksToZero = numOfBlocks + numOfLookaheadBlocks;
 
@@ -753,13 +807,9 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Value * const produced = mFinalProducedPhi[i];
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
-        Value * packIndex = nullptr;
-        Value * maskOffset = b->CreateAnd(produced, BLOCK_MASK);
-        if (itemWidth > 1) {
-            Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
-            packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
-            maskOffset = b->CreateAnd(position, BLOCK_MASK);
-        }
+        Value * const position = b->CreateMul(produced, ITEM_WIDTH);
+        Value * const packIndex = b->CreateURem(b->CreateLShr(position, LOG_2_BLOCK_WIDTH), ITEM_WIDTH);
+        Value * const maskOffset = b->CreateAnd(position, BLOCK_MASK);
 
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
         BasicBlock * const entry = b->GetInsertBlock();
@@ -781,10 +831,10 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Value * const value = b->CreateBlockAlignedLoad(ptr);
         Value * const maskedValue = b->CreateAnd(value, mask);
         b->CreateBlockAlignedStore(maskedValue, ptr);
-        if (itemWidth > 1) {
+        if (numOfBlocks > 1) {
             // Since packs are laid out sequentially in memory, it will hopefully be cheaper to zero them out here
             // because they may be within the same cache line.
-            Constant * const MAX_PACK_INDEX = b->getSize(itemWidth - 1);
+            Constant * const MAX_PACK_INDEX = b->getSize(numOfBlocks - 1);
             Value * const remainingPackBytes = b->CreateShl(b->CreateSub(MAX_PACK_INDEX, packIndex), LOG_2_BLOCK_WIDTH);
             #ifdef PRINT_DEBUG_MESSAGES
             b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);

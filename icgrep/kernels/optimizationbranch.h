@@ -31,7 +31,7 @@ public:
         return mNonZeroKernel;
     }
 
-    const Relationship * getCondition() const {
+    Relationship * getCondition() const {
         return mCondition;
     }
 

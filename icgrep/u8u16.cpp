@@ -56,7 +56,7 @@ public:
     void generatePabloMethod() override;
 };
 
-U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * u8bits, StreamSet * selectors)
+U8U16Kernel::U8U16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *BasisBits, StreamSet *u8bits, StreamSet *selectors)
 : PabloKernel(b, "u8u16",
 // input
 {Binding{"u8bit", BasisBits}},

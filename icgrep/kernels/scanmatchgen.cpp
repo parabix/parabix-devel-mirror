@@ -40,7 +40,6 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Constant * const BITBLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     Value * const initialPos = b->getProcessedItemCount("matchResult");
     Value * accumulator = b->getScalarField("accumulator_address");
-
     b->CreateBr(scanMatchStride);
 
     b->SetInsertPoint(scanMatchStride);

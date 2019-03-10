@@ -50,7 +50,6 @@ inline RateValue getOutputOverflowSize(const Kernel * kernel, const Binding & bi
  ** ------------------------------------------------------------------------------------------------------------- */
 BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
-
     const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = PipelineOutput + (LastStreamSet - FirstStreamSet + 1);
     BufferGraph G(lastBuffer + 1);
@@ -58,8 +57,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     // construct the base buffer graph with edges sorted by port number
     assert (PipelineOutput < FirstScalar);
     assert (LastScalar < FirstStreamSet);
-
-
 
     SmallVector<std::pair<RelationshipType, unsigned>, 16> ports;
     for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
@@ -76,40 +73,43 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 return true;
             };
 
+        auto addBinding = [&](const std::string & name, Relationship * relationship, ProcessingRate rate) -> const Binding & {
+            assert (relationship);
+            Binding * const binding = new Binding(name, relationship, rate);
+            mImplicitBindings.emplace_back(binding);
+            return *binding;
+        };
+
         // note: explicit lambda return type required for refs
-        auto getBinding = [&](const RelationshipType port) -> const Binding & {
-            if (port.Type == PortType::Input) {
-                return kernel->getInputStreamSetBinding(port.Number);
-            } else if (port.Type == PortType::Output) {
-                return kernel->getOutputStreamSetBinding(port.Number);
+        auto getBinding = [&](const RelationshipType port, Relationship * relationship) -> const Binding & {
+            assert (relationship);
+            if (port.Reason == ReasonType::Explicit) {
+                if (port.Type == PortType::Input) {
+                    return kernel->getInputStreamSetBinding(port.Number);
+                } else if (port.Type == PortType::Output) {
+                    return kernel->getOutputStreamSetBinding(port.Number);
+                }
+            } else if (port.Reason == ReasonType::ImplicitPopCount) {
+                return addBinding("#popcount", relationship, FixedRate({1, b->getBitBlockWidth()}));
+            } else if (port.Reason == ReasonType::ImplicitRegionSelector) {
+                return addBinding("#regionselector", relationship, FixedRate());
             }
             llvm_unreachable("unknown port binding type!");
         };
 
-        auto getBindingOrAddImplicit = [&](const RelationshipType port) -> const Binding & {
-            if (port.Reason == ReasonType::Explicit) {
-                return getBinding(port);
-            } else if (port.Reason == ReasonType::ImplicitRegionSelector) {
-                ImplicitBindings.emplace_back("!region_selector", nullptr);
-                return ImplicitBindings.back();
-            }
-            llvm_unreachable("unknown implicit port type?");
-        };
-
-        auto computeBufferRateBounds = [&](const RelationshipType port, const Binding & binding) {
+        auto computeBufferRateBounds = [&](const RelationshipType port, Relationship * relationship) {
             unsigned strideLength = kernel->getStride();
             if (i == PipelineInput || i == PipelineOutput) {
                 const unsigned pageSize = boost::interprocess::mapped_region::get_page_size();
                 strideLength = boost::lcm(pageSize, strideLength);
             }
-
+            const Binding & binding = getBinding(port, relationship);
             const RateValue ub = kernel->getUpperBound(binding) * strideLength;
             RateValue lb{ub};
             if (dataIsConsumedAtVariableRate(binding)) {
                 lb = kernel->getLowerBound(binding) * strideLength;
             }
-
-            return BufferRateData{port, binding, lb, ub};
+            return BufferRateData{port, binding, lb, ub, port.Reason};
         };
 
         // add in any inputs
@@ -119,7 +119,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             if (k < FirstStreamSet) continue;
             const auto buffer = firstBuffer + k - FirstStreamSet;
             assert (firstBuffer <= buffer && buffer <= lastBuffer);
-            const auto portNum = mPipelineGraph[e];
+            const RelationshipType & portNum = mPipelineGraph[e];
             ports.emplace_back(portNum, buffer);
         }
         std::sort(ports.begin(), ports.end());
@@ -127,7 +127,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RelationshipType port;
             unsigned buffer;
             std::tie(port, buffer) = e;
-            add_edge(buffer, i, computeBufferRateBounds(port, getBinding(port)), G);
+            const auto k = FirstStreamSet + buffer - firstBuffer;
+            const RelationshipNode & rn = mPipelineGraph[k];
+            add_edge(buffer, i, computeBufferRateBounds(port, rn.Relationship), G);
         }
         ports.clear();
 
@@ -147,7 +149,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RelationshipType port;
             unsigned buffer;
             std::tie(port, buffer) = e;
-            add_edge(i, buffer, computeBufferRateBounds(port, getBindingOrAddImplicit(port)), G);
+            const auto k = FirstStreamSet + buffer - firstBuffer;
+            const RelationshipNode & rn = mPipelineGraph[k];
+            add_edge(i, buffer, computeBufferRateBounds(port, rn.Relationship), G);
         }
         ports.clear();
     }
@@ -296,7 +300,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     return G;
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -368,7 +371,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
  * @brief addHandlesToPipelineKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index) {
-    for (const auto e : make_iterator_range(out_edges(index, mBufferGraph))) {
+    for (const auto & e : make_iterator_range(out_edges(index, mBufferGraph))) {
         const auto bufferVertex = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[bufferVertex];
         if (LLVM_LIKELY(bn.Type != BufferType::Managed)) {
@@ -739,12 +742,19 @@ inline const Binding & PipelineCompiler::getInputBinding(const unsigned inputPor
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isInputExplicit
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline bool PipelineCompiler::isInputExplicit(const unsigned inputPort) const {
+    return mBufferGraph[getInput(mKernelIndex, inputPort)].Reason == ReasonType::Explicit;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const unsigned kernelVertex, const unsigned inputPort) const {
     assert (inputPort < in_degree(kernelVertex, mBufferGraph));
     const auto e = *(in_edges(kernelVertex, mBufferGraph).first + inputPort);
-    assert (mBufferGraph[e].inputPort() == inputPort);
+    // assert (mBufferGraph[e].inputPort() == inputPort);
     return e;
 }
 
@@ -789,7 +799,7 @@ inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const unsigned output
 inline const BufferGraph::edge_descriptor PipelineCompiler::getOutput(const unsigned kernelVertex, const unsigned outputPort) const {
     assert (outputPort < out_degree(kernelVertex, mBufferGraph));
     const auto e = *(out_edges(kernelVertex, mBufferGraph).first + outputPort);
-    assert (mBufferGraph[e].outputPort() == outputPort);
+    // assert (mBufferGraph[e].outputPort() == outputPort);
     return e;
 }
 

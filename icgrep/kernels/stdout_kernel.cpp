@@ -29,11 +29,7 @@ void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> 
     b->CreateWriteCall(stdOutFd, codeUnitBuffer, length);
 }
 
-void StdOutKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
-
-}
-
-StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * codeUnitBuffer)
+StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *codeUnitBuffer)
 : SegmentOrientedKernel(b, "stdout" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
 {Binding{"codeUnitBuffer", codeUnitBuffer}}

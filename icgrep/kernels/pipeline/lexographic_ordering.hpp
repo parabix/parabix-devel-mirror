@@ -6,6 +6,7 @@
 #include <boost/dynamic_bitset.hpp>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/ADT/SmallVector.h>
+#include <llvm/ADT/BitVector.h>
 #include <vector>
 #include <queue>
 #include <numeric>
@@ -18,6 +19,8 @@ void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
 
     using Vertex = typename graph_traits<Graph>::vertex_descriptor;
     using Queue = std::priority_queue<Vertex, std::vector<Vertex>, std::greater<Vertex>>;
+
+
 
     const auto count = num_vertices(G);
 
@@ -52,12 +55,13 @@ void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
     assert ("not all vertices were reached?" && L.size() == count);
 }
 
+namespace { // anonymous
+
+using ReverseTopologicalOrdering = SmallVector<unsigned, 256>;
+
 template <typename Graph>
-inline void transitive_closure_dag(Graph & G) {
+void __transitive_closure_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
     // Simple topological closure for DAGs
-    SmallVector<unsigned, 256> ordering;
-    ordering.reserve(num_vertices(G));
-    topological_sort(G, std::back_inserter(ordering));
     for (unsigned u : ordering) {
         for (auto e : make_iterator_range(in_edges(u, G))) {
             const auto s = source(e, G);
@@ -66,6 +70,42 @@ inline void transitive_closure_dag(Graph & G) {
             }
         }
     }
+}
+
+template <typename Graph>
+void __transitive_reduction_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
+    using Edge = typename graph_traits<Graph>::edge_descriptor;
+    BitVector sources(num_vertices(G), false);
+    for (unsigned u : ordering ) {
+        for (auto e : make_iterator_range(in_edges(u, G))) {
+            sources.set(source(e, G));
+        }
+        for (auto e : make_iterator_range(out_edges(u, G))) {
+            remove_in_edge_if(target(e, G), [&G, &sources](const Edge f) {
+                return sources.test(source(f, G));
+            }, G);
+        }
+        sources.reset();
+    }
+}
+
+} // end of anonymous namespace
+
+template <typename Graph>
+inline void transitive_closure_dag(Graph & G) {
+    ReverseTopologicalOrdering ordering;
+    ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(ordering));
+    __transitive_closure_dag(ordering, G);
+}
+
+template <typename Graph>
+inline void transitive_reduction_dag(Graph & G) {
+    ReverseTopologicalOrdering ordering;
+    ordering.reserve(num_vertices(G));
+    topological_sort(G, std::back_inserter(ordering));
+    __transitive_closure_dag(ordering, G);
+    __transitive_reduction_dag(ordering, G);
 }
 
 template <typename Graph>
@@ -79,7 +119,7 @@ bool add_edge_if_no_induced_cycle(const typename graph_traits<Graph>::vertex_des
     // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
     const auto d = in_degree(s, G);
     if (d != 0) {
-        dynamic_bitset<> V(num_vertices(G));
+        BitVector V(num_vertices(G));
         std::queue<typename graph_traits<Graph>::vertex_descriptor> Q;
         // do a BFS to search for a t-s path
         Q.push(t);

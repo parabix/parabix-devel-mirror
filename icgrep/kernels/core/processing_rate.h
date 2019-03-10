@@ -29,7 +29,7 @@ struct ProcessingRate  {
     friend struct Binding;
 
     enum class KindId {
-        Fixed, Bounded, PopCount, NegatedPopCount, Unknown, Relative, Greedy
+        Fixed, Bounded, PopCount, NegatedPopCount, Unknown, Relative
     };
 
     using RateValue = boost::rational<unsigned>;
@@ -45,7 +45,6 @@ struct ProcessingRate  {
     }
 
     RateValue getUpperBound() const {
-        assert (!isGreedy());
         return mUpperBound;
     }
 
@@ -60,10 +59,6 @@ struct ProcessingRate  {
 
     bool isBounded() const {
         return mKind == KindId::Bounded;
-    }
-
-    bool isGreedy() const {
-        return mKind == KindId::Greedy;
     }
 
     bool isRelative() const {
@@ -110,19 +105,10 @@ struct ProcessingRate  {
         }
     }
 
-    friend ProcessingRate FixedRate(const unsigned);
-    friend ProcessingRate BoundedRate(const unsigned, const unsigned);
-    friend ProcessingRate UnknownRate(const unsigned);
-    friend ProcessingRate RateEqualTo(std::string);
-    friend ProcessingRate PopcountOf(std::string);
-    friend ProcessingRate PopcountOfNot(std::string);
-    friend ProcessingRate Greedy();
-
+    ProcessingRate() : ProcessingRate(KindId::Fixed, RateValue{1}, RateValue{1}) { }
     ProcessingRate(ProcessingRate &&) = default;
     ProcessingRate(const ProcessingRate &) = default;
     ProcessingRate & operator = (const ProcessingRate & other) = default;
-
-protected:
 
     ProcessingRate(const KindId k, const RateValue lb, const RateValue ub, const std::string && ref = "")
     : mKind(k)
@@ -135,15 +121,19 @@ protected:
     void print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept;
 
 private:
-    const KindId mKind;
-    const RateValue mLowerBound;
-    const RateValue mUpperBound;
-    const std::string mReference;
+    KindId mKind;
+    RateValue mLowerBound;
+    RateValue mUpperBound;
+    std::string mReference;
 };
 
-inline ProcessingRate FixedRate(const unsigned rate = 1) {
-    assert (rate > 0);
+inline ProcessingRate FixedRate(const ProcessingRate::RateValue rate) {
+    assert (rate.numerator() > 0);
     return ProcessingRate(ProcessingRate::KindId::Fixed, rate, rate);
+}
+
+inline ProcessingRate FixedRate() {
+    return FixedRate(ProcessingRate::RateValue{1});
 }
 
 inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
@@ -170,11 +160,6 @@ inline ProcessingRate PopcountOf(std::string ref) {
 inline ProcessingRate PopcountOfNot(std::string ref) {
     return ProcessingRate(ProcessingRate::KindId::NegatedPopCount, 0, 1, std::move(ref));
 }
-
-inline ProcessingRate Greedy() {
-    return ProcessingRate(ProcessingRate::KindId::Greedy, 0, 0);
-}
-
 
 ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
 

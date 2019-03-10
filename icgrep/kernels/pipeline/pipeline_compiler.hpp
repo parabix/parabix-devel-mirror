@@ -5,6 +5,7 @@
 #include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline/regionselectionkernel.h>
+#include <kernels/pipeline/internal/popcount_kernel.h>
 #include <toolchain/toolchain.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
@@ -53,8 +54,8 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
 
 union RelationshipNode {
-    const kernel::Kernel * Kernel = nullptr;
-    const kernel::Relationship * Relationship;
+    kernel::Kernel * Kernel = nullptr;
+    kernel::Relationship * Relationship;
     llvm::Function * Callee;
 
     RelationshipNode() = default;
@@ -66,20 +67,40 @@ union RelationshipNode {
 enum class ReasonType : unsigned {
     Explicit = 0
     , ImplicitRegionSelector = 1
+    , ImplicitPopCount = 2
 };
 
 struct RelationshipType : public StreamPort {
-
     ReasonType Reason;
-
     RelationshipType() : StreamPort(), Reason(ReasonType::Explicit) { }
     RelationshipType & operator = (const RelationshipType &) = default;
-    RelationshipType(PortType type, unsigned number, ReasonType reason = ReasonType::Explicit) : StreamSetPort(type, number), Reason(reason) { }
-    RelationshipType(StreamPort port) : StreamSetPort(port), Reason(ReasonType::Explicit) { }
+    explicit RelationshipType(PortType type, unsigned number, ReasonType reason = ReasonType::Explicit) : StreamSetPort(type, number), Reason(reason){ }
+    explicit RelationshipType(StreamPort port, ReasonType reason = ReasonType::Explicit) : StreamSetPort(port), Reason(reason) { }
+    explicit RelationshipType(StreamPort port, ReasonType reason, ProcessingRate rate) : StreamSetPort(port), Reason(reason) { }
 };
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType>;
 
+
+struct Relationships : public RelationshipGraph, public flat_map<const void *, RelationshipGraph::vertex_descriptor> {
+    using Vertex = RelationshipGraph::vertex_descriptor;
+
+    template <typename Type>
+    Vertex addOrFind(Type * key) {
+        const auto f = find(key);
+        if (f != end()) {
+            return f->second;
+        }
+        const auto v = add_vertex(*this);
+        Graph()[v] = key;
+        emplace(key, v);
+        return v;
+    }
+
+    RelationshipGraph & Graph() {
+        return static_cast<RelationshipGraph &>(*this);
+    }
+};
 
 enum class BufferType : unsigned {
     Internal = 0
@@ -118,6 +139,7 @@ struct BufferRateData {
     BindingRef Binding;
     RateValue  Minimum;
     RateValue  Maximum;
+    ReasonType Reason = ReasonType::Explicit;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -129,12 +151,14 @@ struct BufferRateData {
 
     BufferRateData() = default;
 
-    BufferRateData(RelationshipType port, BindingRef binding, RateValue min, RateValue max)
-    : Port(port), Binding(binding), Minimum(min), Maximum(max) { }
+    BufferRateData(RelationshipType port, BindingRef binding, RateValue min, RateValue max, ReasonType reason)
+    : Port(port), Binding(binding), Minimum(min), Maximum(max), Reason(reason) { }
 
 };
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
+
+using BufferSetGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 template <typename vertex_descriptor>
 using RelMap = flat_map<const Relationship *, vertex_descriptor>;
@@ -227,14 +251,20 @@ struct PipelineGraphBundle {
     PipelineGraphBundle(const unsigned n) : Graph(n) { }
 };
 
-using ImplicitRelationships = flat_map<const Kernel *, const StreamSet *>;
+using ImplicitRelationships = flat_map<const Kernel *, StreamSet *>;
 
 const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
 const static std::string PIPELINE_THREAD_LOCAL_STATE = "PTL";
 const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
+
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
+
+const static std::string ITEM_COUNT_LOCK = "ICL";
+
+const static std::string LOGICAL_SEGMENT_WRITE_SUFFIX = ".LSW";
+const static std::string ITERATION_COUNT_SUFFIX = ".ITC";
 const static std::string TERMINATION_PREFIX = "@TERM";
-const static std::string ITEM_COUNT_SUFFIX = ".IC";
+const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
@@ -244,10 +274,13 @@ class PipelineCompiler {
     template <typename T, unsigned n = 16>
     using Vec = SmallVector<T, n>;
 
+    using ArgVec = Vec<Value *, 64>;
+
 public:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel);
 
+    void addKernelDeclarations(BuilderRef b) const;
     void addPipelineKernelProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
     void generateInitializeThreadLocalMethod(BuilderRef b);
@@ -274,7 +307,7 @@ protected:
     void start(BuilderRef b);
     void setActiveKernel(BuilderRef b, const unsigned index);
     void executeKernel(BuilderRef b);
-    Value * end(BuilderRef b);
+    void end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
     void writePipelineIOItemCounts(BuilderRef b);
@@ -317,7 +350,8 @@ protected:
     void prepareLocalZeroExtendSpace(BuilderRef b);
 
     void writeKernelCall(BuilderRef b);
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, Vec<Value *, 64> & args);
+    void addInternallySynchronizedArg(BuilderRef b, ArgVec & args);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ArgVec &args);
 
     void exitRegionSpan(BuilderRef b);
 
@@ -445,6 +479,10 @@ protected:
 
     BufferGraph makeBufferGraph(BuilderRef b);
 
+    LLVM_READNONE bool isOpenSystem() const {
+        return out_degree(PipelineInput, mBufferGraph) != 0 || in_degree(PipelineOutput, mBufferGraph) != 0;
+    }
+
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
     void constructBuffers(BuilderRef b);
@@ -468,7 +506,8 @@ protected:
 // pipeline analysis functions
 
     static LLVM_READNONE PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
-    static void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, ImplicitRelationships & regions);
+    static void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships &regions);
+    static void addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & regions);
     static void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels);
     static void removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall);
 
@@ -478,6 +517,18 @@ protected:
     TerminationGraph makeTerminationGraph();
     ScalarGraph makeScalarDependencyGraph() const;
     PipelineIOGraph makePipelineIOGraph() const;
+    bool isPipelineInput(const unsigned inputPort) const;
+    bool isPipelineOutput(const unsigned outputPort) const;
+
+// synchronization functions
+
+    BufferSetGraph makeBufferSetGraph() const;
+
+    void acquireItemCountLock(BuilderRef b) const;
+    void acquireLock(BuilderRef b, const std::string & lockName) const;
+
+    LLVM_READNONE bool isKernelDataParallel(const unsigned kernel) const;
+    LLVM_READNONE bool isOutputCacheAligned(BuilderRef b, const unsigned kernel, const unsigned outputPort) const;
 
 // misc. functions
 
@@ -498,7 +549,7 @@ protected:
     LLVM_READNONE const Binding & getInputBinding(const unsigned kernelVertex, const unsigned inputPort) const;
     const Binding & getInputBinding(const unsigned inputPort) const;
     LLVM_READNONE const BufferGraph::edge_descriptor getInput(const unsigned kernelVertex, const unsigned outputPort) const;
-
+    bool isInputExplicit(const unsigned inputPort) const;
 
     LLVM_READNONE unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     unsigned getOutputBufferVertex(const unsigned outputPort) const;
@@ -572,6 +623,7 @@ protected:
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
+    Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
     Vec<unsigned, 32>                           mPortEvaluationOrder;
@@ -632,10 +684,15 @@ protected:
     const unsigned                              FirstStreamSet;
     const unsigned                              LastStreamSet;
 
-    std::vector<Binding>                        ImplicitBindings; // <- change to graph property
+
+
+    std::vector<std::unique_ptr<Binding>>       mImplicitBindings;
     const BufferGraph                           mBufferGraph;
 
+    const BufferSetGraph                        mBufferSetGraph;
+
     const bool                                  mHasZeroExtendedStream;
+    bool                                        mHasThreadLocalPipelineState;
     ConsumerGraph                               mConsumerGraph;
     ScalarGraph                                 mScalarGraph;
     Vec<Value *>                                mScalarValue;
@@ -735,6 +792,7 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , FirstStreamSet(P.FirstStreamSet)
 , LastStreamSet(P.LastStreamSet)
 , mBufferGraph(makeBufferGraph(b))
+, mBufferSetGraph(makeBufferSetGraph())
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
 , mScalarGraph(makeScalarDependencyGraph())
@@ -743,6 +801,13 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mTerminationGraph(makeTerminationGraph())
 , mPopCountGraph(makePopCountGraph()) {
     initializePopCounts();
+
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
+        kernel->addBaseKernelProperties(b);
+        kernel->constructStateTypes(b);
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -779,7 +844,7 @@ inline LLVM_READNONE std::string PipelineCompiler::makeFamilyPrefix(const unsign
 inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned kernelIndex) const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << '@';
+    out << "@K";
     // out << getKernel(kernelIndex)->getName();
     out << kernelIndex;
     out.flush();
@@ -792,7 +857,7 @@ inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned
 inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernelIndex, const Binding & binding) const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << '@';
+    out << "$K";
     // out << getKernel(kernelIndex)->getName();
     out << kernelIndex;
     out << '.';
@@ -838,5 +903,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
 #include "scalar_logic.hpp"
+#include "synchronization_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

@@ -60,22 +60,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
         }
     }
 
-    // generate a transitive closure
-    transitive_closure_dag(G);
-
-    // then take the transitive reduction
-    dynamic_bitset<> sources(PipelineOutput + 1, false);
-    for (unsigned u = PipelineOutput; u--; ) {
-        for (auto e : make_iterator_range(in_edges(u, G))) {
-            sources.set(source(e, G), true);
-        }
-        for (auto e : make_iterator_range(out_edges(u, G))) {
-            remove_in_edge_if(target(e, G), [&G, &sources](const Edge f) {
-                return sources.test(source(f, G));
-            }, G);
-        }
-        sources.reset();
-    }
+    transitive_reduction_dag(G);
 
     // TODO: Reevaulate the "counting" concept. The current system is error prone
     // with some thread interleaving of u32u8 that I have yet to characterize.

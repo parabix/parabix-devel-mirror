@@ -32,7 +32,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME(MustExplicitlyTerminate);
         NAME(SideEffecting);
         NAME(Family);
-        NAME(SynchronizationFree);
+        NAME(InternallySynchronized);
         NAME(InfrequentlyUsed);
         NAME(None);
     }

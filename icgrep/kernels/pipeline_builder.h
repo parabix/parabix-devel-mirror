@@ -50,17 +50,17 @@ public:
         return llvm::cast<Scalar>(mInputScalars[i].getRelationship());
     }
 
-    Scalar * getInputScalar(const std::string & name);
+    Scalar * getInputScalar(const llvm::StringRef name);
 
-    void setInputScalar(const std::string & name, Scalar * value);
+    void setInputScalar(const llvm::StringRef name, Scalar * value);
 
     Scalar * getOutputScalar(const unsigned i) {
         return llvm::cast<Scalar>(mOutputScalars[i].getRelationship());
     }
 
-    Scalar * getOutputScalar(const std::string & name);
+    Scalar * getOutputScalar(const llvm::StringRef name);
 
-    void setOutputScalar(const std::string & name, Scalar * value);
+    void setOutputScalar(const llvm::StringRef name, Scalar * value);
 
     PipelineBuilder(BaseDriver & driver,
                     Bindings && stream_inputs, Bindings && stream_outputs,

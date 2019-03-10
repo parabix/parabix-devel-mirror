@@ -16,7 +16,6 @@ public:
     StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * codeUnitBuffer);
 private:
     void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) override;
-    void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) override;
 private:
     const unsigned mCodeUnitWidth;
 

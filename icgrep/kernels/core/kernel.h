@@ -118,6 +118,10 @@ public:
                 return Type == PortType::Input;
             }
         }
+
+        bool operator == (const StreamSetPort other) const {
+            return (Type == other.Type) && (Number == other.Number);
+        }
     };
 
     // Kernel Signatures and Module IDs
@@ -539,6 +543,10 @@ protected:
         return mNumOfStrides;
     }
 
+    llvm::Value * getExternalSegNo() const {
+        return mExternalSegNo;
+    }
+
     LLVM_READNONE llvm::Value * isFinal() const {
         return mIsFinal;
     }
@@ -602,16 +610,20 @@ private:
         mTerminationSignalPtr = ptr;
     }
 
+    void setExternalSegNo(llvm::Value * segNo) {
+        mExternalSegNo = segNo;
+    }
+
 protected:
 
-    mutable bool                    mIsGenerated;
+    mutable bool                    mIsGenerated = false;
 
-    mutable llvm::Value *           mSharedHandle;
-    mutable llvm::Value *           mThreadLocalHandle;
+    mutable llvm::Value *           mSharedHandle = nullptr;
+    mutable llvm::Value *           mThreadLocalHandle = nullptr;
 
-    llvm::Module *                  mModule;
-    llvm::StructType *              mSharedStateType;
-    llvm::StructType *              mThreadLocalStateType;
+    llvm::Module *                  mModule = nullptr;
+    llvm::StructType *              mSharedStateType = nullptr;
+    llvm::StructType *              mThreadLocalStateType = nullptr;
 
     Bindings                        mInputStreamSets;
     Bindings                        mOutputStreamSets;
@@ -620,13 +632,14 @@ protected:
     Bindings                        mOutputScalars;
     InternalScalars                 mInternalScalars;
 
-    llvm::Function *                mCurrentMethod;
+    llvm::Function *                mCurrentMethod = nullptr;
     unsigned                        mStride;
 
-    llvm::Value *                   mTerminationSignalPtr;
-    llvm::Value *                   mIsFinal;
-    llvm::Value *                   mNumOfStrides;
-    llvm::Value *                   mThreadLocalPtr;
+    llvm::Value *                   mTerminationSignalPtr = nullptr;
+    llvm::Value *                   mIsFinal = nullptr;
+    llvm::Value *                   mNumOfStrides = nullptr;
+    llvm::Value *                   mThreadLocalPtr = nullptr;
+    llvm::Value *                   mExternalSegNo = nullptr;
 
     std::vector<llvm::Value *>      mUpdatableProcessedInputItemPtr;
     std::vector<llvm::Value *>      mProcessedInputItemPtr;
@@ -648,8 +661,8 @@ protected:
     const std::string               mKernelName;
     const TypeId                    mTypeId;
 
-    OwnedStreamSetBuffers           mStreamSetInputBuffers;
-    OwnedStreamSetBuffers           mStreamSetOutputBuffers;
+    mutable OwnedStreamSetBuffers   mStreamSetInputBuffers;
+    mutable OwnedStreamSetBuffers   mStreamSetOutputBuffers;
 
 };
 

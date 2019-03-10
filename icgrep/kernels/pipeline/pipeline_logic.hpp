@@ -57,24 +57,46 @@ bool isFromCurrentFunction(BuilderRef b, const Value * const value) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addKernelDeclarations
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addKernelDeclarations(BuilderRef b) const {
+    flat_set<const Module *> seen;
+    seen.reserve(LastKernel - FirstKernel + 1);
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
+        const Module * const mod = kernel->getModule(); assert (mod);
+        if (seen.insert(mod).second) {
+            kernel->addKernelDeclarations(b);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addPipelineKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // TODO: look into improving cache locality/false sharing of this struct
+
+    // TODO: create a non-persistent / pass through input scalar type to allow the
+    // pipeline to pass an input scalar to a kernel rather than recording it needlessly?
+    // Non-family kernels can be contained within the shared state but family ones
+    // must be allocated dynamically.
+
     b->setKernel(mPipelineKernel);
-    mPipelineKernel->addInternalScalar(b->getSizeTy(), CURRENT_LOGICAL_SEGMENT_NUMBER);
+    if (!isOpenSystem()) {
+        mPipelineKernel->addInternalScalar(b->getSizeTy(), CURRENT_LOGICAL_SEGMENT_NUMBER);
+    }
     Type * const localStateType = getThreadLocalStateType(b);
-    if (!localStateType->isEmptyTy()) {
+    if (localStateType->isEmptyTy()) {
+        mHasThreadLocalPipelineState = false;
+    } else {
         mPipelineKernel->addThreadLocalScalar(localStateType, PIPELINE_THREAD_LOCAL_STATE);
+        mHasThreadLocalPipelineState = true;
     }
     addTerminationProperties(b);
     addConsumerKernelProperties(b, PipelineInput);
+
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        if (kernel->hasThreadLocal()) {
-            const auto prefix = makeKernelName(i);
-            mPipelineKernel->addThreadLocalScalar(kernel->getThreadLocalStateType(), prefix + KERNEL_THREAD_LOCAL_SUFFIX);
-        }
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
@@ -93,11 +115,15 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 
     // TODO: if we've proven we do not need synchronization then we've already proven that
     // we can calculate the item count and num of strides from the input item counts.
-    // With the inclusion of SynchronizationFree attributes for PipelineKernels, this is
+    // With the inclusion of InternallySynchronized attributes for PipelineKernels, this is
     // no longer true and the test requires greater precision.
 
     if (requiresSynchronization(kernelIndex)) {
-        mPipelineKernel->addInternalScalar(sizeTy, makeKernelName(kernelIndex) + LOGICAL_SEGMENT_SUFFIX);
+        const auto prefix = makeKernelName(kernelIndex);
+        mPipelineKernel->addInternalScalar(sizeTy, prefix + LOGICAL_SEGMENT_SUFFIX);
+        if (isKernelDataParallel(kernelIndex)) {
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + LOGICAL_SEGMENT_WRITE_SUFFIX);
+        }
     }
 
     // TODO: if an kernel I/O stream is a pipeline I/O and the kernel processes it at the
@@ -121,6 +147,11 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
             mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
         }
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+    }
+
+    if (kernel->hasThreadLocal()) {
+        const auto prefix = makeKernelName(kernelIndex);
+        mPipelineKernel->addThreadLocalScalar(kernel->getThreadLocalStateType(), prefix + KERNEL_THREAD_LOCAL_SUFFIX);
     }
 
     if (LLVM_LIKELY(kernel->isStateful() && !kernel->hasFamilyName())) {
@@ -238,6 +269,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     Value * const initialSharedState = mPipelineKernel->getHandle();
     Value * const initialThreadLocal = mPipelineKernel->getThreadLocalHandle();
     Value * const initialTerminationSignalPtr = mPipelineKernel->getTerminationSignalPtr();
+    Value * const initialExternalSegNo = mPipelineKernel->getExternalSegNo();
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE PIPELINE DRIVER CONTINUED
@@ -343,6 +375,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     mPipelineKernel->setHandle(b, initialSharedState);
     mPipelineKernel->setThreadLocalHandle(initialThreadLocal);
     mPipelineKernel->setTerminationSignalPtr(initialTerminationSignalPtr);
+    mPipelineKernel->setExternalSegNo(initialExternalSegNo);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -362,88 +395,6 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         mScalarValue[i] = b->CreateCall(getFinalizeFunction(b), params);
     }
     releaseBuffers(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief acquireCurrentSegment
- *
- * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous
- * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
-    if (LLVM_LIKELY(requiresSynchronization(mKernelIndex))) {
-
-        b->setKernel(mPipelineKernel);
-        const auto prefix = makeKernelName(mKernelIndex);
-        const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-        const unsigned waitingOnIdx = serialize ? LastKernel : mKernelIndex;
-        const auto waitingOn = makeKernelName(waitingOnIdx);
-        Value * const waitingOnPtr = b->getScalarFieldPtr(waitingOn + LOGICAL_SEGMENT_SUFFIX);
-        BasicBlock * const kernelWait = b->CreateBasicBlock(prefix + "Wait", mPipelineEnd);
-        b->CreateBr(kernelWait);
-
-        b->SetInsertPoint(kernelWait);
-        Value * const currentSegNo = b->CreateAtomicLoadAcquire(waitingOnPtr);
-        Value * const ready = b->CreateICmpEQ(mSegNo, currentSegNo);
-        BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "Start", mPipelineEnd);
-        b->CreateCondBr(ready, kernelStart, kernelWait);
-
-        b->SetInsertPoint(kernelStart);
-        b->setKernel(mKernel);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief releaseCurrentSegment
- *
- * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::releaseCurrentSegment(BuilderRef b) {
-    if (LLVM_LIKELY(requiresSynchronization(mKernelIndex))) {
-        b->setKernel(mPipelineKernel);
-        Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
-        const auto prefix = makeKernelName(mKernelIndex);
-        Value * const waitingOnPtr = b->getScalarFieldPtr(prefix + LOGICAL_SEGMENT_SUFFIX);
-        b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
-        b->setKernel(mKernel);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief requiresSynchronization
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::requiresSynchronization(const unsigned kernelIndex) const {
-    const Kernel * const kernel = getKernel(kernelIndex);
-    if (kernel->hasAttribute(AttrId::SynchronizationFree)) {
-        return false;
-    }
-    // TODO: Not quite ready yet: we need a function to calculate how many items
-    // will be processed/produced by the i-th execution of this kernel based
-    // strictly on the number of items produced by the (i-1)-th and the i-th
-    // segment for each input to this kernel. Moreover, if we have static buffers,
-    // we must statically know how many items will be consumed by any segment
-    // based only only the value of i and/or the above-mentioned information.
-    return true;
-#if 0
-    if (LLVM_LIKELY(kernel->isStateful())) {
-        return true;
-    }
-    const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = getInputBinding(kernelIndex, i);
-        if (!input.getRate().isFixed()) {
-            return true;
-        }
-    }
-    const auto numOfOutputs = out_degree(kernelIndex, mBufferGraph);
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = getOutputBinding(kernelIndex, i);
-        if (!output.getRate().isFixed()) {
-            return true;
-        }
-    }
-    return false;
-#endif
 }
 
 enum : unsigned {
@@ -575,21 +526,25 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
  * @brief generateInitializeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
-    Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
-    FixedArray<Value *, 2> indices;
-    indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-    allocatePopCountArrays(b, b->CreateGEP(localState, indices));
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        if (kernel->hasThreadLocal()) {
-            setActiveKernel(b, i);
-            SmallVector<Value *, 2> args;
-            if (LLVM_LIKELY(kernel->isStateful())) {
-                args.push_back(kernel->getHandle());
+    if (mPipelineKernel->hasThreadLocal()) {
+        if (mHasThreadLocalPipelineState) {
+            Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
+            FixedArray<Value *, 2> indices;
+            indices[0] = b->getInt32(0);
+            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
+            allocatePopCountArrays(b, b->CreateGEP(localState, indices));
+        }
+        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+            const Kernel * const kernel = getKernel(i);
+            if (kernel->hasThreadLocal()) {
+                setActiveKernel(b, i);
+                SmallVector<Value *, 2> args;
+                if (LLVM_LIKELY(kernel->isStateful())) {
+                    args.push_back(kernel->getHandle());
+                }
+                args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+                b->CreateCall(getInitializeThreadLocalFunction(b), args);
             }
-            args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
-            b->CreateCall(getFinalizeThreadLocalFunction(b), args);
         }
     }
 }
@@ -598,37 +553,42 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
-    Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
-    FixedArray<Value *, 2> indices;
-    indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-    deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
-    if (mHasZeroExtendedStream) {
-        indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
-        b->CreateFree(b->CreateLoad(b->CreateGEP(localState, indices)));
-    }
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        if (kernel->hasThreadLocal()) {
-            setActiveKernel(b, i);
-            SmallVector<Value *, 2> args;
-            if (LLVM_LIKELY(kernel->isStateful())) {
-                args.push_back(kernel->getHandle());
+    if (mPipelineKernel->hasThreadLocal()) {
+        if (mHasThreadLocalPipelineState) {
+            Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
+            FixedArray<Value *, 2> indices;
+            indices[0] = b->getInt32(0);
+            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
+            deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
+            if (mHasZeroExtendedStream) {
+                indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
+                b->CreateFree(b->CreateLoad(b->CreateGEP(localState, indices)));
             }
-            args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
-            b->CreateCall(getFinalizeThreadLocalFunction(b), args);
         }
+        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+            const Kernel * const kernel = getKernel(i);
+            if (kernel->hasThreadLocal()) {
+                setActiveKernel(b, i);
+                SmallVector<Value *, 2> args;
+                if (LLVM_LIKELY(kernel->isStateful())) {
+                    args.push_back(kernel->getHandle());
+                }
+                args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+                b->CreateCall(getFinalizeThreadLocalFunction(b), args);
+            }
+        }
+        // Since all of the nested kernels thread local state is contained within
+        // this pipeline thread's thread local state, freeing the pipeline's will
+        // also free the inner kernels.
+        b->CreateFree(mPipelineKernel->getThreadLocalHandle());
     }
-    // Since all of the nested kernels thread local state is contained within
-    // this pipeline thread's thread local state, freeing the pipeline's will
-    // also free the inner kernels.
-    b->CreateFree(mPipelineKernel->getThreadLocalHandle());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readTerminationSignalFromLocalState
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::readTerminationSignalFromLocalState(BuilderRef b, Value * const localState) const {
+    // TODO: generalize a OR/ADD/etc "combination" mechanism for thread-local to output scalars?
     if (mPipelineTerminated) {
         FixedArray<Value *, 2> indices;
         indices[0] = b->getInt32(0);

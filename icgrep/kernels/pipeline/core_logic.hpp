@@ -24,16 +24,23 @@ void PipelineCompiler::start(BuilderRef b) {
     mMadeProgressInLastSegment = b->CreatePHI(b->getInt1Ty(), 2);
     mMadeProgressInLastSegment->addIncoming(b->getTrue(), entryBlock);
     mPipelineProgress = b->getFalse();
-    // By using an atomic fetch/add here, we gain the ability to dynamically add or
-    // remove threads while still using the segment pipeline parallelism model.
-    // This also allows us to execute nested pipelines without requiring the outer
-    // pipeline to track the current segno.
-    Value * const segNoPtr = b->getScalarFieldPtr(CURRENT_LOGICAL_SEGMENT_NUMBER);
-    mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
+    if (isOpenSystem()) {
+        assert ("open system was not given an external seg no." && mPipelineKernel->getExternalSegNo());
+        PHINode * const segNoPhi = b->CreatePHI(b->getSizeTy(), 2);
+        segNoPhi->addIncoming(mPipelineKernel->getExternalSegNo(), entryBlock);
+        mSegNo = segNoPhi;
+    } else {
+        // By using an atomic fetch/add here, we gain the ability to dynamically add or
+        // remove threads while still using the segment pipeline parallelism model.
+        // This also allows us to execute nested pipelines without requiring the outer
+        // pipeline to track the current segno.
+        Value * const segNoPtr = b->getScalarFieldPtr(CURRENT_LOGICAL_SEGMENT_NUMBER);
+        mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
+    }
     loadTerminationSignals(b);
     mHalted = b->getFalse();
     #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("+++ pipeline start +++", mSegNo);
+    b->CallPrintInt(mPipelineKernel->getName() + " +++ pipeline start +++", mSegNo);
     #endif
     startOptionalCycleCounter(b);
 }
@@ -66,6 +73,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     #endif
     b->setKernel(mPipelineKernel);
     b->setKernel(mKernel);
+
     loadBufferHandles(b);
     readInitialItemCounts(b);
     readConsumedItemCounts(b);
@@ -250,7 +258,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::end(BuilderRef b) {
+void PipelineCompiler::end(BuilderRef b) {
 
     // A pipeline will end for one or two reasons:
 
@@ -268,7 +276,7 @@ Value * PipelineCompiler::end(BuilderRef b) {
     Value * const done = b->CreateOr(mHalted, terminated);
     Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
     #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("+++ pipeline end +++", mSegNo);
+    b->CallPrintInt(mPipelineKernel->getName() + "+++ pipeline end +++", mSegNo);
     #endif
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -276,10 +284,13 @@ Value * PipelineCompiler::end(BuilderRef b) {
             "Dead lock detected: pipeline could not progress after two iterations");
     }
 
-    //Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mMadeProgressInLastSegment->addIncoming(progressedOrFinished, exitBlock);
-    //mSegNo->addIncoming(nextSegNo, exitBlock);
+    if (isOpenSystem()) {
+        Constant * const numOfThreads = b->getSize(mPipelineKernel->getNumOfThreads());
+        Value * const nextSegNo = b->CreateAdd(mSegNo, numOfThreads);
+        cast<PHINode>(mSegNo)->addIncoming(nextSegNo, exitBlock);
+    }
     b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
 
     b->SetInsertPoint(mPipelineEnd);
@@ -288,7 +299,6 @@ Value * PipelineCompiler::end(BuilderRef b) {
     if (mPipelineTerminated) {
         b->CreateStore(terminated, mPipelineTerminated);
     }
-    return mSegNo;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

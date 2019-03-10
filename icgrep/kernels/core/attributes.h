@@ -218,7 +218,7 @@ struct Attribute {
         // should be surpressed from the generated "main" function because it will be bound
         // within it to the appropriate handle/function pointers.
 
-        SynchronizationFree,
+        InternallySynchronized,
 
         // Indicates this kernel does not require multithreading synchronization to ensure
         // correct behaviour. This *only* affects the locks surrounding the kernel in the
@@ -404,8 +404,8 @@ inline Attribute Family() {
     return Attribute(Attribute::KindId::Family, 0);
 }
 
-inline Attribute SynchronizationFree() {
-    return Attribute(Attribute::KindId::SynchronizationFree, 0);
+inline Attribute InternallySynchronized() {
+    return Attribute(Attribute::KindId::InternallySynchronized, 0);
 }
 
 inline Attribute InfrequentlyUsed() {

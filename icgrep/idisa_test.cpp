@@ -54,7 +54,7 @@ private:
     const unsigned mShiftLimit;
 };
 
-ShiftLimitKernel::ShiftLimitKernel(const std::unique_ptr<KernelBuilder> & b, unsigned fw, unsigned limit, StreamSet * input, StreamSet * output)
+ShiftLimitKernel::ShiftLimitKernel(const std::unique_ptr<KernelBuilder> & b, unsigned fw, unsigned limit, StreamSet *input, StreamSet *output)
 : BlockOrientedKernel(b, "shiftLimit" + std::to_string(fw) + "_" + std::to_string(limit),
                               {Binding{"shiftOperand", input}},
                               {Binding{"limitedShift", output}},
@@ -85,7 +85,7 @@ private:
 };
 
 IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm,
-                                                 StreamSet * Operand1, StreamSet * Operand2, StreamSet * result)
+                                                 StreamSet *Operand1, StreamSet *Operand2, StreamSet *result)
 : MultiBlockKernel(b, idisa_op + std::to_string(fw) + "_test",
      {Binding{"operand1", Operand1}, Binding{"operand2", Operand2}},
      {Binding{"result", result}},
@@ -191,8 +191,8 @@ private:
 };
 
 IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm,
-                                                   StreamSet * Operand1, StreamSet * Operand2, StreamSet * result,
-                                                   StreamSet * expected, Scalar * failures)
+                                                   StreamSet *Operand1, StreamSet *Operand2, StreamSet *result,
+                                                   StreamSet *expected, Scalar *failures)
 : BlockOrientedKernel(b, idisa_op + std::to_string(fw) + "_check" + std::to_string(QuietMode),
                            {Binding{"operand1", Operand1},
                             Binding{"operand2", Operand2},

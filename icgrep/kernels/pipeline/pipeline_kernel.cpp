@@ -17,6 +17,15 @@ void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelB
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addKernelDeclarations
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
+    assert (mCompiler.get());
+    mCompiler->addKernelDeclarations(b);
+    Kernel::addKernelDeclarations(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, ArrayRef<Value *> args) {
@@ -49,16 +58,6 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
     }
 
     b->CreateCall(getInitializeFunction(m), initArgs);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addKernelDeclarations
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
-    for (Kernel * kernel : mKernels) {
-        kernel->addKernelDeclarations(b);
-    }
-    Kernel::addKernelDeclarations(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -190,7 +189,10 @@ PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
 , mSignature(std::move(signature)) {
-    addAttribute(SynchronizationFree());
+    // If this is an open system, mark it as internally synchronized.
+    if (getNumOfStreamInputs() > 0 || getNumOfStreamOutputs() > 0) {
+        addAttribute(InternallySynchronized());
+    }
 }
 
 

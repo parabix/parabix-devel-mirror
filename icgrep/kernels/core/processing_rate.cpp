@@ -87,9 +87,6 @@ void ProcessingRate::print(const Kernel * const kernel, llvm::raw_ostream & out)
             out << 'U';
             write(mLowerBound, out);
             return;
-        case KindId::Greedy:
-            out << 'G';
-            break;
         case KindId::PopCount:
             out << 'P';
             break;
