@@ -13,6 +13,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
+    mCompiler->generateImplicitKernels(b);
     mCompiler->addPipelineKernelProperties(b);
 }
 
@@ -20,8 +21,9 @@ void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelB
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
-    assert (mCompiler.get());
-    mCompiler->addKernelDeclarations(b);
+    for (Kernel * kernel : mKernels) {
+        kernel->addKernelDeclarations(b);
+    }
     Kernel::addKernelDeclarations(b);
 }
 
@@ -37,7 +39,6 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
     // TODO: move this logic into the main function creation
 
     // append the kernel pointers for any kernel belonging to a family
-    Module * const m = b->getModule();
     for (Kernel * kernel : mKernels) {
         if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
             PointerType * const voidPtrTy = b->getVoidPtrTy();
@@ -45,19 +46,19 @@ void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b
                 Value * const handle = kernel->createInstance(b);
                 initArgs.push_back(b->CreatePointerCast(handle, voidPtrTy));
             }
-            initArgs.push_back(b->CreatePointerCast(kernel->getInitializeFunction(m), voidPtrTy));
+            initArgs.push_back(b->CreatePointerCast(kernel->getInitializeFunction(b), voidPtrTy));
             if (kernel->hasThreadLocal()) {
-                initArgs.push_back(b->CreatePointerCast(kernel->getInitializeThreadLocalFunction(m), voidPtrTy));
+                initArgs.push_back(b->CreatePointerCast(kernel->getInitializeThreadLocalFunction(b), voidPtrTy));
             }
-            initArgs.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(m), voidPtrTy));
+            initArgs.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(b), voidPtrTy));
             if (kernel->hasThreadLocal()) {
-                initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeThreadLocalFunction(m), voidPtrTy));
+                initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeThreadLocalFunction(b), voidPtrTy));
             }
-            initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeFunction(m), voidPtrTy));
+            initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeFunction(b), voidPtrTy));
         }
     }
 
-    b->CreateCall(getInitializeFunction(m), initArgs);
+    b->CreateCall(getInitializeFunction(b), initArgs);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

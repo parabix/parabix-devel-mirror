@@ -57,16 +57,18 @@ bool isFromCurrentFunction(BuilderRef b, const Value * const value) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addKernelDeclarations
+ * @brief generateImplicitKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addKernelDeclarations(BuilderRef b) const {
-    flat_set<const Module *> seen;
-    seen.reserve(LastKernel - FirstKernel + 1);
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+inline void PipelineCompiler::generateImplicitKernels(BuilderRef b) {
+    for (auto i = FirstKernel; i <= LastKernel; ++i) {
         Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
-        const Module * const mod = kernel->getModule(); assert (mod);
-        if (seen.insert(mod).second) {
-            kernel->addKernelDeclarations(b);
+        if (LLVM_LIKELY(kernel->getModule())) continue;
+        kernel->setModule(mPipelineKernel->getModule());
+        if (kernel->getInitializeFunction(b)) {
+            kernel->prepareCachedKernel(b);
+        } else {
+            kernel->prepareKernel(b);
+            kernel->generateKernel(b);
         }
     }
 }
@@ -82,7 +84,6 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // Non-family kernels can be contained within the shared state but family ones
     // must be allocated dynamically.
 
-    b->setKernel(mPipelineKernel);
     if (!isOpenSystem()) {
         mPipelineKernel->addInternalScalar(b->getSizeTy(), CURRENT_LOGICAL_SEGMENT_NUMBER);
     }
@@ -189,7 +190,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         const auto hasHandle = mKernel->isStateful() ? 1U : 0U;
         args.resize(hasHandle + in_degree(i, mScalarGraph));
         if (LLVM_LIKELY(hasHandle)) {
-            args[0] = mKernel->getHandle();
+            args[0] = mKernel->getHandle(); assert (args[0]);
         }
         b->setKernel(mPipelineKernel);
         for (const auto ce : make_iterator_range(in_edges(i, mScalarGraph))) {
@@ -198,7 +199,11 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             args[j] = getScalar(b, scalar);
         }
         b->setKernel(mKernel);
-        Value * const terminatedOnInit = b->CreateCall(getInitializeFunction(b), args);
+        Value * const f = getInitializeFunction(b);
+        if (LLVM_UNLIKELY(f == nullptr)) {
+            report_fatal_error(mKernel->getName() + " does not have an initialize method");
+        }
+        Value * const terminatedOnInit = b->CreateCall(f, args);
 
         const auto prefix = makeKernelName(mKernelIndex);
         BasicBlock * const kernelTerminated = b->CreateBasicBlock(prefix + "_terminatedOnInit");
@@ -543,7 +548,11 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
                     args.push_back(kernel->getHandle());
                 }
                 args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
-                b->CreateCall(getInitializeThreadLocalFunction(b), args);
+                Value * const f = getInitializeThreadLocalFunction(b);
+                if (LLVM_UNLIKELY(f == nullptr)) {
+                    report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
+                }
+                b->CreateCall(f, args);
             }
         }
     }
@@ -574,7 +583,11 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
                     args.push_back(kernel->getHandle());
                 }
                 args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
-                b->CreateCall(getFinalizeThreadLocalFunction(b), args);
+                Value * const f = getFinalizeThreadLocalFunction(b);
+                if (LLVM_UNLIKELY(f == nullptr)) {
+                    report_fatal_error(mKernel->getName() + " does not to have an finalize method for its threadlocal state");
+                }
+                b->CreateCall(f, args);
             }
         }
         // Since all of the nested kernels thread local state is contained within

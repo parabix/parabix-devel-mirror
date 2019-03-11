@@ -405,8 +405,8 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
                     continue;
                 }
                 // Add the kernel to the pipeline
-                driver.addKernel(selector);
                 kernels.push_back(selector);
+                mImplicitKernels.emplace_back(selector);
                 // Mark the region selectors for this kernel
                 alreadyCreated.emplace(cond, regionSpans);
             } else { // we've already created the correct region span
@@ -553,9 +553,8 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
             default: llvm_unreachable("unknown counting type?");
         }
         // Add the kernel to the pipeline
-        driver.addKernel(popCount);
         kernels.push_back(popCount);
-
+        mImplicitKernels.emplace_back(popCount);
         // insert the implicit relationships
         for (const auto & e : make_iterator_range(in_edges(i, G))) {
             const Edge & ed = G[e];

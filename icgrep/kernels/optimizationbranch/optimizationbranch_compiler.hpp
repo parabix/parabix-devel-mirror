@@ -334,7 +334,6 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
         }
     }
     std::vector<Value *> args;
-    Module * const m = b->getModule();
     Value * terminated = b->getFalse();
     for (unsigned i = ALL_ZERO_BRANCH; i <= NON_ZERO_BRANCH; ++i) {
         const Kernel * const kernel = mBranches[i];
@@ -349,7 +348,7 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
             const auto j = ref.Index + hasHandle;
             args[j] = getInputScalar(b, source(e, mScalarGraph));
         }
-        Value * const terminatedOnInit = b->CreateCall(kernel->getInitializeFunction(m), args);
+        Value * const terminatedOnInit = b->CreateCall(kernel->getInitializeFunction(b), args);
         terminated = b->CreateOr(terminated, terminatedOnInit);
     }
     b->CreateStore(terminated, mBranch->getTerminationSignalPtr());
@@ -839,7 +838,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
 
         calculateFinalOutputItemCounts(b, isFinal, branchType);
 
-        Function * const doSegment = kernel->getDoSegmentFunction(b->getModule());
+        Function * const doSegment = kernel->getDoSegmentFunction(b);
         SmallVector<Value *, 64> args;
         args.reserve(doSegment->arg_size());
         if (handle) {

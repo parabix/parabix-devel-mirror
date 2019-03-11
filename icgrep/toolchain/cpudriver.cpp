@@ -248,18 +248,19 @@ inline void CPUDriver::preparePassManager() {
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
     preparePassManager();
-    for (auto & kernel : mUncachedKernel) {
+    std::vector<std::unique_ptr<Kernel>> uncachedKernels;
+    mUncachedKernel.swap(uncachedKernels);
+    for (auto & kernel : uncachedKernels) {
         kernel->prepareKernel(iBuilder);
     }
-    mCachedKernel.reserve(mUncachedKernel.size());
-    for (auto & kernel : mUncachedKernel) {
+    mCachedKernel.reserve(uncachedKernels.size());
+    for (auto & kernel : uncachedKernels) {
         kernel->generateKernel(iBuilder);
         Module * const module = kernel->getModule(); assert (module);
         module->setTargetTriple(mMainModule->getTargetTriple());
         mPassManager->run(*module);
         mCachedKernel.emplace_back(kernel.release());
     }
-    mUncachedKernel.clear();
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
     llvm::reportAndResetTimings();
     #endif

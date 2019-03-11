@@ -560,15 +560,15 @@ protected:
 
 private:
 
-    void addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
 
     void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
 
-    void addInitializeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addInitializeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
 
     void callGenerateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b);
 
-    void addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
 
     std::vector<llvm::Type *> getDoSegmentFields(const std::unique_ptr<KernelBuilder> & b) const;
 
@@ -578,25 +578,25 @@ private:
 
     std::vector<llvm::Value *> getDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b) const;
 
-    void addFinalizeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addFinalizeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
 
     void callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b);
 
-    void addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
 
     void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b);
 
     void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b);
 
-    llvm::Function * getInitializeFunction(llvm::Module * const module) const;
+    llvm::Function * getInitializeFunction(const std::unique_ptr<KernelBuilder> & b) const;
 
-    llvm::Function * getInitializeThreadLocalFunction(llvm::Module * const module) const;
+    llvm::Function * getInitializeThreadLocalFunction(const std::unique_ptr<KernelBuilder> & b) const;
 
-    llvm::Function * getDoSegmentFunction(llvm::Module * const module) const;
+    llvm::Function * getDoSegmentFunction(const std::unique_ptr<KernelBuilder> & b) const;
 
-    llvm::Function * getFinalizeThreadLocalFunction(llvm::Module * const module) const;
+    llvm::Function * getFinalizeThreadLocalFunction(const std::unique_ptr<KernelBuilder> & b) const;
 
-    llvm::Function * getFinalizeFunction(llvm::Module * const module) const;
+    llvm::Function * getFinalizeFunction(const std::unique_ptr<KernelBuilder> & b) const;
 
     void constructStateTypes(const std::unique_ptr<KernelBuilder> & b);
 

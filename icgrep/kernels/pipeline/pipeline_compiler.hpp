@@ -280,7 +280,7 @@ public:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel);
 
-    void addKernelDeclarations(BuilderRef b) const;
+    void generateImplicitKernels(BuilderRef b);
     void addPipelineKernelProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
     void generateInitializeThreadLocalMethod(BuilderRef b);
@@ -505,9 +505,9 @@ protected:
 
 // pipeline analysis functions
 
-    static LLVM_READNONE PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
-    static void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships &regions);
-    static void addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & regions);
+    PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
+    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships &regions);
+    void addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & regions);
     static void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels);
     static void removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall);
 
@@ -672,6 +672,9 @@ protected:
     flat_map<unsigned, PopCountData>            mPopCountData;
 
     // analysis state
+    std::vector<std::unique_ptr<Kernel>>        mImplicitKernels;
+    std::vector<std::unique_ptr<Binding>>       mImplicitBindings;
+
     const RelationshipGraph                     mPipelineGraph;
     static constexpr unsigned                   PipelineInput = 0;
     static constexpr unsigned                   FirstKernel = 1;
@@ -683,10 +686,6 @@ protected:
     const unsigned                              LastScalar;
     const unsigned                              FirstStreamSet;
     const unsigned                              LastStreamSet;
-
-
-
-    std::vector<std::unique_ptr<Binding>>       mImplicitBindings;
     const BufferGraph                           mBufferGraph;
 
     const BufferSetGraph                        mBufferSetGraph;
@@ -801,13 +800,6 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mTerminationGraph(makeTerminationGraph())
 , mPopCountGraph(makePopCountGraph()) {
     initializePopCounts();
-
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
-        kernel->addBaseKernelProperties(b);
-        kernel->constructStateTypes(b);
-    }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -845,7 +837,9 @@ inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned
     std::string tmp;
     raw_string_ostream out(tmp);
     out << "@K";
-    // out << getKernel(kernelIndex)->getName();
+    #ifdef PRINT_DEBUG_MESSAGES
+    out << getKernel(kernelIndex)->getName();
+    #endif
     out << kernelIndex;
     out.flush();
     return tmp;
@@ -858,7 +852,9 @@ inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned
     std::string tmp;
     raw_string_ostream out(tmp);
     out << "$K";
-    // out << getKernel(kernelIndex)->getName();
+    #ifdef PRINT_DEBUG_MESSAGES
+    out << getKernel(kernelIndex)->getName();
+    #endif
     out << kernelIndex;
     out << '.';
     out << binding.getName();

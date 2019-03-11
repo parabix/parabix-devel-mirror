@@ -110,6 +110,8 @@ protected:
 
     StreamSetBuffer(const BufferKind k, const std::unique_ptr<KernelBuilder> & b, llvm::Type * baseType, unsigned AddressSpace);
 
+    static llvm::Type * resolveType(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Type * const streamSetType);
+
 private:
 
     void assertValidStreamIndex(IDISA::IDISA_Builder * const b, llvm::Value * streamIndex) const;

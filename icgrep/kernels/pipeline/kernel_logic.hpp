@@ -556,10 +556,6 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         args.push_back(b->getScalarFieldPtr(makeKernelName(mKernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX));
     }
 
-
-
-
-
     // If a kernel is internally synchronized, pass the iteration
     // count. Note: this is not the same as the pipeline's logical
     // segment number since unless we can prove that a kernel,
@@ -807,9 +803,14 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Value * const produced = mFinalProducedPhi[i];
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
-        Value * const position = b->CreateMul(produced, ITEM_WIDTH);
-        Value * const packIndex = b->CreateURem(b->CreateLShr(position, LOG_2_BLOCK_WIDTH), ITEM_WIDTH);
-        Value * const maskOffset = b->CreateAnd(position, BLOCK_MASK);
+        Value * packIndex = nullptr;
+        Value * maskOffset = b->CreateAnd(produced, BLOCK_MASK);
+        if (itemWidth > 1) {
+            Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
+            packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
+            maskOffset = b->CreateAnd(position, BLOCK_MASK);
+        }
+
 
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
         BasicBlock * const entry = b->GetInsertBlock();
@@ -831,10 +832,10 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Value * const value = b->CreateBlockAlignedLoad(ptr);
         Value * const maskedValue = b->CreateAnd(value, mask);
         b->CreateBlockAlignedStore(maskedValue, ptr);
-        if (numOfBlocks > 1) {
+        if (itemWidth > 1 && numOfBlocks > 1) {
             // Since packs are laid out sequentially in memory, it will hopefully be cheaper to zero them out here
             // because they may be within the same cache line.
-            Constant * const MAX_PACK_INDEX = b->getSize(numOfBlocks - 1);
+            Constant * const MAX_PACK_INDEX = b->getSize(std::min(itemWidth, numOfBlocks) - 1);
             Value * const remainingPackBytes = b->CreateShl(b->CreateSub(MAX_PACK_INDEX, packIndex), LOG_2_BLOCK_WIDTH);
             #ifdef PRINT_DEBUG_MESSAGES
             b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);
@@ -1062,7 +1063,7 @@ Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const 
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
-    Function * const init = mKernel->getInitializeFunction(b->getModule());
+    Function * const init = mKernel->getInitializeFunction(b);
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, init->getType(), INITIALIZE_FUNCTION_POINTER_SUFFIX);
     }
@@ -1073,7 +1074,7 @@ inline Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
  * @brief getInitializationThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getInitializeThreadLocalFunction(BuilderRef b) const {
-    Function * const init = mKernel->getInitializeThreadLocalFunction(b->getModule());
+    Function * const init = mKernel->getInitializeThreadLocalFunction(b);
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
@@ -1084,7 +1085,7 @@ inline Value * PipelineCompiler::getInitializeThreadLocalFunction(BuilderRef b) 
  * @brief getDoSegmentFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
-    Function * const doSegment = mKernel->getDoSegmentFunction(b->getModule());
+    Function * const doSegment = mKernel->getDoSegmentFunction(b);
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, doSegment->getType(), DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
     }
@@ -1095,7 +1096,7 @@ inline Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
  * @brief getInitializationThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) const {
-    Function * const init = mKernel->getFinalizeThreadLocalFunction(b->getModule());
+    Function * const init = mKernel->getFinalizeThreadLocalFunction(b);
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, init->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
@@ -1106,7 +1107,7 @@ inline Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) co
  * @brief getFinalizeFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getFinalizeFunction(BuilderRef b) const {
-    Function * const term = mKernel->getFinalizeFunction(b->getModule());
+    Function * const term = mKernel->getFinalizeFunction(b);
     if (mKernel->hasFamilyName()) {
         return getFunctionFromKernelState(b, term->getType(), FINALIZE_FUNCTION_POINTER_SUFFIX);
     }
