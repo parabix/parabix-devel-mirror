@@ -338,9 +338,10 @@ protected:
     void initializeKernelLoopExitPhis(BuilderRef b);
     void initializeKernelExitPhis(BuilderRef b);
 
-    void checkForSufficientInputDataAndOutputSpace(BuilderRef b);
-    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target, Value * const halting);
     void determineNumOfLinearStrides(BuilderRef b);
+    void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
+    void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
+    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target, Value * const halting);
 
     void enterRegionSpan(BuilderRef b);
 
@@ -375,8 +376,6 @@ protected:
     void readFinalProducedItemCounts(BuilderRef b);
 
     void writeCopyToOverflowLogic(BuilderRef b);
-    void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
-    void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
 
     void loadItemCountsOfCountableRateStreams(BuilderRef b);
 
@@ -387,8 +386,6 @@ protected:
 
 // intra-kernel functions
 
-    void expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target);
-
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
     Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
@@ -398,7 +395,7 @@ protected:
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
     Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow);
-    Value * calculateBufferExpansionSize(BuilderRef b, const unsigned outputPort);
+    void ensureCapacity(BuilderRef b, const unsigned outputPort);
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
@@ -495,6 +492,10 @@ protected:
     BufferType getOutputBufferType(const unsigned outputPort) const;
     Value * epoch(BuilderRef b, const Binding &binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtended = nullptr) const;
 
+    unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
+    bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
+
+
 // cycle counter functions
 
     void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
@@ -575,11 +576,6 @@ protected:
 
     void itemCountSanityCheck(BuilderRef b, const Binding & binding, const std::string & pastLabel,
                               Value * const itemCount, Value * const expected) const;
-
-
-private:
-
-    static const StreamPort FAKE_CONSUMER;
 
 protected:
 
@@ -700,8 +696,6 @@ protected:
     PopCountGraph                               mPopCountGraph;
 
 };
-
-const StreamPort PipelineCompiler::FAKE_CONSUMER{PortType::Input, std::numeric_limits<unsigned>::max()};
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
 

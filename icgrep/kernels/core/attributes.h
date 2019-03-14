@@ -42,17 +42,11 @@ struct Attribute {
 
         LookBehind, /// NOT DONE
 
-        // A LookBehind(n) attribute on an input stream S declares that the kernel
-        // requires access to input items up to n positions prior to the current
-        // processed item position.
+        // LookBehind(n) ensures that up to n positions prior to the current processed
+        // item of an input must be stored in linear (contiguous) memory.
 
-        // (Notes: this may allow more efficient advances within n (without saving state).
-        // However, a lookbehind extension area prior to the normal buffer base address
-        // is necessary, which must be initially zero-filled.)
-
-        // A LookBehind(n) attribute on an output stream S declares that the kernel
-        // requires access to up to n previously generated output items.
-        // (Example: lz4d lookbehind(65536)).
+        // NOTE: If n is 0, all data will be linear (at the cost of additional
+        // memcopies in order to preserve this property)
 
         Principal,
 
@@ -141,6 +135,10 @@ struct Attribute {
         // that a particular output stream needs both the consumed item count and a pointer
         // to each of its consumers logical segment number for its internal logic.
 
+        Expandable, /// NOT DONE
+
+        // Indicates that the number of stream sets in this buffer can increase.
+
         /** INPUT/OUTPUT STREAM ATTRIBUTES **/
 
         Misaligned,
@@ -188,10 +186,6 @@ struct Attribute {
         // Given a SliceOffset of k, the k-th stream set be the base (zeroth) stream set
         // for the kernel. Internally, this stores a scalar in the kernel state and loads
         // it once at the start of each segment.
-
-        Expandable, /// NOT DONE
-
-        // Indicates that the number of stream sets in this buffer can increase.
 
         /** KERNEL ATTRIBUTES **/
 

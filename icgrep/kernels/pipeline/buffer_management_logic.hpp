@@ -39,6 +39,8 @@ inline RateValue getOutputOverflowSize(const Kernel * kernel, const Binding & bi
     return overflow;
 }
 
+
+
 } // end of anonymous namespace
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -73,7 +75,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 return true;
             };
 
-        auto addBinding = [&](const std::string & name, Relationship * relationship, ProcessingRate rate) -> const Binding & {
+        auto addBinding = [&](const std::string & name, Relationship * relationship, ProcessingRate rate) -> Binding & {
             assert (relationship);
             Binding * const binding = new Binding(name, relationship, rate);
             mImplicitBindings.emplace_back(binding);
@@ -90,7 +92,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     return kernel->getOutputStreamSetBinding(port.Number);
                 }
             } else if (port.Reason == ReasonType::ImplicitPopCount) {
-                return addBinding("#popcount", relationship, FixedRate({1, b->getBitBlockWidth()}));
+                Binding & popCount = addBinding("#popcount", relationship, FixedRate({1, b->getBitBlockWidth()}));
+                popCount.addAttribute(LookBehind(1));
+                return popCount;
             } else if (port.Reason == ReasonType::ImplicitRegionSelector) {
                 return addBinding("#regionselector", relationship, FixedRate());
             }
@@ -234,8 +238,17 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue requiredSpace{producerRate.Maximum};
             RateValue overflowSpace{getInputOverflowSize(producer, output, producerRate)};
             RateValue facsimileSpace{0};
+            unsigned underflowSize = 0;
+            bool unboundedLookbehind = false;
 
-            bool dynamic = false;
+            // If we have an open system, then the input rate to this pipeline cannot
+            // be bounded a priori. Just make all internal buffers dynamic to simplify
+            // the process.
+
+            // TODO: during initialization, we could pass a "suggestion" argument to
+            // indicate what the outer pipeline believes its I/O rates will be.
+
+            bool dynamic = isOpenSystem;
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
                 requiredSpace = lcm(requiredSpace, consumerRate.Maximum);
@@ -247,6 +260,16 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 // Could the consumption rate be less than the production rate?
                 if ((consumerNode.Lower * consumerRate.Minimum) < producerRate.Maximum) {
                     dynamic = true;
+                }
+                // If we have a lookbehind attribute,
+                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
+                    const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
+                    const auto amount = lookBehind.amount();
+                    if (amount == 0) {
+                        unboundedLookbehind = true;
+                    } else {
+                        underflowSize = std::max(underflowSize, lookBehind.amount());
+                    }
                 }
             }
 
@@ -282,12 +305,14 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 additionalSpace = std::max(additionalSpace, roundingSpace);
             }
             additionalSpace = std::max(overflowSize, additionalSpace);
-            // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
-            // However, it is also beneficial
-            if (dynamic || isOpenSystem) {
-                buffer = new DynamicBuffer(b, output.getType(), bufferSize, additionalSpace);
+            underflowSize = (underflowSize + blockWidth - 1) & -blockWidth;
+            if (LLVM_UNLIKELY(unboundedLookbehind)) {
+                buffer = new LinearBuffer(b, output.getType(), bufferSize, additionalSpace, underflowSize, 0);
+            } else if (dynamic) {
+                // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
+                buffer = new DynamicBuffer(b, output.getType(), bufferSize, additionalSpace, underflowSize, 0);
             } else {
-                buffer = new StaticBuffer(b, output.getType(), bufferSize, additionalSpace);
+                buffer = new StaticBuffer(b, output.getType(), bufferSize, additionalSpace, underflowSize, 0);
             }
         }
 
@@ -332,6 +357,8 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
             out << 'E';
         } else if (DynamicBuffer * buffer = dyn_cast<DynamicBuffer>(bn.Buffer)) {
             out << 'D' << buffer->getInitialCapacity() << 'x' << buffer->getNumOfStreams();
+        } else if (LinearBuffer * buffer = dyn_cast<LinearBuffer>(bn.Buffer)) {
+            out << 'L' << buffer->getInitialCapacity() << 'x' << buffer->getNumOfStreams();
         } else if (StaticBuffer * buffer = dyn_cast<StaticBuffer>(bn.Buffer)) {
             out << 'S' << buffer->getCapacity() << 'x' << buffer->getNumOfStreams();
         }

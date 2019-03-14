@@ -33,17 +33,26 @@ inline void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineNumOfLogicalStrides
+ * @brief determineNumOfLinearStrides
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::checkForSufficientInputDataAndOutputSpace(BuilderRef b) {
+void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     assert (b->getKernel() == mKernel);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    mNumOfLinearStrides = nullptr;
+    if (isKernelDataParallel(mKernelIndex)) {
+        mLastPartialSegment = b->getFalse();
+    }
+    mLastPartialSegment = nullptr;
     for (const auto i : mPortEvaluationOrder) {
+        Value * strides = nullptr;
         if (i < numOfInputs) {
             checkForSufficientInputData(b, i);
+            strides = getNumOfAccessibleStrides(b, i);
         } else {
             checkForSufficientOutputSpaceOrExpand(b, i - numOfInputs);
+            strides = getNumOfWritableStrides(b, i - numOfInputs);
         }
+        mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
     }
 }
 
@@ -73,7 +82,6 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     Value * const halting = isPipelineInput(inputPort) ? b->getTrue() : mHalted;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelLoopCall);
     branchToTargetOrLoopExit(b, sufficientInput, target, halting);
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -138,53 +146,39 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
         return;
     }
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
-    Value * const writable = getWritableOutputItems(b, outputPort, true);
-    Value * const strideLength = getOutputStrideLength(b, outputPort);
-    const Binding & output = getOutputBinding(outputPort);
-    const auto prefix = makeBufferName(mKernelIndex, output);
-    Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + "_writable", writable);
-    b->CallPrintInt(prefix + "_requiredOutput", strideLength);
-    b->CallPrintInt(prefix + "_hasEnough", hasEnough);
-    #endif
-    BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
-    mWritableOutputItems[outputPort] = writable;
 
-    if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer))) {
-        expandOutputBuffer(b, outputPort, hasEnough, target);
+    if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer) || isa<LinearBuffer>(buffer))) {
+        ensureCapacity(b, outputPort);
     } else {
+
+        Value * const writable = getWritableOutputItems(b, outputPort, true);
+        Value * const strideLength = getOutputStrideLength(b, outputPort);
+        const Binding & output = getOutputBinding(outputPort);
+        const auto prefix = makeBufferName(mKernelIndex, output);
+        Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
+        BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
+        mWritableOutputItems[outputPort] = writable;
+
         Value * const halting = isPipelineOutput(outputPort) ? b->getTrue() : mHalted;
         branchToTargetOrLoopExit(b, hasEnough, target, halting);
     }
 
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief branchToTargetOrLoopExit
+ * @brief ensureCapacity
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target, Value * const halting) {
-
-    #warning make sure the exit releases the item count incase there wasn't enough data for any strides?
-
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
-    mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
-    mHaltingPhi->addIncoming(halting, exitBlock);
-
-    b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        mUpdatedProcessedPhi[i]->addIncoming(mAlreadyProcessedPhi[i], exitBlock);
-        if (mUpdatedProcessedDeferredPhi[i]) {
-            mUpdatedProcessedDeferredPhi[i]->addIncoming(mAlreadyProcessedDeferredPhi[i], exitBlock);
-        }
+inline void PipelineCompiler::ensureCapacity(BuilderRef b, const unsigned outputPort) {
+    const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
+    Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
+    Value * const consumed = mConsumedItemCount[outputPort]; assert (consumed);
+    Value * required = getOutputStrideLength(b, outputPort);
+    if (LLVM_LIKELY(mNumOfLinearStrides != nullptr)) {
+        required = b->CreateMul(mNumOfLinearStrides, required);
     }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        mUpdatedProducedPhi[i]->addIncoming(mAlreadyProducedPhi[i], exitBlock);
-    }
-    b->SetInsertPoint(target);
+    Value * const writable = buffer->reserveCapacity(b, produced, consumed, required);
+    mWritableOutputItems[outputPort] = writable;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -218,24 +212,28 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineNumOfLinearStrides
+ * @brief branchToTargetOrLoopExit
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
+void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target, Value * const halting) {
+
+    BasicBlock * const exitBlock = b->GetInsertBlock();
+    mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
+    mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
+    mHaltingPhi->addIncoming(halting, exitBlock);
+
+    b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    mNumOfLinearStrides = nullptr;
-    if (isKernelDataParallel(mKernelIndex)) {
-        mLastPartialSegment = b->getFalse();
-    }
-    mLastPartialSegment = nullptr;
-    for (const auto i : mPortEvaluationOrder) {
-        Value * strides = nullptr;
-        if (i < numOfInputs) {
-            strides = getNumOfAccessibleStrides(b, i);
-        } else {
-            strides = getNumOfWritableStrides(b, i - numOfInputs);
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        mUpdatedProcessedPhi[i]->addIncoming(mAlreadyProcessedPhi[i], exitBlock);
+        if (mUpdatedProcessedDeferredPhi[i]) {
+            mUpdatedProcessedDeferredPhi[i]->addIncoming(mAlreadyProcessedDeferredPhi[i], exitBlock);
         }
-        mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
     }
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        mUpdatedProducedPhi[i]->addIncoming(mAlreadyProducedPhi[i], exitBlock);
+    }
+    b->SetInsertPoint(target);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -404,8 +402,9 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         if (LLVM_UNLIKELY(isAnyPopCount(output))) {
             writable = getMinimumNumOfLinearPopCountItems(b, output);
         } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
-            writable = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
+            writable = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
         }
+
         // update the final item counts with any Add/RoundUp attributes
         for (const Attribute & attr : output.getAttributes()) {
             if (attr.isAdd()) {
@@ -424,46 +423,6 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         mLinearOutputItemsPhi[i]->addIncoming(pendingItems[i], exitBlock);
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculateBufferExpansionSize
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::calculateBufferExpansionSize(BuilderRef b, const unsigned outputPort) {
-    Value * const produced = mAlreadyProducedPhi[outputPort];
-    Value * const consumed = mConsumedItemCount[outputPort];
-    Value * const unconsumed = b->CreateSub(produced, consumed);
-    Value * const strideLength = getOutputStrideLength(b, outputPort);
-    return b->CreateAdd(unconsumed, strideLength);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief expandOutputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::expandOutputBuffer(BuilderRef b, const unsigned outputPort, Value * const hasEnough, BasicBlock * const target) {
-    const Binding & output = getOutputBinding(outputPort);
-    const auto prefix = makeBufferName(mKernelIndex, output);
-    BasicBlock * const expand = b->CreateBasicBlock(prefix + "_expandOutputBuffer", target);
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-    Value * const currentWritableItems = mWritableOutputItems[outputPort];
-    b->CreateLikelyCondBr(hasEnough, target, expand);
-
-    b->SetInsertPoint(expand);
-    Value * const size = calculateBufferExpansionSize(b, outputPort);
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + "_expandingToSize", size);
-    #endif
-    const StreamSetBuffer * const buffer = cast<DynamicBuffer>(getOutputBuffer(outputPort));
-    buffer->setCapacity(b.get(), size);
-    Value * const newWritableItems = getWritableOutputItems(b, outputPort, true);
-    BasicBlock * const expandEnd = b->GetInsertBlock();
-    b->CreateBr(target);
-
-    b->SetInsertPoint(target);
-    PHINode * const writablePhi = b->CreatePHI(b->getSizeTy(), 2);
-    writablePhi->addIncoming(currentWritableItems, entryBlock);
-    writablePhi->addIncoming(newWritableItems, expandEnd);
-    mWritableOutputItems[outputPort] = writablePhi;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

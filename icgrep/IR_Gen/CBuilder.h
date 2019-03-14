@@ -317,6 +317,8 @@ public:
 
     llvm::Value * CreateCeilLog2(llvm::Value * value);
 
+    llvm::Value * CreateLog2(llvm::Value * value);
+
     llvm::Value * CreateReadCycleCounter();
 
     template <typename ExternalFunctionType>

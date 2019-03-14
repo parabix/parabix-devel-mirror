@@ -1243,6 +1243,12 @@ Value * CBuilder::CreateCeilLog2(Value * value) {
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m);
 }
 
+Value * CBuilder::CreateLog2(Value * value) {
+    IntegerType * ty = cast<IntegerType>(value->getType());
+    Value * m = CreateCountReverseZeroes(value);
+    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
+}
+
 Value * CBuilder::GetString(StringRef Str) {
     Module * const m = getModule();
     Value * ptr = m->getGlobalVariable(Str, true);

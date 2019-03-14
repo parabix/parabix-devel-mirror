@@ -92,7 +92,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopEntry);
-    checkForSufficientInputDataAndOutputSpace(b);
     determineNumOfLinearStrides(b);
 
     /// -------------------------------------------------------------------------------------
