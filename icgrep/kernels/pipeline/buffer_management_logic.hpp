@@ -272,7 +272,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     }
                 }
             }
-
+            bn.Underflow = underflowSize;
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto blockWidth = b->getBitBlockWidth();
             overflowSpace = lcm(overflowSpace, blockWidth);
@@ -593,17 +593,18 @@ BufferType PipelineCompiler::getOutputBufferType(const unsigned outputPort) cons
 inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (requiresCopyBack(getOutputBufferVertex(i))) {
-            const StreamSetBuffer * const buffer = getOutputBuffer(i);
+        const auto bufferVertex = getOutputBufferVertex(i);
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+        if (bn.Overflow) {
+            const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b.get());
             Value * const priorOffset = b->CreateURem(mAlreadyProducedPhi[i], capacity);
             Value * const produced = mProducedItemCount[i];
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
-            Value * const needsCopyBack = b->CreateAnd(nonCapacityAlignedWrite, wroteToOverflow);
-            const Binding & output = getOutputBinding(i);
-            writeOverflowCopy(b, OverflowCopy::Backwards, needsCopyBack, output, buffer, producedOffset);
+            Value * const needsCopy = b->CreateAnd(nonCapacityAlignedWrite, wroteToOverflow);
+            copy(b, CopyMode::Overflow, needsCopy, getOutputBinding(i), buffer, producedOffset);
         }
     }
 }
@@ -616,41 +617,58 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
     // any data. To do so would incur extra writes and pollute the cache with potentially unnecessary data.
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (requiresFacsimile(getOutputBufferVertex(i))) {
 
-            const StreamSetBuffer * const buffer = getOutputBuffer(i);
+        const auto bufferVertex = getOutputBufferVertex(i);
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+
+        if (bn.Underflow || bn.Fasimile) {
+
+            const StreamSetBuffer * const buffer = bn.Buffer;
 
             Value * const capacity = buffer->getCapacity(b.get());
             Value * const initial = mInitiallyProducedItemCount[i];
             Value * const produced = mUpdatedProducedPhi[i];
 
-            // If we wrote anything and it was not our first write to the buffer ...
             const Binding & output = getOutputBinding(i);
-            Value * overwroteData = b->CreateICmpUGT(produced, capacity);
-            if (LLVM_LIKELY(mKernel->getLowerBound(output) < 1)) {
-                Value * const producedOutput = b->CreateICmpNE(initial, produced);
-                overwroteData = b->CreateAnd(overwroteData, producedOutput);
+
+            if (bn.Fasimile) {
+
+                // If we wrote anything and it was not our first write to the buffer ...
+                Value * overwroteData = b->CreateICmpUGT(produced, capacity);
+                if (LLVM_LIKELY(mKernel->getLowerBound(output) < 1)) {
+                    Value * const producedOutput = b->CreateICmpNE(initial, produced);
+                    overwroteData = b->CreateAnd(overwroteData, producedOutput);
+                }
+                // And we started writing within the first block ...
+                assert (bn.Fasimile <= buffer->getOverflowCapacity(b));
+                Constant * const overflowSize = b->getSize(bn.Fasimile);
+                Value * const initialOffset = b->CreateURem(initial, capacity);
+                Value * const startedWithinFirstBlock = b->CreateICmpULT(initialOffset, overflowSize);
+                Value * const wroteToFirstBlock = b->CreateAnd(overwroteData, startedWithinFirstBlock);
+
+                // And we started writing at the end of the buffer but wrapped over to the start of it,
+                Value * const producedOffset = b->CreateURem(produced, capacity);
+                Value * const wroteFromEndToStart = b->CreateICmpULT(producedOffset, initialOffset);
+
+                // Then mirror the data in the overflow region.
+                Value * const needsCopy = b->CreateOr(wroteToFirstBlock, wroteFromEndToStart);
+
+                // TODO: optimize this further to ensure that we don't copy data that was just copied back from
+                // the overflow. Should be enough just to have a "copyback flag" phi node to say it that was the
+                // last thing it did to the buffer.
+
+                copy(b, CopyMode::Fasimile, needsCopy, output, buffer, overflowSize);
+
             }
-            // And we started writing within the first block ...
-            const auto requiredOverflowSize = getFacsimile(getOutputBufferVertex(i));
-            assert (requiredOverflowSize <= buffer->getOverflowCapacity(b));
-            Constant * const overflowSize = b->getSize(requiredOverflowSize);
-            Value * const initialOffset = b->CreateURem(initial, capacity);
-            Value * const startedWithinFirstBlock = b->CreateICmpULT(initialOffset, overflowSize);
-            Value * const wroteToFirstBlock = b->CreateAnd(overwroteData, startedWithinFirstBlock);
 
-            // And we started writing at the end of the buffer but wrapped over to the start of it,
-            Value * const producedOffset = b->CreateURem(produced, capacity);
-            Value * const wroteFromEndToStart = b->CreateICmpULT(producedOffset, initialOffset);
-
-            // Then mirror the data in the overflow region.
-            Value * const needsCopyForward = b->CreateOr(wroteToFirstBlock, wroteFromEndToStart);
-
-            // TODO: optimize this further to ensure that we don't copy data that was just copied back from
-            // the overflow. Should be enough just to have a "copyback flag" phi node to say it that was the
-            // last thing it did to the buffer.
-
-            writeOverflowCopy(b, OverflowCopy::Forwards, needsCopyForward, output, buffer, overflowSize);
+            if (bn.Underflow) {
+                Value * const producedOffset = b->CreateURem(produced, capacity);
+                Constant * underflow = b->getSize(bn.Underflow);
+                Value * const limit = b->CreateSub(capacity, underflow);
+                Value * const needsCopy = b->CreateICmpUGE(producedOffset, limit);
+                Value * const toCopy = b->CreateSub(producedOffset, limit);
+                copy(b, CopyMode::Underflow, needsCopy, output, buffer, toCopy);
+            }
         }
     }
 }
@@ -660,47 +678,56 @@ void PipelineCompiler::writeCopyForwardLogic(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOverflowCopy
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeOverflowCopy(BuilderRef b, const OverflowCopy direction, Value * cond, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemsToCopy) const {
+void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
+                            const Binding & binding, const StreamSetBuffer * const buffer,
+                            Value * const itemsToCopy) const {
 
-    const auto prefix = makeBufferName(mKernelIndex, binding)
-        + ((direction == OverflowCopy::Forwards) ? "_copyForward" : "_copyBack");
+    auto makeSuffix = [](CopyMode mode) {
+        switch (mode) {
+            case CopyMode::Fasimile: return "Fasimile";
+            case CopyMode::Overflow: return "Overflow";
+            case CopyMode::Underflow: return "Underflow";
+        }
+    };
 
-    BasicBlock * const copyStart = b->CreateBasicBlock(prefix + "Start", mKernelExit);
-    BasicBlock * const copyLoop = b->CreateBasicBlock(prefix + "Loop", mKernelExit);
+    const auto prefix = makeBufferName(mKernelIndex, binding) + "_copy" + makeSuffix(mode);
+
+    BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
 
     b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
 
     b->SetInsertPoint(copyStart);
-    Value * const count = buffer->getStreamSetCount(b.get());
-    Value * blocksToCopy = b->CreateMul(itemsToCopy, count);
     const auto itemWidth = getItemWidth(buffer->getBaseType());
     const auto blockWidth = b->getBitBlockWidth();
+    Value * blocksToCopy = itemsToCopy;
     if (LLVM_LIKELY(itemWidth < blockWidth)) {
         blocksToCopy = b->CreateCeilUDiv(blocksToCopy, b->getSize(blockWidth / itemWidth));
-    } else if (LLVM_UNLIKELY(blockWidth > itemWidth)) {
+    } else if (LLVM_UNLIKELY(blockWidth < itemWidth)) {
         blocksToCopy = b->CreateMul(blocksToCopy, b->getSize(itemWidth / blockWidth));
     }
-    Value * const base = buffer->getBaseAddress(b.get());
-    Value * const overflow = buffer->getOverflowAddress(b.get());
-    PointerType * const copyTy = b->getBitBlockType()->getPointerTo();
-    Value * const source =
-        b->CreatePointerCast((direction == OverflowCopy::Forwards) ? base : overflow, copyTy);
-    Value * const target =
-        b->CreatePointerCast((direction == OverflowCopy::Forwards) ? overflow : base, copyTy);
+    Value * const scale = b->CreateMul(buffer->getStreamSetCount(b.get()), b->getSize(blockWidth / 8));
+    Value * const bytesToCopy = b->CreateMul(blocksToCopy, scale);
 
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-    b->CreateBr(copyLoop);
+    Value * source = nullptr;
+    Value * target = nullptr;
 
-    b->SetInsertPoint(copyLoop);
-    PHINode * const index = b->CreatePHI(b->getSizeTy(), 2);
-    index->addIncoming(b->getSize(0), entryBlock);
-    Value * const val = b->CreateBlockAlignedLoad(b->CreateGEP(source, index));
-    b->CreateBlockAlignedStore(val, b->CreateGEP(target, index));
-    Value * const nextIndex = b->CreateAdd(index, b->getSize(1));
-    index->addIncoming(nextIndex, b->GetInsertBlock());
-    Value * const notDone =b->CreateICmpNE(nextIndex, blocksToCopy);
-    b->CreateCondBr(notDone, copyLoop, copyExit);
+    if (mode == CopyMode::Fasimile) {
+        source = buffer->getBaseAddress(b.get());
+        target = buffer->getOverflowAddress(b.get());
+    } else  {
+        source = buffer->getOverflowAddress(b.get());
+        target = buffer->getBaseAddress(b.get());
+        if (mode == CopyMode::Underflow) {
+            Constant * underflow = ConstantExpr::getNeg(b->getSize(buffer->getUnderflow()));
+            source = b->CreateGEP(source, underflow);
+            target = b->CreateGEP(target, underflow);
+        }
+    }
+
+    b->CreateMemCpy(target, source, bytesToCopy, blockWidth / 8);
+
+    b->CreateBr(copyExit);
 
     b->SetInsertPoint(copyExit);
 }

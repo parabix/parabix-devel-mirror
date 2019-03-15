@@ -174,9 +174,6 @@ inline void PipelineCompiler::ensureCapacity(BuilderRef b, const unsigned output
     Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
     Value * const consumed = mConsumedItemCount[outputPort]; assert (consumed);
     Value * required = getOutputStrideLength(b, outputPort);
-    if (LLVM_LIKELY(mNumOfLinearStrides != nullptr)) {
-        required = b->CreateMul(mNumOfLinearStrides, required);
-    }
     Value * const writable = buffer->reserveCapacity(b, produced, consumed, required);
     mWritableOutputItems[outputPort] = writable;
 }

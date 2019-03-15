@@ -112,8 +112,10 @@ struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     RateValue Lower{};
     RateValue Upper{};
+    unsigned Underflow = 0;
     unsigned Overflow = 0;
     unsigned Fasimile = 0;
+
     BufferType Type = BufferType::Internal;
 
     ~BufferNode() {
@@ -184,16 +186,6 @@ using RelationshipVertex = RelationshipGraph::vertex_descriptor;
 using RelationshipMap = RelMap<RelationshipVertex>;
 
 using ScalarGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
-
-struct OverflowRequirement {
-    unsigned copyBack;
-    unsigned facsimile;
-    OverflowRequirement() = default;
-    OverflowRequirement(const unsigned copyBack, const unsigned copyForward)
-    : copyBack(copyBack), facsimile(copyForward) { }
-};
-
-using OverflowRequirements = StreamSetBufferMap<OverflowRequirement>;
 
 struct PopCountData {
     // compilation state
@@ -360,8 +352,8 @@ protected:
 
     void writeCopyBackLogic(BuilderRef b);
     void writeCopyForwardLogic(BuilderRef b);
-    enum class OverflowCopy { Forwards, Backwards };
-    void writeOverflowCopy(BuilderRef b, const OverflowCopy direction, Value * cond, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemsToCopy) const;
+    enum class CopyMode { Overflow, Fasimile, Underflow };
+    void copy(BuilderRef b, const CopyMode mode, Value * cond, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemsToCopy) const;
 
 
     void computeFullyProcessedItemCounts(BuilderRef b);
