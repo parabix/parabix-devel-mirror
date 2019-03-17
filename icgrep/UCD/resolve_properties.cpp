@@ -20,7 +20,6 @@
 #include <re/re_compiler.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
-#include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
@@ -41,8 +40,8 @@ bool resolvePropertyDefinition(Name * const property) {
         if (propit == alias_map.end()) {
             UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
         }
-        auto theprop = propit->second;
-        if (isa<BinaryPropertyObject>(property_object_table[theprop])){
+        auto theprop = static_cast<UCD::property_t>(propit->second);
+        if (isa<BinaryPropertyObject>(getPropertyObject(theprop))){
             auto valit = Binary_ns::aliases_only_map.find(property->getName());
             if (valit != Binary_ns::aliases_only_map.end()) {
                 if (valit->second == Binary_ns::N) {
@@ -80,21 +79,6 @@ bool resolvePropertyDefinition(Name * const property) {
     return false;
 }
 
-const std::string & getPropertyValueGrepString(const std::string & prop) {
-    auto propit = alias_map.find(canonicalize_value_name(prop));
-    if (propit == alias_map.end()) {
-        UnicodePropertyExpressionError("Expected a property name, but '" + prop + "' found instead");
-    }
-    auto theprop = propit->second;
-    if (EnumeratedPropertyObject * p = dyn_cast<EnumeratedPropertyObject>(property_object_table[theprop])){
-        return p->GetPropertyValueGrepString();
-    } else if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])) {
-        return p->GetPropertyValueGrepString();
-    }
-
-    UnicodePropertyExpressionError("Property " + property_full_name[theprop] + " recognized but not supported in icgrep 1.0");
-}
-
 UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();
@@ -105,7 +89,8 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             if (propit == alias_map.end()) {
                 UnicodePropertyExpressionError("Expected a property name, but '" + name->getNamespace() + "' found instead");
             }
-            auto propObj = property_object_table[propit->second];
+            auto theprop = static_cast<UCD::property_t>(propit->second);
+            auto propObj = getPropertyObject(theprop);
             if ((value.length() > 0) && (value[0] == '/')) {
                 // resolve a regular expression
                 re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
@@ -122,7 +107,8 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 if (propit == alias_map.end()) {
                     UnicodePropertyExpressionError("Expected a property name, but '" + value.substr(1) + "' found instead");
                 }
-                auto propObj2 = property_object_table[propit->second];
+                auto prop2 = static_cast<UCD::property_t>(propit->second);
+                auto propObj2 = getPropertyObject(prop2);
                 if (isa<BinaryPropertyObject>(propObj) && isa<BinaryPropertyObject>(propObj2)) {
                     return ~(cast<BinaryPropertyObject>(propObj)->GetCodepointSet(UCD::Binary_ns::Y) ^
                              cast<BinaryPropertyObject>(propObj2)->GetCodepointSet(UCD::Binary_ns::Y));
@@ -138,12 +124,12 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
         else {
             // No namespace (property) name.   Try as a general category.
             std::string canon = canonicalize_value_name(value);
-            const auto & gcobj = cast<EnumeratedPropertyObject>(property_object_table[gc]);
+            const auto & gcobj = cast<EnumeratedPropertyObject>(getPropertyObject(gc));
             int valcode = gcobj->GetPropertyValueEnumCode(canon);
             if (valcode >= 0) {
                 return gcobj->GetCodepointSet(valcode);
             }
-            const auto & scObj = cast<EnumeratedPropertyObject>(property_object_table[sc]);
+            const auto & scObj = cast<EnumeratedPropertyObject>(getPropertyObject(sc));
             valcode = scObj->GetPropertyValueEnumCode(canon);
             if (valcode >= 0) {
                 return scObj->GetCodepointSet(valcode);
@@ -152,8 +138,9 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             
             auto propit = alias_map.find(canon);
             if (propit != alias_map.end()) {
-                auto theprop = propit->second;
-                if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(property_object_table[theprop])) {
+                auto theprop = static_cast<UCD::property_t>(propit->second);
+                auto propObj = getPropertyObject(theprop);
+                if (BinaryPropertyObject * p = dyn_cast<BinaryPropertyObject>(propObj)) {
                     return p->GetCodepointSet(Binary_ns::Y);
                 }
                 else {

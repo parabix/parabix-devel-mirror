@@ -23,7 +23,6 @@
 #include <re/printer_re.h>
 #include "UCD/PropertyAliases.h"
 #include "UCD/PropertyObjects.h"
-#include "UCD/PropertyObjectTable.h"
 #include "UCD/PropertyValueAliases.h"
 #include <UCD/Equivalence.h>
 #include <UCD/PrecomposedMappings.h>
@@ -80,9 +79,9 @@ public:
     ClusterMatchTransformer(EquivalenceOptions opt = Canonical) :
         RE_Transformer("ClusterMatchTransformer"),
         mOptions(opt),
-        cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
-        sUCobj(cast<StringPropertyObject>(property_object_table[suc])),
-        sLCobj(cast<StringPropertyObject>(property_object_table[slc])),
+        cccObj(cast<EnumeratedPropertyObject>(getPropertyObject(ccc))),
+        sUCobj(cast<StringPropertyObject>(getPropertyObject(suc))),
+        sLCobj(cast<StringPropertyObject>(getPropertyObject(slc))),
         ccc0set(cccObj->GetCodepointSet(CCC_ns::NR)),
         selfUC(sUCobj->GetReflexiveSet()),
         selfLC(sLCobj->GetReflexiveSet())

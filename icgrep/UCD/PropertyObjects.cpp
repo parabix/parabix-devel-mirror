@@ -34,6 +34,11 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
     }
     return s.str();
 }
+    
+PropertyObject * getPropertyObject(property_t property_code) {
+    return property_object_table[property_code];
+};
+
 
 const std::string & PropertyObject::GetPropertyValueGrepString() {
     llvm::report_fatal_error("Property Value Grep String unsupported.");

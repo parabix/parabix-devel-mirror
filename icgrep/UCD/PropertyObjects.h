@@ -16,7 +16,7 @@
 namespace re {class RE;}
 
 namespace UCD {
-
+    
 std::string canonicalize_value_name(const std::string & prop_or_val);
 
 class PropertyObject {
@@ -290,6 +290,10 @@ public:
     UnsupportedPropertyObject(property_t p, ClassTypeId)
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {}
 };
+    
+    
+PropertyObject * getPropertyObject(property_t property_code);
+
 }
 
 #endif
