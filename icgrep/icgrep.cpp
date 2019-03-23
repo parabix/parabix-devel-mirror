@@ -112,6 +112,7 @@ std::vector<re::RE *> readExpressions() {
 namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
+    llvm_shutdown_obj shutdown;
 
     argv::InitializeCommandLineInterface(argc, argv);
 
