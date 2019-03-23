@@ -321,7 +321,7 @@ public:
     }
 
     const Binding & getOutputScalarBinding(const unsigned i) const {
-        assert (i < mInputScalars.size());
+        assert (i < mOutputScalars.size());
         return mOutputScalars[i];
     }
 
