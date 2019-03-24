@@ -556,9 +556,8 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             value = compileExpression(b, s->getValue());
             Type * const ty = s->getType();
             if (LLVM_LIKELY(ty->isVectorTy())) {
-                const auto fw = s->getFieldWidth()->value();
-                value = b->CreateZExtOrTrunc(value, b->getIntNTy(fw));
-                value = b->simd_fill(fw, value);
+                const auto repeatWidth = value->getType()->getIntegerBitWidth();
+                value = b->simd_fill(repeatWidth, value);
             } else {
                 value = b->CreateZExtOrTrunc(value, ty);
             }

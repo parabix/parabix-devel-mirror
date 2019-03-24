@@ -282,8 +282,8 @@ public:
         return mParent->makeName(prefix);
     }
 
-    Integer * getInteger(const int64_t value) const {
-        return mParent->getInteger(value);
+    Integer * getInteger(const int64_t value, unsigned intWidth = 64) const {
+        return mParent->getInteger(value, intWidth);
     }
 
     llvm::LLVMContext & getContext() const {

@@ -44,13 +44,14 @@ String * SymbolGenerator::makeString(const llvm::StringRef prefix) noexcept {
     }
 }
 
-Integer * SymbolGenerator::getInteger(const IntTy value) noexcept {
-    auto f = mIntegerMap.find(value);
+Integer * SymbolGenerator::getInteger(const IntTy value, unsigned intWidth) noexcept {
+    auto key = std::make_pair(value, intWidth);
+    auto f = mIntegerMap.find(key);
     Integer * result;
     if (f == mIntegerMap.end()) {
-        result = new (mAllocator) Integer(value, llvm::IntegerType::getInt64Ty(mContext), mAllocator);
+        result = new (mAllocator) Integer(value, llvm::IntegerType::getIntNTy(mContext, intWidth), mAllocator);
         assert (result->value() == value);
-        mIntegerMap.emplace(value, result);
+        mIntegerMap.emplace(key, result);
     } else {
         result = f->second;
     }

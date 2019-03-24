@@ -158,8 +158,10 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << " = pablo.Repeat(";
             print(splat->getFieldWidth(), out);
             out << ", ";
+            auto fw = splat->getValue()->getType()->getIntegerBitWidth();
+            out << "Int" << fw << "(";
             print(splat->getValue(), out);
-            out << ")";
+            out << "))";
         } else if (const PackH * p = dyn_cast<PackH>(stmt)) {
             out << " = PackH(";
             print(p->getFieldWidth(), out);
