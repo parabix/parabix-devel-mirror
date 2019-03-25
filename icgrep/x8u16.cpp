@@ -8,6 +8,7 @@
 #include <IR_Gen/idisa_target.h>
 
 #include <cc/alphabet.h>
+#include <cc/cc_compiler_target.h>
 #include <cc/cc_compiler.h>
 #include <cc/cc_kernel.h>
 #include <kernels/deletion.h>
@@ -141,7 +142,7 @@ void TranscoderKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("sourceBasis");
     Var * outputVar = getOutputStreamVar("UnicodeBasis");
-    cc::Parabix_CC_Compiler ccc(getEntryScope(), basis);
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     std::vector<CC *> bitXfrmClasses;
     std::vector<CC *> outputBitClasses;
     auto xClasses = transcoderClasses(mAlphabet);

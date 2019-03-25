@@ -1107,7 +1107,7 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::
  * @brief initializeThreadLocalInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::initializeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, ArrayRef<Value *> args) {
-    assert (args.size() == isStateful() ? 2 : 1);
+    assert (args.size() == (isStateful() ? 2 : 1));
     b->setKernel(this);
     Function * const init = getInitializeThreadLocalFunction(b->getModule());
     b->CreateCall(init, args);
@@ -1117,7 +1117,7 @@ void Kernel::initializeThreadLocalInstance(const std::unique_ptr<KernelBuilder> 
  * @brief finalizeThreadLocalInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::finalizeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<Value *> args) const {
-    assert (args.size() == isStateful() ? 2 : 1);
+    assert (args.size() == (isStateful() ? 2 : 1));
     b->setKernel(this);
     Function * const init = getFinalizeThreadLocalFunction(b->getModule());
     b->CreateCall(init, args);
