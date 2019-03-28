@@ -67,7 +67,7 @@ using namespace llvm;
 using namespace cc;
 using namespace kernel;
 namespace grep {
-    
+
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
 static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable experimental pablo transposition."));
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
@@ -635,7 +635,7 @@ bool GrepEngine::searchAllFiles() {
 // DoGrep thread function.
 void * GrepEngine::DoGrepThreadMethod() {
 
-    unsigned fileIdx = mNextFileToGrep++;
+    unsigned fileIdx = mNextFileToGrep.fetch_add(1);
     while (fileIdx < inputPaths.size()) {
         if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
             errs() << "Tracing " << inputPaths[fileIdx].string() << "\n";
@@ -651,10 +651,10 @@ void * GrepEngine::DoGrepThreadMethod() {
             }
             return nullptr;
         }
-        fileIdx = mNextFileToGrep++;
+        fileIdx = mNextFileToGrep.fetch_add(1);
     }
 
-    unsigned printIdx = mNextFileToPrint++;
+    unsigned printIdx = mNextFileToPrint.fetch_add(1);
     if (printIdx == 0) {
 
         while (printIdx < inputPaths.size()) {

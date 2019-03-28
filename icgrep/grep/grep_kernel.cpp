@@ -381,7 +381,7 @@ mOptions(std::move(options)) {
     addAttribute(InfrequentlyUsed());
 }
 
-std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const {
     return mOptions->getSignature();
 }
 
@@ -466,7 +466,7 @@ makeInputBindings(Source, externals),
     addAttribute(InfrequentlyUsed());
 }
 
-std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const {
     return mSignature;
 }
 

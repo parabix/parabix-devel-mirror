@@ -1,9 +1,9 @@
 #ifndef PROCESSING_RATE_H
 #define PROCESSING_RATE_H
 
-#include <string>
 #include <assert.h>
 #include <boost/rational.hpp>
+#include <llvm/ADT/StringRef.h>
 
 namespace llvm { class raw_ostream; }
 
@@ -29,7 +29,7 @@ struct ProcessingRate  {
     friend struct Binding;
 
     enum class KindId {
-        Fixed, Bounded, PopCount, NegatedPopCount, Unknown, Relative
+        Fixed, Bounded, PopCount, NegatedPopCount, PartialSum, Relative, Unknown
     };
 
     using RateValue = boost::rational<unsigned>;
@@ -48,7 +48,7 @@ struct ProcessingRate  {
         return mUpperBound;
     }
 
-    const std::string & getReference() const {
+    const llvm::StringRef getReference() const {
         assert (hasReference());
         return mReference;
     }
@@ -73,12 +73,25 @@ struct ProcessingRate  {
         return mKind == KindId::NegatedPopCount;
     }
 
+    bool isPartialSum() const {
+        return mKind == KindId::PartialSum;
+    }
+
     bool isUnknown() const {
         return mKind == KindId::Unknown;
     }
 
     bool hasReference() const {
-        return isRelative() || isPopCount() || isNegatedPopCount();
+        switch (mKind) {
+            case KindId::PopCount:
+            case KindId::NegatedPopCount:
+            case KindId::PartialSum:
+            case KindId::Relative:
+                assert (mReference.data());
+                return true;
+            default:
+                return false;
+        }
     }
 
     bool isDerived() const {
@@ -110,7 +123,15 @@ struct ProcessingRate  {
     ProcessingRate(const ProcessingRate &) = default;
     ProcessingRate & operator = (const ProcessingRate & other) = default;
 
-    ProcessingRate(const KindId k, const RateValue lb, const RateValue ub, const std::string && ref = "")
+    ProcessingRate(const KindId k, const RateValue lb, const RateValue ub)
+    : mKind(k)
+    , mLowerBound(lb)
+    , mUpperBound(ub)
+    , mReference() {
+
+    }
+
+    ProcessingRate(const KindId k, const RateValue lb, const RateValue ub, const llvm::StringRef ref)
     : mKind(k)
     , mLowerBound(lb)
     , mUpperBound(ub)
@@ -121,10 +142,10 @@ struct ProcessingRate  {
     void print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept;
 
 private:
-    KindId mKind;
-    RateValue mLowerBound;
-    RateValue mUpperBound;
-    std::string mReference;
+    KindId          mKind;
+    RateValue       mLowerBound;
+    RateValue       mUpperBound;
+    llvm::StringRef mReference;
 };
 
 inline ProcessingRate FixedRate(const ProcessingRate::RateValue rate) {
@@ -149,16 +170,20 @@ inline ProcessingRate UnknownRate(const unsigned lower = 0) {
     return ProcessingRate(ProcessingRate::KindId::Unknown, lower, 0);
 }
 
-inline ProcessingRate RateEqualTo(std::string ref) {
-    return ProcessingRate(ProcessingRate::KindId::Relative, 1, 1, std::move(ref));
+inline ProcessingRate RateEqualTo(llvm::StringRef ref) {
+    return ProcessingRate(ProcessingRate::KindId::Relative, 1, 1, ref);
 }
 
-inline ProcessingRate PopcountOf(std::string ref) {
-    return ProcessingRate(ProcessingRate::KindId::PopCount, 0, 1, std::move(ref));
+inline ProcessingRate PopcountOf(llvm::StringRef ref) {
+    return ProcessingRate(ProcessingRate::KindId::PopCount, 0, 1, ref);
 }
 
-inline ProcessingRate PopcountOfNot(std::string ref) {
-    return ProcessingRate(ProcessingRate::KindId::NegatedPopCount, 0, 1, std::move(ref));
+inline ProcessingRate PopcountOfNot(llvm::StringRef ref) {
+    return ProcessingRate(ProcessingRate::KindId::NegatedPopCount, 0, 1, ref);
+}
+
+inline ProcessingRate PartialSum(llvm::StringRef ref) {
+    return ProcessingRate(ProcessingRate::KindId::PartialSum, 0, 1, ref);
 }
 
 ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);

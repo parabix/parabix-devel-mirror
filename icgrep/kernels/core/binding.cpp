@@ -18,7 +18,7 @@ Binding::Binding(std::string name, Relationship * const value, ProcessingRate r)
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(value->getType())
-, mValue(value) {
+, mRelationship(value) {
 
 }
 
@@ -27,7 +27,7 @@ Binding::Binding(std::string name, Relationship * const value, ProcessingRate r,
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(value->getType())
-, mValue(value) {
+, mRelationship(value) {
 
 }
 
@@ -36,7 +36,7 @@ Binding::Binding(std::string name, Relationship * const value, ProcessingRate r,
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(value->getType())
-, mValue(value) {
+, mRelationship(value) {
 
 }
 
@@ -45,7 +45,7 @@ Binding::Binding(llvm::Type * const scalarType, std::string name, ProcessingRate
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(scalarType)
-, mValue(nullptr) {
+, mRelationship(nullptr) {
 
 }
 
@@ -54,7 +54,7 @@ Binding::Binding(llvm::Type * const scalarType, std::string name, ProcessingRate
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(scalarType)
-, mValue(nullptr) {
+, mRelationship(nullptr) {
 
 }
 
@@ -63,7 +63,7 @@ Binding::Binding(llvm::Type * const scalarType, std::string name, ProcessingRate
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(scalarType)
-, mValue(nullptr) {
+, mRelationship(nullptr) {
 
 }
 
@@ -72,7 +72,7 @@ Binding::Binding(llvm::Type * const type, std::string name, Relationship * const
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(type)
-, mValue(value) {
+, mRelationship(value) {
     if (LLVM_UNLIKELY(value == nullptr && type == nullptr)) {
         llvm::report_fatal_error(NULL_RELATIONSHIP_ERROR);
     }
@@ -86,7 +86,7 @@ Binding::Binding(llvm::Type * const type, std::string name, Relationship * const
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(type)
-, mValue(value) {
+, mRelationship(value) {
     if (LLVM_UNLIKELY(value == nullptr && type == nullptr)) {
         llvm::report_fatal_error(NULL_RELATIONSHIP_ERROR);
     }
@@ -100,13 +100,22 @@ Binding::Binding(llvm::Type * const type, std::string name, Relationship * const
 , mName(std::move(name))
 , mRate(std::move(r))
 , mType(type)
-, mValue(value) {
+, mRelationship(value) {
     if (LLVM_UNLIKELY(value == nullptr && type == nullptr)) {
         llvm::report_fatal_error(NULL_RELATIONSHIP_ERROR);
     }
     if (LLVM_UNLIKELY(type && value && value->getType() != type)) {
         llvm::report_fatal_error(NON_MATCHING_TYPE_ERROR);
     }
+}
+
+Binding::Binding(const Binding & original, ProcessingRate r)
+: AttributeSet(original.getAttributes())
+, mName(original.getName())
+, mRate(std::move(r))
+, mType(original.getType())
+, mRelationship(original.getRelationship()) {
+
 }
 
 void Binding::setRelationship(Relationship * const value) {
@@ -116,11 +125,11 @@ void Binding::setRelationship(Relationship * const value) {
     if (LLVM_UNLIKELY(mType && value && value->getType() != mType)) {
         llvm::report_fatal_error(NON_MATCHING_TYPE_ERROR);
     }
-    mValue = value;
+    mRelationship = value;
 }
 
 unsigned Binding::getNumElements() const {
-    StreamSet * const ss = llvm::dyn_cast_or_null<StreamSet>(mValue);
+    StreamSet * const ss = llvm::dyn_cast_or_null<StreamSet>(mRelationship);
     if (LLVM_UNLIKELY(ss == nullptr)) {
         llvm::report_fatal_error(NOT_STREAM_SET);
     }
@@ -128,7 +137,7 @@ unsigned Binding::getNumElements() const {
 }
 
 unsigned Binding::getFieldWidth() const {
-    StreamSet * const ss = llvm::dyn_cast_or_null<StreamSet>(mValue);
+    StreamSet * const ss = llvm::dyn_cast_or_null<StreamSet>(mRelationship);
     if (LLVM_UNLIKELY(ss == nullptr)) {
         llvm::report_fatal_error(NOT_STREAM_SET);
     }

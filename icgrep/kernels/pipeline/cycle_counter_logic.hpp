@@ -46,19 +46,19 @@ inline void PipelineCompiler::updateOptionalCycleCounter(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief selectPrincipleCycleCountBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned kernel) const {
+inline StreamPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned kernel) const {
     const auto numOfInputs = in_degree(kernel, mBufferGraph);
     assert (degree(kernel, mBufferGraph));
     if (numOfInputs == 0) {
-        return getOutputBinding(kernel, 0);
+        return StreamPort{PortType::Output, 0};
     } else {
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const Binding & input = getInputBinding(kernel, i);
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                return input;
+                return StreamPort{PortType::Input, i};
             }
         }
-        return getInputBinding(kernel, 0);
+        return StreamPort{PortType::Input, 0};
     }
 }
 
@@ -80,7 +80,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
 
         for (unsigned k = FirstKernel; k <= LastKernel; ++k) {
 
-            const auto & binding = selectPrincipleCycleCountBinding(k);
+            const auto binding = selectPrincipleCycleCountBinding(k);
             Value * const items = b->getScalarField(makeBufferName(k, binding) + ITEM_COUNT_SUFFIX);
 
             Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());

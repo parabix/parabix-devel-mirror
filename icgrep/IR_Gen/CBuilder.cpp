@@ -152,10 +152,16 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
 
 Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, const Twine & Name) {
     assert (number->getType() == divisor->getType());
-    Type * const t = number->getType();
-    Constant * const ONE = ConstantInt::get(t, 1);
-    // avoid overflow with x+y-1
-    return CreateAdd(CreateUDiv(CreateSub(number, ONE), divisor), ONE, Name);
+    if (LLVM_LIKELY(isa<Constant>(divisor))) {
+        if (LLVM_UNLIKELY(cast<Constant>(divisor)->isOneValue())) {
+            return number;
+        }
+    }
+    // TODO: verify the ASM reuses the remainder from the initial division
+    IntegerType * const intTy = cast<IntegerType>(number->getType());
+    Value * const quot = CreateUDiv(number, divisor);
+    Value * const rem = CreateURem(number, divisor);
+    return CreateAdd(quot, CreateZExt(CreateIsNotNull(rem), intTy), Name);
 }
 
 Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, const Twine & Name) {
@@ -402,6 +408,7 @@ Value * CBuilder::CreateCacheAlignedMalloc(Type * const type, Value * const Arra
     if (ArraySize) {
         size = CreateMul(size, CreateZExtOrTrunc(ArraySize, size->getType()));
     }
+    size = CreateRoundUp(size, ConstantInt::get(size->getType(), getCacheAlignment()));
     return CreatePointerCast(CreateCacheAlignedMalloc(size), type->getPointerTo(addressSpace));
 }
 

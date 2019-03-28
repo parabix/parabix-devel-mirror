@@ -128,32 +128,38 @@ void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
  * @brief addInitializeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
-    SmallVector<Type *, 32> params;
-    if (LLVM_LIKELY(isStateful())) {
-        params.push_back(mSharedStateType->getPointerTo());
-    }
-    for (const Binding & binding : mInputScalars) {
-        params.push_back(binding.getType());
-    }
+    const auto name = getName() + INITIALIZE_SUFFIX;
+    Module * const m = b->getModule();
+    Function * initFunc = m->getFunction(name);
+    if (LLVM_LIKELY(initFunc == nullptr)) {
 
-    FunctionType * const initType = FunctionType::get(b->getInt1Ty(), params, false);
-    Function * const initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, getName() + INITIALIZE_SUFFIX, b->getModule());
-    initFunc->setCallingConv(CallingConv::C);
-    initFunc->setDoesNotThrow();
+        SmallVector<Type *, 32> params;
+        if (LLVM_LIKELY(isStateful())) {
+            params.push_back(mSharedStateType->getPointerTo());
+        }
+        for (const Binding & binding : mInputScalars) {
+            params.push_back(binding.getType());
+        }
 
-    auto arg = initFunc->arg_begin();
-    auto setNextArgName = [&](const StringRef name) {
-        assert (arg != initFunc->arg_end());
-        arg->setName(name);
-        std::advance(arg, 1);
-    };
-    if (LLVM_LIKELY(isStateful())) {
-        setNextArgName("shared");
+        FunctionType * const initType = FunctionType::get(b->getInt1Ty(), params, false);
+        initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, name, m);
+        initFunc->setCallingConv(CallingConv::C);
+        initFunc->setDoesNotThrow();
+
+        auto arg = initFunc->arg_begin();
+        auto setNextArgName = [&](const StringRef name) {
+            assert (arg != initFunc->arg_end());
+            arg->setName(name);
+            std::advance(arg, 1);
+        };
+        if (LLVM_LIKELY(isStateful())) {
+            setNextArgName("shared");
+        }
+        for (const Binding & binding : mInputScalars) {
+            setNextArgName(binding.getName());
+        }
+        assert (arg == initFunc->arg_end());
     }
-    for (const Binding & binding : mInputScalars) {
-        setNextArgName(binding.getName());
-    }
-    assert (arg == initFunc->arg_end());
     return initFunc;
 }
 
@@ -213,28 +219,35 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
 Function * Kernel::addInitializeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
     Function * func = nullptr;
     if (hasThreadLocal()) {
-        SmallVector<Type *, 2> params;
-        if (LLVM_LIKELY(isStateful())) {
-            params.push_back(mSharedStateType->getPointerTo());
-        }
-        params.push_back(mThreadLocalStateType->getPointerTo());
+        const auto name = getName() + INITIALIZE_THREAD_LOCAL_SUFFIX;
+        Module * const m = b->getModule();
+        Function * func = m->getFunction(name);
+        if (LLVM_LIKELY(func == nullptr)) {
 
-        FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
-        func = Function::Create(funcType, GlobalValue::ExternalLinkage, getName() + INITIALIZE_THREAD_LOCAL_SUFFIX, b->getModule());
-        func->setCallingConv(CallingConv::C);
-        func->setDoesNotThrow();
+            SmallVector<Type *, 2> params;
+            if (LLVM_LIKELY(isStateful())) {
+                params.push_back(mSharedStateType->getPointerTo());
+            }
+            params.push_back(mThreadLocalStateType->getPointerTo());
 
-        auto arg = func->arg_begin();
-        auto setNextArgName = [&](const StringRef name) {
-            assert (arg != func->arg_end());
-            arg->setName(name);
-            std::advance(arg, 1);
-        };
-        if (LLVM_LIKELY(isStateful())) {
-            setNextArgName("shared");
+            FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
+            func = Function::Create(funcType, GlobalValue::ExternalLinkage, name, m);
+            func->setCallingConv(CallingConv::C);
+            func->setDoesNotThrow();
+
+            auto arg = func->arg_begin();
+            auto setNextArgName = [&](const StringRef name) {
+                assert (arg != func->arg_end());
+                arg->setName(name);
+                std::advance(arg, 1);
+            };
+            if (LLVM_LIKELY(isStateful())) {
+                setNextArgName("shared");
+            }
+            setNextArgName("thread_local");
+            assert (arg == func->arg_end());
+
         }
-        setNextArgName("thread_local");
-        assert (arg == func->arg_end());
     }
     return func;
 }
@@ -313,60 +326,66 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
  ** ------------------------------------------------------------------------------------------------------------ */
 Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
 
-    Type * const retTy = canSetTerminateSignal() ? b->getInt1Ty() : b->getVoidTy();
-    FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
-    Function * const doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, getName() + DO_SEGMENT_SUFFIX, b->getModule());
-    doSegment->setCallingConv(CallingConv::C);
-    doSegment->setDoesNotThrow();
+    const auto name = getName() + DO_SEGMENT_SUFFIX;
+    Module * const m = b->getModule();
+    Function * doSegment = m->getFunction(name);
+    if (LLVM_LIKELY(doSegment == nullptr)) {
 
-    auto arg = doSegment->arg_begin();
-    auto setNextArgName = [&](const StringRef name) {
-        assert (arg != doSegment->arg_end());
-        arg->setName(name);
-        std::advance(arg, 1);
-    };
-    if (LLVM_LIKELY(isStateful())) {
-        setNextArgName("shared");
-    }
-    if (LLVM_UNLIKELY(hasThreadLocal())) {
-        setNextArgName("thread_local");
-    }
-    if (hasAttribute(AttrId::InternallySynchronized)) {
-        setNextArgName("externalSegNo");
-    }
-    setNextArgName("numOfStrides");
-    for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
-        const Binding & input = mInputStreamSets[i];
-        setNextArgName(input.getName());
-        if (LLVM_LIKELY(isAddressable(input) || isCountable(input))) {
-            setNextArgName(input.getName() + "_processed");
-        }
-        setNextArgName(input.getName() + "_accessible");
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            setNextArgName(input.getName() + "_popCountArray");
-        }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            setNextArgName(input.getName() + "_negatedPopCountArray");
-        }
-    }
+        Type * const retTy = canSetTerminateSignal() ? b->getInt1Ty() : b->getVoidTy();
+        FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
+        doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, name, m);
+        doSegment->setCallingConv(CallingConv::C);
+        doSegment->setDoesNotThrow();
 
-    const auto canTerminate = canSetTerminateSignal();
+        auto arg = doSegment->arg_begin();
+        auto setNextArgName = [&](const StringRef name) {
+            assert (arg != doSegment->arg_end());
+            arg->setName(name);
+            std::advance(arg, 1);
+        };
+        if (LLVM_LIKELY(isStateful())) {
+            setNextArgName("shared");
+        }
+        if (LLVM_UNLIKELY(hasThreadLocal())) {
+            setNextArgName("thread_local");
+        }
+        if (hasAttribute(AttrId::InternallySynchronized)) {
+            setNextArgName("externalSegNo");
+        }
+        setNextArgName("numOfStrides");
+        for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
+            const Binding & input = mInputStreamSets[i];
+            setNextArgName(input.getName());
+            if (LLVM_LIKELY(isAddressable(input) || isCountable(input))) {
+                setNextArgName(input.getName() + "_processed");
+            }
+            setNextArgName(input.getName() + "_accessible");
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+                setNextArgName(input.getName() + "_popCountArray");
+            }
+            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+                setNextArgName(input.getName() + "_negatedPopCountArray");
+            }
+        }
 
-    for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
-        const Binding & output = mOutputStreamSets[i];
-        if (LLVM_LIKELY(!isLocalBuffer(output))) {
-            setNextArgName(output.getName());
+        const auto canTerminate = canSetTerminateSignal();
+
+        for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
+            const Binding & output = mOutputStreamSets[i];
+            if (LLVM_LIKELY(!isLocalBuffer(output))) {
+                setNextArgName(output.getName());
+            }
+            if (LLVM_LIKELY(canTerminate || isAddressable(output) || isCountable(output))) {
+                setNextArgName(output.getName() + "_produced");
+            }
+            if (LLVM_LIKELY(isLocalBuffer(output))) {
+                setNextArgName(output.getName() + "_consumed");
+            } else {
+                setNextArgName(output.getName() + "_writable");
+            }
         }
-        if (LLVM_LIKELY(canTerminate || isAddressable(output) || isCountable(output))) {
-            setNextArgName(output.getName() + "_produced");
-        }
-        if (LLVM_LIKELY(isLocalBuffer(output))) {
-            setNextArgName(output.getName() + "_consumed");
-        } else {
-            setNextArgName(output.getName() + "_writable");
-        }
+        assert (arg == doSegment->arg_end());
     }
-    assert (arg == doSegment->arg_end());
     return doSegment;
 }
 
@@ -768,28 +787,36 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
 Function * Kernel::addFinalizeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
     Function * func = nullptr;
     if (hasThreadLocal()) {
-        SmallVector<Type *, 2> params;
-        if (LLVM_LIKELY(isStateful())) {
-            params.push_back(mSharedStateType->getPointerTo());
-        }
-        params.push_back(mThreadLocalStateType->getPointerTo());
 
-        FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
-        func = Function::Create(funcType, GlobalValue::ExternalLinkage, getName() + FINALIZE_THREAD_LOCAL_SUFFIX, b->getModule());
-        func->setCallingConv(CallingConv::C);
-        func->setDoesNotThrow();
+        const auto name = getName() + FINALIZE_THREAD_LOCAL_SUFFIX;
+        Module * const m = b->getModule();
+        Function * doSegment = m->getFunction(name);
+        if (LLVM_LIKELY(doSegment == nullptr)) {
 
-        auto arg = func->arg_begin();
-        auto setNextArgName = [&](const StringRef name) {
-            assert (arg != func->arg_end());
-            arg->setName(name);
-            std::advance(arg, 1);
-        };
-        if (LLVM_LIKELY(isStateful())) {
-            setNextArgName("shared");
+            SmallVector<Type *, 2> params;
+            if (LLVM_LIKELY(isStateful())) {
+                params.push_back(mSharedStateType->getPointerTo());
+            }
+            params.push_back(mThreadLocalStateType->getPointerTo());
+
+            FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
+            func = Function::Create(funcType, GlobalValue::ExternalLinkage, name, m);
+            func->setCallingConv(CallingConv::C);
+            func->setDoesNotThrow();
+
+            auto arg = func->arg_begin();
+            auto setNextArgName = [&](const StringRef name) {
+                assert (arg != func->arg_end());
+                arg->setName(name);
+                std::advance(arg, 1);
+            };
+            if (LLVM_LIKELY(isStateful())) {
+                setNextArgName("shared");
+            }
+            setNextArgName("thread_local");
+            assert (arg == func->arg_end());
+
         }
-        setNextArgName("thread_local");
-        assert (arg == func->arg_end());
     }
     return func;
 }
@@ -826,34 +853,40 @@ inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<
  * @brief addFinalizeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
-    Type * resultType = nullptr;
-    if (mOutputScalars.empty()) {
-        resultType = b->getVoidTy();
-    } else {
-        const auto n = mOutputScalars.size();
-        SmallVector<Type *, 16> outputType(n);
-        for (unsigned i = 0; i < n; ++i) {
-            outputType[i] = mOutputScalars[i].getType();
-        }
-        if (n == 1) {
-            resultType = outputType[0];
+
+    const auto name = getName() + FINALIZE_SUFFIX;
+    Module * const m = b->getModule();
+    Function * terminateFunc = m->getFunction(name);
+    if (LLVM_LIKELY(terminateFunc == nullptr)) {
+        Type * resultType = nullptr;
+        if (mOutputScalars.empty()) {
+            resultType = b->getVoidTy();
         } else {
-            resultType = StructType::get(b->getContext(), outputType);
+            const auto n = mOutputScalars.size();
+            SmallVector<Type *, 16> outputType(n);
+            for (unsigned i = 0; i < n; ++i) {
+                outputType[i] = mOutputScalars[i].getType();
+            }
+            if (n == 1) {
+                resultType = outputType[0];
+            } else {
+                resultType = StructType::get(b->getContext(), outputType);
+            }
         }
+        std::vector<Type *> params;
+        if (LLVM_LIKELY(isStateful())) {
+            params.push_back(mSharedStateType->getPointerTo());
+        }
+        FunctionType * const terminateType = FunctionType::get(resultType, params, false);
+        terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, name, m);
+        terminateFunc->setCallingConv(CallingConv::C);
+        terminateFunc->setDoesNotThrow();
+        auto args = terminateFunc->arg_begin();
+        if (LLVM_LIKELY(isStateful())) {
+            (args++)->setName("handle");
+        }
+        assert (args == terminateFunc->arg_end());
     }
-    std::vector<Type *> params;
-    if (LLVM_LIKELY(isStateful())) {
-        params.push_back(mSharedStateType->getPointerTo());
-    }
-    FunctionType * const terminateType = FunctionType::get(resultType, params, false);
-    Function * const terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, getName() + FINALIZE_SUFFIX, b->getModule());
-    terminateFunc->setCallingConv(CallingConv::C);
-    terminateFunc->setDoesNotThrow();
-    auto args = terminateFunc->arg_begin();
-    if (LLVM_LIKELY(isStateful())) {
-        (args++)->setName("handle");
-    }
-    assert (args == terminateFunc->arg_end());
     return terminateFunc;
 }
 
@@ -1036,9 +1069,10 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
  *
  * Default kernel signature: generate the IR and emit as byte code.
  ** ------------------------------------------------------------------------------------------------------------- */
-std::string Kernel::makeSignature(const std::unique_ptr<KernelBuilder> & b) {
+std::string Kernel::makeSignature(const std::unique_ptr<KernelBuilder> & b) const {
     if (LLVM_UNLIKELY(hasSignature())) {
-        generateKernel(b);
+        // TODO: make this branch report an error instead.
+        const_cast<Kernel *>(this)->generateKernel(b);
         std::string tmp;
         raw_string_ostream signature(tmp);
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
@@ -1587,22 +1621,12 @@ Kernel::StreamSetPort Kernel::getStreamPort(const StringRef name) const {
         }
     }
 
+    assert (false);
+
     std::string tmp;
     raw_string_ostream out(tmp);
     out << "Kernel " << getName() << " does not contain a streamset named " << name;
     report_fatal_error(out.str());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & Kernel::getStreamBinding(const StringRef name) const {
-    const auto port = getStreamPort(name);
-    if (port.Type == PortType::Input) {
-        return getInputStreamSetBinding(port.Number);
-    } else {
-        return getOutputStreamSetBinding(port.Number);
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

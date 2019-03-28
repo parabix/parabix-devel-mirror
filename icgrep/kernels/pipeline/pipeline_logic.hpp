@@ -101,7 +101,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
-        addPopCountScalarsToPipelineKernel(b, i);
+        // addPopCountScalarsToPipelineKernel(b, i);
         addCycleCounterProperties(b, i);
     }
     b->setKernel(mPipelineKernel);
@@ -133,7 +133,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfInputs; i++) {
         const Binding & input = getInputBinding(kernelIndex, i);
-        const auto prefix = makeBufferName(kernelIndex, input);
+        const auto prefix = makeBufferName(kernelIndex, StreamPort{PortType::Input, i});
         if (input.isDeferred()) {
             mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
         }
@@ -143,7 +143,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     const auto numOfOutputs = out_degree(kernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const Binding & output = getOutputBinding(kernelIndex, i);
-        const auto prefix = makeBufferName(kernelIndex, output);
+        const auto prefix = makeBufferName(kernelIndex, StreamPort{PortType::Output, i});
         if (output.isDeferred()) {
             mPipelineKernel->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
         }
@@ -184,19 +184,24 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     }
 
     constructBuffers(b);
-    std::vector<Value *> args;
+
+    ArgVec args;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
-        const auto hasHandle = mKernel->isStateful() ? 1U : 0U;
-        args.resize(hasHandle + in_degree(i, mScalarGraph));
-        if (LLVM_LIKELY(hasHandle)) {
-            args[0] = mKernel->getHandle(); assert (args[0]);
+        args.clear();
+        if (LLVM_LIKELY(mKernel->isStateful())) {
+            args.push_back(mKernel->getHandle());
         }
         b->setKernel(mPipelineKernel);
-        for (const auto ce : make_iterator_range(in_edges(i, mScalarGraph))) {
-            const auto j = mScalarGraph[ce] + hasHandle;
-            const auto scalar = source(ce, mScalarGraph);
-            args[j] = getScalar(b, scalar);
+        #ifndef NDEBUG
+        unsigned expected = 0;
+        #endif
+        for (const auto & e : make_iterator_range(in_edges(i, mScalarGraph))) {
+            const RelationshipType & rt = mScalarGraph[e];
+            assert (rt.Type == PortType::Input);
+            assert (expected++ == rt.Number);
+            const auto scalar = source(e, mScalarGraph);
+            args.push_back(getScalar(b, scalar));
         }
         b->setKernel(mKernel);
         Value * const f = getInitializeFunction(b);
@@ -491,7 +496,7 @@ enum : unsigned {
 inline StructType * PipelineCompiler::getThreadLocalStateType(BuilderRef b) {
     FixedArray<Type *, THREAD_LOCAL_COUNT> fields;
     Type * const emptyTy = StructType::get(b->getContext());
-    fields[POP_COUNT_STRUCT_INDEX] = getPopCountThreadLocalStateType(b);
+    fields[POP_COUNT_STRUCT_INDEX] = emptyTy; // getPopCountThreadLocalStateType(b);
     fields[ZERO_EXTENDED_BUFFER_INDEX] = mHasZeroExtendedStream ? b->getVoidPtrTy() : emptyTy;
     fields[ZERO_EXTENDED_SPACE_INDEX] = mHasZeroExtendedStream ? b->getSizeTy() : emptyTy;
     if (mPipelineKernel->getNumOfThreads() != 1 && mPipelineKernel->canSetTerminateSignal()) {
@@ -508,9 +513,9 @@ inline StructType * PipelineCompiler::getThreadLocalStateType(BuilderRef b) {
 inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef b, Value * const localState) {
     FixedArray<Value *, 3> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(0);
-    indices[2] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-    mPopCountState = b->CreateGEP(localState, indices);
+    indices[1] = indices[0];
+    //indices[2] = b->getInt32(POP_COUNT_STRUCT_INDEX);
+    //mPopCountState = b->CreateGEP(localState, indices);
     if (mHasZeroExtendedStream) {
         indices[2] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
         mZeroExtendBuffer = b->CreateGEP(localState, indices);
@@ -532,13 +537,13 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
     if (mPipelineKernel->hasThreadLocal()) {
-        if (mHasThreadLocalPipelineState) {
-            Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
-            FixedArray<Value *, 2> indices;
-            indices[0] = b->getInt32(0);
-            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-            allocatePopCountArrays(b, b->CreateGEP(localState, indices));
-        }
+//        if (mHasThreadLocalPipelineState) {
+//            Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
+//            FixedArray<Value *, 2> indices;
+//            indices[0] = b->getInt32(0);
+//            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
+//            allocatePopCountArrays(b, b->CreateGEP(localState, indices));
+//        }
         for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
             if (kernel->hasThreadLocal()) {
@@ -567,8 +572,8 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
             Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
             FixedArray<Value *, 2> indices;
             indices[0] = b->getInt32(0);
-            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-            deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
+//            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
+//            deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
             if (mHasZeroExtendedStream) {
                 indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
                 b->CreateFree(b->CreateLoad(b->CreateGEP(localState, indices)));

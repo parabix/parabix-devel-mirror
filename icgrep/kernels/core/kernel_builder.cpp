@@ -257,16 +257,12 @@ Value * KernelBuilder::CreateCeilUDiv2(Value * const number, const ProcessingRat
         return number;
     }
     Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
-    if (LLVM_LIKELY(divisor.denominator() == 1)) {
-        return CreateCeilUDiv(number, n, Name);
-    } else {
-        //   ⌊(num + ratio - 1) / ratio⌋
-        // = ⌊(num - 1) / (n/d)⌋ + (ratio/ratio)
-        // = ⌊(d * (num - 1)) / n⌋ + 1
-        Constant * const ONE = ConstantInt::get(number->getType(), 1);
+    Value * x = number;
+    if (LLVM_UNLIKELY(divisor.denominator() != 1)) {
         Constant * const d = ConstantInt::get(number->getType(), divisor.denominator());
-        return CreateAdd(CreateUDiv(CreateMul(CreateSub(number, ONE), d), n), ONE, Name);
+        x = CreateMul(number, d);
     }
+    return CreateCeilUDiv(number, n, Name);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

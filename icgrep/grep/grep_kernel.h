@@ -90,7 +90,7 @@ class ICGrepKernel : public pablo::PabloKernel {
 public:
     ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
                  std::unique_ptr<GrepKernelOptions> options);
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const override;
     bool isCachable() const override { return true; }
     bool hasFamilyName() const override { return true; }
 protected:
@@ -112,7 +112,7 @@ class ByteBitGrepKernel : public ByteBitGrepSignature, public pablo::PabloKernel
 public:
     ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const prefix, re::RE * const suffix, StreamSet * const Source, StreamSet * const MatchResults,
                       const Externals externals = {});
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) override;
+    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const override;
     bool isCachable() const override { return true; }
     bool hasFamilyName() const override { return true; }
 private:

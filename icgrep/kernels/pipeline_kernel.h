@@ -56,7 +56,7 @@ public:
 
     bool hasSignature() const final { return true; }
 
-    std::string makeSignature(const std::unique_ptr<KernelBuilder> &) final {
+    std::string makeSignature(const std::unique_ptr<KernelBuilder> &) const final {
         return mSignature;
     }
 

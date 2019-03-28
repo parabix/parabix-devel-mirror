@@ -1,5 +1,7 @@
 #include "pipeline_compiler.hpp"
 
+#if 0
+
 namespace kernel {
 
 namespace {
@@ -472,8 +474,7 @@ inline Value * PipelineCompiler::getPopCountNextBaseOffset(BuilderRef b, const u
         return mConsumedItemCount[outputPort];
     } else {
         b->setKernel(mPipelineKernel);
-        const Binding & output = getOutputBinding(outputPort);
-        const auto bufferName = makeBufferName(mKernelIndex, output);
+        const auto bufferName = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
         const auto fieldName = bufferName + REFERENCE_PROCESSED_COUNT;
         Value * const processed = b->getScalarField(fieldName);
         b->setKernel(mKernel);
@@ -537,8 +538,7 @@ inline void PipelineCompiler::updatePopCountReferenceCounts(BuilderRef b) {
             // Have we encountered all of the pop count refs? If so, update the scalar field.
             // NOTE: we cannot get here if this ref uses the consumed items as its ref item count.
             if (++pc.Encountered == in_degree(bufferVertex, mPopCountGraph)) {
-                const Binding & output = getOutputBinding(inputPort);
-                const auto bufferName = makeBufferName(mKernelIndex, output);
+                const auto bufferName = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
                 b->setKernel(mPipelineKernel);
                 b->setScalarField(bufferName + REFERENCE_PROCESSED_COUNT, pc.Processed);
                 b->setKernel(mKernel);
@@ -557,7 +557,7 @@ void PipelineCompiler::addPopCountScalarsToPipelineKernel(BuilderRef b, const un
         if (LLVM_UNLIKELY(!pc.UsesConsumedCount)) {
             const auto e = in_edge(bufferVertex, mBufferGraph);
             const BufferRateData & rd = mBufferGraph[e];
-            const auto bufferName = makeBufferName(index, rd.Binding);
+            const auto bufferName = makeBufferName(index, rd.Port);
             mPipelineKernel->addThreadLocalScalar(b->getSizeTy(), bufferName + REFERENCE_PROCESSED_COUNT);
         }
     });
@@ -855,3 +855,5 @@ inline void PipelineCompiler::forEachPopCountReferenceInputPort(const unsigned k
 }
 
 }
+
+#endif

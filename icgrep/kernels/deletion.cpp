@@ -264,8 +264,10 @@ void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelB
     //
     // First load all the stream set blocks and the pending data.
     std::vector<Value *> sourceBlock(mStreamCount);
+    //b->CallPrintInt("blockOffsetPhi", blockOffsetPhi);
     for (unsigned i = 0; i < mStreamCount; i++) {
         sourceBlock[i] = b->loadInputStreamBlock("sourceStreamSet", b->getInt32(i), blockOffsetPhi);
+        //b->CallPrintRegister("sourceStreamSet" + std::to_string(i), sourceBlock[i]);
     }
     // Now separate the bits of each field into ones that go into the current field
     // and ones that go into the overflow field.   Extract the first field separately,

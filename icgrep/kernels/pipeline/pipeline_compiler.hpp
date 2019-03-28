@@ -6,6 +6,7 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline/regionselectionkernel.h>
 #include <kernels/pipeline/internal/popcount_kernel.h>
+#include <util/extended_boost_graph_containers.h>
 #include <toolchain/toolchain.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
@@ -22,7 +23,7 @@
 #include <algorithm>
 #include <queue>
 
-// #define PRINT_DEBUG_MESSAGES
+//#define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -53,54 +54,160 @@ using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
 
-union RelationshipNode {
-    kernel::Kernel * Kernel = nullptr;
-    kernel::Relationship * Relationship;
-    llvm::Function * Callee;
+struct RelationshipNode {
 
-    RelationshipNode() = default;
-    RelationshipNode(kernel::Kernel * kernel) : Kernel(kernel) { }
-    RelationshipNode(kernel::Relationship * relationship) : Relationship(relationship) { }
-    RelationshipNode(llvm::Function * callee) : Callee(callee) { }
+    enum RelationshipNodeType : unsigned {
+        IsNil
+        , IsKernel
+        , IsRelationship
+        , IsCallee
+        , IsBinding
+    } Type;
+
+    union {
+
+        const kernel::Kernel *  Kernel;
+        kernel::Relationship *  Relationship;
+        llvm::Constant *        Callee;
+        BindingRef              Binding;
+
+    };
+
+    bool operator == (const RelationshipNode & rn) const {
+        return (Type == rn.Type) && (Kernel == rn.Kernel);
+    }
+
+    bool operator < (const RelationshipNode & rn) const {
+        if(static_cast<unsigned>(Type) < static_cast<unsigned>(rn.Type)) {
+            return true;
+        }
+        if (Type == rn.Type && Kernel < rn.Kernel) {
+            return true;
+        }
+        return false;
+    }
+
+    static_assert(sizeof(Kernel) == sizeof(Relationship), "pointer size inequality?");
+    static_assert(sizeof(Kernel) == sizeof(Callee), "pointer size inequality?");
+    static_assert(sizeof(Kernel) == sizeof(Binding), "pointer size inequality?");
+
+    explicit RelationshipNode() noexcept : Type(IsNil), Kernel(nullptr) { }
+    explicit RelationshipNode(std::nullptr_t) noexcept : Type(IsNil), Kernel(nullptr) { }
+    explicit RelationshipNode(const kernel::Kernel * kernel) noexcept : Type(IsKernel), Kernel(kernel) { }
+    explicit RelationshipNode(kernel::Relationship * relationship) noexcept : Type(IsRelationship), Relationship(relationship) { }
+    explicit RelationshipNode(llvm::Constant * callee) noexcept : Type(IsCallee), Callee(callee) { }
+    explicit RelationshipNode(const kernel::Binding * ref) noexcept : Type(IsBinding), Binding(ref) { }
+    explicit RelationshipNode(const RelationshipNode & rn) noexcept : Type(rn.Type), Kernel(rn.Kernel) { }
+
+    RelationshipNode & operator = (const RelationshipNode & other) {
+        Type = other.Type;
+        Kernel = other.Kernel;
+        return *this;
+    }
+
 };
 
 enum class ReasonType : unsigned {
-    Explicit = 0
-    , ImplicitRegionSelector = 1
-    , ImplicitPopCount = 2
+    None
+    // -----------------------------
+    , Explicit
+    // -----------------------------
+    , ImplicitRegionSelector
+    , ImplicitPopCount
+    // -----------------------------
+    , Reference
 };
 
 struct RelationshipType : public StreamPort {
     ReasonType Reason;
-    RelationshipType() : StreamPort(), Reason(ReasonType::Explicit) { }
+    explicit RelationshipType()
+    : StreamPort(), Reason(ReasonType::None) { }
+
+    explicit RelationshipType(PortType type, unsigned number, ReasonType reason = ReasonType::Explicit)
+    : StreamSetPort(type, number), Reason(reason) { }
+
+    explicit RelationshipType(StreamPort port, ReasonType reason = ReasonType::Explicit)
+    : StreamSetPort(port), Reason(reason) { }
+
     RelationshipType & operator = (const RelationshipType &) = default;
-    explicit RelationshipType(PortType type, unsigned number, ReasonType reason = ReasonType::Explicit) : StreamSetPort(type, number), Reason(reason){ }
-    explicit RelationshipType(StreamPort port, ReasonType reason = ReasonType::Explicit) : StreamSetPort(port), Reason(reason) { }
-    explicit RelationshipType(StreamPort port, ReasonType reason, ProcessingRate rate) : StreamSetPort(port), Reason(reason) { }
+
+    bool operator == (const RelationshipType & rn) const {
+        return (Number == rn.Number) && (Reason == rn.Reason) && (Type == rn.Type);
+    }
+
+    bool operator < (const RelationshipType & rn) const {
+        if (LLVM_LIKELY(Reason == rn.Reason)) {
+            if (LLVM_LIKELY(Type == rn.Type)) {
+                return Number < rn.Number;
+            }
+            return static_cast<unsigned>(Type) < static_cast<unsigned>(rn.Type);
+        }
+        return static_cast<unsigned>(Reason) < static_cast<unsigned>(rn.Reason);
+    }
+
 };
 
-using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType>;
-
+using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType, no_property>;
 
 struct Relationships : public RelationshipGraph, public flat_map<const void *, RelationshipGraph::vertex_descriptor> {
     using Vertex = RelationshipGraph::vertex_descriptor;
 
-    template <typename Type>
-    Vertex addOrFind(Type * key) {
-        const auto f = find(key);
-        if (f != end()) {
-            return f->second;
-        }
-        const auto v = add_vertex(*this);
-        Graph()[v] = key;
-        emplace(key, v);
-        return v;
+    template <typename T>
+    inline Vertex add(T key) {
+        RelationshipNode k(key);
+        return __add(k);
+    }
+
+    template <typename T>
+    inline Vertex addOrFind(T key) {
+        RelationshipNode k(key);
+        return __addOrFind(k);
+    }
+
+    template <typename T>
+    inline Vertex get(T key) {
+        RelationshipNode k(key);
+        return __get(k);
     }
 
     RelationshipGraph & Graph() {
         return static_cast<RelationshipGraph &>(*this);
     }
+
+private:
+
+    BOOST_NOINLINE Vertex __add(const RelationshipNode & key) {
+        assert ("key already exists?" && find(key.Kernel) == end());
+        const auto v = add_vertex(key, *this);
+        emplace(key.Kernel, v);
+        assert ((*this)[v] == key);
+        assert (__get(key) == v);
+        return v;
+    }
+
+    BOOST_NOINLINE Vertex __addOrFind(const RelationshipNode & key) {
+        const auto f = find(key.Kernel);
+        if (f != end()) {
+            const auto v = f->second;
+            assert ((*this)[v] == key);
+            return v;
+        }
+        return __add(key);
+    }
+
+    BOOST_NOINLINE Vertex __get(const RelationshipNode & key) const {
+        const auto f = find(key.Kernel);
+        if (LLVM_LIKELY(f != end())) {
+            const auto v = f->second;
+            assert ((*this)[v] == key);
+            return v;
+        }
+        llvm_unreachable("could not find node in relationship graph");
+    }
+
 };
+
+
 
 enum class BufferType : unsigned {
     Internal = 0
@@ -141,7 +248,6 @@ struct BufferRateData {
     BindingRef Binding;
     RateValue  Minimum;
     RateValue  Maximum;
-    ReasonType Reason = ReasonType::Explicit;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -151,10 +257,17 @@ struct BufferRateData {
         return OutputPort(Port);
     }
 
+    bool operator < (const BufferRateData & rn) const {
+        if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {
+            return Port.Number < rn.Port.Number;
+        }
+        return static_cast<unsigned>(Port.Type) < static_cast<unsigned>(rn.Port.Type);
+    }
+
     BufferRateData() = default;
 
-    BufferRateData(RelationshipType port, BindingRef binding, RateValue min, RateValue max, ReasonType reason)
-    : Port(port), Binding(binding), Minimum(min), Maximum(max), Reason(reason) { }
+    BufferRateData(RelationshipType port, BindingRef binding, RateValue min, RateValue max)
+    : Port(port), Binding(binding), Minimum(min), Maximum(max) { }
 
 };
 
@@ -184,8 +297,6 @@ using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigne
 
 using RelationshipVertex = RelationshipGraph::vertex_descriptor;
 using RelationshipMap = RelMap<RelationshipVertex>;
-
-using ScalarGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 struct PopCountData {
     // compilation state
@@ -228,19 +339,37 @@ struct RegionData {
     RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
 };
 
+template <typename T>
+using OwningVector = std::vector<std::unique_ptr<T>>;
+
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
     static constexpr unsigned FirstKernel = 1U;
     unsigned LastKernel = 0;
     unsigned PipelineOutput = 0;
+    unsigned FirstStreamSet = 0;
+    unsigned LastStreamSet = 0;
+    unsigned FirstBinding = 0;
+    unsigned LastBinding = 0;
     unsigned FirstCall = 0;
     unsigned LastCall = 0;
     unsigned FirstScalar = 0;
     unsigned LastScalar = 0;
-    unsigned FirstStreamSet = 0;
-    unsigned LastStreamSet = 0;
-    RelationshipGraph Graph;
-    PipelineGraphBundle(const unsigned n) : Graph(n) { }
+
+    RelationshipGraph Streams;
+    RelationshipGraph Scalars;
+
+    OwningVector<Kernel> InternalKernels;
+    OwningVector<Binding> InternalBindings;
+
+    PipelineGraphBundle(const unsigned n, const unsigned m,
+                        OwningVector<Kernel> && internalKernels,
+                        OwningVector<Binding> && internalBindings)
+    : Streams(n), Scalars(m)
+    , InternalKernels(std::move(internalKernels))
+    , InternalBindings(std::move(internalBindings)) {
+
+    }
 };
 
 using ImplicitRelationships = flat_map<const Kernel *, StreamSet *>;
@@ -351,9 +480,10 @@ protected:
     void normalTerminationCheck(BuilderRef b, Value * const isFinal);
 
     void writeCopyBackLogic(BuilderRef b);
-    void writeCopyForwardLogic(BuilderRef b);
-    enum class CopyMode { Overflow, Fasimile, Underflow };
-    void copy(BuilderRef b, const CopyMode mode, Value * cond, const Binding & binding, const StreamSetBuffer * const buffer, Value * const itemsToCopy) const;
+    void writeLookAheadLogic(BuilderRef b);
+    void writeLookBehindLogic(BuilderRef b);
+    enum class CopyMode { CopyBack, LookAhead, LookBehind };
+    void copy(BuilderRef b, const CopyMode mode, Value * cond, const unsigned outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy) const;
 
 
     void computeFullyProcessedItemCounts(BuilderRef b);
@@ -381,19 +511,22 @@ protected:
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
     Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
-    Value * getMaximumStrideLength(BuilderRef b, const Binding & binding);
-    Value * calculateNumOfLinearItems(BuilderRef b, const Binding & binding);
+    Value * calculateNumOfLinearItems(BuilderRef b, const StreamPort port);
     Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
     Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow);
-    void ensureCapacity(BuilderRef b, const unsigned outputPort);
+    Value * reserveSufficientCapacity(BuilderRef b, const unsigned outputPort);
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
     Value * getLocallyAvailableItemCount(BuilderRef b, const unsigned inputPort) const;
     void resetMemoizedFields();
+
+    Value * getPartialSumItemCount(BuilderRef b, const StreamPort port, Value * const offset = nullptr) const;
+
+    Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const StreamPort port);
 
 // termination functions
 
@@ -460,7 +593,7 @@ protected:
     ConsumerGraph makeConsumerGraph() const;
     void addConsumerKernelProperties(BuilderRef b, const unsigned kernelIndex);
     void createConsumedPhiNodes(BuilderRef b);
-    void initializeConsumedItemCount(const unsigned bufferVertex, Value * const produced);
+    void initializeConsumedItemCount(BuilderRef b, const unsigned outputPort, Value * const produced);
     void readConsumedItemCounts(BuilderRef b);
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed) const;
 
@@ -494,21 +627,30 @@ protected:
     void startOptionalCycleCounter(BuilderRef b);
     void updateOptionalCycleCounter(BuilderRef b);
     void printOptionalCycleCounter(BuilderRef b);
-    const Binding & selectPrincipleCycleCountBinding(const unsigned kernel) const;
+    StreamPort selectPrincipleCycleCountBinding(const unsigned kernel) const;
 
 // pipeline analysis functions
 
     PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
-    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships &regions);
-    void addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & regions);
-    static void combineDuplicateKernels(RelationshipGraph & G, const Kernels & kernels);
-    static void removeUnusedKernels(RelationshipGraph & G, const unsigned lastKernel, const unsigned lastCall);
+    Relationships generateInitialPipelineGraph(BuilderRef b,
+                                               PipelineKernel * const pipelineKernel,
+                                               OwningVector<Kernel> & internalKernels,
+                                               OwningVector<Binding> & internalBindings);
+
+    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & G,
+                                  OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings);
+
+    void addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & G,
+                            OwningVector<Kernel> &internalKernels, OwningVector<Binding> &internalBindings);
+
+    static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
+    static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
+    static void subsitutePopCountKernels(const unsigned lastKernel, const Relationships & popCounts, RelationshipGraph G, RelationshipMap M);
 
     bool hasZeroExtendedStream() const;
 
     void determineEvaluationOrderOfKernelIO();
     TerminationGraph makeTerminationGraph();
-    ScalarGraph makeScalarDependencyGraph() const;
     PipelineIOGraph makePipelineIOGraph() const;
     bool isPipelineInput(const unsigned inputPort) const;
     bool isPipelineOutput(const unsigned outputPort) const;
@@ -535,6 +677,9 @@ protected:
     LLVM_READNONE std::string makeFamilyPrefix(const unsigned kernelIndex) const;
     LLVM_READNONE std::string makeKernelName(const unsigned kernelIndex) const;
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
+    LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const StreamPort port) const;
+
+    const StreamPort getReference(const StreamPort port) const;
 
     LLVM_READNONE unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
     unsigned getInputBufferVertex(const unsigned inputPort) const;
@@ -556,7 +701,8 @@ protected:
 
     LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
 
-    LLVM_READNONE const Binding & getBinding(const StreamPort port) const;
+    const Binding & getBinding(const StreamPort port) const;
+    LLVM_READNONE const Binding & getBinding(const unsigned kernel, const StreamPort port) const;
     LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
 
 
@@ -587,6 +733,7 @@ protected:
     BranchInst *                                mPipelineEntryBranch = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
+    BasicBlock *                                mKernelLookBehind = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
     BasicBlock *                                mKernelRegionEntryLoop = nullptr;
     BasicBlock *                                mKernelCalculateItemCounts = nullptr;
@@ -660,20 +807,21 @@ protected:
     flat_map<unsigned, PopCountData>            mPopCountData;
 
     // analysis state
-    std::vector<std::unique_ptr<Kernel>>        mImplicitKernels;
-    std::vector<std::unique_ptr<Binding>>       mImplicitBindings;
-
-    const RelationshipGraph                     mPipelineGraph;
+    const RelationshipGraph                     mStreamGraph;
+    const RelationshipGraph                     mScalarGraph;
     static constexpr unsigned                   PipelineInput = 0;
     static constexpr unsigned                   FirstKernel = 1;
     const unsigned                              LastKernel;
     const unsigned                              PipelineOutput;
+    const unsigned                              FirstStreamSet;
+    const unsigned                              LastStreamSet;
+    const unsigned                              FirstBinding;
+    const unsigned                              LastBinding;
     const unsigned                              FirstCall;
     const unsigned                              LastCall;
     const unsigned                              FirstScalar;
     const unsigned                              LastScalar;
-    const unsigned                              FirstStreamSet;
-    const unsigned                              LastStreamSet;
+
     const BufferGraph                           mBufferGraph;
 
     const BufferSetGraph                        mBufferSetGraph;
@@ -681,12 +829,14 @@ protected:
     const bool                                  mHasZeroExtendedStream;
     bool                                        mHasThreadLocalPipelineState;
     ConsumerGraph                               mConsumerGraph;
-    ScalarGraph                                 mScalarGraph;
     Vec<Value *>                                mScalarValue;
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
     PopCountGraph                               mPopCountGraph;
 
+
+    std::vector<std::unique_ptr<Kernel>>        mInternalKernels;
+    std::vector<std::unique_ptr<Binding>>       mInternalBindings;
 };
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
@@ -767,41 +917,43 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P)
 : mPipelineKernel(pipelineKernel)
-, mPipelineGraph(std::move(P.Graph))
+, mStreamGraph(std::move(P.Streams))
+, mScalarGraph(std::move(P.Scalars))
 , LastKernel(P.LastKernel)
 , PipelineOutput(P.PipelineOutput)
+, FirstStreamSet(P.FirstStreamSet)
+, LastStreamSet(P.LastStreamSet)
+, FirstBinding(P.FirstBinding)
+, LastBinding(P.LastBinding)
 , FirstCall(P.FirstCall)
 , LastCall(P.LastCall)
 , FirstScalar(P.FirstScalar)
 , LastScalar(P.LastScalar)
-, FirstStreamSet(P.FirstStreamSet)
-, LastStreamSet(P.LastStreamSet)
 , mBufferGraph(makeBufferGraph(b))
 , mBufferSetGraph(makeBufferSetGraph())
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
-, mScalarGraph(makeScalarDependencyGraph())
 , mScalarValue(LastScalar + 1)
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
-, mPopCountGraph(makePopCountGraph()) {
-    initializePopCounts();
+, mPopCountGraph() // makePopCountGraph())
+, mInternalKernels(std::move(P.InternalKernels))
+, mInternalBindings(std::move(P.InternalBindings)) {
+//    initializePopCounts();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief upperBound
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE RateValue upperBound(not_null<const Kernel *> kernel, const Binding & binding) {
-    assert (kernel->getStride() > 0);
-    return kernel->getUpperBound(binding) * kernel->getStride();
+    report_fatal_error("deprecated");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief lowerBound
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE RateValue lowerBound(not_null<const Kernel *> kernel, const Binding & binding) {
-    assert (kernel->getStride() > 0);
-    return kernel->getLowerBound(binding) * kernel->getStride();
+    report_fatal_error("deprecated");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -822,11 +974,10 @@ inline LLVM_READNONE std::string PipelineCompiler::makeFamilyPrefix(const unsign
 inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned kernelIndex) const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << "@K";
+    out << '@' << kernelIndex;
     #ifdef PRINT_DEBUG_MESSAGES
-    out << getKernel(kernelIndex)->getName();
+    out << '.' << getKernel(kernelIndex)->getName();
     #endif
-    out << kernelIndex;
     out.flush();
     return tmp;
 }
@@ -834,16 +985,29 @@ inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeBufferName
  ** ------------------------------------------------------------------------------------------------------------- */
-inline LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernelIndex, const Binding & binding) const {
+LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernelIndex, const Binding & binding) const {
+    assert (false);
+    report_fatal_error("DEPRECATED");
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeBufferName
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernelIndex, const StreamPort port) const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << "$K";
+    out << "$" << kernelIndex;
     #ifdef PRINT_DEBUG_MESSAGES
-    out << getKernel(kernelIndex)->getName();
+    out << '.' << getKernel(kernelIndex)->getName()
+        << '.' << getBinding(kernelIndex, port).getName();
+    #else
+    if (port.Type == PortType::Input) {
+        out << 'I';
+    } else { // if (port.Type == PortType::Output) {
+        out << 'O';
+    }
+    out.write_hex(port.Number);
     #endif
-    out << kernelIndex;
-    out << '.';
-    out << binding.getName();
     out.flush();
     return tmp;
 }

@@ -53,7 +53,7 @@ CharClassesKernel::CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder
 
 }
 
-std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+std::string CharClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const {
     return mSignature;
 }
 
@@ -82,7 +82,7 @@ void CharClassesKernel::generatePabloMethod() {
         ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     }
     for (unsigned i = 0; i < names.size(); i++) {
-        auto t = nameMap.find(names[i]); 
+        auto t = nameMap.find(names[i]);
         if (t != nameMap.end()) {
             PabloAST * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
             pb.createAssign(r, pb.createInFile(t->second));
@@ -103,7 +103,7 @@ CharClassesSignature(ccs, inputStream->getNumElements() == 1)
 
 }
 
-std::string ByteClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) {
+std::string ByteClassesKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const {
     return mSignature;
 }
 

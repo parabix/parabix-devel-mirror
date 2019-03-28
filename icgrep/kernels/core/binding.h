@@ -63,7 +63,7 @@ struct Binding : public AttributeSet {
     }
 
     Relationship * getRelationship() const {
-        return mValue;
+        return mRelationship;
     }
 
     void setRelationship(Relationship * const value);
@@ -74,13 +74,15 @@ struct Binding : public AttributeSet {
 
 protected:
 
+    Binding(const Binding & original, ProcessingRate r);
+
     void print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept;
 
 private:
     const std::string       mName;
     const ProcessingRate    mRate;
     llvm::Type * const      mType;
-    Relationship *          mValue;
+    Relationship *          mRelationship;
 };
 
 using Bindings = std::vector<Binding>;
@@ -94,7 +96,7 @@ LLVM_READNONE inline bool isCountable(const Binding & binding) {
         return false;
     }
     const ProcessingRate & rate = binding.getRate();
-    return rate.isFixed() || rate.isPopCount() || rate.isNegatedPopCount();
+    return rate.isFixed() || rate.isPartialSum() || rate.isPopCount() || rate.isNegatedPopCount();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

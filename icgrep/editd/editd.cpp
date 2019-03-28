@@ -255,7 +255,7 @@ std::string createName(const std::vector<std::string> & patterns) {
 class PatternKernel final: public pablo::PabloKernel {
 public:
     PatternKernel(const std::unique_ptr<KernelBuilder> & b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
-    std::string makeSignature(const std::unique_ptr<KernelBuilder> &) override;
+    std::string makeSignature(const std::unique_ptr<KernelBuilder> &) const override;
     bool isCachable() const override { return true;}
 protected:
     void generatePabloMethod() override;
@@ -271,7 +271,7 @@ PatternKernel::PatternKernel(const std::unique_ptr<KernelBuilder> & b, const std
     addAttribute(InfrequentlyUsed());
 }
 
-std::string PatternKernel::makeSignature(const std::unique_ptr<KernelBuilder> &) {
+std::string PatternKernel::makeSignature(const std::unique_ptr<KernelBuilder> &) const {
     return getName();
 }
 

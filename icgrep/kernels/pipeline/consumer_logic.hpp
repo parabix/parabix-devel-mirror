@@ -70,7 +70,6 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
         // copy the producing edge
         const auto pe = in_edge(bufferVertex, mBufferGraph);
         add_edge(source(pe, mBufferGraph), bufferVertex, mBufferGraph[pe].Port, G);
-
         for (const auto ce : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
             add_edge(bufferVertex, target(ce, mBufferGraph), mBufferGraph[ce].Port, G);
         }
@@ -159,21 +158,33 @@ next:           continue;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::initializeConsumedItemCount(const unsigned bufferVertex, Value * const produced) {
-    ConsumerNode & cn = mConsumerGraph[bufferVertex];
-    cn.Consumed = produced;
+inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const unsigned outputPort, Value * const produced) {
+    Value * initiallyConsumed = produced;
+    const Binding & binding = getOutputBinding(outputPort);
+    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::LookBehind))) {
+        const Attribute & attr = binding.findAttribute(AttrId::LookBehind);
+        Constant * const lookBehind = b->getSize(attr.amount());
+        Value * consumed = b->CreateSub(initiallyConsumed, lookBehind);
+        Value * const satisfies = b->CreateICmpUGT(initiallyConsumed, lookBehind);
+        initiallyConsumed = b->CreateSelect(satisfies, consumed, b->getSize(0));
+    }
+    ConsumerNode & cn = mConsumerGraph[getOutputBufferVertex(outputPort)];
+    cn.Consumed = initiallyConsumed;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createConsumedPhiNodes
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
+    IntegerType * const sizeTy = b->getSizeTy();
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
         //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
         const auto bufferVertex = source(e, mConsumerGraph);
         ConsumerNode & cn = mConsumerGraph[bufferVertex];
         if (LLVM_LIKELY(cn.PhiNode == nullptr)) {
-            PHINode * const consumedPhi = b->CreatePHI(b->getSizeTy(), 2, "consumed." + std::to_string(bufferVertex) + ".");
+            const auto inputPort = InputPort(mConsumerGraph[e]);
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
+            PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
             consumedPhi->addIncoming(cn.Consumed, mKernelEntry);
             cn.PhiNode = consumedPhi;
         }
@@ -186,8 +197,21 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
 inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
         //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
-        const auto inputPort = InputPort(mConsumerGraph[e]);
-        Value * const processed = mFullyProcessedItemCount[inputPort];
+
+        const auto inputPort = mConsumerGraph[e];
+        Value * processed = mFullyProcessedItemCount[InputPort(inputPort)];
+        // To support the lookbehind attribute, we need to withhold the items from
+        // our consumed count and rely on the initial buffer underflow to access any
+        // items before the start of the physical buffer.
+        const Binding & input = getBinding(inputPort);
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
+            const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
+            ConstantInt * const amount = b->getSize(lookBehind.amount());
+            ConstantInt * const ZERO = b->getSize(0);
+            Value * const safe = b->CreateICmpULT(processed, amount);
+            processed = b->CreateSelect(safe, b->CreateSub(processed, amount), ZERO);
+        }
+
         const auto bufferVertex = source(e, mConsumerGraph);
         ConsumerNode & cn = mConsumerGraph[bufferVertex]; assert (cn.Consumed);
         cn.Consumed = b->CreateUMin(cn.Consumed, processed);
@@ -208,7 +232,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
             continue;
         }
         const BufferRateData & rd = mBufferGraph[e];
-        const auto prefix = makeBufferName(kernel, rd.Binding);
+        const auto prefix = makeBufferName(kernel, rd.Port);
         if (LLVM_UNLIKELY(kernel == PipelineInput)) {
             mPipelineKernel->addNonPersistentScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         } else {
@@ -231,12 +255,15 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
             // is identical to its production rate.
             consumed = mInitiallyProducedItemCount[port];
         } else {
-            const Binding & output = getOutputBinding(port);
-            const auto prefix = makeBufferName(mKernelIndex, output);
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, port});
             consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
         }
         mConsumedItemCount[port] = consumed;
         mPriorConsumedItemCount[getBufferIndex(bufferVertex)] = consumed;
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, port});
+        b->CallPrintInt(prefix + "_consumed", consumed);
+        #endif
     }
     b->setKernel(mKernel);
 }
@@ -280,7 +307,7 @@ inline void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned 
     const auto pe = in_edge(buffer, mBufferGraph);
     const auto producerVertex = source(pe, mBufferGraph);
     const BufferRateData & rd = mBufferGraph[pe];
-    const auto prefix = makeBufferName(producerVertex, rd.Binding);
+    const auto prefix = makeBufferName(producerVertex, rd.Port);
     b->setScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
 }
 

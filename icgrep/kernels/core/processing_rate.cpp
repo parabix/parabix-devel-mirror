@@ -96,6 +96,9 @@ void ProcessingRate::print(const Kernel * const kernel, llvm::raw_ostream & out)
         case KindId::Relative:
             out << 'R';
             break;
+        case KindId::PartialSum:
+            out << 'S';
+            break;
     }
     write(mLowerBound, out);
     const StreamPort ref = kernel->getStreamPort(mReference);

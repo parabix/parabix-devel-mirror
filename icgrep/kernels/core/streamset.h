@@ -119,7 +119,7 @@ public:
 
     virtual llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
-    virtual llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const = 0;
+    virtual llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems = nullptr) const = 0;
 
     void setHandle(BuilderRef b, llvm::Value * const handle);
 
@@ -178,7 +178,7 @@ public:
 
     llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const override;
 
-    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems = nullptr) const override;
 
     void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * addr) const override;
 
@@ -219,7 +219,7 @@ public:
 
     void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * capacity) const override;
 
-    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems = nullptr) const override;
 
     llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
@@ -260,7 +260,7 @@ public:
 
     void releaseBuffer(BuilderRef b) const override;
 
-    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems = nullptr) const override;
 
     llvm::Value * getLinearlyAccessibleItems(BuilderRef b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 
@@ -319,7 +319,7 @@ public:
 
     void releaseBuffer(BuilderRef b) const override;
 
-    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems = nullptr) const override;
 
     llvm::Value * getLinearlyAccessibleItems(BuilderRef b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 

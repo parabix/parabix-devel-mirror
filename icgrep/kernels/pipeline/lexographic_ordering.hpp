@@ -15,7 +15,7 @@ using namespace boost;
 using namespace llvm;
 
 template <typename Graph, typename Vec>
-void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
+bool lexical_ordering(const Graph & G, Vec & L) {
 
     using Vertex = typename graph_traits<Graph>::vertex_descriptor;
     using Queue = std::priority_queue<Vertex, std::vector<Vertex>, std::greater<Vertex>>;
@@ -24,13 +24,18 @@ void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
 
     const auto count = num_vertices(G);
 
-    std::vector<unsigned> encountered(count, 0);
+    SmallVector<unsigned, 4> isolated;
+    SmallVector<unsigned, 256> encountered(count, 0);
     L.reserve(count);
     Queue Q;
 
     for (unsigned i = 0; i < count; ++i) {
-        if (LLVM_LIKELY(in_degree(i, G) == 0)) {
-            Q.push(i);
+        if (LLVM_UNLIKELY(in_degree(i, G) == 0)) {
+            if (LLVM_LIKELY(out_degree(i, G) != 0)) {
+                Q.push(i);
+            } else {
+                isolated.push_back(i);
+            }
         }
     }
 
@@ -48,11 +53,13 @@ void lexical_ordering(const Graph & G, Vec & L, const llvm::Twine error) {
         }
     }
 
-    const size_t traversed = std::accumulate(encountered.begin(), encountered.end(), 0);
-    if (LLVM_UNLIKELY(traversed != num_edges(G))) {
-        llvm::report_fatal_error(error);
+    // leave all isolated vertices at the end of the list
+    L.insert(L.end(), isolated.begin(), isolated.end());
+    if (LLVM_UNLIKELY(L.size() != count)) {
+        return false;
     }
-    assert ("not all vertices were reached?" && L.size() == count);
+    const size_t traversed = std::accumulate(encountered.begin(), encountered.end(), 0);
+    return (traversed == num_edges(G));
 }
 
 namespace { // anonymous

@@ -175,7 +175,7 @@ public:
         }
     }
 
-    virtual std::string makeSignature(const std::unique_ptr<KernelBuilder> & b);
+    virtual std::string makeSignature(const std::unique_ptr<KernelBuilder> & b) const;
 
     virtual bool hasSignature() const { return true; }
 
@@ -423,7 +423,13 @@ public:
 
     LLVM_READNONE StreamSetPort getStreamPort(const llvm::StringRef name) const;
 
-    LLVM_READNONE const Binding & getStreamBinding(const llvm::StringRef name) const;
+    LLVM_READNONE const Binding & getStreamBinding(const llvm::StringRef name) const {
+        return getStreamBinding(getStreamPort(name));
+    }
+
+    LLVM_READNONE const Binding & getStreamBinding(const StreamSetPort port) const {
+        return (port.Type == PortType::Input) ? getInputStreamSetBinding(port.Number) : getOutputStreamSetBinding(port.Number);
+    }
 
     LLVM_READNONE ProcessingRate::RateValue getLowerBound(const Binding & binding) const;
 

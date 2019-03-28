@@ -62,10 +62,6 @@ public:
     // Equivalent to CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor)
     llvm::Value * CreateCeilUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
 
-    llvm::Value * CreateUDivCeil(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "") {
-        return CreateCeilUDiv(number, divisor, Name);
-    }
-
     // Round down to a multiple of divisor.
     llvm::Value * CreateRoundDown(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
 
