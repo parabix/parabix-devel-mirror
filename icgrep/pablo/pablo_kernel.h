@@ -124,7 +124,7 @@ public:
 
     String * makeName(const llvm::StringRef prefix) const;
 
-    Integer * getInteger(const int64_t value) const;
+    Integer * getInteger(const int64_t value, unsigned intWidth = 64) const;
 
     llvm::StructType * getCarryDataTy() const {
         return mCarryDataTy;

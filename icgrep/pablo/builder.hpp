@@ -312,8 +312,8 @@ public:
         return mPb->makeName(prefix);
     }
 
-    Integer * getInteger(const uint64_t value) const {
-        return mPb->getInteger(value);
+    Integer * getInteger(const uint64_t value, unsigned intWidth = 64) const {
+        return mPb->getInteger(value, intWidth);
     }
 
     void print(llvm::raw_ostream & O, const bool expandNested = true) const {

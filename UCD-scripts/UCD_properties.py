@@ -99,7 +99,7 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
         const static std::vector<codepoint_t> defined_cps{
         ${explicitly_defined_cps}};
         static StringOverridePropertyObject property_object(${prop_enum}, 
-                                                    ${overridden}_ns::property_object, 
+                                                    ${overridden}, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     std::move(buffer_offsets), 
@@ -115,7 +115,7 @@ def emit_string_override_property(f, property_code, overridden_code, override_se
     buffer_length = buffer_offsets[-1]
     f.write(s.substitute(prop_enum = property_code,
                          prop_enum_up = property_code.upper(),
-                         overridden = overridden_code.upper(),
+                         overridden = overridden_code,
                          string_buffer = string_buffer,
                          buffer_offsets = cformat.multiline_fill(['%i' % o for o in buffer_offsets], ',', 8),
                          allocation_length = (buffer_length + 255) & -256,
@@ -452,7 +452,7 @@ class UCD_generator():
         basename = 'SpecialCasing'
         parse_SpecialCasing_txt(self.property_object_map)
         f = cformat.open_header_file_for_write(basename)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"UnicodeData.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
         f.write("\nnamespace UCD {\n")
         for p in ['lc', 'uc', 'tc']:
             self.emit_property(f, p)

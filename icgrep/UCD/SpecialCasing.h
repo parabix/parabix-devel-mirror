@@ -11,7 +11,6 @@
 #include "PropertyAliases.h"
 #include "PropertyObjects.h"
 #include "PropertyValueAliases.h"
-#include "UnicodeData.h"
 #include "unicode_set.h"
 
 namespace UCD {
@@ -171,7 +170,7 @@ i̇
         0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04,
         0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(lc, 
-                                                    SLC_ns::property_object, 
+                                                    slc, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     std::move(buffer_offsets), 
@@ -333,7 +332,7 @@ ST
         0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04,
         0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(uc, 
-                                                    SUC_ns::property_object, 
+                                                    suc, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     std::move(buffer_offsets), 
@@ -495,7 +494,7 @@ St
         0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03, 0xfb04,
         0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(tc, 
-                                                    STC_ns::property_object, 
+                                                    stc, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     std::move(buffer_offsets), 

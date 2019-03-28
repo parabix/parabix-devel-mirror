@@ -21,7 +21,6 @@
 #include <UCD/unicode_set.h>
 #include <UCD/PropertyAliases.h>
 #include <UCD/PropertyObjects.h>
-#include <UCD/PropertyObjectTable.h>
 #include <UCD/PropertyValueAliases.h>
 #include <llvm/Support/Casting.h>
 
@@ -100,10 +99,10 @@ private:
 NFD_Transformer::NFD_Transformer(DecompositionOptions opt) :
 RE_Transformer("toNFD"),
 mOptions(opt),
-decompTypeObj(cast<EnumeratedPropertyObject>(property_object_table[dt])),
-decompMappingObj(cast<StringPropertyObject>(property_object_table[dm])),
-cccObj(cast<EnumeratedPropertyObject>(property_object_table[ccc])),
-caseFoldObj(cast<StringOverridePropertyObject>(property_object_table[cf])),
+decompTypeObj(cast<EnumeratedPropertyObject>(getPropertyObject(dt))),
+decompMappingObj(cast<StringPropertyObject>(getPropertyObject(dm))),
+cccObj(cast<EnumeratedPropertyObject>(getPropertyObject(ccc))),
+caseFoldObj(cast<StringOverridePropertyObject>(getPropertyObject(cf))),
 canonicalMapped(decompTypeObj->GetCodepointSet(DT_ns::Can)),
 cc0Set(cccObj->GetCodepointSet(CCC_ns::NR)),
 selfNFKD(decompMappingObj->GetReflexiveSet()),

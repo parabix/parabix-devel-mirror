@@ -16,7 +16,7 @@
 namespace re {class RE;}
 
 namespace UCD {
-
+    
 std::string canonicalize_value_name(const std::string & prop_or_val);
 
 class PropertyObject {
@@ -234,10 +234,10 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    StringOverridePropertyObject(UCD::property_t p, PropertyObject & baseObj, const UnicodeSet && overriddenSet, const char * string_buffer,
+    StringOverridePropertyObject(UCD::property_t p, UCD::property_t baseProp, const UnicodeSet && overriddenSet, const char * string_buffer,
                                  const std::vector<unsigned> && offsets, const std::vector<UCD::codepoint_t> && cps)
     : PropertyObject(p, ClassTypeId::StringOverrideProperty)
-    , mBaseObject(baseObj)
+    , mBaseProperty(baseProp)
     , mOverriddenSet(std::move(overriddenSet))
     , mStringBuffer(string_buffer)
     , mStringOffsets(offsets)
@@ -248,12 +248,12 @@ public:
     const UnicodeSet GetCodepointSet(const std::string & value_spec) override;
     const UnicodeSet GetCodepointSetMatchingPattern(re::RE * pattern) override;
     const UnicodeSet GetReflexiveSet() const override;
-    const PropertyObject & GetBaseObject() {return mBaseObject;}
+    const UCD::property_t GetBaseProperty() {return mBaseProperty;}
     const UnicodeSet & GetOverriddenSet() const {return mOverriddenSet;}
     const std::string GetStringValue(UCD::codepoint_t cp) const override;
 
 private:
-    PropertyObject & mBaseObject;  // the base object that provides default values for this property unless overridden.
+    UCD::property_t mBaseProperty;  // the base object that provides default values for this property unless overridden.
     const UnicodeSet mOverriddenSet;   // codepoints for which the baseObject value is overridden.
     const char * mStringBuffer;  // buffer holding all string values for overridden codepoints, in sorted order.
     const std::vector<unsigned> mStringOffsets;        // the offsets of each string within the buffer.
@@ -290,6 +290,10 @@ public:
     UnsupportedPropertyObject(property_t p, ClassTypeId)
     : PropertyObject(p, ClassTypeId::UnsupportedProperty) {}
 };
+    
+    
+PropertyObject * getPropertyObject(property_t property_code);
+
 }
 
 #endif

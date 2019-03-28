@@ -271,22 +271,22 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
         unsigned lo = re::lo_codepoint(interval);
         unsigned hi = re::hi_codepoint(interval);
         if (lo == hi) {
-            PabloAST * testVal = pb.createRepeat(codeUnitWidth, lo);
+            PabloAST * testVal = pb.createRepeat(codeUnitWidth, pb.getInteger(lo, codeUnitWidth));
             ccStrm = pb.createOr(ccStrm, pb.createEquals(codeUnitStream, testVal));
         } else if (lo == 0) {
             if (hi == maxCodeVal) {
                 // All code units
                 ccStrm = pb.createOnes();
             } else {
-                PabloAST * testVal = pb.createRepeat(codeUnitWidth, hi+1);
+                PabloAST * testVal = pb.createRepeat(codeUnitWidth, pb.getInteger(hi+1, codeUnitWidth));
                 ccStrm = pb.createOr(ccStrm, pb.createLessThan(codeUnitStream, testVal));
             }
         } else if (hi == maxCodeVal) {
-            PabloAST * testVal = pb.createRepeat(codeUnitWidth, lo);
+            PabloAST * testVal = pb.createRepeat(codeUnitWidth, pb.getInteger(lo, codeUnitWidth));
             ccStrm = pb.createOr(ccStrm, pb.createNot(pb.createLessThan(codeUnitStream, testVal)));
         } else {
-            PabloAST * testVal_lo = pb.createRepeat(codeUnitWidth, lo);
-            PabloAST * testVal_hi = pb.createRepeat(codeUnitWidth, hi + 1);
+            PabloAST * testVal_lo = pb.createRepeat(codeUnitWidth, pb.getInteger(lo, codeUnitWidth));
+            PabloAST * testVal_hi = pb.createRepeat(codeUnitWidth, pb.getInteger(hi+1, codeUnitWidth));
             ccStrm = pb.createOr(ccStrm, pb.createAnd(pb.createNot(pb.createLessThan(codeUnitStream, testVal_lo)),
                                                       pb.createLessThan(codeUnitStream, testVal_hi)));
         }
@@ -294,7 +294,8 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
     if (!negatedIsolates.empty()) {
         PabloAST * toExclude = pb.createZeroes();
         for (const auto & interval : negatedIsolates) {
-            PabloAST * testVal = pb.createRepeat(codeUnitWidth, re::lo_codepoint(interval));
+            auto lo = re::lo_codepoint(interval);
+            PabloAST * testVal = pb.createRepeat(codeUnitWidth, pb.getInteger(lo, codeUnitWidth));
             toExclude = pb.createOr(toExclude, pb.createEquals(codeUnitStream, testVal));
         }
         ccStrm = pb.createAnd(ccStrm, pb.createNot(toExclude));

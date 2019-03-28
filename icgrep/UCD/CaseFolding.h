@@ -2392,7 +2392,7 @@ st
         0x1ff4, 0x1ff6, 0x1ff7, 0x1ffc, 0xfb00, 0xfb01, 0xfb02, 0xfb03,
         0xfb04, 0xfb05, 0xfb06, 0xfb13, 0xfb14, 0xfb15, 0xfb16, 0xfb17};
         static StringOverridePropertyObject property_object(cf, 
-                                                    SCF_ns::property_object, 
+                                                    scf, 
                                                     std::move(explicitly_defined_set), 
                                                     static_cast<const char *>(string_buffer), 
                                                     std::move(buffer_offsets), 

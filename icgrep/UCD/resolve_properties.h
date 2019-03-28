@@ -17,7 +17,6 @@ LLVM_ATTRIBUTE_NORETURN void UnicodePropertyExpressionError(std::string errmsg);
 bool resolvePropertyDefinition(re::Name * const property);
 std::string resolvePropertyFunction(re::Name * const property);
 UCD::UnicodeSet resolveUnicodeSet(re::Name * const name);
-const std::string & getPropertyValueGrepString(const std::string & prop);
 
 }
 

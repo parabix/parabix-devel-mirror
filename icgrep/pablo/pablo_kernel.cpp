@@ -191,8 +191,8 @@ String * PabloKernel::makeName(const llvm::StringRef prefix) const {
     return mSymbolTable->makeString(prefix);
 }
 
-Integer * PabloKernel::getInteger(const int64_t value) const {
-    return mSymbolTable->getInteger(value);
+Integer * PabloKernel::getInteger(const int64_t value, unsigned intWidth) const {
+    return mSymbolTable->getInteger(value, intWidth);
 }
 
 llvm::IntegerType * PabloKernel::getInt1Ty() const {

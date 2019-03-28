@@ -34,6 +34,11 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
     }
     return s.str();
 }
+    
+PropertyObject * getPropertyObject(property_t property_code) {
+    return property_object_table[property_code];
+}
+
 
 const std::string & PropertyObject::GetPropertyValueGrepString() {
     llvm::report_fatal_error("Property Value Grep String unsupported.");
@@ -446,7 +451,7 @@ const std::string StringPropertyObject::GetStringValue(codepoint_t cp) const {
 
 const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string & value_spec) {
     // First step: get the codepoints from the base object and then remove any overridden ones.
-    UnicodeSet result_set = mBaseObject.GetCodepointSet(value_spec) - mOverriddenSet;
+    UnicodeSet result_set = getPropertyObject(mBaseProperty)->GetCodepointSet(value_spec) - mOverriddenSet;
     // Now search for additional entries.
     unsigned val_bytes = value_spec.length();
     const char * value_str = value_spec.c_str();
@@ -466,7 +471,7 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSet(const std::string
     
     
 const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re::RE * pattern) {
-    UnicodeSet base_set = mBaseObject.GetCodepointSetMatchingPattern(pattern) - mOverriddenSet;
+    UnicodeSet base_set = getPropertyObject(mBaseProperty)->GetCodepointSetMatchingPattern(pattern) - mOverriddenSet;
     SetByLineNumberAccumulator accum(mExplicitCps, UnicodeSet());
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
@@ -479,11 +484,11 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re
 }
 
 const UnicodeSet StringOverridePropertyObject::GetReflexiveSet() const {
-    return mBaseObject.GetReflexiveSet() - mOverriddenSet;
+    return getPropertyObject(mBaseProperty)->GetReflexiveSet() - mOverriddenSet;
 }
 
 const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) const {
-    if (!mOverriddenSet.contains(cp)) return mBaseObject.GetStringValue(cp);
+    if (!mOverriddenSet.contains(cp)) return getPropertyObject(mBaseProperty)->GetStringValue(cp);
     // Otherwise, binary search through the explicit cps to find the index.
     // string index.
     unsigned lo = 0;

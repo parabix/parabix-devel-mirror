@@ -25,7 +25,7 @@ class SymbolGenerator {
 public:
     using IntTy = int64_t;
     String * makeString(const llvm::StringRef prefix) noexcept;
-    Integer * getInteger(const IntTy value) noexcept;
+    Integer * getInteger(const IntTy value, unsigned intWidth = 64) noexcept;
     ~SymbolGenerator() { }
 protected:
     SymbolGenerator(llvm::LLVMContext & C, Allocator & allocator)
@@ -38,7 +38,7 @@ private:
     Allocator &                                  mAllocator;
     llvm::StringMap<IntTy>                       mPrefixMap;
     llvm::StringMap<String *>                    mStringMap;
-    boost::container::flat_map<IntTy, Integer *> mIntegerMap;
+    boost::container::flat_map<std::pair<IntTy, unsigned>, Integer *> mIntegerMap;
 };
 
 

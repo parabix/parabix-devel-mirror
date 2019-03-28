@@ -631,11 +631,10 @@ bool GrepEngine::searchAllFiles() {
     return grepMatchFound;
 }
 
-
 // DoGrep thread function.
 void * GrepEngine::DoGrepThreadMethod() {
 
-    unsigned fileIdx = mNextFileToGrep.fetch_add(1);
+    unsigned fileIdx = mNextFileToGrep++;
     while (fileIdx < inputPaths.size()) {
         if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
             errs() << "Tracing " << inputPaths[fileIdx].string() << "\n";
@@ -651,35 +650,39 @@ void * GrepEngine::DoGrepThreadMethod() {
             }
             return nullptr;
         }
-        fileIdx = mNextFileToGrep.fetch_add(1);
-    }
-
-    unsigned printIdx = mNextFileToPrint.fetch_add(1);
-    if (printIdx == 0) {
-
-        while (printIdx < inputPaths.size()) {
-            const bool readyToPrint = (mFileStatus[printIdx] == FileStatus::GrepComplete);
-            if (readyToPrint) {
-                const auto output = mResultStrs[printIdx].str();
+        fileIdx = mNextFileToGrep++;
+        if (pthread_self() == mEngineThread) {
+            while ((mNextFileToPrint < inputPaths.size()) && (mFileStatus[mNextFileToPrint] == FileStatus::GrepComplete)) {
+                const auto output = mResultStrs[mNextFileToPrint].str();
                 if (!output.empty()) {
                     llvm::outs() << output;
                 }
-                mFileStatus[printIdx] = FileStatus::PrintComplete;
-                printIdx++;
-            } else {
-                sched_yield();
+                mFileStatus[mNextFileToPrint] = FileStatus::PrintComplete;
+                mNextFileToPrint++;
             }
-        }
-
-        if (mGrepStdIn) {
-            std::ostringstream s;
-            const auto grepResult = doGrep("-", s);
-            llvm::outs() << s.str();
-            if (grepResult) grepMatchFound = true;
         }
     }
     if (pthread_self() != mEngineThread) {
         pthread_exit(nullptr);
+    }
+    while (mNextFileToPrint < inputPaths.size()) {
+        const bool readyToPrint = (mFileStatus[mNextFileToPrint] == FileStatus::GrepComplete);
+        if (readyToPrint) {
+            const auto output = mResultStrs[mNextFileToPrint].str();
+            if (!output.empty()) {
+                llvm::outs() << output;
+            }
+            mFileStatus[mNextFileToPrint] = FileStatus::PrintComplete;
+            mNextFileToPrint++;
+        } else {
+            sched_yield();
+        }
+    }
+    if (mGrepStdIn) {
+        std::ostringstream s;
+        const auto grepResult = doGrep("-", s);
+        llvm::outs() << s.str();
+        if (grepResult) grepMatchFound = true;
     }
     return nullptr;
 }
