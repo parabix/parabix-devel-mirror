@@ -6,6 +6,7 @@
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline/regionselectionkernel.h>
 #include <kernels/pipeline/internal/popcount_kernel.h>
+#include <kernels/core/refwrapper.h>
 #include <util/extended_boost_graph_containers.h>
 #include <toolchain/toolchain.h>
 #include <boost/container/flat_set.hpp>
@@ -23,7 +24,7 @@
 #include <algorithm>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -41,6 +42,7 @@ namespace kernel {
 
 #include <util/enum_flags.hpp>
 
+using BindingRef = RefWrapper<Binding>;
 using PortType = Kernel::PortType;
 using StreamPort = Kernel::StreamSetPort;
 using AttrId = Attribute::KindId;
@@ -49,6 +51,7 @@ using RateId = ProcessingRate::KindId;
 using Scalars = PipelineKernel::Scalars;
 using Kernels = PipelineKernel::Kernels;
 using CallBinding = PipelineKernel::CallBinding;
+using CallRef = RefWrapper<CallBinding>;
 using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 
 // TODO: replace ints used for port #s with the following
@@ -66,10 +69,10 @@ struct RelationshipNode {
 
     union {
 
-        const kernel::Kernel *  Kernel;
-        kernel::Relationship *  Relationship;
-        llvm::Constant *        Callee;
-        BindingRef              Binding;
+        const kernel::Kernel * Kernel;
+        kernel::Relationship * Relationship;
+        CallRef                Callee;
+        BindingRef             Binding;
 
     };
 
@@ -93,10 +96,10 @@ struct RelationshipNode {
 
     explicit RelationshipNode() noexcept : Type(IsNil), Kernel(nullptr) { }
     explicit RelationshipNode(std::nullptr_t) noexcept : Type(IsNil), Kernel(nullptr) { }
-    explicit RelationshipNode(const kernel::Kernel * kernel) noexcept : Type(IsKernel), Kernel(kernel) { }
-    explicit RelationshipNode(kernel::Relationship * relationship) noexcept : Type(IsRelationship), Relationship(relationship) { }
-    explicit RelationshipNode(llvm::Constant * callee) noexcept : Type(IsCallee), Callee(callee) { }
-    explicit RelationshipNode(const kernel::Binding * ref) noexcept : Type(IsBinding), Binding(ref) { }
+    explicit RelationshipNode(not_null<const kernel::Kernel *> kernel) noexcept : Type(IsKernel), Kernel(kernel) { }
+    explicit RelationshipNode(not_null<kernel::Relationship *> relationship) noexcept : Type(IsRelationship), Relationship(relationship) { }
+    explicit RelationshipNode(not_null<const CallBinding *> callee) noexcept : Type(IsCallee), Callee(callee) { }
+    explicit RelationshipNode(not_null<const kernel::Binding *> ref) noexcept : Type(IsBinding), Binding(ref) { }
     explicit RelationshipNode(const RelationshipNode & rn) noexcept : Type(rn.Type), Kernel(rn.Kernel) { }
 
     RelationshipNode & operator = (const RelationshipNode & other) {
@@ -159,15 +162,15 @@ struct Relationships : public RelationshipGraph {
     }
 
     template <typename T>
-    inline Vertex addOrFind(T key) {
+    inline Vertex find(T key) {
         RelationshipNode k(key);
-        return __addOrFind(k);
+        return __find(k);
     }
 
     template <typename T>
-    inline Vertex get(T key) {
+    inline Vertex addOrFind(T key) {
         RelationshipNode k(key);
-        return __get(k);
+        return __addOrFind(k);
     }
 
     RelationshipGraph & Graph() {
@@ -177,12 +180,23 @@ struct Relationships : public RelationshipGraph {
 private:
 
     BOOST_NOINLINE Vertex __add(const RelationshipNode & key) {
-        assert ("key already exists?" && find(key.Kernel) == mMap.end());
+        assert ("key already exists?" && mMap.find(key.Kernel) == mMap.end());
         const auto v = add_vertex(key, *this);
         mMap.emplace(key.Kernel, v);
         assert ((*this)[v] == key);
-        assert (__get(key) == v);
+        assert (__find(key) == v);
         return v;
+    }
+
+
+    BOOST_NOINLINE Vertex __find(const RelationshipNode & key) const {
+        const auto f = mMap.find(key.Kernel);
+        if (LLVM_LIKELY(f != mMap.end())) {
+            const auto v = f->second;
+            assert ((*this)[v] == key);
+            return v;
+        }
+        llvm_unreachable("could not find node in relationship graph");
     }
 
     BOOST_NOINLINE Vertex __addOrFind(const RelationshipNode & key) {
@@ -193,16 +207,6 @@ private:
             return v;
         }
         return __add(key);
-    }
-
-    BOOST_NOINLINE Vertex __get(const RelationshipNode & key) const {
-        const auto f = mMap.find(key.Kernel);
-        if (LLVM_LIKELY(f != mMap.end())) {
-            const auto v = f->second;
-            assert ((*this)[v] == key);
-            return v;
-        }
-        llvm_unreachable("could not find node in relationship graph");
     }
 
     flat_map<const void *, Vertex> mMap;
@@ -541,53 +545,6 @@ protected:
 
     void loadTerminationSignals(BuilderRef b);
     void storeTerminationSignals(BuilderRef b);
-
-// pop-count functions
-
-    void addPopCountScalarsToPipelineKernel(BuilderRef b, const unsigned index);
-
-    void initializePopCounts();
-    void writePopCountComputationLogic(BuilderRef b);
-
-    void initializePopCountReferenceItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> produced);
-    void createPopCountReferenceCounts(BuilderRef b);
-    void computeMinimumPopCountReferenceCounts(BuilderRef b);
-    void updatePopCountReferenceCounts(BuilderRef b);
-    LLVM_READNONE Value * getPopCountNextBaseOffset(BuilderRef b, const unsigned bufferVertex) const;
-    LLVM_READNONE Value * getPopCountBaseOffset(BuilderRef b, const Binding & binding, const unsigned bufferVertex);
-
-    LLVM_READNONE bool hasPositivePopCountArray(const unsigned bufferVertex) const;
-    LLVM_READNONE bool hasNegativePopCountArray(const unsigned bufferVertex) const;
-
-    Value * getMinimumNumOfLinearPopCountItems(BuilderRef b, const Binding & binding);
-    Value * getMaximumNumOfPopCountStrides(BuilderRef b, const Binding & binding, not_null<Value *> sourceItemCount, not_null<Value *> peekableItemCount, Constant * const lookAhead = nullptr);
-    Value * getNumOfLinearPopCountItems(BuilderRef b, const Binding & binding);
-
-    Value * getPositivePopCountArray(BuilderRef b, const unsigned inputPort);
-    Value * getNegativePopCountArray(BuilderRef b, const unsigned inputPort);
-    Value * getIndividualPopCountArray(BuilderRef b, const unsigned inputPort, const unsigned index);
-
-    LLVM_READNONE unsigned getPopCountReferencePort(const Kernel * kernel, const ProcessingRate & rate) const;
-    LLVM_READNONE unsigned getPopCountReferenceBuffer(const Kernel * kernel, const ProcessingRate & rate) const;
-
-    LLVM_READNONE StructType * getPopCountThreadLocalStateType(BuilderRef b);
-    void allocatePopCountArrays(BuilderRef b, Value * base);
-    void deallocatePopCountArrays(BuilderRef b, Value * base);
-
-// pop-count analysis
-
-    PopCountGraph makePopCountGraph() const;
-
-    LLVM_READNONE PopCountData & getPopCountData(const unsigned bufferVertex) const;
-    LLVM_READNONE PopCountData analyzePopCountReference(const unsigned bufferVertex) const;
-    LLVM_READNONE RateValue popCountReferenceFieldWidth(const unsigned bufferVertex) const;
-    LLVM_READNONE bool popCountReferenceCanUseConsumedItemCount(const unsigned bufferVertex) const;
-
-    template <typename LambdaFunction>
-    void forEachOutputBufferThatIsAPopCountReference(const unsigned kernelIndex, LambdaFunction func);
-
-    template <typename LambdaFunction>
-    void forEachPopCountReferenceInputPort(const unsigned kernelIndex, LambdaFunction func);
 
 // consumer recording
 

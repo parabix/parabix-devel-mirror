@@ -24,6 +24,9 @@ void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> 
     for (Kernel * kernel : mKernels) {
         kernel->addKernelDeclarations(b);
     }
+    for (CallBinding & call : mCallBindings) {
+        call.Callee = b->LinkFunction(call.Name, call.Type, call.FunctionPointer);
+    }
     Kernel::addKernelDeclarations(b);
 }
 

@@ -6,22 +6,6 @@
 
 namespace kernel {
 
-// NOTE: std::reference_wrapper is not default constructible, which is required by boost graph
-struct BindingRef {
-    BindingRef() noexcept : binding(nullptr) {}
-    BindingRef(const Binding & ref) noexcept : binding(&ref) {}
-    BindingRef(const Binding * const ref) noexcept : binding(ref) {}
-    operator const Binding & () const noexcept {
-        return get();
-    }
-    const Binding & get() const noexcept {
-        assert (binding && "was not set!");
-        return *binding;
-    }
-private:
-    const Binding * binding;
-};
-
 enum class BindingType : unsigned { StreamInput, StreamOutput, ScalarInput, ScalarOutput };
 
 struct BindingMapEntry {

@@ -233,9 +233,7 @@ Kernel * PipelineBuilder::makeKernel() {
     }
 
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        const auto j = i - firstCall;
-        assert (j < numOfCalls);
-        out << "_C" << mCallBindings[j].Name;
+        out << "_C" << mCallBindings[i].Name;
     }
 
     const auto firstRelationship = pipelineOutput + 1;

@@ -62,8 +62,7 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                     out << rn.Kernel->getName();
                 }
                 break;
-            case RelationshipNode::IsBinding:
-                if (1) {
+            case RelationshipNode::IsBinding: {
                     const Binding & binding = rn.Binding;
                     out << "B:";
                     using KindId = ProcessingRate::KindId;
@@ -100,8 +99,8 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                 }
                 break;
             case RelationshipNode::IsCallee:
-                assert (rn.Callee);
-                out << "C:" << rn.Callee->getName();
+                assert (&rn.Callee);
+                out << "C:" << rn.Callee.get().Name;
                 break;
             case RelationshipNode::IsRelationship:
                 assert (rn.Relationship);
@@ -250,7 +249,7 @@ void addConsumerRelationships(const PortType portType, const CallBinding & call,
     if (LLVM_UNLIKELY(n == 0)) {
         return;
     }
-    const auto consumer = G.addOrFind(call.Callee);
+    const auto consumer = G.addOrFind(&call);
     for (unsigned i = 0; i < n; ++i) {
         const auto relationship = G.addOrFind(array[i]);
         add_edge(relationship, consumer, RelationshipType{portType, i}, G);
@@ -296,9 +295,11 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
         const RelationshipNode & rn = G[i];
         switch (rn.Type) {
             case RelationshipNode::IsKernel:
+                assert (rn.Kernel);
                 kernels.push_back(i);
                 break;
             case RelationshipNode::IsRelationship:
+                assert (rn.Relationship);
                 if (isa<StreamSet>(rn.Relationship)) {
                     streamSets.push_back(i);
                 } else {
@@ -306,9 +307,11 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
                 }
                 break;
             case RelationshipNode::IsCallee:
+                assert (&rn.Callee);
                 callees.push_back(i);
                 break;
             case RelationshipNode::IsBinding:
+                assert (&rn.Binding);
                 bindings.push_back(i);
                 break;
             default:
@@ -481,7 +484,7 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
 
     addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputScalarBindings(), G);
     for (const Kernel * const K : kernels) {
-        const auto k = G.get(K);
+        const auto k = G.find(K);
         addConsumerRelationships(PortType::Input, k, K->getInputScalarBindings(), G);
         addProducerRelationships(PortType::Output, k, K->getOutputScalarBindings(), G);
     }
@@ -689,7 +692,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
             }
         };
 
-        const auto j = G.get(kernel);
+        const auto j = G.find(kernel);
 
         for (const auto & e : make_iterator_range(in_edges(j, G))) {
             addPopCountDependency(source(e, G), G[e]);
@@ -757,10 +760,10 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
         for (const auto & e : make_iterator_range(out_edges(i, H))) {
             const Edge & ed = H[e];
             const Kernel * const kernel = kernels[target(e, H)];
-            const auto consumer = G.get(kernel);
+            const auto consumer = G.find(kernel);
             assert (ed.Type == CountingType::Positive || ed.Type == CountingType::Negative);
             StreamSet * const stream = ed.Type == CountingType::Positive ? positive : negative; assert (stream);
-            const auto streamVertex = G.get(stream);
+            const auto streamVertex = G.find(stream);
 
             // append the popcount rate stream to the kernel
             Binding * const popCount = new Binding("#popcount" + std::to_string(ed.Port.Number), stream, FixedRate({1, kernel->getStride()}));
@@ -1027,19 +1030,19 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 
     // identify all nodes that must be in the final pipeline
     for (const Binding & output : pipelineKernel->getOutputScalarBindings()) {
-        const auto p = G.get(output.getRelationship());
+        const auto p = G.find(output.getRelationship());
         pending.push(p);
         visited.insert_unique(p);
     }
     const auto & calls = pipelineKernel->getCallBindings();
     for (const CallBinding & C : calls) {
-        const auto c = G.get(C.Callee);
+        const auto c = G.find(&C);
         pending.push(c);
         visited.insert_unique(c);
     }
     for (const Kernel * kernel : kernels) {
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::SideEffecting))) {
-            const auto k = G.get(kernel);
+            const auto k = G.find(kernel);
             pending.push(k);
             visited.insert_unique(k);
         }

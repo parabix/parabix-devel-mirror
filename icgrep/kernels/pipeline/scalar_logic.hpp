@@ -13,7 +13,9 @@ std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
     b->setKernel(mPipelineKernel);
     for (unsigned call = FirstCall; call <= LastCall; ++call) {
         writeOutputScalars(b, call, args);
-        Function * const f = cast<Function>(mStreamGraph[call].Callee); assert (f);
+        const RelationshipNode & rn = mScalarGraph[call];
+        const CallBinding & C = rn.Callee;
+        Function * const f = cast<Function>(C.Callee);
         auto i = f->arg_begin();
         for (auto j = args.begin(); j != args.end(); ++i, ++j) {
             assert (i != f->arg_end());

@@ -9,8 +9,8 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/SmallVector.h>
+#include <kernels/core/refwrapper.h>
 #include  <array>
-
 
 using namespace llvm;
 using namespace boost;
@@ -19,6 +19,8 @@ using namespace boost::container;
 #define PRINT_DEBUG_MESSAGES
 
 namespace kernel {
+
+using BindingRef = RefWrapper<Binding>;
 
 using StreamSetGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 

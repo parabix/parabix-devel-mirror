@@ -96,12 +96,10 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     }
     addTerminationProperties(b);
     addConsumerKernelProperties(b, PipelineInput);
-
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
-        // addPopCountScalarsToPipelineKernel(b, i);
         addCycleCounterProperties(b, i);
     }
     b->setKernel(mPipelineKernel);

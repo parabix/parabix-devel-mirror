@@ -38,13 +38,16 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
     clear_out_edges(PipelineInput, G);
 
-    // 2) copy and summarize any output scalars of the pipeline
-    for (const auto & relationship : make_iterator_range(in_edges(PipelineOutput, mScalarGraph))) {
-        const auto r = source(relationship, mScalarGraph);
-        for (const auto & producer : make_iterator_range(in_edges(r, mScalarGraph))) {
-            const auto k = source(producer, mScalarGraph);
-            assert ("cannot occur" && k != PipelineOutput);
-            add_edge(k, PipelineOutput, G);
+    // 2) copy and summarize any input scalars to internal calls or output scalars of the pipeline
+    assert (FirstCall == PipelineOutput + 1);
+    for (unsigned consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
+        for (const auto & relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
+            const auto r = source(relationship, mScalarGraph);
+            for (const auto & producer : make_iterator_range(in_edges(r, mScalarGraph))) {
+                const auto k = source(producer, mScalarGraph);
+                assert ("cannot occur" && k != PipelineOutput);
+                add_edge(k, PipelineOutput, G);
+            }
         }
     }
 
