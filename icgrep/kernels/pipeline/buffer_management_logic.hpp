@@ -699,6 +699,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
             case CopyMode::CopyBack: return "CopyBack";
             case CopyMode::LookBehind: return "LookBehind";
         }
+        llvm_unreachable("unknown copy mode!");
     };
 
     const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort}) + "_copy" + makeSuffix(mode);
@@ -801,9 +802,8 @@ const Binding & PipelineCompiler::getInputBinding(const unsigned kernelVertex, c
     std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
     assert (inputPort < std::distance(ei, ei_end));
     const auto & e = *(ei + inputPort);
-    const RelationshipType & rt = mStreamGraph[e];
-    assert (rt.Type == PortType::Input);
-    assert (rt.Number == inputPort);
+    assert (mStreamGraph[e].Type == PortType::Input);
+    assert (mStreamGraph[e].Number == inputPort);
     const auto v = source(e, mStreamGraph);
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
@@ -858,9 +858,8 @@ const Binding & PipelineCompiler::getOutputBinding(const unsigned kernelVertex, 
     std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
     assert (outputPort < std::distance(ei, ei_end));
     const auto & e = *(ei + outputPort);
-    const RelationshipType & rt = mStreamGraph[e];
-    assert (rt.Type == PortType::Output);
-    assert (rt.Number == outputPort);
+    assert (mStreamGraph[e].Type == PortType::Output);
+    assert (mStreamGraph[e].Number == outputPort);
     const auto v = target(e, mStreamGraph);
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);

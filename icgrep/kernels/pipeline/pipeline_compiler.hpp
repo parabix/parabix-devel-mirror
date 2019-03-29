@@ -149,7 +149,7 @@ struct RelationshipType : public StreamPort {
 
 using RelationshipGraph = adjacency_list<vecS, vecS, bidirectionalS, RelationshipNode, RelationshipType, no_property>;
 
-struct Relationships : public RelationshipGraph, public flat_map<const void *, RelationshipGraph::vertex_descriptor> {
+struct Relationships : public RelationshipGraph {
     using Vertex = RelationshipGraph::vertex_descriptor;
 
     template <typename T>
@@ -177,17 +177,17 @@ struct Relationships : public RelationshipGraph, public flat_map<const void *, R
 private:
 
     BOOST_NOINLINE Vertex __add(const RelationshipNode & key) {
-        assert ("key already exists?" && find(key.Kernel) == end());
+        assert ("key already exists?" && find(key.Kernel) == mMap.end());
         const auto v = add_vertex(key, *this);
-        emplace(key.Kernel, v);
+        mMap.emplace(key.Kernel, v);
         assert ((*this)[v] == key);
         assert (__get(key) == v);
         return v;
     }
 
     BOOST_NOINLINE Vertex __addOrFind(const RelationshipNode & key) {
-        const auto f = find(key.Kernel);
-        if (f != end()) {
+        const auto f = mMap.find(key.Kernel);
+        if (f != mMap.end()) {
             const auto v = f->second;
             assert ((*this)[v] == key);
             return v;
@@ -196,8 +196,8 @@ private:
     }
 
     BOOST_NOINLINE Vertex __get(const RelationshipNode & key) const {
-        const auto f = find(key.Kernel);
-        if (LLVM_LIKELY(f != end())) {
+        const auto f = mMap.find(key.Kernel);
+        if (LLVM_LIKELY(f != mMap.end())) {
             const auto v = f->second;
             assert ((*this)[v] == key);
             return v;
@@ -205,6 +205,7 @@ private:
         llvm_unreachable("could not find node in relationship graph");
     }
 
+    flat_map<const void *, Vertex> mMap;
 };
 
 

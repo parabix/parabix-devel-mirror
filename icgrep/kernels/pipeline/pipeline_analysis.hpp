@@ -349,23 +349,23 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     SmallVector<unsigned, 256> subsitution(num_vertices(G), -1U);
 
-    for (auto i = 0; i < numOfKernels; ++i) {
+    for (unsigned i = 0; i < numOfKernels; ++i) {
         subsitution[kernels[i]] = i;
     }
 
     assert (subsitution[kernels[0]] == P.PipelineInput);
     assert (subsitution[kernels[numOfKernels - 1]] == P.PipelineOutput);
 
-    for (auto i = 0; i < numOfStreamSets; ++i) {
+    for (unsigned i = 0; i < numOfStreamSets; ++i) {
         subsitution[streamSets[i]] = P.FirstStreamSet + i;
     }
-    for (auto i = 0; i < numOfBindings; ++i) {
+    for (unsigned i = 0; i < numOfBindings; ++i) {
         subsitution[bindings[i]] = P.FirstBinding  + i;
     }
-    for (auto i = 0; i < numOfCallees; ++i) {
+    for (unsigned i = 0; i < numOfCallees; ++i) {
         subsitution[callees[i]] = P.FirstCall + i;
     }
-    for (auto i = 0; i < numOfScalars; ++i) {
+    for (unsigned i = 0; i < numOfScalars; ++i) {
         subsitution[scalars[i]] = P.FirstScalar + i;
     }
 
@@ -802,14 +802,14 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
             };
 
-            bool found = false;
+            bool notFound = true;
             if (ed.Port.Type == PortType::Input) {
                 for (const auto & e : make_iterator_range(in_edges(consumer, G))) {
                     const RelationshipType & type = G[e];
                     if (type.Number == ed.Port.Number) {
                         assert (type.Type == PortType::Input);
                         rebind_reference(source(e, G));
-                        found = true;
+                        notFound = false;
                         break;
                     }
                 }
@@ -819,12 +819,14 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
                     if (type.Number == ed.Port.Number) {
                         assert (type.Type == PortType::Output);
                         rebind_reference(target(e, G));
-                        found = true;
+                        notFound = false;
                         break;
                     }
                 }
             }
-            assert ("failed to locate popcount binding" && found);
+            if (LLVM_UNLIKELY(notFound)) {
+                report_fatal_error("Internal error: failed to locate PopCount binding.");
+            }
         }
     }
 }

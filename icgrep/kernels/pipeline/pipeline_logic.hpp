@@ -197,9 +197,8 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         unsigned expected = 0;
         #endif
         for (const auto & e : make_iterator_range(in_edges(i, mScalarGraph))) {
-            const RelationshipType & rt = mScalarGraph[e];
-            assert (rt.Type == PortType::Input);
-            assert (expected++ == rt.Number);
+            assert (mScalarGraph[e].Type == PortType::Input);
+            assert (expected++ == mScalarGraph[e].Number);
             const auto scalar = source(e, mScalarGraph);
             args.push_back(getScalar(b, scalar));
         }
