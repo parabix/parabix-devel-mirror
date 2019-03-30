@@ -23,6 +23,7 @@
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
+#include <pablo/bixnum.h>
 #include <pablo/pe_zeroes.h>
 #include <toolchain/cpudriver.h>
 #include <toolchain/toolchain.h>
@@ -158,13 +159,12 @@ void U8U16Kernel::generatePabloMethod() {
     Var * s43_lo2 = main.createVar("scope43_lo2", zeroes);
     Var * s43_lo1 = main.createVar("scope43_lo1", zeroes);
     Var * s43_lo0 = main.createVar("scope43_lo0", zeroes);
-
-    p4b.createAssign(s43_lo6, p4b.createAnd(u8scope43, p4b.createNot(bit4a1)));           // e - 1
-    p4b.createAssign(s43_lo7, p4b.createAnd(u8scope43, p4b.createXor(bit5a1, s43_lo6)));  // d - borrow
-    PabloAST * brw1 = p4b.createAnd(s43_lo6, p4b.createNot(bit5a1));
-    p4b.createAssign(s43_hi0, p4b.createAnd(u8scope43, p4b.createXor(bit0a2, brw1)));     // c - borrow
-    PabloAST * brw2 = p4b.createAnd(brw1, p4b.createNot(bit0a2));
-    p4b.createAssign(s43_hi1, p4b.createAnd(u8scope43, p4b.createXor(bit1a2, brw2)));     // b - borrow
+    
+    BixNum plane = BixNumModularArithmetic(p4b).Sub({bit4a1, bit5a1, bit0a2, bit1a2}, 1);
+    p4b.createAssign(s43_lo6, p4b.createAnd(u8scope43, plane[0]));
+    p4b.createAssign(s43_lo7, p4b.createAnd(u8scope43, plane[1]));
+    p4b.createAssign(s43_hi0, p4b.createAnd(u8scope43, plane[2]));
+    p4b.createAssign(s43_hi1, p4b.createAnd(u8scope43, plane[3]));
     //
     p4b.createAssign(s43_lo5, p4b.createAnd(u8scope43, bit3a1));
     p4b.createAssign(s43_lo4, p4b.createAnd(u8scope43, bit2a1));
