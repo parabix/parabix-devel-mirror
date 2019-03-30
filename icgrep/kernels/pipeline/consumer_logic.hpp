@@ -227,8 +227,8 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
         const auto buffer = target(e, mBufferGraph);
         // If the out-degree for this buffer is zero, then we've proven that its consumption rate
         // is identical to its production rate.
-        const auto comsumedItemCountMatchesProducedItemCount = (out_degree(buffer, mConsumerGraph) == 0);
-        if (LLVM_UNLIKELY(comsumedItemCountMatchesProducedItemCount && (kernel != PipelineInput))) {
+        const auto consumedItemCountMatchesProducedItemCount = (out_degree(buffer, mConsumerGraph) == 0);
+        if (LLVM_UNLIKELY(consumedItemCountMatchesProducedItemCount && (kernel != PipelineInput))) {
             continue;
         }
         const BufferRateData & rd = mBufferGraph[e];

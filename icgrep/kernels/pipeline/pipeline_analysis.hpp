@@ -155,6 +155,8 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
 
 namespace { // start of anonymous namespace
 
+using RefVector = SmallVector<Relationships::Vertex, 4>;
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addProducerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -163,31 +165,19 @@ void addProducerRelationships(const PortType portType, const unsigned producer, 
     if (LLVM_UNLIKELY(n == 0)) {
         return;
     }
-
     if (isa<StreamSet>(array[0].getRelationship())) {
         for (unsigned i = 0; i < n; ++i) {
             const Binding & item = array[i];
             assert (isa<StreamSet>(item.getRelationship()));
             const auto binding = G.add(&item);
             add_edge(producer, binding, RelationshipType{portType, i}, G);
-            const auto relationship = G.add(item.getRelationship());
+            const auto relationship = G.addOrFind(item.getRelationship());
             add_edge(binding, relationship, RelationshipType{portType, i}, G);
-            const ProcessingRate & rate = item.getRate();
-            if (LLVM_UNLIKELY(rate.hasReference())) {
-                const Kernel * const kernel = G[producer].Kernel;
-                const StreamPort refPort = kernel->getStreamPort(rate.getReference());
-                const Binding & ref = kernel->getStreamBinding(refPort);
-                assert (isa<StreamSet>(ref.getRelationship()));
-                const auto refBinding = G.addOrFind(&ref);
-                // To preserve acyclicity, reference bindings always point to the binding that refers to it.
-                // To simplify later I/O lookup, the edge stores the info of the reference port.
-                add_edge(refBinding, binding, RelationshipType{refPort, ReasonType::Reference}, G);
-            }
         }
     } else if (isa<Scalar>(array[0].getRelationship())) {
         for (unsigned i = 0; i < n; ++i) {
             assert (isa<Scalar>(array[i].getRelationship()));
-            const auto relationship = G.add(array[i].getRelationship());
+            const auto relationship = G.addOrFind(array[i].getRelationship());
             add_edge(producer, relationship, RelationshipType{portType, i}, G);
         }
     }
@@ -201,35 +191,14 @@ void addConsumerRelationships(const PortType portType, const unsigned consumer, 
     if (LLVM_UNLIKELY(n == 0)) {
         return;
     }
-
     if (isa<StreamSet>(array[0].getRelationship())) {
         for (unsigned i = 0; i < n; ++i) {
             const Binding & item = array[i];
             assert (isa<StreamSet>(item.getRelationship()));
             const auto binding = G.add(&item);
             add_edge(binding, consumer, RelationshipType{portType, i}, G);
-            const auto relationship = G.addOrFind(item.getRelationship());
+            const auto relationship = G.find(item.getRelationship());
             add_edge(relationship, binding, RelationshipType{portType, i}, G);
-            const ProcessingRate & rate = item.getRate();
-            if (LLVM_UNLIKELY(rate.hasReference())) {
-                const Kernel * const kernel = G[consumer].Kernel;
-                const StreamPort refPort = kernel->getStreamPort(rate.getReference());
-                if (LLVM_UNLIKELY(refPort.Type != PortType::Input)) {
-                    std::string tmp;
-                    raw_string_ostream msg(tmp);
-                    msg << kernel->getName()
-                        << "."
-                        << item.getName()
-                        << " cannot refer to an output stream";
-                    report_fatal_error(msg.str());
-                }
-                const Binding & ref = kernel->getStreamBinding(refPort);
-                assert (isa<StreamSet>(ref.getRelationship()));
-                const auto refBinding = G.addOrFind(&ref);
-                // To preserve acyclicity, reference bindings always point to the binding that refers to it.
-                // To simplify later I/O lookup, the edge stores the info of the reference port.
-                add_edge(refBinding, binding, RelationshipType{refPort, ReasonType::Reference}, G);
-            }
         }
     } else if (isa<Scalar>(array[0].getRelationship())) {
         for (unsigned i = 0; i < n; ++i) {
@@ -253,6 +222,39 @@ void addConsumerRelationships(const PortType portType, const CallBinding & call,
     for (unsigned i = 0; i < n; ++i) {
         const auto relationship = G.addOrFind(array[i]);
         add_edge(relationship, consumer, RelationshipType{portType, i}, G);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addConsumerRelationships
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, Relationships & G) {
+    const auto n = array.size();
+    if (LLVM_UNLIKELY(n == 0)) {
+        return;
+    }
+    for (unsigned i = 0; i < n; ++i) {
+        const Binding & item = array[i];
+        const ProcessingRate & rate = item.getRate();
+        if (LLVM_UNLIKELY(rate.hasReference())) {
+            const Kernel * const kernel = G[index].Kernel;
+            const StreamPort refPort = kernel->getStreamPort(rate.getReference());
+            if (LLVM_UNLIKELY(portType == PortType::Input && refPort.Type == PortType::Output)) {
+                std::string tmp;
+                raw_string_ostream msg(tmp);
+                msg << "input stream "
+                    << kernel->getName()
+                    << "."
+                    << item.getName()
+                    << " cannot refer to an output stream";
+                report_fatal_error(msg.str());
+            }
+            const Binding & ref = kernel->getStreamBinding(refPort);
+            assert (isa<StreamSet>(ref.getRelationship()));
+            // To preserve acyclicity, reference bindings always point to the binding that refers to it.
+            // To simplify later I/O lookup, the edge stores the info of the reference port.
+            add_edge(G.find(&ref), G.find(&item), RelationshipType{refPort, ReasonType::Reference}, G);
+        }
     }
 }
 
@@ -451,8 +453,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     transcribe(scalars, P.Scalars);
 
-//    printRelationshipGraph(P.Streams, errs(), "Streams");
-//    printRelationshipGraph(P.Scalars, errs(), "Scalars");
+    // printRelationshipGraph(P.Streams, errs(), "Streams");
+    // printRelationshipGraph(P.Scalars, errs(), "Scalars");
 
     return P;
 }
@@ -471,22 +473,39 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
 
     const auto p_in = add_vertex(RelationshipNode(pipelineKernel), G);
     addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputStreamSetBindings(), G);
-    for (const Kernel * const K : kernels) {
-        const auto k = G.add(K);
-        assert (K != pipelineKernel);
-        addConsumerRelationships(PortType::Input, k, K->getInputStreamSetBindings(), G);
-        addProducerRelationships(PortType::Output, k, K->getOutputStreamSetBindings(), G);
+    const auto n = kernels.size();
+    SmallVector<Relationships::Vertex, 64> vertex(n);
+    for (unsigned i = 0; i < n; ++i) {
+        const Kernel * K = kernels[i];
+        if (LLVM_UNLIKELY(K == pipelineKernel)) {
+            std::string tmp;
+            raw_string_ostream msg(tmp);
+            msg << pipelineKernel->getName()
+                << " contains itself in its pipeline";
+            report_fatal_error(msg.str());
+        }
+        vertex[i] = G.add(K);
+        addProducerRelationships(PortType::Output, vertex[i], K->getOutputStreamSetBindings(), G);
     }
+    for (unsigned i = 0; i < n; ++i) {
+        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), G);
+    }
+    for (unsigned i = 0; i < n; ++i) {
+        addReferenceRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), G);
+        addReferenceRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), G);
+    }
+
     // addRegionSelectorKernels(b, kernels, G, internalKernels, internalBindings);
     addPopCountKernels(b, kernels, G, internalKernels, internalBindings);
     const auto p_out = add_vertex(RelationshipNode(pipelineKernel), G);
     addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputStreamSetBindings(), G);
 
     addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputScalarBindings(), G);
-    for (const Kernel * const K : kernels) {
-        const auto k = G.find(K);
-        addConsumerRelationships(PortType::Input, k, K->getInputScalarBindings(), G);
-        addProducerRelationships(PortType::Output, k, K->getOutputScalarBindings(), G);
+    for (unsigned i = 0; i < n; ++i) {
+        addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputScalarBindings(), G);
+    }
+    for (unsigned i = 0; i < n; ++i) {
+        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputScalarBindings(), G);
     }
     for (const CallBinding & C : pipelineKernel->getCallBindings()) {
         addConsumerRelationships(PortType::Input, C, G);

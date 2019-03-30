@@ -306,7 +306,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-//    printBufferGraph(G, errs());
+    // printBufferGraph(G, errs());
 
     return G;
 }
@@ -798,13 +798,25 @@ inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const unsigned inputPo
  * @brief getInputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 const Binding & PipelineCompiler::getInputBinding(const unsigned kernelVertex, const unsigned inputPort) const {
-    graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
-    std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
-    assert (inputPort < std::distance(ei, ei_end));
-    const auto & e = *(ei + inputPort);
+
+    RelationshipGraph::vertex_descriptor v;
+    RelationshipGraph::edge_descriptor e;
+    if (LLVM_UNLIKELY(kernelVertex == PipelineInput || kernelVertex == PipelineOutput)) {
+        graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
+        std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
+        assert (inputPort < std::distance(ei, ei_end));
+        e = *(ei + inputPort);
+        v = target(e, mStreamGraph);
+    } else {
+        graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
+        std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
+        assert (inputPort < std::distance(ei, ei_end));
+        e = *(ei + inputPort);
+        v = source(e, mStreamGraph);
+    }
+
     assert (mStreamGraph[e].Type == PortType::Input);
     assert (mStreamGraph[e].Number == inputPort);
-    const auto v = source(e, mStreamGraph);
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;
@@ -854,13 +866,26 @@ unsigned PipelineCompiler::getOutputBufferVertex(const unsigned kernelVertex, co
  * @brief getOutputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 const Binding & PipelineCompiler::getOutputBinding(const unsigned kernelVertex, const unsigned outputPort) const {
-    graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
-    std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
-    assert (outputPort < std::distance(ei, ei_end));
-    const auto & e = *(ei + outputPort);
+
+    RelationshipGraph::vertex_descriptor v;
+    RelationshipGraph::edge_descriptor e;
+    if (LLVM_UNLIKELY(kernelVertex == PipelineInput || kernelVertex == PipelineOutput)) {
+        graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
+        std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
+        assert (outputPort < std::distance(ei, ei_end));
+        e = *(ei + outputPort);
+        v = source(e, mStreamGraph);
+    } else {
+        graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
+        std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
+        assert (outputPort < std::distance(ei, ei_end));
+        e = *(ei + outputPort);
+        v = target(e, mStreamGraph);
+    }
+
     assert (mStreamGraph[e].Type == PortType::Output);
     assert (mStreamGraph[e].Number == outputPort);
-    const auto v = target(e, mStreamGraph);
+
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;

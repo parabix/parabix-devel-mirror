@@ -120,8 +120,8 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     if (requiresSynchronization(kernelIndex)) {
         const auto prefix = makeKernelName(kernelIndex);
         mPipelineKernel->addInternalScalar(sizeTy, prefix + LOGICAL_SEGMENT_SUFFIX);
-        if (isKernelDataParallel(kernelIndex)) {
-            mPipelineKernel->addInternalScalar(sizeTy, prefix + LOGICAL_SEGMENT_WRITE_SUFFIX);
+        if (kernel->hasAttribute(AttrId::InternallySynchronized)) {
+            mPipelineKernel->addInternalScalar(sizeTy, prefix + ITERATION_COUNT_SUFFIX);
         }
     }
 

@@ -39,10 +39,10 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     assert (b->getKernel() == mKernel);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     mNumOfLinearStrides = nullptr;
-    if (isKernelDataParallel(mKernelIndex)) {
-        mLastPartialSegment = b->getFalse();
+    Value * lastStride = nullptr;
+    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
+        lastStride = b->getFalse();
     }
-    mLastPartialSegment = nullptr;
     for (const auto i : mPortEvaluationOrder) {
         Value * strides = nullptr;
         if (i < numOfInputs) {
@@ -158,7 +158,6 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
     mWritableOutputItems[outputPort] = writable;
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief reserveSufficientCapacity
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -242,21 +241,9 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
     #endif
-    // When zero extended, this stream does not affect the linear strides calculation
     if (mIsInputZeroExtended[inputPort]) {
         numOfStrides = b->CreateSelect(mIsInputZeroExtended[inputPort], mNumOfLinearStrides, numOfStrides);
     }
-    // If this kernel is data parallel, we must determine up front whether this is the
-    // last partial segment.
-
-
-//    if (isKernelDataParallel(mKernelIndex)) {
-//        Value * const available = getLocallyAvailableItemCount(b, inputPort);
-
-
-
-//    }
-
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("> " + prefix + "_numOfStrides", numOfStrides);
     #endif
@@ -478,6 +465,58 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief checkForLastPartialSegment
+ *
+ * If this kernel is internally synchronized, determine whether there are any more segments.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::checkForLastPartialSegment(BuilderRef b, Value * isFinal) {
+    assert (b->getKernel() == mKernel);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    mLastPartialSegment = nullptr;
+    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
+        mLastPartialSegment = isFinal ? isFinal : b->getFalse();
+        for (const auto i : mPortEvaluationOrder) {
+            if (i < numOfInputs) {
+                mLastPartialSegment = b->CreateOr(mLastPartialSegment, noMoreInputData(b, i));
+            } else {
+                mLastPartialSegment = b->CreateOr(mLastPartialSegment, noMoreOutputData(b, i - numOfInputs));
+            }
+        }
+        assert (mLastPartialSegment);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief noMoreInputData
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::noMoreInputData(BuilderRef b, const unsigned inputPort) {
+    const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
+    Value * const available = getLocallyAvailableItemCount(b, inputPort);
+    Value * const pending = b->CreateAdd(mAlreadyProcessedPhi[inputPort], mLinearInputItemsPhi[inputPort]);
+    Value * const accessible = buffer->getLinearlyAccessibleItems(b, pending, available);
+    Value * const strideLength = getInputStrideLength(b, inputPort);
+    Value * const required = addLookahead(b, inputPort, strideLength);
+    return b->CreateICmpULE(required, accessible);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief noMoreOutputData
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::noMoreOutputData(BuilderRef b, const unsigned outputPort) {
+    // TODO: not right for popcount rates. will have to branch (to account for # of ref items)
+    // then check with the ref rate's pending offset.
+    const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
+    if (isa<DynamicBuffer>(buffer)) {
+        return b->getFalse();
+    }
+    Value * const consumed = mConsumedItemCount[outputPort]; assert (consumed);
+    Value * const pending = b->CreateAdd(mAlreadyProducedPhi[outputPort], mLinearOutputItemsPhi[outputPort]);
+    Value * const writable = buffer->getLinearlyWritableItems(b, pending, consumed);
+    Value * const required = getOutputStrideLength(b, outputPort);
+    return b->CreateICmpULE(required, writable);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeKernelCall
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
@@ -519,11 +558,11 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     // state will be after completion for the input positions. We
     // can rely on the kernel itself to handle output synchronization.
 
-    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
-        Value * const iterationPtr = b->getScalarFieldPtr(makeKernelName(mKernelIndex) + ITERATION_COUNT_SUFFIX);
-        Value * const iterationCount = b->CreateAtomicFetchAndAdd(b->getSize(1), iterationPtr);
-        args.push_back(iterationCount);
-    }
+//    if (mLastPartialSegment) {
+//        Value * const iterationPtr = b->getScalarFieldPtr(makeKernelName(mKernelIndex) + ITERATION_COUNT_SUFFIX);
+//        Value * const iterationCount = b->CreateAtomicFetchAndAdd(b->getSize(1), iterationPtr);
+//        args.push_back(iterationCount);
+//    }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
 
     RelationshipType prior_in{};
@@ -749,10 +788,6 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
             continue;
         }
-
-
-
-
         const auto itemWidth = getItemWidth(buffer->getBaseType());
         // Determine the maximum lookahead dependency on this stream and zero fill
         // the appropriate number of additional blocks.

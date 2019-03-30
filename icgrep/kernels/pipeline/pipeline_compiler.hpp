@@ -180,7 +180,7 @@ struct Relationships : public RelationshipGraph {
 private:
 
     BOOST_NOINLINE Vertex __add(const RelationshipNode & key) {
-        assert ("key already exists?" && mMap.find(key.Kernel) == mMap.end());
+        assert ("adding an existing relationship key!" && mMap.find(key.Kernel) == mMap.end());
         const auto v = add_vertex(key, *this);
         mMap.emplace(key.Kernel, v);
         assert ((*this)[v] == key);
@@ -473,6 +473,10 @@ protected:
 
     void calculateNonFinalItemCounts(BuilderRef b);
     void calculateFinalItemCounts(BuilderRef b);
+
+    void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
+    Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
+    Value * noMoreOutputData(BuilderRef b, const unsigned outputPort);
 
     void prepareLocalZeroExtendSpace(BuilderRef b);
 
@@ -1004,7 +1008,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "core_logic.hpp"
 #include "kernel_logic.hpp"
 #include "cycle_counter_logic.hpp"
-#include "popcount_logic.hpp"
 #include "pipeline_logic.hpp"
 #include "scalar_logic.hpp"
 #include "synchronization_logic.hpp"

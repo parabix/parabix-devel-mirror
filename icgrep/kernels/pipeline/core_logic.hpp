@@ -150,6 +150,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopCall);
+    checkForLastPartialSegment(b, isFinal);
     prepareLocalZeroExtendSpace(b);
     writeKernelCall(b);
     writeCopyBackLogic(b);
@@ -193,9 +194,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     writeUpdatedItemCounts(b, false);
     computeFullyProcessedItemCounts(b);
     computeMinimumConsumedItemCounts(b);
-    //computeMinimumPopCountReferenceCounts(b);
     writeLookAheadLogic(b);
-    //writePopCountComputationLogic(b);
     computeFullyProducedItemCounts(b);
     mKernelLoopExitPhiCatch->moveAfter(b->GetInsertBlock());
     b->CreateBr(mKernelLoopExitPhiCatch);
@@ -244,6 +243,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
         if (mAlreadyProgressedPhi) {
             mAlreadyProgressedPhi->addIncoming(b->getTrue(), entryBlock);
         }
+        // This needs to test mLastPartialSegment.
         b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, mKernelLoopEntry);
     } else { // just exit the loop
         const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
