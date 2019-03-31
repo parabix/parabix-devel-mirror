@@ -12,6 +12,20 @@
 namespace pablo {
 
 using BixNum = std::vector<PabloAST *>;
+    
+    
+class BixNumArithmetic {
+    BixNumArithmetic(PabloBuilder & pb) : mPB(pb) {}
+    PabloAST * EQ(BixNum value, unsigned test);
+    PabloAST * EQ(BixNum value, BixNum test);
+    PabloAST * NEQ(BixNum value, unsigned test);
+    PabloAST * NEQ(BixNum value, BixNum test);
+    PabloAST * UGE(BixNum value, unsigned floor);
+    PabloAST * UGE(BixNum value, BixNum floor);
+
+private:
+    PabloBuilder & mPB;
+};
 
 class BixNumModularArithmetic {
 public:    

@@ -5,6 +5,7 @@
 
 #include <pablo/bixnum.h>
 #include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
 
 
 namespace pablo {
@@ -12,12 +13,91 @@ namespace pablo {
 PabloAST * createXor3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
     return pb.createXor(op1, pb.createXor(op2, op3));
 }
-    
- PabloAST * createMajority3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
+
+PabloAST * createMajority3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
     return pb.createOr(pb.createAnd(op1, op2), pb.createAnd(op3, pb.createOr(op1, op2)));
 }
-    
-    
+
+PabloAST * createIf3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
+    return pb.createOr(pb.createAnd(op1, op2), pb.createAnd(op3, pb.createNot(op1)));
+}
+
+PabloAST * BixNumArithmetic::UGE(BixNum value, unsigned floor) {
+    unsigned floor_bits = std::log2(floor);
+    if (value.size() < floor_bits) return mPB.createZeroes();
+    PabloAST * UGE_so_far = mPB.createOnes();
+    for (auto i = 0; i < floor_bits; i++) {
+        auto floor_bit = (floor >> i) & 1;
+        if (floor_bit == 1) {
+            UGE_so_far = mPB.createAnd(value[i], UGE_so_far);
+        } else {
+            UGE_so_far = mPB.createOr(value[i], UGE_so_far);
+        }
+    }
+    for (unsigned i = floor_bits; i < value.size(); i++) {
+        UGE_so_far = mPB.createOr(value[i], UGE_so_far);
+    }
+    return UGE_so_far;
+}
+
+PabloAST * BixNumArithmetic::UGE(BixNum value, BixNum floor) {
+    PabloAST * UGE_so_far = mPB.createOnes();
+    unsigned common_bits = std::min(value.size(), floor.size());
+    for (auto i = 0; i < common_bits; i++) {
+        UGE_so_far = createIf3(mPB, floor[i], mPB.createAnd(value[i], UGE_so_far),
+                                              mPB.createOr(value[i], UGE_so_far));
+    }
+    for (unsigned i = common_bits; i < floor.size(); i++) {
+        UGE_so_far = mPB.createAnd(UGE_so_far, mPB.createNot(floor[i]));
+    }
+    for (unsigned i = common_bits; i < value.size(); i++) {
+        UGE_so_far = mPB.createOr(UGE_so_far, value[i]);
+    }
+    return UGE_so_far;
+}
+
+PabloAST * BixNumArithmetic::EQ(BixNum value, unsigned floor) {
+    unsigned floor_bits = std::log2(floor);
+    if (value.size() < floor_bits) return mPB.createZeroes();
+    PabloAST * EQ_1 = mPB.createOnes();
+    PabloAST * EQ_0 = mPB.createZeroes();
+    for (auto i = 0; i < floor_bits; i++) {
+        auto floor_bit = (floor >> i) & 1;
+        if (floor_bit == 1) {
+            EQ_1 = mPB.createAnd(value[i], EQ_1);
+        } else {
+            EQ_0 = mPB.createOr(value[i], EQ_0);
+        }
+    }
+    for (unsigned i = floor_bits; i < value.size(); i++) {
+        EQ_0 = mPB.createOr(value[i], EQ_0);
+    }
+    return mPB.createAnd(EQ_1, mPB.createNot(EQ_0));
+}
+
+PabloAST * BixNumArithmetic::NEQ(BixNum value, unsigned floor) {
+    return mPB.createNot(EQ(value, floor));
+}
+
+PabloAST * BixNumArithmetic::NEQ(BixNum value, BixNum test) {
+    PabloAST * any_NEQ = mPB.createZeroes();
+    unsigned common_bits = std::min(value.size(), test.size());
+    for (auto i = 0; i < common_bits; i++) {
+        any_NEQ = mPB.createOr(any_NEQ, mPB.createXor(value[i], test[i]));
+    }
+    for (unsigned i = common_bits; i < test.size(); i++) {
+        any_NEQ = mPB.createOr(any_NEQ, test[i]);
+    }
+    for (unsigned i = common_bits; i < value.size(); i++) {
+        any_NEQ = mPB.createOr(any_NEQ, value[i]);
+    }
+    return any_NEQ;
+}
+
+PabloAST * BixNumArithmetic::EQ(BixNum value, BixNum test) {
+    return mPB.createNot(NEQ(value, test));
+}
+
 BixNum BixNumModularArithmetic::Add(BixNum augend, unsigned addend) {
     BixNum sum(augend.size());
     addend = addend & ((1 << augend.size()) - 1); 

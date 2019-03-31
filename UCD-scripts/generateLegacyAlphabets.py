@@ -22,7 +22,7 @@ UnicodeMappableAlphabet alphabet("${alphabet_name}", 128, &codepoints);
 # Parse a WHATWG specification of a single-byte-encoding, return 
 # a dictionary mapping "pointers" to code points.
 #
-def parse_WHATWG_single_byte_encoding(enc_name):
+def parse_WHATWG_index_file(enc_name):
     f = open("encodings/WHATWG/index-" + enc_name + ".txt")
 
     # To find the pointers and their corresponding code points in an index,
@@ -50,12 +50,30 @@ def validate_full_extended_ASCII(idx):
     return True
 
 
-def make_encoder(enc_name):
-    idx = parse_WHATWG_single_byte_encoding(enc_name)
+def make_extended_ASCII_encoder(enc_name):
+    idx = parse_WHATWG_index_file(enc_name)
     if not validate_full_extended_ASCII(idx):
         print(enc_name + " is not a full extended ASCII single-byte-encoding")
         return
     cps = [idx[k] for k in range(128)]
     cp_list = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
     return Template(Alphabet_Template).substitute(alphabet_name = enc_name.replace('-','_'), codepoint_list = cp_list)
+
+def print_GB_tables():
+    idx = parse_WHATWG_index_file('gb18030')
+    print("    std::vector<std::vector<codepoint_t>> GB_DoubleByteTable = {")
+    for byte1 in range(0x81, 0xFF):
+        pointer_base = (byte1 - 0x81) * 190
+        cps = [idx[p] for p in range(pointer_base, pointer_base + 190)]
+        cp_list = cformat.multiline_fill(['0x%04x' % cp for cp in cps], ',', 8)
+        cp_list = "        {" + cp_list + "}"
+        if byte1 != 0xFE:
+            cp_list += ","
+        else:
+            cp_list += "};"
+        print(cp_list)
+
+if __name__ == "__main__":
+    print_GB_tables()
+
 
