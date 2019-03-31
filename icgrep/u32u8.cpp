@@ -270,9 +270,9 @@ void UTF8assembly::generatePabloMethod() {
     }
 }
 
-void deposit(const std::unique_ptr<ProgramBuilder> & P, const unsigned base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
+void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
     StreamSet * const expanded = P->CreateStreamSet(count);
-    P->CreateKernelCall<StreamExpandKernel>(inputs, base, mask, expanded);
+    P->CreateKernelCall<StreamExpandKernel>(base, inputs, mask, expanded);
     if (AVX2_available() && BMI2_available()) {
         P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
     } else {
@@ -282,11 +282,11 @@ void deposit(const std::unique_ptr<ProgramBuilder> & P, const unsigned base, con
 
 typedef void (*u32u8FunctionType)(uint32_t fd);
 
-u32u8FunctionType u32u8_gen (CPUDriver & pxDriver) {
+u32u8FunctionType u32u8_gen (CPUDriver & driver) {
 
-    auto & iBuilder = pxDriver.getBuilder();
-    Type * const int32Ty = iBuilder->getInt32Ty();
-    auto P = pxDriver.makePipeline({Binding{int32Ty, "fd"}});
+    auto & b = driver.getBuilder();
+    Type * const int32Ty = b->getInt32Ty();
+    auto P = driver.makePipeline({Binding{int32Ty, "fd"}});
 
     Scalar * const fileDescriptor = P->getInputScalar("fd");
 
@@ -322,10 +322,10 @@ u32u8FunctionType u32u8_gen (CPUDriver & pxDriver) {
 
     P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
 
-    deposit(P, 18, 3, u8initial, u32basis, deposit18_20);
-    deposit(P, 12, 6, u8mask12_17, u32basis, deposit12_17);
-    deposit(P, 6, 6, u8mask6_11, u32basis, deposit6_11);
-    deposit(P, 0, 6, u8final, u32basis, deposit0_5);
+    deposit(P, P->CreateConstant(b->getSize(18)), 3, u8initial, u32basis, deposit18_20);
+    deposit(P, P->CreateConstant(b->getSize(12)), 6, u8mask12_17, u32basis, deposit12_17);
+    deposit(P, P->CreateConstant(b->getSize(6)), 6, u8mask6_11, u32basis, deposit6_11);
+    deposit(P, P->CreateConstant(b->getSize(0)), 6, u8final, u32basis, deposit0_5);
 
     P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
                                       u8initial, u8final, u8mask6_11, u8mask12_17,

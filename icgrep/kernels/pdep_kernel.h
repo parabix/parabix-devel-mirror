@@ -53,7 +53,8 @@ private:
 class StreamExpandKernel final : public MultiBlockKernel {
 public:
     StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b
-                       , StreamSet * source, const unsigned base, StreamSet * mask
+                       , Scalar * base
+                       , StreamSet * source, StreamSet * mask
                        , StreamSet * expanded
                        , const unsigned FieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
@@ -62,7 +63,6 @@ protected:
     void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) override;
 private:
     const unsigned mFieldWidth;
-    const unsigned mSelectedStreamBase;
     const unsigned mSelectedStreamCount;
 };
 

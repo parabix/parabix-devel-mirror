@@ -142,19 +142,23 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
 }
 
 StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b
-                                       , StreamSet * source, const unsigned base, StreamSet * mask
+                                       , Scalar * base
+                                       , StreamSet * source
+                                       , StreamSet * mask
                                        , StreamSet * expanded
                                        , const unsigned FieldWidth)
 : MultiBlockKernel(b, "streamExpand" + std::to_string(FieldWidth)
-+ "_" + std::to_string(source->getNumElements())
-+ "_" + std::to_string(base) + "_" + std::to_string(expanded->getNumElements()),
-
++ std::to_string(source->getNumElements())
++ ":" + std::to_string(expanded->getNumElements()),
+// input stream sets
 {Binding{"marker", mask, FixedRate(), Principal()},
 Binding{"source", source, PopcountOf("marker")}},
+// output stream set
 {Binding{"output", expanded, FixedRate(), BlockSize(1)}},
-{}, {}, {})
+// input scalar
+{Binding{"base", base}},
+{}, {})
 , mFieldWidth(FieldWidth)
-, mSelectedStreamBase(base)
 , mSelectedStreamCount(expanded->getNumElements()) {
 
 }
@@ -176,9 +180,12 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * processedSourceItems = b->getProcessedItemCount("source");
     Value * initialSourceOffset = b->CreateURem(processedSourceItems, bwConst);
 
+    Value * const streamBase = b->getScalarField("base");
     SmallVector<Value *, 16> pendingData(mSelectedStreamCount);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        pendingData[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), ZERO);
+        Constant * const streamIndex = ConstantInt::get(streamBase->getType(), i);
+        Value * const streamOffset = b->CreateAdd(streamBase, streamIndex);
+        pendingData[i] = b->loadInputStreamBlock("source", streamOffset, ZERO);
     }
 
     b->CreateBr(expandLoop);
@@ -240,7 +247,9 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // Now load and process source streams.
     SmallVector<Value *, 16> sourceData(mSelectedStreamCount);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        sourceData[i] = b->loadInputStreamBlock("source", b->getInt32(mSelectedStreamBase + i), srcBlockNo);
+        Constant * const streamIndex = ConstantInt::get(streamBase->getType(), i);
+        Value * const streamOffset = b->CreateAdd(streamBase, streamIndex);
+        sourceData[i] = b->loadInputStreamBlock("source", streamOffset, srcBlockNo);
         Value * A = b->simd_srlv(mFieldWidth, b->mvmd_dsll(mFieldWidth, sourceData[i], pendingDataPhi[i], field_offset_lo), bit_offset);
         Value * B = b->simd_sllv(mFieldWidth, b->mvmd_dsll(mFieldWidth, sourceData[i], pendingDataPhi[i], field_offset_hi), shift_fwd);
         Value * full_source_block = b->simd_or(A, B);
