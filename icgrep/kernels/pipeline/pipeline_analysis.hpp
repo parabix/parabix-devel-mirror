@@ -226,7 +226,7 @@ void addConsumerRelationships(const PortType portType, const CallBinding & call,
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addConsumerRelationships
+ * @brief addReferenceRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, Relationships & G) {
     const auto n = array.size();

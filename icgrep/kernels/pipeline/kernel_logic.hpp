@@ -91,7 +91,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
     Value * const processed = mAlreadyProcessedPhi[inputPort];
     ConstantInt * facsimile = nullptr;
     if (addFacsimile) {
-        const auto size = getFacsimile(getInputBufferVertex(inputPort));
+        const auto size = getLookAhead(getInputBufferVertex(inputPort));
         if (size) {
             facsimile = b->getSize(size);
         }
@@ -415,8 +415,8 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
                 Value * requiredBytes = mLinearInputItemsPhi[i]; assert (requiredBytes);
                 Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
                 requiredBytes = b->CreateRoundUp(requiredBytes, BLOCK_WIDTH);
-                if (bn.Fasimile) {
-                    requiredBytes = b->CreateAdd(requiredBytes, b->getSize(bn.Fasimile));
+                if (bn.LookAhead) {
+                    requiredBytes = b->CreateAdd(requiredBytes, b->getSize(bn.LookAhead));
                 }
                 requiredBytes = b->CreateMul(requiredBytes, bn.Buffer->getStreamSetCount(b.get()));
 

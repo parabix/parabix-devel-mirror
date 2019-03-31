@@ -54,7 +54,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     determineEvaluationOrderOfKernelIO();
 
     const auto prefix = makeKernelName(mKernelIndex);
-    BasicBlock * const kernelLookBehind = b->CreateBasicBlock(prefix + "_lookBehind", mPipelineEnd);
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", mPipelineEnd);
     mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", mPipelineEnd);
     mKernelTerminationCheck = b->CreateBasicBlock(prefix + "_normalTerminationCheck", mPipelineEnd);
@@ -80,16 +79,11 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     readInitialItemCounts(b);
     readConsumedItemCounts(b);
     mKernelEntry = b->GetInsertBlock();
-    b->CreateUnlikelyCondBr(initiallyTerminated(b), mKernelExit, kernelLookBehind);
+    b->CreateUnlikelyCondBr(initiallyTerminated(b), mKernelExit, mKernelLoopEntry);
 
     /// -------------------------------------------------------------------------------------
-    /// LOOK BEHIND
+    /// PHI NODE INITIALIZATION
     /// -------------------------------------------------------------------------------------
-
-    b->SetInsertPoint(kernelLookBehind);
-    writeLookBehindLogic(b);
-    mKernelLookBehind = b->GetInsertBlock();
-    b->CreateBr(mKernelLoopEntry);
 
     // Set up some PHI nodes early to simplify accumulating their incoming values.
     initializeKernelLoopEntryPhis(b);
@@ -152,6 +146,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopCall);
     checkForLastPartialSegment(b, isFinal);
     prepareLocalZeroExtendSpace(b);
+    writeLookBehindLogic(b);
     writeKernelCall(b);
     writeCopyBackLogic(b);
     BasicBlock * const abnormalTermination =
@@ -417,10 +412,7 @@ void PipelineCompiler::writePipelineIOItemCounts(BuilderRef b) {
 inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     Type * const sizeTy = b->getSizeTy();
     b->SetInsertPoint(mKernelLoopEntry);
-
-    BasicBlock * entryBlock = mKernelLookBehind;
-
-
+    BasicBlock * const entryBlock = mKernelEntry;
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});

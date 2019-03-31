@@ -224,9 +224,9 @@ struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     RateValue Lower{};
     RateValue Upper{};
-    unsigned Underflow = 0;
-    unsigned Overflow = 0;
-    unsigned Fasimile = 0;
+    unsigned LookBehind = 0;
+    unsigned CopyBack = 0;
+    unsigned LookAhead = 0;
 
     BufferType Type = BufferType::Internal;
 
@@ -573,9 +573,9 @@ protected:
     void loadBufferHandles(BuilderRef b);
     void releaseBuffers(BuilderRef b);
     LLVM_READNONE bool requiresCopyBack(const unsigned bufferVertex) const;
-    LLVM_READNONE bool requiresFacsimile(const unsigned bufferVertex) const;
+    LLVM_READNONE bool requiresLookAhead(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
-    LLVM_READNONE unsigned getFacsimile(const unsigned bufferVertex) const;
+    LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
     BufferType getOutputBufferType(const unsigned outputPort) const;
     Value * epoch(BuilderRef b, const Binding &binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtended = nullptr) const;
 
@@ -695,7 +695,6 @@ protected:
     BranchInst *                                mPipelineEntryBranch = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
-    BasicBlock *                                mKernelLookBehind = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
     BasicBlock *                                mKernelRegionEntryLoop = nullptr;
     BasicBlock *                                mKernelCalculateItemCounts = nullptr;

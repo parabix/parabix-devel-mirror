@@ -42,14 +42,6 @@ public:
         return mBaseType;
     }
 
-    uint64_t getNumOfStreams() const {
-        uint64_t numStreams = 1;
-        if (mBaseType->isArrayTy()) {
-            numStreams = mBaseType->getArrayNumElements();
-        }
-        return numStreams;
-    }
-
     unsigned getAddressSpace() const {
         return mAddressSpace;
     }
@@ -127,7 +119,7 @@ protected:
 
     llvm::Value * getHandle(IDISA::IDISA_Builder * const b) const;
 
-    llvm::Value * addOverflow(BuilderRef b, llvm::Value * const bufferCapacity, llvm::Value * const overflowItems, llvm::Value * const consumedOffset = nullptr) const;
+    llvm::Value * addOverflow(BuilderRef b, llvm::Value * const bufferCapacity, llvm::Value * const overflowItems, llvm::Value * const consumedOffset) const;
 
     StreamSetBuffer(const BufferKind k, BuilderRef b, llvm::Type * baseType, const size_t overflowBlocks, const size_t underflowSize, unsigned AddressSpace);
 

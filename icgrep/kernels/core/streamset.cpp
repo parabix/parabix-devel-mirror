@@ -18,11 +18,50 @@ namespace llvm { class Function; }
 
 using namespace llvm;
 using IDISA::IDISA_Builder;
+using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 
 namespace kernel {
 
 LLVM_ATTRIBUTE_NORETURN void unsupported(const char * const function, const char * const bufferType) {
     report_fatal_error(StringRef{function} + " is not supported by " + bufferType + "Buffers");
+}
+
+LLVM_READNONE inline Constant * nullPointerFor(BuilderRef b, Type * type, const unsigned underflow) {
+    if (LLVM_LIKELY(underflow == 0)) {
+        return ConstantPointerNull::get(cast<PointerType>(type));
+    } else {
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(type);
+        Constant * const U = ConstantInt::get(intPtrTy, underflow);
+        Constant * const P = ConstantExpr::getSizeOf(type->getPointerElementType());
+        return ConstantExpr::getIntToPtr(ConstantExpr::getMul(U, P), type);
+    }
+}
+
+LLVM_READNONE inline Constant * nullPointerFor(BuilderRef b, Value * ptr, const unsigned underflow) {
+    return nullPointerFor(b, ptr->getType(), underflow);
+}
+
+LLVM_READNONE inline Value * addUnderflow(BuilderRef b, Value * ptr, const unsigned underflow) {
+    if (LLVM_LIKELY(underflow == 0)) {
+        return ptr;
+    } else {
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
+        Constant * offset = ConstantInt::get(intPtrTy, underflow);
+        return b->CreateGEP(ptr, offset);
+    }
+}
+
+LLVM_READNONE inline Value * subtractUnderflow(BuilderRef b, Value * ptr, const unsigned underflow) {
+    if (LLVM_LIKELY(underflow == 0)) {
+        return ptr;
+    } else {
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
+        Constant * offset = ConstantExpr::getNeg(ConstantInt::get(intPtrTy, underflow));
+        return b->CreateGEP(ptr, offset);
+    }
 }
 
 inline Value * StreamSetBuffer::getHandle(IDISA_Builder * const /* b */) const {
@@ -58,9 +97,6 @@ Value * StreamSetBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * cons
 
 Value * StreamSetBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * blockIndex, Value * const packIndex) const {
     assertValidStreamIndex(b, streamIndex);
-    if (mUnderflow) {
-        blockIndex = b->CreateAdd(blockIndex, b->getSize(mUnderflow));
-    }
     return b->CreateGEP(baseAddress, {blockIndex, streamIndex, packIndex});
 }
 
@@ -107,9 +143,6 @@ Value * StreamSetBuffer::getRawItemPointer(IDISA_Builder * const b, Value * stre
     }
     Constant * const itemsPerVector = ConstantExpr::getUDiv(ConstantExpr::getSizeOf(mType), ConstantExpr::getSizeOf(itemTy));
     Value * blockOffset = b->CreateMul(b->CreateRoundDown(absolutePosition, itemsPerVector), getStreamSetCount(b));
-    if (mUnderflow) {
-        blockOffset = b->CreateAdd(blockOffset, b->getSize(mUnderflow));
-    }
     Value * const streamOffset = b->CreateMul(streamIndex, itemsPerVector);
     Value * const itemOffset = b->CreateURem(absolutePosition, itemsPerVector);
     Value * const position = b->CreateAdd(b->CreateAdd(blockOffset, streamOffset), itemOffset);
@@ -239,24 +272,18 @@ Type * StaticBuffer::getHandleType(BuilderRef /* b */) const {
 }
 
 void StaticBuffer::allocateBuffer(BuilderRef b) {
-    assert (mHandle && "has not been set prior to calling allocateBuffer");
+    Value * const handle = getHandle(b.get());
+    assert (handle && "has not been set prior to calling allocateBuffer");
     Constant * size = b->getSize(mCapacity + mUnderflow + mOverflow);
-    Value * const buffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
-    b->CreateStore(buffer, mHandle);
-}
-
-LLVM_READNONE inline ConstantPointerNull * nullPointerFor(Type * type) {
-    return ConstantPointerNull::get(cast<PointerType>(type));
-}
-
-LLVM_READNONE inline ConstantPointerNull * nullPointerFor(Value * ptr) {
-    return nullPointerFor(ptr->getType());
+    Value * const buffer = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
+    b->CreateStore(addUnderflow(b, buffer, mUnderflow), handle);
 }
 
 void StaticBuffer::releaseBuffer(BuilderRef b) const {
-    Value * buffer = b->CreateLoad(mHandle);
-    b->CreateFree(buffer);
-    b->CreateStore(nullPointerFor(buffer), mHandle);
+    Value * const handle = getHandle(b.get());
+    Value * buffer = b->CreateLoad(handle);
+    b->CreateFree(subtractUnderflow(b, buffer, mUnderflow));
+    b->CreateStore(nullPointerFor(b, buffer, mUnderflow), handle);
 }
 
 inline bool isCapacityGuaranteed(const Value * const index, const size_t capacity) {
@@ -285,11 +312,7 @@ void StaticBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) c
 }
 
 Value * StaticBuffer::getBaseAddress(IDISA_Builder * const b) const {
-    Value * addr = b->CreateLoad(getHandle(b));
-    if (mUnderflow) {
-        addr = b->CreateGEP(addr, b->getSize(mUnderflow));
-    }
-    return addr;
+    return b->CreateLoad(getHandle(b));
 }
 
 void StaticBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {
@@ -321,7 +344,7 @@ Value * StaticBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const fro
     Value * const capacity = getCapacity(b.get());
     Value * const availableItems = b->CreateSub(totalItems, fromPosition);
     Value * const fromOffset = b->CreateURem(fromPosition, capacity);
-    Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems);
+    Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
     Value * const linearSpace = b->CreateSub(capacityWithOverflow, fromOffset);
     return b->CreateUMin(availableItems, linearSpace);
 }
@@ -360,21 +383,22 @@ void DynamicBuffer::allocateBuffer(BuilderRef b) {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(BaseAddress);
-    Value * const baseAddressField = b->CreateGEP(mHandle, indices);
-    Type * const baseAddressPtrTy = baseAddressField->getType()->getPointerElementType();
+
+    Value * const handle = getHandle(b.get());
+    Value * const baseAddressField = b->CreateGEP(handle, indices);
     Constant * size = b->getSize(mInitialCapacity + mUnderflow + mOverflow);
-    Value * const baseAddress = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    Value * const baseAddress = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
     if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
         b->CallPrintInt("allocated: ", baseAddress);
-        Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(getType()), size);
+        Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(mType), size);
         b->CallPrintInt("allocated capacity: ", bufferSize);
     }
-    b->CreateStore(baseAddress, baseAddressField);
+    b->CreateStore(addUnderflow(b, baseAddress, mUnderflow), baseAddressField);
     indices[1] = b->getInt32(PriorBaseAddress);
-    Value * const priorAddressField = b->CreateGEP(mHandle, indices);
-    b->CreateStore(ConstantPointerNull::getNullValue(baseAddressPtrTy), priorAddressField);
+    Value * const priorAddressField = b->CreateGEP(handle, indices);
+    b->CreateStore(nullPointerFor(b, baseAddress, mUnderflow), priorAddressField);
     indices[1] = b->getInt32(Capacity);
-    Value * const capacityField = b->CreateGEP(mHandle, indices);
+    Value * const capacityField = b->CreateGEP(handle, indices);
     b->CreateStore(b->getSize(mInitialCapacity), capacityField);
 }
 
@@ -384,15 +408,16 @@ void DynamicBuffer::releaseBuffer(BuilderRef b) const {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(PriorBaseAddress);
-    Value * priorAddressField = b->CreateGEP(handle, indices);
-    Value * priorAddress = b->CreateLoad(priorAddressField);
-    b->CreateFree(priorAddress);
-    b->CreateStore(nullPointerFor(priorAddress), priorAddressField);
+    Value * const priorAddressField = b->CreateGEP(handle, indices);
+    Value * const priorAddress = b->CreateLoad(priorAddressField);
+    b->CreateFree(subtractUnderflow(b, priorAddress, mUnderflow));
+    Constant * const nullPtr = nullPointerFor(b, priorAddress, mUnderflow);
+    b->CreateStore(nullPtr, priorAddressField);
     indices[1] = b->getInt32(BaseAddress);
-    Value * baseAddressField = b->CreateGEP(handle, indices);
-    Value * baseAddress = b->CreateLoad(baseAddressField);
-    b->CreateFree(baseAddress);
-    b->CreateStore(nullPointerFor(baseAddress), baseAddressField);
+    Value * const baseAddressField = b->CreateGEP(handle, indices);
+    Value * const baseAddress = b->CreateLoad(baseAddressField);
+    b->CreateFree(subtractUnderflow(b, baseAddress, mUnderflow));
+    b->CreateStore(nullPtr, baseAddressField);
 }
 
 void DynamicBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {
@@ -401,11 +426,7 @@ void DynamicBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* add
 
 Value * DynamicBuffer::getBaseAddress(IDISA_Builder * const b) const {
     Value * const ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(BaseAddress)});
-    Value * addr = b->CreateLoad(ptr);
-    if (mUnderflow) {
-        addr = b->CreateGEP(addr, b->getSize(mUnderflow));
-    }
-    return addr;
+    return b->CreateLoad(ptr);
 }
 
 Value * DynamicBuffer::getOverflowAddress(IDISA_Builder * const b) const {
@@ -446,7 +467,7 @@ Value * DynamicBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const fr
     Value * const capacity = getCapacity(b.get());
     Value * const availableItems = b->CreateSub(totalItems, fromPosition);
     Value * const fromOffset = b->CreateURem(fromPosition, capacity);
-    Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems);
+    Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
     Value * const linearSpace = b->CreateSub(capacityWithOverflow, fromOffset);
     return b->CreateUMin(availableItems, linearSpace);
 }
@@ -512,10 +533,12 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
 
     Value * requiredCapacity = newCapacity;
     if (mUnderflow || mOverflow) {
-        Constant * const additionalCapacity = b->getSize((mUnderflow + mOverflow));
+        Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
         requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
     }
-    Value * const newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
+    Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
+    newBuffer = addUnderflow(b, newBuffer, mUnderflow);
+
     indices[1] = b->getInt32(BaseAddress);
     Value * const bufferField = b->CreateGEP(handle, indices);
     Value * const buffer = b->CreateLoad(bufferField);
@@ -572,7 +595,7 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         Value * const check = b->CreateICmpUGE(remainingAfterExpand, requiredChunks);
         b->CreateAssert(check, "buffer expansion error");
     }
-    b->CreateFree(priorBuffer);
+    b->CreateFree(subtractUnderflow(b, priorBuffer, mUnderflow));
     b->CreateBr(expanded);
 
     b->SetInsertPoint(expanded);
@@ -612,7 +635,8 @@ void LinearBuffer::allocateBuffer(BuilderRef b) {
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(ReportedAddress);
     Value * const firstBufferField =  b->CreateGEP(mHandle, indices);
-    Value * const firstBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    Value * firstBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    firstBuffer = addUnderflow(b, firstBuffer, mUnderflow);
     b->CreateStore(firstBuffer, firstBufferField);
     Constant * const initialCapacity = b->getSize(mInitialCapacity);
     indices[1] = b->getInt32(FirstCapacity);
@@ -622,7 +646,8 @@ void LinearBuffer::allocateBuffer(BuilderRef b) {
     indices[1] = b->getInt32(SecondCapacity);
     b->CreateStore(initialCapacity, b->CreateGEP(mHandle, indices));
     indices[1] = b->getInt32(SecondBufferAddress);
-    Value * const secondBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    Value * secondBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    secondBuffer = addUnderflow(b, secondBuffer, mUnderflow);
     if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
         Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(getType()), size);
         b->CallPrintInt("linear allocated (1): ", firstBuffer);
@@ -630,7 +655,7 @@ void LinearBuffer::allocateBuffer(BuilderRef b) {
         b->CallPrintInt("linear allocated (2): ", secondBuffer);
         b->CallPrintInt("linear allocated (2) capacity: ", bufferSize);
     }
-    b->CreateStore(secondBuffer, b->CreateGEP(mHandle, indices));
+    b->CreateStore(addUnderflow(b, secondBuffer, mUnderflow), b->CreateGEP(mHandle, indices));
 }
 
 void LinearBuffer::releaseBuffer(BuilderRef b) const {
@@ -638,12 +663,13 @@ void LinearBuffer::releaseBuffer(BuilderRef b) const {
     Value * const handle = getHandle(b.get());
     Value * priorAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(SecondBufferAddress)});
     Value * priorAddress = b->CreateLoad(priorAddressField);
-    b->CreateFree(priorAddress);
-    b->CreateStore(nullPointerFor(priorAddress), priorAddressField);
+    b->CreateFree(subtractUnderflow(b, priorAddress, mUnderflow));
+    Constant * nullPtr = nullPointerFor(b, priorAddress, mUnderflow);
+    b->CreateStore(nullPtr, priorAddressField);
     Value * baseAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(FirstBufferAddress)});
     Value * baseAddress = b->CreateLoad(baseAddressField);
-    b->CreateFree(baseAddress);
-    b->CreateStore(nullPointerFor(baseAddress), baseAddressField);
+    b->CreateFree(subtractUnderflow(b, baseAddress, mUnderflow));
+    b->CreateStore(nullPtr, baseAddressField);
 }
 
 void LinearBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {
@@ -652,11 +678,7 @@ void LinearBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr
 
 Value * LinearBuffer::getBaseAddress(IDISA_Builder * const b) const {
     Value * const ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(ReportedAddress)});
-    Value * addr = b->CreateLoad(ptr);
-    if (mUnderflow) {
-        addr = b->CreateGEP(addr, b->getSize(mUnderflow));
-    }
-    return addr;
+    return b->CreateLoad(ptr);
 }
 
 Value * LinearBuffer::getOverflowAddress(IDISA_Builder * const b) const {
@@ -741,9 +763,10 @@ Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * co
     requiredCapacity = b->CreateRoundUp(requiredCapacity, firstCapacity);
     Value * requiredCapacityBlocks = b->CreateLShr(requiredCapacity, LOG_2_BIT_BLOCK_WIDTH);
     Value * size = b->CreateAdd(requiredCapacityBlocks, b->getSize(mUnderflow + mOverflow));
-    Value * const expandedBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    Value * expandedBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
+    expandedBuffer = addUnderflow(b, expandedBuffer, mUnderflow);
     indices[1] = b->getInt32(SecondBufferAddress);
-    b->CreateFree(secondBuffer);
+    b->CreateFree(subtractUnderflow(b, secondBuffer, mUnderflow));
     b->CreateBr(copyToBuffer);
 
     b->SetInsertPoint(copyToBuffer);
@@ -810,7 +833,7 @@ StaticBuffer::StaticBuffer(BuilderRef b, Type * const type,
             && (overflowSize % b->getBitBlockWidth()) == 0);
     assert ("static buffer underflow must be a multiple of bitblock width"
             && (underflowSize % b->getBitBlockWidth()) == 0);
-    assert ("static buffer capacity must be at least twice its underflow + overflow"
+    assert ("static buffer capacity must be at least twice its max(underflow, overflow)"
             && (capacity >= (std::max(underflowSize, overflowSize) * 2)));
 }
 
@@ -826,7 +849,7 @@ DynamicBuffer::DynamicBuffer(BuilderRef b, Type * const type,
             && (overflowSize % b->getBitBlockWidth()) == 0);
     assert ("dynamic buffer underflow must be a multiple of bitblock width"
             && (underflowSize % b->getBitBlockWidth()) == 0);
-    assert ("dynamic buffer initial capacity must be at least twice its underflow + overflow"
+    assert ("dynamic buffer initial capacity must be at least twice its max(underflow, overflow)"
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
 }
 
@@ -839,7 +862,7 @@ LinearBuffer::LinearBuffer(BuilderRef b, Type * const type,
     assert ("linear buffer capacity must be a multiple of bitblock width" && (initialCapacity % b->getBitBlockWidth()) == 0);
     assert ("linear buffer overflow must be a multiple of bitblock width" && (overflowSize % b->getBitBlockWidth()) == 0);
     assert ("linear buffer underflow must be a multiple of bitblock width" && (underflowSize % b->getBitBlockWidth()) == 0);
-    assert ("linear buffer initial capacity must be at least twice its underflow + overflow"
+    assert ("linear buffer initial capacity must be at least twice its max(underflow, overflow)"
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
 }
 

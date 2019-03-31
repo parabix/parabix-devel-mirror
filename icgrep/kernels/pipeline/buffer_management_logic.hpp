@@ -211,6 +211,16 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             unsigned underflowSize = 0;
             bool unboundedLookbehind = false;
 
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::LookBehind))) {
+                const auto & lookBehind = output.findAttribute(AttrId::LookBehind);
+                const auto amount = lookBehind.amount();
+                if (amount == 0) {
+                    unboundedLookbehind = true;
+                } else {
+                    underflowSize = lookBehind.amount();
+                }
+            }
+
             // TODO: If we have an open system, then the input rate to this pipeline cannot
             // be bounded a priori. During initialization, we could pass a "suggestion"
             // argument to indicate what the outer pipeline believes its I/O rates will be.
@@ -251,7 +261,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto blockWidth = b->getBitBlockWidth();
-            underflowSize = (underflowSize + blockWidth - 1) & -blockWidth;
 
             // ensure any Add/RoundUpTo attributes are safely handled
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
@@ -271,16 +280,17 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 overflowSpace = std::max(overflowSpace, std::max(a, b));
             }
 
+            underflowSize = (underflowSize + blockWidth - 1) & -blockWidth;
             overflowSpace = lcm(overflowSpace, blockWidth);
             facsimileSpace = lcm(facsimileSpace, blockWidth);
 
-            bn.Underflow = underflowSize;
-            bn.Overflow = overflowSpace.numerator();
+            bn.LookBehind = underflowSize;
+            bn.CopyBack = overflowSpace.numerator();
             assert (overflowSpace.denominator() == 1);
-            bn.Fasimile = facsimileSpace.numerator();
+            bn.LookAhead = facsimileSpace.numerator();
             assert (facsimileSpace.denominator() == 1);
 
-            unsigned overflowSize = std::max(bn.Overflow, bn.Fasimile);
+            unsigned overflowSize = std::max(bn.CopyBack, bn.LookAhead);
             // compute the buffer size
             if (underflowSize || overflowSize) {
                 const RateValue requiredOverflow(std::max(underflowSize, overflowSize) * 2);
@@ -306,7 +316,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-    // printBufferGraph(G, errs());
+//    printBufferGraph(G, errs());
 
     return G;
 }
@@ -339,35 +349,59 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferNode & bn = G[i];
         if (bn.Buffer == nullptr) {
             out << '?';
-        } else if (isa<ExternalBuffer>(bn.Buffer)) {
-            out << 'E';
-        } else if (DynamicBuffer * buffer = dyn_cast<DynamicBuffer>(bn.Buffer)) {
-            out << 'D' << buffer->getInitialCapacity() << 'x' << buffer->getNumOfStreams();
-        } else if (LinearBuffer * buffer = dyn_cast<LinearBuffer>(bn.Buffer)) {
-            out << 'L' << buffer->getInitialCapacity() << 'x' << buffer->getNumOfStreams();
-        } else if (StaticBuffer * buffer = dyn_cast<StaticBuffer>(bn.Buffer)) {
-            out << 'S' << buffer->getCapacity() << 'x' << buffer->getNumOfStreams();
+        } else {
+            const StreamSetBuffer * const buffer = bn.Buffer;
+            using KindId = StreamSetBuffer::BufferKind;
+            char bufferType = 'X';
+            switch (buffer->getBufferKind()) {
+                case KindId::ExternalBuffer: bufferType = 'E'; break;
+                case KindId::StaticBuffer: bufferType = 'S'; break;
+                case KindId::DynamicBuffer: bufferType = 'D'; break;
+                case KindId::LinearBuffer: bufferType = 'L'; break;
+                default: llvm_unreachable("unknown buffer type");
+            }
+
+            Type * ty = buffer->getBaseType();
+            out << bufferType << ' ' << ty->getArrayNumElements() << 'x';
+            ty = ty->getArrayElementType();
+            ty = ty->getVectorElementType();
+            out << ty->getIntegerBitWidth();
+
+            if (buffer->getBufferKind() != KindId::ExternalBuffer) {
+                out << " [";
+                switch (buffer->getBufferKind()) {
+                    case KindId::StaticBuffer:
+                        out << cast<StaticBuffer>(buffer)->getCapacity();
+                        break;
+                    case KindId::DynamicBuffer:
+                        out << cast<DynamicBuffer>(buffer)->getInitialCapacity();
+                        break;
+                    case KindId::LinearBuffer:
+                        out << cast<LinearBuffer>(buffer)->getInitialCapacity();
+                        break;
+                    default: llvm_unreachable("unknown buffer type");
+                }
+                out << ']';
+            }
         }
-        if (bn.Underflow || bn.Overflow || bn.Fasimile) {
+
+        if (bn.LookBehind || bn.CopyBack || bn.LookAhead) {
             StringRef joiner(" (");
-            if (bn.Underflow) {
-                out << joiner << "U:" << bn.Underflow;
+            if (bn.LookBehind) {
+                out << joiner << "U:" << bn.LookBehind;
                 joiner = StringRef(", ");
             }
-            if (bn.Overflow) {
-                out << joiner << "O:" << bn.Overflow;
+            if (bn.CopyBack) {
+                out << joiner << "O:" << bn.CopyBack;
                 joiner = StringRef(", ");
             }
-            if (bn.Fasimile) {
-                out << joiner << "F:" << bn.Fasimile;
+            if (bn.LookAhead) {
+                out << joiner << "F:" << bn.LookAhead;
                 joiner = StringRef(", ");
             }
             out << ')';
         }
-        if (bn.Buffer) {
-            out << "\n";
-            bn.Buffer->getBaseType()->print(out);
-        }
+
         out << "\"];\n";
     }
 
@@ -562,21 +596,21 @@ inline bool PipelineCompiler::requiresCopyBack(const unsigned bufferVertex) cons
  * @brief getCopyBack
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCompiler::getCopyBack(const unsigned bufferVertex) const {
-    return mBufferGraph[bufferVertex].Overflow;
+    return mBufferGraph[bufferVertex].CopyBack;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief requiresFacsimile
+ * @brief requiresLookAhead
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::requiresFacsimile(const unsigned bufferVertex) const {
-    return getFacsimile(bufferVertex) != 0;
+inline bool PipelineCompiler::requiresLookAhead(const unsigned bufferVertex) const {
+    return getLookAhead(bufferVertex) != 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getFacsimile
+ * @brief getLookAhead
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getFacsimile(const unsigned bufferVertex) const {
-    return mBufferGraph[bufferVertex].Fasimile;
+inline unsigned PipelineCompiler::getLookAhead(const unsigned bufferVertex) const {
+    return mBufferGraph[bufferVertex].LookAhead;
 
 }
 
@@ -589,6 +623,26 @@ BufferType PipelineCompiler::getOutputBufferType(const unsigned outputPort) cons
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writeLookBehindLogic
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const auto bufferVertex = getOutputBufferVertex(i);
+        const BufferNode & bn = mBufferGraph[bufferVertex];
+        if (bn.LookBehind) {
+            const StreamSetBuffer * const buffer = bn.Buffer;
+            Value * const capacity = buffer->getCapacity(b.get());
+            Value * const produced = mAlreadyProducedPhi[i];
+            Value * const producedOffset = b->CreateURem(produced, capacity);
+            Constant * const underflow = b->getSize(bn.LookBehind);
+            Value * const needsCopy = b->CreateICmpULT(producedOffset, underflow);
+            copy(b, CopyMode::LookBehind, needsCopy, i, bn.Buffer, bn.LookBehind);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeCopyBackLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
@@ -596,7 +650,7 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto bufferVertex = getOutputBufferVertex(i);
         const BufferNode & bn = mBufferGraph[bufferVertex];
-        if (bn.Overflow) {
+        if (bn.CopyBack) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b.get());
             Value * const priorOffset = b->CreateURem(mAlreadyProducedPhi[i], capacity);
@@ -605,7 +659,7 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
             Value * const needsCopy = b->CreateAnd(nonCapacityAlignedWrite, wroteToOverflow);
-            copy(b, CopyMode::CopyBack, needsCopy, i, buffer, bn.Overflow);
+            copy(b, CopyMode::CopyBack, needsCopy, i, buffer, bn.CopyBack);
         }
     }
 }
@@ -622,7 +676,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
         const auto bufferVertex = getOutputBufferVertex(i);
         const BufferNode & bn = mBufferGraph[bufferVertex];
 
-        if (bn.Fasimile) {
+        if (bn.LookAhead) {
 
             const StreamSetBuffer * const buffer = bn.Buffer;
 
@@ -649,8 +703,8 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             }
 
             // And we started writing within the first block ...
-            assert (bn.Fasimile <= buffer->getOverflowCapacity(b));
-            Constant * const overflowSize = b->getSize(bn.Fasimile);
+            assert (bn.LookAhead <= buffer->getOverflowCapacity(b));
+            Constant * const overflowSize = b->getSize(bn.LookAhead);
             Value * const initialOffset = b->CreateURem(initial, capacity);
             Value * const startedWithinFirstBlock = b->CreateICmpULT(initialOffset, overflowSize);
             Value * const wroteToFirstBlock = b->CreateAnd(overwroteData, startedWithinFirstBlock);
@@ -666,22 +720,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             // the overflow. Should be enough just to have a "copyback flag" phi node to say it that was the
             // last thing it did to the buffer.
 
-            copy(b, CopyMode::LookAhead, needsCopy, i, buffer, bn.Fasimile);
-        }
-    }
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeLookBehindLogic
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto bufferVertex = getOutputBufferVertex(i);
-        const BufferNode & bn = mBufferGraph[bufferVertex];
-        if (bn.Underflow) {
-            copy(b, CopyMode::LookBehind, b->getTrue(), i, bn.Buffer, bn.Underflow);
+            copy(b, CopyMode::LookAhead, needsCopy, i, buffer, bn.LookAhead);
         }
     }
 }
@@ -710,7 +749,6 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
 
     b->SetInsertPoint(copyStart);
-
     const auto itemWidth = getItemWidth(buffer->getBaseType());
     const auto blockWidth = b->getBitBlockWidth();
     assert ((itemsToCopy % blockWidth) == 0);
