@@ -114,7 +114,7 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
             mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
         }
         for (unsigned j = 0; j < mStreamCount; ++j) {
-            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j + mInputStreamBase), blockOffsetPhi);
             inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
             Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
             outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
@@ -129,7 +129,7 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
         Value * delMask = kb->simd_not(extractionMask);
         const auto move_masks = parallel_prefix_deletion_masks(kb, mCompressFieldWidth, delMask);
         for (unsigned j = 0; j < mStreamCount; ++j) {
-            Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j + mInputStreamBase), blockOffsetPhi);
             Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input);
             kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
         }
@@ -143,7 +143,7 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
 
 FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw
                                          , StreamSet * inputStreamSet, StreamSet * extractionMask
-                                         , StreamSet * outputStreamSet)
+                                         , StreamSet * outputStreamSet, unsigned inputStreamBase)
 : MultiBlockKernel(b, "fieldCompress" + std::to_string(fw) + "_" + std::to_string(inputStreamSet->getNumElements()),
 // inputs
 {Binding{"inputStreamSet", inputStreamSet},
@@ -152,7 +152,8 @@ Binding{"extractionMask", extractionMask}},
 {Binding{"outputStreamSet", outputStreamSet}},
 {}, {}, {})
 , mCompressFieldWidth(fw)
-, mStreamCount(inputStreamSet->getNumElements()) {
+, mStreamCount(inputStreamSet->getNumElements())
+, mInputStreamBase(inputStreamBase) {
 
 }
 

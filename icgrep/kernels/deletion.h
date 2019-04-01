@@ -39,7 +39,8 @@ private:
 // Compress within fields of size fw.
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
-    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet);
+    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw,
+                        StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet, unsigned inputStreamBase = 0);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -47,6 +48,7 @@ protected:
 private:
     const unsigned mCompressFieldWidth;
     const unsigned mStreamCount;
+    const unsigned mInputStreamBase;
 };
 
 class PEXTFieldCompressKernel final : public MultiBlockKernel {
