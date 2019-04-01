@@ -57,14 +57,6 @@ protected:
     pablo::PabloAST * bit_pattern_expr(const unsigned pattern, unsigned selected_bits, PabloBlockOrBuilder & pb);
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * char_test_expr(const re::codepoint_t ch, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * make_range(const re::codepoint_t n1, const re::codepoint_t n2, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
-    template<typename PabloBlockOrBuilder>
-    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
 
 protected:  
     const unsigned                  mEncodingBits;
@@ -87,6 +79,14 @@ public:
 private:
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * charset_expr(const re::CC *cc, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * make_range(const re::codepoint_t n1, const re::codepoint_t n2, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb);
 };
     
 
@@ -107,6 +107,7 @@ private:
 class Parabix_Ternary_CC_Compiler : public CC_Compiler, public CC_Compiler_Common {
 public:
     using CC_Compiler::compileCC;
+    using ClassTypeId = pablo::PabloAST::ClassTypeId;
     using octet_pair_t = std::pair<re::codepoint_t, uint8_t>;
     using octets_intervals_union_t = std::pair<std::vector<octet_pair_t>, std::vector<re::interval_t>>;
 
@@ -123,6 +124,20 @@ private:
     pablo::PabloAST * make_octets_expr(const std::vector<octet_pair_t> octets, PabloBlockOrBuilder & pb);
     template<typename PabloBlockOrBuilder>
     pablo::PabloAST * make_intervals_expr(const std::vector<re::interval_t> intervals, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * make_range(re::codepoint_t lo, re::codepoint_t hi, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * make_octet_range(const unsigned mask, const unsigned basis_idx, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * char_or_range_expr(const re::codepoint_t lo, const re::codepoint_t hi, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * bit_pattern_expr(const unsigned pattern, const unsigned basis_idx, unsigned selected_bits, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * joinTerms(std::vector<pablo::PabloAST *> terms, ClassTypeId ty, PabloBlockOrBuilder & pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb);
+    template<typename PabloBlockOrBuilder>
+    pablo::PabloAST * LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb);
     octets_intervals_union_t make_octets_intervals_union(const re::CC *cc);
     inline re::codepoint_t octet_base_codepoint(const octet_pair_t & i) {
         return std::get<0>(i);
