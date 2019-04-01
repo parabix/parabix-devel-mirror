@@ -376,43 +376,6 @@ u8u16FunctionType generatePipeline2(CPUDriver & pxDriver) {
     return reinterpret_cast<u8u16FunctionType>(P->compile());
 }
 
-void GB_18030_DoubleByteLogic::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
-    cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), byte1_basis);
-    PabloAST * zeroes = pb.createZeroes();
-    Var * u16[16];
-    for (int i = 0; i < 16; ++i) {
-        u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
-    }
-    for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
-        PabloAST * byte1 = Byte1_compiler.compileCC(makeCC(char_code));
-        PabloBlock * nested = getEntryScope()->createScope();
-        std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
-        cc::Parabix_CC_Compiler_Builder Byte2_compiler(nested, byte2_basis);
-        std::vector<CC *> bitXfrmClasses;
-        std::vector<CC *> outputBitClasses;
-        auto xClasses = byteTranscoderClasses(fullByteTable_GB10830_byte2(GB_DoubleByteTable[char_code - 0x81], 0xFFFD));
-        bitXfrmClasses = xClasses.first;
-        outputBitClasses = xClasses.second;
-        for (unsigned i = 0; i < BitsPerInputByte; i++) {
-            PabloAST * xfrmStrm = Byte2_compiler.compileCC(bitXfrmClasses[i]);
-            PabloAST * outStrm = pb.createXor(xfrmStrm, byte2_basis[i]);
-            nested->createAssign(u16[i], nested->createOr(u16[i], outStrm));
-        }
-        for (unsigned i = BitsPerInputByte; i < BitsPerInputByte + outputBitClasses.size(); i++) {
-            PabloAST * outStrm = Byte2_compiler.compileCC(outputBitClasses[i + BitsPerInputByte]);
-            nested->createAssign(u16[i], nested->createOr(u16[i], outStrm));
-        }
-        pb.createIf(byte1, nested);
-    }
-    Var * const u16_output = getOutputStreamVar("u16_basis");
-    for (unsigned i = 0; i < 16; i++) {
-        pb.createAssign(pb.createExtract(u16_output, pb.getInteger(i)), u16[i]);
-    }
-}
-
-
 size_t file_size(const int fd) {
     struct stat st;
     if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {

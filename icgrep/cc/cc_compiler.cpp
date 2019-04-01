@@ -76,94 +76,8 @@ PabloAST * CC_Compiler_Common::bit_pattern_expr(const unsigned pattern, unsigned
 }
 
 template<typename PabloBlockOrBuilder>
-PabloAST * CC_Compiler_Common::make_range(const codepoint_t n1, const codepoint_t n2, PabloBlockOrBuilder & pb) {
-    codepoint_t diff_count = 0;
-
-    for (codepoint_t diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
-
-    if ((n2 < n1) || (diff_count > mEncodingBits)) {
-        llvm::report_fatal_error("Bad Range: [" + std::to_string(n1) + "," +
-                                 std::to_string(n2) + "] for " +
-                                 std::to_string(mEncodingBits) + "-bit encoding");
-    }
-
-    const codepoint_t mask0 = (static_cast<codepoint_t>(1) << diff_count) - 1;
-
-    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncodingMask ^ mask0, pb);
-
-    if (diff_count == 0) return common;
-
-    const codepoint_t mask1 = (static_cast<codepoint_t>(1) << (diff_count - 1)) - 1;
-
-    PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1, pb);
-    PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1, pb);
-
-    return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1, pb), hi_test, lo_test));
-}
-
-template<typename PabloBlockOrBuilder>
-PabloAST * CC_Compiler_Common::GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb) {
-    if (N == 0) {
-        return pb.createOnes(); //Return a true literal.
-    }
-    else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
-        return pb.createOr(pb.createOr(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n, pb));
-    }
-    else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
-        return pb.createAnd(pb.createAnd(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n - (3 << (N - 2)), pb));
-    }
-    else if (N >= 1)
-    {
-        int hi_bit = n & (1 << (N - 1));
-        int lo_bits = n - hi_bit;
-        PabloAST * lo_range = GE_Range(N - 1, lo_bits, pb);
-        if (hi_bit == 0)
-        {
-            /*
-              If the hi_bit of n is not set, then whenever the corresponding bit
-              is set in the target, the target will certaily be >=.  Otherwise,
-              the value of GE_range(N-1), lo_range) is required.
-            */
-            return pb.createOr(getBasisVar(N - 1, pb), lo_range);
-        }
-        else
-        {
-            /*
-              If the hi_bit of n is set, then the corresponding bit must be set
-              in the target for >= and GE_range(N-1, lo_bits) must also be true.
-            */
-            return pb.createAnd(getBasisVar(N - 1, pb), lo_range);
-        }
-    }
-    throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
-}
-
-template<typename PabloBlockOrBuilder>
-PabloAST * CC_Compiler_Common::LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb) {
-    /*
-      If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
-      Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
-    */
-    if ((n + 1) == (1UL << N)) {
-        return pb.createOnes(); //True.
-    } else {
-        return pb.createNot(GE_Range(N, n + 1, pb));
-    }
-}
-
-template<typename PabloBlockOrBuilder>
 inline PabloAST * CC_Compiler_Common::char_test_expr(const codepoint_t ch, PabloBlockOrBuilder &pb) {
     return bit_pattern_expr(ch, mEncodingMask, pb);
-}
-
-template<typename PabloBlockOrBuilder>
-inline PabloAST * CC_Compiler_Common::char_or_range_expr(const codepoint_t lo, const codepoint_t hi, PabloBlockOrBuilder &pb) {
-    if (lo == hi) {
-        return char_test_expr(lo, pb);
-    } else if (lo < hi) {
-        return make_range(lo, hi, pb);
-    }
-    llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
 }
 
 template<typename PabloBlockOrBuilder>
@@ -234,7 +148,92 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
     return pb.createInFile(expr);
-    
+}
+
+template<typename PabloBlockOrBuilder>
+inline PabloAST * Parabix_CC_Compiler::char_or_range_expr(const codepoint_t lo, const codepoint_t hi, PabloBlockOrBuilder &pb) {
+    if (lo == hi) {
+        return char_test_expr(lo, pb);
+    } else if (lo < hi) {
+        return make_range(lo, hi, pb);
+    }
+    llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_CC_Compiler::make_range(const codepoint_t n1, const codepoint_t n2, PabloBlockOrBuilder & pb) {
+    codepoint_t diff_count = 0;
+
+    for (codepoint_t diff_bits = n1 ^ n2; diff_bits; diff_count++, diff_bits >>= 1);
+
+    if ((n2 < n1) || (diff_count > mEncodingBits)) {
+        llvm::report_fatal_error("Bad Range: [" + std::to_string(n1) + "," +
+                                 std::to_string(n2) + "] for " +
+                                 std::to_string(mEncodingBits) + "-bit encoding");
+    }
+
+    const codepoint_t mask0 = (static_cast<codepoint_t>(1) << diff_count) - 1;
+
+    PabloAST * common = bit_pattern_expr(n1 & ~mask0, mEncodingMask ^ mask0, pb);
+
+    if (diff_count == 0) return common;
+
+    const codepoint_t mask1 = (static_cast<codepoint_t>(1) << (diff_count - 1)) - 1;
+
+    PabloAST* lo_test = GE_Range(diff_count - 1, n1 & mask1, pb);
+    PabloAST* hi_test = LE_Range(diff_count - 1, n2 & mask1, pb);
+
+    return pb.createAnd(common, pb.createSel(getBasisVar(diff_count - 1, pb), hi_test, lo_test));
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb) {
+    if (N == 0) {
+        return pb.createOnes(); //Return a true literal.
+    }
+    else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
+        return pb.createOr(pb.createOr(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n, pb));
+    }
+    else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
+        return pb.createAnd(pb.createAnd(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb)), GE_Range(N - 2, n - (3 << (N - 2)), pb));
+    }
+    else if (N >= 1)
+    {
+        int hi_bit = n & (1 << (N - 1));
+        int lo_bits = n - hi_bit;
+        PabloAST * lo_range = GE_Range(N - 1, lo_bits, pb);
+        if (hi_bit == 0)
+        {
+            /*
+              If the hi_bit of n is not set, then whenever the corresponding bit
+              is set in the target, the target will certaily be >=.  Otherwise,
+              the value of GE_range(N-1), lo_range) is required.
+            */
+            return pb.createOr(getBasisVar(N - 1, pb), lo_range);
+        }
+        else
+        {
+            /*
+              If the hi_bit of n is set, then the corresponding bit must be set
+              in the target for >= and GE_range(N-1, lo_bits) must also be true.
+            */
+            return pb.createAnd(getBasisVar(N - 1, pb), lo_range);
+        }
+    }
+    throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb) {
+    /*
+      If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
+      Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
+    */
+    if ((n + 1) == (1UL << N)) {
+        return pb.createOnes(); //True.
+    } else {
+        return pb.createNot(GE_Range(N, n + 1, pb));
+    }
 }
 
 PabloAST * Parabix_CC_Compiler::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
@@ -363,6 +362,133 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_intervals_expr(const std::vector<in
 }
 
 template<typename PabloBlockOrBuilder>
+inline PabloAST * Parabix_Ternary_CC_Compiler::char_or_range_expr(const codepoint_t lo, const codepoint_t hi, PabloBlockOrBuilder &pb) {
+    if (lo == hi) {
+        return char_test_expr(lo, pb);
+    } else if (lo < hi) {
+        return make_range(lo, hi, pb);
+    }
+    llvm::report_fatal_error(std::string("Invalid Character Set Range: [") + std::to_string(lo) + "," + std::to_string(hi) + "]");
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_Ternary_CC_Compiler::make_range(codepoint_t lo, codepoint_t hi, PabloBlockOrBuilder & pb) {
+    assert(lo < hi);
+    const unsigned irr_bits = __builtin_ctzll(lo | (~hi));
+    const unsigned basis_idx = irr_bits;
+    codepoint_t diff_count = 0;
+    for (codepoint_t diff_bits = lo ^ hi; diff_bits; diff_count++, diff_bits >>= 1);
+    const codepoint_t mask0 = (static_cast<codepoint_t>(1) << diff_count) - 1;
+    PabloAST * common = bit_pattern_expr(lo & ~mask0, basis_idx, mEncodingMask ^ mask0, pb);
+    if (diff_count == 0 || diff_count == irr_bits) return common;
+    const codepoint_t mask1 = (static_cast<codepoint_t>(1) << (diff_count - 1)) - 1;
+    const codepoint_t mask2 = mask1 >> irr_bits << irr_bits;
+    if (((hi & mask2) >> irr_bits) + 1 == ((lo & mask2) >> irr_bits)) { // hi + 1 = lo
+        PabloAST * lo_test = GE_Range(diff_count - 1, lo & mask2, pb);
+        if (isa<Ones>(common)) {
+            return pb.createXor(getBasisVar(diff_count - 1, pb), lo_test);
+        }
+        return pb.createTernary(pb.getInteger(0x60), common, getBasisVar(diff_count - 1, pb), lo_test);
+    } else if ((mask2 & hi) == mask2) { // hi with pattern xx111xx
+        PabloAST * lo_test = GE_Range(diff_count - 1, lo & mask2, pb);
+        if (isa<Ones>(common)) {
+            return pb.createOr(getBasisVar(diff_count - 1, pb), lo_test);
+        }
+        return pb.createTernary(pb.getInteger(0xE0), common, getBasisVar(diff_count - 1, pb), lo_test);
+    } else if ((mask2 ^ (mask2 & lo)) == mask2) { // lo with pattern xx000xx
+        PabloAST * hi_test = LE_Range(diff_count - 1, hi & mask1, pb);
+        if (isa<Ones>(common)) {
+            return pb.createOr(pb.createNot(getBasisVar(diff_count - 1, pb)), hi_test);
+        }
+        return pb.createTernary(pb.getInteger(0xE0), common, pb.createNot(getBasisVar(diff_count - 1, pb)), hi_test);
+    }
+    PabloAST * lo_test = GE_Range(diff_count - 1, lo & mask1, pb);
+    PabloAST * hi_test = LE_Range(diff_count - 1, hi & mask1, pb);
+    const unsigned lo_zeroes = __builtin_ctzll(lo >> irr_bits);
+    const unsigned hi_ones = __builtin_ctzll((~hi) >> irr_bits);
+    PabloAST * sel = nullptr;
+    if ((mask2 >> irr_bits >> lo_zeroes) == 0x01) { // lo with pattern xx100xx
+        sel = pb.createSel(getBasisVar(diff_count - 1, pb), hi_test, getBasisVar(diff_count - 2, pb));
+    } else if ((mask2 >> irr_bits >> hi_ones) == 0x01) { // hi with pattern xx011xx
+        sel = pb.createSel(getBasisVar(diff_count - 1, pb), pb.createNot(getBasisVar(diff_count - 2, pb)), lo_test);
+    } else {
+        sel = pb.createSel(getBasisVar(diff_count - 1, pb), hi_test, lo_test);
+    }
+    return pb.createAnd(common, sel);
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_Ternary_CC_Compiler::GE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder &pb) {
+    if (N == 0) {
+        return pb.createOnes(); //Return a true literal.
+    }
+    else if (((N % 2) == 0) && ((n >> (N - 2)) == 0)) {
+        return pb.createOr3(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb), GE_Range(N - 2, n, pb));
+    }
+    else if (((N % 2) == 0) && ((n >> (N - 2)) == 3)) {
+        return pb.createAnd3(getBasisVar(N - 1, pb), getBasisVar(N - 2, pb), GE_Range(N - 2, n - (3 << (N - 2)), pb));
+    }
+    else if (N >= 1)
+    {
+        int hi_bit = n & (1 << (N - 1));
+        int lo_bits = n - hi_bit;
+        PabloAST * lo_range = GE_Range(N - 1, lo_bits, pb);
+        if (hi_bit == 0)
+        {
+            /*
+              If the hi_bit of n is not set, then whenever the corresponding bit
+              is set in the target, the target will certaily be >=.  Otherwise,
+              the value of GE_range(N-1), lo_range) is required.
+            */
+           if (isa<Or>(lo_range)) {
+               Statement * stmt = cast<Statement>(lo_range);
+               return pb.createOr3(getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
+           } else if (isa<And>(lo_range)) {
+               Statement * stmt = cast<Statement>(lo_range);
+               return pb.createTernary(pb.getInteger(0xF8), getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
+           }
+           return pb.createOr(getBasisVar(N - 1, pb), lo_range);
+        }
+        else
+        {
+            /*
+              If the hi_bit of n is set, then the corresponding bit must be set
+              in the target for >= and GE_range(N-1, lo_bits) must also be true.
+            */
+            if (isa<And>(lo_range)) {
+                Statement * stmt = cast<Statement>(lo_range);
+                return pb.createAnd3(getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
+            } else if (isa<Or>(lo_range)) {
+                Statement * stmt = cast<Statement>(lo_range);
+                return pb.createTernary(pb.getInteger(0xE0), getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
+            }
+            return pb.createAnd(getBasisVar(N - 1, pb), lo_range);
+        }
+    }
+    throw std::runtime_error("Unexpected input given to ge_range: " + std::to_string(N) + ", " + std::to_string(n));
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_Ternary_CC_Compiler::LE_Range(const unsigned N, const unsigned n, PabloBlockOrBuilder & pb) {
+    /*
+      If an N-bit pattern is all ones, then it is always true that any n-bit value is LE this pattern.
+      Handling this as a special case avoids an overflow issue with n+1 requiring more than N bits.
+    */
+    if ((n + 1) == (1UL << N)) {
+        return pb.createOnes(); //True.
+    } else {
+        return pb.createNot(GE_Range(N, n + 1, pb));
+    }
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_Ternary_CC_Compiler::make_octet_range(const unsigned mask, const unsigned basis_idx, PabloBlockOrBuilder & pb) {
+    if (mask == 0xFF) return pb.createOnes();
+    assert(mEncodingBits > basis_idx + 2);
+    return pb.createTernary(pb.getInteger(mask), getBasisVar(basis_idx + 2, pb), getBasisVar(basis_idx + 1, pb), getBasisVar(basis_idx, pb));
+}
+
+template<typename PabloBlockOrBuilder>
 PabloAST * Parabix_Ternary_CC_Compiler::make_octets_expr(const std::vector<octet_pair_t> octets, PabloBlockOrBuilder & pb) {
     std::vector<PabloAST *> terms;
     for (auto octet : octets) {
@@ -382,26 +508,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_octets_expr(const std::vector<octet
             }
         }
     }
-    if (terms.empty()) return pb.createZeroes();
-    //Reduce the list so that all of the expressions are contained within a single expression.
-    std::vector<PabloAST *> temp;
-    temp.reserve(terms.size());
-    do {
-        for (unsigned i = 0; i < (terms.size() / 3); i++) {
-            temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
-        }
-        for (unsigned i = 0; i < (terms.size() % 3); i++) {
-            temp.push_back(terms[terms.size() - i - 1]);
-        }
-        terms.swap(temp);
-        temp.clear();
-    } while (terms.size() >= 3);
-    assert (terms.size() == 2 || terms.size() == 1);
-    if (terms.size() == 2) {
-        return pb.createOr(terms.front(), terms.back());
-    } else {
-        return terms.front();
-    }
+    return joinTerms(terms, ClassTypeId::Or, pb);
 }
 
 octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_union(const re::CC *cc) {
@@ -450,6 +557,61 @@ octets_intervals_union_t Parabix_Ternary_CC_Compiler::make_octets_intervals_unio
         }
     }
     return std::make_pair(octets, intervals);
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_Ternary_CC_Compiler::bit_pattern_expr(const unsigned pattern, const unsigned basis_idx, unsigned selected_bits, PabloBlockOrBuilder & pb) {
+    if (LLVM_UNLIKELY(selected_bits == 0)) {
+        return pb.createOnes();
+    } else {
+        std::vector<PabloAST*> terms;
+        for (unsigned i = basis_idx; selected_bits && i < mEncodingBits; ++i) {
+            unsigned test_bit = static_cast<unsigned>(1) << i;
+            PabloAST * term = nullptr;
+            if (selected_bits & test_bit) {
+                term = getBasisVar(i, pb);
+                if ((pattern & test_bit) == 0) {
+                    term = pb.createNot(term);
+                }
+                selected_bits ^= test_bit;
+            }
+            if (term) terms.push_back(term);
+        }
+        return joinTerms(terms, ClassTypeId::And, pb);
+    }
+}
+
+template<typename PabloBlockOrBuilder>
+PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms, ClassTypeId ty, PabloBlockOrBuilder & pb) {
+    assert(ty == ClassTypeId::And || ty == ClassTypeId::Or);
+    if (terms.empty()) return pb.createZeroes();
+    //Reduce the list so that all of the expressions are contained within a single expression.
+    std::vector<PabloAST *> temp;
+    temp.reserve(terms.size());
+    do {
+        for (unsigned i = 0; i < (terms.size() / 3); i++) {
+            if (ty == ClassTypeId::Or) {
+                temp.push_back(pb.createOr3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
+            } else {
+                temp.push_back(pb.createAnd3(terms[3 * i], terms[(3 * i) + 1], terms[(3 * i) + 2]));
+            }
+        }
+        for (unsigned i = 0; i < (terms.size() % 3); i++) {
+            temp.push_back(terms[terms.size() - i - 1]);
+        }
+        terms.swap(temp);
+        temp.clear();
+    } while (terms.size() >= 3);
+    assert (terms.size() == 2 || terms.size() == 1);
+    if (terms.size() == 2) {
+        if (ty == ClassTypeId::Or) {
+            return pb.createOr(terms.front(), terms.back());
+        } else {
+            return pb.createAnd(terms.front(), terms.back());
+        }
+    } else {
+        return terms.front();
+    }
 }
 
 PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
