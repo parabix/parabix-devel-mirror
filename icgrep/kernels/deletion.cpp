@@ -97,13 +97,42 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
     blockOffsetPhi->addIncoming(ZERO, entry);
-    Value * extractionMask = kb->loadInputStreamBlock("extractionMask", ZERO, blockOffsetPhi);
-    Value * delMask = kb->simd_not(extractionMask);
-    const auto move_masks = parallel_prefix_deletion_masks(kb, mCompressFieldWidth, delMask);
-    for (unsigned j = 0; j < mStreamCount; ++j) {
-        Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
-        Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input);
-        kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
+    if (BMI2_available() && ((mCompressFieldWidth == 32) || (mCompressFieldWidth == 64))) {
+        Type * fieldTy = kb->getIntNTy(mCompressFieldWidth);
+        Type * fieldPtrTy = PointerType::get(fieldTy, 0);
+        Constant * PEXT_func = nullptr;
+        if (mCompressFieldWidth == 64) {
+            PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
+        } else if (mCompressFieldWidth == 32) {
+            PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_32);
+        }
+        const unsigned fieldsPerBlock = kb->getBitBlockWidth()/mCompressFieldWidth;
+        std::vector<Value *> mask(fieldsPerBlock);
+        Value * extractionMaskPtr = kb->getInputStreamBlockPtr("extractionMask", ZERO, blockOffsetPhi);
+        extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
+        for (unsigned i = 0; i < fieldsPerBlock; i++) {
+            mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
+        }
+        for (unsigned j = 0; j < mStreamCount; ++j) {
+            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
+            Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
+            for (unsigned i = 0; i < fieldsPerBlock; i++) {
+                Value * field = kb->CreateLoad(kb->CreateGEP(inputPtr, kb->getInt32(i)));
+                Value * compressed = kb->CreateCall(PEXT_func, {field, mask[i]});
+                kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
+            }
+        }
+    } else {
+        Value * extractionMask = kb->loadInputStreamBlock("extractionMask", ZERO, blockOffsetPhi);
+        Value * delMask = kb->simd_not(extractionMask);
+        const auto move_masks = parallel_prefix_deletion_masks(kb, mCompressFieldWidth, delMask);
+        for (unsigned j = 0; j < mStreamCount; ++j) {
+            Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input);
+            kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
+        }
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, processBlock);
