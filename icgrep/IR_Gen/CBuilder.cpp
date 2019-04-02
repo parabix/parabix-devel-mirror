@@ -1037,11 +1037,14 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 #endif
 
 void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage) {
+
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
-        if (LLVM_UNLIKELY(cast<Constant>(assertion)->isNullValue())) {
-            report_fatal_error(failureMessage);
+        if (LLVM_LIKELY(!cast<Constant>(assertion)->isNullValue())) {
+            return;
         }
-    } else if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+    }
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Module * const m = getModule();
         Type * const stackTy = IntegerType::get(getContext(), sizeof(uintptr_t) * 8);
         PointerType * const stackPtrTy = stackTy->getPointerTo();
@@ -1124,7 +1127,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
 
 
         const unsigned FIRST_NON_ASSERT = 2;
-        Value * trace = nullptr;
+        Constant * trace = nullptr;
         ConstantInt * depth = nullptr;
         if (LLVM_UNLIKELY(stack.size() < FIRST_NON_ASSERT)) {
             trace = ConstantPointerNull::get(stackPtrTy);
@@ -1152,7 +1155,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
                 Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<unw_word_t>(stack.data() + FIRST_NON_ASSERT, n));
                 trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
             }
-            trace = CreatePointerCast(trace, stackPtrTy);
+            trace = ConstantExpr::getPointerCast(trace, stackPtrTy);
             depth = getInt32(n);
         }
         #else
@@ -1163,6 +1166,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         SmallVector<char, 1024> tmp;
         Value * const msg = GetString(failureMessage.toStringRef(tmp));
         IRBuilder<>::CreateCall(function, {assertion, name, msg, trace, depth});
+
     } else { // if assertions are not enabled, make it a compiler assumption.
 
         // INVESTIGATE: while interesting, this does not seem to produce faster code and only provides a trivial
@@ -1258,12 +1262,11 @@ Value * CBuilder::CreateLog2(Value * value) {
 
 Value * CBuilder::GetString(StringRef Str) {
     Module * const m = getModule();
-    Value * ptr = m->getGlobalVariable(Str, true);
+    GlobalVariable * ptr = m->getGlobalVariable(Str, true);
     if (ptr == nullptr) {
         ptr = CreateGlobalString(Str, Str);
     }
-    Value * zero = getInt32(0);
-    return CreateInBoundsGEP(ptr, { zero, zero });
+    return ConstantExpr::getPointerCast(ptr, getInt8PtrTy());
 }
 
 Value * CBuilder::CreateReadCycleCounter() {
@@ -1562,12 +1565,23 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                         bool remove = false;
                         Value * const check = ci.getOperand(0);
                         if (LLVM_UNLIKELY(isa<Constant>(check))) {
-                            if (LLVM_LIKELY(cast<Constant>(check)->isOneValue())) {
-                                remove = true;
-                            } else {
-                                // TODO: show all static failures with their compilation context
+                            if (LLVM_UNLIKELY(cast<Constant>(check)->isNullValue())) {
+                                // show all static failures with their compilation context
+                                auto extract = [](const Value * a) -> const char * {
+                                    const GlobalVariable * const g = cast<GlobalVariable>(a->stripPointerCasts());
+                                    const ConstantDataArray * const d = cast<ConstantDataArray>(g->getInitializer());
+                                    return d->getRawDataValues().data();
+                                };
+                                const char * const _name = extract(ci.getOperand(1));
+                                const char * const _msg = extract(ci.getOperand(2));
+                                const uintptr_t * const _trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
+                                const uint32_t _n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
+                                __report_failure(_name, _msg, _trace, _n);
+                                exit(-1);
                             }
-                        } else if (LLVM_UNLIKELY(S.count(check))) { // will never be executed
+                            remove = true;
+                        } else if (LLVM_UNLIKELY(S.count(check))) {
+                            // a duplicate check will never be executed if true
                             remove = true;
                         } else {
                             S.insert(check);

@@ -79,11 +79,11 @@ void DeletionKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
 
 DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned fieldWidth, const unsigned streamCount)
 : BlockOrientedKernel(b, "del" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
-                      {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
-                          Binding{b->getStreamSetTy(), "delMaskSet"}},
-                      {Binding{b->getStreamSetTy(streamCount), "outputStreamSet"},
-                          Binding{b->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
-                      {}, {}, {})
+{Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
+  Binding{b->getStreamSetTy(), "delMaskSet"}},
+{Binding{b->getStreamSetTy(streamCount), "outputStreamSet"},
+  Binding{b->getStreamSetTy(), "unitCounts", FixedRate(), RoundUpTo(b->getBitBlockWidth())}},
+{}, {}, {})
 , mDeletionFieldWidth(fieldWidth)
 , mStreamCount(streamCount) {
 }
