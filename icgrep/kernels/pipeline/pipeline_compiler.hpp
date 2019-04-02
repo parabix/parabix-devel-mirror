@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <queue>
 
-// #define PRINT_DEBUG_MESSAGES
+//#define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -794,8 +794,6 @@ protected:
 
     const BufferGraph                           mBufferGraph;
 
-    const BufferSetGraph                        mBufferSetGraph;
-
     const bool                                  mHasZeroExtendedStream;
     bool                                        mHasThreadLocalPipelineState;
     ConsumerGraph                               mConsumerGraph;
@@ -900,7 +898,6 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , FirstScalar(P.FirstScalar)
 , LastScalar(P.LastScalar)
 , mBufferGraph(makeBufferGraph(b))
-, mBufferSetGraph(makeBufferSetGraph())
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)

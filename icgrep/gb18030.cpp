@@ -125,9 +125,10 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     //
     // GB prefix bytes are the keys that are first in 2 or 4 byte sequences.
     PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(pb.createAdvance(GB_k2, 1)));
-    pb.createAssign(pb.createExtract(getOutputStreamVar("GB_bytes"), pb.getInteger(0)), GB_single);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("GB_bytes"), pb.getInteger(1)), GB_prefix);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("GB_bytes"), pb.getInteger(2)), GB_k2);
+    Var * GB_bytes = getOutputStreamVar("GB_bytes");
+    pb.createAssign(pb.createExtract(GB_bytes, 0), GB_single);
+    pb.createAssign(pb.createExtract(GB_bytes, 1), GB_prefix);
+    pb.createAssign(pb.createExtract(GB_bytes, 2), GB_k2);
 }
 
 class GB_18030_ExtractionMasks : public pablo::PabloKernel {
@@ -636,10 +637,10 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
 
 }
 
-void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, unsigned inputBase, StreamSet * mask, StreamSet * outputs) {
+void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
     unsigned fw = 64;  // Best for PEXT extraction.
     StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
-    P->CreateKernelCall<FieldCompressKernel>(fw, inputSet, mask, compressed, inputBase);
+    P->CreateKernelCall<FieldCompressKernel>(fw, inputBase, inputSet, mask, compressed);
     P->CreateKernelCall<StreamCompressKernel>(compressed, mask, outputs, fw);
 }
 
@@ -675,12 +676,15 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * const byte2 = P->CreateStreamSet(8);
     StreamSet * const nybble2 = P->CreateStreamSet(4);
 
-    extract(P, GB_bytes, 0, GB_mask1, ASCII);
-    extract(P, GB_bytes, 2, GB_mask1, GB_4byte);
-    extract(P, BasisBits, 0, GB_mask1, byte1);
-    extract(P, BasisBits, 0, GB_mask2, nybble1);
-    extract(P, BasisBits, 0, GB_mask3, byte2);
-    extract(P, BasisBits, 0, GB_mask4, nybble2);
+    Scalar * ZERO = P->CreateConstant(b->getSize(0));
+    Scalar * TWO = P->CreateConstant(b->getSize(2));
+
+    extract(P, GB_bytes, ZERO, GB_mask1, ASCII);
+    extract(P, GB_bytes, TWO, GB_mask1, GB_4byte);
+    extract(P, BasisBits, ZERO, GB_mask1, byte1);
+    extract(P, BasisBits, ZERO, GB_mask2, nybble1);
+    extract(P, BasisBits, ZERO, GB_mask3, byte2);
+    extract(P, BasisBits, ZERO, GB_mask4, nybble2);
 
     StreamSet * const u16basis = P->CreateStreamSet(16);
     P->CreateKernelCall<GB_18030_CoreLogic>(ASCII, GB_4byte, byte1, byte2, u16basis);

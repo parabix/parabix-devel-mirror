@@ -57,59 +57,6 @@ inline void PipelineCompiler::acquireItemCountLock(BuilderRef b) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeBufferSetGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-BufferSetGraph PipelineCompiler::makeBufferSetGraph() const {
-
-    // We need to account for the pipeline I/O individually but each set of output
-    // from an internal kernel can be considered together.
-
-    SmallVector<unsigned, 64> M(num_vertices(mBufferGraph) - PipelineOutput, 0);
-    const auto m  = PipelineOutput + 1U;
-    auto n = m;
-    for (const auto & e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        M[target(e, mBufferGraph) - m] = n++;
-    }
-    for (const auto & e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        M[source(e, mBufferGraph) - m] = n++;
-    }
-    for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        if (LLVM_UNLIKELY(out_degree(i, mBufferGraph) == 0)) {
-            continue;
-        }
-        for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            auto & Mi = M[target(e, mBufferGraph) - m];
-            if (LLVM_LIKELY(Mi == 0)) {
-                Mi = n;
-            }
-        }
-        ++n;
-    }
-
-    BufferSetGraph G(n);
-
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
-            add_edge(M[source(e, mBufferGraph) - m], i, G);
-        }
-        for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            add_edge(i, M[target(e, mBufferGraph) - m], G);
-        }
-    }
-
-    transitive_reduction_dag(G);
-
-    unsigned lock = 0;
-    for (const auto & e : make_iterator_range(edges(G))) {
-        G[e] = lock++;
-    }
-
-    return G;
-
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief acquireCurrentSegment
  *
  * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous

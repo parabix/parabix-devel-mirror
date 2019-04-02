@@ -93,6 +93,7 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * done = kb->CreateBasicBlock("done");
     Constant * const ZERO = kb->getSize(0);
+    Value * const baseOffset = kb->getScalarField("base");
     kb->CreateBr(processBlock);
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
@@ -114,7 +115,8 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
             mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
         }
         for (unsigned j = 0; j < mStreamCount; ++j) {
-            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j + mInputStreamBase), blockOffsetPhi);
+            Value * const streamIndex = kb->CreateAdd(baseOffset, ConstantInt::get(baseOffset->getType(), j));
+            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", streamIndex, blockOffsetPhi);
             inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
             Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
             outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
@@ -129,7 +131,8 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
         Value * delMask = kb->simd_not(extractionMask);
         const auto move_masks = parallel_prefix_deletion_masks(kb, mCompressFieldWidth, delMask);
         for (unsigned j = 0; j < mStreamCount; ++j) {
-            Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j + mInputStreamBase), blockOffsetPhi);
+            Value * const streamIndex = kb->CreateAdd(baseOffset, ConstantInt::get(baseOffset->getType(), j));
+            Value * input = kb->loadInputStreamBlock("inputStreamSet", streamIndex, blockOffsetPhi);
             Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input);
             kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
         }
@@ -141,19 +144,22 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     kb->SetInsertPoint(done);
 }
 
-FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw
-                                         , StreamSet * inputStreamSet, StreamSet * extractionMask
-                                         , StreamSet * outputStreamSet, unsigned inputStreamBase)
-: MultiBlockKernel(b, "fieldCompress" + std::to_string(fw) + "_" + std::to_string(inputStreamSet->getNumElements()),
-// inputs
+FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fieldWidth
+                                         , Scalar * inputBase, StreamSet * inputStreamSet, StreamSet * extractionMask
+                                         , StreamSet * outputStreamSet)
+: MultiBlockKernel(b, "fieldCompress" + std::to_string(fieldWidth) + "_" +
+                   std::to_string(inputStreamSet->getNumElements()) +
+                   ":" + std::to_string(outputStreamSet->getNumElements()) ,
+// input streams
 {Binding{"inputStreamSet", inputStreamSet},
 Binding{"extractionMask", extractionMask}},
-// outputs
+// output stream
 {Binding{"outputStreamSet", outputStreamSet}},
-{}, {}, {})
-, mCompressFieldWidth(fw)
-, mStreamCount(inputStreamSet->getNumElements())
-, mInputStreamBase(inputStreamBase) {
+// input scalar
+{Binding{"base", inputBase}},
+{}, {})
+, mCompressFieldWidth(fieldWidth)
+, mStreamCount(inputStreamSet->getNumElements()) {
 
 }
 

@@ -25,13 +25,13 @@ namespace pablo { class PabloKernel; }
 namespace pablo { class Statement; }
 namespace kernel { class KernelBuilder; }
 
-/* 
+/*
  * Carry Data Manager.
- * 
+ *
  * Each PabloBlock (Main, If, While) has a contiguous data area for carry information.
- * The data area may be at a fixed or variable base offset from the base of the 
+ * The data area may be at a fixed or variable base offset from the base of the
  * main function carry data area.
- * The data area for each block consists of contiguous space for the local carries and 
+ * The data area for each block consists of contiguous space for the local carries and
  * advances of the block plus the areas of any ifs/whiles nested within the block.
 
 */
@@ -43,10 +43,10 @@ class CarryManager {
     enum { LONG_ADVANCE_BASE = 64 };
 
 public:
-  
+
     CarryManager() noexcept;
 
-    void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);    
+    void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
 
     void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb);
 
@@ -75,15 +75,15 @@ public:
     void leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Methods for processing individual carry-generating operations. */
-    
+
     llvm::Value * addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
 
     llvm::Value * advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Advance * advance, llvm::Value * const strm);
-    
+
     llvm::Value * indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * advance, llvm::Value * const strm, llvm::Value * const index_strm);
- 
+
     /* Methods for getting and setting carry summary values for If statements */
-         
+
     llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition);
 
     /* Clear carry state for conditional regions */
@@ -118,7 +118,7 @@ private:
     unsigned                                        mCurrentFrameIndex;
 
     const PabloBlock *                              mCurrentScope;
-    CarryData *                                     mCarryInfo;
+    const CarryData *                               mCarryInfo;
 
     llvm::Value *                                   mNextSummaryTest;
 
@@ -130,7 +130,7 @@ private:
     bool                                            mHasNonCarryCollapsingLoops;
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
-    llvm::Value *                                   mLoopSelector;    
+    llvm::Value *                                   mLoopSelector;
     llvm::Value *                                   mNextLoopSelector;
     llvm::Value *                                   mCarryPackPtr;
     std::vector<llvm::PHINode *>                    mLoopIndicies;

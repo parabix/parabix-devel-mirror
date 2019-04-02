@@ -96,7 +96,7 @@ Lookahead * PabloBlock::createLookahead(PabloAST * expr, Integer * shiftAmount, 
 
 Extract * PabloBlock::createExtract(Var * array, Integer * index) {
     assert (array && index);
-    Type * type = array->getType();
+    Type * type = array->getType(); assert (type);
     if (LLVM_LIKELY(isa<ArrayType>(type))) {
         type = cast<ArrayType>(type)->getArrayElementType();
     } else {

@@ -25,7 +25,7 @@ using ScopeSet = SmallSet<const PabloBlock *, 32>;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyUseDefInformation
  ** ------------------------------------------------------------------------------------------------------------- */
-void testUsers(const PabloAST * expr, const ScopeSet & validScopes) { 
+void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
     size_t uses = 0;
     SmallSet<const PabloAST *, 16> verified;
     for (const PabloAST * use : expr->users()) {
@@ -289,7 +289,7 @@ void verifyProgramStructure(const PabloBlock * block, unsigned & nestingDepth) {
             verifyProgramStructure(nested, nestingDepth);
             --nestingDepth;
         }
-    }    
+    }
 }
 
 inline void verifyProgramStructure(const PabloKernel * kernel) {
@@ -432,7 +432,7 @@ void PabloVerifier::verify(const PabloKernel * kernel, const std::string & locat
     try {
         verifyProgramStructure(kernel);
         verifyUseDefInformation(kernel);
-        verifyAllPathsDominate(kernel);
+        // verifyAllPathsDominate(kernel);
     } catch(std::runtime_error & err) {
         PabloPrinter::print(kernel, errs());
         errs().flush();

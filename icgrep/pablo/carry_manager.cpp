@@ -185,17 +185,12 @@ void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder
     assert(!mCarryMetadata.empty());
     mCarryInfo = &mCarryMetadata[0];
     assert (!mCarryInfo->hasSummary());
-    if (LLVM_LIKELY(mKernel->isStateful())) {
-        mCurrentFrame = b->getScalarFieldPtr("carries");
-    } else {
-        mCurrentFrame = nullptr;
-    }
+    mCurrentFrame = b->getScalarFieldPtr("carries");
+    // assert (mKernel->isStateful() || mCurrentFrame->getType()->isEmptyTy());
     mCurrentFrameIndex = 0;
     mCarryScopes = 0;
     mCarryScopeIndex.push_back(0);
-
     assert (mCarryFrameStack.empty());
-
     assert (mCarrySummaryStack.empty());
 
     Type * const carryTy = b->getBitBlockType();

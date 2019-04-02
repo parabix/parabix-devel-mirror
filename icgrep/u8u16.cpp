@@ -160,7 +160,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * s43_lo2 = main.createVar("scope43_lo2", zeroes);
     Var * s43_lo1 = main.createVar("scope43_lo1", zeroes);
     Var * s43_lo0 = main.createVar("scope43_lo0", zeroes);
-    
+
     BixNum plane = BixNumModularArithmetic(p4b).Sub({bit4a1, bit5a1, bit0a2, bit1a2}, 1);
     p4b.createAssign(s43_lo6, p4b.createAnd(u8scope43, plane[0]));
     p4b.createAssign(s43_lo7, p4b.createAnd(u8scope43, plane[1]));
@@ -299,7 +299,9 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
         P->CreateKernelCall<SwizzleGenerator>(u16Swizzles, std::vector<StreamSet *>{u16bits});
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
     } else {
-        P->CreateKernelCall<FieldCompressKernel>(b->getBitBlockWidth()/16, u8bits, selectors, u16bits);
+        const auto fieldWidth = b->getBitBlockWidth() / 16;
+        Scalar * inputBase = P->CreateConstant(b->getSize(0));
+        P->CreateKernelCall<FieldCompressKernel>(fieldWidth, inputBase, u8bits, selectors, u16bits);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes);
     }
 
@@ -311,7 +313,9 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver) {
 
 // ------------------------------------------------------
 
-void makeNonAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, const unsigned FieldWidth, StreamSet * const ByteStream, StreamSet * const u16bytes) {
+void makeNonAsciiBranch(const std::unique_ptr<KernelBuilder> & b,
+                        const std::unique_ptr<PipelineBuilder> & P,
+                        StreamSet * const ByteStream, StreamSet * const u16bytes) {
 
     // Transposed bits from s2p
     StreamSet * BasisBits = P->CreateStreamSet(8);
@@ -337,7 +341,9 @@ void makeNonAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, const unsign
         P->CreateKernelCall<SwizzleGenerator>(u16Swizzles, std::vector<StreamSet *>{u16bits});
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
     } else {
-        P->CreateKernelCall<FieldCompressKernel>(FieldWidth, u8bits, selectors, u16bits);
+        const auto fieldWidth = b->getBitBlockWidth() / 16;
+        Scalar * inputBase = P->CreateConstant(b->getSize(0));
+        P->CreateKernelCall<FieldCompressKernel>(fieldWidth, inputBase, u8bits, selectors, u16bits);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes);
     }
 }
@@ -368,7 +374,7 @@ u8u16FunctionType generatePipeline2(CPUDriver & pxDriver) {
 
     makeAllAsciiBranch(B->getAllZeroBranch(), ByteStream, u16bytes);
 
-    makeNonAsciiBranch(B->getNonZeroBranch(), b->getBitBlockWidth() / 16, ByteStream, u16bytes);
+    makeNonAsciiBranch(b, B->getNonZeroBranch(), ByteStream, u16bytes);
 
     Scalar * outputFileName = P->getInputScalar("outputFileName");
     P->CreateKernelCall<FileSink>(outputFileName, u16bytes);

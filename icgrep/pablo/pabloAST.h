@@ -109,10 +109,6 @@ public:
         return mType;
     }
 
-    inline void setType(llvm::Type * type) noexcept {
-        mType = type;
-    }
-
     inline user_iterator user_begin() noexcept {
         return mUsers.begin();
     }
@@ -154,11 +150,25 @@ public:
     void print(llvm::raw_ostream & O) const;
 
 protected:
-    inline PabloAST(const ClassTypeId id, llvm::Type * const type, Allocator & allocator)
+    PabloAST(const ClassTypeId id, llvm::Type * const type, Allocator & allocator) noexcept
     : mClassTypeId(id)
     , mType(type)
     , mUsers(allocator) {
-
+        #ifndef NDEBUG
+        // is nullary type?
+        switch (id) {
+            case ClassTypeId::Kernel:
+            case ClassTypeId::Block:
+            case ClassTypeId::Assign:
+            case ClassTypeId::If:
+            case ClassTypeId::While:
+                assert ("non-null Type given to valueless PabloAST node" && (type == nullptr));
+                break;
+            default:
+                assert ("null Type given to value-carrying PabloAST node" && type);
+                break;
+        }
+        #endif
     }
     bool addUser(PabloAST * const user) noexcept;
 
@@ -168,7 +178,7 @@ protected:
 
 private:
     const ClassTypeId       mClassTypeId;
-    llvm::Type *            mType;
+    llvm::Type * const      mType;
     Users                   mUsers;
 };
 
