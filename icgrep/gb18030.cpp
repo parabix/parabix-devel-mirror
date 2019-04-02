@@ -411,7 +411,8 @@ void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, con
     }
 }
 
-const unsigned BitsPerInputByte = 8;
+
+const unsigned BitsPerInputByte = 7;
 
 std::pair<std::vector<CC *>, std::vector<CC *>> byteTranscoderClasses(std::vector<codepoint_t> table) {
     if (table.size() != 256) llvm::report_fatal_error("Need 256 entries for byte transcoding.");
@@ -425,7 +426,11 @@ std::pair<std::vector<CC *>, std::vector<CC *>> byteTranscoderClasses(std::vecto
     for (unsigned i = 0; i < BitsPerInputByte; i++) {
         bitXfrmClasses.push_back(makeCC(&cc::Byte));
     }
-    std::vector<CC *> outputBitClasses(BitsPerOutputUnit-BitsPerInputByte);
+    std::vector<CC *> outputBitClasses;
+    outputBitClasses.reserve(BitsPerOutputUnit-BitsPerInputByte);
+    for (unsigned i = BitsPerInputByte; i < BitsPerOutputUnit; i++) {
+        outputBitClasses.push_back(makeCC(&cc::Byte));
+    }
     for (unsigned ch_code = 0; ch_code < 256; ch_code++) {
         codepoint_t transcodedCh = table[ch_code];
         codepoint_t changedBits = transcodedCh ^ ch_code;
@@ -492,23 +497,23 @@ GB_18030_CoreLogic::GB_18030_CoreLogic
 void GB_18030_CoreLogic::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * ASCII = pb.createExtract(getInputStreamVar("ASCII"), pb.getInteger(0));
-    PabloAST * GB_4byte = pb.createExtract(getInputStreamVar("GB_4byte"), pb.getInteger(0));
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
+    std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
     cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), byte1_basis);
     PabloAST * zeroes = pb.createZeroes();
     Var * u16[16];
     std::vector<std::vector<UCD::codepoint_t>> GB_tbl = get_GB_DoubleByteTable();
-    for (int i = 0; i < 7; ++i) {
+    for (unsigned i = 0; i < BitsPerInputByte; ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), pb.createAnd(ASCII, byte1_basis[i]));
     }
-    for (int i = 8; i < 16; ++i) {
+    for (unsigned i = BitsPerInputByte; i < 16; ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
     }
     for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
-        PabloAST * byte1 = Byte1_compiler.compileCC(makeCC(char_code));
-        PabloBlock * nested = getEntryScope()->createScope();
-        std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
-        cc::Parabix_CC_Compiler_Builder Byte2_compiler(nested, byte2_basis);
+        PabloAST * byte1 = Byte1_compiler.compileCC(makeCC(char_code, &cc::Byte));
+        PabloBlock * inner = getEntryScope()->createScope();
+        PabloBuilder nested(inner);
+        cc::Parabix_CC_Compiler_Builder Byte2_compiler(inner, byte2_basis);
         std::vector<CC *> bitXfrmClasses;
         std::vector<CC *> outputBitClasses;
         auto xClasses = byteTranscoderClasses(fullByteTable_GB10830_byte2(GB_tbl[char_code - 0x81], 0xFFFD));
@@ -516,14 +521,14 @@ void GB_18030_CoreLogic::generatePabloMethod() {
         outputBitClasses = xClasses.second;
         for (unsigned i = 0; i < BitsPerInputByte; i++) {
             PabloAST * xfrmStrm = Byte2_compiler.compileCC(bitXfrmClasses[i]);
-            PabloAST * outStrm = pb.createXor(xfrmStrm, byte2_basis[i]);
-            nested->createAssign(u16[i], nested->createOr(u16[i], outStrm));
+            PabloAST * outStrm = nested.createXor(xfrmStrm, byte2_basis[i]);
+            nested.createAssign(u16[i], nested.createOr(u16[i], outStrm));
         }
         for (unsigned i = BitsPerInputByte; i < BitsPerInputByte + outputBitClasses.size(); i++) {
-            PabloAST * outStrm = Byte2_compiler.compileCC(outputBitClasses[i + BitsPerInputByte]);
-            nested->createAssign(u16[i], nested->createOr(u16[i], outStrm));
+            PabloAST * outStrm = Byte2_compiler.compileCC(outputBitClasses[i - BitsPerInputByte]);
+            nested.createAssign(u16[i], nested.createOr(u16[i], outStrm));
         }
-        pb.createIf(byte1, nested);
+        pb.createIf(byte1, inner);
     }
     Var * const u16_output = getOutputStreamVar("u16_basis");
     for (unsigned i = 0; i < 16; i++) {
@@ -588,8 +593,7 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     lo11 = BixNumModularArithmetic(pb).Add(lo11, byte4_lo4);
     BixNum lo15 = BixNumModularArithmetic(pb).Add(BixNumFullArithmetic(pb).Mul(byte2_lo4, 1260), lo11);
     BixNum byte1_X_12600 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte1_lo7, 1), 12600);
-    BixNum GB_val = BixNumModularArithmetic(pb).Add(byte1_X_12600, lo15);
-
+    BixNum GB_val = BixNumFullArithmetic(pb).Add(byte1_X_12600, lo15);
     const unsigned GB_SupplementaryPlaneValue = 189000;
     PabloAST * aboveBMP = pb.createAnd(GB_4byte, BixNumArithmetic(pb).UGE(byte1_lo7, 0x10));
 

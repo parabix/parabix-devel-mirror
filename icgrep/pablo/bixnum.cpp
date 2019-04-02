@@ -162,8 +162,8 @@ BixNum BixNumModularArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
         PabloAST * carry = mPB.createZeroes();
         if ((multiplier & (1 << i)) != 0) {
             for (unsigned j = 0; j + i < product.size(); j++) {
-                product[j + i] = createXor3(mPB, product[j + i], multiplicand[i], carry);
-                carry = createMajority3(mPB, product[j + i], multiplicand[i], carry);
+                product[j + i] = createXor3(mPB, product[j + i], multiplicand[j], carry);
+                carry = createMajority3(mPB, product[j + i], multiplicand[j], carry);
             }
             product[multiplicand.size() + i] = carry;
         }
@@ -198,8 +198,8 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
             PabloAST * carry = mPB.createZeroes();
             if ((multiplier & (1 << i)) != 0) {
                 for (unsigned j = 0; j < multiplicand.size(); j++) {
-                    product[j + i] = createXor3(mPB, product[j + i], multiplicand[i], carry);
-                    carry = createMajority3(mPB, product[j + i], multiplicand[i], carry);
+                    product[j + i] = createXor3(mPB, product[j + i], multiplicand[j], carry);
+                    carry = createMajority3(mPB, product[j + i], multiplicand[j], carry);
                 }
                 product[multiplicand.size() + i] = carry;
             }
@@ -210,8 +210,8 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
             PabloAST * borrow = mPB.createZeroes();
             if ((complement & (1 << i)) != 0) {
                 for (unsigned j = 0; j < multiplicand.size(); j++) {
-                    product[j + i] = createXor3(mPB, product[j + i], multiplicand[i], borrow);
-                    borrow = createMajority3(mPB, mPB.createNot(product[j + i]), multiplicand[i], borrow);
+                    product[j + i] = createXor3(mPB, product[j + i], multiplicand[j], borrow);
+                    borrow = createMajority3(mPB, mPB.createNot(product[j + i]), multiplicand[j], borrow);
                 }
                 product[multiplicand.size() + i] = borrow;
             }
