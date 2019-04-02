@@ -377,7 +377,15 @@ struct PipelineGraphBundle {
     }
 };
 
-using ImplicitRelationships = flat_map<const Kernel *, StreamSet *>;
+enum CycleCounter {
+  AFTER_SYNCHRONIZATION
+  , BUFFER_EXPANSION
+  , AFTER_KERNEL_CALL
+  , FINAL
+// ------------------
+  , BEFORE_KERNEL_CALL
+  , INITIAL
+};
 
 const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
 const static std::string PIPELINE_THREAD_LOCAL_STATE = "PTL";
@@ -586,8 +594,9 @@ protected:
 // cycle counter functions
 
     void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
-    void startOptionalCycleCounter(BuilderRef b);
-    void updateOptionalCycleCounter(BuilderRef b);
+    void startCycleCounter(BuilderRef b, const CycleCounter type);
+    void updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end);
+    Value * getBufferExpansionCycleCounter(BuilderRef b) const;
     void printOptionalCycleCounter(BuilderRef b);
     StreamPort selectPrincipleCycleCountBinding(const unsigned kernel) const;
 
@@ -761,7 +770,7 @@ protected:
     Vec<PHINode *>                              mFullyProducedItemCount; // *after* exiting the kernel
 
     // cycle counter state
-    Value *                                     mCycleCountStart = nullptr;
+    std::array<Value *, 4>                      mCycleCounters;
 
     // popcount state
     Value *                                     mPopCountState;

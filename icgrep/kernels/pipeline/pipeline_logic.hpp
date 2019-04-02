@@ -242,10 +242,12 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     }
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        startCycleCounter(b, CycleCounter::INITIAL);
         setActiveKernel(b, i);
         acquireCurrentSegment(b);
         executeKernel(b);
         releaseCurrentSegment(b);
+        updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::FINAL);
     }
     end(b);
 }
@@ -354,10 +356,12 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // generate the pipeline logic for this thread
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        startCycleCounter(b, CycleCounter::INITIAL);
         setActiveKernel(b, i);
         acquireCurrentSegment(b);
         executeKernel(b);
         releaseCurrentSegment(b);
+        updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::FINAL);
     }
     mKernel = nullptr;
     mKernelIndex = 0;
@@ -511,8 +515,6 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
     FixedArray<Value *, 3> indices;
     indices[0] = b->getInt32(0);
     indices[1] = indices[0];
-    //indices[2] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-    //mPopCountState = b->CreateGEP(localState, indices);
     if (mHasZeroExtendedStream) {
         indices[2] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
         mZeroExtendBuffer = b->CreateGEP(localState, indices);
@@ -534,13 +536,6 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
     if (mPipelineKernel->hasThreadLocal()) {
-//        if (mHasThreadLocalPipelineState) {
-//            Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
-//            FixedArray<Value *, 2> indices;
-//            indices[0] = b->getInt32(0);
-//            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-//            allocatePopCountArrays(b, b->CreateGEP(localState, indices));
-//        }
         for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
             if (kernel->hasThreadLocal()) {
@@ -569,8 +564,6 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
             Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
             FixedArray<Value *, 2> indices;
             indices[0] = b->getInt32(0);
-//            indices[1] = b->getInt32(POP_COUNT_STRUCT_INDEX);
-//            deallocatePopCountArrays(b, b->CreateGEP(localState, indices));
             if (mHasZeroExtendedStream) {
                 indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
                 b->CreateFree(b->CreateLoad(b->CreateGEP(localState, indices)));

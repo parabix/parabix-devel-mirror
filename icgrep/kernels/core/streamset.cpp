@@ -262,7 +262,7 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
     }
 }
 
-Value * ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
+Value * ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
     unsupported("reserveCapacity", "External");
 }
 
@@ -362,7 +362,7 @@ Value * StaticBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fromP
     return b->CreateSelect(full, b->getSize(0), remaining);
 }
 
-Value * StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
+Value * StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
     unsupported("reserveCapacity", "Static");
 }
 
@@ -494,7 +494,7 @@ void DynamicBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) 
     unsupported("setCapacity", "Dynamic");
 }
 
-Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems) const {
+Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems, Value * cycleCounterAccumulator) const {
 
     const auto blockWidth = b->getBitBlockWidth();
     assert (is_power_2(blockWidth));
@@ -511,6 +511,12 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     b->CreateCondBr(b->CreateICmpULT(remaining, required), expandBuffer, expanded);
 
     b->SetInsertPoint(expandBuffer);
+
+    Value * cycleCounterStart = nullptr;
+    if (cycleCounterAccumulator) {
+        cycleCounterStart = b->CreateReadCycleCounter();
+    }
+
 
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
@@ -596,6 +602,12 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         b->CreateAssert(check, "buffer expansion error");
     }
     b->CreateFree(subtractUnderflow(b, priorBuffer, mUnderflow));
+    if (cycleCounterAccumulator) {
+        Value * const cycleCounterEnd = b->CreateReadCycleCounter();
+        Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);
+        Value * const accum = b->CreateAdd(b->CreateLoad(cycleCounterAccumulator), duration);
+        b->CreateStore(accum, cycleCounterAccumulator);
+    }
     b->CreateBr(expanded);
 
     b->SetInsertPoint(expanded);
@@ -708,7 +720,7 @@ void LinearBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) c
     unsupported("setCapacity", "Linear");
 }
 
-Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems) const {
+Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems, Value * cycleCounterAccumulator) const {
 
     ConstantInt * const LOG_2_BIT_BLOCK_WIDTH = b->getSize(std::log2(b->getBitBlockWidth()));
 

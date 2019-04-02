@@ -148,7 +148,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
                                        , StreamSet * expanded
                                        , const unsigned FieldWidth)
 : MultiBlockKernel(b, "streamExpand" + std::to_string(FieldWidth)
-+ std::to_string(source->getNumElements())
++ "_" + std::to_string(source->getNumElements())
 + ":" + std::to_string(expanded->getNumElements()),
 // input stream sets
 {Binding{"marker", mask, FixedRate(), Principal()},

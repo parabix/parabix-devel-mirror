@@ -42,7 +42,6 @@ void PipelineCompiler::start(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(mPipelineKernel->getName() + " +++ pipeline start +++", mSegNo);
     #endif
-    startOptionalCycleCounter(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -206,7 +205,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     writeFinalConsumedItemCounts(b);
     //updatePopCountReferenceCounts(b);
     readFinalProducedItemCounts(b);
-    updateOptionalCycleCounter(b);
     mHalted = mHaltedPhi;
     assert (mKernel == getKernel(mKernelIndex) && b->getKernel() == mKernel);
     #ifdef PRINT_DEBUG_MESSAGES

@@ -14,14 +14,6 @@
 
 namespace kernel {
 
-namespace {
-
-inline RateValue div_by_non_zero(const RateValue & num, const RateValue & denom) {
-    return  (denom.numerator() == 0) ? num : (num / denom);
-}
-
-} // end of anonymous namespace
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
  *
@@ -98,9 +90,17 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     // cannot accommodate the full amount of data we could produce given the expected inputs, the
     // next loop will resize them accordingly.
 
+    auto div_by_non_zero = [](const RateValue & num, const RateValue & denom) -> RateValue {
+        return  (denom.numerator() == 0) ? num : (num / denom);
+    };
+
     // compute how much data each kernel could consume/produce per iteration.
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        if (LLVM_LIKELY(in_degree(i, G) > 0)) {
+        BufferNode & kn = G[i];
+        if (LLVM_UNLIKELY(in_degree(i, G) == 0)) {
+            kn.Lower = RateValue{1, 1};
+            kn.Upper = RateValue{1, 1};
+        } else {
             RateValue lower{std::numeric_limits<unsigned>::max()};
             RateValue upper{std::numeric_limits<unsigned>::max()};
             for (const auto & ce : make_iterator_range(in_edges(i, G))) {
@@ -111,7 +111,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const auto max = div_by_non_zero(productionRate.Maximum, consumptionRate.Minimum);
                 upper = std::min(upper, max);
             }
-            BufferNode & kn = G[i];
             kn.Lower = lower;
             kn.Upper = upper;
             for (const auto e : make_iterator_range(out_edges(i, G))) {
@@ -316,7 +315,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-//    printBufferGraph(G, errs());
+   // printBufferGraph(G, errs());
 
     return G;
 }
@@ -326,33 +325,49 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out) {
 
+    using KindId = StreamSetBuffer::BufferKind;
+
     out << "digraph G {\n"
-           "v" << PipelineInput << " [label=\"[" << PipelineInput << "] P_{in}\" shape=box];\n";
+           "v" << PipelineInput << " [label=\"[" << PipelineInput << "] P_{in}\" peripheries=2, shape=rect];\n";
+
+    auto rate_range = [&out](const RateValue & a, const RateValue & b) {
+        if (a.denominator() > 1 || b.denominator() > 1) {
+            out << a.numerator() << "/" << a.denominator()
+                << " - "
+                << b.numerator() << "/" << b.denominator();
+        } else {
+            out << a.numerator() << " - " << b.numerator();
+        }
+    };
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
         std::string name = kernel->getName();
         boost::replace_all(name, "\"", "\\\"");
 
-        out << "v" << i << " [label=\"[" << i << "] " << name << "\" shape=box];\n";
+        const BufferNode & bn = G[i];
+
+        out << "v" << i <<
+               " [label=\"[" << i << "] " << name << '\n';
+        rate_range(bn.Lower, bn.Upper);
+        out << "\" peripheries=2, shape=rect];\n";
     }
 
-    out << "v" << PipelineOutput << " [label=\"[" << PipelineOutput << "]P_{out}\" shape=box];\n";
+    out << "v" << PipelineOutput << " [label=\"[" << PipelineOutput << "]P_{out}\" peripheries=2, shape=rect];\n";
 
     const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(G);
 
     for (unsigned i = firstBuffer; i != lastBuffer; ++i) {
-        out << "v" << i << " [label=\""
-               "(" << i << ") ";
+        out << "v" << i << " [shape=record, label=\""
+               << i << "|{";
 
         const BufferNode & bn = G[i];
-        if (bn.Buffer == nullptr) {
+        const StreamSetBuffer * const buffer = bn.Buffer;
+        if (buffer == nullptr) {
             out << '?';
         } else {
-            const StreamSetBuffer * const buffer = bn.Buffer;
-            using KindId = StreamSetBuffer::BufferKind;
-            char bufferType = 'X';
+            char bufferType = '?';
             switch (buffer->getBufferKind()) {
                 case KindId::ExternalBuffer: bufferType = 'E'; break;
                 case KindId::StaticBuffer: bufferType = 'S'; break;
@@ -362,47 +377,41 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
             }
 
             Type * ty = buffer->getBaseType();
-            out << bufferType << ' ' << ty->getArrayNumElements() << 'x';
+            out << bufferType << ':'
+                << ty->getArrayNumElements() << 'x';
             ty = ty->getArrayElementType();
             ty = ty->getVectorElementType();
             out << ty->getIntegerBitWidth();
+        }
 
-            if (buffer->getBufferKind() != KindId::ExternalBuffer) {
-                out << " [";
-                switch (buffer->getBufferKind()) {
-                    case KindId::StaticBuffer:
-                        out << cast<StaticBuffer>(buffer)->getCapacity();
-                        break;
-                    case KindId::DynamicBuffer:
-                        out << cast<DynamicBuffer>(buffer)->getInitialCapacity();
-                        break;
-                    case KindId::LinearBuffer:
-                        out << cast<LinearBuffer>(buffer)->getInitialCapacity();
-                        break;
-                    default: llvm_unreachable("unknown buffer type");
-                }
-                out << ']';
+        out << "|{";
+
+        if (buffer && buffer->getBufferKind() != KindId::ExternalBuffer) {
+            switch (buffer->getBufferKind()) {
+                case KindId::StaticBuffer:
+                    out << cast<StaticBuffer>(buffer)->getCapacity();
+                    break;
+                case KindId::DynamicBuffer:
+                    out << cast<DynamicBuffer>(buffer)->getInitialCapacity();
+                    break;
+                case KindId::LinearBuffer:
+                    out << cast<LinearBuffer>(buffer)->getInitialCapacity();
+                    break;
+                default: llvm_unreachable("unknown buffer type");
             }
         }
 
-        if (bn.LookBehind || bn.CopyBack || bn.LookAhead) {
-            StringRef joiner(" (");
-            if (bn.LookBehind) {
-                out << joiner << "U:" << bn.LookBehind;
-                joiner = StringRef(", ");
-            }
-            if (bn.CopyBack) {
-                out << joiner << "O:" << bn.CopyBack;
-                joiner = StringRef(", ");
-            }
-            if (bn.LookAhead) {
-                out << joiner << "F:" << bn.LookAhead;
-                joiner = StringRef(", ");
-            }
-            out << ')';
+        if (bn.LookBehind) {
+            out << "|U:" << bn.LookBehind;
+        }
+        if (bn.CopyBack) {
+            out << "|O:" << bn.CopyBack;
+        }
+        if (bn.LookAhead) {
+            out << "|F:" << bn.LookAhead;
         }
 
-        out << "\"];\n";
+        out << "}}\"];\n";
     }
 
     for (auto e : make_iterator_range(edges(G))) {
@@ -410,18 +419,8 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const auto t = target(e, G);
         out << "v" << s << " -> v" << t;
         const BufferRateData & pd = G[e];
-
-        out << " [label=\"#"
-            << pd.Port.Number << ": ";
-
-        if (pd.Minimum.denominator() > 1 || pd.Maximum.denominator() > 1) {
-            out << pd.Minimum.numerator() << "/" << pd.Minimum.denominator()
-                << " - "
-                << pd.Maximum.numerator() << "/" << pd.Maximum.denominator();
-        } else {
-            out << pd.Minimum.numerator() << " - " << pd.Maximum.numerator();
-        }
-
+        out << " [label=\"#" << pd.Port.Number << ": ";
+        rate_range(pd.Minimum, pd.Maximum);
         std::string name = pd.Binding.get().getName();
         boost::replace_all(name, "\"", "\\\"");
         out << '\n' << name << "\"];\n";

@@ -135,6 +135,7 @@ void PipelineCompiler::acquireCurrentSegment(BuilderRef b) {
 
         b->SetInsertPoint(kernelStart);
         b->setKernel(mKernel);
+        updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::AFTER_SYNCHRONIZATION);
     }
 }
 

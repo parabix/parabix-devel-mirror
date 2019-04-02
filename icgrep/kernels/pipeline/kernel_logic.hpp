@@ -171,7 +171,7 @@ inline Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const u
     if (size) {
         copyBack = b->getSize(size - 1);
     }
-    return buffer->reserveCapacity(b, produced, consumed, required, copyBack);
+    return buffer->reserveCapacity(b, produced, consumed, required, copyBack, getBufferExpansionCycleCounter(b));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -652,7 +652,10 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     b->CallPrintInt("* " + prefix + "_executing", mNumOfLinearStrides);
     #endif
 
+    startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
     mTerminatedExplicitly = b->CreateCall(getDoSegmentFunction(b), args);
+    updateCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
+
     if (LLVM_LIKELY(!canTerminate)) {
         mTerminatedExplicitly = b->getFalse();
     }

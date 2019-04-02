@@ -9,37 +9,53 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        const auto prefix = makeKernelName(kernel);
-        mPipelineKernel->addInternalScalar(b->getInt64Ty(), prefix + CYCLE_COUNT_SUFFIX);
+        // TODO: make these thread local to prevent false cache sharing
+        const auto prefix = makeKernelName(kernel) + CYCLE_COUNT_SUFFIX;
+        IntegerType * const int64Ty = b->getInt64Ty();
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::FINAL));
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief startOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::startOptionalCycleCounter(BuilderRef b) {
+inline void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        mCycleCountStart = b->CreateReadCycleCounter();
-    } else {
-        mCycleCountStart = nullptr;
+        mCycleCounters[type] = b->CreateReadCycleCounter();
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief startOptionalCycleCounter
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
+    Value * ptr = nullptr;
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+        b->setKernel(mPipelineKernel);
+        const auto prefix = makeKernelName(mKernelIndex) + CYCLE_COUNT_SUFFIX;
+        ptr = b->getScalarFieldPtr(prefix + std::to_string(BUFFER_EXPANSION));
+        b->setKernel(mKernel);
+    }
+    return ptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::updateOptionalCycleCounter(BuilderRef b) {
+inline void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        const auto prefix = makeKernelName(mKernelIndex);
+        Value * const endCount = b->CreateReadCycleCounter();
+        Value * const duration = b->CreateSub(endCount, mCycleCounters[start]);
+        const auto prefix = makeKernelName(mKernelIndex) + CYCLE_COUNT_SUFFIX;
         b->setKernel(mPipelineKernel);
-        Value * const counterPtr = b->getScalarFieldPtr(prefix + CYCLE_COUNT_SUFFIX);
-        Value * runningCount = b->CreateLoad(counterPtr, true);
-        Value * const cycleCountEnd = b->CreateReadCycleCounter();
-        Value * const segmentCycleCount = b->CreateSub(cycleCountEnd, mCycleCountStart);
-        runningCount = b->CreateAdd(runningCount, segmentCycleCount);
-        b->CreateStore(runningCount, counterPtr);
+        Value * const counterPtr = b->getScalarFieldPtr(prefix + std::to_string(end));
+        Value * const runningCount = b->CreateLoad(counterPtr, true);
+        Value * const updatedCount = b->CreateAdd(runningCount, duration);
+        b->CreateStore(updatedCount, counterPtr);
         b->setKernel(mKernel);
-        mCycleCountStart = cycleCountEnd;
     }
 }
 
@@ -67,36 +83,107 @@ inline StreamPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsig
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        Value* FP_100 = ConstantFP::get(b->getDoubleTy(), 100.0);
-        Value* totalCycles = b->getSize(0);
+
+        Value * totalCycles = b->getInt64(0);
+        size_t maxLength = 0;
         b->setKernel(mPipelineKernel);
-        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-            const auto prefix = makeKernelName(i);
-            Value * const counterPtr = b->getScalarFieldPtr(prefix + CYCLE_COUNT_SUFFIX);
-            Value * const cycles = b->CreateLoad(counterPtr);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const auto prefix = makeKernelName(i) + CYCLE_COUNT_SUFFIX;
+            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
             totalCycles = b->CreateAdd(totalCycles, cycles);
+            const Kernel * const kernel = getKernel(i);
+            maxLength = std::max(maxLength, kernel->getName().length());
         }
-        Value* fTotalCycle = b->CreateUIToFP(totalCycles, b->getDoubleTy());
+        maxLength += 4;
 
-        for (unsigned k = FirstKernel; k <= LastKernel; ++k) {
+        Type * const doubleTy = b->getDoubleTy();
+        Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
+        Value * const fTotalCycles = b->CreateUIToFP(totalCycles, doubleTy);
 
-            const auto binding = selectPrincipleCycleCountBinding(k);
-            Value * const items = b->getScalarField(makeBufferName(k, binding) + ITEM_COUNT_SUFFIX);
+        // Print the title line
 
-            Value * fItems = b->CreateUIToFP(items, b->getDoubleTy());
-            const auto name = makeKernelName(k);
-            Value * const counterPtr = b->getScalarFieldPtr(name + CYCLE_COUNT_SUFFIX);
-            Value * cycles = b->CreateLoad(counterPtr);
-            Value * fCycles = b->CreateUIToFP(cycles, b->getDoubleTy());
-            Value * percentage = b->CreateFDiv(b->CreateFMul(fCycles, FP_100), fTotalCycle);
+        SmallVector<char, 100> buffer;
+        raw_svector_ostream title(buffer);
 
-            const Kernel * const kernel = getKernel(k);
-            const auto formatString = kernel->getName() + ": %7.2e items processed;"
-                                                          "  %7.2e CPU cycles,"
-                                                          "  %6.2f cycles per item,"
-                                                          "  %2.2f%% of Total CPU Cycles.\n";
-            Value * stringPtr = b->CreatePointerCast(b->GetString(formatString), b->getInt8PtrTy());
-            b->CreateCall(b->GetDprintf(), {b->getInt32(2), stringPtr, fItems, fCycles, b->CreateFDiv(fCycles, fItems), percentage});
+        title << "Name";
+        title.indent(maxLength - 4);
+        title << "     ITEMS " // items processed;
+                 "    CYCLES " // CPU cycles,
+                 "   RATE " // cycles per item,
+                 " SYNC " // synchronization %,
+                 " BUFF " // buffer expansion %,
+                 " OVER " // overhead %,
+                 "  EXEC " // execution %,
+                 "    %\n"; // % of Total CPU Cycles.
+
+        FixedArray<Value *, 2> titleArgs;
+        titleArgs[0] = b->getInt32(STDERR_FILENO);
+        titleArgs[1] = b->CreatePointerCast(b->GetString(title.str()), b->getInt8PtrTy());
+        b->CreateCall(b->GetDprintf(), titleArgs);
+
+        // Print each kernel line
+        buffer.clear();
+
+        raw_svector_ostream line(buffer);
+        line << "%-" << maxLength << "s" // name
+                "%10.2E " // items processed;
+                "%10.2E " // CPU cycles,
+                "%7.2f " // cycles per item,
+                "%5.1f " // synchronization %,
+                "%5.1f " // buffer expansion %,
+                "%5.1f " // overhead %,
+                "%6.1f " // execution %,
+                "%5.1f\n"; // % of Total CPU Cycles.
+
+        FixedArray<Value *, 11> args;
+        args[0] = titleArgs[0];
+        args[1] = b->CreatePointerCast(b->GetString(line.str()), b->getInt8PtrTy());
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+
+            const auto binding = selectPrincipleCycleCountBinding(i);
+            Value * const items = b->getScalarField(makeBufferName(i, binding) + ITEM_COUNT_SUFFIX);
+            Value * const fItems = b->CreateUIToFP(items, doubleTy);
+
+            const auto prefix = makeKernelName(i) + CYCLE_COUNT_SUFFIX;
+            Value * const synchronizationCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
+            Value * const fSynchronizationCycles = b->CreateUIToFP(synchronizationCycles, doubleTy);
+            Value * const fSynchronizationCycles100 = b->CreateFMul(fSynchronizationCycles, fOneHundred);
+
+            Value * const bufferExpandCycles = b->getScalarField(prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
+            Value * const fBufferExpandCycles = b->CreateUIToFP(bufferExpandCycles, doubleTy);
+            Value * const fBufferExpandCycles100 = b->CreateFMul(fBufferExpandCycles, fOneHundred);
+
+            Value * const executionCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
+            Value * const fExecutionCycles = b->CreateUIToFP(executionCycles, doubleTy);
+            Value * const fExecutionCycles100 = b->CreateFMul(fExecutionCycles, fOneHundred);
+
+            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
+            Value * const fCycles = b->CreateUIToFP(cycles, doubleTy);
+
+            Value * const fSynchronizationPerc = b->CreateFDiv(fSynchronizationCycles100, fCycles);
+            Value * const fBufferExpandPerc = b->CreateFDiv(fBufferExpandCycles100, fCycles);
+            Value * const fExecutionPerc = b->CreateFDiv(fExecutionCycles100, fCycles);
+
+            Value * const fKnownOverheads = b->CreateFAdd(b->CreateFAdd(fSynchronizationCycles100, fBufferExpandPerc), fExecutionCycles100);
+            Value * const fCyclesPerItem = b->CreateFDiv(fCycles, fItems);
+            Value * const fCycles100 = b->CreateFMul(fCycles, fOneHundred);
+
+            Value * const fUnknownOverhead = b->CreateFDiv(b->CreateFSub(fCycles100, fKnownOverheads), fCycles);
+            Value * const fPercentageOfTotal = b->CreateFDiv(fCycles100, fTotalCycles);
+
+            const Kernel * const kernel = getKernel(i);
+            args[2] = b->CreatePointerCast(b->GetString(kernel->getName()), b->getInt8PtrTy());
+            args[3] = fItems;
+            args[4] = fCycles;
+            args[5] = fCyclesPerItem;
+            args[6] = fSynchronizationPerc;
+            args[7] = fBufferExpandPerc;
+            args[8] = fUnknownOverhead;
+            args[9] = fExecutionPerc;
+            args[10] = fPercentageOfTotal;
+
+            b->CreateCall(b->GetDprintf(), args);
         }
     }
 }
