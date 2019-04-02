@@ -15,6 +15,7 @@ using BixNum = std::vector<PabloAST *>;
     
     
 class BixNumArithmetic {
+public:
     BixNumArithmetic(PabloBuilder & pb) : mPB(pb) {}
     PabloAST * EQ(BixNum value, unsigned test);
     PabloAST * EQ(BixNum value, BixNum test);
