@@ -109,7 +109,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         title.indent(maxLength - 4);
         title << "     ITEMS " // items processed;
                  "    CYCLES " // CPU cycles,
-                 "   RATE " // cycles per item,
+                 "      RATE " // cycles per item,
                  " SYNC " // synchronization %,
                  " BUFF " // buffer expansion %,
                  " OVER " // overhead %,
@@ -128,7 +128,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         line << "%-" << maxLength << "s" // name
                 "%10.2E " // items processed;
                 "%10.2E " // CPU cycles,
-                "%7.2f " // cycles per item,
+                "%10.2f " // cycles per item,
                 "%5.1f " // synchronization %,
                 "%5.1f " // buffer expansion %,
                 "%5.1f " // overhead %,

@@ -159,7 +159,7 @@ Binding{"extractionMask", extractionMask}},
 {Binding{"base", inputBase}},
 {}, {})
 , mCompressFieldWidth(fieldWidth)
-, mStreamCount(inputStreamSet->getNumElements()) {
+, mStreamCount(outputStreamSet->getNumElements()) {
 
 }
 
