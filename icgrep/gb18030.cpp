@@ -32,7 +32,8 @@
 
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <iostream>
+#include <sstream>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace pablo;
 using namespace kernel;
@@ -41,7 +42,9 @@ using namespace codegen;
 using namespace re;
 
 static cl::OptionCategory gb18030Options("gb18030 Options", "Transcoding control options.");
+
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(gb18030Options));
+static cl::opt<unsigned> ReplacementCharacter("replacement-character", cl::desc("Codepoint value of the character used to replace any unmapped or invalid input sequence."), cl::init(0xFFFD), cl::cat(gb18030Options));
 
 // Analyze GB 10830 encoded data to classify bytes as singletons (ASCII or error),
 // prefixes of 2- or 4-byte sequences, or second bytes of 4-byte sequences.
@@ -72,7 +75,7 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     // is said to be a key byte.
     // It is possible that there is a sequence of bytes in the range 0x81-FE.
     // The first such byte is always a key byte.
-    PabloAST * GB_key1 = pb.createAnd(x81_FE, pb.createNot(pb.createAdvance(x81_FE, 1)), "GB_key1");
+    PabloAST * GB_key1 = pb.createAnd(x81_FE, pb.createNot(pb.createAdvance(x81_FE, 1)), "gb_key1");
     // In a run of consecutive x81_FE bytes, every second one must be the
     // second byte of a 2-byte sequence and hence is not a key byte.
     // Therefore, if the first key byte in a run of x81_FE bytes starts at an odd
@@ -80,16 +83,16 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     // Similarly, the key bytes in a run whose first key byte is at an even
     // position are only those at even positions in the run.
 
-    PabloAST * odd_positions = pb.createRepeat(1, pb.getInteger(0x55, 8));
-    PabloAST * even_positions = pb.createRepeat(1, pb.getInteger(0xAA, 8));
-    PabloAST * GB_key1_odd = pb.createAnd(GB_key1, odd_positions);
-    PabloAST * GB_key1_even = pb.createAnd(GB_key1, even_positions);
+    PabloAST * odd_positions = pb.createRepeat(1, pb.getInteger(0xAA, 8));
+    PabloAST * even_positions = pb.createRepeat(1, pb.getInteger(0x55, 8));
+    PabloAST * GB_key1_odd = pb.createAnd(GB_key1, odd_positions, "gb_key1_odd");
+    PabloAST * GB_key1_even = pb.createAnd(GB_key1, even_positions, "gb_key1_even");
 
-    PabloAST * x81_FE_run_odd = pb.createMatchStar(GB_key1_odd, x81_FE);
-    PabloAST * x81_FE_run_even = pb.createMatchStar(GB_key1_even, x81_FE);
-    PabloAST * GB_keys_odd = pb.createAnd(x81_FE_run_odd, odd_positions);
-    PabloAST * GB_keys_even = pb.createAnd(x81_FE_run_even, even_positions);
-    PabloAST * GB_keys = pb.createOr(GB_keys_odd, GB_keys_even, "GB_keys");
+    PabloAST * x81_FE_run_odd = pb.createAnd(x81_FE, pb.createMatchStar(GB_key1_odd, x81_FE));
+    PabloAST * x81_FE_run_even = pb.createAnd(x81_FE, pb.createMatchStar(GB_key1_even, x81_FE));
+    PabloAST * GB_keys_odd = pb.createAnd(x81_FE_run_odd, odd_positions, "gb_keys_odd");
+    PabloAST * GB_keys_even = pb.createAnd(x81_FE_run_even, even_positions, "gb_keys_even");
+    PabloAST * GB_keys = pb.createOr(GB_keys_odd, GB_keys_even, "gb_keys");
     //
     // All bytes after a key byte are data bytes of 2 or 4 byte sequences.
     PabloAST * GB_data = pb.createAdvance(GB_keys, 1);
@@ -104,8 +107,8 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     // byte 2 positions prior is not a GB_4_data byte.
     PabloAST * GB_k2_1 = pb.createAnd(GB_4_data, pb.createNot(pb.createAdvance(GB_4_data, 2)));
 
-    PabloAST * odd_pairs = pb.createRepeat(1, pb.getInteger(0x33, 8));
-    PabloAST * even_pairs = pb.createRepeat(1, pb.getInteger(0xCC, 8));
+    PabloAST * odd_pairs = pb.createRepeat(1, pb.getInteger(0xCC, 8));
+    PabloAST * even_pairs = pb.createRepeat(1, pb.getInteger(0x33, 8));
     PabloAST * GB_k2_1_odd = pb.createAnd(GB_k2_1, odd_pairs);
     PabloAST * GB_k2_1_even = pb.createAnd(GB_k2_1, even_pairs);
 
@@ -116,15 +119,15 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
 
     PabloAST * GB_k2_odd = pb.createAnd(data4_run_odd, odd_pairs);
     PabloAST * GB_k2_even = pb.createAnd(data4_run_even, even_pairs);
-    PabloAST * GB_k2 = pb.createOr(GB_k2_odd, GB_k2_even);
+    PabloAST * GB_k2 = pb.createAnd(GB_4_data, pb.createOr(GB_k2_odd, GB_k2_even), "gb_k2");
     //
     //  All bytes that are neither key nor data of 2 or 4 byte sequences
     //  are ASCII or error.
     //
-    PabloAST * GB_single = pb.createNot(pb.createOr(GB_keys, GB_data));
+    PabloAST * GB_single = pb.createNot(pb.createOr(GB_keys, GB_data), "gb_single");
     //
     // GB prefix bytes are the keys that are first in 2 or 4 byte sequences.
-    PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(pb.createAdvance(GB_k2, 1)));
+    PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(pb.createAdvance(GB_k2, 1)), "gb_prefix");
     Var * GB_bytes = getOutputStreamVar("GB_bytes");
     pb.createAssign(pb.createExtract(GB_bytes, 0), GB_single);
     pb.createAssign(pb.createExtract(GB_bytes, 1), GB_prefix);
@@ -156,18 +159,18 @@ void GB_18030_ExtractionMasks::generatePabloMethod() {
     PabloAST * GB_k2 = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(2));
     //
     // mask1 is for the extraction of the first byte of data for every GB 1, 2 or 4 byte sequence.
-    PabloAST * mask1 = pb.createOr(GB_single, GB_prefix);
+    PabloAST * mask1 = pb.createOr(GB_single, GB_prefix, "gb_mask1");
     //
     // mask2 is for selecting the low 4 bits of the 2nd byte of a sequence (or first of a singleton).
     PabloAST * GB_second = pb.createAdvance(GB_prefix, 1);
-    PabloAST * mask2 = pb.createOr(GB_single, GB_second);
+    PabloAST * mask2 = pb.createOr(GB_single, GB_second, "gb_mask2");
     // mask3 is for the last byte of data for every GB 1 or 2 byte sequence, or the 3rd byte
     // of every 4 byte sequence.
     PabloAST * GB_2of2 = pb.createAnd(GB_second, pb.createNot(GB_k2));
     PabloAST * GB_3of4 = pb.createAdvance(pb.createAnd(GB_second, GB_k2), 1);
-    PabloAST * mask3 = pb.createOr(GB_single, pb.createOr(GB_2of2, GB_3of4));
+    PabloAST * mask3 = pb.createOr(GB_single, pb.createOr(GB_2of2, GB_3of4), "gb_mask3");
     // mask4 is for selecting the low 4 bits of the last byte of a sequence.
-    PabloAST * mask4 = pb.createOr(GB_single, pb.createOr(GB_2of2, pb.createAdvance(GB_3of4, 1)));
+    PabloAST * mask4 = pb.createOr(GB_single, pb.createOr(GB_2of2, pb.createAdvance(GB_3of4, 1)), "gb_mask4");
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_1"), pb.getInteger(0)), mask1);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_2"), pb.getInteger(0)), mask2);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_3"), pb.getInteger(0)), mask3);
@@ -418,10 +421,10 @@ const unsigned BitsPerInputByte = 7;
 std::pair<std::vector<CC *>, std::vector<CC *>> byteTranscoderClasses(std::vector<codepoint_t> table) {
     if (table.size() != 256) llvm::report_fatal_error("Need 256 entries for byte transcoding.");
     codepoint_t allBits = 0;
-    for (unsigned ch_code = 0; ch_code < 1 << BitsPerInputByte; ch_code++) {
+    for (unsigned ch_code = 0; ch_code < (1 << BitsPerInputByte); ch_code++) {
         allBits |= table[ch_code];
     }
-    const unsigned BitsPerOutputUnit = std::log2(allBits);
+    const unsigned BitsPerOutputUnit = std::log2(allBits)+1;
     std::vector<CC *> bitXfrmClasses;
     bitXfrmClasses.reserve(BitsPerInputByte);
     for (unsigned i = 0; i < BitsPerInputByte; i++) {
@@ -498,6 +501,8 @@ GB_18030_CoreLogic::GB_18030_CoreLogic
 void GB_18030_CoreLogic::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * ASCII = pb.createExtract(getInputStreamVar("ASCII"), pb.getInteger(0));
+    PabloAST * GB_4byte = pb.createExtract(getInputStreamVar("GB_4byte"), pb.getInteger(0));
+    PabloAST * GB_prefix2 = pb.createNot(pb.createOr(ASCII, GB_4byte), "gb_prefix2");
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
     std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
     cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), byte1_basis);
@@ -511,22 +516,24 @@ void GB_18030_CoreLogic::generatePabloMethod() {
         u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
     }
     for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
-        PabloAST * byte1 = Byte1_compiler.compileCC(makeCC(char_code, &cc::Byte));
+        std::stringstream gbpfx;
+        gbpfx << "gb_" << std::hex << char_code << "_16[";
+        PabloAST * byte1 = pb.createAnd(GB_prefix2, Byte1_compiler.compileCC(makeCC(char_code - 0x80, &cc::Byte)));
         PabloBlock * inner = getEntryScope()->createScope();
         PabloBuilder nested(inner);
         cc::Parabix_CC_Compiler_Builder Byte2_compiler(inner, byte2_basis);
         std::vector<CC *> bitXfrmClasses;
         std::vector<CC *> outputBitClasses;
-        auto xClasses = byteTranscoderClasses(fullByteTable_GB10830_byte2(GB_tbl[char_code - 0x81], 0xFFFD));
+        auto xClasses = byteTranscoderClasses(fullByteTable_GB10830_byte2(GB_tbl[char_code - 0x81], ReplacementCharacter));
         bitXfrmClasses = xClasses.first;
         outputBitClasses = xClasses.second;
         for (unsigned i = 0; i < BitsPerInputByte; i++) {
-            PabloAST * xfrmStrm = Byte2_compiler.compileCC(bitXfrmClasses[i]);
-            PabloAST * outStrm = nested.createXor(xfrmStrm, byte2_basis[i]);
+            PabloAST * xfrmStrm = nested.createAnd(byte1, Byte2_compiler.compileCC(bitXfrmClasses[i]));
+            PabloAST * outStrm = nested.createAnd(byte1, nested.createXor(xfrmStrm, byte2_basis[i]), gbpfx.str() + std::to_string(i) + "]");
             nested.createAssign(u16[i], nested.createOr(u16[i], outStrm));
         }
         for (unsigned i = BitsPerInputByte; i < BitsPerInputByte + outputBitClasses.size(); i++) {
-            PabloAST * outStrm = Byte2_compiler.compileCC(outputBitClasses[i - BitsPerInputByte]);
+            PabloAST * outStrm = nested.createAnd(byte1, Byte2_compiler.compileCC(outputBitClasses[i - BitsPerInputByte]), gbpfx.str() + std::to_string(i) + "]");
             nested.createAssign(u16[i], nested.createOr(u16[i], outStrm));
         }
         pb.createIf(byte1, inner);
@@ -586,17 +593,17 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     BixNum byte2_lo4(4);
     BixNum byte4_lo4(4);
     for (unsigned i = 0; i < 4; i++) {
-        byte2_lo4[i] = pb.createAnd(GB_4byte, nybble1[i]);
-        byte4_lo4[i] = pb.createAnd(GB_4byte, nybble2[i]);
+        byte2_lo4[i] = pb.createAnd(GB_4byte, nybble1[i], "gb_nybble1");
+        byte4_lo4[i] = pb.createAnd(GB_4byte, nybble2[i], "gb_nybble2");
     }
 
     BixNum lo11 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte3_lo7, 1), 10);
     lo11 = BixNumModularArithmetic(pb).Add(lo11, byte4_lo4);
     BixNum lo15 = BixNumModularArithmetic(pb).Add(BixNumFullArithmetic(pb).Mul(byte2_lo4, 1260), lo11);
     BixNum byte1_X_12600 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte1_lo7, 1), 12600);
-    BixNum GB_val = BixNumFullArithmetic(pb).Add(byte1_X_12600, lo15);
+    BixNum GB_val = BixNumModularArithmetic(pb).Add(byte1_X_12600, lo15);
     const unsigned GB_SupplementaryPlaneValue = 189000;
-    PabloAST * aboveBMP = pb.createAnd(GB_4byte, BixNumArithmetic(pb).UGE(byte1_lo7, 0x10));
+    PabloAST * aboveBMP = pb.createAnd(GB_4byte, BixNumArithmetic(pb).UGE(byte1_lo7, 0x10), "gb_aboveBMP");
 
     Zeroes * zeroes = pb.createZeroes();
     std::vector<PabloAST *> u21(21, zeroes);
@@ -680,7 +687,7 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     Scalar * TWO = P->CreateConstant(b->getSize(2));
 
     extract(P, GB_bytes, ZERO, GB_mask1, ASCII);
-    extract(P, GB_bytes, TWO, GB_mask1, GB_4byte);
+    extract(P, GB_bytes, TWO, GB_mask2, GB_4byte);
     extract(P, BasisBits, ZERO, GB_mask1, byte1);
     extract(P, BasisBits, ZERO, GB_mask2, nybble1);
     extract(P, BasisBits, ZERO, GB_mask3, byte2);
@@ -748,7 +755,7 @@ int main(int argc, char *argv[]) {
     gb18030FunctionType gb18030Function = generatePipeline(pxDriver);
     const int fd = open(inputFile.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
-        std::cerr << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
+        llvm::errs() << "Error: cannot open " << inputFile << " for processing. Skipped.\n";
     } else {
         gb18030Function(fd, inputFile.c_str());
         close(fd);

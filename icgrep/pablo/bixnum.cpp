@@ -188,7 +188,7 @@ BixNum BixNumFullArithmetic::Add(BixNum augend, BixNum addend) {
 }
 
 BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
-    unsigned multiplier_bits = std::log2(multiplier);
+    unsigned multiplier_bits = std::log2(multiplier)+1;
     BixNum product(multiplicand.size() + multiplier_bits, mPB.createZeroes());
     // Choose between the addition-based and subtraction-based strategies based
     // on the number of 1 bits in the multiplier.
