@@ -508,7 +508,7 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer");
     BasicBlock * const expanded = b->CreateBasicBlock("expanded");
 
-    b->CreateCondBr(b->CreateICmpULT(remaining, required), expandBuffer, expanded);
+    b->CreateUnlikelyCondBr(b->CreateICmpULT(remaining, required), expandBuffer, expanded);
 
     b->SetInsertPoint(expandBuffer);
 
@@ -517,7 +517,6 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         cycleCounterStart = b->CreateReadCycleCounter();
     }
 
-
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(Capacity);
@@ -525,7 +524,6 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     Value * const handle = getHandle(b.get());
     Value * const capacityField = b->CreateGEP(handle, indices);
     Value * const capacity = b->CreateLoad(capacityField);
-
     Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
     Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
     Value * const requiredChunks = b->CreateCeilUDiv(required, BLOCK_WIDTH);

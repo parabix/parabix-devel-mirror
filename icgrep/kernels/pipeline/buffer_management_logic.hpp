@@ -187,9 +187,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         } else {
 
             auto getOverflowSize = [&](const Kernel * kernel, const Binding & binding, const BufferRateData & rd) -> RateValue {
-                if (binding.hasAttribute(AttrId::BlockSize)) {
-                    return 0;
-                }
                 const auto deviation = rd.Maximum - rd.Minimum;
                 if (deviation.numerator() == 0) {
                     return deviation;
@@ -205,9 +202,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             };
 
             RateValue requiredSpace{producerRate.Maximum};
-            RateValue overflowSpace{getOverflowSize(producer, output, producerRate)};
-            RateValue facsimileSpace{0};
-            unsigned underflowSize = 0;
+            RateValue copyBackSpace{getOverflowSize(producer, output, producerRate)};
+            RateValue lookAheadSpace{0};
+            unsigned lookBehindSize = 0;
             bool unboundedLookbehind = false;
 
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::LookBehind))) {
@@ -216,7 +213,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 if (amount == 0) {
                     unboundedLookbehind = true;
                 } else {
-                    underflowSize = lookBehind.amount();
+                    lookBehindSize = lookBehind.amount();
                 }
             }
 
@@ -238,7 +235,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 if (LLVM_UNLIKELY(input.hasLookahead())) {
                     overflow += input.getLookahead();
                 }
-                facsimileSpace = std::max(facsimileSpace, overflow);
+                lookAheadSpace = std::max(lookAheadSpace, overflow);
 
                 // Could the consumption rate be less than the production rate?
                 if ((consumerNode.Lower * consumerRate.Minimum) < producerRate.Maximum) {
@@ -253,7 +250,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     if (amount == 0) {
                         unboundedLookbehind = true;
                     } else {
-                        underflowSize = std::max(underflowSize, lookBehind.amount());
+                        lookBehindSize = std::max(lookBehindSize, lookBehind.amount());
                     }
                 }
             }
@@ -265,7 +262,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
                 const auto & add = output.findAttribute(AttrId::Add);
                 const RateValue amount(add.amount());
-                overflowSpace = std::max(overflowSpace, amount);
+                copyBackSpace = std::max(copyBackSpace, amount);
             }
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::RoundUpTo))) {
                 const auto & roundUpTo = output.findAttribute(AttrId::RoundUpTo);
@@ -276,23 +273,23 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 RateValue r(roundUpTo.amount());
                 const auto a = mod(producerRate.Minimum, r);
                 const auto b = mod(producerRate.Maximum, r);
-                overflowSpace = std::max(overflowSpace, std::max(a, b));
+                copyBackSpace = std::max(copyBackSpace, std::max(a, b));
             }
 
-            underflowSize = (underflowSize + blockWidth - 1) & -blockWidth;
-            overflowSpace = lcm(overflowSpace, blockWidth);
-            facsimileSpace = lcm(facsimileSpace, blockWidth);
+            lookBehindSize = (lookBehindSize + blockWidth - 1) & -blockWidth;
+            copyBackSpace = lcm(copyBackSpace, blockWidth);
+            lookAheadSpace = lcm(lookAheadSpace, blockWidth);
 
-            bn.LookBehind = underflowSize;
-            bn.CopyBack = overflowSpace.numerator();
-            assert (overflowSpace.denominator() == 1);
-            bn.LookAhead = facsimileSpace.numerator();
-            assert (facsimileSpace.denominator() == 1);
+            bn.LookBehind = lookBehindSize;
+            bn.CopyBack = copyBackSpace.numerator();
+            assert (copyBackSpace.denominator() == 1);
+            bn.LookAhead = lookAheadSpace.numerator();
+            assert (lookAheadSpace.denominator() == 1);
 
             unsigned overflowSize = std::max(bn.CopyBack, bn.LookAhead);
             // compute the buffer size
-            if (underflowSize || overflowSize) {
-                const RateValue requiredOverflow(std::max(underflowSize, overflowSize) * 2);
+            if (lookBehindSize || overflowSize) {
+                const RateValue requiredOverflow(std::max(lookBehindSize, overflowSize) * 2);
                 requiredSpace = std::max(requiredSpace, requiredOverflow);
             }
             const auto bufferSpace = lcm(requiredSpace, blockWidth);
@@ -302,12 +299,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             assert (codegen::ThreadNum > 0);
 
             if (LLVM_UNLIKELY(unboundedLookbehind)) {
-                buffer = new LinearBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
+                buffer = new LinearBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
             } else if (dynamic) {
                 // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
-                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
+                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
             } else {
-                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
+                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
             }
         }
 
@@ -402,13 +399,13 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
 
         if (bn.LookBehind) {
-            out << "|U:" << bn.LookBehind;
+            out << "|LB:" << bn.LookBehind;
         }
         if (bn.CopyBack) {
-            out << "|O:" << bn.CopyBack;
+            out << "|CB:" << bn.CopyBack;
         }
         if (bn.LookAhead) {
-            out << "|F:" << bn.LookAhead;
+            out << "|LA:" << bn.LookAhead;
         }
 
         out << "}}\"];\n";
