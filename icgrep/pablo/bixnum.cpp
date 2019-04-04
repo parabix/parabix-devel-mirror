@@ -215,8 +215,18 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
                     borrow = createMajority3(mPB, mPB.createNot(product[j + i]), multiplicand[j], borrow);
                     product[j + i] = tmp;
                 }
-                product[multiplicand.size() + i] = borrow;
+                for (unsigned j = multiplicand.size(); j < product.size()-i; j++) {
+                    PabloAST * tmp  = mPB.createXor(product[j + i], borrow);
+                    borrow = mPB.createAnd(mPB.createNot(product[j + i]), borrow);
+                    product[j + i] = tmp;
+                }
             }
+        }
+        PabloAST * carry = mPB.createZeroes();
+        for (unsigned j = 0; j < multiplicand.size(); j++) {
+            PabloAST * tmp = createXor3(mPB, product[j + multiplier_bits], multiplicand[j], carry);
+            carry = createMajority3(mPB, product[j + multiplier_bits], multiplicand[j], carry);
+            product[j + multiplier_bits] = tmp;
         }
     }
     return product;
