@@ -244,7 +244,7 @@ public:
 
     void CallPrintInt(llvm::StringRef name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
 
-    llvm::Value * GetString(llvm::StringRef Str);
+    llvm::Constant * GetString(llvm::StringRef Str);
 
     inline llvm::IntegerType * getSizeTy() const {
         assert (mSizeType);

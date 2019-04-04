@@ -33,9 +33,14 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
-                        clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously overwriting kernel state / stream space.\n"
-                                                  "NOTE: this requires memory to be page-aligned, which may still hide errors."),
+                        clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously "
+                                                  "overwriting kernel state / stream space.\n"
+                                                  "NOTE: this requires memory to be page-aligned, which "
+                                                  "may still hide errors."),
                         clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
+                        clEnumVal(EnableBlockingIOCounter, "Count and report the number of blocked kernel "
+                                                           "executions due to insufficient data/space of a "
+                                                           "particular stream."),
                         clEnumVal(DisableIndirectBranch, "Disable use of indirect branches in kernel code.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 

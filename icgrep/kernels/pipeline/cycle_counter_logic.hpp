@@ -9,13 +9,40 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        // TODO: make these thread local to prevent false cache sharing
-        const auto prefix = makeKernelName(kernel) + CYCLE_COUNT_SUFFIX;
+        // TODO: make these thread local to prevent false sharing and enable
+        // analysis of thread distributions?
+        const auto prefix = makeKernelName(kernel);
         IntegerType * const int64Ty = b->getInt64Ty();
-        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
-        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
-        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
-        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::FINAL));
+
+        const auto prefix2 = prefix + STATISTICS_CYCLE_COUNT_SUFFIX;
+
+        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::BUFFER_EXPANSION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::FINAL));
+    }
+
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+
+        const auto prefix = makeKernelName(kernel);
+        IntegerType * const int64Ty = b->getInt64Ty();
+
+        // total # of segments processed by kernel
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + STATISTICS_SEGMENT_COUNT_SUFFIX);
+
+        // # of blocked I/O channel attempts in which no strides
+        // were possible (i.e., blocked on first iteration)
+        const auto prefix3 = prefix + STATISTICS_BLOCKING_IO_SUFFIX + "I";
+        const auto numOfInputs = getNumOfStreamInputs(kernel);
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            mPipelineKernel->addInternalScalar(int64Ty, prefix3 + std::to_string(i));
+        }
+        const auto prefix4 = prefix + STATISTICS_BLOCKING_IO_SUFFIX + "O";
+        const auto numOfOutputs = getNumOfStreamOutputs(kernel);
+        for (unsigned i = 0; i < numOfOutputs; ++i) {
+            // TODO: ignore dynamic buffers
+            mPipelineKernel->addInternalScalar(int64Ty, prefix4 + std::to_string(i));
+        }
     }
 }
 
@@ -35,7 +62,7 @@ inline Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) co
     Value * ptr = nullptr;
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         b->setKernel(mPipelineKernel);
-        const auto prefix = makeKernelName(mKernelIndex) + CYCLE_COUNT_SUFFIX;
+        const auto prefix = makeKernelName(mKernelIndex) + STATISTICS_CYCLE_COUNT_SUFFIX;
         ptr = b->getScalarFieldPtr(prefix + std::to_string(BUFFER_EXPANSION));
         b->setKernel(mKernel);
     }
@@ -45,15 +72,48 @@ inline Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) {
+inline void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+        b->setKernel(mPipelineKernel);
         Value * const endCount = b->CreateReadCycleCounter();
         Value * const duration = b->CreateSub(endCount, mCycleCounters[start]);
-        const auto prefix = makeKernelName(mKernelIndex) + CYCLE_COUNT_SUFFIX;
-        b->setKernel(mPipelineKernel);
+        const auto prefix = makeKernelName(mKernelIndex) + STATISTICS_CYCLE_COUNT_SUFFIX;
         Value * const counterPtr = b->getScalarFieldPtr(prefix + std::to_string(end));
-        Value * const runningCount = b->CreateLoad(counterPtr, true);
+        Value * const runningCount = b->CreateLoad(counterPtr);
         Value * const updatedCount = b->CreateAdd(runningCount, duration);
+        b->CreateStore(updatedCount, counterPtr);
+        b->setKernel(mKernel);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief incrementNumberOfSegmentsCounter
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::incrementNumberOfSegmentsCounter(BuilderRef b) const {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+        b->setKernel(mPipelineKernel);
+        const auto fieldName =
+            makeKernelName(mKernelIndex) + STATISTICS_SEGMENT_COUNT_SUFFIX;
+        Value * const counterPtr = b->getScalarFieldPtr(fieldName);
+        Value * const runningCount = b->CreateLoad(counterPtr);
+        Value * const updatedCount = b->CreateAdd(runningCount, b->getInt64(1));
+        b->CreateStore(updatedCount, counterPtr);
+        b->setKernel(mKernel);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief recordBlockingIO
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::recordBlockingIO(BuilderRef b, const StreamPort port) const {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+        b->setKernel(mPipelineKernel);
+        const auto fieldName =
+            makeKernelName(mKernelIndex) + STATISTICS_BLOCKING_IO_SUFFIX +
+            (port.Type == PortType::Input ? "I" : "O") + std::to_string(port.Number);
+        Value * const counterPtr = b->getScalarFieldPtr(fieldName);
+        Value * const runningCount = b->CreateLoad(counterPtr);
+        Value * const updatedCount = b->CreateAdd(runningCount, mBlockedOnFirstStridePhi);
         b->CreateStore(updatedCount, counterPtr);
         b->setKernel(mKernel);
     }
@@ -79,33 +139,28 @@ inline StreamPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsig
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief updateOptionalCycleCounter
+ * @brief printOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
 
-        Value * totalCycles = b->getInt64(0);
+        // Print the title line
+
         size_t maxLength = 0;
         b->setKernel(mPipelineKernel);
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
-            const auto prefix = makeKernelName(i) + CYCLE_COUNT_SUFFIX;
-            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
-            totalCycles = b->CreateAdd(totalCycles, cycles);
             const Kernel * const kernel = getKernel(i);
             maxLength = std::max(maxLength, kernel->getName().length());
         }
         maxLength += 4;
 
-        Type * const doubleTy = b->getDoubleTy();
-        Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
-        Value * const fTotalCycles = b->CreateUIToFP(totalCycles, doubleTy);
-
-        // Print the title line
-
         SmallVector<char, 100> buffer;
         raw_svector_ostream title(buffer);
 
-        title << "Name";
+        title << "CYCLE COUNTER:\n\n"
+
+                 "  # "  // kernel #
+                 "NAME"; // kernel Name
         title.indent(maxLength - 4);
         title << "     ITEMS " // items processed;
                  "    CYCLES " // CPU cycles,
@@ -114,18 +169,21 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
                  " BUFF " // buffer expansion %,
                  " OVER " // overhead %,
                  "  EXEC " // execution %,
-                 "    %\n"; // % of Total CPU Cycles.
+                 "    %%\n"; // % of Total CPU Cycles.
 
+        Constant * const STDERR = b->getInt32(STDERR_FILENO);
         FixedArray<Value *, 2> titleArgs;
-        titleArgs[0] = b->getInt32(STDERR_FILENO);
-        titleArgs[1] = b->CreatePointerCast(b->GetString(title.str()), b->getInt8PtrTy());
+        titleArgs[0] = STDERR;
+        titleArgs[1] = b->GetString(title.str());
         b->CreateCall(b->GetDprintf(), titleArgs);
 
         // Print each kernel line
+
         buffer.clear();
 
         raw_svector_ostream line(buffer);
-        line << "%-" << maxLength << "s" // name
+        line << "%3" PRIu32 " " // kernel #
+                "%-" << maxLength << "s" // name
                 "%10.2E " // items processed;
                 "%10.2E " // CPU cycles,
                 "%10.2f " // cycles per item,
@@ -135,9 +193,21 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
                 "%6.1f " // execution %,
                 "%5.1f\n"; // % of Total CPU Cycles.
 
-        FixedArray<Value *, 11> args;
-        args[0] = titleArgs[0];
-        args[1] = b->CreatePointerCast(b->GetString(line.str()), b->getInt8PtrTy());
+        FixedArray<Value *, 12> args;
+        args[0] = STDERR;
+        args[1] = b->GetString(line.str());
+
+        Value * totalCycles = b->getInt64(0);
+        b->setKernel(mPipelineKernel);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const auto prefix = makeKernelName(i) + STATISTICS_CYCLE_COUNT_SUFFIX;
+            Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
+            totalCycles = b->CreateAdd(totalCycles, cycles);
+        }
+
+        Type * const doubleTy = b->getDoubleTy();
+        Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
+        Value * const fTotalCycles = b->CreateUIToFP(totalCycles, doubleTy);
 
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
@@ -145,7 +215,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             Value * const items = b->getScalarField(makeBufferName(i, binding) + ITEM_COUNT_SUFFIX);
             Value * const fItems = b->CreateUIToFP(items, doubleTy);
 
-            const auto prefix = makeKernelName(i) + CYCLE_COUNT_SUFFIX;
+            const auto prefix = makeKernelName(i) + STATISTICS_CYCLE_COUNT_SUFFIX;
             Value * const synchronizationCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
             Value * const fSynchronizationCycles = b->CreateUIToFP(synchronizationCycles, doubleTy);
             Value * const fSynchronizationCycles100 = b->CreateFMul(fSynchronizationCycles, fOneHundred);
@@ -173,18 +243,187 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             Value * const fPercentageOfTotal = b->CreateFDiv(fCycles100, fTotalCycles);
 
             const Kernel * const kernel = getKernel(i);
-            args[2] = b->CreatePointerCast(b->GetString(kernel->getName()), b->getInt8PtrTy());
-            args[3] = fItems;
-            args[4] = fCycles;
-            args[5] = fCyclesPerItem;
-            args[6] = fSynchronizationPerc;
-            args[7] = fBufferExpandPerc;
-            args[8] = fUnknownOverhead;
-            args[9] = fExecutionPerc;
-            args[10] = fPercentageOfTotal;
+            args[2] = b->getInt32(i);
+            args[3] = b->GetString(kernel->getName());
+            args[4] = fItems;
+            args[5] = fCycles;
+            args[6] = fCyclesPerItem;
+            args[7] = fSynchronizationPerc;
+            args[8] = fBufferExpandPerc;
+            args[9] = fUnknownOverhead;
+            args[10] = fExecutionPerc;
+            args[11] = fPercentageOfTotal;
 
             b->CreateCall(b->GetDprintf(), args);
         }
+        // print final new line
+        FixedArray<Value *, 2> finalArgs;
+        finalArgs[0] = STDERR;
+        finalArgs[1] = b->GetString("\n");
+        b->CreateCall(b->GetDprintf(), finalArgs);
+    }
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief printOptionalBlockingIOStatistics
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+
+        // Print the title line
+
+        size_t maxKernelLength = 0;
+        size_t maxBindingLength = 0;
+        b->setKernel(mPipelineKernel);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const Kernel * const kernel = getKernel(i);
+            maxKernelLength = std::max(maxKernelLength, kernel->getName().length());
+            for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const BufferRateData & binding = mBufferGraph[e];
+                const Binding & ref = binding.Binding;
+                maxBindingLength = std::max(maxBindingLength, ref.getName().length());
+            }
+            for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
+                const BufferRateData & binding = mBufferGraph[e];
+                const Binding & ref = binding.Binding;
+                maxBindingLength = std::max(maxBindingLength, ref.getName().length());
+            }
+        }
+        maxKernelLength += 4;
+        maxBindingLength += 4;
+
+        SmallVector<char, 100> buffer;
+        raw_svector_ostream line(buffer);
+
+        line << "BLOCKING I/O:\n\n"
+                "  # "  // kernel ID #  (only shown for first)
+                 "KERNEL"; // kernel Name (only shown for first)
+        line.indent(maxKernelLength - 6);
+        line << "PORT";
+        line.indent(5 + maxBindingLength - 4); // I/O Type (e.g., input port 3 = I3), Port Name
+        line << " BUFFER " // buffer ID #
+                "   BLOCKED "
+                 "     %%\n"; // % of blocking attempts
+
+        Constant * const STDERR = b->getInt32(STDERR_FILENO);
+
+        FixedArray<Value *, 2> titleArgs;
+        titleArgs[0] = STDERR;
+        titleArgs[1] = b->GetString(line.str());
+        b->CreateCall(b->GetDprintf(), titleArgs);
+
+        // Print each kernel line
+
+        // generate first line format string
+        buffer.clear();
+        line << "%3" PRIu32 " " // kernel #
+                "%-" << maxKernelLength << "s" // kernel name
+                "%c%-3" PRIu32 " " // I/O type
+                "%-" << maxBindingLength << "s" // port name
+                "%7" PRIu32 // buffer ID #
+                "%11" PRIu64 " " // # of blocked attempts
+                "%6.2f\n"; // % of blocking attempts
+        Value * const firstLine = b->GetString(line.str());
+
+        // generate remaining lines format string
+        buffer.clear();
+        line.indent(maxKernelLength + 4); // spaces for kernel #, kernel name
+        line << "%c%-3" PRIu32 " " // I/O type
+                "%-" << maxBindingLength << "s" // port name
+                "%7" PRIu32 // buffer ID #
+                "%11" PRIu64 " " // # of blocked attempts
+                "%6.2f\n"; // % of blocking attempts
+        Value * const remainingLines = b->GetString(line.str());
+
+        SmallVector<Value *, 8> args;
+        args[0] = STDERR;
+
+
+        Type * const doubleTy = b->getDoubleTy();
+        Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+
+            const auto prefix = makeKernelName(i);
+            // total # of segments processed by kernel
+            Value * const totalNumberOfSegments = b->getScalarField(prefix + STATISTICS_SEGMENT_COUNT_SUFFIX);
+            Value * const fTotalNumberOfSegments = b->CreateUIToFP(totalNumberOfSegments, doubleTy);
+
+            const Kernel * const kernel = getKernel(i);
+            Constant * kernelName = b->GetString(kernel->getName());
+
+            for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const BufferRateData & binding = mBufferGraph[e];
+                args.push_back(STDERR);
+                if (kernelName) {
+                    args.push_back(firstLine);
+                    args.push_back(b->getInt32(i));
+                    args.push_back(kernelName);
+                    kernelName = nullptr;
+                } else {
+                    args.push_back(remainingLines);
+                }
+                args.push_back(b->getInt8('I'));
+                const auto inputPort = binding.inputPort();
+                args.push_back(b->getInt32(inputPort));
+                const Binding & ref = binding.Binding;
+
+                args.push_back(b->GetString(ref.getName()));
+
+                args.push_back(b->getInt32(source(e, mBufferGraph) - FirstStreamSet + 1));
+
+                const auto prefix2 = prefix + STATISTICS_BLOCKING_IO_SUFFIX + "I";
+                Value * const blockedCount = b->getScalarField(prefix2 + std::to_string(inputPort));
+                args.push_back(blockedCount);
+
+                Value * const fBlockedCount = b->CreateUIToFP(blockedCount, doubleTy);
+                Value * const fBlockedCount100 = b->CreateFMul(fBlockedCount, fOneHundred);
+                args.push_back(b->CreateFDiv(fBlockedCount100, fTotalNumberOfSegments));
+
+                b->CreateCall(b->GetDprintf(), args);
+
+                args.clear();
+            }
+
+            for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
+                const BufferRateData & binding = mBufferGraph[e];
+                args.push_back(STDERR);
+                if (kernelName) {
+                    args.push_back(firstLine);
+                    args.push_back(b->getInt32(i));
+                    args.push_back(kernelName);
+                    kernelName = nullptr;
+                } else {
+                    args.push_back(remainingLines);
+                }
+                args.push_back(b->getInt8('O'));
+                const auto outputPort = binding.outputPort();
+                args.push_back(b->getInt32(outputPort));
+                const Binding & ref = binding.Binding;
+                args.push_back(b->GetString(ref.getName()));
+
+                args.push_back(b->getInt32(target(e, mBufferGraph) - FirstStreamSet + 1));
+
+                const auto prefix2 = prefix + STATISTICS_BLOCKING_IO_SUFFIX + "O";
+                Value * const blockedCount = b->getScalarField(prefix2 + std::to_string(outputPort));
+                args.push_back(blockedCount);
+
+                Value * const fBlockedCount = b->CreateUIToFP(blockedCount, doubleTy);
+                Value * const fBlockedCount100 = b->CreateFMul(fBlockedCount, fOneHundred);
+                args.push_back(b->CreateFDiv(fBlockedCount100, fTotalNumberOfSegments));
+
+                b->CreateCall(b->GetDprintf(), args);
+
+                args.clear();
+            }
+
+        }
+        // print final new line
+        FixedArray<Value *, 2> finalArgs;
+        finalArgs[0] = STDERR;
+        finalArgs[1] = b->GetString("\n");
+        b->CreateCall(b->GetDprintf(), finalArgs);
     }
 }
 

@@ -228,6 +228,10 @@ Kernel * PipelineBuilder::makeKernel() {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         out << "+CYC";
     }
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+        out << "+BIC";
+    }
+
     for (unsigned i = 0; i < numOfKernels; ++i) {
         out << "_K" << mKernels[i]->getFamilyName();
     }

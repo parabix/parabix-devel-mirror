@@ -38,6 +38,7 @@ enum DebugFlags {
     EnableAsserts,
     EnableMProtect,
     EnableCycleCounter,
+    EnableBlockingIOCounter,
     DisableIndirectBranch,
     DebugFlagSentinel
 };
@@ -45,7 +46,7 @@ enum DebugFlags {
 bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag);
 
 extern bool SegmentPipelineParallel;
-    
+
 // Options for generating IR or ASM to files
 const std::string OmittedOption = ".";
 extern std::string ShowUnoptimizedIROption;

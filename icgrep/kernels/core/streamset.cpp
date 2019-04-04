@@ -512,6 +512,9 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
 
     b->SetInsertPoint(expandBuffer);
 
+    // TODO: indicate when buffer expansions occurs so we can potentially track them in the pipeline?
+    // Report with segno,capacity pair?
+
     Value * cycleCounterStart = nullptr;
     if (cycleCounterAccumulator) {
         cycleCounterStart = b->CreateReadCycleCounter();
@@ -528,10 +531,13 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
     Value * const requiredChunks = b->CreateCeilUDiv(required, BLOCK_WIDTH);
 
-    // make sure the new capacity is a least 2x the current capacity and a multiple of it
+    // make sure the new capacity is at least 2x the current capacity and a multiple of it
     Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
     Value * newCapacity = b->CreateAdd(unconsumedChunks, requiredChunks);
-    newCapacity = b->CreateAdd(newCapacity, capacity);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * const check = b->CreateICmpUGE(newCapacity, capacity);
+        b->CreateAssert(check, "unnecessary buffer expansion occurred");
+    }
     newCapacity = b->CreateRoundUp(newCapacity, capacity);
     Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
 

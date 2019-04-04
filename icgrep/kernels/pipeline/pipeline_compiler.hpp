@@ -401,7 +401,11 @@ const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
-const static std::string CYCLE_COUNT_SUFFIX = ".CYC";
+
+
+const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".CYC";
+const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SC";
+const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".BY";
 
 class PipelineCompiler {
 
@@ -475,7 +479,7 @@ protected:
     void determineNumOfLinearStrides(BuilderRef b);
     void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
     void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
-    void branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * target, Value * const halting);
+    void branchToTargetOrLoopExit(BuilderRef b, const StreamPort port, Value * const cond, BasicBlock * target, Value * const halting);
 
     void enterRegionSpan(BuilderRef b);
 
@@ -595,10 +599,15 @@ protected:
 
     void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
     void startCycleCounter(BuilderRef b, const CycleCounter type);
-    void updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end);
+    void updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const;
     Value * getBufferExpansionCycleCounter(BuilderRef b) const;
+
+    void incrementNumberOfSegmentsCounter(BuilderRef b) const;
+    void recordBlockingIO(BuilderRef b, const StreamPort port) const;
+
     void printOptionalCycleCounter(BuilderRef b);
     StreamPort selectPrincipleCycleCountBinding(const unsigned kernel) const;
+    void printOptionalBlockingIOStatistics(BuilderRef b);
 
 // pipeline analysis functions
 
@@ -726,6 +735,7 @@ protected:
     PHINode *                                   mHaltedPhi = nullptr;
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
+    PHINode *                                   mBlockedOnFirstStridePhi = nullptr;
     PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;

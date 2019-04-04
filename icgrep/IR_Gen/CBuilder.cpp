@@ -1260,7 +1260,7 @@ Value * CBuilder::CreateLog2(Value * value) {
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
 }
 
-Value * CBuilder::GetString(StringRef Str) {
+Constant * CBuilder::GetString(StringRef Str) {
     Module * const m = getModule();
     GlobalVariable * ptr = m->getGlobalVariable(Str, true);
     if (ptr == nullptr) {
@@ -1554,10 +1554,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
     }
     bool modified = false;
     DenseSet<Value *> S;
+    // TODO: incorporate alias analysis to reduce redundant memory checks?
     for (auto & F : M) {
         for (auto & B : F) {
             S.clear();
-            for (BasicBlock::iterator i = B.begin(); i != B.end(); ) {
+            for (auto i = B.begin(); i != B.end(); ) {
                 Instruction & inst = *i;
                 if (LLVM_UNLIKELY(isa<CallInst>(inst))) {
                     CallInst & ci = cast<CallInst>(inst);
@@ -1572,11 +1573,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                     const ConstantDataArray * const d = cast<ConstantDataArray>(g->getInitializer());
                                     return d->getRawDataValues().data();
                                 };
-                                const char * const _name = extract(ci.getOperand(1));
-                                const char * const _msg = extract(ci.getOperand(2));
-                                const uintptr_t * const _trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
-                                const uint32_t _n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
-                                __report_failure(_name, _msg, _trace, _n);
+                                const char * const name = extract(ci.getOperand(1));
+                                const char * const msg = extract(ci.getOperand(2));
+                                const uintptr_t * const trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
+                                const uint32_t n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
+                                __report_failure(name, msg, trace, n);
                                 exit(-1);
                             }
                             remove = true;

@@ -77,6 +77,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     loadBufferHandles(b);
     readInitialItemCounts(b);
     readConsumedItemCounts(b);
+    incrementNumberOfSegmentsCounter(b);
     mKernelEntry = b->GetInsertBlock();
     b->CreateUnlikelyCondBr(initiallyTerminated(b), mKernelExit, mKernelLoopEntry);
 
@@ -233,8 +234,10 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
             mAlreadyProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
             mFinalProducedPhi[i]->addIncoming(mProducedItemCount[i], entryBlock);
         }
-        if (mAlreadyProgressedPhi) {
-            mAlreadyProgressedPhi->addIncoming(b->getTrue(), entryBlock);
+        assert (mAlreadyProgressedPhi);
+        mAlreadyProgressedPhi->addIncoming(b->getTrue(), entryBlock);
+        if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+            mBlockedOnFirstStridePhi->addIncoming(b->getInt64(0), entryBlock);
         }
         // This needs to test mLastPartialSegment.
         b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, mKernelLoopEntry);
@@ -432,6 +435,10 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelIndex);
     mAlreadyProgressedPhi = b->CreatePHI(b->getInt1Ty(), 2, prefix + "_madeProgress");
     mAlreadyProgressedPhi->addIncoming(mPipelineProgress, entryBlock);
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+        mBlockedOnFirstStridePhi = b->CreatePHI(b->getInt64Ty(), 2, prefix + "_blockedOnFirstStride");
+        mBlockedOnFirstStridePhi->addIncoming(b->getInt64(1), entryBlock);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -395,6 +395,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
 void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
     printOptionalCycleCounter(b);
+    printOptionalBlockingIOStatistics(b);
     SmallVector<Value *, 16> params;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);

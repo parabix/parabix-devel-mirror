@@ -78,7 +78,7 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     mAccessibleInputItems[inputPort] = accessible;
     Value * const halting = isPipelineInput(inputPort) ? b->getTrue() : mHalted;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelLoopCall);
-    branchToTargetOrLoopExit(b, sufficientInput, target, halting);
+    branchToTargetOrLoopExit(b, StreamPort(PortType::Input, inputPort), sufficientInput, target, halting);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -153,7 +153,7 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
         Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
         BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
         Value * const halting = isPipelineOutput(outputPort) ? b->getTrue() : mHalted;
-        branchToTargetOrLoopExit(b, hasEnough, target, halting);
+        branchToTargetOrLoopExit(b, StreamPort(PortType::Output, outputPort), hasEnough, target, halting);
     }
     mWritableOutputItems[outputPort] = writable;
 }
@@ -202,14 +202,28 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief branchToTargetOrLoopExit
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond, BasicBlock * const target, Value * const halting) {
+void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, const StreamPort port, Value * const cond, BasicBlock * const target, Value * const halting) {
+
+    BasicBlock * blockingIOCounter = nullptr;
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
+        const auto prefix = makeBufferName(mKernelIndex, port);
+        blockingIOCounter = b->CreateBasicBlock(prefix + "_recordBlockedIO", mKernelLoopExit);
+    }
+
+    b->CreateLikelyCondBr(cond, target, blockingIOCounter ? blockingIOCounter : mKernelLoopExit);
+
+    if (blockingIOCounter) {
+        b->SetInsertPoint(blockingIOCounter);
+        recordBlockingIO(b, port);
+        b->CreateBr(mKernelLoopExit);
+    }
 
     BasicBlock * const exitBlock = b->GetInsertBlock();
+
     mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
     mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     mHaltingPhi->addIncoming(halting, exitBlock);
 
-    b->CreateLikelyCondBr(cond, target, mKernelLoopExit);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         mUpdatedProcessedPhi[i]->addIncoming(mAlreadyProcessedPhi[i], exitBlock);
@@ -221,6 +235,7 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, Value * const cond
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         mUpdatedProducedPhi[i]->addIncoming(mAlreadyProducedPhi[i], exitBlock);
     }
+
     b->SetInsertPoint(target);
 }
 
