@@ -202,17 +202,17 @@ public:
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef prefix);
 
-    Ternary * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c) {
+    PabloAST * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c) {
         return createTernary(getInteger(mask), a, b, c);
     }
 
-    Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c);
+    PabloAST * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c);
 
-    Ternary * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
+    PabloAST * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
         return createTernary(getInteger(mask), a, b, c, prefix);
     }
 
-    Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix);
+    PabloAST * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix);
 
     PabloAST * createCount(PabloAST * expr);
 

@@ -665,11 +665,11 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
 }
 
 
-Ternary * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c) {
+PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c) {
     return MAKE_QUATERNARY(Ternary, mask, a, b, c);
 }
 
-Ternary * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
+PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
     return MAKE_NAMED_QUATERNARY(Ternary, prefix, mask, a, b, c);
 }
 

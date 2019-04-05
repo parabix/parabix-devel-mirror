@@ -515,7 +515,7 @@ void GB_18030_CoreLogic::generatePabloMethod() {
     for (unsigned i = BitsPerInputByte; i < 16; ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
     }
-    for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
+    for (unsigned char_code = 0x81; char_code < 0x82; char_code++) {
         std::stringstream gbpfx;
         gbpfx << "gb_" << std::hex << char_code << "_16[";
         PabloAST * byte1 = pb.createAnd(GB_prefix2, Byte1_compiler.compileCC(makeCC(char_code - 0x80, &cc::Byte)));
@@ -619,7 +619,7 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
 
     std::vector<std::pair<unsigned, unsigned>> range_tbl = get_GB_RangeTable();
     PabloAST * GE_lo_bound = pb.createOnes();
-    for (unsigned i = 0; i < range_tbl.size(); i++) {
+    for (unsigned i = 0; i < range_tbl.size() - 2; i++) {
         unsigned base = range_tbl[i].first;
         codepoint_t cp = range_tbl[i].second;
         codepoint_t offset = cp - base;

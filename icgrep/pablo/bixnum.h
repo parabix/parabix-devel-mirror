@@ -23,6 +23,10 @@ public:
     PabloAST * NEQ(BixNum value, BixNum test);
     PabloAST * UGE(BixNum value, unsigned floor);
     PabloAST * UGE(BixNum value, BixNum floor);
+    BixNum ZeroExtend(BixNum value, unsigned extended_size);
+    BixNum SignExtend(BixNum value, unsigned extended_size);
+    BixNum Truncate(BixNum value, unsigned truncated_size);
+
 
 private:
     PabloBuilder & mPB;

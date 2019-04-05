@@ -10,15 +10,15 @@
 namespace pablo {
 
 PabloAST * createXor3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
-    return pb.createXor(op1, pb.createXor(op2, op3));
+    return pb.createTernary(0x96, op1, op2, op3);
 }
 
 PabloAST * createMajority3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
-    return pb.createOr(pb.createAnd(op1, op2), pb.createAnd(op3, pb.createOr(op1, op2)));
+    return pb.createTernary(0xE8, op1, op2, op3);
 }
 
 PabloAST * createIf3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
-    return pb.createOr(pb.createAnd(op1, op2), pb.createAnd(op3, pb.createNot(op1)));
+    return pb.createTernary(0xCA, op1, op2, op3);
 }
 
 PabloAST * BixNumArithmetic::UGE(BixNum value, unsigned floor) {
@@ -91,6 +91,39 @@ PabloAST * BixNumArithmetic::NEQ(BixNum value, BixNum test) {
         any_NEQ = mPB.createOr(any_NEQ, value[i]);
     }
     return any_NEQ;
+}
+
+BixNum BixNumArithmetic::ZeroExtend(BixNum value, unsigned extended_size) {
+    assert(extended_size >= value.size());
+    BixNum extended(extended_size);
+    for (unsigned i = 0; i < value.size(); i++) {
+        extended[i] = value[i];
+    }
+    for (unsigned i = value.size(); i < extended_size; i++) {
+        extended[i] = mPB.createZeroes();
+    }
+    return extended;
+}
+
+BixNum BixNumArithmetic::SignExtend(BixNum value, unsigned extended_size) {
+    assert(extended_size >= value.size());
+    BixNum extended(extended_size);
+    for (unsigned i = 0; i < value.size(); i++) {
+        extended[i] = value[i];
+    }
+    for (unsigned i = value.size(); i < extended_size; i++) {
+        extended[i] = value.back();
+    }
+    return extended;
+}
+
+BixNum BixNumArithmetic::Truncate(BixNum value, unsigned truncated_size) {
+    assert(truncated_size <= value.size());
+    BixNum truncated(truncated_size);
+    for (unsigned i = 0; i < truncated_size; i++) {
+        truncated[i] = value[i];
+    }
+    return truncated;
 }
 
 PabloAST * BixNumArithmetic::EQ(BixNum value, BixNum test) {
