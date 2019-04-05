@@ -19,7 +19,6 @@
 #include <boost/container/flat_set.hpp>
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
-
 #include <llvm/Support/raw_ostream.h>
 
 using namespace boost;
@@ -100,7 +99,6 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
     const auto baseNonZeroEntries = mNonZero.size();
     Statement * stmt = block->front();
     while (stmt) {
-
         if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
             Assign * const assign = cast<Assign>(stmt);
             PabloAST * const var = assign->getVariable();
@@ -182,6 +180,11 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
             if (folded) {
                 Statement * const prior = stmt->getPrevNode();
                 stmt->replaceWith(folded);
+                // Since folding a statement may result in inserting new
+                // sub-statements or transform the statement in such a
+                // manner that we must re-evaluate it, check the statement
+                // after the prior to ensure that we traverse the AST in
+                // sequential order.
                 stmt = prior ? prior->getNextNode() : block->front();
                 continue;
             }
@@ -189,9 +192,11 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
             // By recording which statements have already been seen, we can detect the redundant statements
             // as any having the same type and operands. If so, we can replace its users with the prior statement.
             // and erase this statement from the AST
-            const auto f = expressions.findOrAdd(stmt);
-            if (!f.second) {
-                stmt = stmt->replaceWith(f.first);
+            PabloAST * replacement = nullptr;
+            bool added = false;
+            std::tie(replacement, added) = expressions.findOrAdd(stmt);
+            if (!added) {
+                stmt = stmt->replaceWith(replacement);
                 continue;
             }
 
@@ -266,9 +271,9 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
  ** ------------------------------------------------------------------------------------------------------------- */
 static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
     if (isa<Not>(stmt)) {
-        PabloAST * value = stmt->getOperand(0);
+        PabloAST * value = cast<Not>(stmt)->getExpr();
         if (LLVM_UNLIKELY(isa<Not>(value))) {
-            return cast<Not>(value)->getOperand(0); // ¬¬A ⇔ A
+            return cast<Not>(value)->getExpr(); // ¬¬A ⇔ A
         } else if (LLVM_UNLIKELY(isa<Zeroes>(value))) {
             return block->createOnes(stmt->getType()); // ¬0 ⇔ 1
         }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
@@ -305,38 +310,52 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
             return nullptr;
         }
     } else if (isa<Xor>(stmt)) {
+
         PabloAST * op[2];
         op[0] = stmt->getOperand(0);
         op[1] = stmt->getOperand(1);
+        if (LLVM_UNLIKELY(op[0] == op[1])) {
+            return block->createZeroes(stmt->getType());
+        }
         bool negated = false;
         PabloAST * expr = nullptr;
+        bool unchanged = true;
         for (unsigned i = 0; i < 2; ++i) {
-            if (Not * const n = dyn_cast<Not>(op[i])) {
+            if (isa<Not>(op[i])) {
                 negated ^= true;
-                op[i] = n->getExpr();
+                op[i] = cast<Not>(op[i])->getExpr();
+                unchanged = false;
             } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
                 negated ^= isa<Ones>(op[i]);
                 expr = op[1 - i];
+                unchanged = false;
             }
         }
+
+        if (LLVM_LIKELY(unchanged)) {
+            return nullptr;
+        }
+
+        block->setInsertPoint(stmt);
+
         if (LLVM_LIKELY(expr == nullptr)) {
             if (LLVM_UNLIKELY(op[0] == op[1])) {
-                if (LLVM_UNLIKELY(negated)) {
+                if (LLVM_LIKELY(negated)) {
                     return block->createOnes(stmt->getType());
                 } else {
                     return block->createZeroes(stmt->getType());
                 }
-            } else {
-                if (op[1] < op[0]) {
-                    std::swap(op[0], op[1]);
-                }
-                stmt->setOperand(0, op[0]);
-                stmt->setOperand(1, op[1]);
             }
+            if (op[1] < op[0]) {
+                std::swap(op[0], op[1]);
+            }
+            expr = block->createXor(op[0], op[1]);
         }
+
         if (LLVM_UNLIKELY(negated)) {
-            block->setInsertPoint(stmt);
-            expr = triviallyFold(block->createNot(expr ? expr : stmt), block);
+            Not * const negated = block->createNot(expr);
+            PabloAST * const folded = triviallyFold(negated, block);
+            expr = folded ? folded : negated;
         }
         return expr;
     } else if (isa<Advance>(stmt)) {
