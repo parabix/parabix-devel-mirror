@@ -588,6 +588,7 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
 
     BixNum byte3_lo7(7);
     for (unsigned i = 0; i < 7; i++) {
+        byte1_lo7[i] = pb.createAnd(GB_4byte, byte1_lo7[i]);
         byte3_lo7[i] = pb.createAnd(GB_4byte, byte2[i]);
     }
     BixNum byte2_lo4(4);
