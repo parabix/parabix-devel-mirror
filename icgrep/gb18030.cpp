@@ -515,7 +515,7 @@ void GB_18030_CoreLogic::generatePabloMethod() {
     for (unsigned i = BitsPerInputByte; i < 16; ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
     }
-    for (unsigned char_code = 0x81; char_code < 0x82; char_code++) {
+    for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
         std::stringstream gbpfx;
         gbpfx << "gb_" << std::hex << char_code << "_16[";
         PabloAST * byte1 = pb.createAnd(GB_prefix2, Byte1_compiler.compileCC(makeCC(char_code - 0x80, &cc::Byte)));
@@ -600,14 +600,18 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     BixNum lo11 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte3_lo7, 1), 10);
     lo11 = BixNumModularArithmetic(pb).Add(lo11, byte4_lo4);
     BixNum lo15 = BixNumModularArithmetic(pb).Add(BixNumFullArithmetic(pb).Mul(byte2_lo4, 1260), lo11);
+
+    BixNum SMP_base = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte1_lo7, 0x10), 12600);
+    SMP_base = BixNumModularArithmetic(pb).Add(SMP_base, 0x10000);
     BixNum byte1_X_12600 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte1_lo7, 1), 12600);
+
     BixNum GB_val = BixNumModularArithmetic(pb).Add(byte1_X_12600, lo15);
-    const unsigned GB_SupplementaryPlaneValue = 189000;
+    BixNum SMP_offset = BixNumModularArithmetic(pb).Add(SMP_base, lo15);
+
     PabloAST * aboveBMP = pb.createAnd(GB_4byte, BixNumArithmetic(pb).UGE(byte1_lo7, 0x10), "gb_aboveBMP");
 
     Zeroes * zeroes = pb.createZeroes();
     std::vector<PabloAST *> u21(21, zeroes);
-    BixNum SMP_offset = BixNumModularArithmetic(pb).Sub(GB_val, GB_SupplementaryPlaneValue);
     for (unsigned i = 0; i < 21; i++) {
         u21[i] = pb.createAnd(SMP_offset[i], aboveBMP);
     }
@@ -615,12 +619,12 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
         u21[i] = pb.createOr(u16[i], u21[i]);
     }
 
-
-
+    const unsigned max_pointer_for_BMP = 39419;
     std::vector<std::pair<unsigned, unsigned>> range_tbl = get_GB_RangeTable();
     PabloAST * GE_lo_bound = pb.createOnes();
-    for (unsigned i = 0; i < range_tbl.size() - 2; i++) {
+    for (unsigned i = 0; i < range_tbl.size() - 1; i++) {
         unsigned base = range_tbl[i].first;
+        if (base > max_pointer_for_BMP) break;
         codepoint_t cp = range_tbl[i].second;
         codepoint_t offset = cp - base;
         PabloAST * GE_hi_bound;
@@ -636,7 +640,6 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
         }
         GE_lo_bound = GE_hi_bound;
     }
-
     Var * const u21_basis = getOutputStreamVar("u21_basis");
     for (unsigned i = 0; i < 21; i++) {
         pb.createAssign(pb.createExtract(u21_basis, pb.getInteger(i)), u21[i]);
