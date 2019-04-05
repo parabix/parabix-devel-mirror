@@ -505,7 +505,7 @@ void GB_18030_CoreLogic::generatePabloMethod() {
     PabloAST * GB_prefix2 = pb.createNot(pb.createOr(ASCII, GB_4byte), "gb_prefix2");
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
     std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
-    cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), byte1_basis);
+    cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), BixNumArithmetic(pb).ZeroExtend(byte1_basis, 8));
     PabloAST * zeroes = pb.createZeroes();
     Var * u16[16];
     std::vector<std::vector<UCD::codepoint_t>> GB_tbl = get_GB_DoubleByteTable();
