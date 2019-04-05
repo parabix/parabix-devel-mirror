@@ -586,43 +586,50 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     BixNum nybble2 = getInputStreamSet("nybble2");
     BixNum u16 = getInputStreamSet("u16_basis");
 
+    PabloAST * zeroes = pb.createZeroes();
+    Var * u21[21];
+    for (unsigned i = 0; i < 21; ++i) {
+        u21[i] = pb.createVar("u21_" + std::to_string(i), zeroes);
+    }
+
+    PabloBuilder nb = pb.createScope();
+
     BixNum byte3_lo7(7);
     for (unsigned i = 0; i < 7; i++) {
-        byte1_lo7[i] = pb.createAnd(GB_4byte, byte1_lo7[i]);
-        byte3_lo7[i] = pb.createAnd(GB_4byte, byte2[i]);
+        byte1_lo7[i] = nb.createAnd(GB_4byte, byte1_lo7[i]);
+        byte3_lo7[i] = nb.createAnd(GB_4byte, byte2[i]);
     }
     BixNum byte2_lo4(4);
     BixNum byte4_lo4(4);
     for (unsigned i = 0; i < 4; i++) {
-        byte2_lo4[i] = pb.createAnd(GB_4byte, nybble1[i], "gb_nybble1");
-        byte4_lo4[i] = pb.createAnd(GB_4byte, nybble2[i], "gb_nybble2");
+        byte2_lo4[i] = nb.createAnd(GB_4byte, nybble1[i], "gb_nybble1");
+        byte4_lo4[i] = nb.createAnd(GB_4byte, nybble2[i], "gb_nybble2");
     }
 
-    BixNum lo11 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte3_lo7, 1), 10);
-    lo11 = BixNumModularArithmetic(pb).Add(lo11, byte4_lo4);
-    BixNum lo15 = BixNumModularArithmetic(pb).Add(BixNumFullArithmetic(pb).Mul(byte2_lo4, 1260), lo11);
+    BixNum lo11 = BixNumFullArithmetic(nb).Mul(BixNumModularArithmetic(nb).Sub(byte3_lo7, 1), 10);
+    lo11 = BixNumModularArithmetic(nb).Add(lo11, byte4_lo4);
+    BixNum lo15 = BixNumModularArithmetic(nb).Add(BixNumFullArithmetic(nb).Mul(byte2_lo4, 1260), lo11);
 
-    BixNum SMP_base = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte1_lo7, 0x10), 12600);
-    SMP_base = BixNumModularArithmetic(pb).Add(SMP_base, 0x10000);
-    BixNum byte1_X_12600 = BixNumFullArithmetic(pb).Mul(BixNumModularArithmetic(pb).Sub(byte1_lo7, 1), 12600);
+    BixNum SMP_base = BixNumFullArithmetic(nb).Mul(BixNumModularArithmetic(nb).Sub(byte1_lo7, 0x10), 12600);
+    SMP_base = BixNumModularArithmetic(nb).Add(SMP_base, 0x10000);
+    BixNum byte1_X_12600 = BixNumFullArithmetic(nb).Mul(BixNumModularArithmetic(nb).Sub(byte1_lo7, 1), 12600);
 
-    BixNum GB_val = BixNumModularArithmetic(pb).Add(byte1_X_12600, lo15);
-    BixNum SMP_offset = BixNumModularArithmetic(pb).Add(SMP_base, lo15);
+    BixNum GB_val = BixNumModularArithmetic(nb).Add(byte1_X_12600, lo15);
+    BixNum SMP_offset = BixNumModularArithmetic(nb).Add(SMP_base, lo15);
 
-    PabloAST * aboveBMP = pb.createAnd(GB_4byte, BixNumArithmetic(pb).UGE(byte1_lo7, 0x10), "gb_aboveBMP");
+    PabloAST * aboveBMP = nb.createAnd(GB_4byte, BixNumArithmetic(nb).UGE(byte1_lo7, 0x10), "gb_aboveBMP");
 
-    Zeroes * zeroes = pb.createZeroes();
-    std::vector<PabloAST *> u21(21, zeroes);
-    for (unsigned i = 0; i < 21; i++) {
-        u21[i] = pb.createAnd(SMP_offset[i], aboveBMP);
+    PabloAST * temp[16];
+    for (unsigned i = 16; i < 21; i++) {
+        nb.createAssign(u21[i], nb.createAnd(SMP_offset[i], aboveBMP));
     }
     for (unsigned i = 0; i < 16; i++) {
-        u21[i] = pb.createOr(u16[i], u21[i]);
+        temp[i] = nb.createAnd(SMP_offset[i], aboveBMP);
     }
 
     const unsigned max_pointer_for_BMP = 39419;
     std::vector<std::pair<unsigned, unsigned>> range_tbl = get_GB_RangeTable();
-    PabloAST * GE_lo_bound = pb.createOnes();
+    PabloAST * GE_lo_bound = nb.createOnes();
     for (unsigned i = 0; i < range_tbl.size() - 1; i++) {
         unsigned base = range_tbl[i].first;
         if (base > max_pointer_for_BMP) break;
@@ -630,22 +637,28 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
         codepoint_t offset = cp - base;
         PabloAST * GE_hi_bound;
         if (i < range_tbl.size() - 1) {
-            GE_hi_bound = BixNumArithmetic(pb).UGE(GB_val, range_tbl[i+1].first);
+            GE_hi_bound = BixNumArithmetic(nb).UGE(GB_val, range_tbl[i+1].first);
         } else {
-            GE_hi_bound = pb.createOnes();
+            GE_hi_bound = nb.createOnes();
         }
-        PabloAST * in_range = pb.createAnd(GE_lo_bound, pb.createNot(GE_hi_bound));
-        BixNum mapped = BixNumModularArithmetic(pb).Add(GB_val, offset);
+        PabloAST * in_range = nb.createAnd(GE_lo_bound, nb.createNot(GE_hi_bound));
+        BixNum mapped = BixNumModularArithmetic(nb).Add(GB_val, offset);
         for (unsigned i = 0; i < 16; i++) {
-            u21[i] = pb.createOr(u21[i], pb.createAnd(in_range, mapped[i]));
+            temp[i] = nb.createOr(temp[i], nb.createAnd(in_range, mapped[i]));
         }
         GE_lo_bound = GE_hi_bound;
     }
+    for (unsigned i = 0; i < 16; i++) {
+        nb.createAssign(u21[i], temp[i]);
+    }
+    pb.createIf(GB_4byte, nb);
     Var * const u21_basis = getOutputStreamVar("u21_basis");
-    for (unsigned i = 0; i < 21; i++) {
+    for (unsigned i = 0; i < 16; i++) {
+        pb.createAssign(pb.createExtract(u21_basis, pb.getInteger(i)), pb.createOr(u16[i], u21[i]));
+    }
+    for (unsigned i = 16; i < 21; i++) {
         pb.createAssign(pb.createExtract(u21_basis, pb.getInteger(i)), u21[i]);
     }
-
 }
 
 void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
