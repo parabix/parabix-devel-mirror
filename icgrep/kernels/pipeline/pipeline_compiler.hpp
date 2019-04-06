@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -403,9 +403,10 @@ const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 
 
-const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".CYC";
-const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SC";
-const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".BY";
+const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
+const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
+const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".SBY";
+const static std::string STATISTICS_BUFFER_EXPANSION_SUFFIX = ".SBX";
 
 class PipelineCompiler {
 
@@ -608,6 +609,7 @@ protected:
     void printOptionalCycleCounter(BuilderRef b);
     StreamPort selectPrincipleCycleCountBinding(const unsigned kernel) const;
     void printOptionalBlockingIOStatistics(BuilderRef b);
+    void printOptionalBufferExpansionHistory(BuilderRef b);
 
 // pipeline analysis functions
 

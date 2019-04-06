@@ -608,9 +608,9 @@ private:
 
     void initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const bool skipThreadLocal = false) const;
 
-    unsigned getSharedScalarIndex(const llvm::StringRef name) const;
+    unsigned getSharedScalarIndex(KernelBuilder * b, const llvm::StringRef name) const;
 
-    llvm::Value * getScalarValuePtr(const llvm::StringRef name) const;
+    llvm::Value * getScalarValuePtr(KernelBuilder * b, const llvm::StringRef name) const;
 
     void setTerminationSignalPtr(llvm::Value * ptr) {
         mTerminationSignalPtr = ptr;

@@ -296,7 +296,7 @@ inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
         SmallVector<char, 100> buffer;
         raw_svector_ostream line(buffer);
 
-        line << "BLOCKING I/O:\n\n"
+        line << "BLOCKING I/O STATISTICS:\n\n"
                 "  # "  // kernel ID #  (only shown for first)
                  "KERNEL"; // kernel Name (only shown for first)
         line.indent(maxKernelLength - 6);
@@ -403,7 +403,7 @@ inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 const Binding & ref = binding.Binding;
                 args.push_back(b->GetString(ref.getName()));
 
-                args.push_back(b->getInt32(target(e, mBufferGraph) - FirstStreamSet + 1));
+                args.push_back(b->getInt32(getBufferIndex(target(e, mBufferGraph))));
 
                 const auto prefix2 = prefix + STATISTICS_BLOCKING_IO_SUFFIX + "O";
                 Value * const blockedCount = b->getScalarField(prefix2 + std::to_string(outputPort));
@@ -426,5 +426,169 @@ inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
         b->CreateCall(b->GetDprintf(), finalArgs);
     }
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief printOptionalBufferExpansionHistory
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+
+        // Print the title line
+
+        size_t maxKernelLength = 0;
+        size_t maxBindingLength = 0;
+        b->setKernel(mPipelineKernel);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const Kernel * const kernel = getKernel(i);
+            maxKernelLength = std::max(maxKernelLength, kernel->getName().length());
+            for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const BufferRateData & binding = mBufferGraph[e];
+                const Binding & ref = binding.Binding;
+                maxBindingLength = std::max(maxBindingLength, ref.getName().length());
+            }
+            for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
+                const BufferRateData & binding = mBufferGraph[e];
+                const Binding & ref = binding.Binding;
+                maxBindingLength = std::max(maxBindingLength, ref.getName().length());
+            }
+        }
+        maxKernelLength += 4;
+        maxBindingLength += 4;
+
+        SmallVector<char, 100> buffer;
+        raw_svector_ostream format(buffer);
+
+        // TODO: if expanding buffers are supported again, we need another field here for streamset size
+
+        format << "BUFFER EXPANSION HISTORY:\n\n"
+                  "  # "  // kernel ID #  (only shown for first)
+                  "KERNEL"; // kernel Name (only shown for first)
+        format.indent(maxKernelLength - 6);
+        format << "PORT";
+        format.indent(5 + maxBindingLength - 4); // I/O Type (e.g., input port 3 = I3), Port Name
+        format << " BUFFER " // buffer ID #
+                  "        SEG # "
+                  "              SIZE\n"; // % of blocking attempts
+
+        Constant * const STDERR = b->getInt32(STDERR_FILENO);
+
+        FixedArray<Value *, 2> titleArgs;
+        titleArgs[0] = STDERR;
+        titleArgs[1] = b->GetString(format.str());
+        b->CreateCall(b->GetDprintf(), titleArgs);
+
+        // Print each kernel line
+
+        // generate line format string
+        buffer.clear();
+        format << "%3" PRIu32 " " // kernel #
+                  "%-" << maxKernelLength << "s" // kernel name
+                  "O%-3" PRIu32 " " // I/O type
+                  "%-" << maxBindingLength << "s" // port name
+                  "%7" PRIu32 // buffer ID #
+                  "%14" PRIu64 " " // segment #
+                  "%18" PRIu64 "\n"; // size (as multiple of streamset block size)
+
+        FixedArray<Value *, 9> args;
+        args[0] = STDERR;
+        args[1] = b->GetString(format.str());
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            bool first = true;
+            for (const auto & output : make_iterator_range(out_edges(i, mBufferGraph))) {
+                const BufferRateData & br = mBufferGraph[output];
+                const auto bufferVertex = target(output, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[bufferVertex];
+                if (isa<DynamicBuffer>(bn.Buffer)) {
+
+                    if (first) {
+                        const Kernel * const kernel = getKernel(i);
+                        args[2] = b->getInt32(i);
+                        args[3] = b->GetString(kernel->getName());
+                        first = false;
+                    }
+
+                    const auto outputPort = br.outputPort();
+                    args[4] = b->getInt32(outputPort);
+                    const Binding & binding = br.Binding;
+                    args[5] = b->GetString(binding.getName());
+                    args[6] = b->getInt32(getBufferIndex(bufferVertex));
+
+                    const auto prefix = makeBufferName(i, StreamPort{PortType::Output, outputPort});
+                    Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+
+                    Constant * const ZERO = b->getInt32(0);
+                    Constant * const ONE = b->getInt32(1);
+
+                    Value * const traceArrayField = b->CreateGEP(traceData, {ZERO, ZERO});
+                    Value * const traceArray = b->CreateLoad(traceArrayField);
+                    Value * const traceCountField = b->CreateGEP(traceData, {ZERO, ONE});
+                    Value * const traceCount = b->CreateLoad(traceCountField);
+
+                    BasicBlock * const outputEntry = b->GetInsertBlock();
+                    BasicBlock * const outputLoop = b->CreateBasicBlock(prefix + "_bufferExpansionReportLoop");
+                    BasicBlock * const outputExit = b->CreateBasicBlock(prefix + "_bufferExpansionReportExit");
+
+                    b->CreateBr(outputLoop);
+
+                    b->SetInsertPoint(outputLoop);
+                    PHINode * const index = b->CreatePHI(b->getSizeTy(), 2);
+                    index->addIncoming(b->getSize(0), outputEntry);
+
+                    Value * const segmentNumField = b->CreateGEP(traceArray, {index, ZERO});
+                    Value * const segmentNum = b->CreateLoad(segmentNumField);
+
+                    args[7] = segmentNum;
+
+                    Value * const newBufferSizeField = b->CreateGEP(traceArray, {index, ONE});
+                    Value * const newBufferSize = b->CreateLoad(newBufferSizeField);
+
+                    args[8] = newBufferSize;
+
+                    b->CreateCall(b->GetDprintf(), args);
+
+                    Value * const nextIndex = b->CreateAdd(index, b->getSize(1));
+                    index->addIncoming(nextIndex, outputLoop);
+                    Value * const notDone = b->CreateICmpULT(nextIndex, traceCount);
+                    b->CreateCondBr(notDone, outputLoop, outputExit);
+
+                    b->SetInsertPoint(outputExit);
+                }
+            }
+        }
+        // print final new line
+        FixedArray<Value *, 2> finalArgs;
+        finalArgs[0] = STDERR;
+        finalArgs[1] = b->GetString("\n");
+        b->CreateCall(b->GetDprintf(), finalArgs);
+    }
+}
+
+#if 0
+const auto firstBuffer = PipelineOutput + 1;
+const auto lastBuffer = num_vertices(mBufferGraph);
+for (auto i = firstBuffer; i != lastBuffer; ++i) {
+    const BufferNode & bn = mBufferGraph[i];
+    if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
+        bn.Buffer->releaseBuffer(b);
+
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+            if (isa<DynamicBuffer>(bn.Buffer)) {
+
+                const auto pe = in_edge(i, mBufferGraph);
+                const auto p = source(pe, mBufferGraph);
+                const BufferRateData & rd = mBufferGraph[pe];
+                const auto prefix = makeBufferName(p, rd.Port);
+
+                Value * const traceData = b->getScalarField(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+                Constant * const ZERO = b->getInt32(0);
+                b->CreateFree(b->CreateLoad(b->CreateGEP(traceData, {ZERO, ZERO})));
+            }
+        }
+
+    }
+}
+#endif
+
 
 }

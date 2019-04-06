@@ -1,6 +1,8 @@
 #ifndef PE_CONSTANT_H
 #define PE_CONSTANT_H
 
+#if 0
+
 #include <pablo/pabloAST.h>
 
 namespace pablo {
@@ -33,5 +35,7 @@ private:
 };
 
 }
+
+#endif
 
 #endif // PE_CONSTANT_H

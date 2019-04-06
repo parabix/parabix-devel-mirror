@@ -103,13 +103,18 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         } else {
             RateValue lower{std::numeric_limits<unsigned>::max()};
             RateValue upper{std::numeric_limits<unsigned>::max()};
-            for (const auto & ce : make_iterator_range(in_edges(i, G))) {
-                const BufferRateData & consumptionRate = G[ce];
-                const BufferRateData & productionRate = G[in_edge(source(ce, G), G)];
-                const auto min = div_by_non_zero(productionRate.Minimum, consumptionRate.Maximum);
-                lower = std::min(lower, min);
-                const auto max = div_by_non_zero(productionRate.Maximum, consumptionRate.Minimum);
-                upper = std::min(upper, max);
+            // for each input ...
+            for (const auto & input : make_iterator_range(in_edges(i, G))) {
+                const BufferRateData & inputRate = G[input];
+                const auto buffer = source(input, G);
+                // for each producer of the input ...
+                for (const auto & output : make_iterator_range(in_edges(buffer, G))) {
+                    const BufferRateData & outputRate = G[output];
+                    const auto min = div_by_non_zero(outputRate.Minimum, inputRate.Maximum);
+                    lower = std::min(lower, min);
+                    const auto max = div_by_non_zero(outputRate.Maximum, inputRate.Minimum);
+                    upper = std::min(upper, max);
+                }
             }
             kn.Lower = lower;
             kn.Upper = upper;
@@ -226,7 +231,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const BufferRateData & consumerRate = G[ce];
                 requiredSpace = lcm(requiredSpace, consumerRate.Maximum);
                 const auto c = target(ce, G);
-                const BufferNode & consumerNode = G[c];
+                const BufferNode & consumerData = G[c];
                 const Kernel * const consumer = getKernel(c);
                 const Binding & input = consumerRate.Binding;
 
@@ -238,7 +243,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 lookAheadSpace = std::max(lookAheadSpace, overflow);
 
                 // Could the consumption rate be less than the production rate?
-                if ((consumerNode.Lower * consumerRate.Minimum) < producerRate.Maximum) {
+                if (consumerData.Lower * consumerRate.Minimum < producerRate.Maximum) {
                     dynamic = true;
                 }
 
@@ -289,8 +294,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             unsigned overflowSize = std::max(bn.CopyBack, bn.LookAhead);
             // compute the buffer size
             if (lookBehindSize || overflowSize) {
-                const RateValue requiredOverflow(std::max(lookBehindSize, overflowSize) * 2);
-                requiredSpace = std::max(requiredSpace, requiredOverflow);
+                const RateValue bufferCopySpace(std::max(lookBehindSize, overflowSize) * 2);
+                requiredSpace = std::max(requiredSpace, bufferCopySpace);
             }
             const auto bufferSpace = lcm(requiredSpace, blockWidth);
             assert (bufferSpace.denominator() == 1);
@@ -312,7 +317,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-    // printBufferGraph(G, errs());
+//    printBufferGraph(G, errs());
 
     return G;
 }
@@ -325,7 +330,9 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
     using KindId = StreamSetBuffer::BufferKind;
 
     out << "digraph G {\n"
-           "v" << PipelineInput << " [label=\"[" << PipelineInput << "] P_{in}\" peripheries=2, shape=rect];\n";
+           "v" << PipelineInput << " [label=\"[" <<
+           PipelineInput << "] P_{in}\""
+           " shape=rect, style=rounded, peripheries=2];\n";
 
     auto rate_range = [&out](const RateValue & a, const RateValue & b) {
         if (a.denominator() > 1 || b.denominator() > 1) {
@@ -345,12 +352,14 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferNode & bn = G[i];
 
         out << "v" << i <<
-               " [label=\"[" << i << "] " << name << '\n';
+               " [label=\"[" << i << "] " << name << "\\n";
         rate_range(bn.Lower, bn.Upper);
-        out << "\" peripheries=2, shape=rect];\n";
+        out << "\" shape=rect, style=rounded, peripheries=2];\n";
     }
 
-    out << "v" << PipelineOutput << " [label=\"[" << PipelineOutput << "]P_{out}\" peripheries=2, shape=rect];\n";
+    out << "v" << PipelineOutput << " [label=\"[" <<
+           PipelineOutput << "] P_{out}\""
+           " shape=rect, style=rounded, peripheries=2];\n";
 
     const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(G);
@@ -420,7 +429,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         rate_range(pd.Minimum, pd.Maximum);
         std::string name = pd.Binding.get().getName();
         boost::replace_all(name, "\"", "\\\"");
-        out << '\n' << name << "\"];\n";
+        out << "\\n" << name << "\"];\n";
     }
 
     out << "}\n\n";
@@ -438,6 +447,19 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
             const BufferRateData & rd = mBufferGraph[e];
             const auto prefix = makeBufferName(index, rd.Port);
             mPipelineKernel->addInternalScalar(bn.Buffer->getHandleType(b), prefix);
+            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+                if (isa<DynamicBuffer>(bn.Buffer)) {
+                    LLVMContext & C = b->getContext();
+                    FixedArray<Type *, 2> traceStruct;
+                    traceStruct[0] = b->getSizeTy(); // segment num
+                    traceStruct[1] = b->getSizeTy(); // new capacity
+                    Type * const traceStructTy = StructType::get(C, traceStruct);
+                    traceStruct[0] = traceStructTy->getPointerTo(); // pointer to trace log
+                    // traceStruct[1] = b->getSizeTy(); // length of trace log
+                    mPipelineKernel->addInternalScalar(StructType::get(C, traceStruct),
+                                                       prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+                }
+            }
         }
     }
 }
@@ -458,11 +480,30 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
             const auto pe = in_edge(i, mBufferGraph);
             const auto p = source(pe, mBufferGraph);
             const BufferRateData & rd = mBufferGraph[pe];
-            const auto name = makeBufferName(p, rd.Port);
-            Value * const handle = b->getScalarFieldPtr(name);
+            const auto prefix = makeBufferName(p, rd.Port);
+            Value * const handle = b->getScalarFieldPtr(prefix);
             StreamSetBuffer * const buffer = bn.Buffer;
             buffer->setHandle(b, handle);
             buffer->allocateBuffer(b);
+            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+                if (isa<DynamicBuffer>(bn.Buffer)) {
+                    Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+                    Type * const traceDataTy = traceData->getType()->getPointerElementType();
+                    Type * const traceLogTy =  traceDataTy->getStructElementType(0)->getPointerElementType();
+
+                    Constant * const ZERO = b->getInt32(0);
+                    Constant * const ONE = b->getInt32(1);
+                    Constant * const SZ_ZERO = b->getSize(0);
+                    Constant * const SZ_ONE = b->getSize(1);
+                    Value * const traceDataArray = b->CreateCacheAlignedMalloc(traceLogTy, SZ_ONE);
+                    // fill in the struct
+                    b->CreateStore(traceDataArray, b->CreateGEP(traceData, {ZERO, ZERO}));
+                    b->CreateStore(SZ_ONE, b->CreateGEP(traceData, {ZERO, ONE}));
+                    // then the initial record
+                    b->CreateStore(SZ_ZERO, b->CreateGEP(traceDataArray, {ZERO, ZERO}));
+                    b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(traceDataArray, {ZERO, ONE}));
+                }
+            }
         }
     }
 }
@@ -498,12 +539,30 @@ inline void PipelineCompiler::loadBufferHandles(BuilderRef b) {
  * @brief releaseBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::releaseBuffers(BuilderRef b) {
+
+    b->setKernel(mPipelineKernel);
+
     const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(mBufferGraph);
-    for (auto bufferVertex = firstBuffer; bufferVertex != lastBuffer; ++bufferVertex) {
-        const BufferNode & bn = mBufferGraph[bufferVertex];
+    for (auto i = firstBuffer; i != lastBuffer; ++i) {
+        const BufferNode & bn = mBufferGraph[i];
         if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
             bn.Buffer->releaseBuffer(b);
+
+            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+                if (isa<DynamicBuffer>(bn.Buffer)) {
+
+                    const auto pe = in_edge(i, mBufferGraph);
+                    const auto p = source(pe, mBufferGraph);
+                    const BufferRateData & rd = mBufferGraph[pe];
+                    const auto prefix = makeBufferName(p, rd.Port);
+
+                    Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+                    Constant * const ZERO = b->getInt32(0);
+                    b->CreateFree(b->CreateLoad(b->CreateGEP(traceData, {ZERO, ZERO})));
+                }
+            }
+
         }
     }
 }

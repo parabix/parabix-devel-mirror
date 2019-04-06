@@ -428,6 +428,9 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
            return block->getInteger(result);
        }
     }
+
+
+
     return nullptr;
 }
 

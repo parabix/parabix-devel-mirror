@@ -634,7 +634,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
             // If an output is a managed buffer, the address is stored within the state instead
             // of being passed in through the function call.
-            Value * const handle = getScalarValuePtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            Value * const handle = getScalarValuePtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
             buffer->setHandle(b, handle);
         } else {
             Value * const logicalBaseAddress = nextArg();
@@ -750,7 +750,7 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
             // If an output is a managed buffer, the address is stored within the state instead
             // of being passed in through the function call.
-            Value * const handle = getScalarValuePtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            Value * const handle = getScalarValuePtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
             props.push_back(handle);
         } else {
             props.push_back(buffer->getBaseAddress(b.get()));
@@ -911,7 +911,7 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const Binding & output = mOutputStreamSets[i];
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
-            Value * const handle = getScalarValuePtr(output.getName() + BUFFER_HANDLE_SUFFIX);
+            Value * const handle = getScalarValuePtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
             mStreamSetOutputBuffers[i]->setHandle(b, handle);
         }
     }
@@ -942,7 +942,7 @@ std::vector<Value *> Kernel::getFinalOutputScalars(const std::unique_ptr<KernelB
     const auto n = mOutputScalars.size();
     std::vector<Value *> outputs(n);
     for (unsigned i = 0; i < n; ++i) {
-        outputs[i] = b->CreateLoad(getScalarValuePtr(mOutputScalars[i].getName()));
+        outputs[i] = b->CreateLoad(getScalarValuePtr(b.get(), mOutputScalars[i].getName()));
     }
     return outputs;
 }
@@ -1462,7 +1462,7 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeScalarValuePtr
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned Kernel::getSharedScalarIndex(const llvm::StringRef name) const {
+unsigned Kernel::getSharedScalarIndex(KernelBuilder * /* b */, const llvm::StringRef name) const {
     unsigned sharedIndex = 0;
     for (const auto & binding : mInputScalars) {
         if (name.equals(binding.getName())) {
@@ -1500,6 +1500,8 @@ unsigned Kernel::getSharedScalarIndex(const llvm::StringRef name) const {
             default: llvm_unreachable("I/O scalars cannot be internal");
         }
     }
+
+
     std::string tmp;
     raw_string_ostream out(tmp);
     out << "Kernel " << getName() <<
@@ -1511,7 +1513,7 @@ unsigned Kernel::getSharedScalarIndex(const llvm::StringRef name) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getScalarValuePtr
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * Kernel::getScalarValuePtr(const StringRef name) const {
+Value * Kernel::getScalarValuePtr(KernelBuilder * /* b */, const StringRef name) const {
     if (LLVM_UNLIKELY(mScalarValueMap.empty())) {
         return nullptr;
     } else {

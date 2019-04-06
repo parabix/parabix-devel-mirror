@@ -396,6 +396,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
     printOptionalCycleCounter(b);
     printOptionalBlockingIOStatistics(b);
+    printOptionalBufferExpansionHistory(b);
     SmallVector<Value *, 16> params;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
@@ -545,7 +546,7 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
                 if (LLVM_LIKELY(kernel->isStateful())) {
                     args.push_back(kernel->getHandle());
                 }
-                args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+                args.push_back(mPipelineKernel->getScalarValuePtr(b.get(), makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
                 Value * const f = getInitializeThreadLocalFunction(b);
                 if (LLVM_UNLIKELY(f == nullptr)) {
                     report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
@@ -562,7 +563,7 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
 void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
     if (mPipelineKernel->hasThreadLocal()) {
         if (mHasThreadLocalPipelineState) {
-            Value * const localState = mPipelineKernel->getScalarValuePtr(PIPELINE_THREAD_LOCAL_STATE);
+            Value * const localState = mPipelineKernel->getScalarValuePtr(b.get(), PIPELINE_THREAD_LOCAL_STATE);
             FixedArray<Value *, 2> indices;
             indices[0] = b->getInt32(0);
             if (mHasZeroExtendedStream) {
@@ -578,7 +579,7 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
                 if (LLVM_LIKELY(kernel->isStateful())) {
                     args.push_back(kernel->getHandle());
                 }
-                args.push_back(mPipelineKernel->getScalarValuePtr(makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+                args.push_back(mPipelineKernel->getScalarValuePtr(b.get(), makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
                 Value * const f = getFinalizeThreadLocalFunction(b);
                 if (LLVM_UNLIKELY(f == nullptr)) {
                     report_fatal_error(mKernel->getName() + " does not to have an finalize method for its threadlocal state");

@@ -71,10 +71,6 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
     Value * const hasEnough = b->CreateICmpUGE(accessible, required);
     Value * const sufficientInput = b->CreateOr(hasEnough, isClosed(b, inputPort));
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + "_accessible", accessible);
-    b->CallPrintInt(prefix + "_required", required);
-    #endif
     mAccessibleInputItems[inputPort] = accessible;
     Value * const halting = isPipelineInput(inputPort) ? b->getTrue() : mHalted;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelLoopCall);
@@ -98,14 +94,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
     }
 
     const Binding & input = getInputBinding(inputPort);
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
-    b->CallPrintInt(prefix + "_available", available);
-    b->CallPrintInt(prefix + "_processed", processed);
-    #endif
-
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
-
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
         // switching to a "zeroed buffer". The size of the buffer will be determined by the final
@@ -121,6 +110,12 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
         mIsInputZeroExtended[inputPort] = useZeroExtend;
         accessible = b->CreateSelect(useZeroExtend, MAX_INT, accessible);
     }
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
+    b->CallPrintInt(prefix + "_processed", processed);
+    b->CallPrintInt(prefix + "_accessible", accessible);
+    #endif
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * sanityCheck = b->CreateICmpULE(processed, available);
@@ -171,7 +166,58 @@ inline Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const u
     if (size) {
         copyBack = b->getSize(size - 1);
     }
-    return buffer->reserveCapacity(b, produced, consumed, required, copyBack, getBufferExpansionCycleCounter(b));
+    Value * writable, * expanded;
+
+    std::tie(writable, expanded) =
+        buffer->reserveCapacity(b, produced, consumed, required, copyBack,
+                                getBufferExpansionCycleCounter(b));
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
+    b->CallPrintInt(prefix + "_produced", produced);
+    b->CallPrintInt(prefix + "_writable", writable);
+    #endif
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+        if (isa<DynamicBuffer>(buffer)) {
+            b->setKernel(mPipelineKernel);
+
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
+
+            BasicBlock * const recordExpansion = b->CreateBasicBlock(prefix + "_recordExpansion", mKernelLoopExit);
+            BasicBlock * const continueChecking = b->CreateBasicBlock(prefix + "_continueChecking", mKernelLoopExit);
+
+            b->CreateUnlikelyCondBr(expanded, recordExpansion, continueChecking);
+
+            b->SetInsertPoint(recordExpansion);
+
+            Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+            Type * const traceDataTy = traceData->getType()->getPointerElementType();
+            Type * const traceLogTy =  traceDataTy->getStructElementType(0)->getPointerElementType();
+
+            Constant * const ZERO = b->getInt32(0);
+            Constant * const ONE = b->getInt32(1);
+
+            Value * const traceLogArrayField = b->CreateGEP(traceData, {ZERO, ZERO});
+            Value * traceLogArray = b->CreateLoad(traceLogArrayField);
+            Value * const traceLogCountField = b->CreateGEP(traceData, {ZERO, ONE});
+            Value * const traceIndex = b->CreateLoad(traceLogCountField);
+            Value * const traceCount = b->CreateAdd(traceIndex, b->getSize(1));
+
+            traceLogArray = b->CreateRealloc(traceLogTy, traceLogArray, traceCount);
+            b->CreateStore(traceLogArray, traceLogArrayField);
+            b->CreateStore(traceCount, traceLogCountField);
+
+            b->CreateStore(mSegNo, b->CreateGEP(traceLogArray, {traceIndex, ZERO}));
+            b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(traceLogArray, {traceIndex, ONE}));
+            b->CreateBr(continueChecking);
+
+            b->SetInsertPoint(continueChecking);
+            b->setKernel(mKernel);
+        }
+    }
+
+
+    return writable;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -196,7 +242,13 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
             copyBack = b->getSize(size - 1);
         }
     }
-    return buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
+    Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
+    b->CallPrintInt(prefix + "_produced", produced);
+    b->CallPrintInt(prefix + "_writable", writable);
+    #endif
+    return writable;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

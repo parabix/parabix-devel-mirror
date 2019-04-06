@@ -209,9 +209,6 @@ void ExternalBuffer::releaseBuffer(BuilderRef /* b */) const {
 
 void ExternalBuffer::setBaseAddress(IDISA_Builder * const b, Value * const addr) const {
     assert (mHandle && "has not been set prior to calling setBaseAddress");
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        b->CreateAssert(addr, "base address cannot be null");
-    }
     Value * const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(BaseAddress)});
     b->CreateStore(b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType()), p);
 }
@@ -262,7 +259,7 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
     }
 }
 
-Value * ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
+std::pair<Value *, Value *> ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
     unsupported("reserveCapacity", "External");
 }
 
@@ -362,14 +359,14 @@ Value * StaticBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fromP
     return b->CreateSelect(full, b->getSize(0), remaining);
 }
 
-Value * StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
+std::pair<Value *, Value *> StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
     unsupported("reserveCapacity", "Static");
 }
 
 // Dynamic Buffer
 Type * DynamicBuffer::getHandleType(BuilderRef b) const {
-    PointerType * typePtr = getPointerType();
-    IntegerType * sizeTy = b->getSizeTy();
+    PointerType * const typePtr = getPointerType();
+    IntegerType * const sizeTy = b->getSizeTy();
     FixedArray<Type *, 3> types;
     types[BaseAddress] = typePtr;
     types[Capacity] = sizeTy;
@@ -383,16 +380,10 @@ void DynamicBuffer::allocateBuffer(BuilderRef b) {
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(BaseAddress);
-
     Value * const handle = getHandle(b.get());
     Value * const baseAddressField = b->CreateGEP(handle, indices);
     Constant * size = b->getSize(mInitialCapacity + mUnderflow + mOverflow);
     Value * const baseAddress = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
-    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
-        b->CallPrintInt("allocated: ", baseAddress);
-        Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(mType), size);
-        b->CallPrintInt("allocated capacity: ", bufferSize);
-    }
     b->CreateStore(addUnderflow(b, baseAddress, mUnderflow), baseAddressField);
     indices[1] = b->getInt32(PriorBaseAddress);
     Value * const priorAddressField = b->CreateGEP(handle, indices);
@@ -494,7 +485,7 @@ void DynamicBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) 
     unsupported("setCapacity", "Dynamic");
 }
 
-Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems, Value * cycleCounterAccumulator) const {
+std::pair<Value *, Value *> DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems, Value * const cycleCounterAccumulator) const {
 
     const auto blockWidth = b->getBitBlockWidth();
     assert (is_power_2(blockWidth));
@@ -539,6 +530,7 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         b->CreateAssert(check, "unnecessary buffer expansion occurred");
     }
     newCapacity = b->CreateRoundUp(newCapacity, capacity);
+
     Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
 
     Value * requiredCapacity = newCapacity;
@@ -618,8 +610,10 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     PHINode * const writable = b->CreatePHI(b->getSizeTy(), 2);
     writable->addIncoming(remaining, entryBlock);
     writable->addIncoming(remainingAfterExpand, storeNewBuffer);
-
-    return writable;
+    PHINode * const wasExpanded = b->CreatePHI(b->getInt1Ty(), 2);
+    wasExpanded->addIncoming(b->getFalse(), entryBlock);
+    wasExpanded->addIncoming(b->getTrue(), storeNewBuffer);
+    return std::make_pair(writable, wasExpanded);
 }
 
 // Linear Buffer
@@ -664,13 +658,6 @@ void LinearBuffer::allocateBuffer(BuilderRef b) {
     indices[1] = b->getInt32(SecondBufferAddress);
     Value * secondBuffer = b->CreateCacheAlignedMalloc(getType(), size, mAddressSpace);
     secondBuffer = addUnderflow(b, secondBuffer, mUnderflow);
-    if (codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers)) {
-        Value * const bufferSize = b->CreateMul(ConstantExpr::getSizeOf(getType()), size);
-        b->CallPrintInt("linear allocated (1): ", firstBuffer);
-        b->CallPrintInt("linear allocated (1) capacity: ", bufferSize);
-        b->CallPrintInt("linear allocated (2): ", secondBuffer);
-        b->CallPrintInt("linear allocated (2) capacity: ", bufferSize);
-    }
     b->CreateStore(addUnderflow(b, secondBuffer, mUnderflow), b->CreateGEP(mHandle, indices));
 }
 
@@ -724,7 +711,7 @@ void LinearBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) c
     unsupported("setCapacity", "Linear");
 }
 
-Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems, Value * cycleCounterAccumulator) const {
+std::pair<Value *, Value *> LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems, Value * cycleCounterAccumulator) const {
 
     ConstantInt * const LOG_2_BIT_BLOCK_WIDTH = b->getSize(std::log2(b->getBitBlockWidth()));
 
@@ -825,8 +812,10 @@ Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * co
     PHINode * const writable = b->CreatePHI(b->getSizeTy(), 2);
     writable->addIncoming(remaining, entryBlock);
     writable->addIncoming(remainingAfterExpand, copyToBuffer);
-
-    return writable;
+    PHINode * const wasExpanded = b->CreatePHI(b->getInt1Ty(), 2);
+    wasExpanded->addIncoming(b->getFalse(), entryBlock);
+    wasExpanded->addIncoming(b->getTrue(), copyToBuffer);
+    return std::make_pair(writable, wasExpanded);
 }
 
 // Constructors
