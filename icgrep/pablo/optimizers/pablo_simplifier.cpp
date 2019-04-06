@@ -13,6 +13,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
+#include <pablo/pablo_toolchain.h>
 #ifndef NDEBUG
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
@@ -70,7 +71,7 @@ struct PassContainer {
  * @brief run
  ** ------------------------------------------------------------------------------------------------------------- */
 void run(PabloKernel * const kernel) {
-    redundancyElimination(kernel->getEntryScope(), nullptr, nullptr);
+    redundancyElimination(kernel->getEntryScope(), nullptr, nullptr, CompileOptionIsSet(EnableTernaryOpt));
     strengthReduction(kernel->getEntryScope());
     deadCodeElimination(kernel->getEntryScope());
 }
@@ -83,7 +84,7 @@ protected:
  * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
  * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
-void redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt) {
+void redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt, const bool ternaryMode) {
     ExpressionTable expressions(et);
     VariableTable variables(vt);
 
@@ -150,7 +151,7 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
             // Mark the cond as non-zero prior to processing the inner scope.
             mNonZero.push_back(cond);
             // Process the Branch body
-            redundancyElimination(br->getBody(), &expressions, &variables);
+            redundancyElimination(br->getBody(), &expressions, &variables, ternaryMode);
             assert (mNonZero.back() == cond);
             mNonZero.pop_back();
 
@@ -176,7 +177,7 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
                 }
             }
 
-            PabloAST * const folded = triviallyFold(stmt, block);
+            PabloAST * const folded = triviallyFold(stmt, block, ternaryMode);
             if (folded) {
                 Statement * const prior = stmt->getPrevNode();
                 stmt->replaceWith(folded);
@@ -269,7 +270,7 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
+static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
     if (isa<Not>(stmt)) {
         PabloAST * value = cast<Not>(stmt)->getExpr();
         if (LLVM_UNLIKELY(isa<Not>(value))) {
@@ -354,7 +355,7 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
 
         if (LLVM_UNLIKELY(negated)) {
             Not * const negated = block->createNot(expr);
-            PabloAST * const folded = triviallyFold(negated, block);
+            PabloAST * const folded = triviallyFold(negated, block, ternaryMode);
             expr = folded ? folded : negated;
         }
         return expr;
@@ -399,21 +400,21 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block) {
         }
         if (LLVM_UNLIKELY(isa<Zeroes>(sel->getTrueExpr()))) {
             block->setInsertPoint(stmt->getPrevNode());
-            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block);
-            return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block);
+            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
+            return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block, ternaryMode);
         }
         if (LLVM_UNLIKELY(isa<Ones>(sel->getTrueExpr()))) {
             block->setInsertPoint(stmt->getPrevNode());
-            return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block);
+            return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block, ternaryMode);
         }
         if (LLVM_UNLIKELY(isa<Zeroes>(sel->getFalseExpr()))) {
             block->setInsertPoint(stmt->getPrevNode());
-            return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block);
+            return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block, ternaryMode);
         }
         if (LLVM_UNLIKELY(isa<Ones>(sel->getFalseExpr()))) {
             block->setInsertPoint(stmt->getPrevNode());
-            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block);
-            return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block);
+            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
+            return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block, ternaryMode);
         }
     } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
        if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {

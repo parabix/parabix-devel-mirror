@@ -90,9 +90,6 @@ void pablo_function_passes(PabloKernel * kernel) {
     if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableSimplification))) {
         Simplifier::optimize(kernel);
     }
-    if (PabloOptimizationsOptions.isSet(EnableTernaryOpt)) {
-        // TODO: apply ternary simplifier
-    }
     if (PabloOptimizationsOptions.isSet(EnableDistribution)) {
         DistributivePass::optimize(kernel);
     }
