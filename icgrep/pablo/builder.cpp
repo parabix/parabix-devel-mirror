@@ -651,42 +651,162 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
 }
 
 PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    if (isa<Zeroes>(expr1) || isa<Zeroes>(expr2) || isa<Zeroes>(expr3)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr2)) {
+        return expr3;
+    } else if (isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return expr1;
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr3)) {
+        return expr2;
+    } else if (isa<Ones>(expr1)) {
+        return createAnd(expr2, expr3);
+    } else if (isa<Ones>(expr2)) {
+        return createAnd(expr1, expr3);
+    } else if (isa<Ones>(expr3)) {
+        return createAnd(expr1, expr2);
+    }
     //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
     // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
     return createTernary(0x80, expr1, expr2, expr3);
 }
 
 PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    if (isa<Zeroes>(expr1) || isa<Zeroes>(expr2) || isa<Zeroes>(expr3)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr2)) {
+        return expr3;
+    } else if (isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return expr1;
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr3)) {
+        return expr2;
+    } else if (isa<Ones>(expr1)) {
+        return createAnd(expr2, expr3);
+    } else if (isa<Ones>(expr2)) {
+        return createAnd(expr1, expr3);
+    } else if (isa<Ones>(expr3)) {
+        return createAnd(expr1, expr2);
+    }
     return createTernary(0x80, expr1, expr2, expr3, prefix);
 }
 
 PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    if (isa<Ones>(expr1) || isa<Ones>(expr2) || isa<Ones>(expr3)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2)) {
+        return expr3;
+    } else if (isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return expr1;
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr3)) {
+        return expr2;
+    } else if (isa<Zeroes>(expr1)) {
+        return createOr(expr2, expr3);
+    } else if (isa<Zeroes>(expr2)) {
+        return createOr(expr1, expr3);
+    } else if (isa<Zeroes>(expr3)) {
+        return createOr(expr1, expr2);
+    }
     //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
     // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
     return createTernary(0xFE, expr1, expr2, expr3);
 }
 
 PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    if (isa<Ones>(expr1) || isa<Ones>(expr2) || isa<Ones>(expr3)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2)) {
+        return expr3;
+    } else if (isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return expr1;
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr3)) {
+        return expr2;
+    } else if (isa<Zeroes>(expr1)) {
+        return createOr(expr2, expr3);
+    } else if (isa<Zeroes>(expr2)) {
+        return createOr(expr1, expr3);
+    } else if (isa<Zeroes>(expr3)) {
+        return createOr(expr1, expr2);
+    }
     return createTernary(0xFE, expr1, expr2, expr3, prefix);
 }
 
 PabloAST * PabloBuilder::createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    if (isa<Ones>(expr1) && isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return expr1;
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr3)) {
+        return expr2;
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2)) {
+        return expr3;
+    } else if (isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return expr1;
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr3)) {
+        return expr2;
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr2)) {
+        return expr3;
+    }
     //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
     // xor3(a, b, c) =    1      0      0      1      0      1      1      0    = 0x96
     return createTernary(0x96, expr1, expr2, expr3);
 }
 
 PabloAST * PabloBuilder::createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    if (isa<Ones>(expr1) && isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return expr1;
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr3)) {
+        return expr2;
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2)) {
+        return expr3;
+    } else if (isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return expr1;
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr3)) {
+        return expr2;
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr2)) {
+        return expr3;
+    }
     return createTernary(0x96, expr1, expr2, expr3, prefix);
 }
 
 PabloAST * PabloBuilder::createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr3)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return createZeroes(expr2->getType());
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr2)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr3)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return createOnes(expr2->getType());
+    }
     //          (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
     // majority3(a, b, c) =    1      1      1      0      1      0      0      0    = 0xE8
     return createTernary(0xE8, expr1, expr2, expr3);
 }
 
 PabloAST * PabloBuilder::createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    if (isa<Zeroes>(expr1) && isa<Zeroes>(expr2)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Zeroes>(expr1) && isa<Zeroes>(expr3)) {
+        return createZeroes(expr1->getType());
+    } else if (isa<Zeroes>(expr2) && isa<Zeroes>(expr3)) {
+        return createZeroes(expr2->getType());
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr2)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Ones>(expr1) && isa<Ones>(expr3)) {
+        return createOnes(expr1->getType());
+    } else if (isa<Ones>(expr2) && isa<Ones>(expr3)) {
+        return createOnes(expr2->getType());
+    }
     return createTernary(0xE8, expr1, expr2, expr3, prefix);
 }
 
