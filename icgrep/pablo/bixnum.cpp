@@ -9,18 +9,6 @@
 
 namespace pablo {
 
-PabloAST * createXor3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
-    return pb.createTernary(0x96, op1, op2, op3);
-}
-
-PabloAST * createMajority3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
-    return pb.createTernary(0xE8, op1, op2, op3);
-}
-
-PabloAST * createIf3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST * op3) {
-    return pb.createTernary(0xCA, op1, op2, op3);
-}
-
 PabloAST * BixNumArithmetic::UGE(BixNum value, unsigned floor) {
     unsigned floor_bits = std::log2(floor)+1;
     if (value.size() < floor_bits) return mPB.createZeroes();
@@ -43,8 +31,8 @@ PabloAST * BixNumArithmetic::UGE(BixNum value, BixNum floor) {
     PabloAST * UGE_so_far = mPB.createOnes();
     unsigned common_bits = std::min(value.size(), floor.size());
     for (unsigned i = 0; i < common_bits; i++) {
-        UGE_so_far = createIf3(mPB, floor[i], mPB.createAnd(value[i], UGE_so_far),
-                                              mPB.createOr(value[i], UGE_so_far));
+        UGE_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGE_so_far),
+                                             mPB.createOr(value[i], UGE_so_far));
     }
     for (unsigned i = common_bits; i < floor.size(); i++) {
         UGE_so_far = mPB.createAnd(UGE_so_far, mPB.createNot(floor[i]));
@@ -157,8 +145,8 @@ BixNum BixNumModularArithmetic::Add(BixNum augend, BixNum addend) {
     PabloAST * carry = mPB.createZeroes();
     for (unsigned i = 0; i < augend.size(); i++) {
         if (i < addend.size()) {
-            sum[i] = createXor3(mPB, augend[i], addend[i], carry);
-            carry = createMajority3(mPB, augend[i], addend[i], carry);
+            sum[i] = mPB.createXor3(augend[i], addend[i], carry);
+            carry = mPB.createMajority3(augend[i], addend[i], carry);
         } else {
             sum[i] = mPB.createXor(augend[i], carry);
             carry = mPB.createAnd(augend[i], carry);
@@ -177,8 +165,8 @@ BixNum BixNumModularArithmetic::Sub(BixNum minuend, BixNum subtrahend) {
     PabloAST * borrow = mPB.createZeroes();
     for (unsigned i = 0; i < minuend.size(); i++) {
         if (i < subtrahend.size()) {
-            diff[i] = createXor3(mPB, minuend[i], subtrahend[i], borrow);
-            borrow = createMajority3(mPB, mPB.createNot(minuend[i]), subtrahend[i], borrow);
+            diff[i] = mPB.createXor3(minuend[i], subtrahend[i], borrow);
+            borrow = mPB.createMajority3(mPB.createNot(minuend[i]), subtrahend[i], borrow);
         } else {
             diff[i] = mPB.createXor(minuend[i], borrow);
             borrow = mPB.createAnd(mPB.createNot(minuend[i]), borrow);
@@ -194,8 +182,8 @@ BixNum BixNumModularArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
         if ((multiplier & (1 << i)) != 0) {
             PabloAST * carry = mPB.createZeroes();
             for (unsigned j = 0; j + i < product.size(); j++) {
-                PabloAST * tmp = createXor3(mPB, product[j + i], multiplicand[j], carry);
-                carry = createMajority3(mPB, product[j + i], multiplicand[j], carry);
+                PabloAST * tmp = mPB.createXor3(product[j + i], multiplicand[j], carry);
+                carry = mPB.createMajority3(product[j + i], multiplicand[j], carry);
                 product[j + i] = tmp;
             }
             product[multiplicand.size() + i] = carry;
@@ -209,8 +197,8 @@ BixNum BixNumFullArithmetic::Add(BixNum augend, BixNum addend) {
     BixNum sum(augend.size() + 1);
     PabloAST * carry = mPB.createZeroes();
     for (unsigned i = 0; i < addend.size(); i++) {
-        sum[i] = createXor3(mPB, augend[i], addend[i], carry);
-        carry = createMajority3(mPB, augend[i], addend[i], carry);
+        sum[i] = mPB.createXor3(augend[i], addend[i], carry);
+        carry = mPB.createMajority3(augend[i], addend[i], carry);
     }
     for (unsigned i = addend.size(); i < augend.size(); i++) {
         sum[i] = mPB.createXor(augend[i], carry);
@@ -231,8 +219,8 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
             if ((multiplier & (1 << i)) != 0) {
                 PabloAST * carry = mPB.createZeroes();
                 for (unsigned j = 0; j < multiplicand.size(); j++) {
-                    PabloAST * tmp = createXor3(mPB, product[j + i], multiplicand[j], carry);
-                    carry = createMajority3(mPB, product[j + i], multiplicand[j], carry);
+                    PabloAST * tmp = mPB.createXor3(product[j + i], multiplicand[j], carry);
+                    carry = mPB.createMajority3(product[j + i], multiplicand[j], carry);
                     product[j + i] = tmp;
                 }
                 product[multiplicand.size() + i] = carry;
@@ -244,12 +232,12 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
             if ((complement & (1 << i)) != 0) {
                 PabloAST * borrow = mPB.createZeroes();
                 for (unsigned j = 0; j < multiplicand.size(); j++) {
-                    PabloAST * tmp  = createXor3(mPB, product[j + i], multiplicand[j], borrow);
-                    borrow = createMajority3(mPB, mPB.createNot(product[j + i]), multiplicand[j], borrow);
+                    PabloAST * tmp = mPB.createXor3(product[j + i], multiplicand[j], borrow);
+                    borrow = mPB.createMajority3(mPB.createNot(product[j + i]), multiplicand[j], borrow);
                     product[j + i] = tmp;
                 }
                 for (unsigned j = multiplicand.size(); j < product.size()-i; j++) {
-                    PabloAST * tmp  = mPB.createXor(product[j + i], borrow);
+                    PabloAST * tmp = mPB.createXor(product[j + i], borrow);
                     borrow = mPB.createAnd(mPB.createNot(product[j + i]), borrow);
                     product[j + i] = tmp;
                 }
@@ -257,8 +245,8 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
         }
         PabloAST * carry = mPB.createZeroes();
         for (unsigned j = 0; j < multiplicand.size(); j++) {
-            PabloAST * tmp = createXor3(mPB, product[j + multiplier_bits], multiplicand[j], carry);
-            carry = createMajority3(mPB, product[j + multiplier_bits], multiplicand[j], carry);
+            PabloAST * tmp = mPB.createXor3(product[j + multiplier_bits], multiplicand[j], carry);
+            carry = mPB.createMajority3(product[j + multiplier_bits], multiplicand[j], carry);
             product[j + multiplier_bits] = tmp;
         }
     }

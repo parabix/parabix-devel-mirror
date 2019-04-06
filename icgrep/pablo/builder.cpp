@@ -213,6 +213,9 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr) {
     }
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
+    } else if (Ternary * ternary = dyn_cast<Ternary>(expr)) {
+        const uint8_t mask = ternary->getMask()->value();
+        return createTernary(~mask, ternary->getA(), ternary->getB(), ternary->getC());
     }
     return MAKE_UNARY(Not, expr);
 }
@@ -226,6 +229,9 @@ PabloAST * PabloBuilder::createNot(PabloAST * expr, const llvm::StringRef prefix
     }
     else if (Not * not1 = dyn_cast<Not>(expr)) {
         return not1->getOperand(0);
+    } else if (Ternary * ternary = dyn_cast<Ternary>(expr)) {
+        const uint8_t mask = ternary->getMask()->value();
+        return createTernary(~mask, ternary->getA(), ternary->getB(), ternary->getC());
     }
     return MAKE_NAMED_UNARY(Not, prefix, expr);
 }
@@ -314,16 +320,6 @@ PabloAST * PabloBuilder::createAnd(PabloAST * expr1, PabloAST * expr2, const llv
         std::swap(expr1, expr2);
     }
     return MAKE_NAMED_BINARY(And, prefix, expr1, expr2);
-}
-
-PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
-    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
-    // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
-    return createTernary(0x80, expr1, expr2, expr3);
-}
-
-PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
-    return createTernary(0x80, expr1, expr2, expr3, prefix);
 }
 
 PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2) {
@@ -416,16 +412,6 @@ PabloAST * PabloBuilder::createOr(PabloAST * expr1, PabloAST * expr2, const llvm
         std::swap(expr1, expr2);
     }
     return MAKE_NAMED_BINARY(Or, prefix, expr1, expr2);
-}
-
-PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
-    //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
-    // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
-    return createTernary(0xFE, expr1, expr2, expr3);
-}
-
-PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
-    return createTernary(0xFE, expr1, expr2, expr3, prefix);
 }
 
 PabloAST * PabloBuilder::createXor(PabloAST * expr1, PabloAST * expr2) {
@@ -664,6 +650,45 @@ PabloAST * PabloBuilder::createSel(PabloAST * condition, PabloAST * trueExpr, Pa
     return MAKE_NAMED_TERNARY(Sel, prefix, condition, trueExpr, falseExpr);
 }
 
+PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
+    return createTernary(0x80, expr1, expr2, expr3);
+}
+
+PabloAST * PabloBuilder::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    return createTernary(0x80, expr1, expr2, expr3, prefix);
+}
+
+PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
+    return createTernary(0xFE, expr1, expr2, expr3);
+}
+
+PabloAST * PabloBuilder::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    return createTernary(0xFE, expr1, expr2, expr3, prefix);
+}
+
+PabloAST * PabloBuilder::createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // xor3(a, b, c) =    1      0      0      1      0      1      1      0    = 0x96
+    return createTernary(0x96, expr1, expr2, expr3);
+}
+
+PabloAST * PabloBuilder::createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    return createTernary(0x96, expr1, expr2, expr3, prefix);
+}
+
+PabloAST * PabloBuilder::createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3) {
+    //          (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // majority3(a, b, c) =    1      1      1      0      1      0      0      0    = 0xE8
+    return createTernary(0xE8, expr1, expr2, expr3);
+}
+
+PabloAST * PabloBuilder::createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+    return createTernary(0xE8, expr1, expr2, expr3, prefix);
+}
 
 PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c) {
     return MAKE_QUATERNARY(Ternary, mask, a, b, c);
