@@ -50,7 +50,8 @@ static cl::bits<PabloCompilationFlags>
                                          clEnumVal(DisableCodeMotion, "Moves statements into the innermost legal If-scope and moves invariants out of While-loops."),
                                          clEnumVal(EnableDistribution, "Apply distribution law optimization."),                                         
                                          clEnumVal(EnableSchedulingPrePass, "Pablo Statement Scheduling Pre-Pass"),
-                                         clEnumVal(EnableProfiling, "Profile branch statistics.")
+                                         clEnumVal(EnableProfiling, "Profile branch statistics."),
+                                         clEnumVal(EnableTernaryOpt, "Enable ternary optimization.")
                                          CL_ENUM_VAL_SENTINEL), cl::cat(PabloOptions));
 
 bool DebugOptionIsSet(const PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
@@ -88,6 +89,9 @@ void pablo_function_passes(PabloKernel * kernel) {
     }
     if (LLVM_LIKELY(!PabloOptimizationsOptions.isSet(DisableSimplification))) {
         Simplifier::optimize(kernel);
+    }
+    if (PabloOptimizationsOptions.isSet(EnableTernaryOpt)) {
+        // TODO: apply ternary simplifier
     }
     if (PabloOptimizationsOptions.isSet(EnableDistribution)) {
         DistributivePass::optimize(kernel);
