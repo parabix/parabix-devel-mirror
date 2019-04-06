@@ -690,6 +690,66 @@ PabloAST * PabloBuilder::createMajority3(PabloAST * expr1, PabloAST * expr2, Pab
     return createTernary(0xE8, expr1, expr2, expr3, prefix);
 }
 
+PabloAST * PabloBuilder::createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2) {
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // andOr(a, b, c) =    1      1      1      0      0      0      0      0    = 0xE0
+    return createTernary(0xE0, andExpr1, orExpr1, orExpr2);
+}
+
+PabloAST * PabloBuilder::createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const llvm::StringRef prefix) {
+    return createTernary(0xE0, andExpr1, orExpr1, orExpr2, prefix);
+}
+
+PabloAST * PabloBuilder::createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2) {
+    //       (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // andXor(a, b, c) =    0      1      1      0      0      0      0      0    = 0x60
+    return createTernary(0x60, andExpr1, xorExpr1, xorExpr2);
+}
+
+PabloAST * PabloBuilder::createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const llvm::StringRef prefix) {
+    return createTernary(0x60, andExpr1, xorExpr1, xorExpr2, prefix);
+}
+
+PabloAST * PabloBuilder::createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2) {
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // orAnd(a, b, c) =    1      1      1      1      1      0      0      0    = 0xF8
+    return createTernary(0xF8, orExpr1, andExpr1, andExpr2);
+}
+
+PabloAST * PabloBuilder::createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const llvm::StringRef prefix) {
+    return createTernary(0xF8, orExpr1, andExpr1, andExpr2, prefix);
+}
+
+PabloAST * PabloBuilder::createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2) {
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // orXor(a, b, c) =    1      1      1      1      0      1      1      0    = 0xF6
+    return createTernary(0xF6, orExpr1, xorExpr1, xorExpr2);
+}
+
+PabloAST * PabloBuilder::createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const llvm::StringRef prefix) {
+    return createTernary(0xF6, orExpr1, xorExpr1, xorExpr2, prefix);
+}
+
+PabloAST * PabloBuilder::createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2) {
+    //       (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // xorAnd(a, b, c) =    0      1      1      1      1      0      0      0    = 0x78
+    return createTernary(0x78, xorExpr1, andExpr1, andExpr2);
+}
+
+PabloAST * PabloBuilder::createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const llvm::StringRef prefix) {
+    return createTernary(0x78, xorExpr1, andExpr1, andExpr2, prefix);
+}
+
+PabloAST * PabloBuilder::createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2) {
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // xorOr(a, b, c) =    0      0      0      1      1      1      1      0    = 0x1E
+    return createTernary(0x1E, xorExpr1, orExpr1, orExpr2);
+}
+
+PabloAST * PabloBuilder::createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const llvm::StringRef prefix) {
+    return createTernary(0x1E, xorExpr1, orExpr1, orExpr2, prefix);
+}
+
 PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c) {
     return MAKE_QUATERNARY(Ternary, mask, a, b, c);
 }
