@@ -298,16 +298,17 @@ BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsi
     for (unsigned ch_code = lo; ch_code <= hi; ch_code++) {
         codepoint_t transcodedCh = mTable[ch_code];
         codepoint_t changedBits = transcodedCh ^ ch_code;
+        unsigned subTableIdx = ch_code % (1<<bitsPerInputUnit);
         for (unsigned i = 0; i < bitsPerInputUnit; i++) {
             unsigned bit = 1 << i;
             if ((changedBits & bit) == bit) {
-                bitXfrmClasses[i]->insert(ch_code);
+                bitXfrmClasses[i]->insert(subTableIdx);
             }
         }
         for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
             unsigned bit = 1 << i;
             if ((transcodedCh & bit) == bit) {
-                outputBitClasses[i-bitsPerInputUnit]->insert(ch_code);
+                outputBitClasses[i-bitsPerInputUnit]->insert(subTableIdx);
             }
         }
     }
