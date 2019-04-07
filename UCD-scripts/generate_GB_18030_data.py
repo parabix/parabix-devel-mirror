@@ -15,6 +15,13 @@ def GB_double_byte_table():
             tbl += "};\n"
     return tbl
 
+def GB_double_byte_table():
+    idx = WHATWG_parser.parse_WHATWG_index_file('gb18030')
+    tbl = "std::vector<unsigned> GB_DoubleByteTable = {\n    "
+    tbl += cformat.multiline_fill(['0x%04x' % idx[k] for k in sorted(idx.keys())], ',', 4)
+    tbl += "};\n"
+    return tbl
+
 
 def GB_range_table():
     idx = WHATWG_parser.parse_WHATWG_index_file('gb18030-ranges')
@@ -26,13 +33,13 @@ def GB_range_table():
 def generate_GB_data_cpp():
     f = cformat.open_cpp_file_for_write('GB_18030_data')
     f.write(GB_double_byte_table())
-    f.write("\nstd::vector<std::vector<UCD::codepoint_t>> & get_GB_DoubleByteTable() {\n   return GB_DoubleByteTable;\n}\n")
+    f.write("\nstd::vector<UCD::codepoint_t> & get_GB_DoubleByteTable() {\n   return GB_DoubleByteTable;\n}\n")
     f.write(GB_range_table())
     f.write("\nstd::vector<std::pair<unsigned, unsigned>> & get_GB_RangeTable() {\n   return GB_RangeTable;\n}\n")
     f.close()
     f = cformat.open_header_file_for_write('GB_18030_data')
     cformat.write_imports(f, ['<vector>', '<UCD/unicode_set.h>'])
-    f.write("\nstd::vector<std::vector<UCD::codepoint_t>> & get_GB_DoubleByteTable();\n")
+    f.write("\nstd::vector<UCD::codepoint_t> & get_GB_DoubleByteTable();\n")
     f.write("\nstd::vector<std::pair<unsigned, unsigned>> & get_GB_RangeTable();\n")
     cformat.close_header_file(f)
 

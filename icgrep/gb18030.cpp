@@ -471,29 +471,51 @@ void GB_18030_CoreLogic::generatePabloMethod() {
     std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
     
     
-    cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), BixNumArithmetic(pb).ZeroExtend(byte1_basis, 8));
+    // Initialize 16 bit stream variables with ASCII values.
     PabloAST * zeroes = pb.createZeroes();
     Var * u16[16];
-    std::vector<std::vector<UCD::codepoint_t>> GB_tbl = get_GB_DoubleByteTable();
-    for (unsigned i = 0; i < BitsPerInputByte; ++i) {
+    for (unsigned i = 0; i < byte1_basis.size(); ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), pb.createAnd(ASCII, byte1_basis[i]));
     }
-    for (unsigned i = BitsPerInputByte; i < 16; ++i) {
+    for (unsigned i = byte1_basis.size(); i < 16; ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
     }
-    for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
+    
+    //  Double byte sequences use a lookup table, with codepoints determined
+    //  according to a calculated index.
+    
+    std::vector<UCD::codepoint_t> GB_tbl = get_GB_DoubleByteTable();
+    const unsigned maxGB2index = GB_tbl.size()-1;
+
+    // The valid values for the second byte of a 2-byte GB sequence are 0x40-7F and 0x80-0xFE.
+    // Normalize these values to the range 0 through 190.  
+    BixNum x80 = {byte2_basis[7]};
+    BixNum b2 = BixNumModularArithmetic(pb).Sub(BixNumModularArithmetic(pb).Sub(byte2_basis, x80), 0x40);
+
+    // The valid values for the first byte of a 2-byte GB sequence are 0x81-0xFE.  Normalize
+    // to the range 0-125 as seven-bit value.
+    BixNum b1 = BixNumModularArithmetic(pb).Sub(BixNumArithmetic(pb).Truncate(byte1_basis, 7), 0x1);
+    // Now compute the GB 2-byte index value:  190 * b1 + b2, as a 15-bit quantity.
+    BixNum GB2idx = BixNumModularArithmetic(pb).Add(BixNumFullArithmetic(pb).Mul(b1, 190), b2);
+
+    const unsigned subTableBits = 8;
+    const unsigned subTableSize = 1 << subTableBits;
+    BixNum tblIdxBasis = BixNumArithmetic(pb).HighBits(GB2idx, GB2idx.size()-subTableBits);
+    BixNum subTblBasis = BixNumArithmetic(pb).Truncate(GB2idx, subTableBits);
+    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(getEntryScope(), BixNumArithmetic(pb).ZeroExtend(tblIdxBasis, 8));
+
+    for (unsigned tblCode = 0; tblCode <= maxGB2index; tblCode+=subTableSize) {
         std::stringstream gbpfx;
-        gbpfx << "gb_" << std::hex << char_code << "_16";
-        PabloAST * byte1 = pb.createAnd(GB_prefix2, Byte1_compiler.compileCC(makeCC(char_code - 0x80, &cc::Byte)));
+        gbpfx << "gb_tbl" << std::hex << (tblCode/subTableSize);
+        PabloAST * tblCodeStrm = pb.createAnd(GB_prefix2, tblIdxCompiler.compileCC(makeCC(tblCode/subTableSize, &cc::Byte)));
         PabloBlock * inner = getEntryScope()->createScope();
         PabloBuilder nested(inner);
-        std::vector<unsigned> subTable = fullByteTable_GB10830_byte2(GB_tbl[char_code - 0x81], ReplacementCharacter);
-        BixNumTableCompiler tblComp(nested, subTable, gbpfx.str());
-        BixNum outputCode = tblComp.compileSubTableLookup(0, 255, 16, byte2_basis);
+        BixNumTableCompiler tblComp(nested, GB_tbl, gbpfx.str());
+        BixNum outputCode = tblComp.compileSubTableLookup(tblCode, std::min(tblCode + subTableSize -1, maxGB2index), 16, subTblBasis);
         for (unsigned i = 0; i < 16; i++) {
-            nested.createAssign(u16[i], nested.createOr(u16[i], nested.createAnd(byte1, outputCode[i])));
+            nested.createAssign(u16[i], nested.createOr(u16[i], nested.createAnd(tblCodeStrm, outputCode[i])));
         }
-        pb.createIf(byte1, inner);
+        pb.createIf(tblCodeStrm, inner);
     }
     Var * const u16_output = getOutputStreamVar("u16_basis");
     for (unsigned i = 0; i < 16; i++) {

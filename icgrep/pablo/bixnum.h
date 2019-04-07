@@ -26,6 +26,7 @@ public:
     BixNum ZeroExtend(BixNum value, unsigned extended_size);
     BixNum SignExtend(BixNum value, unsigned extended_size);
     BixNum Truncate(BixNum value, unsigned truncated_size);
+    BixNum HighBits(BixNum value, unsigned highBitCount);
 
 
 private:

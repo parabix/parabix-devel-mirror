@@ -132,6 +132,16 @@ BixNum BixNumArithmetic::Truncate(BixNum value, unsigned truncated_size) {
     return truncated;
 }
 
+BixNum BixNumArithmetic::HighBits(BixNum value, unsigned highBitCount) {
+    assert(highBitCount <= value.size());
+    unsigned offset = value.size() - highBitCount;
+    BixNum extracted(highBitCount);
+    for (unsigned i = 0; i < highBitCount; i++) {
+        extracted[i] = value[i + offset];
+    }
+    return extracted;
+}
+
 PabloAST * BixNumArithmetic::EQ(BixNum value, BixNum test) {
     return mPB.createNot(NEQ(value, test));
 }
