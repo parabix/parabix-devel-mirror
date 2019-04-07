@@ -6,6 +6,12 @@
 #include <pablo/bixnum.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
+#include <cc/alphabet.h>
+#include <cc/cc_compiler.h>
+#include <cc/cc_compiler_target.h>
+
+using namespace cc;
+using namespace re;
 
 namespace pablo {
 
@@ -264,5 +270,49 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
     }
     return product;
 }
+
+BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsigned bitsPerOutputUnit, BixNum input) {
+    assert(hi-lo > 0);
+    const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
+    assert(input.size() >= bitsPerInputUnit);
+    std::vector<CC *> bitXfrmClasses;
+    bitXfrmClasses.reserve(bitsPerInputUnit);
+    for (unsigned i = 0; i < bitsPerInputUnit; i++) {
+        bitXfrmClasses.push_back(makeCC(&cc::Byte));
+    }
+    std::vector<CC *> outputBitClasses;
+    outputBitClasses.reserve(bitsPerOutputUnit-bitsPerInputUnit);
+    for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
+        outputBitClasses.push_back(makeCC(&cc::Byte));
+    }
+    for (unsigned ch_code = lo; ch_code <= hi; ch_code++) {
+        codepoint_t transcodedCh = mTable[ch_code];
+        codepoint_t changedBits = transcodedCh ^ ch_code;
+        for (unsigned i = 0; i < bitsPerInputUnit; i++) {
+            unsigned bit = 1 << i;
+            if ((changedBits & bit) == bit) {
+                bitXfrmClasses[i]->insert(ch_code);
+            }
+        }
+        for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
+            unsigned bit = 1 << i;
+            if ((transcodedCh & bit) == bit) {
+                outputBitClasses[i-bitsPerInputUnit]->insert(ch_code);
+            }
+        }
+    }
+    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(mPB.getPabloBlock(), input);
+    BixNum output;
+    output.reserve(bitsPerOutputUnit);
+    for (unsigned i = 0; i < bitsPerInputUnit; i++) {
+        PabloAST * xfrmStrm = inputUnitCompiler.compileCC(bitXfrmClasses[i]);
+        output[i] = mPB.createXor(xfrmStrm, input[i]);
+    }
+    for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
+        output[i] = inputUnitCompiler.compileCC(outputBitClasses[i - bitsPerInputUnit]);
+    }
+    return output;
+}
+
 
 }

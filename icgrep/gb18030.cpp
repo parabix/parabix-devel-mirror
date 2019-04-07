@@ -416,44 +416,6 @@ void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, con
 }
 
 
-const unsigned BitsPerInputByte = 7;
-
-std::pair<std::vector<CC *>, std::vector<CC *>> byteTranscoderClasses(std::vector<codepoint_t> table) {
-    if (table.size() != 256) llvm::report_fatal_error("Need 256 entries for byte transcoding.");
-    codepoint_t allBits = 0;
-    for (unsigned ch_code = 0; ch_code < (1 << BitsPerInputByte); ch_code++) {
-        allBits |= table[ch_code];
-    }
-    const unsigned BitsPerOutputUnit = std::log2(allBits)+1;
-    std::vector<CC *> bitXfrmClasses;
-    bitXfrmClasses.reserve(BitsPerInputByte);
-    for (unsigned i = 0; i < BitsPerInputByte; i++) {
-        bitXfrmClasses.push_back(makeCC(&cc::Byte));
-    }
-    std::vector<CC *> outputBitClasses;
-    outputBitClasses.reserve(BitsPerOutputUnit-BitsPerInputByte);
-    for (unsigned i = BitsPerInputByte; i < BitsPerOutputUnit; i++) {
-        outputBitClasses.push_back(makeCC(&cc::Byte));
-    }
-    for (unsigned ch_code = 0; ch_code < 256; ch_code++) {
-        codepoint_t transcodedCh = table[ch_code];
-        codepoint_t changedBits = transcodedCh ^ ch_code;
-        for (unsigned i = 0; i < BitsPerInputByte; i++) {
-            unsigned bit = 1 << i;
-            if ((changedBits & bit) == bit) {
-                bitXfrmClasses[i]->insert(ch_code);
-            }
-        }
-        for (unsigned i = BitsPerInputByte; i < BitsPerOutputUnit; i++) {
-            unsigned bit = 1 << i;
-            if ((transcodedCh & bit) == bit) {
-                outputBitClasses[i-BitsPerInputByte]->insert(ch_code);
-            }
-        }
-    }
-    return std::make_pair(bitXfrmClasses, outputBitClasses);
-}
-
 //
 // The second byte of a 2-byte GB 18030 sequence must be in the
 // range 0x40 to 0xFE, excluding 0x7F.   Given a table of output
@@ -487,6 +449,8 @@ protected:
     void generatePabloMethod() override;
 };
 
+const unsigned BitsPerInputByte = 7;
+
 GB_18030_CoreLogic::GB_18030_CoreLogic
 (const std::unique_ptr<kernel::KernelBuilder> & kb,
  StreamSet * ASCII, StreamSet * GB_4byte,
@@ -505,6 +469,8 @@ void GB_18030_CoreLogic::generatePabloMethod() {
     PabloAST * GB_prefix2 = pb.createNot(pb.createOr(ASCII, GB_4byte), "gb_prefix2");
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
     std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
+    
+    
     cc::Parabix_CC_Compiler_Builder Byte1_compiler(getEntryScope(), BixNumArithmetic(pb).ZeroExtend(byte1_basis, 8));
     PabloAST * zeroes = pb.createZeroes();
     Var * u16[16];
@@ -517,24 +483,15 @@ void GB_18030_CoreLogic::generatePabloMethod() {
     }
     for (unsigned char_code = 0x81; char_code < 0xFF; char_code++) {
         std::stringstream gbpfx;
-        gbpfx << "gb_" << std::hex << char_code << "_16[";
+        gbpfx << "gb_" << std::hex << char_code << "_16";
         PabloAST * byte1 = pb.createAnd(GB_prefix2, Byte1_compiler.compileCC(makeCC(char_code - 0x80, &cc::Byte)));
         PabloBlock * inner = getEntryScope()->createScope();
         PabloBuilder nested(inner);
-        cc::Parabix_CC_Compiler_Builder Byte2_compiler(inner, byte2_basis);
-        std::vector<CC *> bitXfrmClasses;
-        std::vector<CC *> outputBitClasses;
-        auto xClasses = byteTranscoderClasses(fullByteTable_GB10830_byte2(GB_tbl[char_code - 0x81], ReplacementCharacter));
-        bitXfrmClasses = xClasses.first;
-        outputBitClasses = xClasses.second;
-        for (unsigned i = 0; i < BitsPerInputByte; i++) {
-            PabloAST * xfrmStrm = nested.createAnd(byte1, Byte2_compiler.compileCC(bitXfrmClasses[i]));
-            PabloAST * outStrm = nested.createAnd(byte1, nested.createXor(xfrmStrm, byte2_basis[i]), gbpfx.str() + std::to_string(i) + "]");
-            nested.createAssign(u16[i], nested.createOr(u16[i], outStrm));
-        }
-        for (unsigned i = BitsPerInputByte; i < BitsPerInputByte + outputBitClasses.size(); i++) {
-            PabloAST * outStrm = nested.createAnd(byte1, Byte2_compiler.compileCC(outputBitClasses[i - BitsPerInputByte]), gbpfx.str() + std::to_string(i) + "]");
-            nested.createAssign(u16[i], nested.createOr(u16[i], outStrm));
+        std::vector<unsigned> subTable = fullByteTable_GB10830_byte2(GB_tbl[char_code - 0x81], ReplacementCharacter);
+        BixNumTableCompiler tblComp(nested, subTable, gbpfx.str());
+        BixNum outputCode = tblComp.compileSubTableLookup(0, 255, 16, byte2_basis);
+        for (unsigned i = 0; i < 16; i++) {
+            nested.createAssign(u16[i], nested.createOr(u16[i], nested.createAnd(byte1, outputCode[i])));
         }
         pb.createIf(byte1, inner);
     }

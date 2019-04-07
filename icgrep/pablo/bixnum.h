@@ -55,7 +55,21 @@ private:
     PabloBuilder & mPB;
 };
 
+// 
+// A compiler that implements parallel bitwise table lookup for fixed tables.
+// 
+class BixNumTableCompiler {
+public:
+    BixNumTableCompiler(PabloBuilder & b, std::vector<unsigned> & table, std::string tName="tx") : mPB(b), mTable(table) {}
+    BixNum compileSubTableLookup(unsigned lo, unsigned hi, unsigned bitsPerOutputUnit, BixNum input);
+    
+private:
+    PabloBuilder & mPB;
+    std::vector<unsigned> & mTable;
+};
+
 }
+
 
 #endif
 
