@@ -272,162 +272,258 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
  ** ------------------------------------------------------------------------------------------------------------- */
 static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
     if (isa<Not>(stmt)) {
-        PabloAST * value = cast<Not>(stmt)->getExpr();
-        if (LLVM_UNLIKELY(isa<Not>(value))) {
-            return cast<Not>(value)->getExpr(); // ¬¬A ⇔ A
-        } else if (LLVM_UNLIKELY(isa<Zeroes>(value))) {
-            return block->createOnes(stmt->getType()); // ¬0 ⇔ 1
-        }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
-            return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
-        }
-    } else if (isa<And>(stmt) || isa<Or>(stmt)) {
-        PabloAST * op[2];
-        op[0] = stmt->getOperand(0);
-        op[1] = stmt->getOperand(1);
-        for (unsigned i = 0; i < 2; ++i) {
-            if (const Not * const n = dyn_cast<Not>(op[i])) {
-                if (LLVM_UNLIKELY(n->getExpr() == op[1 - i])) {
-                    if (isa<And>(stmt)) {
-                        return block->createZeroes(stmt->getType());
-                    } else {
-                        return block->createOnes(stmt->getType());
-                    }
-                }
-            } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
-                if (isa<And>(stmt) ^ isa<Zeroes>(op[i])) {
-                    return op[1 - i];
-                } else {
-                    return op[i];
-                }
-            }
-        }
-        if (LLVM_UNLIKELY(op[0] == op[1])) {
-            return op[0];
-        } else {
-            if (op[1] < op[0]) {
-                stmt->setOperand(0, op[1]);
-                stmt->setOperand(1, op[0]);
-            }
-            return nullptr;
-        }
+        return triviallyFoldNot(stmt, block, ternaryMode);
+    } else if (isa<And>(stmt)) {
+        return triviallyFoldAnd(stmt, block, ternaryMode);
+    } else if (isa<Or>(stmt)) {
+        return triviallyFoldOr(stmt, block, ternaryMode);
     } else if (isa<Xor>(stmt)) {
+        return triviallyFoldXor(stmt, block, ternaryMode);
+    } else if (isa<Advance>(stmt)) {
+        return triviallyFoldAdvance(stmt, block, ternaryMode);
+    } else if (isa<ScanThru>(stmt)) {
+        return triviallyFoldScanThru(stmt, block, ternaryMode);
+    } else if (isa<MatchStar>(stmt)) {
+        return triviallyFoldMatchStar(stmt, block, ternaryMode);
+    } else if (isa<Lookahead>(stmt)) {
+        return triviallyFoldLookAhead(stmt, block, ternaryMode);
+    } else if (LLVM_UNLIKELY(isa<Sel>(stmt))) {
+        return triviallyFoldSel(stmt, block, ternaryMode);
+    } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
+        return triviallyFoldAddOrSub(stmt, block, ternaryMode);
+    }
+    return nullptr;
+}
 
-        PabloAST * op[2];
-        op[0] = stmt->getOperand(0);
-        op[1] = stmt->getOperand(1);
-        if (LLVM_UNLIKELY(op[0] == op[1])) {
-            return block->createZeroes(stmt->getType());
-        }
-        bool negated = false;
-        PabloAST * expr = nullptr;
-        bool unchanged = true;
-        for (unsigned i = 0; i < 2; ++i) {
-            if (isa<Not>(op[i])) {
-                negated ^= true;
-                op[i] = cast<Not>(op[i])->getExpr();
-                unchanged = false;
-            } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
-                negated ^= isa<Ones>(op[i]);
-                expr = op[1 - i];
-                unchanged = false;
-            }
-        }
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation Not
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Not>(stmt));
+    PabloAST * value = cast<Not>(stmt)->getExpr();
+    if (LLVM_UNLIKELY(isa<Not>(value))) {
+        return cast<Not>(value)->getExpr(); // ¬¬A ⇔ A
+    } else if (LLVM_UNLIKELY(isa<Zeroes>(value))) {
+        return block->createOnes(stmt->getType()); // ¬0 ⇔ 1
+    }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
+        return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
+    }
+    return nullptr;
+}
 
-        if (LLVM_LIKELY(unchanged)) {
-            return nullptr;
-        }
-
-        block->setInsertPoint(stmt);
-
-        if (LLVM_LIKELY(expr == nullptr)) {
-            if (LLVM_UNLIKELY(op[0] == op[1])) {
-                if (LLVM_LIKELY(negated)) {
-                    return block->createOnes(stmt->getType());
-                } else {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initial fold of binary operations And and Or
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldBinaryAndOr(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<And>(stmt) || isa<Or>(stmt));
+    PabloAST * op[2];
+    op[0] = stmt->getOperand(0);
+    op[1] = stmt->getOperand(1);
+    for (unsigned i = 0; i < 2; ++i) {
+        if (const Not * const n = dyn_cast<Not>(op[i])) {
+            if (LLVM_UNLIKELY(n->getExpr() == op[1 - i])) {
+                if (isa<And>(stmt)) {
                     return block->createZeroes(stmt->getType());
+                } else {
+                    return block->createOnes(stmt->getType());
                 }
             }
-            if (op[1] < op[0]) {
-                std::swap(op[0], op[1]);
+        } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
+            if (isa<And>(stmt) ^ isa<Zeroes>(op[i])) {
+                return op[1 - i];
+            } else {
+                return op[i];
             }
-            expr = block->createXor(op[0], op[1]);
         }
+    }
+    if (LLVM_UNLIKELY(op[0] == op[1])) {
+        return op[0];
+    } else {
+        if (op[1] < op[0]) {
+            stmt->setOperand(0, op[1]);
+            stmt->setOperand(1, op[0]);
+        }
+        return nullptr;
+    }
+}
 
-        if (LLVM_UNLIKELY(negated)) {
-            Not * const negated = block->createNot(expr);
-            PabloAST * const folded = triviallyFold(negated, block, ternaryMode);
-            expr = folded ? folded : negated;
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation And
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<And>(stmt));
+    return triviallyFoldBinaryAndOr(stmt, block, ternaryMode);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation Or
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldOr(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Or>(stmt));
+    return triviallyFoldBinaryAndOr(stmt, block, ternaryMode);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation Xor
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Xor>(stmt));
+    PabloAST * op[2];
+    op[0] = stmt->getOperand(0);
+    op[1] = stmt->getOperand(1);
+    if (LLVM_UNLIKELY(op[0] == op[1])) {
+        return block->createZeroes(stmt->getType());
+    }
+    bool negated = false;
+    PabloAST * expr = nullptr;
+    bool unchanged = true;
+    for (unsigned i = 0; i < 2; ++i) {
+        if (isa<Not>(op[i])) {
+            negated ^= true;
+            op[i] = cast<Not>(op[i])->getExpr();
+            unchanged = false;
+        } else if (LLVM_UNLIKELY(isa<Zeroes>(op[i]) || isa<Ones>(op[i]))) {
+            negated ^= isa<Ones>(op[i]);
+            expr = op[1 - i];
+            unchanged = false;
         }
-        return expr;
-    } else if (isa<Advance>(stmt)) {
-        Advance * const adv = cast<Advance>(stmt);
-        if (LLVM_UNLIKELY(isa<Zeroes>(adv->getExpression()) || adv->getAmount() == 0)) {
-            return adv->getExpression();
-        }
-    } else if (isa<ScanThru>(stmt)) {
-        ScanThru * const st = cast<ScanThru>(stmt);
-        if (LLVM_UNLIKELY(isa<Zeroes>(st->getScanFrom()) || isa<Zeroes>(st->getScanThru()))) {
-            return st->getScanFrom();
-        } else if (LLVM_UNLIKELY(isa<Ones>(st->getScanThru()))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            return block->createZeroes(stmt->getType());
-        } else if (LLVM_UNLIKELY(isa<ScanThru>(st->getScanFrom()))) {
-            ScanThru * const nested = cast<ScanThru>(st->getScanFrom());
-            if (LLVM_UNLIKELY(st->getScanThru() == nested->getScanThru())) {
-                return nested;
+    }
+
+    if (LLVM_LIKELY(unchanged)) {
+        return nullptr;
+    }
+
+    block->setInsertPoint(stmt);
+
+    if (LLVM_LIKELY(expr == nullptr)) {
+        if (LLVM_UNLIKELY(op[0] == op[1])) {
+            if (LLVM_LIKELY(negated)) {
+                return block->createOnes(stmt->getType());
+            } else {
+                return block->createZeroes(stmt->getType());
             }
         }
-    } else if (isa<MatchStar>(stmt)) {
-        MatchStar * const mstar = cast<MatchStar>(stmt);
-        if (LLVM_UNLIKELY(isa<Zeroes>(mstar->getMarker()) || isa<Zeroes>(mstar->getCharClass()))) {
-            return mstar->getMarker();
-        } else if (LLVM_UNLIKELY(isa<Ones>(mstar->getMarker()))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            return block->createOnes(stmt->getType());
+        if (op[1] < op[0]) {
+            std::swap(op[0], op[1]);
         }
-    } else if (isa<Lookahead>(stmt)) {
-        Lookahead * const la = cast<Lookahead>(stmt);
-        if (LLVM_UNLIKELY(isa<Zeroes>(la->getExpression()) || la->getAmount() == 0)) {
-            return la->getExpression();
+        expr = block->createXor(op[0], op[1]);
+    }
+
+    if (LLVM_UNLIKELY(negated)) {
+        Not * const negated = block->createNot(expr);
+        PabloAST * const folded = triviallyFold(negated, block, ternaryMode);
+        expr = folded ? folded : negated;
+    }
+    return expr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation Advance
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldAdvance(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Advance>(stmt));
+    Advance * const adv = cast<Advance>(stmt);
+    if (LLVM_UNLIKELY(isa<Zeroes>(adv->getExpression()) || adv->getAmount() == 0)) {
+        return adv->getExpression();
+    }
+    return nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation ScanThru
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldScanThru(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<ScanThru>(stmt));
+    ScanThru * const st = cast<ScanThru>(stmt);
+    if (LLVM_UNLIKELY(isa<Zeroes>(st->getScanFrom()) || isa<Zeroes>(st->getScanThru()))) {
+        return st->getScanFrom();
+    } else if (LLVM_UNLIKELY(isa<Ones>(st->getScanThru()))) {
+        block->setInsertPoint(stmt->getPrevNode());
+        return block->createZeroes(stmt->getType());
+    } else if (LLVM_UNLIKELY(isa<ScanThru>(st->getScanFrom()))) {
+        ScanThru * const nested = cast<ScanThru>(st->getScanFrom());
+        if (LLVM_UNLIKELY(st->getScanThru() == nested->getScanThru())) {
+            return nested;
         }
-    } else if (LLVM_UNLIKELY(isa<Sel>(stmt))) {
-        Sel * const sel = cast<Sel>(stmt);
-        if (LLVM_UNLIKELY(isa<Zeroes>(sel->getCondition()))) {
-            return sel->getFalseExpr();
+    }
+    return nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation MatchStar
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldMatchStar(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<MatchStar>(stmt));
+    MatchStar * const mstar = cast<MatchStar>(stmt);
+    if (LLVM_UNLIKELY(isa<Zeroes>(mstar->getMarker()) || isa<Zeroes>(mstar->getCharClass()))) {
+        return mstar->getMarker();
+    } else if (LLVM_UNLIKELY(isa<Ones>(mstar->getMarker()))) {
+        block->setInsertPoint(stmt->getPrevNode());
+        return block->createOnes(stmt->getType());
+    }
+    return nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation LookAhead
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldLookAhead(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Lookahead>(stmt));
+    Lookahead * const la = cast<Lookahead>(stmt);
+    if (LLVM_UNLIKELY(isa<Zeroes>(la->getExpression()) || la->getAmount() == 0)) {
+        return la->getExpression();
+    }
+    return nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operation Sel
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldSel(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Sel>(stmt));
+    Sel * const sel = cast<Sel>(stmt);
+    if (LLVM_UNLIKELY(isa<Zeroes>(sel->getCondition()))) {
+        return sel->getFalseExpr();
+    }
+    if (LLVM_UNLIKELY(isa<Ones>(sel->getCondition()))) {
+        return sel->getTrueExpr();
+    }
+    if (LLVM_UNLIKELY(isa<Zeroes>(sel->getTrueExpr()))) {
+        block->setInsertPoint(stmt->getPrevNode());
+        PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
+        return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block, ternaryMode);
+    }
+    if (LLVM_UNLIKELY(isa<Ones>(sel->getTrueExpr()))) {
+        block->setInsertPoint(stmt->getPrevNode());
+        return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block, ternaryMode);
+    }
+    if (LLVM_UNLIKELY(isa<Zeroes>(sel->getFalseExpr()))) {
+        block->setInsertPoint(stmt->getPrevNode());
+        return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block, ternaryMode);
+    }
+    if (LLVM_UNLIKELY(isa<Ones>(sel->getFalseExpr()))) {
+        block->setInsertPoint(stmt->getPrevNode());
+        PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
+        return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block, ternaryMode);
+    }
+    return nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief fold operations Add or Subtraction
+ ** ------------------------------------------------------------------------------------------------------------- */
+static PabloAST * triviallyFoldAddOrSub(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+    assert(isa<Add>(stmt) || isa<Subtract>(stmt));
+    if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
+        const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
+        const Integer * const int1 = cast<Integer>(stmt->getOperand(1));
+        Integer::IntTy result = 0;
+        if (isa<Add>(stmt)) {
+            result = int0->value() + int1->value();
+        } else {
+            result = int0->value() - int1->value();
         }
-        if (LLVM_UNLIKELY(isa<Ones>(sel->getCondition()))) {
-            return sel->getTrueExpr();
-        }
-        if (LLVM_UNLIKELY(isa<Zeroes>(sel->getTrueExpr()))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
-            return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block, ternaryMode);
-        }
-        if (LLVM_UNLIKELY(isa<Ones>(sel->getTrueExpr()))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block, ternaryMode);
-        }
-        if (LLVM_UNLIKELY(isa<Zeroes>(sel->getFalseExpr()))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block, ternaryMode);
-        }
-        if (LLVM_UNLIKELY(isa<Ones>(sel->getFalseExpr()))) {
-            block->setInsertPoint(stmt->getPrevNode());
-            PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
-            return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block, ternaryMode);
-        }
-    } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
-       if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
-           const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
-           const Integer * const int1 = cast<Integer>(stmt->getOperand(1));
-           Integer::IntTy result = 0;
-           if (isa<Add>(stmt)) {
-               result = int0->value() + int1->value();
-           } else {
-               result = int0->value() - int1->value();
-           }
-           return block->getInteger(result);
-       }
+        return block->getInteger(result);
     }
     return nullptr;
 }
