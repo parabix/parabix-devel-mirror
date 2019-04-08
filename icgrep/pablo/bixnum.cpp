@@ -147,6 +147,7 @@ PabloAST * BixNumArithmetic::EQ(BixNum value, BixNum test) {
 }
 
 BixNum BixNumModularArithmetic::Add(BixNum augend, unsigned addend) {
+    if (addend == 0) return augend;
     BixNum sum(augend.size());
     addend = addend & ((1 << augend.size()) - 1);
     unsigned i = 0;
@@ -281,8 +282,11 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
     return product;
 }
 
+const unsigned CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM = 4;
+
 BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsigned bitsPerOutputUnit, BixNum input) {
-    assert(hi-lo > 0);
+    assert (hi > lo);
+    unsigned tblSize = hi - lo + 1;
     const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
     assert(input.size() >= bitsPerInputUnit);
     std::vector<CC *> bitXfrmClasses;
@@ -295,8 +299,31 @@ BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsi
     for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
         outputBitClasses.push_back(makeCC(&cc::Byte));
     }
+
+    // Determine the longest consecutive run.
+    int cur_offset = static_cast<int>(mTable[lo]);
+    unsigned cur_seq_lgth = 1;
+    int best_offset = cur_offset;
+    unsigned max_seq_lgth = 1;
+    for (int i = lo+1; i <= hi; i++) {
+        int offset = static_cast<int>(mTable[i]) - i;
+        if (offset == cur_offset) {
+            cur_seq_lgth++;
+        } else {
+            if (cur_seq_lgth > max_seq_lgth) {
+                max_seq_lgth = cur_seq_lgth;
+                best_offset = cur_offset;
+            }
+            cur_offset = offset;
+            cur_seq_lgth = 1;
+        }
+    }
+    if (max_seq_lgth < CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
+        best_offset = 0;  // no offsetting
+    }
+
     for (unsigned ch_code = lo; ch_code <= hi; ch_code++) {
-        codepoint_t transcodedCh = mTable[ch_code];
+        codepoint_t transcodedCh = static_cast<codepoint_t>(static_cast<int>(mTable[ch_code]) - best_offset);
         codepoint_t changedBits = transcodedCh ^ ch_code;
         unsigned subTableIdx = ch_code % (1<<bitsPerInputUnit);
         for (unsigned i = 0; i < bitsPerInputUnit; i++) {
@@ -313,14 +340,16 @@ BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsi
         }
     }
     cc::Parabix_CC_Compiler_Builder inputUnitCompiler(mPB.getPabloBlock(), input);
-    BixNum output;
-    output.reserve(bitsPerOutputUnit);
+    BixNum output(bitsPerOutputUnit, mPB.createZeroes());
     for (unsigned i = 0; i < bitsPerInputUnit; i++) {
         PabloAST * xfrmStrm = inputUnitCompiler.compileCC(bitXfrmClasses[i]);
         output[i] = mPB.createXor(xfrmStrm, input[i]);
     }
     for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
         output[i] = inputUnitCompiler.compileCC(outputBitClasses[i - bitsPerInputUnit]);
+    }
+    if (max_seq_lgth >= CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
+        output = BixNumModularArithmetic(mPB).Add(output, static_cast<unsigned>(best_offset));  // no offsetting
     }
     return output;
 }
