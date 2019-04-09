@@ -305,8 +305,14 @@ static PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block, c
         return cast<Not>(value)->getExpr(); // ¬¬A ⇔ A
     } else if (LLVM_UNLIKELY(isa<Zeroes>(value))) {
         return block->createOnes(stmt->getType()); // ¬0 ⇔ 1
-    }  else if (LLVM_UNLIKELY(isa<Ones>(value))) {
+    } else if (LLVM_UNLIKELY(isa<Ones>(value))) {
         return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
+    } else if (ternaryMode) {
+        if (auto ternary = dyn_cast<Ternary>(value)) { // ¬Ternary(m, a, b, c) ⇔ Ternary(¬m, a, b, c)
+            block->setInsertPoint(stmt);
+            const uint8_t mask = ternary->getMask()->value();
+            return block->createTernary(block->getInteger(~mask), ternary->getA(), ternary->getB(), ternary->getC());
+        }
     }
     return nullptr;
 }
