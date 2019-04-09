@@ -366,11 +366,11 @@ static PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block, c
         SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
         if (!op.empty()) {
             PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
-            if (And * b = dyn_cast<And>(basic_op) ) {
+            if (isa<And>(basic_op)) {
                 return block->createAnd3(op[2], op[0], op[1]);
-            } else if (Or * b = dyn_cast<Or>(basic_op) ) {
+            } else if (isa<Or>(basic_op)) {
                 return block->createAndOr(op[2], op[0], op[1]);
-            } else if (Xor * b = dyn_cast<Xor>(basic_op) ) {
+            } else if (isa<Xor>(basic_op)) {
                 return block->createAndXor(op[2], op[0], op[1]);
             }
         }
@@ -391,11 +391,11 @@ static PabloAST * triviallyFoldOr(Statement * stmt, PabloBlock * const block, co
         SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
         if (!op.empty()) {
             PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
-            if (And * b = dyn_cast<And>(basic_op) ) {
+            if (isa<And>(basic_op)) {
                 return block->createOrAnd(op[2], op[0], op[1]);
-            } else if (Or * b = dyn_cast<Or>(basic_op) ) {
+            } else if (isa<Or>(basic_op)) {
                 return block->createOr3(op[2], op[0], op[1]);
-            } else if (Xor * b = dyn_cast<Xor>(basic_op) ) {
+            } else if (isa<Xor>(basic_op)) {
                 return block->createOrXor(op[2], op[0], op[1]);
             }
         }
@@ -459,11 +459,11 @@ static PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block, c
         SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
         if (!op.empty()) {
             PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
-            if (And * b = dyn_cast<And>(basic_op) ) {
+            if (isa<And>(basic_op)) {
                 expr = block->createXorAnd(op[2], op[0], op[1]);
-            } else if (Or * b = dyn_cast<Or>(basic_op) ) {
+            } else if (isa<Or>(basic_op)) {
                 expr = block->createXorOr(op[2], op[0], op[1]);
-            } else if (Xor * b = dyn_cast<Xor>(basic_op) ) {
+            } else if (isa<Xor>(basic_op)) {
                 expr = block->createXor3(op[2], op[0], op[1]);
             }
         }
