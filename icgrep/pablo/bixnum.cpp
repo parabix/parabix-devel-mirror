@@ -63,20 +63,16 @@ PabloAST * BixNumArithmetic::UGE(BixNum value, BixNum floor) {
 }
 
 PabloAST * BixNumArithmetic::EQ(BixNum value, unsigned floor) {
-    unsigned floor_bits = std::log2(floor)+1;
-    if (value.size() < floor_bits) return mPB.createZeroes();
+    if (floor >> value.size() != 0) return mPB.createZeroes();
     PabloAST * EQ_1 = mPB.createOnes();
     PabloAST * EQ_0 = mPB.createZeroes();
-    for (unsigned i = 0; i < floor_bits; i++) {
+    for (unsigned i = 0; i < value.size(); i++) {
         auto floor_bit = (floor >> i) & 1;
         if (floor_bit == 1) {
             EQ_1 = mPB.createAnd(value[i], EQ_1);
         } else {
             EQ_0 = mPB.createOr(value[i], EQ_0);
         }
-    }
-    for (unsigned i = floor_bits; i < value.size(); i++) {
-        EQ_0 = mPB.createOr(value[i], EQ_0);
     }
     return mPB.createAnd(EQ_1, mPB.createNot(EQ_0));
 }

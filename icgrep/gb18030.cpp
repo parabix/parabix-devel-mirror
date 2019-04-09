@@ -270,26 +270,26 @@ public:
     GB_18030_DoubleByteRangeKernel(const std::unique_ptr<KernelBuilder> & kb,
                                    StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
                                    StreamSet * u16_out,
-                                   unsigned rangeBase, unsigned rangeSize);
+                                   unsigned rangeBase, unsigned rangeBits);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:
     unsigned mRangeBase;
-    unsigned mRangeSize;
+    unsigned mRangeBits;
 };
 
 GB_18030_DoubleByteRangeKernel::GB_18030_DoubleByteRangeKernel
 (const std::unique_ptr<KernelBuilder> & kb,
  StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
  StreamSet * u16_out,
- unsigned rangeBase, unsigned rangeSize)
-: PabloKernel(kb, "GB_18030_DoubleByteRangeKernel" + std::to_string(rangeBase) + "-" + std::to_string(rangeSize),
+ unsigned rangeBase, unsigned rangeBits)
+: PabloKernel(kb, "GB_18030_DoubleByteRangeKernel" + std::to_string(rangeBase) + "-" + std::to_string(rangeBase + (1 << rangeBits) - 1),
               // input
 {Binding{"GB_2byte", GB_2byte}, Binding{"gb15_index", gb15_index}, Binding{"u16_in", u16_in}},
               // output
-{Binding{"u16_out", u16_out}}), mRangeBase(rangeBase), mRangeSize(rangeSize) {
+{Binding{"u16_out", u16_out}}), mRangeBase(rangeBase), mRangeBits(rangeBits) {
 }
 
 void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
@@ -305,41 +305,44 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     
     //  Double byte sequences use a lookup table, with codepoints determined
     //  according to a calculated index.
-    
+ 
     std::vector<UCD::codepoint_t> GB_tbl = get_GB_DoubleByteTable();
     const unsigned maxGB2limit = GB_tbl.size();
-    unsigned rangeLimit = std::min(mRangeBase + mRangeSize, maxGB2limit);
+    
+    BixNum kernelSelectBasis = BixNumArithmetic(pb).HighBits(GB2idx, GB2idx.size()-mRangeBits);
+    PabloAST * inRange = pb.createAnd(GB_2byte, BixNumArithmetic(pb).EQ(kernelSelectBasis, mRangeBase >> mRangeBits));
+    unsigned rangeLimit = mRangeBase + (1 << mRangeBits);
+    if (rangeLimit > maxGB2limit) {
+        unsigned aboveBaseLimit = maxGB2limit % (1 << mRangeBits);
+        BixNum aboveBase = BixNumArithmetic(pb).Truncate(GB2idx, mRangeBits);
+        inRange = pb.createAnd(inRange, pb.createNot(BixNumArithmetic(pb).UGE(aboveBase, aboveBaseLimit)));
+        rangeLimit = maxGB2limit;
+    }
     
     const unsigned subTableBits = 7;
     const unsigned subTableSize = 1 << subTableBits;
     BixNum tblIdxBasis = BixNumArithmetic(pb).HighBits(GB2idx, GB2idx.size()-subTableBits);
     BixNum subTblBasis = BixNumArithmetic(pb).Truncate(GB2idx, subTableBits);
     BixNumTableCompiler tblComp(GB_tbl, 16, subTblBasis);
-
-    PabloAST * aboveBase = BixNumArithmetic(pb).UGE(GB2idx, mRangeBase);
-    PabloAST * belowLimit = pb.createNot(BixNumArithmetic(pb).UGE(GB2idx, rangeLimit), "belowLimit");
-    PabloAST * inRange = pb.createAnd(GB_2byte, pb.createAnd(aboveBase, belowLimit, "inRange"));
     
-    //PabloBuilder nested = pb.createScope();
-    //PabloBlock * inner = nested.getPabloBlock();
+    //PabloBuilder & nested = pb;
+    PabloBuilder nested = pb.createScope();
     
-    //BixNum rangeIndex = BixNumArithmetic(nested).Truncate(GB2idx, std::log2(mRangeSize));
-    
-    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(pb.getPabloBlock(), BixNumArithmetic(pb).ZeroExtend(tblIdxBasis, 8));
+    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(nested.getPabloBlock(), BixNumArithmetic(nested).ZeroExtend(tblIdxBasis, 8));
 
 
     for (unsigned tblCode = mRangeBase; tblCode < rangeLimit; tblCode+=subTableSize) {
         unsigned subTableLimit = std::min(tblCode + subTableSize -1, rangeLimit - 1);
         //llvm::errs() << "tblCode = " << tblCode << ", limit = " << subTableLimit << "\n";
-        PabloAST * tblCodeStrm = pb.createAnd(GB_2byte, tblIdxCompiler.compileCC(makeCC(tblCode/subTableSize, &cc::Byte)));
-        PabloBuilder nested2 = pb.createScope();
+        PabloAST * tblCodeStrm = nested.createAnd(inRange, tblIdxCompiler.compileCC(makeCC(tblCode/subTableSize, &cc::Byte)));
+        PabloBuilder nested2 = nested.createScope();
         BixNum outputCode = tblComp.compileSubTable(nested2, tblCode, subTableLimit);
         for (unsigned i = 0; i < 16; i++) {
             nested2.createAssign(u16[i], nested2.createOr(u16[i], nested2.createAnd(tblCodeStrm, outputCode[i], "st_" + std::to_string(tblCode) + "[" + std::to_string(i) + "]")));
         }
-        pb.createIf(tblCodeStrm, nested2);
+        nested.createIf(tblCodeStrm, nested2);
     }
-    //pb.createIf(inRange, nested);
+    pb.createIf(inRange, nested);
 
     Var * const u16_out = getOutputStreamVar("u16_out");
     for (unsigned i = 0; i < 16; i++) {
@@ -529,14 +532,14 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
 
     P->CreateKernelCall<GB_18030_InitializeASCII>(ASCII, byte1, u16basis);
 
-    const unsigned KernelSubrangeSize = 4096;
+    const unsigned KernelSubrangeBits = 11;
+    const unsigned KernelSubrangeSize = 1 << KernelSubrangeBits;
     const unsigned GB2_tblSize = get_GB_DoubleByteTable().size();
 
     for (unsigned rangeBase = 0; rangeBase < GB2_tblSize; rangeBase += KernelSubrangeSize) {
         //llvm::errs() << "rangeBase = " << rangeBase << "\n";
         StreamSet * u16out = P->CreateStreamSet(16);
-        unsigned rSize = std::min(KernelSubrangeSize, GB2_tblSize-rangeBase);
-        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(GB_2byte, gb15index, u16basis, u16out, rangeBase, rSize);
+        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(GB_2byte, gb15index, u16basis, u16out, rangeBase, KernelSubrangeBits);
         u16basis = u16out;
     }
 
