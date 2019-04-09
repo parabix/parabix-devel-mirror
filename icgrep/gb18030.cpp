@@ -228,74 +228,122 @@ void GB_18030_DoubleByteIndex::generatePabloMethod() {
     }
 }
 
-class GB_18030_CoreLogic : public pablo::PabloKernel {
+
+class GB_18030_InitializeASCII : public pablo::PabloKernel {
 public:
-    GB_18030_CoreLogic(const std::unique_ptr<KernelBuilder> & kb,
-                             StreamSet * ASCII, StreamSet * GB_2byte,
-                             StreamSet * byte1_basis, StreamSet * gb15_index,
-                             StreamSet * u16_basis);
+    GB_18030_InitializeASCII(const std::unique_ptr<KernelBuilder> & kb,
+                             StreamSet * ASCII, StreamSet * byte1_basis, StreamSet * u16_basis);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
+    const unsigned ASCII_Bits = 7;
 protected:
     void generatePabloMethod() override;
 };
 
-GB_18030_CoreLogic::GB_18030_CoreLogic
-(const std::unique_ptr<kernel::KernelBuilder> & kb,
- StreamSet * ASCII, StreamSet * GB_2byte,
- StreamSet * byte1_basis, StreamSet * gb15_index, StreamSet * u16_basis)
-: PabloKernel(kb, "GB_18030_CoreLogic",
+GB_18030_InitializeASCII::GB_18030_InitializeASCII
+(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * ASCII, StreamSet * byte1_basis, StreamSet * u16_basis)
+: PabloKernel(kb, "GB_18030_InitializeASCII",
               // input
-{Binding{"ASCII", ASCII}, Binding{"GB_2byte", GB_2byte}, Binding{"byte1_basis", byte1_basis}, Binding{"gb15_index", gb15_index}},
+{Binding{"ASCII", ASCII}, Binding{"byte1_basis", byte1_basis}},
               // output
 {Binding{"u16_basis", u16_basis}}) {
 }
 
-void GB_18030_CoreLogic::generatePabloMethod() {
+void GB_18030_InitializeASCII::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * ASCII = pb.createExtract(getInputStreamVar("ASCII"), pb.getInteger(0));
-    PabloAST * GB_2byte = pb.createExtract(getInputStreamVar("GB_2byte"), pb.getInteger(0));
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
-    BixNum GB2idx = getInputStreamSet("gb15_index");
     
     // Initialize 16 bit stream variables with ASCII values.
     PabloAST * zeroes = pb.createZeroes();
-    Var * u16[16];
-    for (unsigned i = 0; i < byte1_basis.size(); ++i) {
-        u16[i] = pb.createVar("u16" + std::to_string(i), pb.createAnd(ASCII, byte1_basis[i]));
+    Var * const u16_output = getOutputStreamVar("u16_basis");
+    for (unsigned i = 0; i < ASCII_Bits; ++i) {
+        pb.createAssign(pb.createExtract(u16_output, pb.getInteger(i)), pb.createAnd(ASCII, byte1_basis[i]));
     }
-    for (unsigned i = byte1_basis.size(); i < 16; ++i) {
-        u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
+    for (unsigned i = ASCII_Bits; i < 16; ++i) {
+        pb.createAssign(pb.createExtract(u16_output, pb.getInteger(i)), zeroes);
+    }
+}
+
+class GB_18030_DoubleByteRangeKernel : public pablo::PabloKernel {
+public:
+    GB_18030_DoubleByteRangeKernel(const std::unique_ptr<KernelBuilder> & kb,
+                                   StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
+                                   StreamSet * u16_out,
+                                   unsigned rangeBase, unsigned rangeSize);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+private:
+    unsigned mRangeBase;
+    unsigned mRangeSize;
+};
+
+GB_18030_DoubleByteRangeKernel::GB_18030_DoubleByteRangeKernel
+(const std::unique_ptr<KernelBuilder> & kb,
+ StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
+ StreamSet * u16_out,
+ unsigned rangeBase, unsigned rangeSize)
+: PabloKernel(kb, "GB_18030_DoubleByteRangeKernel" + std::to_string(rangeBase) + "-" + std::to_string(rangeSize),
+              // input
+{Binding{"GB_2byte", GB_2byte}, Binding{"gb15_index", gb15_index}, Binding{"u16_in", u16_in}},
+              // output
+{Binding{"u16_out", u16_out}}), mRangeBase(rangeBase), mRangeSize(rangeSize) {
+}
+
+void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    PabloAST * GB_2byte = pb.createExtract(getInputStreamVar("GB_2byte"), pb.getInteger(0));
+    BixNum GB2idx = getInputStreamSet("gb15_index");
+    BixNum u16_in = getInputStreamSet("u16_in");
+    
+    Var * u16[16];
+    for (unsigned i = 0; i < u16_in.size(); ++i) {
+        u16[i] = pb.createVar("u16" + std::to_string(i), u16_in[i]);
     }
     
     //  Double byte sequences use a lookup table, with codepoints determined
     //  according to a calculated index.
     
     std::vector<UCD::codepoint_t> GB_tbl = get_GB_DoubleByteTable();
-    const unsigned maxGB2index = GB_tbl.size()-1;
+    const unsigned maxGB2limit = GB_tbl.size();
+    unsigned rangeLimit = std::min(mRangeBase + mRangeSize, maxGB2limit);
     
-    const unsigned subTableBits = 8;
+    const unsigned subTableBits = 7;
     const unsigned subTableSize = 1 << subTableBits;
     BixNum tblIdxBasis = BixNumArithmetic(pb).HighBits(GB2idx, GB2idx.size()-subTableBits);
     BixNum subTblBasis = BixNumArithmetic(pb).Truncate(GB2idx, subTableBits);
-    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(getEntryScope(), BixNumArithmetic(pb).ZeroExtend(tblIdxBasis, 8));
+    BixNumTableCompiler tblComp(GB_tbl, 16, subTblBasis);
+
+    PabloAST * aboveBase = BixNumArithmetic(pb).UGE(GB2idx, mRangeBase);
+    PabloAST * belowLimit = pb.createNot(BixNumArithmetic(pb).UGE(GB2idx, rangeLimit), "belowLimit");
+    PabloAST * inRange = pb.createAnd(GB_2byte, pb.createAnd(aboveBase, belowLimit, "inRange"));
     
-    for (unsigned tblCode = 0; tblCode <= maxGB2index; tblCode+=subTableSize) {
-        std::stringstream gbpfx;
-        gbpfx << "gb_tbl" << std::hex << (tblCode/subTableSize);
+    //PabloBuilder nested = pb.createScope();
+    //PabloBlock * inner = nested.getPabloBlock();
+    
+    //BixNum rangeIndex = BixNumArithmetic(nested).Truncate(GB2idx, std::log2(mRangeSize));
+    
+    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(pb.getPabloBlock(), BixNumArithmetic(pb).ZeroExtend(tblIdxBasis, 8));
+
+
+    for (unsigned tblCode = mRangeBase; tblCode < rangeLimit; tblCode+=subTableSize) {
+        unsigned subTableLimit = std::min(tblCode + subTableSize -1, rangeLimit - 1);
+        //llvm::errs() << "tblCode = " << tblCode << ", limit = " << subTableLimit << "\n";
         PabloAST * tblCodeStrm = pb.createAnd(GB_2byte, tblIdxCompiler.compileCC(makeCC(tblCode/subTableSize, &cc::Byte)));
-        PabloBlock * inner = getEntryScope()->createScope();
-        PabloBuilder nested(inner);
-        BixNumTableCompiler tblComp(nested, GB_tbl, gbpfx.str());
-        BixNum outputCode = tblComp.compileSubTableLookup(tblCode, std::min(tblCode + subTableSize -1, maxGB2index), 16, subTblBasis);
+        PabloBuilder nested2 = pb.createScope();
+        BixNum outputCode = tblComp.compileSubTable(nested2, tblCode, subTableLimit);
         for (unsigned i = 0; i < 16; i++) {
-            nested.createAssign(u16[i], nested.createOr(u16[i], nested.createAnd(tblCodeStrm, outputCode[i])));
+            nested2.createAssign(u16[i], nested2.createOr(u16[i], nested2.createAnd(tblCodeStrm, outputCode[i], "st_" + std::to_string(tblCode) + "[" + std::to_string(i) + "]")));
         }
-        pb.createIf(tblCodeStrm, inner);
+        pb.createIf(tblCodeStrm, nested2);
     }
-    Var * const u16_output = getOutputStreamVar("u16_basis");
+    //pb.createIf(inRange, nested);
+
+    Var * const u16_out = getOutputStreamVar("u16_out");
     for (unsigned i = 0; i < 16; i++) {
-        pb.createAssign(pb.createExtract(u16_output, pb.getInteger(i)), u16[i]);
+        pb.createAssign(pb.createExtract(u16_out, pb.getInteger(i)), u16[i]);
     }
 }
 
@@ -328,8 +376,6 @@ GB_18030_FourByteLogic::GB_18030_FourByteLogic
               // output
 {Binding{"u21_basis", u21_basis}}) {
 }
-
-
 
 void GB_18030_FourByteLogic::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -479,8 +525,20 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * const gb15index = P->CreateStreamSet(15);
     P->CreateKernelCall<GB_18030_DoubleByteIndex>(ASCII, GB_4byte, byte1, byte2, GB_2byte, gb15index);
 
-    StreamSet * const u16basis = P->CreateStreamSet(16);
-    P->CreateKernelCall<GB_18030_CoreLogic>(ASCII, GB_2byte, byte1, gb15index, u16basis);
+    StreamSet * u16basis = P->CreateStreamSet(16);
+
+    P->CreateKernelCall<GB_18030_InitializeASCII>(ASCII, byte1, u16basis);
+
+    const unsigned KernelSubrangeSize = 4096;
+    const unsigned GB2_tblSize = get_GB_DoubleByteTable().size();
+
+    for (unsigned rangeBase = 0; rangeBase < GB2_tblSize; rangeBase += KernelSubrangeSize) {
+        //llvm::errs() << "rangeBase = " << rangeBase << "\n";
+        StreamSet * u16out = P->CreateStreamSet(16);
+        unsigned rSize = std::min(KernelSubrangeSize, GB2_tblSize-rangeBase);
+        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(GB_2byte, gb15index, u16basis, u16out, rangeBase, rSize);
+        u16basis = u16out;
+    }
 
     StreamSet * const u32basis = P->CreateStreamSet(21);
     P->CreateKernelCall<GB_18030_FourByteLogic>(GB_4byte, byte1, nybble1, byte2, nybble2, u16basis, u32basis);

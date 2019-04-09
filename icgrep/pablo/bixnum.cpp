@@ -28,6 +28,7 @@ PabloAST * createIf3(PabloBuilder & pb, PabloAST * op1, PabloAST * op2, PabloAST
 }
 
 PabloAST * BixNumArithmetic::UGE(BixNum value, unsigned floor) {
+    if (floor == 0) return mPB.createOnes();
     unsigned floor_bits = std::log2(floor)+1;
     if (value.size() < floor_bits) return mPB.createZeroes();
     PabloAST * UGE_so_far = mPB.createOnes();
@@ -284,19 +285,19 @@ BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
 
 const unsigned CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM = 4;
 
-BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsigned bitsPerOutputUnit, BixNum input) {
+BixNum BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi) {
     assert (hi > lo);
     unsigned tblSize = hi - lo + 1;
     const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
-    assert(input.size() >= bitsPerInputUnit);
+    assert(mInput.size() >= bitsPerInputUnit);
     std::vector<CC *> bitXfrmClasses;
     bitXfrmClasses.reserve(bitsPerInputUnit);
     for (unsigned i = 0; i < bitsPerInputUnit; i++) {
         bitXfrmClasses.push_back(makeCC(&cc::Byte));
     }
     std::vector<CC *> outputBitClasses;
-    outputBitClasses.reserve(bitsPerOutputUnit-bitsPerInputUnit);
-    for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
+    outputBitClasses.reserve(mBitsPerOutputUnit-bitsPerInputUnit);
+    for (unsigned i = bitsPerInputUnit; i < mBitsPerOutputUnit; i++) {
         outputBitClasses.push_back(makeCC(&cc::Byte));
     }
 
@@ -332,24 +333,24 @@ BixNum BixNumTableCompiler::compileSubTableLookup(unsigned lo, unsigned hi, unsi
                 bitXfrmClasses[i]->insert(subTableIdx);
             }
         }
-        for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
+        for (unsigned i = bitsPerInputUnit; i < mBitsPerOutputUnit; i++) {
             unsigned bit = 1 << i;
             if ((transcodedCh & bit) == bit) {
                 outputBitClasses[i-bitsPerInputUnit]->insert(subTableIdx);
             }
         }
     }
-    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(mPB.getPabloBlock(), input);
-    BixNum output(bitsPerOutputUnit, mPB.createZeroes());
+    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(pb.getPabloBlock(), mInput);
+    BixNum output(mBitsPerOutputUnit, pb.createZeroes());
     for (unsigned i = 0; i < bitsPerInputUnit; i++) {
         PabloAST * xfrmStrm = inputUnitCompiler.compileCC(bitXfrmClasses[i]);
-        output[i] = mPB.createXor(xfrmStrm, input[i]);
+        output[i] = pb.createXor(xfrmStrm, mInput[i]);
     }
-    for (unsigned i = bitsPerInputUnit; i < bitsPerOutputUnit; i++) {
+    for (unsigned i = bitsPerInputUnit; i < mBitsPerOutputUnit; i++) {
         output[i] = inputUnitCompiler.compileCC(outputBitClasses[i - bitsPerInputUnit]);
     }
     if (max_seq_lgth >= CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
-        output = BixNumModularArithmetic(mPB).Add(output, static_cast<unsigned>(best_offset));  // no offsetting
+        output = BixNumModularArithmetic(pb).Add(output, static_cast<unsigned>(best_offset));  // no offsetting
     }
     return output;
 }

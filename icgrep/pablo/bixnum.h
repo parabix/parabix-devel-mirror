@@ -61,12 +61,14 @@ private:
 // 
 class BixNumTableCompiler {
 public:
-    BixNumTableCompiler(PabloBuilder & b, std::vector<unsigned> & table, std::string tName="tx") : mPB(b), mTable(table) {}
-    BixNum compileSubTableLookup(unsigned lo, unsigned hi, unsigned bitsPerOutputUnit, BixNum input);
+    BixNumTableCompiler(std::vector<unsigned> & table, unsigned bitsPerOutputUnit, BixNum & input) : 
+        mTable(table), mBitsPerOutputUnit(bitsPerOutputUnit), mInput(input) {}
+    BixNum compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi);
     
 private:
-    PabloBuilder & mPB;
     std::vector<unsigned> & mTable;
+    unsigned mBitsPerOutputUnit;
+    BixNum & mInput;
 };
 
 }
