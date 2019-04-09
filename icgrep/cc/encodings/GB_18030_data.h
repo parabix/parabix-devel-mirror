@@ -11,7 +11,7 @@
 #include <UCD/unicode_set.h>
 #include <vector>
 
-std::vector<std::vector<UCD::codepoint_t>> & get_GB_DoubleByteTable();
+std::vector<UCD::codepoint_t> & get_GB_DoubleByteTable();
 
 std::vector<std::pair<unsigned, unsigned>> & get_GB_RangeTable();
 
