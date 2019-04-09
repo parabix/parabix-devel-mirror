@@ -356,14 +356,18 @@ static PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block, c
     if (folded) {
         return triviallyFold(cast<Statement>(folded), block, ternaryMode);
     }
-    PabloAST * op[2];
-    op[0] = stmt->getOperand(0);
-    op[1] = stmt->getOperand(1);
-    if (And * b = dyn_cast<And>(op[0])) {
-        block->setInsertPoint(cast<Statement>(stmt));
-        Ternary * blah = block->createAnd3(b->getOperand(0), b->getOperand(1), op[1]);
-        stmt->replaceWith(cast<Statement>(blah));
-        return nullptr;
+    if (ternaryMode) {
+        SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
+        if (!op.empty()) {
+            PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
+            if (And * b = dyn_cast<And>(basic_op) ) {
+                return block->createAnd3(op[2], op[0], op[1]);
+            } else if (Or * b = dyn_cast<Or>(basic_op) ) {
+                return block->createAndOr(op[2], op[0], op[1]);
+            } else if (Xor * b = dyn_cast<Xor>(basic_op) ) {
+                return block->createAndXor(op[2], op[0], op[1]);
+            }
+        }
     }
     return nullptr;
 }
@@ -373,7 +377,24 @@ static PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block, c
  ** ------------------------------------------------------------------------------------------------------------- */
 static PabloAST * triviallyFoldOr(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
     assert(isa<Or>(stmt));
-    return triviallyFoldBinaryAndOr(stmt, block, ternaryMode);
+    PabloAST * folded = triviallyFoldBinaryAndOr(stmt, block, ternaryMode);
+    if (folded) {
+        return triviallyFold(cast<Statement>(folded), block, ternaryMode);
+    }
+    if (ternaryMode) {
+        SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
+        if (!op.empty()) {
+            PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
+            if (And * b = dyn_cast<And>(basic_op) ) {
+                return block->createOrAnd(op[2], op[0], op[1]);
+            } else if (Or * b = dyn_cast<Or>(basic_op) ) {
+                return block->createOr3(op[2], op[0], op[1]);
+            } else if (Xor * b = dyn_cast<Xor>(basic_op) ) {
+                return block->createOrXor(op[2], op[0], op[1]);
+            }
+        }
+    }
+    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -427,6 +448,21 @@ static PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block, c
         PabloAST * const folded = triviallyFold(negated, block, ternaryMode);
         expr = folded ? folded : negated;
     }
+
+    if (ternaryMode && isa<PabloAST>(stmt) && equals(expr, cast<PabloAST>(stmt))) {
+        SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
+        if (!op.empty()) {
+            PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
+            if (And * b = dyn_cast<And>(basic_op) ) {
+                expr = block->createXorAnd(op[2], op[0], op[1]);
+            } else if (Or * b = dyn_cast<Or>(basic_op) ) {
+                expr = block->createXorOr(op[2], op[0], op[1]);
+            } else if (Xor * b = dyn_cast<Xor>(basic_op) ) {
+                expr = block->createXor3(op[2], op[0], op[1]);
+            }
+        }
+    }
+
     return expr;
 }
 
@@ -542,9 +578,29 @@ static PabloAST * triviallyFoldAddOrSub(Statement * stmt, PabloBlock * const blo
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief helper function to fold basic operation operands
+ ** ------------------------------------------------------------------------------------------------------------- */
+static SmallVector<PabloAST *, 3> triviallyFoldBasicBinOp(Statement * stmt, PabloAST * expr1, PabloAST * expr2, PabloBlock * const block, const bool ternaryMode) {
+    SmallVector<PabloAST *, 3> op;
+    if (isBasicBinaryOp(expr1)) {
+        op.push_back(cast<Statement>(expr1)->getOperand(0));
+        op.push_back(cast<Statement>(expr1)->getOperand(1));
+        op.push_back(expr2);
+    } else if (isBasicBinaryOp(expr2)) {
+        op.push_back(cast<Statement>(expr2)->getOperand(0));
+        op.push_back(cast<Statement>(expr2)->getOperand(1));
+        op.push_back(expr1);
+    } else {
+        return op;
+    }
+    block->setInsertPoint(stmt);
+    return op;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief check if op is And, Or or Xor
  ** ------------------------------------------------------------------------------------------------------------- */
-static bool isBasicBinaryOp(Statement * stmt) {
+static bool isBasicBinaryOp(PabloAST * stmt) {
     return isa<Or>(stmt) || isa<Xor>(stmt) || isa<And>(stmt);
 }
 
