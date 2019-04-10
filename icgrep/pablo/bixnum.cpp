@@ -15,31 +15,39 @@ using namespace re;
 
 namespace pablo {
 
-PabloAST * BixNumArithmetic::UGE(BixNum value, unsigned floor) {
+PabloAST * BixNumCompiler::UGE(BixNum value, unsigned floor) {
     if (floor == 0) return mPB.createOnes();
-    unsigned floor_bits = std::log2(floor)+1;
-    if (value.size() < floor_bits) return mPB.createZeroes();
-    PabloAST * UGE_so_far = mPB.createOnes();
-    for (unsigned i = 0; i < floor_bits; i++) {
-        auto floor_bit = (floor >> i) & 1;
-        if (floor_bit == 1) {
-            UGE_so_far = mPB.createAnd(value[i], UGE_so_far);
-        } else {
-            UGE_so_far = mPB.createOr(value[i], UGE_so_far);
-        }
-    }
-    for (unsigned i = floor_bits; i < value.size(); i++) {
-        UGE_so_far = mPB.createOr(value[i], UGE_so_far);
-    }
-    return UGE_so_far;
+    return UGT(value, floor - 1);
 }
 
-PabloAST * BixNumArithmetic::UGE(BixNum value, BixNum floor) {
+PabloAST * BixNumCompiler::UGT(BixNum value, unsigned floor) {
+    if (floor >> value.size() != 0) return mPB.createZeroes();
+    PabloAST * UGT_so_far = mPB.createZeroes();
+    for (unsigned i = 0; i < value.size(); i++) {
+        auto floor_bit = (floor >> i) & 1;
+        if (floor_bit == 1) {
+            UGT_so_far = mPB.createAnd(value[i], UGT_so_far);
+        } else {
+            UGT_so_far = mPB.createOr(value[i], UGT_so_far);
+        }
+    }
+    return UGT_so_far;
+}
+
+PabloAST * BixNumCompiler::ULE(BixNum value, unsigned floor) {
+    return mPB.createNot(UGT(value, floor));
+}
+    
+PabloAST * BixNumCompiler::ULT(BixNum value, unsigned floor) {
+    return mPB.createNot(UGE(value, floor));
+}
+
+PabloAST * BixNumCompiler::UGE(BixNum value, BixNum floor) {
     PabloAST * UGE_so_far = mPB.createOnes();
     unsigned common_bits = std::min(value.size(), floor.size());
     for (unsigned i = 0; i < common_bits; i++) {
         UGE_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGE_so_far),
-                                             mPB.createOr(value[i], UGE_so_far));
+                                   mPB.createOr(value[i], UGE_so_far));
     }
     for (unsigned i = common_bits; i < floor.size(); i++) {
         UGE_so_far = mPB.createAnd(UGE_so_far, mPB.createNot(floor[i]));
@@ -50,7 +58,31 @@ PabloAST * BixNumArithmetic::UGE(BixNum value, BixNum floor) {
     return UGE_so_far;
 }
 
-PabloAST * BixNumArithmetic::EQ(BixNum value, unsigned floor) {
+PabloAST * BixNumCompiler::UGT(BixNum value, BixNum floor) {
+    PabloAST * UGT_so_far = mPB.createZeroes();
+    unsigned common_bits = std::min(value.size(), floor.size());
+    for (unsigned i = 0; i < common_bits; i++) {
+        UGT_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGT_so_far),
+                                   mPB.createOr(value[i], UGT_so_far));
+    }
+    for (unsigned i = common_bits; i < floor.size(); i++) {
+        UGT_so_far = mPB.createAnd(UGT_so_far, mPB.createNot(floor[i]));
+    }
+    for (unsigned i = common_bits; i < value.size(); i++) {
+        UGT_so_far = mPB.createOr(UGT_so_far, value[i]);
+    }
+    return UGT_so_far;
+}
+
+PabloAST * BixNumCompiler::ULE(BixNum value, BixNum floor) {
+    return mPB.createNot(UGT(value, floor));
+}
+
+PabloAST * BixNumCompiler::ULT(BixNum value, BixNum floor) {
+    return mPB.createNot(UGE(value, floor));
+}
+
+PabloAST * BixNumCompiler::EQ(BixNum value, unsigned floor) {
     if (floor >> value.size() != 0) return mPB.createZeroes();
     PabloAST * EQ_1 = mPB.createOnes();
     PabloAST * EQ_0 = mPB.createZeroes();
@@ -65,11 +97,11 @@ PabloAST * BixNumArithmetic::EQ(BixNum value, unsigned floor) {
     return mPB.createAnd(EQ_1, mPB.createNot(EQ_0));
 }
 
-PabloAST * BixNumArithmetic::NEQ(BixNum value, unsigned floor) {
+PabloAST * BixNumCompiler::NEQ(BixNum value, unsigned floor) {
     return mPB.createNot(EQ(value, floor));
 }
 
-PabloAST * BixNumArithmetic::NEQ(BixNum value, BixNum test) {
+PabloAST * BixNumCompiler::NEQ(BixNum value, BixNum test) {
     PabloAST * any_NEQ = mPB.createZeroes();
     unsigned common_bits = std::min(value.size(), test.size());
     for (unsigned i = 0; i < common_bits; i++) {
@@ -84,7 +116,7 @@ PabloAST * BixNumArithmetic::NEQ(BixNum value, BixNum test) {
     return any_NEQ;
 }
 
-BixNum BixNumArithmetic::ZeroExtend(BixNum value, unsigned extended_size) {
+BixNum BixNumCompiler::ZeroExtend(BixNum value, unsigned extended_size) {
     assert(extended_size >= value.size());
     BixNum extended(extended_size);
     for (unsigned i = 0; i < value.size(); i++) {
@@ -96,7 +128,7 @@ BixNum BixNumArithmetic::ZeroExtend(BixNum value, unsigned extended_size) {
     return extended;
 }
 
-BixNum BixNumArithmetic::SignExtend(BixNum value, unsigned extended_size) {
+BixNum BixNumCompiler::SignExtend(BixNum value, unsigned extended_size) {
     assert(extended_size >= value.size());
     BixNum extended(extended_size);
     for (unsigned i = 0; i < value.size(); i++) {
@@ -108,7 +140,7 @@ BixNum BixNumArithmetic::SignExtend(BixNum value, unsigned extended_size) {
     return extended;
 }
 
-BixNum BixNumArithmetic::Truncate(BixNum value, unsigned truncated_size) {
+BixNum BixNumCompiler::Truncate(BixNum value, unsigned truncated_size) {
     assert(truncated_size <= value.size());
     BixNum truncated(truncated_size);
     for (unsigned i = 0; i < truncated_size; i++) {
@@ -117,7 +149,7 @@ BixNum BixNumArithmetic::Truncate(BixNum value, unsigned truncated_size) {
     return truncated;
 }
 
-BixNum BixNumArithmetic::HighBits(BixNum value, unsigned highBitCount) {
+BixNum BixNumCompiler::HighBits(BixNum value, unsigned highBitCount) {
     assert(highBitCount <= value.size());
     unsigned offset = value.size() - highBitCount;
     BixNum extracted(highBitCount);
@@ -127,11 +159,11 @@ BixNum BixNumArithmetic::HighBits(BixNum value, unsigned highBitCount) {
     return extracted;
 }
 
-PabloAST * BixNumArithmetic::EQ(BixNum value, BixNum test) {
+PabloAST * BixNumCompiler::EQ(BixNum value, BixNum test) {
     return mPB.createNot(NEQ(value, test));
 }
 
-BixNum BixNumModularArithmetic::Add(BixNum augend, unsigned addend) {
+BixNum BixNumCompiler::AddModular(BixNum augend, unsigned addend) {
     if (addend == 0) return augend;
     BixNum sum(augend.size());
     addend = addend & ((1 << augend.size()) - 1);
@@ -154,7 +186,7 @@ BixNum BixNumModularArithmetic::Add(BixNum augend, unsigned addend) {
     return sum;
 }
 
-BixNum BixNumModularArithmetic::Add(BixNum augend, BixNum addend) {
+BixNum BixNumCompiler::AddModular(BixNum augend, BixNum addend) {
     BixNum sum(augend.size());
     PabloAST * carry = mPB.createZeroes();
     for (unsigned i = 0; i < augend.size(); i++) {
@@ -169,12 +201,12 @@ BixNum BixNumModularArithmetic::Add(BixNum augend, BixNum addend) {
     return sum;
 }
 
-BixNum BixNumModularArithmetic::Sub(BixNum minuend, unsigned subtrahend) {
+BixNum BixNumCompiler::SubModular(BixNum minuend, unsigned subtrahend) {
     unsigned complement = (~subtrahend) + 1;
-    return Add(minuend, complement);
+    return AddModular(minuend, complement);
 }
 
-BixNum BixNumModularArithmetic::Sub(BixNum minuend, BixNum subtrahend) {
+BixNum BixNumCompiler::SubModular(BixNum minuend, BixNum subtrahend) {
     BixNum diff(minuend.size());
     PabloAST * borrow = mPB.createZeroes();
     for (unsigned i = 0; i < minuend.size(); i++) {
@@ -189,7 +221,7 @@ BixNum BixNumModularArithmetic::Sub(BixNum minuend, BixNum subtrahend) {
     return diff;
 }
 
-BixNum BixNumModularArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
+BixNum BixNumCompiler::MulModular(BixNum multiplicand, unsigned multiplier) {
     unsigned multiplier_bits = std::log2(multiplier)+1;
     BixNum product(multiplicand.size(), mPB.createZeroes());
     for (unsigned i = 0; i < multiplier_bits; i++) {
@@ -206,8 +238,8 @@ BixNum BixNumModularArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
     return product;
 }
 
-BixNum BixNumFullArithmetic::Add(BixNum augend, BixNum addend) {
-    if (augend.size() < addend.size()) return Add(addend, augend);
+BixNum BixNumCompiler::AddFull(BixNum augend, BixNum addend) {
+    if (augend.size() < addend.size()) return AddFull(addend, augend);
     BixNum sum(augend.size() + 1);
     PabloAST * carry = mPB.createZeroes();
     for (unsigned i = 0; i < addend.size(); i++) {
@@ -222,7 +254,7 @@ BixNum BixNumFullArithmetic::Add(BixNum augend, BixNum addend) {
     return sum;
 }
 
-BixNum BixNumFullArithmetic::Mul(BixNum multiplicand, unsigned multiplier) {
+BixNum BixNumCompiler::MulFull(BixNum multiplicand, unsigned multiplier) {
     unsigned multiplier_bits = std::log2(multiplier)+1;
     BixNum product(multiplicand.size() + multiplier_bits, mPB.createZeroes());
     // Choose between the addition-based and subtraction-based strategies based
@@ -271,7 +303,6 @@ const unsigned CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM = 4;
 
 BixNum BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi) {
     assert (hi > lo);
-    unsigned tblSize = hi - lo + 1;
     const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
     assert(mInput.size() >= bitsPerInputUnit);
     std::vector<CC *> bitXfrmClasses;
@@ -334,7 +365,7 @@ BixNum BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsi
         output[i] = inputUnitCompiler.compileCC(outputBitClasses[i - bitsPerInputUnit]);
     }
     if (max_seq_lgth >= CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
-        output = BixNumModularArithmetic(pb).Add(output, static_cast<unsigned>(best_offset));  // no offsetting
+        output = BixNumCompiler(pb).AddModular(output, static_cast<unsigned>(best_offset));  // no offsetting
     }
     return output;
 }

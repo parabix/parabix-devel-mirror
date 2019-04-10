@@ -14,44 +14,37 @@ namespace pablo {
 using BixNum = std::vector<PabloAST *>;
     
     
-class BixNumArithmetic {
+class BixNumCompiler {
 public:
-    BixNumArithmetic(PabloBuilder & pb) : mPB(pb) {}
+    BixNumCompiler(PabloBuilder & pb) : mPB(pb) {}
     PabloAST * EQ(BixNum value, unsigned test);
     PabloAST * EQ(BixNum value, BixNum test);
     PabloAST * NEQ(BixNum value, unsigned test);
     PabloAST * NEQ(BixNum value, BixNum test);
     PabloAST * UGE(BixNum value, unsigned floor);
     PabloAST * UGE(BixNum value, BixNum floor);
+    PabloAST * UGT(BixNum value, unsigned floor);
+    PabloAST * UGT(BixNum value, BixNum floor);
+    PabloAST * ULE(BixNum value, unsigned floor);
+    PabloAST * ULE(BixNum value, BixNum floor);
+    PabloAST * ULT(BixNum value, unsigned floor);
+    PabloAST * ULT(BixNum value, BixNum floor);
     BixNum ZeroExtend(BixNum value, unsigned extended_size);
     BixNum SignExtend(BixNum value, unsigned extended_size);
     BixNum Truncate(BixNum value, unsigned truncated_size);
     BixNum HighBits(BixNum value, unsigned highBitCount);
+    //
+    // Modular arithmetic operations
+    BixNum AddModular(BixNum augend, unsigned addend);
+    BixNum AddModular(BixNum augend, BixNum addend);
+    BixNum SubModular(BixNum minuend, unsigned subtrahend);
+    BixNum SubModular(BixNum minuend, BixNum subtrahend);
+    BixNum MulModular(BixNum multiplicand, unsigned multiplier);
+    //
+    // Full arithmetic operations
+    BixNum AddFull(BixNum augend, BixNum addend);
+    BixNum MulFull(BixNum multiplicand, unsigned multiplier);
 
-
-private:
-    PabloBuilder & mPB;
-};
-
-class BixNumModularArithmetic {
-public:    
-    BixNumModularArithmetic(PabloBuilder & pb) : mPB(pb) {}
-    BixNum Add(BixNum augend, unsigned addend);
-    BixNum Add(BixNum augend, BixNum addend);
-    BixNum Sub(BixNum minuend, unsigned subtrahend);
-    BixNum Sub(BixNum minuend, BixNum subtrahend);
-    BixNum Mul(BixNum multiplicand, unsigned multiplier);
-private:
-    PabloBuilder & mPB;
-};
-
-class BixNumFullArithmetic {
-public:
-    BixNumFullArithmetic(PabloBuilder & pb) : mPB(pb) {}
-    
-    BixNum Add(BixNum augend, unsigned addend);
-    BixNum Add(BixNum augend, BixNum addend);
-    BixNum Mul(BixNum multiplicand, unsigned multiplier);
 private:
     PabloBuilder & mPB;
 };

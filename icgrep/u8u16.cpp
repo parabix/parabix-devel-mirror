@@ -161,7 +161,7 @@ void U8U16Kernel::generatePabloMethod() {
     Var * s43_lo1 = main.createVar("scope43_lo1", zeroes);
     Var * s43_lo0 = main.createVar("scope43_lo0", zeroes);
 
-    BixNum plane = BixNumModularArithmetic(p4b).Sub({bit4a1, bit5a1, bit0a2, bit1a2}, 1);
+    BixNum plane = BixNumCompiler(p4b).SubModular({bit4a1, bit5a1, bit0a2, bit1a2}, 1);
     p4b.createAssign(s43_lo6, p4b.createAnd(u8scope43, plane[0]));
     p4b.createAssign(s43_lo7, p4b.createAnd(u8scope43, plane[1]));
     p4b.createAssign(s43_hi0, p4b.createAnd(u8scope43, plane[2]));

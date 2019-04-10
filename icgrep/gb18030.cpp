@@ -203,6 +203,7 @@ GB_18030_DoubleByteIndex::GB_18030_DoubleByteIndex
 
 void GB_18030_DoubleByteIndex::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
+    BixNumCompiler bnc(pb);
     PabloAST * ASCII = pb.createExtract(getInputStreamVar("ASCII"), pb.getInteger(0));
     PabloAST * GB_4byte = pb.createExtract(getInputStreamVar("GB_4byte"), pb.getInteger(0));
     PabloAST * GB_2byte = pb.createNot(pb.createOr(ASCII, GB_4byte), "gb_2byte");
@@ -214,13 +215,13 @@ void GB_18030_DoubleByteIndex::generatePabloMethod() {
     // The valid values for the second byte of a 2-byte GB sequence are 0x40-7F and 0x80-0xFE.
     // Normalize these values to the range 0 through 190.
     BixNum x80 = {byte2_basis[7]};
-    BixNum b2 = BixNumModularArithmetic(pb).Sub(BixNumModularArithmetic(pb).Sub(byte2_basis, x80), 0x40);
+    BixNum b2 = bnc.SubModular(bnc.SubModular(byte2_basis, x80), 0x40);
     
     // The valid values for the first byte of a 2-byte GB sequence are 0x81-0xFE.  Normalize
     // to the range 0-125 as seven-bit value.
-    BixNum b1 = BixNumModularArithmetic(pb).Sub(BixNumArithmetic(pb).Truncate(byte1_basis, 7), 0x1);
+    BixNum b1 = bnc.SubModular(bnc.Truncate(byte1_basis, 7), 0x1);
     // Now compute the GB 2-byte index value:  190 * b1 + b2, as a 15-bit quantity.
-    BixNum GB2idx = BixNumModularArithmetic(pb).Add(BixNumFullArithmetic(pb).Mul(b1, 190), b2);
+    BixNum GB2idx = bnc.AddModular(bnc.MulFull(b1, 190), b2);
     
     Var * const gb15_index = getOutputStreamVar("gb15_index");
     for (unsigned i = 0; i < 15; i++) {
@@ -294,6 +295,7 @@ GB_18030_DoubleByteRangeKernel::GB_18030_DoubleByteRangeKernel
 
 void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
+    BixNumCompiler bnc(pb);
     PabloAST * GB_2byte = pb.createExtract(getInputStreamVar("GB_2byte"), pb.getInteger(0));
     BixNum GB2idx = getInputStreamSet("gb15_index");
     BixNum u16_in = getInputStreamSet("u16_in");
@@ -309,26 +311,26 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     std::vector<UCD::codepoint_t> GB_tbl = get_GB_DoubleByteTable();
     const unsigned maxGB2limit = GB_tbl.size();
     
-    BixNum kernelSelectBasis = BixNumArithmetic(pb).HighBits(GB2idx, GB2idx.size()-mRangeBits);
-    PabloAST * inRange = pb.createAnd(GB_2byte, BixNumArithmetic(pb).EQ(kernelSelectBasis, mRangeBase >> mRangeBits));
+    BixNum kernelSelectBasis = bnc.HighBits(GB2idx, GB2idx.size()-mRangeBits);
+    PabloAST * inRange = pb.createAnd(GB_2byte, bnc.EQ(kernelSelectBasis, mRangeBase >> mRangeBits));
     unsigned rangeLimit = mRangeBase + (1 << mRangeBits);
     if (rangeLimit > maxGB2limit) {
         unsigned aboveBaseLimit = maxGB2limit % (1 << mRangeBits);
-        BixNum aboveBase = BixNumArithmetic(pb).Truncate(GB2idx, mRangeBits);
-        inRange = pb.createAnd(inRange, pb.createNot(BixNumArithmetic(pb).UGE(aboveBase, aboveBaseLimit)));
+        BixNum aboveBase = bnc.Truncate(GB2idx, mRangeBits);
+        inRange = pb.createAnd(inRange, pb.createNot(bnc.UGE(aboveBase, aboveBaseLimit)));
         rangeLimit = maxGB2limit;
     }
     
     const unsigned subTableBits = 7;
     const unsigned subTableSize = 1 << subTableBits;
-    BixNum tblIdxBasis = BixNumArithmetic(pb).HighBits(GB2idx, GB2idx.size()-subTableBits);
-    BixNum subTblBasis = BixNumArithmetic(pb).Truncate(GB2idx, subTableBits);
+    BixNum tblIdxBasis = bnc.HighBits(GB2idx, GB2idx.size()-subTableBits);
+    BixNum subTblBasis = bnc.Truncate(GB2idx, subTableBits);
     BixNumTableCompiler tblComp(GB_tbl, 16, subTblBasis);
     
     //PabloBuilder & nested = pb;
     PabloBuilder nested = pb.createScope();
     
-    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(nested.getPabloBlock(), BixNumArithmetic(nested).ZeroExtend(tblIdxBasis, 8));
+    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(nested.getPabloBlock(), BixNumCompiler(nested).ZeroExtend(tblIdxBasis, 8));
 
 
     for (unsigned tblCode = mRangeBase; tblCode < rangeLimit; tblCode+=subTableSize) {
@@ -397,6 +399,7 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     }
 
     PabloBuilder nb = pb.createScope();
+    BixNumCompiler bnc(nb);
 
     BixNum byte3_lo7(7);
     for (unsigned i = 0; i < 7; i++) {
@@ -410,18 +413,18 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
         byte4_lo4[i] = nb.createAnd(GB_4byte, nybble2[i], "gb_nybble2");
     }
 
-    BixNum lo11 = BixNumFullArithmetic(nb).Mul(BixNumModularArithmetic(nb).Sub(byte3_lo7, 1), 10);
-    lo11 = BixNumModularArithmetic(nb).Add(lo11, byte4_lo4);
-    BixNum lo15 = BixNumModularArithmetic(nb).Add(BixNumFullArithmetic(nb).Mul(byte2_lo4, 1260), lo11);
+    BixNum lo11 = bnc.MulFull(bnc.SubModular(byte3_lo7, 1), 10);
+    lo11 = bnc.AddModular(lo11, byte4_lo4);
+    BixNum lo15 = bnc.AddModular(bnc.MulFull(byte2_lo4, 1260), lo11);
 
-    BixNum SMP_base = BixNumFullArithmetic(nb).Mul(BixNumModularArithmetic(nb).Sub(byte1_lo7, 0x10), 12600);
-    SMP_base = BixNumModularArithmetic(nb).Add(SMP_base, 0x10000);
-    BixNum byte1_X_12600 = BixNumFullArithmetic(nb).Mul(BixNumModularArithmetic(nb).Sub(byte1_lo7, 1), 12600);
+    BixNum SMP_base = bnc.MulFull(bnc.SubModular(byte1_lo7, 0x10), 12600);
+    SMP_base = bnc.AddModular(SMP_base, 0x10000);
+    BixNum byte1_X_12600 = bnc.MulFull(bnc.SubModular(byte1_lo7, 1), 12600);
 
-    BixNum GB_val = BixNumModularArithmetic(nb).Add(byte1_X_12600, lo15);
-    BixNum SMP_offset = BixNumModularArithmetic(nb).Add(SMP_base, lo15);
+    BixNum GB_val = bnc.AddModular(byte1_X_12600, lo15);
+    BixNum SMP_offset = bnc.AddModular(SMP_base, lo15);
 
-    PabloAST * aboveBMP = nb.createAnd(GB_4byte, BixNumArithmetic(nb).UGE(byte1_lo7, 0x10), "gb_aboveBMP");
+    PabloAST * aboveBMP = nb.createAnd(GB_4byte, bnc.UGE(byte1_lo7, 0x10), "gb_aboveBMP");
 
     PabloAST * temp[16];
     for (unsigned i = 16; i < 21; i++) {
@@ -441,12 +444,12 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
         codepoint_t offset = cp - base;
         PabloAST * GE_hi_bound;
         if (i < range_tbl.size() - 1) {
-            GE_hi_bound = BixNumArithmetic(nb).UGE(GB_val, range_tbl[i+1].first);
+            GE_hi_bound = bnc.UGE(GB_val, range_tbl[i+1].first);
         } else {
             GE_hi_bound = nb.createOnes();
         }
         PabloAST * in_range = nb.createAnd(GE_lo_bound, nb.createNot(GE_hi_bound));
-        BixNum mapped = BixNumModularArithmetic(nb).Add(GB_val, offset);
+        BixNum mapped = bnc.AddModular(GB_val, offset);
         for (unsigned i = 0; i < 16; i++) {
             temp[i] = nb.createOr(temp[i], nb.createAnd(in_range, mapped[i]));
         }
