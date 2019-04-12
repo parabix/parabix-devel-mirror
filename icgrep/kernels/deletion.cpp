@@ -224,7 +224,7 @@ StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelB
 : MultiBlockKernel(b, "streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
 {Binding{"sourceStreamSet", source},
 Binding{"extractionMask", extractionMask}},
-{Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask"), BlockSize(1)}},
+{Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask")}},
 {}, {}, {})
 , mCompressedFieldWidth(FieldWidth)
 , mStreamCount(source->getNumElements()) {

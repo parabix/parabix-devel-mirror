@@ -231,6 +231,12 @@ Kernel * PipelineBuilder::makeKernel() {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
         out << "+BIC";
     }
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+        out << "+DB";
+    }
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
+        out << "+SS";
+    }
 
     for (unsigned i = 0; i < numOfKernels; ++i) {
         out << "_K" << mKernels[i]->getFamilyName();

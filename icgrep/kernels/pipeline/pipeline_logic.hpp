@@ -159,6 +159,47 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         PointerType * const handlePtrTy = kernel->getSharedStateType()->getPointerTo(0);
         mPipelineKernel->addInternalScalar(handlePtrTy, makeKernelName(kernelIndex));
     }
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+        for (const auto & e : make_iterator_range(out_edges(kernelIndex, mBufferGraph))) {
+            const auto bufferVertex = target(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[bufferVertex];
+            if (isa<DynamicBuffer>(bn.Buffer)) {
+                const BufferRateData & rd = mBufferGraph[e];
+                const auto prefix = makeBufferName(kernelIndex, rd.Port);
+                LLVMContext & C = b->getContext();
+                FixedArray<Type *, 2> traceStruct;
+                traceStruct[0] = sizeTy; // segment num
+                traceStruct[1] = sizeTy; // new capacity
+                Type * const traceStructTy = StructType::get(C, traceStruct);
+                traceStruct[0] = traceStructTy->getPointerTo(); // pointer to trace log
+                // traceStruct[1] = sizeTy; // length of trace log
+                mPipelineKernel->addInternalScalar(StructType::get(C, traceStruct),
+                                                   prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+            }
+        }
+    }
+
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
+        LLVMContext & C = b->getContext();
+        FixedArray<Type *, 2> recordStruct;
+        recordStruct[0] = sizeTy; // segment num
+        recordStruct[1] = sizeTy; // # of strides
+        Type * const recordStructTy = StructType::get(C, recordStruct);
+
+        FixedArray<Type *, 4> traceStruct;
+        traceStruct[0] = sizeTy; // last num of strides (to avoid unnecessary loads of the trace
+                                 // log and simplify the logic for first stride)
+        traceStruct[1] = recordStructTy->getPointerTo(); // pointer to trace log
+        traceStruct[2] = sizeTy; // trace length
+        traceStruct[3] = sizeTy; // trace capacity (for realloc)
+
+        const auto prefix = makeKernelName(kernelIndex);
+
+        mPipelineKernel->addInternalScalar(StructType::get(C, traceStruct),
+                                           prefix + STATISTICS_STRIDES_PER_SEGMENT_SUFFIX);
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -182,10 +223,12 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     }
 
     constructBuffers(b);
+    initializeBufferExpansionHistory(b);
 
     ArgVec args;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
+        initializeStridesPerSegment(b);
         args.clear();
         if (LLVM_LIKELY(mKernel->isStateful())) {
             args.push_back(mKernel->getHandle());
@@ -397,6 +440,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     printOptionalCycleCounter(b);
     printOptionalBlockingIOStatistics(b);
     printOptionalBufferExpansionHistory(b);
+    printOptionalStridesPerSegment(b);
     SmallVector<Value *, 16> params;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);

@@ -14,6 +14,15 @@
 
 namespace kernel {
 
+raw_ostream & operator << (raw_ostream & os, const RateValue & rv) {
+    if (LLVM_LIKELY(rv.denominator() == 1)) {
+        os << rv.numerator();
+    } else {
+        os << rv.numerator() << '/' << rv.denominator();
+    }
+    return os;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
  *
@@ -38,9 +47,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             const ProcessingRate & rate = binding.getRate();
             RateValue lb{rate.getLowerBound()};
             RateValue ub{rate.getUpperBound()};
-
             if (LLVM_UNLIKELY(rate.isRelative())) {
-                const Binding & ref = getBinding(getReference(port));
+                const Binding & ref = getBinding(getReference(i, port));
                 const ProcessingRate & refRate = ref.getRate();
                 lb *= refRate.getLowerBound();
                 ub *= refRate.getUpperBound();
@@ -94,37 +102,547 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         return  (denom.numerator() == 0) ? num : (num / denom);
     };
 
-    // compute how much data each kernel could consume/produce per iteration.
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        BufferNode & kn = G[i];
-        if (LLVM_UNLIKELY(in_degree(i, G) == 0)) {
-            kn.Lower = RateValue{1, 1};
-            kn.Upper = RateValue{1, 1};
+    // Compute how much data each kernel could process/produce per segment
+
+    const RateValue RATE_ONE{1};
+
+    for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+
+        BufferNode & kn = G[kernel];
+        if (LLVM_UNLIKELY(in_degree(kernel, G) == 0)) {
+            kn.Lower = RATE_ONE;
+            kn.Upper = RATE_ONE;
         } else {
             RateValue lower{std::numeric_limits<unsigned>::max()};
             RateValue upper{std::numeric_limits<unsigned>::max()};
+
+            // for each input ...
+            for (const auto & kernelInput : make_iterator_range(in_edges(kernel, G))) {
+                const BufferRateData & inputRate = G[kernelInput];
+                const auto inputBuffer = source(kernelInput, G);
+
+                // for each producer of the input ...
+                for (const auto & producerOutput : make_iterator_range(in_edges(inputBuffer, G))) {
+                    const BufferRateData & outputRate = G[producerOutput];
+                    const auto min = div_by_non_zero(outputRate.MinimumFlow, inputRate.MaximumFlow);
+                    lower = std::min(lower, min);
+                    const auto max = div_by_non_zero(outputRate.MaximumFlow, inputRate.MinimumFlow);
+                    upper = std::min(upper, max);
+                }
+            }
+
+            for (const auto e : make_iterator_range(in_edges(kernel, G))) {
+                BufferRateData & rd = G[e];
+                rd.MinimumFlow = lower * rd.MinimumFlow;
+                rd.MaximumFlow = upper * rd.MaximumFlow;
+            }
+
+            // If a consumer may require more items than than the lower bound of a stream's
+            // output rate, we may end up having to carry over (STRIDE - 1) items until
+            // the next iteration. However, if during that next iteration, the producer
+            // generates the maximum number of output items, we may not be able to process
+            // all of the input data due to the capacity of the output buffer.
+
+            // While this may stabilize itself, we can avoid reasoning about the potential
+            // backlog of input impacting all prior kernels by simply adding enough output
+            // space to accommodate the potential hold over of this buffer and propagating
+            // the impact of this to the subsequent buffers.
+
+            // for each output  ...
+            RateValue holdover{0};
+            for (const auto & kernelOutput : make_iterator_range(out_edges(kernel, G))) {
+                const BufferRateData & outputRate = G[kernelOutput];
+                const auto outputBuffer = target(kernelOutput, G);
+                // for each producer of the input ...
+                for (const auto & consumerInput : make_iterator_range(in_edges(outputBuffer, G))) {
+                    const BufferRateData & inputRate = G[consumerInput];
+                    if (outputRate.Minimum < inputRate.Maximum) {
+                        const auto additional = (inputRate.Maximum / outputRate.Maximum);
+                        holdover = std::max(holdover, additional);
+                    }
+                }
+            }
+
+            upper += holdover;
+
+            kn.Lower = lower;
+            kn.Upper = upper;
+
+            /*
+Here is test input for gb18030
+cs-osl-08:/home/cameron/parabix-devel/icgrep5-build/zhw.gb18030
+
+Here is expected output:
+cs-osl-08:/home/cameron/parabix-devel/icgrep5-build/zhw.u8
+*/
+
+            for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+                BufferRateData & rd = G[e];
+                rd.MinimumFlow = lower * rd.MinimumFlow;
+                rd.MaximumFlow = upper * rd.MaximumFlow;
+            }
+
+        }
+    }
+
+    // fill in any known pipeline I/O buffers
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, G))) {
+        const auto bufferVertex = target(e, G);
+        BufferNode & bn = G[bufferVertex];
+        assert (bn.Buffer == nullptr);
+        bn.Buffer = mPipelineKernel->getInputStreamSetBuffer(G[e].inputPort());
+        bn.Type = BufferType::External;
+    }
+
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, G))) {
+        const auto bufferVertex = source(e, G);
+        BufferNode & bn = G[bufferVertex];
+        assert (bn.Buffer == nullptr);
+        bn.Buffer = mPipelineKernel->getOutputStreamSetBuffer(G[e].outputPort());
+        bn.Type = BufferType::External;
+    }
+
+    const auto requiredThreadSegments = ((codegen::ThreadNum > 1U) ? codegen::ThreadNum + 1U : 1U);
+    const auto numOfSegments = std::max(codegen::BufferSegments, requiredThreadSegments);
+
+    // then construct the rest
+    for (unsigned i = FirstStreamSet; i <= LastStreamSet; ++i) {
+
+        BufferNode & bn = G[i];
+        const auto pe = in_edge(i, G);
+        const auto producerVertex = source(pe, G);
+        const Kernel * const producer = getKernel(producerVertex);
+        const BufferRateData & producerRate = G[pe];
+        const Binding & output = producerRate.Binding;
+
+        // Verify all consumers expect the same input type as the produced output type.
+        Type * const baseType = output.getType();
+        for (const auto & e : make_iterator_range(out_edges(i, G))) {
+            const BufferRateData & consumerRate = G[e];
+            const Binding & input = consumerRate.Binding;
+            if (LLVM_UNLIKELY(baseType != input.getType())) {
+                std::string tmp;
+                raw_string_ostream msg(tmp);
+                msg << producer->getName() << ':' << output.getName()
+                    << " produces a ";
+                baseType->print(msg);
+                const Kernel * const consumer = getKernel(target(e, G));
+                msg << " but "
+                    << consumer->getName() << ':' << input.getName()
+                    << " expects ";
+                input.getType()->print(msg);
+                report_fatal_error(msg.str());
+            }
+        }
+
+        // Is this a pipeline I/O buffer?
+        assert ((bn.Buffer == nullptr) ^ (bn.Type == BufferType::External));
+        if (bn.Type == BufferType::External) {
+            continue;
+        }
+        const auto isUnknown = producerRate.Maximum.numerator() == 0;
+        const auto isManaged = output.hasAttribute(AttrId::ManagedBuffer);
+
+        StreamSetBuffer * buffer = nullptr;
+        BufferType bufferType = BufferType::Internal;
+        if (LLVM_UNLIKELY(isUnknown || isManaged)) {
+            buffer = new ExternalBuffer(b, baseType);
+            bufferType = BufferType::Managed;
+        } else {
+
+            auto getOverflowSize = [&](const Kernel * kernel, const Binding & binding, const BufferRateData & rd) -> RateValue {
+                const auto deviation = rd.Maximum - rd.Minimum;
+                if (deviation.numerator() == 0) {
+                    return deviation;
+                }
+                const ProcessingRate & pr = binding.getRate();
+                RateValue ub{pr.getUpperBound()};
+                if (LLVM_UNLIKELY(pr.isRelative())) {
+                    const Binding & ref = getBinding(getReference(rd.Port));
+                    const ProcessingRate & rate = ref.getRate();
+                    ub *= rate.getUpperBound();
+                }
+                return std::min(deviation, ub * kernel->getStride());
+            };
+
+
+            RateValue rounding{producerRate.Maximum};
+            RateValue requiredSpace{producerRate.MaximumFlow};
+            RateValue copyBackSpace{getOverflowSize(producer, output, producerRate)};
+            RateValue lookAheadSpace{0};
+            unsigned lookBehindSize = 0;
+            bool unboundedLookbehind = false;
+
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::LookBehind))) {
+                const auto & lookBehind = output.findAttribute(AttrId::LookBehind);
+                const auto amount = lookBehind.amount();
+                if (amount == 0) {
+                    unboundedLookbehind = true;
+                } else {
+                    lookBehindSize = lookBehind.amount();
+                }
+            }
+
+            // TODO: If we have an open system, then the input rate to this pipeline cannot
+            // be bounded a priori. During initialization, we could pass a "suggestion"
+            // argument to indicate what the outer pipeline believes its I/O rates will be.
+
+            bool dynamic = true;
+            for (const auto ce : make_iterator_range(out_edges(i, G))) {
+                const BufferRateData & consumerRate = G[ce];
+                const auto c = target(ce, G);
+                //const BufferNode & consumerData = G[c];
+                const Kernel * const consumer = getKernel(c);
+                const Binding & input = consumerRate.Binding;
+                rounding = lcm(rounding, consumerRate.Maximum);
+                requiredSpace = std::max(requiredSpace, consumerRate.MaximumFlow);
+
+                // get output overflow size
+                auto overflow = getOverflowSize(consumer, input, consumerRate);
+                if (LLVM_UNLIKELY(input.hasLookahead())) {
+                    overflow += input.getLookahead();
+                }
+                lookAheadSpace = std::max(lookAheadSpace, overflow);
+
+                // Could the consumption rate be less than the production rate?
+                if (consumerRate.Minimum < consumerRate.Maximum) {
+                    dynamic = true;
+                }
+
+                // If we have a lookbehind attribute, make sure we have enough underflow
+                // space to satisfy the processing rate.
+                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
+                    const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
+                    const auto amount = lookBehind.amount();
+                    if (amount == 0) {
+                        unboundedLookbehind = true;
+                    } else {
+                        lookBehindSize = std::max(lookBehindSize, lookBehind.amount());
+                    }
+                }
+            }
+
+            // calculate overflow (copyback) and fascimile (copyforward) space
+            const auto blockWidth = b->getBitBlockWidth();
+            rounding = lcm(rounding, RateValue{blockWidth});
+
+            auto mod = [](const RateValue & a, const RateValue & b) -> RateValue {
+                RateValue n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
+                return a - RateValue{floor(n)} * b;
+            };
+
+            auto round_up = [&](RateValue & r) {
+                const RateValue m = mod(r, rounding);
+                if (LLVM_UNLIKELY(m.numerator() != 0)) {
+                    r = (r - m) + rounding;
+                }
+            };
+
+            auto round_up_int = [](const unsigned n, const unsigned m) {
+                assert (is_power_2(m));
+                return (n + m - 1) & -m;
+            };
+
+            round_up(copyBackSpace);
+            round_up(lookAheadSpace);
+
+            lookBehindSize = round_up_int(lookBehindSize, blockWidth);
+
+            bn.LookBehind = lookBehindSize;
+            bn.CopyBack = ceiling(copyBackSpace);
+            bn.LookAhead = ceiling(lookAheadSpace);
+
+            unsigned overflowSize = std::max(bn.CopyBack, bn.LookAhead);
+
+            // ensure any Add/RoundUpTo attributes are safely handled
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
+                const auto & add = output.findAttribute(AttrId::Add);
+                overflowSize = std::max(overflowSize, add.amount());
+            }
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::RoundUpTo))) {
+                const auto & roundUpTo = output.findAttribute(AttrId::RoundUpTo);
+                RateValue r(roundUpTo.amount());
+                const auto a = mod(producerRate.Minimum, r);
+                const auto b = mod(producerRate.Maximum, r);
+                const auto c = ceiling(std::max(a, b));
+                overflowSize = std::max(overflowSize, c);
+            }
+
+            overflowSize = round_up_int(overflowSize, blockWidth);
+
+            // compute the buffer size
+            if (lookBehindSize || overflowSize) {
+                const RateValue bufferCopySpace(std::max(lookBehindSize, overflowSize) * 2);
+                requiredSpace = std::max(requiredSpace, bufferCopySpace);
+            }
+
+            round_up(requiredSpace);
+
+            const auto bufferSize = ceiling(requiredSpace) * numOfSegments;
+
+            assert (codegen::BufferSegments > 0);
+            assert (codegen::ThreadNum > 0);
+
+            if (LLVM_UNLIKELY(unboundedLookbehind)) {
+                buffer = new LinearBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
+            } else if (dynamic) {
+                // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
+                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
+            } else {
+                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
+            }
+        }
+
+        bn.Buffer = buffer;
+        bn.Type = bufferType;
+    }
+
+    // printBufferGraph(G, errs());
+
+    return G;
+}
+
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePipelineBufferGraph
+ *
+ * Return an acyclic bi-partite graph indicating the I/O relationships between the kernels and their buffers.
+ *
+ * Ordering: producer -> buffer -> consumer
+ ** ------------------------------------------------------------------------------------------------------------- */
+BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
+
+//    struct RateRange {
+//        RateValue Lower;
+//        RateValue Upper;
+
+//        RateRange(const RateValue & lower, const RateValue & upper)
+//        : Lower(lower), Upper(upper) {
+
+//        }
+
+//    };
+
+    using SymbolicRateGraph = adjacency_list<vecS, vecS, directedS, RateValue>;
+
+    BufferGraph G(LastStreamSet + 1);
+
+    for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
+        const Kernel * const kernel = mStreamGraph[i].Kernel; assert (kernel);
+
+        auto computeBufferRateBounds = [&](const RelationshipType port, const RelationshipNode & bindingNode) {
+            unsigned strideLength = kernel->getStride();
+            if (i == PipelineInput || i == PipelineOutput) {
+                strideLength = boost::lcm(codegen::SegmentSize, strideLength);
+            }
+            assert (bindingNode.Type == RelationshipNode::IsBinding);
+            const Binding & binding = bindingNode.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            RateValue lb{rate.getLowerBound()};
+            RateValue ub{rate.getUpperBound()};
+            if (LLVM_UNLIKELY(rate.isRelative())) {
+                const Binding & ref = getBinding(getReference(i, port));
+                const ProcessingRate & refRate = ref.getRate();
+                lb *= refRate.getLowerBound();
+                ub *= refRate.getUpperBound();
+            }
+            if (LLVM_UNLIKELY(binding.isDeferred())) {
+                lb = RateValue{0};
+            }
+            return BufferRateData{port, binding, lb * strideLength, ub * strideLength};
+        };
+
+        // add in any inputs
+        RelationshipType prior_in{};
+        for (const auto & e : make_iterator_range(in_edges(i, mStreamGraph))) {
+            const RelationshipType & port = mStreamGraph[e];
+            assert (prior_in < port);
+            prior_in = port;
+            const auto binding = source(e, mStreamGraph);
+            const RelationshipNode & rn = mStreamGraph[binding];
+            assert (rn.Type == RelationshipNode::IsBinding);
+            const auto f = first_in_edge(binding, mStreamGraph);
+            assert (mStreamGraph[f].Reason != ReasonType::Reference);
+            unsigned streamSet = source(f, mStreamGraph);
+            assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
+            assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
+            add_edge(streamSet, i, computeBufferRateBounds(port, rn), G);
+        }
+
+        // and any outputs
+        RelationshipType prior_out{};
+        for (const auto & e : make_iterator_range(out_edges(i, mStreamGraph))) {
+            const RelationshipType & port = mStreamGraph[e];
+            assert (prior_out < port);
+            prior_out = port;
+            const auto binding = target(e, mStreamGraph);
+            const RelationshipNode & rn = mStreamGraph[binding];
+            assert (rn.Type == RelationshipNode::IsBinding);
+            const auto f = out_edge(binding, mStreamGraph);
+            assert (mStreamGraph[f].Reason != ReasonType::Reference);
+            unsigned streamSet = target(f, mStreamGraph);
+            assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
+            assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
+            add_edge(i, streamSet, computeBufferRateBounds(port, rn), G);
+        }
+    }
+
+    // Since we do not want to create an artifical bottleneck by constructing output buffers that
+    // cannot accommodate the full amount of data we could produce given the expected inputs, the
+    // next loop will resize them accordingly.
+
+    auto div_by_non_zero = [](const RateValue & num, const RateValue & denom) -> RateValue {
+        return  (denom.numerator() == 0) ? num : (num / denom);
+    };
+
+    // Compute how much data each kernel could process/produce per segment
+
+    const RateValue RATE_ONE{1};
+
+    SymbolicRateGraph S;
+
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+
+        // TODO: reason about relative rates
+
+#if 0
+
+        using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+
+        const auto m = in_degree(i, G);
+        const auto n = out_degree(i, G);
+        Graph H(m + n);
+
+        for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+            const BufferRateData & bd = G[e];
+            const Binding & input = bd.Binding;
+            const ProcessingRate & rate = input.getRate();
+            if (rate.hasReference()) {
+                const StreamPort ref = getReference(bd.Port);
+                assert ("input stream cannot refer to an output stream" && ref.Type == PortType::Input);
+                add_edge(ref.Number, bd.Port.Number, H);
+            }
+        }
+
+        for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const BufferRateData & bd = G[e];
+            const Binding & output = bd.Binding;
+            const ProcessingRate & rate = output.getRate();
+            if (rate.hasReference()) {
+                const StreamPort ref = getReference(bd.Port);
+                const auto k = (ref.Type == PortType::Output) ? m : 0U;
+                add_edge(ref.Number + k, bd.Port.Number + m, H);
+            }
+        }
+
+#endif
+
+        BufferNode & kn = G[i];
+        if (LLVM_UNLIKELY(in_degree(i, G) == 0)) {
+            kn.SymbolicRate = add_vertex(RATE_ONE, S);
+            kn.Lower = RATE_ONE;
+            kn.Upper = RATE_ONE;
+        } else {
+            RateValue lower{std::numeric_limits<unsigned>::max()};
+            RateValue upper{0};
+
+            bool first = true;
+            size_t symbolicRateId = 0;
+            bool disparate = false;
+
             // for each input ...
             for (const auto & input : make_iterator_range(in_edges(i, G))) {
                 const BufferRateData & inputRate = G[input];
                 const auto buffer = source(input, G);
+
+                const BufferNode & bn = G[buffer];
+                if (first) {
+                    symbolicRateId = bn.SymbolicRate;
+                } else if (symbolicRateId != bn.SymbolicRate) {
+                    disparate = true;
+                }
+
+                // Is this stream consumed at a variable rate?
+                if (inputRate.Minimum < inputRate.Maximum) {
+                    disparate = true;
+                }
+
+
                 // for each producer of the input ...
                 for (const auto & output : make_iterator_range(in_edges(buffer, G))) {
                     const BufferRateData & outputRate = G[output];
                     const auto min = div_by_non_zero(outputRate.Minimum, inputRate.Maximum);
                     lower = std::min(lower, min);
-                    const auto max = div_by_non_zero(outputRate.Maximum, inputRate.Minimum);
-                    upper = std::min(upper, max);
+                    auto max = div_by_non_zero(outputRate.Maximum, inputRate.Minimum);
+
+                    // Is this stream produced at a variable rate?
+                    if (outputRate.Minimum < outputRate.Maximum) {
+                        disparate = true;
+                    }
+
+                    // If a consumer may require more items than than the lower bound of a stream's
+                    // output rate, we may end up having to carry over (STRIDE - 1) items until
+                    // the next iteration. However, if during that next iteration, the producer
+                    // generates the maximum number of output items, we may not be able to process
+                    // all of the input data due to the capacity of the output buffer.
+
+                    // While this may stabilize itself, we can avoid reasoning about the potential
+                    // backlog of input impacting all prior kernels by simply adding enough output
+                    // space to accommodate the potential hold over of this buffer and propagating
+                    // the impact of this to the subsequent buffers.
+
+                    if (outputRate.Minimum < inputRate.Maximum) {
+                        max += RATE_ONE;
+                    }
+                    upper = std::max(upper, max);
                 }
+            }
+
+
+
+
+            if (LLVM_UNLIKELY(disparate)) {
+                symbolicRateId = add_vertex(upper, S);
+                for (const auto & input : make_iterator_range(in_edges(i, G))) {
+                    const auto buffer = source(input, G);
+                    const BufferNode & bn = G[buffer];
+                    add_edge(symbolicRateId, bn.SymbolicRate, S);
+                }
+                lower = RATE_ONE;
+                upper = RATE_ONE;
             }
             kn.Lower = lower;
             kn.Upper = upper;
-            for (const auto e : make_iterator_range(out_edges(i, G))) {
+            kn.SymbolicRate = symbolicRateId;
+#error here!
+
+            /*
+Here is test input for gb18030
+cs-osl-08:/home/cameron/parabix-devel/icgrep5-build/zhw.gb18030
+
+Here is expected output:
+cs-osl-08:/home/cameron/parabix-devel/icgrep5-build/zhw.u8
+*/
+
+            for (const auto e : make_iterator_range(in_edges(i, G))) {
                 BufferRateData & rd = G[e];
                 rd.Minimum = lower * rd.Minimum;
                 rd.Maximum = upper * rd.Maximum;
             }
+
+            for (const auto e : make_iterator_range(out_edges(i, G))) {
+                BufferRateData & rd = G[e];
+                rd.Minimum = lower * rd.Minimum;
+                rd.Maximum = upper * rd.Maximum;
+                BufferNode & bn = G[target(e, G)];
+                bn.SymbolicRate = symbolicRateId;
+            }
+
         }
     }
+
 
     // fill in any known pipeline I/O buffers
     for (const auto e : make_iterator_range(out_edges(PipelineInput, G))) {
@@ -229,11 +747,14 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bool dynamic = false;
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
-                requiredSpace = lcm(requiredSpace, consumerRate.Maximum);
                 const auto c = target(ce, G);
-                const BufferNode & consumerData = G[c];
+                // const BufferNode & consumerData = G[c];
                 const Kernel * const consumer = getKernel(c);
                 const Binding & input = consumerRate.Binding;
+
+                // requiredSpace = std::max(requiredSpace, consumerData.Upper * consumerRate.Maximum);
+
+                requiredSpace = std::max(requiredSpace, consumerRate.Maximum);
 
                 // get output overflow size
                 auto overflow = getOverflowSize(consumer, input, consumerRate);
@@ -243,7 +764,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 lookAheadSpace = std::max(lookAheadSpace, overflow);
 
                 // Could the consumption rate be less than the production rate?
-                if (consumerData.Lower * consumerRate.Minimum < producerRate.Maximum) {
+                if (consumerRate.Minimum < producerRate.Maximum) {
                     dynamic = true;
                 }
 
@@ -263,24 +784,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto blockWidth = b->getBitBlockWidth();
 
-            // ensure any Add/RoundUpTo attributes are safely handled
-            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
-                const auto & add = output.findAttribute(AttrId::Add);
-                const RateValue amount(add.amount());
-                copyBackSpace = std::max(copyBackSpace, amount);
-            }
-            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::RoundUpTo))) {
-                const auto & roundUpTo = output.findAttribute(AttrId::RoundUpTo);
-                auto mod = [](const RateValue & a, const RateValue & b) -> RateValue {
-                    RateValue n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
-                    return a - n * b;
-                };
-                RateValue r(roundUpTo.amount());
-                const auto a = mod(producerRate.Minimum, r);
-                const auto b = mod(producerRate.Maximum, r);
-                copyBackSpace = std::max(copyBackSpace, std::max(a, b));
-            }
-
             lookBehindSize = (lookBehindSize + blockWidth - 1) & -blockWidth;
             copyBackSpace = lcm(copyBackSpace, blockWidth);
             lookAheadSpace = lcm(lookAheadSpace, blockWidth);
@@ -292,14 +795,36 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             assert (lookAheadSpace.denominator() == 1);
 
             unsigned overflowSize = std::max(bn.CopyBack, bn.LookAhead);
+
+            // ensure any Add/RoundUpTo attributes are safely handled
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Add))) {
+                const auto & add = output.findAttribute(AttrId::Add);
+                overflowSize = std::max(overflowSize, add.amount());
+            }
+            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::RoundUpTo))) {
+                const auto & roundUpTo = output.findAttribute(AttrId::RoundUpTo);
+                auto mod = [](const RateValue & a, const RateValue & b) -> RateValue {
+                    RateValue n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
+                    return a - n * b;
+                };
+                RateValue r(roundUpTo.amount());
+                const auto a = mod(producerRate.Minimum, r);
+                const auto b = mod(producerRate.Maximum, r);
+                const auto c = ceiling(std::max(a, b));
+                overflowSize = std::max(overflowSize, c);
+            }
+
             // compute the buffer size
             if (lookBehindSize || overflowSize) {
                 const RateValue bufferCopySpace(std::max(lookBehindSize, overflowSize) * 2);
                 requiredSpace = std::max(requiredSpace, bufferCopySpace);
             }
+
             const auto bufferSpace = lcm(requiredSpace, blockWidth);
+
             assert (bufferSpace.denominator() == 1);
             const auto bufferSize = bufferSpace.numerator() * numOfSegments;
+
             assert (codegen::BufferSegments > 0);
             assert (codegen::ThreadNum > 0);
 
@@ -317,10 +842,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-//    printBufferGraph(G, errs());
+    printBufferGraph(G, errs());
 
     return G;
 }
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printBufferGraph
@@ -328,11 +855,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out) {
 
     using KindId = StreamSetBuffer::BufferKind;
-
-    out << "digraph G {\n"
-           "v" << PipelineInput << " [label=\"[" <<
-           PipelineInput << "] P_{in}\""
-           " shape=rect, style=rounded, peripheries=2];\n";
 
     auto rate_range = [&out](const RateValue & a, const RateValue & b) {
         if (a.denominator() > 1 || b.denominator() > 1) {
@@ -344,22 +866,30 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
     };
 
+    const BufferNode & sn = G[PipelineInput];
+    out << "digraph G {\n"
+           "v" << PipelineInput << " [label=\"[" <<
+           PipelineInput << "] P_{in}\\n";
+           rate_range(sn.Lower, sn.Upper);
+    out << "\" shape=rect, style=rounded, peripheries=2];\n";
+
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
         std::string name = kernel->getName();
         boost::replace_all(name, "\"", "\\\"");
-
         const BufferNode & bn = G[i];
-
         out << "v" << i <<
                " [label=\"[" << i << "] " << name << "\\n";
         rate_range(bn.Lower, bn.Upper);
         out << "\" shape=rect, style=rounded, peripheries=2];\n";
     }
 
+    const BufferNode & tn = G[PipelineInput];
+
     out << "v" << PipelineOutput << " [label=\"[" <<
-           PipelineOutput << "] P_{out}\""
-           " shape=rect, style=rounded, peripheries=2];\n";
+           PipelineOutput << "] P_{out}\\n";
+           rate_range(tn.Lower, tn.Upper);
+    out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
     const auto firstBuffer = PipelineOutput + 1;
     const auto lastBuffer = num_vertices(G);
@@ -427,9 +957,11 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferRateData & pd = G[e];
         out << " [label=\"#" << pd.Port.Number << ": ";
         rate_range(pd.Minimum, pd.Maximum);
+        out << "\\n(";
+        rate_range(pd.MinimumFlow, pd.MaximumFlow);
         std::string name = pd.Binding.get().getName();
         boost::replace_all(name, "\"", "\\\"");
-        out << "\\n" << name << "\"];\n";
+        out << ")\\n" << name << "\"];\n";
     }
 
     out << "}\n\n";
@@ -447,19 +979,6 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
             const BufferRateData & rd = mBufferGraph[e];
             const auto prefix = makeBufferName(index, rd.Port);
             mPipelineKernel->addInternalScalar(bn.Buffer->getHandleType(b), prefix);
-            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-                if (isa<DynamicBuffer>(bn.Buffer)) {
-                    LLVMContext & C = b->getContext();
-                    FixedArray<Type *, 2> traceStruct;
-                    traceStruct[0] = b->getSizeTy(); // segment num
-                    traceStruct[1] = b->getSizeTy(); // new capacity
-                    Type * const traceStructTy = StructType::get(C, traceStruct);
-                    traceStruct[0] = traceStructTy->getPointerTo(); // pointer to trace log
-                    // traceStruct[1] = b->getSizeTy(); // length of trace log
-                    mPipelineKernel->addInternalScalar(StructType::get(C, traceStruct),
-                                                       prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
-                }
-            }
         }
     }
 }
@@ -485,25 +1004,6 @@ void PipelineCompiler::constructBuffers(BuilderRef b) {
             StreamSetBuffer * const buffer = bn.Buffer;
             buffer->setHandle(b, handle);
             buffer->allocateBuffer(b);
-            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-                if (isa<DynamicBuffer>(bn.Buffer)) {
-                    Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
-                    Type * const traceDataTy = traceData->getType()->getPointerElementType();
-                    Type * const traceLogTy =  traceDataTy->getStructElementType(0)->getPointerElementType();
-
-                    Constant * const ZERO = b->getInt32(0);
-                    Constant * const ONE = b->getInt32(1);
-                    Constant * const SZ_ZERO = b->getSize(0);
-                    Constant * const SZ_ONE = b->getSize(1);
-                    Value * const traceDataArray = b->CreateCacheAlignedMalloc(traceLogTy, SZ_ONE);
-                    // fill in the struct
-                    b->CreateStore(traceDataArray, b->CreateGEP(traceData, {ZERO, ZERO}));
-                    b->CreateStore(SZ_ONE, b->CreateGEP(traceData, {ZERO, ONE}));
-                    // then the initial record
-                    b->CreateStore(SZ_ZERO, b->CreateGEP(traceDataArray, {ZERO, ZERO}));
-                    b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(traceDataArray, {ZERO, ONE}));
-                }
-            }
         }
     }
 }

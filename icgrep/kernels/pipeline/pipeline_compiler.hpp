@@ -1,4 +1,4 @@
-#ifndef PIPELINE_COMPILER_HPP
+﻿#ifndef PIPELINE_COMPILER_HPP
 #define PIPELINE_COMPILER_HPP
 
 #include <kernels/pipeline_kernel.h>
@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <queue>
 
-// #define PRINT_DEBUG_MESSAGES
+//#define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -220,6 +220,11 @@ enum class BufferType : unsigned {
     , External = 2
 };
 
+enum class SymbolicRateType : unsigned {
+    Bounded
+    , Minimum
+};
+
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     RateValue Lower{};
@@ -227,6 +232,7 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned CopyBack = 0;
     unsigned LookAhead = 0;
+    size_t   SymbolicRate = 0;
 
     BufferType Type = BufferType::Internal;
 
@@ -253,6 +259,8 @@ struct BufferRateData {
     BindingRef Binding;
     RateValue  Minimum;
     RateValue  Maximum;
+    RateValue  MinimumFlow;
+    RateValue  MaximumFlow;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -271,8 +279,13 @@ struct BufferRateData {
 
     BufferRateData() = default;
 
-    BufferRateData(RelationshipType port, BindingRef binding, RateValue min, RateValue max)
-    : Port(port), Binding(binding), Minimum(min), Maximum(max) { }
+    BufferRateData(RelationshipType port, BindingRef binding,
+                   RateValue minRate, RateValue maxRate)
+    : Port(port), Binding(binding)
+    , Minimum(minRate), Maximum(maxRate)
+    , MinimumFlow(minRate), MaximumFlow(maxRate) {
+
+    }
 
 };
 
@@ -407,6 +420,7 @@ const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
 const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".SBY";
 const static std::string STATISTICS_BUFFER_EXPANSION_SUFFIX = ".SBX";
+const static std::string STATISTICS_STRIDES_PER_SEGMENT_SUFFIX = ".SSPS";
 
 class PipelineCompiler {
 
@@ -534,10 +548,10 @@ protected:
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
     Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
     Value * calculateNumOfLinearItems(BuilderRef b, const StreamPort port);
-    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile);
+    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
-    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow);
+    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort);
     Value * reserveSufficientCapacity(BuilderRef b, const unsigned outputPort);
     Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount);
@@ -601,7 +615,7 @@ protected:
     void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
     void startCycleCounter(BuilderRef b, const CycleCounter type);
     void updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const;
-    Value * getBufferExpansionCycleCounter(BuilderRef b) const;
+
 
     void incrementNumberOfSegmentsCounter(BuilderRef b) const;
     void recordBlockingIO(BuilderRef b, const StreamPort port) const;
@@ -609,7 +623,16 @@ protected:
     void printOptionalCycleCounter(BuilderRef b);
     StreamPort selectPrincipleCycleCountBinding(const unsigned kernel) const;
     void printOptionalBlockingIOStatistics(BuilderRef b);
+
+
+    void initializeBufferExpansionHistory(BuilderRef b) const;
+    Value * getBufferExpansionCycleCounter(BuilderRef b) const;
+    void recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort, const StreamSetBuffer * const buffer, Value * const expanded) const;
     void printOptionalBufferExpansionHistory(BuilderRef b);
+
+    void initializeStridesPerSegment(BuilderRef b) const;
+    void recordStridesPerSegment(BuilderRef b, Value * const numOfStrides) const;
+    void printOptionalStridesPerSegment(BuilderRef b) const;
 
 // pipeline analysis functions
 
@@ -661,6 +684,7 @@ protected:
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const StreamPort port) const;
 
+    const StreamPort getReference(const unsigned kernel, const StreamPort port) const;
     const StreamPort getReference(const StreamPort port) const;
 
     LLVM_READNONE unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
@@ -711,6 +735,7 @@ protected:
     Value *                                     mHalted = nullptr;
     PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;
+    PHINode *                                   mNextPipelineProgress = nullptr;
     Value *                                     mPipelineTerminated = nullptr;
     BranchInst *                                mPipelineEntryBranch = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
@@ -735,6 +760,9 @@ protected:
     Value *                                     mTerminatedInitially = nullptr;
     PHINode *                                   mHaltingPhi = nullptr;
     PHINode *                                   mHaltedPhi = nullptr;
+    PHINode *                                   mCurrentNumOfStrides = nullptr;
+    Value *                                     mUpdatedNumOfStrides = nullptr;
+    PHINode *                                   mTotalNumOfStrides = nullptr;
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mBlockedOnFirstStridePhi = nullptr;
@@ -953,7 +981,7 @@ inline LLVM_READNONE std::string PipelineCompiler::makeFamilyPrefix(const unsign
 inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned kernelIndex) const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << '@' << kernelIndex;
+    out << kernelIndex;
     #ifdef PRINT_DEBUG_MESSAGES
     out << '.' << getKernel(kernelIndex)->getName();
     #endif
@@ -975,7 +1003,7 @@ LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernel
 LLVM_READNONE std::string PipelineCompiler::makeBufferName(const unsigned kernelIndex, const StreamPort port) const {
     std::string tmp;
     raw_string_ostream out(tmp);
-    out << "$" << kernelIndex;
+    out << kernelIndex;
     #ifdef PRINT_DEBUG_MESSAGES
     out << '.' << getKernel(kernelIndex)->getName()
         << '.' << getBinding(kernelIndex, port).getName();

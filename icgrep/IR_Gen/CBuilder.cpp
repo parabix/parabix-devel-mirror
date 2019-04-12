@@ -1044,138 +1044,129 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         }
     }
 
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Module * const m = getModule();
-        Type * const stackTy = IntegerType::get(getContext(), sizeof(uintptr_t) * 8);
-        PointerType * const stackPtrTy = stackTy->getPointerTo();
-        PointerType * const int8PtrTy = getInt8PtrTy();
-        Function * function = m->getFunction("assert");
-        if (LLVM_UNLIKELY(function == nullptr)) {
-            auto ip = saveIP();
-            IntegerType * const int1Ty = getInt1Ty();
-            FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
-            function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
-            function->setDoesNotThrow();
-            #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-            function->setDoesNotAlias(2);
-            #endif
-            BasicBlock * const entry = BasicBlock::Create(getContext(), "", function);
-            BasicBlock * const failure = BasicBlock::Create(getContext(), "", function);
-            BasicBlock * const success = BasicBlock::Create(getContext(), "", function);
-            auto arg = function->arg_begin();
-            arg->setName("assertion");
-            Value * assertion = &*arg++;
-            arg->setName("name");
-            Value * name = &*arg++;
-            arg->setName("msg");
-            Value * msg = &*arg++;
-            arg->setName("trace");
-            Value * trace = &*arg++;
-            arg->setName("depth");
-            Value * depth = &*arg++;
-            SetInsertPoint(entry);
-            IRBuilder<>::CreateCondBr(assertion, success, failure);
-            IRBuilder<>::SetInsertPoint(failure);
-            IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { name, msg, trace, depth });
-            CreateExit(-1);
-            IRBuilder<>::CreateBr(success); // necessary to satisfy the LLVM verifier. this is never executed.
-            SetInsertPoint(success);
-            IRBuilder<>::CreateRetVoid();
-            restoreIP(ip);
-        }
-        #ifndef NDEBUG
-        SmallVector<unw_word_t, 64> stack;
-        #if defined(HAS_MACH_VM_TYPES)
-        for (;;) {
-            unsigned int n;
-            _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
-            if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
-                while (n >= 1 && stack[n - 1] == 0) {
-                    n -= 1;
-                }
-                stack.set_size(n);
-                break;
-            }
-            stack.reserve(n * 2);
-        }
-        #elif defined(HAS_LIBUNWIND)
-        unw_context_t context;
-        // Initialize cursor to current frame for local unwinding.
-        unw_getcontext(&context);
-        unw_cursor_t cursor;
-        unw_init_local(&cursor, &context);
-        // Unwind frames one by one, going up the frame stack.
-        while (unw_step(&cursor) > 0) {
-            unw_word_t pc;
-            unw_get_reg(&cursor, UNW_REG_IP, &pc);
-            if (pc == 0) {
-                break;
-            }
-            stack.push_back(pc);
-        }
-        #elif defined(HAS_EXECINFO)
-        for (;;) {
-            const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
-            if (LLVM_LIKELY(n < (int)stack.capacity())) {
-                stack.set_size(n);
-                break;
-            }
-            stack.reserve(n * 2);
-        }
+    Module * const m = getModule();
+    LLVMContext & C = getContext();
+    Type * const stackTy = IntegerType::get(C, sizeof(uintptr_t) * 8);
+    PointerType * const stackPtrTy = stackTy->getPointerTo();
+    PointerType * const int8PtrTy = getInt8PtrTy();
+    Function * function = m->getFunction("assert");
+    if (LLVM_UNLIKELY(function == nullptr)) {
+        auto ip = saveIP();
+        IntegerType * const int1Ty = getInt1Ty();
+        FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
+        function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
+        function->setDoesNotThrow();
+        #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
+        function->setDoesNotAlias(2);
         #endif
-        // TODO: look into how to safely use __builtin_return_address(0)?
+        BasicBlock * const entry = BasicBlock::Create(C, "", function);
+        BasicBlock * const failure = BasicBlock::Create(C, "", function);
+        BasicBlock * const success = BasicBlock::Create(C, "", function);
+        auto arg = function->arg_begin();
+        arg->setName("assertion");
+        Value * assertion = &*arg++;
+        arg->setName("name");
+        Value * name = &*arg++;
+        arg->setName("msg");
+        Value * msg = &*arg++;
+        arg->setName("trace");
+        Value * trace = &*arg++;
+        arg->setName("depth");
+        Value * depth = &*arg++;
+        SetInsertPoint(entry);
+        IRBuilder<>::CreateCondBr(assertion, success, failure);
+        IRBuilder<>::SetInsertPoint(failure);
+        IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { name, msg, trace, depth });
+        CreateExit(-1);
+        IRBuilder<>::CreateBr(success); // necessary to satisfy the LLVM verifier. this is never executed.
+        SetInsertPoint(success);
+        IRBuilder<>::CreateRetVoid();
+        restoreIP(ip);
+    }
+    #ifndef NDEBUG
+    SmallVector<unw_word_t, 64> stack;
+    #if defined(HAS_MACH_VM_TYPES)
+    for (;;) {
+        unsigned int n;
+        _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
+        if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
+            while (n >= 1 && stack[n - 1] == 0) {
+                n -= 1;
+            }
+            stack.set_size(n);
+            break;
+        }
+        stack.reserve(n * 2);
+    }
+    #elif defined(HAS_LIBUNWIND)
+    unw_context_t context;
+    // Initialize cursor to current frame for local unwinding.
+    unw_getcontext(&context);
+    unw_cursor_t cursor;
+    unw_init_local(&cursor, &context);
+    // Unwind frames one by one, going up the frame stack.
+    while (unw_step(&cursor) > 0) {
+        unw_word_t pc;
+        unw_get_reg(&cursor, UNW_REG_IP, &pc);
+        if (pc == 0) {
+            break;
+        }
+        stack.push_back(pc);
+    }
+    #elif defined(HAS_EXECINFO)
+    for (;;) {
+        const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
+        if (LLVM_LIKELY(n < (int)stack.capacity())) {
+            stack.set_size(n);
+            break;
+        }
+        stack.reserve(n * 2);
+    }
+    #endif
+    // TODO: look into how to safely use __builtin_return_address(0)?
 
 
-        const unsigned FIRST_NON_ASSERT = 2;
-        Constant * trace = nullptr;
-        ConstantInt * depth = nullptr;
-        if (LLVM_UNLIKELY(stack.size() < FIRST_NON_ASSERT)) {
-            trace = ConstantPointerNull::get(stackPtrTy);
-            depth = getInt32(0);
-        } else {
-            const auto n = stack.size() - FIRST_NON_ASSERT;
-            for (GlobalVariable & gv : m->getGlobalList()) {
-                Type * const ty = gv.getValueType();
-                if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
-                    const ConstantDataArray * const array = cast<ConstantDataArray>(gv.getOperand(0));
-                    bool found = true;
-                    for (size_t i = 0; i < n; ++i) {
-                        if (LLVM_LIKELY(array->getElementAsInteger(i) != stack[i + FIRST_NON_ASSERT])) {
-                            found = false;
-                            break;
-                        }
-                    }
-                    if (LLVM_UNLIKELY(found)) {
-                        trace = &gv;
+    const unsigned FIRST_NON_ASSERT = 2;
+    Constant * trace = nullptr;
+    ConstantInt * depth = nullptr;
+    if (LLVM_UNLIKELY(stack.size() < FIRST_NON_ASSERT)) {
+        trace = ConstantPointerNull::get(stackPtrTy);
+        depth = getInt32(0);
+    } else {
+        const auto n = stack.size() - FIRST_NON_ASSERT;
+        for (GlobalVariable & gv : m->getGlobalList()) {
+            Type * const ty = gv.getValueType();
+            if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
+                const ConstantDataArray * const array = cast<ConstantDataArray>(gv.getOperand(0));
+                bool found = true;
+                for (size_t i = 0; i < n; ++i) {
+                    if (LLVM_LIKELY(array->getElementAsInteger(i) != stack[i + FIRST_NON_ASSERT])) {
+                        found = false;
                         break;
                     }
                 }
+                if (LLVM_UNLIKELY(found)) {
+                    trace = &gv;
+                    break;
+                }
             }
-            if (LLVM_LIKELY(trace == nullptr)) {
-                Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<unw_word_t>(stack.data() + FIRST_NON_ASSERT, n));
-                trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
-            }
-            trace = ConstantExpr::getPointerCast(trace, stackPtrTy);
-            depth = getInt32(n);
         }
-        #else
-        Value * trace = ConstantPointerNull::get(stackPtrTy);
-        Value * depth = getInt32(0);
-        #endif
-        Value * const name = GetString(getKernelName());
-        SmallVector<char, 1024> tmp;
-        Value * const msg = GetString(failureMessage.toStringRef(tmp));
-        IRBuilder<>::CreateCall(function, {assertion, name, msg, trace, depth});
-
-    } else { // if assertions are not enabled, make it a compiler assumption.
-
-        // INVESTIGATE: while interesting, this does not seem to produce faster code and only provides a trivial
-        // reduction of compiled code size in LLVM 3.8 but nearly doubles JIT compilation time. This may have been
-        // improved with later versions of LLVM but it's likely that assumptions ought to be hand placed once
-        // they're proven to improve performance.
-
-        // IRBuilder<>::CreateAssumption(assertion);
+        if (LLVM_LIKELY(trace == nullptr)) {
+            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<unw_word_t>(stack.data() + FIRST_NON_ASSERT, n));
+            trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
+        }
+        trace = ConstantExpr::getPointerCast(trace, stackPtrTy);
+        depth = getInt32(n);
     }
+    #else
+    Value * trace = ConstantPointerNull::get(stackPtrTy);
+    Value * depth = getInt32(0);
+    #endif
+    Value * const name = GetString(getKernelName());
+    SmallVector<char, 1024> tmp;
+    Value * const msg = GetString(failureMessage.toStringRef(tmp));
+    IRBuilder<>::CreateCall(function, {assertion, name, msg, trace, depth});
+
 }
 
 void CBuilder::CreateExit(const int exitCode) {

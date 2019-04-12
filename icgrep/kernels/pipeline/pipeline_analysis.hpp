@@ -453,8 +453,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     transcribe(scalars, P.Scalars);
 
-   // printRelationshipGraph(P.Streams, errs(), "Streams");
-   // printRelationshipGraph(P.Scalars, errs(), "Scalars");
+//    printRelationshipGraph(P.Streams, errs(), "Streams");
+//    printRelationshipGraph(P.Scalars, errs(), "Scalars");
 
     return P;
 }
@@ -1120,7 +1120,7 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReferenceVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
+const StreamPort PipelineCompiler::getReference(const unsigned kernel, const StreamPort port) const {
     using InEdgeIterator = graph_traits<RelationshipGraph>::in_edge_iterator;
     using OutEdgeIterator = graph_traits<RelationshipGraph>::out_edge_iterator;
 
@@ -1128,14 +1128,14 @@ const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
     RelationshipGraph::vertex_descriptor binding = 0;
     if (port.Type == PortType::Input) {
         InEdgeIterator ei, ei_end;
-        std::tie(ei, ei_end) = in_edges(mKernelIndex, mStreamGraph);
+        std::tie(ei, ei_end) = in_edges(kernel, mStreamGraph);
         assert (port.Number < std::distance(ei, ei_end));
         const auto e = *(ei + port.Number);
         assert (mStreamGraph[e].Number == port.Number);
         binding = source(e, mStreamGraph);
     } else { // if (port.Type == PortType::Output) {
         OutEdgeIterator ei, ei_end;
-        std::tie(ei, ei_end) = out_edges(mKernelIndex, mStreamGraph);
+        std::tie(ei, ei_end) = out_edges(kernel, mStreamGraph);
         assert (port.Number < std::distance(ei, ei_end));
         const auto e = *(ei + port.Number);
         assert (mStreamGraph[e].Number == port.Number);
@@ -1151,6 +1151,10 @@ const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
     const RelationshipType & rt = mStreamGraph[e];
     assert (rt.Reason == ReasonType::Reference);
     return rt;
+}
+
+const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
+    return getReference(mKernelIndex, port);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

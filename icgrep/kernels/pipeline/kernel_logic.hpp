@@ -64,11 +64,13 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
     // must have enough data based on its already tested inputs and ignore
     // checking whether an input kernel is terminated if a stronger test has
     // already been done. Work out the logic for these tests globally.
-
-    Value * const accessible = getAccessibleInputItems(b, inputPort, true);
+    Value * const accessible = getAccessibleInputItems(b, inputPort);
     Value * const strideLength = getInputStrideLength(b, inputPort);
     Value * const required = addLookahead(b, inputPort, strideLength);
     const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
+    #ifdef PRINT_DEBUG_MESSAGES
+    b->CallPrintInt(prefix + "_required", required);
+    #endif
     Value * const hasEnough = b->CreateICmpUGE(accessible, required);
     Value * const sufficientInput = b->CreateOr(hasEnough, isClosed(b, inputPort));
     mAccessibleInputItems[inputPort] = accessible;
@@ -80,19 +82,16 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getAccessibleInputItems
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool addFacsimile) {
+Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned inputPort) {
     assert (inputPort < mAccessibleInputItems.size());
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
     Value * const processed = mAlreadyProcessedPhi[inputPort];
     ConstantInt * facsimile = nullptr;
-    if (addFacsimile) {
-        const auto size = getLookAhead(getInputBufferVertex(inputPort));
-        if (size) {
-            facsimile = b->getSize(size);
-        }
+    const auto size = getLookAhead(getInputBufferVertex(inputPort));
+    if (size) {
+        facsimile = b->getSize(size);
     }
-
     const Binding & input = getInputBinding(inputPort);
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
@@ -142,10 +141,13 @@ inline void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b
     if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer) || isa<LinearBuffer>(buffer))) {
         writable = reserveSufficientCapacity(b, outputPort);
     } else {
-        writable = getWritableOutputItems(b, outputPort, true);
-        Value * const strideLength = getOutputStrideLength(b, outputPort);
+        writable = getWritableOutputItems(b, outputPort);
+        Value * const required = getOutputStrideLength(b, outputPort);
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
-        Value * const hasEnough = b->CreateICmpULE(strideLength, writable, prefix + "_hasEnough");
+        #ifdef PRINT_DEBUG_MESSAGES
+        b->CallPrintInt(prefix + "_required", required);
+        #endif
+        Value * const hasEnough = b->CreateICmpULE(required, writable, prefix + "_hasEnough");
         BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
         Value * const halting = isPipelineOutput(outputPort) ? b->getTrue() : mHalted;
         branchToTargetOrLoopExit(b, StreamPort(PortType::Output, outputPort), hasEnough, target, halting);
@@ -166,64 +168,29 @@ inline Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const u
     if (size) {
         copyBack = b->getSize(size - 1);
     }
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
+    b->CallPrintInt(prefix + "_produced", produced);
+    b->CallPrintInt(prefix + "_required", required);
+    #endif
+
     Value * writable, * expanded;
 
     std::tie(writable, expanded) =
         buffer->reserveCapacity(b, produced, consumed, required, copyBack,
                                 getBufferExpansionCycleCounter(b));
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
-    b->CallPrintInt(prefix + "_produced", produced);
     b->CallPrintInt(prefix + "_writable", writable);
     #endif
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-        if (isa<DynamicBuffer>(buffer)) {
-            b->setKernel(mPipelineKernel);
-
-            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
-
-            BasicBlock * const recordExpansion = b->CreateBasicBlock(prefix + "_recordExpansion", mKernelLoopExit);
-            BasicBlock * const continueChecking = b->CreateBasicBlock(prefix + "_continueChecking", mKernelLoopExit);
-
-            b->CreateUnlikelyCondBr(expanded, recordExpansion, continueChecking);
-
-            b->SetInsertPoint(recordExpansion);
-
-            Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
-            Type * const traceDataTy = traceData->getType()->getPointerElementType();
-            Type * const traceLogTy =  traceDataTy->getStructElementType(0)->getPointerElementType();
-
-            Constant * const ZERO = b->getInt32(0);
-            Constant * const ONE = b->getInt32(1);
-
-            Value * const traceLogArrayField = b->CreateGEP(traceData, {ZERO, ZERO});
-            Value * traceLogArray = b->CreateLoad(traceLogArrayField);
-            Value * const traceLogCountField = b->CreateGEP(traceData, {ZERO, ONE});
-            Value * const traceIndex = b->CreateLoad(traceLogCountField);
-            Value * const traceCount = b->CreateAdd(traceIndex, b->getSize(1));
-
-            traceLogArray = b->CreateRealloc(traceLogTy, traceLogArray, traceCount);
-            b->CreateStore(traceLogArray, traceLogArrayField);
-            b->CreateStore(traceCount, traceLogCountField);
-
-            b->CreateStore(mSegNo, b->CreateGEP(traceLogArray, {traceIndex, ZERO}));
-            b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(traceLogArray, {traceIndex, ONE}));
-            b->CreateBr(continueChecking);
-
-            b->SetInsertPoint(continueChecking);
-            b->setKernel(mKernel);
-        }
-    }
-
-
+    recordBufferExpansionHistory(b, outputPort, buffer, expanded);
     return writable;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getWritableOutputItems
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool addOverflow) {
+Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned outputPort) {
     assert (outputPort < mWritableOutputItems.size());
     const Binding & output = getOutputBinding(outputPort);
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
@@ -236,11 +203,9 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
                         ": consumed count exceeds produced count");
     }
     ConstantInt * copyBack = nullptr;
-    if (addOverflow) {
-        const auto size = getCopyBack(getOutputBufferVertex(outputPort));
-        if (size) {
-            copyBack = b->getSize(size - 1);
-        }
+    const auto size = getCopyBack(getOutputBufferVertex(outputPort));
+    if (size) {
+        copyBack = b->getSize(size - 1);
     }
     Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
     #ifdef PRINT_DEBUG_MESSAGES
@@ -274,6 +239,7 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, const StreamPort p
 
     mTerminatedPhi->addIncoming(mTerminatedInitially, exitBlock);
     mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
+    mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
     mHaltingPhi->addIncoming(halting, exitBlock);
 
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
@@ -312,7 +278,7 @@ inline Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const u
         numOfStrides = b->CreateSelect(mIsInputZeroExtended[inputPort], mNumOfLinearStrides, numOfStrides);
     }
     #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt("> " + prefix + "_numOfStrides", numOfStrides);
+    b->CallPrintInt("< " + prefix + "_numOfStrides", numOfStrides);
     #endif
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * const closed = isClosed(b, inputPort);
@@ -341,7 +307,7 @@ inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const uns
         }
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
-        b->CallPrintInt("< " + prefix + "_numOfStrides", numOfStrides);
+        b->CallPrintInt("> " + prefix + "_numOfStrides", numOfStrides);
         #endif
     }
     return numOfStrides;
@@ -722,7 +688,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
     startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
     mTerminatedExplicitly = b->CreateCall(getDoSegmentFunction(b), args);
     updateCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
-
+    mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
     if (LLVM_LIKELY(!canTerminate)) {
         mTerminatedExplicitly = b->getFalse();
     }
@@ -1076,13 +1042,13 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
 
     if (port.Type == PortType::Input) {
         Value * const processed = mAlreadyProcessedPhi[port.Number];
-        sourceItemCount = b->CreateAdd(processed, getAccessibleInputItems(b, port.Number, false));
+        sourceItemCount = b->CreateAdd(processed, getAccessibleInputItems(b, port.Number));
         sourceItemCount = subtractLookahead(b, port.Number, sourceItemCount);
         Value * const accessible = mAccessibleInputItems[port.Number];
         peekableItemCount = b->CreateAdd(processed, accessible);
     } else { // if (port.Type == PortType::Output) {
         Value * const produced = mAlreadyProducedPhi[port.Number];
-        sourceItemCount = b->CreateAdd(produced, getWritableOutputItems(b, port.Number, false));
+        sourceItemCount = b->CreateAdd(produced, getWritableOutputItems(b, port.Number));
         Value * const writable = mWritableOutputItems[port.Number];
         peekableItemCount = b->CreateAdd(produced, writable);
     }

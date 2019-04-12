@@ -428,6 +428,93 @@ inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeBufferExpansionHistory
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+
+        const auto firstBuffer = PipelineOutput + 1;
+        const auto lastBuffer = num_vertices(mBufferGraph);
+
+        Constant * const ZERO = b->getInt32(0);
+        Constant * const ONE = b->getInt32(1);
+        Constant * const SZ_ZERO = b->getSize(0);
+        Constant * const SZ_ONE = b->getSize(1);
+
+        for (unsigned i = firstBuffer; i < lastBuffer; ++i) {
+            const BufferNode & bn = mBufferGraph[i];
+            if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
+                const auto pe = in_edge(i, mBufferGraph);
+                const auto p = source(pe, mBufferGraph);
+                const BufferRateData & rd = mBufferGraph[pe];
+                const auto prefix = makeBufferName(p, rd.Port);
+                const StreamSetBuffer * const buffer = bn.Buffer;
+
+                if (isa<DynamicBuffer>(buffer)) {
+                    Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+                    Type * const traceDataTy = traceData->getType()->getPointerElementType();
+                    Type * const traceLogTy =  traceDataTy->getStructElementType(0)->getPointerElementType();
+
+                    Value * const traceDataArray = b->CreateCacheAlignedMalloc(traceLogTy, SZ_ONE);
+                    // fill in the struct
+                    b->CreateStore(traceDataArray, b->CreateGEP(traceData, {ZERO, ZERO}));
+                    b->CreateStore(SZ_ONE, b->CreateGEP(traceData, {ZERO, ONE}));
+                    // then the initial record
+                    b->CreateStore(SZ_ZERO, b->CreateGEP(traceDataArray, {ZERO, ZERO}));
+                    b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(traceDataArray, {ZERO, ONE}));
+                }
+            }
+        }
+
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief recordBufferExpansionHistory
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort, const StreamSetBuffer * const buffer, Value * const expanded) const {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+        if (isa<DynamicBuffer>(buffer)) {
+            b->setKernel(mPipelineKernel);
+
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
+
+            BasicBlock * const recordExpansion = b->CreateBasicBlock(prefix + "_recordExpansion", mKernelLoopExit);
+            BasicBlock * const continueChecking = b->CreateBasicBlock(prefix + "_continueChecking", mKernelLoopExit);
+
+            b->CreateUnlikelyCondBr(expanded, recordExpansion, continueChecking);
+
+            b->SetInsertPoint(recordExpansion);
+
+            Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+            Type * const traceDataTy = traceData->getType()->getPointerElementType();
+            Type * const traceLogTy =  traceDataTy->getStructElementType(0)->getPointerElementType();
+
+            Constant * const ZERO = b->getInt32(0);
+            Constant * const ONE = b->getInt32(1);
+
+            Value * const traceLogArrayField = b->CreateGEP(traceData, {ZERO, ZERO});
+            Value * traceLogArray = b->CreateLoad(traceLogArrayField);
+            Value * const traceLogCountField = b->CreateGEP(traceData, {ZERO, ONE});
+            Value * const traceIndex = b->CreateLoad(traceLogCountField);
+            Value * const traceCount = b->CreateAdd(traceIndex, b->getSize(1));
+
+            traceLogArray = b->CreateRealloc(traceLogTy, traceLogArray, traceCount);
+            b->CreateStore(traceLogArray, traceLogArrayField);
+            b->CreateStore(traceCount, traceLogCountField);
+
+            b->CreateStore(mSegNo, b->CreateGEP(traceLogArray, {traceIndex, ZERO}));
+            b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(traceLogArray, {traceIndex, ONE}));
+            b->CreateBr(continueChecking);
+
+            b->SetInsertPoint(continueChecking);
+            b->setKernel(mKernel);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalBufferExpansionHistory
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
@@ -477,9 +564,7 @@ inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) 
         titleArgs[1] = b->GetString(format.str());
         b->CreateCall(b->GetDprintf(), titleArgs);
 
-        // Print each kernel line
-
-        // generate line format string
+        // Generate line format string
         buffer.clear();
         format << "%3" PRIu32 " " // kernel #
                   "%-" << maxKernelLength << "s" // kernel name
@@ -488,6 +573,8 @@ inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) 
                   "%7" PRIu32 // buffer ID #
                   "%14" PRIu64 " " // segment #
                   "%18" PRIu64 "\n"; // size (as multiple of streamset block size)
+
+        // Print each kernel line
 
         FixedArray<Value *, 9> args;
         args[0] = STDERR;
@@ -564,31 +651,283 @@ inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) 
     }
 }
 
-#if 0
-const auto firstBuffer = PipelineOutput + 1;
-const auto lastBuffer = num_vertices(mBufferGraph);
-for (auto i = firstBuffer; i != lastBuffer; ++i) {
-    const BufferNode & bn = mBufferGraph[i];
-    if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
-        bn.Buffer->releaseBuffer(b);
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeStridesPerSegment
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::initializeStridesPerSegment(BuilderRef b) const {
 
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-            if (isa<DynamicBuffer>(bn.Buffer)) {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
+        b->setKernel(mPipelineKernel);
 
-                const auto pe = in_edge(i, mBufferGraph);
-                const auto p = source(pe, mBufferGraph);
-                const BufferRateData & rd = mBufferGraph[pe];
-                const auto prefix = makeBufferName(p, rd.Port);
+        const auto prefix = makeKernelName(mKernelIndex);
 
-                Value * const traceData = b->getScalarField(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
-                Constant * const ZERO = b->getInt32(0);
-                b->CreateFree(b->CreateLoad(b->CreateGEP(traceData, {ZERO, ZERO})));
-            }
+        Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_STRIDES_PER_SEGMENT_SUFFIX);
+        Type * const traceDataTy = traceData->getType()->getPointerElementType();
+        Type * const traceLogTy =  traceDataTy->getStructElementType(1)->getPointerElementType();
+
+        Constant * const SZ_ZERO = b->getSize(0);
+        Constant * const SZ_DEFAULT_CAPACITY = b->getSize(32);
+        Constant * const ZERO = b->getInt32(0);
+        Constant * const ONE = b->getInt32(1);
+        Constant * const TWO = b->getInt32(2);
+        Constant * const THREE = b->getInt32(3);
+
+        Value * const traceDataArray = b->CreateCacheAlignedMalloc(traceLogTy, SZ_DEFAULT_CAPACITY);
+
+        // fill in the struct
+        b->CreateStore(SZ_ZERO, b->CreateGEP(traceData, {ZERO, ZERO})); // "last" num of strides
+        b->CreateStore(traceDataArray, b->CreateGEP(traceData, {ZERO, ONE})); // trace log
+        b->CreateStore(SZ_ZERO, b->CreateGEP(traceData, {ZERO, TWO})); // trace length
+        b->CreateStore(SZ_DEFAULT_CAPACITY, b->CreateGEP(traceData, {ZERO, THREE})); // trace capacity
+
+        b->setKernel(mKernel);
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief recordStridesPerSegment
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::recordStridesPerSegment(BuilderRef b, Value * const numOfStrides) const {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
+        // NOTE: this records only the change to attempt to reduce the memory usage of this log.
+
+        b->setKernel(mPipelineKernel);
+        const auto prefix = makeKernelName(mKernelIndex);
+        Value * const kernelTraceLog = b->getScalarFieldPtr(prefix + STATISTICS_STRIDES_PER_SEGMENT_SUFFIX);
+
+        Module * const m = b->getModule();
+        Function * record = m->getFunction("$trace_strides_per_segment");
+        if (LLVM_UNLIKELY(record == nullptr)) {
+            auto ip = b->saveIP();
+            LLVMContext & C = b->getContext();
+            Type * const sizeTy = b->getSizeTy();
+            FunctionType * fty = FunctionType::get(b->getVoidTy(), { kernelTraceLog->getType(), sizeTy, sizeTy }, false);
+            record = Function::Create(fty, Function::PrivateLinkage, "$trace_strides_per_segment", m);
+
+            BasicBlock * const entry = BasicBlock::Create(C, "entry", record);
+            BasicBlock * const trace = BasicBlock::Create(C, "trace", record);
+            BasicBlock * const expand = BasicBlock::Create(C, "expand", record);
+            BasicBlock * const write = BasicBlock::Create(C, "write", record);
+            BasicBlock * const exit = BasicBlock::Create(C, "exit", record);
+
+            b->SetInsertPoint(entry);
+
+            auto arg = record->arg_begin();
+            arg->setName("traceData");
+            Value * const traceData = &*arg++;
+            arg->setName("segNo");
+            Value * const segNo = &*arg++;
+            arg->setName("numOfStrides");
+            Value * const numOfStrides = &*arg++;
+            assert (arg == record->arg_end());
+
+            Constant * const ZERO = b->getInt32(0);
+            Constant * const ONE = b->getInt32(1);
+            Constant * const TWO = b->getInt32(2);
+            Constant * const THREE = b->getInt32(3);
+
+            Value * const lastNumOfStridesField = b->CreateGEP(traceData, {ZERO, ZERO});
+            Value * const lastNumOfStrides = b->CreateLoad(lastNumOfStridesField);
+            Value * const changed = b->CreateICmpNE(lastNumOfStrides, numOfStrides);
+            b->CreateCondBr(changed, trace, exit);
+
+            b->SetInsertPoint(trace);
+
+            Value * const traceLogField = b->CreateGEP(traceData, {ZERO, ONE});
+            Value * const traceLog = b->CreateLoad(traceLogField);
+            Value * const traceLengthField = b->CreateGEP(traceData, {ZERO, TWO});
+            Value * const traceLength = b->CreateLoad(traceLengthField);
+            Value * const traceCapacityField = b->CreateGEP(traceData, {ZERO, THREE});
+            Value * const traceCapacity = b->CreateLoad(traceCapacityField);
+
+            Value * const hasSpace = b->CreateICmpNE(traceLength, traceCapacity);
+
+            b->CreateLikelyCondBr(hasSpace, write, expand);
+
+            b->SetInsertPoint(expand);
+            Value * const nextTraceCapacity = b->CreateShl(traceCapacity, 1);
+            Type * const traceDataTy = traceData->getType()->getPointerElementType();
+            Type * const traceLogTy =  traceDataTy->getStructElementType(1)->getPointerElementType();
+            Value * const expandedtraceLog = b->CreateRealloc(traceLogTy, traceLog, nextTraceCapacity);
+            b->CreateStore(expandedtraceLog, traceLogField);
+            b->CreateStore(nextTraceCapacity, traceCapacityField);
+            b->CreateBr(write);
+
+            b->SetInsertPoint(write);
+            PHINode * const traceLogPhi = b->CreatePHI(traceLog->getType(), 2);
+            traceLogPhi->addIncoming(traceLog, trace);
+            traceLogPhi->addIncoming(expandedtraceLog, expand);
+            b->CreateStore(segNo, b->CreateGEP(traceLogPhi, {traceLength , ZERO}));
+            b->CreateStore(numOfStrides, b->CreateGEP(traceLogPhi, {traceLength , ONE}));
+            b->CreateStore(numOfStrides, lastNumOfStridesField);
+            b->CreateStore(b->CreateAdd(traceLength, b->getSize(1)), traceLengthField);
+            b->CreateBr(exit);
+
+            b->SetInsertPoint(exit);
+            b->CreateRetVoid();
+
+            b->restoreIP(ip);
         }
 
+        b->CreateCall(record, { kernelTraceLog, mSegNo, numOfStrides } );
+        b->setKernel(mKernel);
     }
 }
-#endif
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief printOptionalStridesPerSegment
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
+    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
+
+        IntegerType * const sizeTy = b->getSizeTy();
+        IntegerType * const boolTy = b->getInt1Ty();
+
+        Constant * const ZERO = b->getInt32(0);
+        Constant * const ONE = b->getInt32(1);
+        Constant * const TWO = b->getInt32(2);
+
+        ConstantInt * const SZ_ZERO = b->getSize(0);
+        ConstantInt * const SZ_ONE = b->getSize(1);
+
+        ConstantInt * const FALSE = b->getFalse();
+        ConstantInt * const TRUE = b->getTrue();
+
+        // Print the title line
+        SmallVector<char, 100> buffer;
+        raw_svector_ostream format(buffer);
+        format << "STRIDES PER SEGMENT:\n\n"
+                  "SEG #";
+        SmallVector<Constant *, 64> strideSize(LastKernel + 1);
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const Kernel * const kernel = getKernel(i);
+            strideSize[i] = b->getSize(kernel->getStride());
+            std::string temp = kernel->getName();
+            boost::replace_all(temp, "\"", "\\\"");
+            format << ",\"" << i << " " << temp << "\"";
+        }
+        format << "\n";
+
+
+        Constant * const STDERR = b->getInt32(STDERR_FILENO);
+
+        FixedArray<Value *, 2> titleArgs;
+        titleArgs[0] = STDERR;
+        titleArgs[1] = b->GetString(format.str());
+        b->CreateCall(b->GetDprintf(), titleArgs);
+
+        // Generate line format string
+        buffer.clear();
+
+        format << "%" PRIu64; // seg #
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            format << ",%" PRIu64; // strides
+        }
+        format << "\n";
+
+        // Print each kernel line
+        SmallVector<Value *, 64> args(LastKernel + 3);
+        args[0] = STDERR;
+        args[1] = b->GetString(format.str());
+
+        // Pre load all of pointers to the the trace log out of the pipeline state.
+
+        SmallVector<Value *, 64> traceLogArray(LastKernel + 1);
+        SmallVector<Value *, 64> traceLengthArray(LastKernel + 1);
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            const auto prefix = makeKernelName(i);
+            Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_STRIDES_PER_SEGMENT_SUFFIX);
+            traceLogArray[i] = b->CreateLoad(b->CreateGEP(traceData, {ZERO, ONE}));
+            traceLengthArray[i] = b->CreateLoad(b->CreateGEP(traceData, {ZERO, TWO}));
+        }
+
+        // Start printing the data lines
+
+        BasicBlock * const loopEntry = b->GetInsertBlock();
+        BasicBlock * const loopStart = b->CreateBasicBlock("reportStridesPerSegment");
+        b->CreateBr(loopStart);
+
+        b->SetInsertPoint(loopStart);
+        PHINode * const segNo = b->CreatePHI(sizeTy, 2);
+        segNo->addIncoming(SZ_ZERO, loopEntry);
+        SmallVector<PHINode *, 64> currentIndex(LastKernel + 1);
+        SmallVector<PHINode *, 64> updatedIndex(LastKernel + 1);
+        SmallVector<PHINode *, 64> currentValue(LastKernel + 1);
+        SmallVector<PHINode *, 64> updatedValue(LastKernel + 1);
+
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            currentIndex[i] = b->CreatePHI(sizeTy, 2);
+            currentIndex[i]->addIncoming(SZ_ZERO, loopEntry);
+            currentValue[i] = b->CreatePHI(sizeTy, 2);
+            currentValue[i]->addIncoming(SZ_ZERO, loopEntry);
+        }
+
+        Value * notDone = FALSE;
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            BasicBlock * const entry = b->GetInsertBlock();
+            BasicBlock * const check = b->CreateBasicBlock();
+            BasicBlock * const update = b->CreateBasicBlock();
+            BasicBlock * const next = b->CreateBasicBlock();
+            Value * const notEndOfTrace = b->CreateICmpNE(currentIndex[i], traceLengthArray[i]);
+            b->CreateLikelyCondBr(notEndOfTrace, check, next);
+
+            b->SetInsertPoint(check);
+            Value * const nextSegNo = b->CreateLoad(b->CreateGEP(traceLogArray[i], { currentIndex[i], ZERO }));
+            b->CreateCondBr(b->CreateICmpEQ(segNo, nextSegNo), update, next);
+
+            b->SetInsertPoint(update);
+            Value * const numOfStrides = b->CreateLoad(b->CreateGEP(traceLogArray[i], { currentIndex[i], ONE }));
+            Value * const currentIndex1 = b->CreateAdd(currentIndex[i], SZ_ONE);
+            b->CreateBr(next);
+
+            b->SetInsertPoint(next);
+            PHINode * const nextValue = b->CreatePHI(sizeTy, 3);
+            nextValue->addIncoming(SZ_ZERO, entry);
+            nextValue->addIncoming(currentValue[i], check);
+            nextValue->addIncoming(numOfStrides, update);
+            updatedValue[i] = nextValue;
+            PHINode * const nextIndex = b->CreatePHI(sizeTy, 3);
+            nextIndex->addIncoming(currentIndex[i], entry);
+            nextIndex->addIncoming(currentIndex[i], check);
+            nextIndex->addIncoming(currentIndex1, update);
+            updatedIndex[i] = nextIndex;
+            PHINode * const nextNotDone = b->CreatePHI(boolTy, 3);
+            nextNotDone->addIncoming(notDone, entry);
+            nextNotDone->addIncoming(TRUE, check);
+            nextNotDone->addIncoming(TRUE, update);
+            notDone = nextNotDone;
+        }
+
+        args[2] = segNo;
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            args[i - FirstKernel + 3] = b->CreateMul(updatedValue[i], strideSize[i]);
+        }
+
+        b->CreateCall(b->GetDprintf(), args);
+
+        BasicBlock * const loopExit = b->CreateBasicBlock("reportStridesPerSegmentExit");
+        BasicBlock * const loopEnd = b->GetInsertBlock();
+        segNo->addIncoming(b->CreateAdd(segNo, SZ_ONE), loopEnd);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            currentIndex[i]->addIncoming(updatedIndex[i], loopEnd);
+            currentValue[i]->addIncoming(updatedValue[i], loopEnd);
+        }
+
+        b->CreateLikelyCondBr(notDone, loopStart, loopExit);
+
+        b->SetInsertPoint(loopExit);
+        // print final new line
+        FixedArray<Value *, 2> finalArgs;
+        finalArgs[0] = STDERR;
+        finalArgs[1] = b->GetString("\n");
+        b->CreateCall(b->GetDprintf(), finalArgs);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            b->CreateFree(traceLogArray[i]);
+        }
+    }
+}
 
 }

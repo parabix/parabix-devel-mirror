@@ -32,6 +32,7 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
+                        clEnumVal(TraceStridesPerSegment, "Show log of number of strides executed per kernel segment."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
                         clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously "
                                                   "overwriting kernel state / stream space.\n"

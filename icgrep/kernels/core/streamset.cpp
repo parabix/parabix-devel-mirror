@@ -499,7 +499,7 @@ std::pair<Value *, Value *> DynamicBuffer::reserveCapacity(BuilderRef b, Value *
     BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer");
     BasicBlock * const expanded = b->CreateBasicBlock("expanded");
 
-    b->CreateUnlikelyCondBr(b->CreateICmpULT(remaining, required), expandBuffer, expanded);
+    b->CreateLikelyCondBr(b->CreateICmpULE(required, remaining), expanded, expandBuffer);
 
     b->SetInsertPoint(expandBuffer);
 
@@ -525,10 +525,14 @@ std::pair<Value *, Value *> DynamicBuffer::reserveCapacity(BuilderRef b, Value *
     // make sure the new capacity is at least 2x the current capacity and a multiple of it
     Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
     Value * newCapacity = b->CreateAdd(unconsumedChunks, requiredChunks);
+    #ifdef NDEBUG
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+    #endif
         Value * const check = b->CreateICmpUGE(newCapacity, capacity);
         b->CreateAssert(check, "unnecessary buffer expansion occurred");
+    #ifdef NDEBUG
     }
+    #endif
     newCapacity = b->CreateRoundUp(newCapacity, capacity);
 
     Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
@@ -593,10 +597,14 @@ std::pair<Value *, Value *> DynamicBuffer::reserveCapacity(BuilderRef b, Value *
     b->CreateStore(newCapacity, capacityField);
 
     Value * const remainingAfterExpand = getLinearlyWritableItems(b, produced, consumed, overflowItems);
+    #ifdef NDEBUG
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        Value * const check = b->CreateICmpUGE(remainingAfterExpand, requiredChunks);
-        b->CreateAssert(check, "buffer expansion error");
+    #endif
+        Value * const check2 = b->CreateICmpUGE(remainingAfterExpand, requiredChunks);
+        b->CreateAssert(check2, "buffer expansion error");
+    #ifdef NDEBUG
     }
+    #endif
     b->CreateFree(subtractUnderflow(b, priorBuffer, mUnderflow));
     if (cycleCounterAccumulator) {
         Value * const cycleCounterEnd = b->CreateReadCycleCounter();

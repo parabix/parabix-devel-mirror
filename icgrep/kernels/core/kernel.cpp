@@ -1519,6 +1519,7 @@ Value * Kernel::getScalarValuePtr(KernelBuilder * /* b */, const StringRef name)
     } else {
         const auto f = mScalarValueMap.find(name);
         if (LLVM_UNLIKELY(f == mScalarValueMap.end())) {
+            assert (false);
             report_fatal_error(getName() + " does not contain scalar: " + name);
         }
         return f->second;

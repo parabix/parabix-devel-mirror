@@ -154,7 +154,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
 {Binding{"marker", mask, FixedRate(), Principal()},
 Binding{"source", source, PopcountOf("marker")}},
 // output stream set
-{Binding{"output", expanded, FixedRate(), BlockSize(1)}},
+{Binding{"output", expanded}},
 // input scalar
 {Binding{"base", base}},
 {}, {})
