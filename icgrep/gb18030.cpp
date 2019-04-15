@@ -211,18 +211,18 @@ void GB_18030_DoubleByteIndex::generatePabloMethod() {
 
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
     std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
-    
+
     // The valid values for the second byte of a 2-byte GB sequence are 0x40-7F and 0x80-0xFE.
     // Normalize these values to the range 0 through 190.
     BixNum x80 = {byte2_basis[7]};
     BixNum b2 = bnc.SubModular(bnc.SubModular(byte2_basis, x80), 0x40);
-    
+
     // The valid values for the first byte of a 2-byte GB sequence are 0x81-0xFE.  Normalize
     // to the range 0-125 as seven-bit value.
     BixNum b1 = bnc.SubModular(bnc.Truncate(byte1_basis, 7), 0x1);
     // Now compute the GB 2-byte index value:  190 * b1 + b2, as a 15-bit quantity.
     BixNum GB2idx = bnc.AddModular(bnc.MulFull(b1, 190), b2);
-    
+
     Var * const gb15_index = getOutputStreamVar("gb15_index");
     for (unsigned i = 0; i < 15; i++) {
         pb.createAssign(pb.createExtract(gb15_index, pb.getInteger(i)), pb.createAnd(GB2idx[i], GB_2byte));
@@ -254,7 +254,7 @@ void GB_18030_InitializeASCII::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * ASCII = pb.createExtract(getInputStreamVar("ASCII"), pb.getInteger(0));
     std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
-    
+
     // Initialize 16 bit stream variables with ASCII values.
     PabloAST * zeroes = pb.createZeroes();
     Var * const u16_output = getOutputStreamVar("u16_basis");
@@ -299,7 +299,7 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     PabloAST * GB_2byte = pb.createExtract(getInputStreamVar("GB_2byte"), pb.getInteger(0));
     BixNum GB2idx = getInputStreamSet("gb15_index");
     BixNum u16_in = getInputStreamSet("u16_in");
-    
+
     std::vector<Var *> u16(u16_in.size());
     for (unsigned i = 0; i < u16.size(); ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), u16_in[i]);
@@ -307,10 +307,10 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
 
     //  Double byte sequences use a lookup table, with codepoints determined
     //  according to a calculated index.
- 
+
     std::vector<UCD::codepoint_t> GB_tbl = get_GB_DoubleByteTable();
     const unsigned maxGB2limit = GB_tbl.size();
-    
+
     BixNum kernelSelectBasis = bnc.HighBits(GB2idx, GB2idx.size()-mRangeBits);
     PabloAST * inRange = pb.createAnd(GB_2byte, bnc.EQ(kernelSelectBasis, mRangeBase >> mRangeBits));
     unsigned rangeLimit = mRangeBase + (1 << mRangeBits);
@@ -320,16 +320,16 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
         inRange = pb.createAnd(inRange, pb.createNot(bnc.UGE(aboveBase, aboveBaseLimit)));
         rangeLimit = maxGB2limit;
     }
-    
+
     const unsigned subTableBits = 7;
     const unsigned subTableSize = 1 << subTableBits;
     BixNum tblIdxBasis = bnc.HighBits(GB2idx, GB2idx.size()-subTableBits);
     BixNum subTblBasis = bnc.Truncate(GB2idx, subTableBits);
     BixNumTableCompiler tblComp(GB_tbl, subTblBasis, u16);
-    
+
     //PabloBuilder & nested = pb;
     PabloBuilder nested = pb.createScope();
-    
+
     cc::Parabix_CC_Compiler_Builder tblIdxCompiler(nested.getPabloBlock(), BixNumCompiler(nested).ZeroExtend(tblIdxBasis, 8));
 
 
@@ -437,11 +437,11 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     BixNum SMP_offset = bnc.AddModular(SMP_base, lo15);
 
     PabloAST * aboveBMP = nb.createAnd(GB_4byte, bnc.UGE(byte1_lo7, 0x10), "gb_aboveBMP");
-    
+
     const unsigned BMP_bits = 16;
     const unsigned total_bits = 21;
     tablePartitionLogic(nb, 0, 0, nb.createAnd(GB_4byte, nb.createNot(aboveBMP)), 0, mRangeTable.size()-1, BMP_bits);
-    
+
     for (unsigned i = 0; i < BMP_bits; i++) {
         nb.createAssign(mU21[i], nb.createOr(mU21[i], nb.createAnd(SMP_offset[i], aboveBMP)));
     }
@@ -456,12 +456,12 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
 }
 
 void GB_18030_FourByteLogic::tablePartitionLogic(PabloBuilder & pb,
-                                            unsigned nestingDepth,
-                                            unsigned partitionBase,
-                                            PabloAST * partitionSelect,
-                                            unsigned tblIndex1,
-                                            unsigned tblIndexLast,
-                                            unsigned outputBitsToSet) {
+                                                 unsigned nestingDepth,
+                                                 unsigned partitionBase,
+                                                 PabloAST * partitionSelect,
+                                                 unsigned tblIndex1,
+                                                 unsigned tblIndexLast,
+                                                 unsigned outputBitsToSet) {
     BixNumCompiler bnc(pb);
     unsigned partitionBits = mPartitionBits[nestingDepth];
     unsigned partitionSize = 1 << partitionBits;
@@ -469,7 +469,7 @@ void GB_18030_FourByteLogic::tablePartitionLogic(PabloBuilder & pb,
     // overall table consisting of the partitionSize entries starting
     // with partitionBase.   The PabloAST expression partitionSelect,
     // is assumed to represent those positions that are properly
-    // within the partition. 
+    // within the partition.
     if (nestingDepth == mPartitionBits.size() - 1) {
         // We are at the finest level of table partitioning; process
         // all table ranges within this partition without further subpartition.
@@ -530,8 +530,8 @@ void GB_18030_FourByteLogic::tablePartitionLogic(PabloBuilder & pb,
             codepoint_t changeableBits = std::log2(cpBase ^ cpMax) + 1;
             //
             // If we have multiple table entries for a single subpartition, we make a
-            // recursive call to consider further division into subsubpartitions.  
-            // 
+            // recursive call to consider further division into subsubpartitions.
+            //
             if (nextTblIdx - currentIdx > 1) {
                 PabloBuilder nested = pb.createScope();
                 for (unsigned i = changeableBits; i < outputBitsToSet; i++) {
@@ -709,3 +709,4 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
