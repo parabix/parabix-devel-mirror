@@ -54,14 +54,15 @@ private:
 // 
 class BixNumTableCompiler {
 public:
-    BixNumTableCompiler(std::vector<unsigned> & table, unsigned bitsPerOutputUnit, BixNum & input) : 
-        mTable(table), mBitsPerOutputUnit(bitsPerOutputUnit), mInput(input) {}
-    BixNum compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi);
-    
+    BixNumTableCompiler(std::vector<unsigned> & table, BixNum & input, std::vector<Var *> & output) :
+        mTable(table), mBitsPerOutputUnit(output.size()), mInput(input), mU16(output) {}
+    void compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * partitionSelect);
+
 private:
     std::vector<unsigned> & mTable;
     unsigned mBitsPerOutputUnit;
     BixNum & mInput;
+    std::vector<Var *> & mU16;
 };
 
 }

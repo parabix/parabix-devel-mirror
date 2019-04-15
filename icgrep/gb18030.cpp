@@ -300,11 +300,11 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     BixNum GB2idx = getInputStreamSet("gb15_index");
     BixNum u16_in = getInputStreamSet("u16_in");
     
-    Var * u16[16];
-    for (unsigned i = 0; i < u16_in.size(); ++i) {
+    std::vector<Var *> u16(u16_in.size());
+    for (unsigned i = 0; i < u16.size(); ++i) {
         u16[i] = pb.createVar("u16" + std::to_string(i), u16_in[i]);
     }
-    
+
     //  Double byte sequences use a lookup table, with codepoints determined
     //  according to a calculated index.
  
@@ -325,7 +325,7 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     const unsigned subTableSize = 1 << subTableBits;
     BixNum tblIdxBasis = bnc.HighBits(GB2idx, GB2idx.size()-subTableBits);
     BixNum subTblBasis = bnc.Truncate(GB2idx, subTableBits);
-    BixNumTableCompiler tblComp(GB_tbl, 16, subTblBasis);
+    BixNumTableCompiler tblComp(GB_tbl, subTblBasis, u16);
     
     //PabloBuilder & nested = pb;
     PabloBuilder nested = pb.createScope();
@@ -338,10 +338,7 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
         //llvm::errs() << "tblCode = " << tblCode << ", limit = " << subTableLimit << "\n";
         PabloAST * tblCodeStrm = nested.createAnd(inRange, tblIdxCompiler.compileCC(makeCC(tblCode/subTableSize, &cc::Byte)));
         PabloBuilder nested2 = nested.createScope();
-        BixNum outputCode = tblComp.compileSubTable(nested2, tblCode, subTableLimit);
-        for (unsigned i = 0; i < 16; i++) {
-            nested2.createAssign(u16[i], nested2.createOr(u16[i], nested2.createAnd(tblCodeStrm, outputCode[i], "st_" + std::to_string(tblCode) + "[" + std::to_string(i) + "]")));
-        }
+        tblComp.compileSubTable(nested2, tblCode, subTableLimit, tblCodeStrm);
         nested.createIf(tblCodeStrm, nested2);
     }
     pb.createIf(inRange, nested);

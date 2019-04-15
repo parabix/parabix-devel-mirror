@@ -301,7 +301,7 @@ BixNum BixNumCompiler::MulFull(BixNum multiplicand, unsigned multiplier) {
 
 const unsigned CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM = 4;
 
-BixNum BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi) {
+void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * subtableSelect) {
     assert (hi > lo);
     const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
     assert(mInput.size() >= bitsPerInputUnit);
@@ -367,7 +367,9 @@ BixNum BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsi
     if (max_seq_lgth >= CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
         output = BixNumCompiler(pb).AddModular(output, static_cast<unsigned>(best_offset));  // no offsetting
     }
-    return output;
+    for (unsigned i = 0; i < mBitsPerOutputUnit; i++) {
+        pb.createAssign(mU16[i], pb.createOr(mU16[i], pb.createAnd(subtableSelect, output[i])));
+    }
 }
 
 
