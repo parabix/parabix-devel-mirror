@@ -9,6 +9,7 @@
 #include <cc/alphabet.h>
 #include <cc/cc_compiler.h>
 #include <cc/cc_compiler_target.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace cc;
 using namespace re;
@@ -372,5 +373,140 @@ void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsign
     }
 }
 
+unsigned BixNumRangeTableCompiler::getTableVal(unsigned inputVal) {
+    unsigned idx = getTableIndex(inputVal);
+    return mRangeTable[idx].second + inputVal - mRangeTable[idx].first;
+}
+
+unsigned BixNumRangeTableCompiler::getTableIndex(unsigned inputVal) {
+    unsigned loIdx = 0;
+    unsigned hiIdx = mRangeTable.size() - 1;
+    while (loIdx != hiIdx) {
+        unsigned midIdx = (loIdx + hiIdx + 1)/2;
+        if (inputVal < mRangeTable[midIdx].first) {
+            hiIdx = midIdx-1;
+        } else {
+            loIdx = midIdx;
+        }
+    }
+    return loIdx;
+}
+    
+unsigned BixNumRangeTableCompiler::consecutiveFrom(unsigned inputVal) {
+    unsigned idx = getTableIndex(inputVal);
+    if ((idx == mRangeTable.size()-1) || (mRangeTable[idx+1].first >= mInputMax)) {
+        return mInputMax - inputVal + 1;
+    }
+    return mRangeTable[idx+1].first - inputVal;
+}
+
+unsigned BixNumRangeTableCompiler::computeOutputBitsForRange(unsigned lo, unsigned hi) {
+    return std::log2(getTableVal(lo) ^ getTableVal(hi)) + 1;
+}
+
+const unsigned BMP_bits = 16;  // FIX - this only for the 4-byte to 2-byte GB table
+
+void BixNumRangeTableCompiler::compileTable(PabloBuilder & pb, PabloAST * partitionSelect) {
+    tablePartitionLogic(pb, 0, 0, partitionSelect, BMP_bits);
+
+}
+
+void BixNumRangeTableCompiler::innerLogic(PabloBuilder & pb,
+                                           unsigned partitionBase,
+                                           PabloAST * partitionSelect,
+                                           unsigned outputBitsToSet) {
+    BixNumCompiler bnc(pb);
+    PabloAST * GE_lo_bound = partitionSelect;
+    unsigned tblIndex1 = getTableIndex(partitionBase);
+    unsigned tblIndexLast = getTableIndex(partitionBase + (1 << mPartitionBits.back()) - 1);
+    for (unsigned i = tblIndex1; i <= tblIndexLast; i++) {
+        unsigned base = mRangeTable[i].first;
+        codepoint_t cp = mRangeTable[i].second;
+        codepoint_t offset = cp - base;
+        PabloAST * GE_hi_bound;
+        if (i < tblIndexLast) {
+            GE_hi_bound = bnc.UGE(mInput, mRangeTable[i+1].first);
+        } else {
+            GE_hi_bound = pb.createNot(partitionSelect);
+        }
+        PabloAST * in_range = pb.createAnd(GE_lo_bound, pb.createNot(GE_hi_bound));
+        BixNum mapped = bnc.AddModular(bnc.Truncate(mInput, outputBitsToSet), offset % (1 << outputBitsToSet));
+        for (unsigned i = 0; i < outputBitsToSet; i++) {
+            pb.createAssign(mOutput[i], pb.createOr(mOutput[i], pb.createAnd(in_range, mapped[i])));
+        }
+        GE_lo_bound = GE_hi_bound;
+    }
+}
+    
+void BixNumRangeTableCompiler::tablePartitionLogic(PabloBuilder & pb,
+                                                   unsigned nestingDepth,
+                                                   unsigned partitionBase,
+                                                   PabloAST * partitionSelect,
+                                                   unsigned outputBitsToSet) {
+    if (nestingDepth == mPartitionBits.size() - 1) {
+        innerLogic(pb, partitionBase, partitionSelect, outputBitsToSet);
+        return;
+    }
+    
+    BixNumCompiler bnc(pb);
+    unsigned partitionBits = mPartitionBits[nestingDepth];
+    unsigned partitionSize = 1 << partitionBits;
+    // Upon entry, the obligation is to deal with a partition of the
+    // overall table consisting of the partitionSize entries starting
+    // with partitionBase.   The PabloAST expression partitionSelect,
+    // is assumed to represent those positions that are properly
+    // within the partition.
+    
+    // Partition into subPartitions...
+    // The first subpartition starts at the beginning of the overall partition.
+    unsigned subPartitionBase = partitionBase;
+    unsigned subPartitionLimit = std::min(partitionBase + partitionSize, mInputMax + 1);
+    unsigned subPartitionBits = mPartitionBits[nestingDepth+1];
+    PabloAST * subPartitionLB_test = partitionSelect;
+    while (subPartitionBase < subPartitionLimit) {
+        unsigned subPartitionNo = subPartitionBase >> subPartitionBits;
+        // Now determine the subpartition upper bound expression.  If the current table entry
+        // entry spans one or more subpartitions, then we combine the subpartitions which
+        // have a single offset calculation.   Otherwise, we advance only one subpartition.
+        unsigned consecutiveLimit = std::min(subPartitionLimit - subPartitionBase, consecutiveFrom(subPartitionBase));
+        unsigned consecSubPartitions = consecutiveLimit >> subPartitionBits;
+        unsigned nextSubPartitionNo = subPartitionNo + (consecSubPartitions > 0 ? consecSubPartitions : 1);
+        unsigned nextSubPartitionBase = nextSubPartitionNo << subPartitionBits;
+        PabloAST * subpartitionUB_test = bnc.ULT(bnc.HighBits(mInput, mInput.size() - subPartitionBits), nextSubPartitionNo);
+        PabloAST * inSubPartition = pb.createAnd(subPartitionLB_test, subpartitionUB_test);
+        //
+        // Determine which of the upper output bits are unchanging through the
+        // entire subpartition, so that they can be set explicitly.
+        //
+        codepoint_t changeableBits = computeOutputBitsForRange(subPartitionBase, nextSubPartitionBase-1);
+        codepoint_t cpBase = getTableVal(subPartitionBase);
+        PabloBuilder nested = pb.createScope();
+        for (unsigned i = changeableBits; i < outputBitsToSet; i++) {
+            if ((cpBase >> i) & 1) {
+                nested.createAssign(mOutput[i], nested.createOr(mOutput[i], inSubPartition));
+            }
+        }
+        //
+        // If we have multiple table entries for a single subpartition, we make a
+        // recursive call to consider further division into subsubpartitions.
+        //
+        if (consecSubPartitions == 0) {
+            tablePartitionLogic(nested, nestingDepth+1, subPartitionBase, inSubPartition, changeableBits);
+        } else {
+            BixNumCompiler bnc(nested);
+            // The current table entry spans one or more subpartitions.
+            // Compute the mapped values.
+            unsigned offset = getTableVal(subPartitionBase) - subPartitionBase;
+            BixNum mapped = bnc.AddModular(bnc.Truncate(mInput, changeableBits), offset % (1 << changeableBits));
+            for (unsigned i = 0; i < changeableBits; i++) {
+                nested.createAssign(mOutput[i], nested.createOr(mOutput[i], nested.createAnd(inSubPartition, mapped[i])));
+            }
+        }
+        pb.createIf(inSubPartition, nested);
+        // Update for the next iteration and continue;
+        subPartitionBase = nextSubPartitionBase;
+        subPartitionLB_test = pb.createNot(subpartitionUB_test);
+    }
+}
 
 }

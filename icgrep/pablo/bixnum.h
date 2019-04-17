@@ -65,6 +65,46 @@ private:
     std::vector<Var *> & mU16;
 };
 
+
+typedef std::vector<Var *> BixVar;
+
+class BixNumTableCompilerInterface  {
+public:
+    void setRecursivePartitionLevels(std::vector<unsigned> & partitionBits) {mPartitionBits = partitionBits;}
+protected:
+    BixNumTableCompilerInterface(BixNum & input, BixVar & output) : mInput(input), mOutput(output) {}
+    BixNum & mInput;
+    BixVar & mOutput;
+    std::vector<unsigned> mPartitionBits;
+};
+
+
+typedef std::vector<std::pair<unsigned, unsigned>> RangeTable;
+
+class BixNumRangeTableCompiler : public BixNumTableCompilerInterface {
+public:
+    BixNumRangeTableCompiler(RangeTable & table, unsigned inputMax, BixNum & input, BixVar & output) :
+        BixNumTableCompilerInterface(input, output), mRangeTable(table), mInputMax(inputMax) {}
+    void compileTable(PabloBuilder & pb, PabloAST * tableSelect);
+private:
+    RangeTable mRangeTable;
+    unsigned mInputMax;
+    unsigned getTableIndex(unsigned inputVal);
+    unsigned getTableVal(unsigned inputVal);
+    unsigned consecutiveFrom(unsigned inputVal);
+    unsigned computeOutputBitsForRange(unsigned lo, unsigned rangeSize);
+    void innerLogic(PabloBuilder & pb,
+                             unsigned partitionBase,
+                             PabloAST * partitionSelect,
+                             unsigned outputBitsToSet);
+    void tablePartitionLogic(PabloBuilder & pb,
+                             unsigned nestingDepth,
+                             unsigned partitionBase,
+                             PabloAST * partitionSelect,
+                             unsigned outputBitsToSet);
+
+};
+
 }
 
 

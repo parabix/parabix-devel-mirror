@@ -369,7 +369,7 @@ protected:
 private:
     std::vector<std::pair<unsigned, unsigned>> & mRangeTable;
     BixNum mGB_val;
-    Var * mU21[21];
+    std::vector<Var *> mU21;
     // This controls the insertion of an if-hierarchy for table lookup.
     // Each level deals with partitions of size 1 << mPartitionBits[k];
     std::vector<unsigned> mPartitionBits = {16, 13, 9, 5};
@@ -403,11 +403,15 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     BixNum nybble2 = getInputStreamSet("nybble2");
     BixNum u16 = getInputStreamSet("u16_basis");
 
+    const unsigned BMP_bits = 16;
+    const unsigned total_bits = 21;
+
+    mU21.resize(total_bits);
     PabloAST * zeroes = pb.createZeroes();
-    for (unsigned i = 0; i < 16; ++i) {
+    for (unsigned i = 0; i < BMP_bits; ++i) {
         mU21[i] = pb.createVar("u21_" + std::to_string(i), u16[i]);
     }
-    for (unsigned i = 16; i < 21; ++i) {
+    for (unsigned i = BMP_bits; i < total_bits; ++i) {
         mU21[i] = pb.createVar("u21_" + std::to_string(i), zeroes);
     }
 
@@ -438,9 +442,12 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
 
     PabloAST * aboveBMP = nb.createAnd(GB_4byte, bnc.UGE(byte1_lo7, 0x10), "gb_aboveBMP");
 
-    const unsigned BMP_bits = 16;
-    const unsigned total_bits = 21;
-    tablePartitionLogic(nb, 0, 0, nb.createAnd(GB_4byte, nb.createNot(aboveBMP)), 0, mRangeTable.size()-1, BMP_bits);
+
+    BixNumRangeTableCompiler tableCompiler(mRangeTable, 39419, mGB_val, mU21);
+    tableCompiler.setRecursivePartitionLevels(mPartitionBits);
+    tableCompiler.compileTable(nb, nb.createAnd(GB_4byte, nb.createNot(aboveBMP)));
+
+    //tablePartitionLogic(nb, 0, 0, nb.createAnd(GB_4byte, nb.createNot(aboveBMP)), 0, mRangeTable.size()-1, BMP_bits);
 
     for (unsigned i = 0; i < BMP_bits; i++) {
         nb.createAssign(mU21[i], nb.createOr(mU21[i], nb.createAnd(SMP_offset[i], aboveBMP)));
