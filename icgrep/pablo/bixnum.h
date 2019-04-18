@@ -49,22 +49,6 @@ private:
     PabloBuilder & mPB;
 };
 
-// 
-// A compiler that implements parallel bitwise table lookup for fixed tables.
-// 
-class BixNumTableCompiler {
-public:
-    BixNumTableCompiler(std::vector<unsigned> & table, BixNum & input, std::vector<Var *> & output) :
-        mTable(table), mBitsPerOutputUnit(output.size()), mInput(input), mU16(output) {}
-    void compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * partitionSelect);
-
-private:
-    std::vector<unsigned> & mTable;
-    unsigned mBitsPerOutputUnit;
-    BixNum & mInput;
-    std::vector<Var *> & mU16;
-};
-
 
 typedef std::vector<Var *> BixVar;
 
@@ -72,36 +56,69 @@ class BixNumTableCompilerInterface  {
 public:
     void setRecursivePartitionLevels(std::vector<unsigned> & partitionBits) {mPartitionBits = partitionBits;}
 protected:
-    BixNumTableCompilerInterface(BixNum & input, BixVar & output) : mInput(input), mOutput(output) {}
+    BixNumTableCompilerInterface(BixNum & input, BixVar & output, unsigned inputMax) :
+        mInput(input), mOutput(output), mInputMax(inputMax) {}
     BixNum & mInput;
     BixVar & mOutput;
+    unsigned mInputMax;
     std::vector<unsigned> mPartitionBits;
+    virtual unsigned getTableVal(unsigned inputVal) = 0;
+    virtual unsigned consecutiveFrom(unsigned inputVal) = 0;
+    virtual unsigned computeOutputBitsForRange(unsigned lo, unsigned rangeSize) = 0;
+    virtual void innerLogic(PabloBuilder & pb,
+                    unsigned partitionBase,
+                    PabloAST * partitionSelect,
+                    unsigned outputBitsToSet) = 0;
+    void tablePartitionLogic(PabloBuilder & pb,
+                             unsigned nestingDepth,
+                             unsigned partitionBase,
+                             PabloAST * partitionSelect,
+                             unsigned outputBitsToSet);
 };
 
+
+    
+    
+//
+// A compiler that implements parallel bitwise table lookup for fixed tables.
+//
+class BixNumTableCompiler : public BixNumTableCompilerInterface {
+public:
+    BixNumTableCompiler(std::vector<unsigned> & table, BixNum & input, BixVar & output) :
+        BixNumTableCompilerInterface(input, output, table.size()-1),
+        mTable(table), mBitsPerOutputUnit(output.size()) {}
+    void compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * partitionSelect);
+
+private:
+    std::vector<unsigned> & mTable;
+    unsigned mBitsPerOutputUnit;
+    unsigned getTableVal(unsigned inputVal) override;
+    unsigned consecutiveFrom(unsigned inputVal) override;
+    unsigned computeOutputBitsForRange(unsigned lo, unsigned rangeSize) override;
+    void innerLogic(PabloBuilder & pb,
+                    unsigned partitionBase,
+                    PabloAST * partitionSelect,
+                    unsigned outputBitsToSet) override;
+};
+    
 
 typedef std::vector<std::pair<unsigned, unsigned>> RangeTable;
 
 class BixNumRangeTableCompiler : public BixNumTableCompilerInterface {
 public:
     BixNumRangeTableCompiler(RangeTable & table, unsigned inputMax, BixNum & input, BixVar & output) :
-        BixNumTableCompilerInterface(input, output), mRangeTable(table), mInputMax(inputMax) {}
+        BixNumTableCompilerInterface(input, output, inputMax), mRangeTable(table) {}
     void compileTable(PabloBuilder & pb, PabloAST * tableSelect);
 private:
     RangeTable mRangeTable;
-    unsigned mInputMax;
     unsigned getTableIndex(unsigned inputVal);
-    unsigned getTableVal(unsigned inputVal);
-    unsigned consecutiveFrom(unsigned inputVal);
-    unsigned computeOutputBitsForRange(unsigned lo, unsigned rangeSize);
+    unsigned getTableVal(unsigned inputVal) override;
+    unsigned consecutiveFrom(unsigned inputVal) override;
+    unsigned computeOutputBitsForRange(unsigned lo, unsigned rangeSize) override;
     void innerLogic(PabloBuilder & pb,
                              unsigned partitionBase,
                              PabloAST * partitionSelect,
-                             unsigned outputBitsToSet);
-    void tablePartitionLogic(PabloBuilder & pb,
-                             unsigned nestingDepth,
-                             unsigned partitionBase,
-                             PabloAST * partitionSelect,
-                             unsigned outputBitsToSet);
+                             unsigned outputBitsToSet) override;
 
 };
 

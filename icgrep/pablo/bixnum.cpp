@@ -301,7 +301,45 @@ BixNum BixNumCompiler::MulFull(BixNum multiplicand, unsigned multiplier) {
 }
 
 const unsigned CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM = 4;
+unsigned BixNumTableCompiler::getTableVal(unsigned inputVal) {
+    return mTable[inputVal];
+}
 
+unsigned BixNumTableCompiler::consecutiveFrom(unsigned inputVal) {
+    unsigned consec = 1;
+    unsigned lastVal = mTable[inputVal];
+    unsigned nextVal = inputVal + 1;
+    while ((nextVal <= mInputMax) && (mTable[nextVal] == lastVal + 1)) {
+        consec++;
+        lastVal = mTable[nextVal];
+        nextVal++;
+    }
+    return consec;
+}
+
+unsigned BixNumTableCompiler::computeOutputBitsForRange(unsigned lo, unsigned hi) {
+    unsigned OrAccum = mTable[lo];
+    unsigned AndAccum = mTable[lo];
+    for (unsigned i = lo+1; i < hi; i++) {
+        OrAccum |= mTable[i];
+        AndAccum |= mTable[i];
+    }
+    return std::log2(OrAccum &~ AndAccum) + 1;
+}
+    
+    
+    void BixNumTableCompiler::innerLogic(PabloBuilder & pb,
+                                              unsigned partitionBase,
+                                              PabloAST * partitionSelect,
+                                              unsigned outputBitsToSet) {
+        mBitsPerOutputUnit = outputBitsToSet;
+        unsigned hi = std::min(mInputMax, partitionBase + (1 << mPartitionBits.back()));
+        compileSubTable(pb, partitionBase, hi, partitionSelect);
+        
+    }
+    
+
+    
 void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * subtableSelect) {
     assert (hi > lo);
     const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
@@ -369,7 +407,7 @@ void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsign
         output = BixNumCompiler(pb).AddModular(output, static_cast<unsigned>(best_offset));  // no offsetting
     }
     for (unsigned i = 0; i < mBitsPerOutputUnit; i++) {
-        pb.createAssign(mU16[i], pb.createOr(mU16[i], pb.createAnd(subtableSelect, output[i])));
+        pb.createAssign(mOutput[i], pb.createOr(mOutput[i], pb.createAnd(subtableSelect, output[i])));
     }
 }
 
@@ -438,7 +476,7 @@ void BixNumRangeTableCompiler::innerLogic(PabloBuilder & pb,
     }
 }
     
-void BixNumRangeTableCompiler::tablePartitionLogic(PabloBuilder & pb,
+void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
                                                    unsigned nestingDepth,
                                                    unsigned partitionBase,
                                                    PabloAST * partitionSelect,
