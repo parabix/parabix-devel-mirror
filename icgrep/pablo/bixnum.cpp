@@ -333,7 +333,7 @@ unsigned BixNumTableCompiler::computeOutputBitsForRange(unsigned lo, unsigned hi
                                               PabloAST * partitionSelect,
                                               unsigned outputBitsToSet) {
         mBitsPerOutputUnit = outputBitsToSet;
-        unsigned hi = std::min(mInputMax, partitionBase + (1 << mPartitionBits.back()));
+        unsigned hi = std::min(mInputMax, partitionBase + (1 << mPartitionBits.back()) - 1);
         compileSubTable(pb, partitionBase, hi, partitionSelect);
         
     }
@@ -378,8 +378,8 @@ void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsign
     }
 
     for (unsigned ch_code = lo; ch_code <= hi; ch_code++) {
-        codepoint_t transcodedCh = static_cast<codepoint_t>(static_cast<int>(mTable[ch_code]) - best_offset);
-        codepoint_t changedBits = transcodedCh ^ ch_code;
+        unsigned transcodedCh = static_cast<unsigned>(static_cast<int>(mTable[ch_code]) - best_offset);
+        unsigned changedBits = transcodedCh ^ ch_code;
         unsigned subTableIdx = ch_code % (1<<bitsPerInputUnit);
         for (unsigned i = 0; i < bitsPerInputUnit; i++) {
             unsigned bit = 1 << i;
@@ -442,10 +442,8 @@ unsigned BixNumRangeTableCompiler::computeOutputBitsForRange(unsigned lo, unsign
     return std::log2(getTableVal(lo) ^ getTableVal(hi)) + 1;
 }
 
-const unsigned BMP_bits = 16;  // FIX - this only for the 4-byte to 2-byte GB table
-
 void BixNumRangeTableCompiler::compileTable(PabloBuilder & pb, PabloAST * partitionSelect) {
-    tablePartitionLogic(pb, 0, 0, partitionSelect, BMP_bits);
+    tablePartitionLogic(pb, 0, 0, partitionSelect, mOutput.size());
 
 }
 
@@ -459,8 +457,8 @@ void BixNumRangeTableCompiler::innerLogic(PabloBuilder & pb,
     unsigned tblIndexLast = getTableIndex(partitionBase + (1 << mPartitionBits.back()) - 1);
     for (unsigned i = tblIndex1; i <= tblIndexLast; i++) {
         unsigned base = mRangeTable[i].first;
-        codepoint_t cp = mRangeTable[i].second;
-        codepoint_t offset = cp - base;
+        unsigned cp = mRangeTable[i].second;
+        unsigned offset = cp - base;
         PabloAST * GE_hi_bound;
         if (i < tblIndexLast) {
             GE_hi_bound = bnc.UGE(mInput, mRangeTable[i+1].first);
@@ -516,8 +514,8 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
         // Determine which of the upper output bits are unchanging through the
         // entire subpartition, so that they can be set explicitly.
         //
-        codepoint_t changeableBits = computeOutputBitsForRange(subPartitionBase, nextSubPartitionBase-1);
-        codepoint_t cpBase = getTableVal(subPartitionBase);
+        unsigned changeableBits = computeOutputBitsForRange(subPartitionBase, subPartitionLimit-1);
+        unsigned cpBase = getTableVal(subPartitionBase);
         PabloBuilder nested = pb.createScope();
         for (unsigned i = changeableBits; i < outputBitsToSet; i++) {
             if ((cpBase >> i) & 1) {
