@@ -82,7 +82,7 @@ inline PabloAST * CC_Compiler_Common::char_test_expr(const codepoint_t ch, Pablo
 
 template<typename PabloBlockOrBuilder>
 inline PabloAST * CC_Compiler_Common::getBasisVar(const unsigned i, PabloBlockOrBuilder & pb) const {
-    assert (i < mEncodingBits);
+    if (i >= mEncodingBits) return pb.createZeroes();
     return mBasisBit[i];
 }
 
