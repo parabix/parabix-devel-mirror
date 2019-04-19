@@ -312,36 +312,23 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     const unsigned maxGB2limit = GB_tbl.size();
 
     BixNum kernelSelectBasis = bnc.HighBits(GB2idx, GB2idx.size()-mRangeBits);
-    PabloAST * inRange = pb.createAnd(GB_2byte, bnc.EQ(kernelSelectBasis, mRangeBase >> mRangeBits));
     unsigned rangeLimit = mRangeBase + (1 << mRangeBits);
+    PabloAST * inRange = bnc.EQ(kernelSelectBasis, mRangeBase >> mRangeBits);
     if (rangeLimit > maxGB2limit) {
         unsigned aboveBaseLimit = maxGB2limit % (1 << mRangeBits);
         BixNum aboveBase = bnc.Truncate(GB2idx, mRangeBits);
-        inRange = pb.createAnd(inRange, pb.createNot(bnc.UGE(aboveBase, aboveBaseLimit)));
+        inRange = pb.createAnd(inRange, bnc.ULT(aboveBase, aboveBaseLimit));
         rangeLimit = maxGB2limit;
     }
+    inRange = pb.createAnd(GB_2byte, inRange, "gb_inRange_" + std::to_string(mRangeBase) + "-" + std::to_string(rangeLimit));
 
-    const unsigned subTableBits = 7;
-    const unsigned subTableSize = 1 << subTableBits;
-    BixNum tblIdxBasis = bnc.HighBits(GB2idx, GB2idx.size()-subTableBits);
-    BixNum subTblBasis = bnc.Truncate(GB2idx, subTableBits);
-    BixNumTableCompiler tblComp(GB_tbl, subTblBasis, u16);
+    BixNumTableCompiler tableCompiler(GB_tbl, GB2idx, u16);
+    std::vector<unsigned> partitionLevels = {mRangeBits, 11, 9, 5};
+    tableCompiler.setRecursivePartitionLevels(partitionLevels);
+    PabloBuilder nb = pb.createScope();
+    tableCompiler.compileSubTable(nb, mRangeBase, inRange);
+    pb.createIf(inRange, nb);
 
-    //PabloBuilder & nested = pb;
-    PabloBuilder nested = pb.createScope();
-
-    cc::Parabix_CC_Compiler_Builder tblIdxCompiler(nested.getPabloBlock(), BixNumCompiler(nested).ZeroExtend(tblIdxBasis, 8));
-
-
-    for (unsigned tblCode = mRangeBase; tblCode < rangeLimit; tblCode+=subTableSize) {
-        unsigned subTableLimit = std::min(tblCode + subTableSize -1, rangeLimit - 1);
-        //llvm::errs() << "tblCode = " << tblCode << ", limit = " << subTableLimit << "\n";
-        PabloAST * tblCodeStrm = nested.createAnd(inRange, tblIdxCompiler.compileCC(makeCC(tblCode/subTableSize, &cc::Byte)));
-        PabloBuilder nested2 = nested.createScope();
-        tblComp.compileSubTable(nested2, tblCode, subTableLimit, tblCodeStrm);
-        nested.createIf(tblCodeStrm, nested2);
-    }
-    pb.createIf(inRange, nested);
 
     Var * const u16_out = getOutputStreamVar("u16_out");
     for (unsigned i = 0; i < 16; i++) {

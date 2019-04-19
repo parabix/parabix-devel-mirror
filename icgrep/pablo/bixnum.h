@@ -87,7 +87,7 @@ public:
     BixNumTableCompiler(std::vector<unsigned> & table, BixNum & input, BixVar & output) :
         BixNumTableCompilerInterface(input, output, table.size()-1),
         mTable(table), mBitsPerOutputUnit(output.size()) {}
-    void compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * partitionSelect);
+    void compileSubTable(PabloBuilder & pb, unsigned lo, PabloAST * partitionSelect);
 
 private:
     std::vector<unsigned> & mTable;

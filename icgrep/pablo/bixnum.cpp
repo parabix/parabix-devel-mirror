@@ -321,37 +321,35 @@ unsigned BixNumTableCompiler::computeOutputBitsForRange(unsigned lo, unsigned hi
     unsigned OrAccum = mTable[lo];
     unsigned AndAccum = mTable[lo];
     for (unsigned i = lo+1; i < hi; i++) {
-        OrAccum |= mTable[i];
-        AndAccum |= mTable[i];
+        OrAccum |= mTable[i];  // zero bits will be zero for all lo..hi
+        AndAccum &= mTable[i]; // one bits will be one for all lo..hi
     }
-    return std::log2(OrAccum &~ AndAccum) + 1;
+    return std::log2(OrAccum & ~AndAccum) + 1;
 }
-    
-    
-    void BixNumTableCompiler::innerLogic(PabloBuilder & pb,
-                                              unsigned partitionBase,
-                                              PabloAST * partitionSelect,
-                                              unsigned outputBitsToSet) {
-        mBitsPerOutputUnit = outputBitsToSet;
-        unsigned hi = std::min(mInputMax, partitionBase + (1 << mPartitionBits.back()) - 1);
-        compileSubTable(pb, partitionBase, hi, partitionSelect);
-        
-    }
+
+void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, PabloAST * subtableSelect) {
+    tablePartitionLogic(pb, 0, lo, subtableSelect, mOutput.size());
+}
     
 
     
-void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsigned hi, PabloAST * subtableSelect) {
+void BixNumTableCompiler::innerLogic(PabloBuilder & pb,
+                                          unsigned lo,
+                                          PabloAST * subtableSelect,
+                                          unsigned outputBitsToSet) {
+    unsigned hi = std::min(mInputMax, lo + (1 << mPartitionBits.back()) - 1);
     assert (hi > lo);
     const unsigned bitsPerInputUnit = std::log2(hi-lo)+1;
     assert(mInput.size() >= bitsPerInputUnit);
+    const unsigned xfrmBits = bitsPerInputUnit;
     std::vector<CC *> bitXfrmClasses;
-    bitXfrmClasses.reserve(bitsPerInputUnit);
-    for (unsigned i = 0; i < bitsPerInputUnit; i++) {
+    bitXfrmClasses.reserve(xfrmBits);
+    for (unsigned i = 0; i < xfrmBits; i++) {
         bitXfrmClasses.push_back(makeCC(&cc::Byte));
     }
     std::vector<CC *> outputBitClasses;
-    outputBitClasses.reserve(mBitsPerOutputUnit-bitsPerInputUnit);
-    for (unsigned i = bitsPerInputUnit; i < mBitsPerOutputUnit; i++) {
+    outputBitClasses.reserve(outputBitsToSet-xfrmBits);
+    for (unsigned i = xfrmBits; i < outputBitsToSet; i++) {
         outputBitClasses.push_back(makeCC(&cc::Byte));
     }
 
@@ -376,38 +374,39 @@ void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, unsign
     if (max_seq_lgth < CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
         best_offset = 0;  // no offsetting
     }
-
     for (unsigned ch_code = lo; ch_code <= hi; ch_code++) {
         unsigned transcodedCh = static_cast<unsigned>(static_cast<int>(mTable[ch_code]) - best_offset);
         unsigned changedBits = transcodedCh ^ ch_code;
         unsigned subTableIdx = ch_code % (1<<bitsPerInputUnit);
-        for (unsigned i = 0; i < bitsPerInputUnit; i++) {
+        for (unsigned i = 0; i < xfrmBits; i++) {
             unsigned bit = 1 << i;
             if ((changedBits & bit) == bit) {
                 bitXfrmClasses[i]->insert(subTableIdx);
             }
         }
-        for (unsigned i = bitsPerInputUnit; i < mBitsPerOutputUnit; i++) {
+        for (unsigned i = xfrmBits; i < outputBitsToSet; i++) {
             unsigned bit = 1 << i;
             if ((transcodedCh & bit) == bit) {
-                outputBitClasses[i-bitsPerInputUnit]->insert(subTableIdx);
+                outputBitClasses[i-xfrmBits]->insert(subTableIdx);
             }
         }
     }
-    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(pb.getPabloBlock(), mInput);
-    BixNum output(mBitsPerOutputUnit, pb.createZeroes());
-    for (unsigned i = 0; i < bitsPerInputUnit; i++) {
+    BixNumCompiler bnc(pb);
+    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(pb.getPabloBlock(), bnc.Truncate(mInput, bitsPerInputUnit));
+    BixNum output(outputBitsToSet, pb.createZeroes());
+    for (unsigned i = 0; i < xfrmBits; i++) {
         PabloAST * xfrmStrm = inputUnitCompiler.compileCC(bitXfrmClasses[i]);
-        output[i] = pb.createXor(xfrmStrm, mInput[i]);
+        output[i] = pb.createXor(xfrmStrm, mInput[i], "tbl_xfrm[" + std::to_string(i) + "]");
     }
-    for (unsigned i = bitsPerInputUnit; i < mBitsPerOutputUnit; i++) {
-        output[i] = inputUnitCompiler.compileCC(outputBitClasses[i - bitsPerInputUnit]);
+    for (unsigned i = xfrmBits; i < outputBitsToSet; i++) {
+        output[i] = inputUnitCompiler.compileCC(outputBitClasses[i - xfrmBits]);
     }
     if (max_seq_lgth >= CONSECUTIVE_SEQ_OPTIMIZATION_MINIMUM) {
-        output = BixNumCompiler(pb).AddModular(output, static_cast<unsigned>(best_offset));  // no offsetting
+        output = BixNumCompiler(pb).AddModular(output, static_cast<unsigned>(best_offset));
     }
-    for (unsigned i = 0; i < mBitsPerOutputUnit; i++) {
-        pb.createAssign(mOutput[i], pb.createOr(mOutput[i], pb.createAnd(subtableSelect, output[i])));
+    for (unsigned i = 0; i < outputBitsToSet; i++) {
+        PabloAST * bit = pb.createAnd(subtableSelect, output[i], "tbl_bit[" + std::to_string(i) + "]");
+        pb.createAssign(mOutput[i], pb.createOr(mOutput[i], bit));
     }
 }
 
@@ -500,6 +499,7 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
     unsigned subPartitionBits = mPartitionBits[nestingDepth+1];
     PabloAST * subPartitionLB_test = partitionSelect;
     while (subPartitionBase < subPartitionLimit) {
+        //llvm::errs() << std::string(nestingDepth, ' ') << "subPartitionBase = " << subPartitionBase << "\n";
         unsigned subPartitionNo = subPartitionBase >> subPartitionBits;
         // Now determine the subpartition upper bound expression.  If the current table entry
         // entry spans one or more subpartitions, then we combine the subpartitions which
@@ -509,7 +509,7 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
         unsigned nextSubPartitionNo = subPartitionNo + (consecSubPartitions > 0 ? consecSubPartitions : 1);
         unsigned nextSubPartitionBase = nextSubPartitionNo << subPartitionBits;
         PabloAST * subpartitionUB_test = bnc.ULT(bnc.HighBits(mInput, mInput.size() - subPartitionBits), nextSubPartitionNo);
-        PabloAST * inSubPartition = pb.createAnd(subPartitionLB_test, subpartitionUB_test);
+        PabloAST * inSubPartition = pb.createAnd(subPartitionLB_test, subpartitionUB_test, "tbl_partition_" + std::to_string(subPartitionBase) + "-" + std::to_string(nextSubPartitionBase));
         //
         // Determine which of the upper output bits are unchanging through the
         // entire subpartition, so that they can be set explicitly.
@@ -517,6 +517,7 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
         unsigned changeableBits = computeOutputBitsForRange(subPartitionBase, subPartitionLimit-1);
         unsigned cpBase = getTableVal(subPartitionBase);
         PabloBuilder nested = pb.createScope();
+        pb.createIf(inSubPartition, nested);
         for (unsigned i = changeableBits; i < outputBitsToSet; i++) {
             if ((cpBase >> i) & 1) {
                 nested.createAssign(mOutput[i], nested.createOr(mOutput[i], inSubPartition));
@@ -533,12 +534,15 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
             // The current table entry spans one or more subpartitions.
             // Compute the mapped values.
             unsigned offset = getTableVal(subPartitionBase) - subPartitionBase;
-            BixNum mapped = bnc.AddModular(bnc.Truncate(mInput, changeableBits), offset % (1 << changeableBits));
+            BixNum idxBasis;
+            if (mInput.size() < changeableBits) idxBasis = bnc.ZeroExtend(mInput, changeableBits);
+            else idxBasis = bnc.Truncate(mInput, changeableBits);
+            BixNum mapped = bnc.AddModular(idxBasis, offset % (1 << changeableBits));
             for (unsigned i = 0; i < changeableBits; i++) {
-                nested.createAssign(mOutput[i], nested.createOr(mOutput[i], nested.createAnd(inSubPartition, mapped[i])));
+                PabloAST * bit = nested.createAnd(inSubPartition, mapped[i], "tbl_bit[" + std::to_string(i) + "]");
+                nested.createAssign(mOutput[i], nested.createOr(mOutput[i], bit));
             }
         }
-        pb.createIf(inSubPartition, nested);
         // Update for the next iteration and continue;
         subPartitionBase = nextSubPartitionBase;
         subPartitionLB_test = pb.createNot(subpartitionUB_test);
