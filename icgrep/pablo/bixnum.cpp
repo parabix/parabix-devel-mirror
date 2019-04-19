@@ -165,9 +165,9 @@ PabloAST * BixNumCompiler::EQ(BixNum value, BixNum test) {
 }
 
 BixNum BixNumCompiler::AddModular(BixNum augend, unsigned addend) {
+    addend = addend & ((1 << augend.size()) - 1);
     if (addend == 0) return augend;
     BixNum sum(augend.size());
-    addend = addend & ((1 << augend.size()) - 1);
     unsigned i = 0;
     while ((addend & (1 << i)) == 0) {
         sum[i] = augend[i];
@@ -223,6 +223,9 @@ BixNum BixNumCompiler::SubModular(BixNum minuend, BixNum subtrahend) {
 }
 
 BixNum BixNumCompiler::MulModular(BixNum multiplicand, unsigned multiplier) {
+    if (multiplier == 0) {
+        return {mPB.createZeroes()};
+    }
     unsigned multiplier_bits = std::log2(multiplier)+1;
     BixNum product(multiplicand.size(), mPB.createZeroes());
     for (unsigned i = 0; i < multiplier_bits; i++) {
