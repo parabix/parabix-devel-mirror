@@ -323,7 +323,7 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     inRange = pb.createAnd(GB_2byte, inRange, "gb_inRange_" + std::to_string(mRangeBase) + "-" + std::to_string(rangeLimit));
 
     BixNumTableCompiler tableCompiler(GB_tbl, GB2idx, u16);
-    std::vector<unsigned> partitionLevels = {mRangeBits, 11, 9, 5};
+    std::vector<unsigned> partitionLevels = {mRangeBits, 9, 7, 5};
     tableCompiler.setRecursivePartitionLevels(partitionLevels);
     PabloBuilder nb = pb.createScope();
     tableCompiler.compileSubTable(nb, mRangeBase, inRange);

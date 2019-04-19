@@ -320,7 +320,7 @@ unsigned BixNumTableCompiler::consecutiveFrom(unsigned inputVal) {
 unsigned BixNumTableCompiler::computeOutputBitsForRange(unsigned lo, unsigned hi) {
     unsigned OrAccum = mTable[lo];
     unsigned AndAccum = mTable[lo];
-    for (unsigned i = lo+1; i < hi; i++) {
+    for (unsigned i = lo+1; i <= hi; i++) {
         OrAccum |= mTable[i];  // zero bits will be zero for all lo..hi
         AndAccum &= mTable[i]; // one bits will be one for all lo..hi
     }
@@ -392,7 +392,8 @@ void BixNumTableCompiler::innerLogic(PabloBuilder & pb,
         }
     }
     BixNumCompiler bnc(pb);
-    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(pb.getPabloBlock(), bnc.Truncate(mInput, bitsPerInputUnit));
+    assert(bitsPerInputUnit <= 8);
+    cc::Parabix_CC_Compiler_Builder inputUnitCompiler(pb.getPabloBlock(), bnc.ZeroExtend(bnc.Truncate(mInput, bitsPerInputUnit),8));
     BixNum output(outputBitsToSet, pb.createZeroes());
     for (unsigned i = 0; i < xfrmBits; i++) {
         PabloAST * xfrmStrm = inputUnitCompiler.compileCC(bitXfrmClasses[i]);
