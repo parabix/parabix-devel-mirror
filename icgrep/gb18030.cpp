@@ -18,6 +18,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/stdout_kernel.h>
+#include <kernels/streams_merge.h>
 #include <kernels/deletion.h>
 #include <kernels/pdep_kernel.h>
 #include <pablo/builder.hpp>
@@ -269,7 +270,7 @@ void GB_18030_InitializeASCII::generatePabloMethod() {
 class GB_18030_DoubleByteRangeKernel : public pablo::PabloKernel {
 public:
     GB_18030_DoubleByteRangeKernel(const std::unique_ptr<KernelBuilder> & kb,
-                                   StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
+                                   StreamSet * GB_2byte, StreamSet * gb_index,
                                    StreamSet * u16_out,
                                    unsigned rangeBase, unsigned rangeBits);
     bool isCachable() const override { return true; }
@@ -283,12 +284,12 @@ private:
 
 GB_18030_DoubleByteRangeKernel::GB_18030_DoubleByteRangeKernel
 (const std::unique_ptr<KernelBuilder> & kb,
- StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
+ StreamSet * GB_2byte, StreamSet * gb_index,
  StreamSet * u16_out,
  unsigned rangeBase, unsigned rangeBits)
 : PabloKernel(kb, "GB_18030_DoubleByteRangeKernel" + std::to_string(rangeBase) + "-" + std::to_string(rangeBase + (1 << rangeBits) - 1),
               // input
-{Binding{"GB_2byte", GB_2byte}, Binding{"gb15_index", gb15_index}, Binding{"u16_in", u16_in}},
+{Binding{"GB_2byte", GB_2byte}, Binding{"gb_index", gb_index}},
               // output
 {Binding{"u16_out", u16_out}}), mRangeBase(rangeBase), mRangeBits(rangeBits) {
 }
@@ -297,12 +298,12 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     BixNumCompiler bnc(pb);
     PabloAST * GB_2byte = pb.createExtract(getInputStreamVar("GB_2byte"), pb.getInteger(0));
-    BixNum GB2idx = getInputStreamSet("gb15_index");
-    BixNum u16_in = getInputStreamSet("u16_in");
+    BixNum GB2idx = getInputStreamSet("gb_index");
 
-    std::vector<Var *> u16(u16_in.size());
+    std::vector<Var *> u16(16);
+    PabloAST * zeroes = pb.createZeroes();
     for (unsigned i = 0; i < u16.size(); ++i) {
-        u16[i] = pb.createVar("u16" + std::to_string(i), u16_in[i]);
+        u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
     }
 
     //  Double byte sequences use a lookup table, with codepoints determined
@@ -503,9 +504,10 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * const gb15index = P->CreateStreamSet(15);
     P->CreateKernelCall<GB_18030_DoubleByteIndex>(ASCII, GB_4byte, byte1, byte2, GB_2byte, gb15index);
 
-    StreamSet * u16basis = P->CreateStreamSet(16);
+    std::vector<StreamSet *> u16_outputs;
+    u16_outputs.push_back(P->CreateStreamSet(16));
 
-    P->CreateKernelCall<GB_18030_InitializeASCII>(ASCII, byte1, u16basis);
+    P->CreateKernelCall<GB_18030_InitializeASCII>(ASCII, byte1, u16_outputs[0]);
 
     const unsigned KernelSubrangeBits = 11;
     const unsigned KernelSubrangeSize = 1 << KernelSubrangeBits;
@@ -514,10 +516,13 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     for (unsigned rangeBase = 0; rangeBase < GB2_tblSize; rangeBase += KernelSubrangeSize) {
         //llvm::errs() << "rangeBase = " << rangeBase << "\n";
         StreamSet * u16out = P->CreateStreamSet(16);
-        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(GB_2byte, gb15index, u16basis, u16out, rangeBase, KernelSubrangeBits);
-        u16basis = u16out;
+        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(GB_2byte, gb15index, u16out, rangeBase, KernelSubrangeBits);
+        u16_outputs.push_back(u16out);
     }
-
+    
+    StreamSet * const u16basis = P->CreateStreamSet(16);
+    P->CreateKernelCall<StreamsMerge>(u16_outputs, u16basis);
+    
     StreamSet * const u32basis = P->CreateStreamSet(21);
     P->CreateKernelCall<GB_18030_FourByteLogic>(GB_4byte, byte1, nybble1, byte2, nybble2, u16basis, u32basis);
 
