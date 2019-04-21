@@ -559,8 +559,6 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * const u32basis = P->CreateStreamSet(21);
     std::vector<StreamSet *> deposited = {ASCII_deposit, gb2_deposit, gb4_deposit};
     P->CreateKernelCall<StreamsMerge>(deposited, u32basis);
-
-
     
     if (OutputEncoding == "UTF-32") {
         StreamSet * const u32data = P->CreateStreamSet(1, 32);
