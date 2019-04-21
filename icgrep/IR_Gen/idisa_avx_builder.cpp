@@ -841,16 +841,7 @@ Value * IDISA_AVX512F_Builder::esimd_mergeh(unsigned fw, Value * a, Value * b) {
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
         return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
     }
-    if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
-        const unsigned fieldCount = mBitBlockWidth/fw;
-        SmallVector<Constant *, 16> Idxs(fieldCount);
-        for (unsigned i = 0; i < fieldCount / 2; i++) {
-            Idxs[2 * i] = getInt32(i + fieldCount / 2); // selects elements from first reg.
-            Idxs[2 * i + 1] = getInt32(i + fieldCount / 2 + fieldCount); // selects elements from second reg.
-        }
-        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get(Idxs)));
-    }
-    if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
+    if (fw == 8)   {
         const unsigned fieldCount = mBitBlockWidth/fw;
         SmallVector<Constant *, 8> Idxs(fieldCount/2);
         for (unsigned i = 0; i < fieldCount / 2; i++) {
@@ -896,16 +887,7 @@ Value * IDISA_AVX512F_Builder::esimd_mergel(unsigned fw, Value * a, Value * b) {
         Value * hi_move_fwd = simd_slli(16, high_bits, 8-fw);
         return simd_or(simd_if(1, simd_himask(16), high_bits, low_bits), simd_or(lo_move_back, hi_move_fwd));
     }
-    if ((fw == 32) || (hostCPUFeatures.hasAVX512BW && (fw == 16)))   {
-        const unsigned fieldCount = mBitBlockWidth/fw;
-        SmallVector<Constant *, 16> Idxs(fieldCount);
-        for (unsigned i = 0; i < fieldCount / 2; i++) {
-            Idxs[2 * i] = getInt32(i); // selects elements from first reg.
-            Idxs[2 * i + 1] = getInt32(i + fieldCount); // selects elements from second reg.
-        }
-        return bitCast(mvmd_shuffle2(fw, fwCast(fw, b), fwCast(fw, a), ConstantVector::get(Idxs)));
-    }
-    if ((fw == 8) || (hostCPUFeatures.hasAVX512BW && (fw == 8)))   {
+    if (fw == 8) {
         const unsigned fieldCount = mBitBlockWidth/fw;
         SmallVector<Constant *, 8> Idxs(fieldCount/2);
         for (unsigned i = 0; i < fieldCount / 2; i++) {
