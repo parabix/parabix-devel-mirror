@@ -18,6 +18,7 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/stdout_kernel.h>
+#include <kernels/streams_merge.h>
 #include <kernels/deletion.h>
 #include <kernels/pdep_kernel.h>
 #include <pablo/builder.hpp>
@@ -52,17 +53,17 @@ static cl::opt<unsigned> ReplacementCharacter("replacement-character", cl::desc(
 //
 class GB_18030_ClassifyBytes : public pablo::PabloKernel {
 public:
-    GB_18030_ClassifyBytes(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basis, StreamSet * GB_bytes);
+    GB_18030_ClassifyBytes(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basis, StreamSet * GB_ASCII, StreamSet * GB2_final, StreamSet * GB4_final, StreamSet * GB_final);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-GB_18030_ClassifyBytes::GB_18030_ClassifyBytes (const std::unique_ptr<KernelBuilder> & b, StreamSet * basis, StreamSet * GB_bytes)
+GB_18030_ClassifyBytes::GB_18030_ClassifyBytes (const std::unique_ptr<KernelBuilder> & b, StreamSet * basis, StreamSet * GB_ASCII, StreamSet * GB2_final, StreamSet * GB4_final, StreamSet * GB_final)
 : PabloKernel(b, "GB_18030_ClassifyBytes",
 {Binding{"basis", basis}},
-              {Binding{"GB_bytes", GB_bytes}}) {}
+              {Binding{"GB_ASCII", GB_ASCII}, Binding{"GB2_final", GB2_final}, Binding{"GB4_final", GB4_final}, Binding{"GB_final", GB_final}}) {}
 
 void GB_18030_ClassifyBytes::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -125,14 +126,45 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     //  All bytes that are neither key nor data of 2 or 4 byte sequences
     //  are ASCII or error.
     //
-    PabloAST * GB_single = pb.createNot(pb.createOr(GB_keys, GB_data), "gb_single");
+    PabloAST * GB_single = pb.createInFile(pb.createNot(pb.createOr(GB_keys, GB_data), "gb_single"));
     //
     // GB prefix bytes are the keys that are first in 2 or 4 byte sequences.
     PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(pb.createAdvance(GB_k2, 1)), "gb_prefix");
-    Var * GB_bytes = getOutputStreamVar("GB_bytes");
-    pb.createAssign(pb.createExtract(GB_bytes, 0), GB_single);
-    pb.createAssign(pb.createExtract(GB_bytes, 1), GB_prefix);
-    pb.createAssign(pb.createExtract(GB_bytes, 2), GB_k2);
+    PabloAST * GB2_final = pb.createAnd(pb.createAdvance(GB_prefix, 1), pb.createNot(GB_k2));
+    PabloAST * GB4_final = pb.createAdvance(GB_k2, 2);
+    PabloAST * GB_final = pb.createOr3(GB_single, GB2_final, GB4_final);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB_ASCII"), 0), GB_single);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB2_final"), 0), GB2_final);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB4_final"), 0), GB4_final);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB_final"), 0), GB_final);
+}
+
+class GB_18030_Derived : public pablo::PabloKernel {
+public:
+    GB_18030_Derived(const std::unique_ptr<KernelBuilder> & kb, StreamSet * GB2_final, StreamSet * GB4_final, StreamSet * GB2_prefix, StreamSet * GB4_prefix, StreamSet * GB4_scope2, StreamSet * GB4_scope3);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+GB_18030_Derived::GB_18030_Derived (const std::unique_ptr<KernelBuilder> & b, StreamSet * GB2_final, StreamSet * GB4_final, StreamSet * GB2_prefix, StreamSet * GB4_prefix, StreamSet * GB4_scope2, StreamSet * GB4_scope3)
+: PabloKernel(b, "GB_18030_Derived",
+{Binding{"GB2_final", GB2_final, FixedRate(), LookAhead(1)}, Binding{"GB4_final", GB4_final, FixedRate(), LookAhead(3)}},
+              {Binding{"GB2_prefix", GB2_prefix}, Binding{"GB4_prefix", GB4_prefix}, Binding{"GB4_scope2", GB4_scope2}, Binding{"GB4_scope3", GB4_scope3}}) {}
+
+void GB_18030_Derived::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    PabloAST * GB2_final = pb.createExtract(getInputStreamVar("GB2_final"), pb.getInteger(0));
+    PabloAST * GB4_final = pb.createExtract(getInputStreamVar("GB4_final"), pb.getInteger(0));
+    PabloAST * GB2_prefix = pb.createLookahead(GB2_final, 1);
+    PabloAST * GB4_prefix = pb.createLookahead(GB4_final, 3);
+    PabloAST * GB4_scope2 = pb.createLookahead(GB4_final, 2);
+    PabloAST * GB4_scope3 = pb.createLookahead(GB4_final, 1);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB2_prefix"), 0), GB2_prefix);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB4_prefix"), 0), GB4_prefix);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB4_scope2"), 0), GB4_scope2);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("GB4_scope3"), 0), GB4_scope3);
 }
 
 class GB_18030_ExtractionMasks : public pablo::PabloKernel {
@@ -181,9 +213,7 @@ void GB_18030_ExtractionMasks::generatePabloMethod() {
 class GB_18030_DoubleByteIndex : public pablo::PabloKernel {
 public:
     GB_18030_DoubleByteIndex(const std::unique_ptr<KernelBuilder> & kb,
-                             StreamSet * ASCII, StreamSet * GB_4byte,
-                             StreamSet * byte1_basis, StreamSet * byte2_basis,
-                             StreamSet * GB_2byte, StreamSet * gb15_index);
+                             StreamSet * GB2_basis14_8, StreamSet * GB2_basis7_0, StreamSet * gb15_index);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -192,40 +222,35 @@ protected:
 
 GB_18030_DoubleByteIndex::GB_18030_DoubleByteIndex
 (const std::unique_ptr<kernel::KernelBuilder> & kb,
- StreamSet * ASCII, StreamSet * GB_4byte,
- StreamSet * byte1_basis, StreamSet * byte2_basis, StreamSet * GB_2byte, StreamSet * gb15_index)
+ StreamSet * GB2_basis14_8, StreamSet * GB2_basis7_0, StreamSet * gb15_index)
 : PabloKernel(kb, "GB_18030_DoubleByteIndex",
               // input
-{Binding{"ASCII", ASCII}, Binding{"GB_4byte", GB_4byte}, Binding{"byte1_basis", byte1_basis}, Binding{"byte2_basis", byte2_basis}},
+{Binding{"GB2_basis14_8", GB2_basis14_8}, Binding{"GB2_basis7_0", GB2_basis7_0}},
               // output
-{Binding{"GB_2byte", GB_2byte}, Binding{"gb15_index", gb15_index}}) {
+{Binding{"gb15_index", gb15_index}}) {
 }
 
 void GB_18030_DoubleByteIndex::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     BixNumCompiler bnc(pb);
-    PabloAST * ASCII = pb.createExtract(getInputStreamVar("ASCII"), pb.getInteger(0));
-    PabloAST * GB_4byte = pb.createExtract(getInputStreamVar("GB_4byte"), pb.getInteger(0));
-    PabloAST * GB_2byte = pb.createNot(pb.createOr(ASCII, GB_4byte), "gb_2byte");
-    pb.createAssign(pb.createExtract(getOutputStreamVar("GB_2byte"), pb.getInteger(0)), GB_2byte);
 
-    std::vector<PabloAST *> byte1_basis = getInputStreamSet("byte1_basis");
-    std::vector<PabloAST *> byte2_basis = getInputStreamSet("byte2_basis");
+    std::vector<PabloAST *> GB2_basis14_8 = getInputStreamSet("GB2_basis14_8");
+    std::vector<PabloAST *> GB2_basis7_0 = getInputStreamSet("GB2_basis7_0");
 
     // The valid values for the second byte of a 2-byte GB sequence are 0x40-7F and 0x80-0xFE.
     // Normalize these values to the range 0 through 190.
-    BixNum x80 = {byte2_basis[7]};
-    BixNum b2 = bnc.SubModular(bnc.SubModular(byte2_basis, x80), 0x40);
+    BixNum x80 = {GB2_basis7_0[7]};
+    BixNum b2 = bnc.SubModular(bnc.SubModular(GB2_basis7_0, x80), 0x40);
 
     // The valid values for the first byte of a 2-byte GB sequence are 0x81-0xFE.  Normalize
     // to the range 0-125 as seven-bit value.
-    BixNum b1 = bnc.SubModular(bnc.Truncate(byte1_basis, 7), 0x1);
+    BixNum b1 = bnc.SubModular(bnc.Truncate(GB2_basis14_8, 7), 0x1);
     // Now compute the GB 2-byte index value:  190 * b1 + b2, as a 15-bit quantity.
     BixNum GB2idx = bnc.AddModular(bnc.MulFull(b1, 190), b2);
 
     Var * const gb15_index = getOutputStreamVar("gb15_index");
     for (unsigned i = 0; i < 15; i++) {
-        pb.createAssign(pb.createExtract(gb15_index, pb.getInteger(i)), pb.createAnd(GB2idx[i], GB_2byte));
+        pb.createAssign(pb.createExtract(gb15_index, pb.getInteger(i)), GB2idx[i]);
     }
 }
 
@@ -269,7 +294,7 @@ void GB_18030_InitializeASCII::generatePabloMethod() {
 class GB_18030_DoubleByteRangeKernel : public pablo::PabloKernel {
 public:
     GB_18030_DoubleByteRangeKernel(const std::unique_ptr<KernelBuilder> & kb,
-                                   StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
+                                   StreamSet * gb15_index, StreamSet * u16_in,
                                    StreamSet * u16_out,
                                    unsigned rangeBase, unsigned rangeBits);
     bool isCachable() const override { return true; }
@@ -279,30 +304,47 @@ protected:
 private:
     unsigned mRangeBase;
     unsigned mRangeBits;
+    bool mHasU16input;
 };
+
+Bindings doubleByteKernelInputBindings(StreamSet * gb15_index, StreamSet * u16_in) {
+    if (u16_in == nullptr) {
+        return {Binding{"gb15_index", gb15_index}};
+    }
+    else {
+        return {Binding{"gb15_index", gb15_index}, Binding{"u16_in", u16_in}};
+    }
+}
+
 
 GB_18030_DoubleByteRangeKernel::GB_18030_DoubleByteRangeKernel
 (const std::unique_ptr<KernelBuilder> & kb,
- StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
+ StreamSet * gb15_index, StreamSet * u16_in,
  StreamSet * u16_out,
  unsigned rangeBase, unsigned rangeBits)
 : PabloKernel(kb, "GB_18030_DoubleByteRangeKernel" + std::to_string(rangeBase) + "-" + std::to_string(rangeBase + (1 << rangeBits) - 1),
               // input
-{Binding{"GB_2byte", GB_2byte}, Binding{"gb15_index", gb15_index}, Binding{"u16_in", u16_in}},
+doubleByteKernelInputBindings(gb15_index, u16_in),
               // output
-{Binding{"u16_out", u16_out}}), mRangeBase(rangeBase), mRangeBits(rangeBits) {
+{Binding{"u16_out", u16_out}}), mRangeBase(rangeBase), mRangeBits(rangeBits), mHasU16input(u16_in != nullptr) {
 }
 
 void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     BixNumCompiler bnc(pb);
-    PabloAST * GB_2byte = pb.createExtract(getInputStreamVar("GB_2byte"), pb.getInteger(0));
     BixNum GB2idx = getInputStreamSet("gb15_index");
-    BixNum u16_in = getInputStreamSet("u16_in");
 
-    std::vector<Var *> u16(u16_in.size());
-    for (unsigned i = 0; i < u16.size(); ++i) {
-        u16[i] = pb.createVar("u16" + std::to_string(i), u16_in[i]);
+    std::vector<Var *> u16(16);
+    if (mHasU16input) {
+        BixNum u16_in = getInputStreamSet("u16_in");
+        for (unsigned i = 0; i < u16.size(); ++i) {
+            u16[i] = pb.createVar("u16" + std::to_string(i), u16_in[i]);
+        }
+    } else {
+        PabloAST * zeroes = pb.createZeroes();
+        for (unsigned i = 0; i < u16.size(); ++i) {
+            u16[i] = pb.createVar("u16" + std::to_string(i), zeroes);
+        }
     }
 
     //  Double byte sequences use a lookup table, with codepoints determined
@@ -320,7 +362,6 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
         inRange = pb.createAnd(inRange, bnc.ULT(aboveBase, aboveBaseLimit));
         rangeLimit = maxGB2limit;
     }
-    inRange = pb.createAnd(GB_2byte, inRange, "gb_inRange_" + std::to_string(mRangeBase) + "-" + std::to_string(rangeLimit));
 
     BixNumTableCompiler tableCompiler(GB_tbl, GB2idx, u16);
     std::vector<unsigned> partitionLevels = {mRangeBits, 9, 7, 5};
@@ -339,9 +380,8 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
 class GB_18030_FourByteLogic : public pablo::PabloKernel {
 public:
     GB_18030_FourByteLogic(const std::unique_ptr<KernelBuilder> & kb,
-                           StreamSet * GB_4byte,
-                           StreamSet * byte1, StreamSet * nybble1, StreamSet * byte2, StreamSet * nybble2, StreamSet * u16_basis,
-                           StreamSet * u21_basis);
+                           StreamSet * GB4_basis21_15, StreamSet * GB2_basis14_11, StreamSet * GB4_basis10_4, StreamSet * GB4_basis3_0,
+                           StreamSet * GB4_results);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -350,31 +390,25 @@ protected:
 
 GB_18030_FourByteLogic::GB_18030_FourByteLogic
 (const std::unique_ptr<kernel::KernelBuilder> & kb,
- StreamSet * GB_4byte,
- StreamSet * byte1, StreamSet * nybble1, StreamSet * byte2, StreamSet * nybble2, StreamSet * u16_basis,
- StreamSet * u21_basis)
+ StreamSet * GB4_basis21_15, StreamSet * GB2_basis14_11, StreamSet * GB4_basis10_4, StreamSet * GB4_basis3_0,
+ StreamSet * GB4_results)
 : PabloKernel(kb, "GB_18030_FourByteLogic",
               // input
-{Binding{"GB_4byte", GB_4byte},
-    Binding{"byte1", byte1},
-    Binding{"nybble1", nybble1},
-    Binding{"byte2", byte2},
-    Binding{"nybble2", nybble2},
-    Binding{"u16_basis", u16_basis}
+{Binding{"GB4_basis21_15", GB4_basis21_15},
+    Binding{"GB2_basis14_11", GB2_basis14_11},
+    Binding{"GB4_basis10_4", GB4_basis10_4},
+    Binding{"GB4_basis3_0", GB4_basis3_0}
 },
               // output
-{Binding{"u21_basis", u21_basis}}) {
+{Binding{"GB4_results", GB4_results}}) {
 }
 
 void GB_18030_FourByteLogic::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    PabloAST * GB_4byte = pb.createExtract(getInputStreamVar("GB_4byte"), pb.getInteger(0));
-
-    BixNum byte1_lo7 = getInputStreamSet("byte1");
-    BixNum nybble1 = getInputStreamSet("nybble1");
-    BixNum byte2 = getInputStreamSet("byte2");
-    BixNum nybble2 = getInputStreamSet("nybble2");
-    BixNum u16_in = getInputStreamSet("u16_basis");
+    BixNum GB4_basis21_15 = getInputStreamSet("GB4_basis21_15");
+    BixNum GB2_basis14_11 = getInputStreamSet("GB2_basis14_11");
+    BixNum GB4_basis10_4 = getInputStreamSet("GB4_basis10_4");
+    BixNum GB4_basis3_0 = getInputStreamSet("GB4_basis3_0");
 
     const unsigned BMP_bits = 16;
     const unsigned total_bits = 21;
@@ -385,58 +419,44 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     high5.resize(total_bits - BMP_bits);
     PabloAST * zeroes = pb.createZeroes();
     for (unsigned i = 0; i < BMP_bits; ++i) {
-        u16[i] = pb.createVar("u21_" + std::to_string(i), u16_in[i]);
+        u16[i] = pb.createVar("u21_" + std::to_string(i), zeroes);
     }
     for (unsigned i = BMP_bits; i < total_bits; i++) {
         high5[i - BMP_bits] = pb.createVar("u21_" + std::to_string(i), zeroes);
     }
 
-    PabloBuilder nb = pb.createScope();
-    BixNumCompiler bnc(nb);
-    BixNum byte3_lo7(7);
-    for (unsigned i = 0; i < 7; i++) {
-        byte1_lo7[i] = nb.createAnd(GB_4byte, byte1_lo7[i]);
-        byte3_lo7[i] = nb.createAnd(GB_4byte, byte2[i]);
-    }
-    BixNum byte2_lo4(4);
-    BixNum byte4_lo4(4);
-    for (unsigned i = 0; i < 4; i++) {
-        byte2_lo4[i] = nb.createAnd(GB_4byte, nybble1[i], "gb_nybble1");
-        byte4_lo4[i] = nb.createAnd(GB_4byte, nybble2[i], "gb_nybble2");
-    }
+    BixNumCompiler bnc(pb);
+    BixNum lo11 = bnc.MulFull(bnc.SubModular(GB4_basis10_4, 1), 10);
+    lo11 = bnc.AddModular(lo11, GB4_basis3_0);
+    BixNum lo15 = bnc.AddModular(bnc.MulFull(GB2_basis14_11, 1260), lo11);
 
-    BixNum lo11 = bnc.MulFull(bnc.SubModular(byte3_lo7, 1), 10);
-    lo11 = bnc.AddModular(lo11, byte4_lo4);
-    BixNum lo15 = bnc.AddModular(bnc.MulFull(byte2_lo4, 1260), lo11);
-
-    BixNum SMP_base = bnc.MulFull(bnc.SubModular(byte1_lo7, 0x10), 12600);
+    BixNum SMP_base = bnc.MulFull(bnc.SubModular(GB4_basis21_15, 0x10), 12600);
     SMP_base = bnc.AddModular(SMP_base, 0x10000);
-    BixNum byte1_X_12600 = bnc.MulFull(bnc.SubModular(byte1_lo7, 1), 12600);
+    BixNum byte1_X_12600 = bnc.MulFull(bnc.SubModular(GB4_basis21_15, 1), 12600);
     BixNum GB_val = bnc.AddModular(byte1_X_12600, lo15);
     BixNum SMP_offset = bnc.AddModular(SMP_base, lo15);
 
-    PabloAST * aboveBMP = nb.createAnd(GB_4byte, bnc.UGE(byte1_lo7, 0x10), "gb_aboveBMP");
+    PabloAST * aboveBMP = bnc.UGE(GB4_basis21_15, 0x10);
 
     BixNumRangeTableCompiler tableCompiler(get_GB_RangeTable(), 39419, GB_val, u16);
     // This controls the insertion of an if-hierarchy for table lookup.
     // Each level deals with partitions of size 1 << mPartitionBits[k];
     std::vector<unsigned> partitionLevels = {16, 13, 9, 5};
     tableCompiler.setRecursivePartitionLevels(partitionLevels);
-    tableCompiler.compileTable(nb, nb.createAnd(GB_4byte, nb.createNot(aboveBMP)));
+    tableCompiler.compileTable(pb, pb.createNot(aboveBMP));
 
     for (unsigned i = 0; i < BMP_bits; i++) {
-        nb.createAssign(u16[i], nb.createOr(u16[i], nb.createAnd(SMP_offset[i], aboveBMP)));
+        pb.createAssign(u16[i], pb.createOr(u16[i], pb.createAnd(SMP_offset[i], aboveBMP)));
     }
     for (unsigned i = BMP_bits; i < total_bits; i++) {
-        nb.createAssign(high5[i - BMP_bits], nb.createAnd(SMP_offset[i], aboveBMP));
+        pb.createAssign(high5[i - BMP_bits], pb.createAnd(SMP_offset[i], aboveBMP));
     }
-    pb.createIf(GB_4byte, nb);
-    Var * const u21_basis = getOutputStreamVar("u21_basis");
+    Var * const GB4_results = getOutputStreamVar("GB4_results");
     for (unsigned i = 0; i < BMP_bits; i++) {
-        pb.createAssign(pb.createExtract(u21_basis, pb.getInteger(i)), u16[i]);
+        pb.createAssign(pb.createExtract(GB4_results, pb.getInteger(i)), u16[i]);
     }
     for (unsigned i = BMP_bits; i < total_bits; i++) {
-        pb.createAssign(pb.createExtract(u21_basis, pb.getInteger(i)), high5[i - BMP_bits]);
+        pb.createAssign(pb.createExtract(GB4_results, pb.getInteger(i)), high5[i - BMP_bits]);
     }
 }
 
@@ -472,54 +492,73 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
 
-    StreamSet * const GB_bytes = P->CreateStreamSet(3);
-    P->CreateKernelCall<GB_18030_ClassifyBytes>(BasisBits, GB_bytes);
+    StreamSet * const GB_ASCII = P->CreateStreamSet(1);
+    StreamSet * const GB2_final = P->CreateStreamSet(1);
+    StreamSet * const GB4_final = P->CreateStreamSet(1);
+    StreamSet * const GB_final = P->CreateStreamSet(1);
+    P->CreateKernelCall<GB_18030_ClassifyBytes>(BasisBits, GB_ASCII, GB2_final, GB4_final, GB_final);
 
-    // Masks for extraction of 1 bit per GB code unit sequence.
-    StreamSet * const GB_mask1 = P->CreateStreamSet(1);
-    StreamSet * const GB_mask2 = P->CreateStreamSet(1);
-    StreamSet * const GB_mask3 = P->CreateStreamSet(1);
-    StreamSet * const GB_mask4 = P->CreateStreamSet(1);
-    P->CreateKernelCall<GB_18030_ExtractionMasks>(GB_bytes, GB_mask1, GB_mask2, GB_mask3, GB_mask4);
+    StreamSet * const GB2_prefix = P->CreateStreamSet(1);
+    StreamSet * const GB4_prefix = P->CreateStreamSet(1);
+    StreamSet * const GB4_scope2 = P->CreateStreamSet(1);
+    StreamSet * const GB4_scope3 = P->CreateStreamSet(1);
+    P->CreateKernelCall<GB_18030_Derived>(GB2_final, GB4_final, GB2_prefix, GB4_prefix, GB4_scope2, GB4_scope3);
 
-    StreamSet * const ASCII = P->CreateStreamSet(1);    // markers for ASCII data
-    StreamSet * const GB_4byte = P->CreateStreamSet(1); // markers for 4-byte sequences
-    StreamSet * const byte1 = P->CreateStreamSet(7);    // only need the seven bits
-    StreamSet * const nybble1 = P->CreateStreamSet(4);
-    StreamSet * const byte2 = P->CreateStreamSet(8);
-    StreamSet * const nybble2 = P->CreateStreamSet(4);
-
+    StreamSet * const ASCII_deposit_mask = P->CreateStreamSet(1);
+    StreamSet * const GB2_deposit_mask = P->CreateStreamSet(1);
+    StreamSet * const GB4_deposit_mask = P->CreateStreamSet(1);
     Scalar * ZERO = P->CreateConstant(b->getSize(0));
-    Scalar * TWO = P->CreateConstant(b->getSize(2));
+    extract(P, GB_ASCII, ZERO, GB_final, ASCII_deposit_mask);
+    extract(P, GB2_final, ZERO, GB_final, GB2_deposit_mask);
+    extract(P, GB4_final, ZERO, GB_final, GB4_deposit_mask);
 
-    extract(P, GB_bytes, ZERO, GB_mask1, ASCII);
-    extract(P, GB_bytes, TWO, GB_mask2, GB_4byte);
-    extract(P, BasisBits, ZERO, GB_mask1, byte1);
-    extract(P, BasisBits, ZERO, GB_mask2, nybble1);
-    extract(P, BasisBits, ZERO, GB_mask3, byte2);
-    extract(P, BasisBits, ZERO, GB_mask4, nybble2);
+    StreamSet * const ASCII_basis = P->CreateStreamSet(7);
+    extract(P, BasisBits, ZERO, GB_ASCII, ASCII_basis);
+    StreamSet * const ASCII_deposit = P->CreateStreamSet(7);
+    deposit(P, P->CreateConstant(b->getSize(0)), 7, ASCII_deposit_mask, ASCII_basis, ASCII_deposit);
 
-    StreamSet * const GB_2byte = P->CreateStreamSet(1); // markers for 2-byte sequences
+    StreamSet * const GB2_basis14_8 = P->CreateStreamSet(7);
+    StreamSet * const GB2_basis7_0 = P->CreateStreamSet(8);
+    extract(P, BasisBits, ZERO, GB2_prefix, GB2_basis14_8);
+    extract(P, BasisBits, ZERO, GB2_final, GB2_basis7_0);
+
     StreamSet * const gb15index = P->CreateStreamSet(15);
-    P->CreateKernelCall<GB_18030_DoubleByteIndex>(ASCII, GB_4byte, byte1, byte2, GB_2byte, gb15index);
-
-    StreamSet * u16basis = P->CreateStreamSet(16);
-
-    P->CreateKernelCall<GB_18030_InitializeASCII>(ASCII, byte1, u16basis);
+    P->CreateKernelCall<GB_18030_DoubleByteIndex>(GB2_basis14_8, GB2_basis7_0, gb15index);
 
     const unsigned KernelSubrangeBits = 11;
     const unsigned KernelSubrangeSize = 1 << KernelSubrangeBits;
     const unsigned GB2_tblSize = get_GB_DoubleByteTable().size();
 
+    StreamSet * gb2_accum = nullptr;
     for (unsigned rangeBase = 0; rangeBase < GB2_tblSize; rangeBase += KernelSubrangeSize) {
         //llvm::errs() << "rangeBase = " << rangeBase << "\n";
-        StreamSet * u16out = P->CreateStreamSet(16);
-        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(GB_2byte, gb15index, u16basis, u16out, rangeBase, KernelSubrangeBits);
-        u16basis = u16out;
+        StreamSet * gb2_results = P->CreateStreamSet(16);
+        P->CreateKernelCall<GB_18030_DoubleByteRangeKernel>(gb15index, gb2_accum, gb2_results, rangeBase, KernelSubrangeBits);
+        gb2_accum = gb2_results;
     }
 
+    StreamSet * const gb2_deposit = P->CreateStreamSet(16);
+    deposit(P, P->CreateConstant(b->getSize(0)), 16, GB2_deposit_mask, gb2_accum, gb2_deposit);
+
+    StreamSet * const GB4_basis21_15 = P->CreateStreamSet(7);
+    StreamSet * const GB2_basis14_11 = P->CreateStreamSet(4);
+    StreamSet * const GB4_basis10_4 = P->CreateStreamSet(7);
+    StreamSet * const GB4_basis3_0 = P->CreateStreamSet(4);
+    extract(P, BasisBits, ZERO, GB4_prefix, GB4_basis21_15);
+    extract(P, BasisBits, ZERO, GB4_scope2, GB2_basis14_11);
+    extract(P, BasisBits, ZERO, GB4_scope3, GB4_basis10_4);
+    extract(P, BasisBits, ZERO, GB4_final, GB4_basis3_0);
+
+    StreamSet * const GB4_results = P->CreateStreamSet(21);
+    P->CreateKernelCall<GB_18030_FourByteLogic>(GB4_basis21_15, GB2_basis14_11, GB4_basis10_4, GB4_basis3_0, GB4_results);
+
+    StreamSet * const gb4_deposit = P->CreateStreamSet(21);
+    deposit(P, P->CreateConstant(b->getSize(0)), 21, GB4_deposit_mask, GB4_results, gb4_deposit);
+
     StreamSet * const u32basis = P->CreateStreamSet(21);
-    P->CreateKernelCall<GB_18030_FourByteLogic>(GB_4byte, byte1, nybble1, byte2, nybble2, u16basis, u32basis);
+    std::vector<StreamSet *> deposited = {ASCII_deposit, gb2_deposit, gb4_deposit};
+    P->CreateKernelCall<StreamsMerge>(deposited, u32basis);
+
 
     // Buffers for calculated deposit masks.
     StreamSet * const u8fieldMask = P->CreateStreamSet();
