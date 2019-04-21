@@ -46,6 +46,7 @@ static cl::OptionCategory gb18030Options("gb18030 Options", "Transcoding control
 
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(gb18030Options));
 static cl::opt<unsigned> ReplacementCharacter("replacement-character", cl::desc("Codepoint value of the character used to replace any unmapped or invalid input sequence."), cl::init(0xFFFD), cl::cat(gb18030Options));
+static cl::opt<std::string> OutputEncoding("encoding", cl::desc("Output encoding (default: UTF-8)"), cl::init("UTF-8"), cl::cat(gb18030Options));
 
 // Analyze GB 10830 encoded data to classify bytes as singletons (ASCII or error),
 // prefixes of 2- or 4-byte sequences, or second bytes of 4-byte sequences.
@@ -521,42 +522,55 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * const u32basis = P->CreateStreamSet(21);
     P->CreateKernelCall<GB_18030_FourByteLogic>(GB_4byte, byte1, nybble1, byte2, nybble2, u16basis, u32basis);
 
-    // Buffers for calculated deposit masks.
-    StreamSet * const u8fieldMask = P->CreateStreamSet();
-    StreamSet * const u8final = P->CreateStreamSet();
-    StreamSet * const u8initial = P->CreateStreamSet();
-    StreamSet * const u8mask12_17 = P->CreateStreamSet();
-    StreamSet * const u8mask6_11 = P->CreateStreamSet();
+    
+    if (OutputEncoding == "UTF-32") {
+        StreamSet * const u32data = P->CreateStreamSet(1, 32);
+        P->CreateKernelCall<P2S21Kernel>(u32basis, u32data);
+        P->CreateKernelCall<StdOutKernel>(u32data);
+    } else if (OutputEncoding == "UTF-32BE") {
+        StreamSet * const u32data = P->CreateStreamSet(1, 32);
+        P->CreateKernelCall<P2S21Kernel>(u32basis, u32data, cc::ByteNumbering::BigEndian);
+        P->CreateKernelCall<StdOutKernel>(u32data);
+    } else if (OutputEncoding == "UTF-8") {    
+        // Buffers for calculated deposit masks.
+        StreamSet * const u8fieldMask = P->CreateStreamSet();
+        StreamSet * const u8final = P->CreateStreamSet();
+        StreamSet * const u8initial = P->CreateStreamSet();
+        StreamSet * const u8mask12_17 = P->CreateStreamSet();
+        StreamSet * const u8mask6_11 = P->CreateStreamSet();
 
-    // Intermediate buffers for deposited bits
-    StreamSet * const deposit18_20 = P->CreateStreamSet(3);
-    StreamSet * const deposit12_17 = P->CreateStreamSet(6);
-    StreamSet * const deposit6_11 = P->CreateStreamSet(6);
-    StreamSet * const deposit0_5 = P->CreateStreamSet(6);
+        // Intermediate buffers for deposited bits
+        StreamSet * const deposit18_20 = P->CreateStreamSet(3);
+        StreamSet * const deposit12_17 = P->CreateStreamSet(6);
+        StreamSet * const deposit6_11 = P->CreateStreamSet(6);
+        StreamSet * const deposit0_5 = P->CreateStreamSet(6);
 
-    // Final buffers for computed UTF-8 basis bits and byte stream.
-    StreamSet * const u8basis = P->CreateStreamSet(8);
-    StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
+        // Final buffers for computed UTF-8 basis bits and byte stream.
+        StreamSet * const u8basis = P->CreateStreamSet(8);
+        StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
 
-    // Calculate the u8final deposit mask.
-    StreamSet * const extractionMask = P->CreateStreamSet();
-    P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
-    P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, extractionMask, u8final);
+        // Calculate the u8final deposit mask.
+        StreamSet * const extractionMask = P->CreateStreamSet();
+        P->CreateKernelCall<UTF8fieldDepositMask>(u32basis, u8fieldMask, extractionMask);
+        P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, extractionMask, u8final);
 
-    P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
+        P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
 
-    deposit(P, P->CreateConstant(b->getSize(18)), 3, u8initial, u32basis, deposit18_20);
-    deposit(P, P->CreateConstant(b->getSize(12)), 6, u8mask12_17, u32basis, deposit12_17);
-    deposit(P, P->CreateConstant(b->getSize(6)), 6, u8mask6_11, u32basis, deposit6_11);
-    deposit(P, P->CreateConstant(b->getSize(0)), 6, u8final, u32basis, deposit0_5);
+        deposit(P, P->CreateConstant(b->getSize(18)), 3, u8initial, u32basis, deposit18_20);
+        deposit(P, P->CreateConstant(b->getSize(12)), 6, u8mask12_17, u32basis, deposit12_17);
+        deposit(P, P->CreateConstant(b->getSize(6)), 6, u8mask6_11, u32basis, deposit6_11);
+        deposit(P, P->CreateConstant(b->getSize(0)), 6, u8final, u32basis, deposit0_5);
 
-    P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
-                                      u8initial, u8final, u8mask6_11, u8mask12_17,
-                                      u8basis);
+        P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
+                                        u8initial, u8final, u8mask6_11, u8mask12_17,
+                                        u8basis);
 
-    P->CreateKernelCall<P2SKernel>(u8basis, u8bytes);
+        P->CreateKernelCall<P2SKernel>(u8basis, u8bytes);
 
-    P->CreateKernelCall<StdOutKernel>(u8bytes);
+        P->CreateKernelCall<StdOutKernel>(u8bytes);
+    } else {
+        llvm::report_fatal_error("Unsupported output encoding: " + OutputEncoding);
+    }
 
     return reinterpret_cast<gb18030FunctionType>(P->compile());
 }
