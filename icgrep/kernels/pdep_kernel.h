@@ -50,12 +50,14 @@ private:
     const unsigned mSwizzleFactor;
 };
 
+enum class StreamExpandOptimization {None, NullCheck};
 class StreamExpandKernel final : public MultiBlockKernel {
 public:
     StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b
                        , Scalar * base
                        , StreamSet * source, StreamSet * mask
                        , StreamSet * expanded
+                       , const StreamExpandOptimization = StreamExpandOptimization::None
                        , const unsigned FieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
@@ -64,6 +66,7 @@ protected:
 private:
     const unsigned mFieldWidth;
     const unsigned mSelectedStreamCount;
+    const StreamExpandOptimization mOptimization;
 };
 
 class FieldDepositKernel final : public MultiBlockKernel {
