@@ -82,7 +82,7 @@ inline PabloAST * CC_Compiler_Common::char_test_expr(const codepoint_t ch, Pablo
 
 template<typename PabloBlockOrBuilder>
 inline PabloAST * CC_Compiler_Common::getBasisVar(const unsigned i, PabloBlockOrBuilder & pb) const {
-    assert (i < mEncodingBits);
+    if (i >= mEncodingBits) return pb.createZeroes();
     return mBasisBit[i];
 }
 
@@ -388,19 +388,19 @@ PabloAST * Parabix_Ternary_CC_Compiler::make_range(codepoint_t lo, codepoint_t h
         if (isa<Ones>(common)) {
             return pb.createXor(getBasisVar(diff_count - 1, pb), lo_test);
         }
-        return pb.createTernary(pb.getInteger(0x60), common, getBasisVar(diff_count - 1, pb), lo_test);
+        return pb.createAndXor(common, getBasisVar(diff_count - 1, pb), lo_test);
     } else if ((mask2 & hi) == mask2) { // hi with pattern xx111xx
         PabloAST * lo_test = GE_Range(diff_count - 1, lo & mask2, pb);
         if (isa<Ones>(common)) {
             return pb.createOr(getBasisVar(diff_count - 1, pb), lo_test);
         }
-        return pb.createTernary(pb.getInteger(0xE0), common, getBasisVar(diff_count - 1, pb), lo_test);
+        return pb.createAndOr(common, getBasisVar(diff_count - 1, pb), lo_test);
     } else if ((mask2 ^ (mask2 & lo)) == mask2) { // lo with pattern xx000xx
         PabloAST * hi_test = LE_Range(diff_count - 1, hi & mask1, pb);
         if (isa<Ones>(common)) {
             return pb.createOr(pb.createNot(getBasisVar(diff_count - 1, pb)), hi_test);
         }
-        return pb.createTernary(pb.getInteger(0xE0), common, pb.createNot(getBasisVar(diff_count - 1, pb)), hi_test);
+        return pb.createAndOr(common, pb.createNot(getBasisVar(diff_count - 1, pb)), hi_test);
     }
     PabloAST * lo_test = GE_Range(diff_count - 1, lo & mask1, pb);
     PabloAST * hi_test = LE_Range(diff_count - 1, hi & mask1, pb);
@@ -445,7 +445,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::GE_Range(const unsigned N, const unsigne
                return pb.createOr3(getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
            } else if (isa<And>(lo_range)) {
                Statement * stmt = cast<Statement>(lo_range);
-               return pb.createTernary(pb.getInteger(0xF8), getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
+               return pb.createOrAnd(getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
            }
            return pb.createOr(getBasisVar(N - 1, pb), lo_range);
         }
@@ -460,7 +460,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::GE_Range(const unsigned N, const unsigne
                 return pb.createAnd3(getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
             } else if (isa<Or>(lo_range)) {
                 Statement * stmt = cast<Statement>(lo_range);
-                return pb.createTernary(pb.getInteger(0xE0), getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
+                return pb.createAndOr(getBasisVar(N - 1, pb), stmt->getOperand(0), stmt->getOperand(1));
             }
             return pb.createAnd(getBasisVar(N - 1, pb), lo_range);
         }
@@ -616,7 +616,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::joinTerms(std::vector<PabloAST *> terms,
 
 PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloBuilder & builder) {
     if (byte_no <= 1) return builder.createOr(target, var);
-    else return builder.createTernary(builder.getInteger(0xF8), target, var, builder.createAdvance(prefix, 1));
+    else return builder.createOrAnd(target, var, builder.createAdvance(prefix, 1));
 }
 
 PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no, const unsigned len, PabloAST * target, PabloAST * var, PabloAST * prefix, PabloAST * suffix, PabloBuilder & builder) {
@@ -626,7 +626,7 @@ PabloAST * Parabix_Ternary_CC_Compiler::createUCDSequence(const unsigned byte_no
     for (unsigned i = byte_no; i != len - 1; ++i) {
         var = builder.createAnd(suffix, builder.createAdvance(var, 1));
     }
-    return builder.createTernary(builder.getInteger(0xF8), target, suffix, builder.createAdvance(var, 1));
+    return builder.createOrAnd(target, suffix, builder.createAdvance(var, 1));
 }
 
 } // end of namespace cc

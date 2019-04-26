@@ -123,10 +123,6 @@ public:
 
     PabloAST * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
 
-    PabloAST * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
-
-    PabloAST * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
-
     PabloAST * createNot(PabloAST * expr);
 
     PabloAST * createNot(PabloAST * expr, const llvm::StringRef prefix);
@@ -170,10 +166,6 @@ public:
 
     PabloAST * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
 
-    PabloAST * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
-
-    PabloAST * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
-
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2);
 
     PabloAST * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix);
@@ -201,6 +193,46 @@ public:
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr);
 
     PabloAST * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const llvm::StringRef prefix);
+
+    PabloAST * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
+
+    PabloAST * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
+
+    PabloAST * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
+
+    PabloAST * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
+
+    PabloAST * createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
+
+    PabloAST * createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
+
+    PabloAST * createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3);
+
+    PabloAST * createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix);
+
+    PabloAST * createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2);
+
+    PabloAST * createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const llvm::StringRef prefix);
+
+    PabloAST * createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2);
+
+    PabloAST * createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const llvm::StringRef prefix);
+
+    PabloAST * createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2);
+
+    PabloAST * createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const llvm::StringRef prefix);
+
+    PabloAST * createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2);
+
+    PabloAST * createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const llvm::StringRef prefix);
+
+    PabloAST * createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2);
+
+    PabloAST * createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const llvm::StringRef prefix);
+
+    PabloAST * createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2);
+
+    PabloAST * createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const llvm::StringRef prefix);
 
     PabloAST * createTernary(const uint8_t mask, PabloAST * a, PabloAST * b, PabloAST * c) {
         return createTernary(getInteger(mask), a, b, c);

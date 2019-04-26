@@ -141,13 +141,14 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     b->SetInsertPoint(finishedStrides);
 }
 
-StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b
-                                       , Scalar * base
-                                       , StreamSet * source
-                                       , StreamSet * mask
-                                       , StreamSet * expanded
-                                       , const unsigned FieldWidth)
-: MultiBlockKernel(b, "streamExpand" + std::to_string(FieldWidth)
+StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                       Scalar * base,
+                                       StreamSet * source,
+                                       StreamSet * mask,
+                                       StreamSet * expanded,
+                                       const StreamExpandOptimization opt,
+                                       const unsigned FieldWidth)
+    : MultiBlockKernel(b, "streamExpand" + std::to_string(FieldWidth) + ((opt == StreamExpandOptimization::NullCheck) ? "nullcheck" : "")
 + "_" + std::to_string(source->getNumElements())
 + ":" + std::to_string(expanded->getNumElements()),
 // input stream sets
@@ -159,9 +160,8 @@ Binding{"source", source, PopcountOf("marker")}},
 {Binding{"base", base}},
 {}, {})
 , mFieldWidth(FieldWidth)
-, mSelectedStreamCount(expanded->getNumElements()) {
-
-}
+, mSelectedStreamCount(expanded->getNumElements()),
+    mOptimization(opt) {}
 
 void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
     Type * fieldWidthTy = b->getIntNTy(mFieldWidth);
@@ -191,18 +191,36 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->CreateBr(expandLoop);
     // Main Loop
     b->SetInsertPoint(expandLoop);
-    PHINode * blockNoPhi = b->CreatePHI(b->getSizeTy(), 2);
-    PHINode * pendingOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
+    const unsigned incomingCount = (mOptimization == StreamExpandOptimization::NullCheck) ? 3 : 2;
+    PHINode * blockNoPhi = b->CreatePHI(b->getSizeTy(), incomingCount);
+    PHINode * pendingOffsetPhi = b->CreatePHI(b->getSizeTy(), incomingCount);
     SmallVector<PHINode *, 16> pendingDataPhi(mSelectedStreamCount);
     blockNoPhi->addIncoming(ZERO, entry);
     pendingOffsetPhi->addIncoming(initialSourceOffset, entry);
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), 2);
+        pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), incomingCount);
         pendingDataPhi[i]->addIncoming(pendingData[i], entry);
     }
-
     Value * deposit_mask = b->loadInputStreamBlock("marker", ZERO, blockNoPhi);
-
+    Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
+    if (mOptimization == StreamExpandOptimization::NullCheck) {
+        BasicBlock * expandLoopContinue = b->CreateBasicBlock("expandLoopContinue");
+        BasicBlock * nullMarkers = b->CreateBasicBlock("nullMarkers");
+        b->CreateCondBr(b->bitblock_any(deposit_mask), expandLoopContinue, nullMarkers);
+        b->SetInsertPoint(nullMarkers);
+        Constant * zeroes = b->allZeroes();
+        for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+            b->storeOutputStreamBlock("output", b->getInt32(i), blockNoPhi, zeroes);
+        }
+        blockNoPhi->addIncoming(nextBlk, nullMarkers);
+        pendingOffsetPhi->addIncoming(pendingOffsetPhi, nullMarkers);
+        for (unsigned i = 0; i < mSelectedStreamCount; i++) {
+            pendingDataPhi[i]->addIncoming(pendingDataPhi[i], nullMarkers);
+        }
+        b->CreateCondBr(moreToDo, expandLoop, expansionDone);
+        b->SetInsertPoint(expandLoopContinue);
+    }
     // Calculate the field values and offsets we need for assembling a
     // a full block of source bits.  Assembly will use the following operations.
     // A = b->simd_srlv(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
@@ -261,15 +279,13 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     //
     // Update loop control Phis for the next iteration.
     //
-    Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
-    blockNoPhi->addIncoming(nextBlk, expandLoop);
-    pendingOffsetPhi->addIncoming(newPendingOffset, expandLoop);
+    blockNoPhi->addIncoming(nextBlk, b->GetInsertBlock());
+    pendingOffsetPhi->addIncoming(newPendingOffset, b->GetInsertBlock());
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
-        pendingDataPhi[i]->addIncoming(sourceData[i], expandLoop);
+        pendingDataPhi[i]->addIncoming(sourceData[i], b->GetInsertBlock());
     }
     //
     // Now continue the loop if there are more blocks to process.
-    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
     b->CreateCondBr(moreToDo, expandLoop, expansionDone);
 
     b->SetInsertPoint(expansionDone);

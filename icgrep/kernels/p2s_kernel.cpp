@@ -1,4 +1,5 @@
 #include "p2s_kernel.h"
+#include <cc/alphabet.h>
 #include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
 #include <toolchain/toolchain.h>
@@ -223,6 +224,73 @@ Binding{"extractionMask", extractionMask}},
 {}, {}, {}) {
 
 }
+
+
+
+void P2S21Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+    Value * zeroes = b->allZeroes();
+    Value * bits23_16[8];
+    
+    for (unsigned j = 0; j < 5; ++j) {
+        const unsigned idx = j + 16;
+        bits23_16[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
+    }
+    bits23_16[5] = zeroes;
+    bits23_16[6] = zeroes;
+    bits23_16[7] = zeroes;
+    Value * byte2[8];
+    p2s(b, bits23_16, byte2);
+    
+    Value * bits15_8[8];
+    for (unsigned j = 0; j < 8; ++j) {
+        const unsigned idx = j + 8;
+        bits15_8[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
+    }
+    Value * byte1[8];
+    p2s(b, bits15_8, byte1);
+    
+    Value * bits7_0[8];
+    for (unsigned j = 0; j < 8; ++j) {
+        bits7_0[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j));
+    }
+    Value * byte0[8];
+    p2s(b, bits7_0, byte0);
+    
+    for (unsigned j = 0; j < 8; ++j) {
+        Value * quadbyte32[4];
+        if (mByteNumbering == cc::ByteNumbering::BigEndian) {
+            Value * hi_dblbyte_0 = b->bitCast(b->esimd_mergel(8, zeroes, byte2[j]));
+            Value * hi_dblbyte_1 = b->bitCast(b->esimd_mergeh(8, zeroes, byte2[j]));
+            Value * lo_dblbyte_0 = b->bitCast(b->esimd_mergel(8, byte1[j], byte0[j]));
+            Value * lo_dblbyte_1 = b->bitCast(b->esimd_mergeh(8, byte1[j], byte0[j]));
+            quadbyte32[0] = b->bitCast(b->esimd_mergel(16, hi_dblbyte_0, lo_dblbyte_0));
+            quadbyte32[1] = b->bitCast(b->esimd_mergeh(16, hi_dblbyte_0, lo_dblbyte_0));
+            quadbyte32[2] = b->bitCast(b->esimd_mergel(16, hi_dblbyte_1, lo_dblbyte_1));
+            quadbyte32[3] = b->bitCast(b->esimd_mergeh(16, hi_dblbyte_1, lo_dblbyte_1));
+        } else {
+            Value * hi_dblbyte_0 = b->bitCast(b->esimd_mergel(8, byte2[j], zeroes));
+            Value * hi_dblbyte_1 = b->bitCast(b->esimd_mergeh(8, byte2[j], zeroes));
+            Value * lo_dblbyte_0 = b->bitCast(b->esimd_mergel(8, byte0[j], byte1[j]));
+            Value * lo_dblbyte_1 = b->bitCast(b->esimd_mergeh(8, byte0[j], byte1[j]));
+            quadbyte32[0] = b->bitCast(b->esimd_mergel(16, lo_dblbyte_0, hi_dblbyte_0));
+            quadbyte32[1] = b->bitCast(b->esimd_mergeh(16, lo_dblbyte_0, hi_dblbyte_0));
+            quadbyte32[2] = b->bitCast(b->esimd_mergel(16, lo_dblbyte_1, hi_dblbyte_1));
+            quadbyte32[3] = b->bitCast(b->esimd_mergeh(16, lo_dblbyte_1, hi_dblbyte_1));
+        }
+        for (unsigned k = 0; k < 4; k++) {
+            b->storeOutputStreamPack("u32stream", b->getInt32(0), b->getInt32(4 * j + k), quadbyte32[k]);
+        }
+    }
+}
+
+P2S21Kernel::P2S21Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u21bits, StreamSet *u32stream, cc::ByteNumbering numbering)
+: BlockOrientedKernel(b, "p2s_21" + cc::numberingSuffix(numbering),
+{Binding{"basisBits", u21bits}},
+{Binding{"u32stream", u32stream}},
+{}, {}, {}), mByteNumbering(numbering) {
+
+}
+
 
 
 }

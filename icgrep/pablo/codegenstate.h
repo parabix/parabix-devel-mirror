@@ -164,23 +164,11 @@ public:
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
 
-    Ternary * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
-        return createAnd3(expr1, expr2, expr3, makeName(prefix));
-    }
-
-    Ternary * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
-
     Or * createOr(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createOr(expr1, expr2, makeName(prefix));
     }
 
     Or * createOr(PabloAST * expr1, PabloAST * expr2, const String * const name = nullptr);
-
-    Ternary * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
-        return createOr3(expr1, expr2, expr3, makeName(prefix));
-    }
-
-    Ternary * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
 
     Xor * createXor(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createXor(expr1, expr2, makeName(prefix));
@@ -193,6 +181,66 @@ public:
     }
 
     Sel * createSel(PabloAST * condition, PabloAST * trueExpr, PabloAST * falseExpr, const String * const name = nullptr);
+
+    Ternary * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+        return createAnd3(expr1, expr2, expr3, makeName(prefix));
+    }
+
+    Ternary * createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
+
+    Ternary * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+        return createOr3(expr1, expr2, expr3, makeName(prefix));
+    }
+
+    Ternary * createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
+
+    Ternary * createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+        return createXor3(expr1, expr2, expr3, makeName(prefix));
+    }
+
+    Ternary * createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
+
+    Ternary * createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const llvm::StringRef prefix) {
+        return createMajority3(expr1, expr2, expr3, makeName(prefix));
+    }
+
+    Ternary * createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name = nullptr);
+
+    Ternary * createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const llvm::StringRef prefix) {
+        return createAndOr(andExpr1, orExpr1, orExpr2, makeName(prefix));
+    }
+
+    Ternary * createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const String * const name = nullptr);
+
+    Ternary * createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const llvm::StringRef prefix) {
+        return createAndXor(andExpr1, xorExpr1, xorExpr2, makeName(prefix));
+    }
+
+    Ternary * createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const String * const name = nullptr);
+
+    Ternary * createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const llvm::StringRef prefix) {
+        return createOrAnd(orExpr1, andExpr1, andExpr2, makeName(prefix));
+    }
+
+    Ternary * createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const String * const name = nullptr);
+
+    Ternary * createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const llvm::StringRef prefix) {
+        return createOrXor(orExpr1, xorExpr1, xorExpr2, makeName(prefix));
+    }
+
+    Ternary * createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const String * const name = nullptr);
+
+    Ternary * createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const llvm::StringRef prefix) {
+        return createXorAnd(xorExpr1, andExpr1, andExpr2, makeName(prefix));
+    }
+
+    Ternary * createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const String * const name = nullptr);
+
+    Ternary * createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const llvm::StringRef prefix) {
+        return createXorOr(xorExpr1, orExpr1, orExpr2, makeName(prefix));
+    }
+
+    Ternary * createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const String * const name = nullptr);
 
     Ternary * createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name = nullptr);
 

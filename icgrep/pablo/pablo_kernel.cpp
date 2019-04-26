@@ -221,6 +221,9 @@ static inline std::string && annotateKernelNameWithPabloDebugFlags(std::string &
     if (CompileOptionIsSet(EnableSchedulingPrePass)) {
         name += "+Sched";
     }
+    if (CompileOptionIsSet(EnableTernaryOpt)) {
+        name += "+TerOpt";
+    }
     if (codegen::CCCOption == "ternary") {
         name += "+ternary";
     }

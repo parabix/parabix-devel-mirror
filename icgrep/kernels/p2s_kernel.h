@@ -7,6 +7,7 @@
 
 #include <cc/alphabet.h>
 #include <kernels/core/kernel.h>
+
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
@@ -60,6 +61,16 @@ public:
     bool hasSignature() const override { return false; }
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+};
+
+class P2S21Kernel final : public BlockOrientedKernel {
+public:
+    P2S21Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSet * u21bits, StreamSet * u32stream, cc::ByteNumbering = cc::ByteNumbering::LittleEndian);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+private:
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    cc::ByteNumbering mByteNumbering;
 };
 
 }

@@ -117,25 +117,9 @@ And * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const String * c
     return insertAtInsertionPoint(new (mAllocator) And(expr1->getType(), expr1, expr2, name, mAllocator));
 }
 
-Ternary * PabloBlock::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
-    CHECK_SAME_TYPE(expr1, expr2);
-    CHECK_SAME_TYPE(expr2, expr3);
-    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
-    // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
-    return createTernary(getInteger(0x80), expr1, expr2, expr3, name);
-}
-
 Or * PabloBlock::createOr(PabloAST * expr1, PabloAST * expr2, const String * const name) {
     CHECK_SAME_TYPE(expr1, expr2);
     return insertAtInsertionPoint(new (mAllocator) Or(expr1->getType(), expr1, expr2, name, mAllocator));
-}
-
-Ternary * PabloBlock::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
-    CHECK_SAME_TYPE(expr1, expr2);
-    CHECK_SAME_TYPE(expr2, expr3);
-    //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
-    // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
-    return createTernary(getInteger(0xFE), expr1, expr2, expr3, name);
 }
 
 Xor * PabloBlock::createXor(PabloAST * expr1, PabloAST * expr2, const String * const name) {
@@ -270,6 +254,86 @@ IndexedAdvance * PabloBlock::createIndexedAdvance(PabloAST * expr, PabloAST * in
 }
 
 /// QUARTERNARY FUNCTIONS
+
+Ternary * PabloBlock::createAnd3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    CHECK_SAME_TYPE(expr2, expr3);
+    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // and3(a, b, c) =    1      0      0      0      0      0      0      0    = 0x80
+    return createTernary(getInteger(0x80), expr1, expr2, expr3, name);
+}
+
+Ternary * PabloBlock::createOr3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    CHECK_SAME_TYPE(expr2, expr3);
+    //    (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // or3(a, b, c) =    1      1      1      1      1      1      1      0    = 0xFE
+    return createTernary(getInteger(0xFE), expr1, expr2, expr3, name);
+}
+
+Ternary * PabloBlock::createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    CHECK_SAME_TYPE(expr2, expr3);
+    //     (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // xor3(a, b, c) =    1      0      0      1      0      1      1      0    = 0x96
+    return createTernary(getInteger(0x96), expr1, expr2, expr3, name);
+}
+
+Ternary * PabloBlock::createMajority3(PabloAST * expr1, PabloAST * expr2, PabloAST * expr3, const String * const name) {
+    CHECK_SAME_TYPE(expr1, expr2);
+    CHECK_SAME_TYPE(expr2, expr3);
+    //          (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // majority3(a, b, c) =    1      1      1      0      1      0      0      0    = 0xE8
+    return createTernary(getInteger(0xE8), expr1, expr2, expr3, name);
+}
+
+Ternary * PabloBlock::createAndOr(PabloAST * andExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const String * const name) {
+    CHECK_SAME_TYPE(andExpr1, orExpr1);
+    CHECK_SAME_TYPE(orExpr1, orExpr2);
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // andOr(a, b, c) =    1      1      1      0      0      0      0      0    = 0xE0
+    return createTernary(getInteger(0xE0), andExpr1, orExpr1, orExpr2, name);
+}
+
+Ternary * PabloBlock::createAndXor(PabloAST * andExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const String * const name) {
+    CHECK_SAME_TYPE(andExpr1, xorExpr1);
+    CHECK_SAME_TYPE(xorExpr1, xorExpr2);
+    //       (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // andXor(a, b, c) =    0      1      1      0      0      0      0      0    = 0x60
+    return createTernary(getInteger(0x60), andExpr1, xorExpr1, xorExpr2, name);
+}
+
+Ternary * PabloBlock::createOrAnd(PabloAST * orExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const String * const name) {
+    CHECK_SAME_TYPE(orExpr1, andExpr1);
+    CHECK_SAME_TYPE(andExpr1, andExpr2);
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // orAnd(a, b, c) =    1      1      1      1      1      0      0      0    = 0xF8
+    return createTernary(getInteger(0xF8), orExpr1, andExpr1, andExpr2, name);
+}
+
+Ternary * PabloBlock::createOrXor(PabloAST * orExpr1, PabloAST * xorExpr1, PabloAST * xorExpr2, const String * const name) {
+    CHECK_SAME_TYPE(orExpr1, xorExpr1);
+    CHECK_SAME_TYPE(xorExpr1, xorExpr2);
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // orXor(a, b, c) =    1      1      1      1      0      1      1      0    = 0xF6
+    return createTernary(getInteger(0xF6), orExpr1, xorExpr1, xorExpr2, name);
+}
+
+Ternary * PabloBlock::createXorAnd(PabloAST * xorExpr1, PabloAST * andExpr1, PabloAST * andExpr2, const String * const name) {
+    CHECK_SAME_TYPE(xorExpr1, andExpr1);
+    CHECK_SAME_TYPE(andExpr1, andExpr2);
+    //       (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // xorAnd(a, b, c) =    0      1      1      1      1      0      0      0    = 0x78
+    return createTernary(getInteger(0x78), xorExpr1, andExpr1, andExpr2, name);
+}
+
+Ternary * PabloBlock::createXorOr(PabloAST * xorExpr1, PabloAST * orExpr1, PabloAST * orExpr2, const String * const name) {
+    CHECK_SAME_TYPE(xorExpr1, orExpr1);
+    CHECK_SAME_TYPE(orExpr1, orExpr2);
+    //      (a, b, c) =  (111), (110), (101), (100), (011), (010), (001), (000)
+    // xorOr(a, b, c) =    0      0      0      1      1      1      1      0    = 0x1E
+    return createTernary(getInteger(0x1E), xorExpr1, orExpr1, orExpr2, name);
+}
 
 Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * const name) {
     CHECK_SAME_TYPE(a, b);
