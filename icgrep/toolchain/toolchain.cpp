@@ -30,9 +30,13 @@ static cl::OptionCategory CodeGenOptions("Code Generation Options", "These optio
 static cl::bits<DebugFlags>
 DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
-                        clEnumVal(TraceCounts, "Show kernel processed and produced item counts."),
-                        clEnumVal(TraceDynamicBuffers, "Show dynamic buffer allocations and deallocations."),
-                        clEnumVal(TraceStridesPerSegment, "Show log of number of strides executed per kernel segment."),
+                        clEnumVal(TraceCounts, "Trace kernel processed and produced item counts."),
+                        clEnumVal(TraceDynamicBuffers, "Trace dynamic buffer allocations and deallocations."),
+                        clEnumVal(TraceBlockedIO, "Trace kernels prevented from processing any strides "
+                                                  "due to insufficient input items / output space."),
+                        clEnumVal(TraceStridesPerSegment, "Trace number of strides executed over segments."),
+                        clEnumVal(TraceProducedItemCounts, "Trace produced item count deltas over segments."),
+                        clEnumVal(TraceUnconsumedItemCounts, "Trace unconsumed item counts over segments."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
                         clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously "
                                                   "overwriting kernel state / stream space.\n"
@@ -44,6 +48,8 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                                                            "particular stream."),
                         clEnumVal(DisableIndirectBranch, "Disable use of indirect branches in kernel code.")
                         CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
+
+
 
 std::string ShowIROption = OmittedOption;
 static cl::opt<std::string, true> IROutputOption("ShowIR", cl::location(ShowIROption), cl::ValueOptional,

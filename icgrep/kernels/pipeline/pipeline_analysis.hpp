@@ -513,7 +513,7 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
     addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputScalarBindings(), G);
 
     // Pipeline optimizations
-    // combineDuplicateKernels(b, kernels, G);
+    combineDuplicateKernels(b, kernels, G);
     removeUnusedKernels(pipelineKernel, p_in, p_out, kernels, G);
     return G;
 }
@@ -667,24 +667,22 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
         const Kernel * const kernel = kernels[i];
 
-        auto addPopCountDependency = [&](const Relationships::vertex_descriptor v,
+        auto addPopCountDependency = [&](const Relationships::vertex_descriptor bindingVertex,
                                          const RelationshipType & port) {
 
-            const RelationshipNode & rn = G[v];
+            const RelationshipNode & rn = G[bindingVertex];
             assert (rn.Type == RelationshipNode::IsBinding);
             const Binding & binding = rn.Binding;
             const ProcessingRate & rate = binding.getRate();
             if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
                 // determine which port this I/O port refers to
-                for (const auto & e : make_iterator_range(in_edges(v, G))) {
+                for (const auto & e : make_iterator_range(in_edges(bindingVertex, G))) {
                     const RelationshipType & rt = G[e];
                     if (rt.Reason == ReasonType::Reference) {
-                        const auto ref = source(e, G);
-                        const RelationshipNode & rn = G[ref];
+                        const auto refStreamVertex = source(e, G);
+                        const RelationshipNode & rn = G[refStreamVertex];
                         assert (rn.Type == RelationshipNode::IsBinding);
                         const Binding & refBinding = rn.Binding;
-
-
                         Relationship * const refStream = refBinding.getRelationship();
                         const auto f = M.find(refStream);
                         Vertex refVertex = 0;
@@ -701,6 +699,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
                                 report_fatal_error(msg.str());
                             }
                             refVertex = add_vertex(refStream, H);
+                            M.emplace(refStream, refVertex);
                         }
                         const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
                         add_edge(refVertex, i, Edge{type, port}, H);
@@ -853,6 +852,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
     }
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief combineDuplicateKernels
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -940,7 +940,7 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                 inputs.resize(numOfStreams);
                 scalars.resize(n - numOfStreams);
 
-                KernelId id(kernel->makeSignature(b), inputs, scalars);
+                KernelId id(kernel->getName(), inputs, scalars);
 
                 const auto f = Ids.emplace(std::move(id), i);
                 if (LLVM_UNLIKELY(!f.second)) {
@@ -1120,11 +1120,10 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReferenceVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-const StreamPort PipelineCompiler::getReference(const unsigned kernel, const StreamPort port) const {
+BOOST_NOINLINE
+RelationshipGraph::edge_descriptor PipelineCompiler::getReferenceEdge(const unsigned kernel, const StreamPort port) const {
     using InEdgeIterator = graph_traits<RelationshipGraph>::in_edge_iterator;
     using OutEdgeIterator = graph_traits<RelationshipGraph>::out_edge_iterator;
-
-
     RelationshipGraph::vertex_descriptor binding = 0;
     if (port.Type == PortType::Input) {
         InEdgeIterator ei, ei_end;
@@ -1148,12 +1147,25 @@ const StreamPort PipelineCompiler::getReference(const unsigned kernel, const Str
     std::tie(ei, ei_end) = in_edges(binding, mStreamGraph);
     assert (std::distance(ei, ei_end) == 2);
     const auto e = *(ei + 1);
-    const RelationshipType & rt = mStreamGraph[e];
-    assert (rt.Reason == ReasonType::Reference);
-    return rt;
+    assert (mStreamGraph[e].Reason == ReasonType::Reference);
+    return e;
 }
 
-const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getReferenceBufferVertex
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline unsigned PipelineCompiler::getReferenceBufferVertex(const unsigned kernel, const StreamPort port) const {
+    return parent(source(getReferenceEdge(kernel, port), mStreamGraph), mStreamGraph);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getReference
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const StreamPort PipelineCompiler::getReference(const unsigned kernel, const StreamPort port) const {
+    return mStreamGraph[getReferenceEdge(kernel, port)];
+}
+
+inline const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
     return getReference(mKernelIndex, port);
 }
 

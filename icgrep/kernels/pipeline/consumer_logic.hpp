@@ -69,9 +69,12 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
     for (auto bufferVertex = firstBuffer; bufferVertex < lastBuffer; ++bufferVertex) {
         // copy the producing edge
         const auto pe = in_edge(bufferVertex, mBufferGraph);
-        add_edge(source(pe, mBufferGraph), bufferVertex, mBufferGraph[pe].Port, G);
-        for (const auto ce : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-            add_edge(bufferVertex, target(ce, mBufferGraph), mBufferGraph[ce].Port, G);
+        const BufferRateData & br = mBufferGraph[pe];
+        add_edge(source(pe, mBufferGraph), bufferVertex, ConsumerEdge{br.Port, 0}, G);
+        unsigned index = 0;
+        for (const auto & ce : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+            const BufferRateData & br = mBufferGraph[ce];
+            add_edge(bufferVertex, target(ce, mBufferGraph), ConsumerEdge{br.Port, ++index}, G);
         }
 
 #if 0
@@ -156,6 +159,37 @@ next:           continue;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addConsumerKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const unsigned kernel) {
+    IntegerType * const sizeTy = b->getSizeTy();
+    for (const auto & e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+        const auto buffer = target(e, mBufferGraph);
+        // If the out-degree for this buffer is zero, then we've proven that its consumption rate
+        // is identical to its production rate.
+
+        const auto numOfConsumers = out_degree(buffer, mConsumerGraph);
+        const auto consumedItemCountMatchesProducedItemCount = (numOfConsumers == 0);
+        if (LLVM_UNLIKELY(consumedItemCountMatchesProducedItemCount && (kernel != PipelineInput))) {
+            continue;
+        }
+        const BufferRateData & rd = mBufferGraph[e];
+        assert (rd.Port.Type == PortType::Output);
+        const auto name = makeBufferName(kernel, rd.Port) + CONSUMED_ITEM_COUNT_SUFFIX;
+
+        Type * countTy = sizeTy;
+        if (LLVM_UNLIKELY(mTrackIndividualConsumedItemCounts)) {
+            countTy = ArrayType::get(sizeTy, numOfConsumers + 1);
+        }
+        if (LLVM_UNLIKELY(kernel == PipelineInput)) {
+            mPipelineKernel->addNonPersistentScalar(countTy, name);
+        } else {
+            mPipelineKernel->addInternalScalar(countTy, name);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const unsigned outputPort, Value * const produced) {
@@ -170,75 +204,7 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const un
     }
     ConsumerNode & cn = mConsumerGraph[getOutputBufferVertex(outputPort)];
     cn.Consumed = initiallyConsumed;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief createConsumedPhiNodes
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
-    IntegerType * const sizeTy = b->getSizeTy();
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
-        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
-        const auto bufferVertex = source(e, mConsumerGraph);
-        ConsumerNode & cn = mConsumerGraph[bufferVertex];
-        if (LLVM_LIKELY(cn.PhiNode == nullptr)) {
-            const auto inputPort = InputPort(mConsumerGraph[e]);
-            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
-            PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
-            consumedPhi->addIncoming(cn.Consumed, mKernelEntry);
-            cn.PhiNode = consumedPhi;
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief computeMinimumConsumedItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
-        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
-
-        const auto inputPort = mConsumerGraph[e];
-        Value * processed = mFullyProcessedItemCount[InputPort(inputPort)];
-        // To support the lookbehind attribute, we need to withhold the items from
-        // our consumed count and rely on the initial buffer underflow to access any
-        // items before the start of the physical buffer.
-        const Binding & input = getBinding(inputPort);
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
-            const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
-            ConstantInt * const amount = b->getSize(lookBehind.amount());
-            ConstantInt * const ZERO = b->getSize(0);
-            Value * const safe = b->CreateICmpULT(processed, amount);
-            processed = b->CreateSelect(safe, b->CreateSub(processed, amount), ZERO);
-        }
-
-        const auto bufferVertex = source(e, mConsumerGraph);
-        ConsumerNode & cn = mConsumerGraph[bufferVertex]; assert (cn.Consumed);
-        cn.Consumed = b->CreateUMin(cn.Consumed, processed);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addConsumerKernelProperties
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const unsigned kernel) {
-    IntegerType * const sizeTy = b->getSizeTy();
-    for (const auto & e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-        const auto buffer = target(e, mBufferGraph);
-        // If the out-degree for this buffer is zero, then we've proven that its consumption rate
-        // is identical to its production rate.
-        const auto consumedItemCountMatchesProducedItemCount = (out_degree(buffer, mConsumerGraph) == 0);
-        if (LLVM_UNLIKELY(consumedItemCountMatchesProducedItemCount && (kernel != PipelineInput))) {
-            continue;
-        }
-        const BufferRateData & rd = mBufferGraph[e];
-        const auto prefix = makeBufferName(kernel, rd.Port);
-        if (LLVM_UNLIKELY(kernel == PipelineInput)) {
-            mPipelineKernel->addNonPersistentScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
-        } else {
-            mPipelineKernel->addInternalScalar(sizeTy, prefix + CONSUMED_ITEM_COUNT_SUFFIX);
-        }
-    }
+    cn.Encountered = 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -247,7 +213,8 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
 void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
     b->setKernel(mPipelineKernel);
     for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mConsumerGraph))) {
-        const auto port = OutputPort(mConsumerGraph[e]);
+        const ConsumerEdge & c = mConsumerGraph[e];
+        const auto port = c.Port;
         const auto bufferVertex = target(e, mConsumerGraph);
         Value * consumed = nullptr;
         if (LLVM_UNLIKELY(out_degree(bufferVertex, mConsumerGraph) == 0)) {
@@ -256,7 +223,13 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
             consumed = mInitiallyProducedItemCount[port];
         } else {
             const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, port});
-            consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+            if (LLVM_UNLIKELY(mTrackIndividualConsumedItemCounts)) {
+                Value * const ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+                Constant * const ZERO = b->getInt32(0);
+                consumed = b->CreateLoad(b->CreateGEP(ptr, { ZERO, ZERO } ));
+            } else {
+                consumed = b->getScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+            }
         }
         mConsumedItemCount[port] = consumed;
         mPriorConsumedItemCount[getBufferIndex(bufferVertex)] = consumed;
@@ -268,47 +241,93 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
     b->setKernel(mKernel);
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief createConsumedPhiNodes
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
+    IntegerType * const sizeTy = b->getSizeTy();
+    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
+        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
+        const auto buffer = source(e, mConsumerGraph);
+        ConsumerNode & cn = mConsumerGraph[buffer];
+        if (LLVM_LIKELY(cn.PhiNode == nullptr)) {
+            const ConsumerEdge & c = mConsumerGraph[e];
+            const auto inputPort = c.Port;
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
+            PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
+            consumedPhi->addIncoming(cn.Consumed, mKernelEntry);
+            cn.PhiNode = consumedPhi;
+            cn.Encountered++;
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeMinimumConsumedItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
+    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
+        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
+        const ConsumerEdge & c = mConsumerGraph[e];
+        Value * processed = mFullyProcessedItemCount[c.Port];
+        // To support the lookbehind attribute, we need to withhold the items from
+        // our consumed count and rely on the initial buffer underflow to access any
+        // items before the start of the physical buffer.
+        const Binding & input = getBinding(StreamPort{PortType::Input, c.Port});
+        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
+            const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
+            ConstantInt * const amount = b->getSize(lookBehind.amount());
+            ConstantInt * const ZERO = b->getSize(0);
+            Value * const safe = b->CreateICmpULT(processed, amount);
+            processed = b->CreateSelect(safe, b->CreateSub(processed, amount), ZERO);
+        }
+        const auto buffer = source(e, mConsumerGraph);
+        ConsumerNode & cn = mConsumerGraph[buffer]; assert (cn.Consumed);
+        if (LLVM_UNLIKELY(mTrackIndividualConsumedItemCounts)) {
+            const ConsumerEdge & c = mConsumerGraph[e]; assert (c.Index > 0);
+            setConsumedItemCount(b, buffer, processed, c.Index);
+        }
+        cn.Consumed = b->CreateUMin(cn.Consumed, processed);
+    }
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeFinalConsumedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
 
-    flat_set<unsigned> buffers;
-    buffers.reserve(in_degree(mKernelIndex, mConsumerGraph));
-
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
         const auto buffer = source(e, mConsumerGraph);
-        buffers.insert(buffer);
-        //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
+        //if (LLVM_UNLIKELY(mConsumerGraph[e] != FAKE_CONSUMER)) {
         ConsumerNode & cn = mConsumerGraph[buffer];
         if (LLVM_LIKELY(cn.PhiNode != nullptr)) {
             cn.PhiNode->addIncoming(cn.Consumed, mKernelLoopExitPhiCatch);
             cn.Consumed = cn.PhiNode;
             cn.PhiNode = nullptr;
         }
-    }
-    clear_in_edges(mKernelIndex, mConsumerGraph);
-
-    b->setKernel(mPipelineKernel);
-    // check to see if we've fully finished processing any stream
-    for (const auto buffer : buffers) {
-        if (out_degree(buffer, mConsumerGraph) == 0) {
-            ConsumerNode & cn = mConsumerGraph[buffer];
-            setConsumedItemCount(b, buffer, cn.Consumed);
+        // check to see if we've fully finished processing any stream
+        if (out_degree(buffer, mConsumerGraph) == cn.Encountered) {
+            setConsumedItemCount(b, buffer, cn.Consumed, 0);
         }
     }
-    b->setKernel(mKernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned buffer, not_null<Value *> consumed) const {
+inline void PipelineCompiler::setConsumedItemCount(BuilderRef b, const unsigned buffer, not_null<Value *> consumed, const unsigned slot) const {
     const auto pe = in_edge(buffer, mBufferGraph);
     const auto producerVertex = source(pe, mBufferGraph);
     const BufferRateData & rd = mBufferGraph[pe];
     const auto prefix = makeBufferName(producerVertex, rd.Port);
-    b->setScalarField(prefix + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
+    b->setKernel(mPipelineKernel);
+    Value * ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+    b->setKernel(mKernel);
+    if (LLVM_UNLIKELY(mTrackIndividualConsumedItemCounts)) {
+        ptr = b->CreateGEP(ptr, { b->getInt32(0), b->getInt32(slot) });
+    }
+    b->CreateStore(consumed, ptr);
 }
 
 }

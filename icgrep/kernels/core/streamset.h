@@ -111,9 +111,9 @@ public:
 
     virtual llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
-    virtual std::pair<llvm::Value *, llvm::Value *> reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems, llvm::Value * cycleCounterAccumulator  = nullptr) const = 0;
+    virtual llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
 
-    void setHandle(BuilderRef b, llvm::Value * const handle);
+    void setHandle(BuilderRef b, llvm::Value * const handle) const;
 
 protected:
 
@@ -134,7 +134,7 @@ protected:
     const BufferKind                mBufferKind;
     // Each StreamSetBuffer object is local to the Kernel (or pipeline) object at (pre-JIT) "compile time" but
     // by sharing the same handle will refer to the same stream set at (post-JIT) run time.
-    llvm::Value *                   mHandle;
+    mutable llvm::Value *           mHandle;
     llvm::Type * const              mType;
     const unsigned                  mOverflow;
     const unsigned                  mUnderflow;
@@ -170,7 +170,7 @@ public:
 
     llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const override;
 
-    std::pair<llvm::Value *, llvm::Value *> reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems, llvm::Value * cycleCounterAccumulator  = nullptr) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * addr) const override;
 
@@ -211,7 +211,7 @@ public:
 
     void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * capacity) const override;
 
-    std::pair<llvm::Value *, llvm::Value *> reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems, llvm::Value * cycleCounterAccumulator  = nullptr) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     llvm::Value * getStreamBlockPtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * streamIndex, llvm::Value * blockIndex) const override;
 
@@ -252,7 +252,7 @@ public:
 
     void releaseBuffer(BuilderRef b) const override;
 
-    std::pair<llvm::Value *, llvm::Value *> reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems, llvm::Value * cycleCounterAccumulator = nullptr) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     llvm::Value * getLinearlyAccessibleItems(BuilderRef b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 
@@ -311,7 +311,7 @@ public:
 
     void releaseBuffer(BuilderRef b) const override;
 
-    std::pair<llvm::Value *, llvm::Value *> reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems, llvm::Value * cycleCounterAccumulator  = nullptr) const override;
+    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     llvm::Value * getLinearlyAccessibleItems(BuilderRef b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
 

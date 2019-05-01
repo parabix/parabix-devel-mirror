@@ -101,7 +101,10 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
         addCycleCounterProperties(b, i);
+        addProducedItemCountDeltaProperties(b, i);
+        addUnconsumedItemCountProperties(b, i);
     }
+
     b->setKernel(mPipelineKernel);
 }
 
@@ -168,12 +171,17 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
                 const BufferRateData & rd = mBufferGraph[e];
                 const auto prefix = makeBufferName(kernelIndex, rd.Port);
                 LLVMContext & C = b->getContext();
+                const auto numOfConsumers = out_degree(bufferVertex, mConsumerGraph);
+
+                // segment num  0
+                // new capacity 1
+                // produced item count 2
+                // consumer processed item count [3,n)
+                Type * const traceStructTy = ArrayType::get(sizeTy, numOfConsumers + 3);
+
                 FixedArray<Type *, 2> traceStruct;
-                traceStruct[0] = sizeTy; // segment num
-                traceStruct[1] = sizeTy; // new capacity
-                Type * const traceStructTy = StructType::get(C, traceStruct);
                 traceStruct[0] = traceStructTy->getPointerTo(); // pointer to trace log
-                // traceStruct[1] = sizeTy; // length of trace log
+                traceStruct[1] = sizeTy; // length of trace log
                 mPipelineKernel->addInternalScalar(StructType::get(C, traceStruct),
                                                    prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
             }
@@ -437,10 +445,20 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
+    // calculate the last segment # used by any kernel in case any reports require it.
+    b->setKernel(mPipelineKernel);
+    mSegNo = nullptr;
+    for (auto i = FirstKernel; i <= LastKernel; ++i) {
+        Value * const segNo = b->getScalarField(makeKernelName(i) + LOGICAL_SEGMENT_SUFFIX);
+        mSegNo = b->CreateUMax(mSegNo, segNo);
+    }
     printOptionalCycleCounter(b);
     printOptionalBlockingIOStatistics(b);
+    printOptionalBlockedIOPerSegment(b);
     printOptionalBufferExpansionHistory(b);
     printOptionalStridesPerSegment(b);
+    printProducedItemCountDeltas(b);
+    printUnconsumedItemCounts(b);
     SmallVector<Value *, 16> params;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);

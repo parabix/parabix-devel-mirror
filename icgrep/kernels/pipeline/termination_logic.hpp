@@ -273,7 +273,7 @@ inline void PipelineCompiler::setTerminated(BuilderRef b) const {
     const auto pathId = mTerminationGraph[mKernelIndex];
     Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(pathId));
     Constant * const signal = getTerminationSignal(b, mKernelIndex);
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
         Value * const priorSignal = b->CreateLoad(ptr, true);
         Value * const expectedPriorSignal = ConstantExpr::getSub(signal, b->getSize(1));
         Value * const valid = b->CreateICmpEQ(priorSignal, expectedPriorSignal);

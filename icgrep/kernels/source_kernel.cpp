@@ -210,6 +210,7 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     // If so, just copy the data ...
     b->SetInsertPoint(copyBack);
     b->CreateMemCpy(baseBuffer, unreadData, remainingBytes, blockSize);
+    BasicBlock * const copyBackExit = b->GetInsertBlock();
     b->CreateBr(prepareBuffer);
 
     // Otherwise, allocate a buffer with twice the capacity and copy the unconsumed data back into it
@@ -224,12 +225,13 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->CreateFree(ancillaryBuffer);
     b->setScalarField("buffer", expandedBuffer);
     b->setCapacity("sourceBuffer", expandedCapacity);
+    BasicBlock * const expandAndCopyBackExit = b->GetInsertBlock();
     b->CreateBr(prepareBuffer);
 
     b->SetInsertPoint(prepareBuffer);
     PHINode * const newBaseBuffer = b->CreatePHI(baseBuffer->getType(), 2);
-    newBaseBuffer->addIncoming(baseBuffer, copyBack);
-    newBaseBuffer->addIncoming(expandedBuffer, expandAndCopyBack);
+    newBaseBuffer->addIncoming(baseBuffer, copyBackExit);
+    newBaseBuffer->addIncoming(expandedBuffer, expandAndCopyBackExit);
     Value * const newBaseAddress = b->CreateGEP(newBaseBuffer, b->CreateNeg(consumed));
     b->setBaseAddress("sourceBuffer", newBaseAddress);
     b->CreateBr(readData);

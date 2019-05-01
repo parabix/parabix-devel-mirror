@@ -319,7 +319,8 @@ void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
         kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
     Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
-    blockOffsetPhi->addIncoming(nextBlk, processBlock);
+    BasicBlock * const processBlockExit = kb->GetInsertBlock();
+    blockOffsetPhi->addIncoming(nextBlk, processBlockExit);
     Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
     kb->CreateCondBr(moreToDo, processBlock, s2pDone);
     kb->SetInsertPoint(s2pDone);

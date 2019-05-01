@@ -25,7 +25,6 @@ namespace llvm { class Value; }
 
 class BaseDriver;
 
-
 inline bool is_power_2(const uint64_t n) {
     return ((n & (n - 1)) == 0) && n;
 }
@@ -402,7 +401,21 @@ public:
         return *mDriver;
     }
 
+    llvm::BasicBlock * WriteDefaultRethrowBlock();
+
 protected:
+
+    llvm::Function * getDefaultPersonalityFunction();
+
+    llvm::Function * getThrow();
+
+    llvm::Function * getAllocateException();
+
+    llvm::Function * getBeginCatch();
+
+    llvm::Function * getEndCatch();
+
+    llvm::Function * getRethrow();
 
     bool hasAlignedAlloc() const;
 
@@ -410,7 +423,7 @@ protected:
 
     bool hasAddressSanitizer() const;
 
-    virtual std::string getKernelName() const = 0;
+    virtual std::string getKernelName() const;
 
     void __CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage);
 

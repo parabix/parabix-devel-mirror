@@ -68,7 +68,7 @@ inline Value * StreamSetBuffer::getHandle(IDISA_Builder * const /* b */) const {
     return mHandle;
 }
 
-void StreamSetBuffer::setHandle(BuilderRef b, Value * const handle) {
+void StreamSetBuffer::setHandle(BuilderRef b, Value * const handle) const {
     assert ("handle cannot be null!" && handle);
     assert ("handle is not of the correct type" && handle->getType() == getHandlePointerType(b));
     #ifndef NDEBUG
@@ -259,7 +259,7 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
     }
 }
 
-std::pair<Value *, Value *> ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
+Value * ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
     unsupported("reserveCapacity", "External");
 }
 
@@ -359,7 +359,7 @@ Value * StaticBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fromP
     return b->CreateSelect(full, b->getSize(0), remaining);
 }
 
-std::pair<Value *, Value *> StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */, Value * /* cycleCounterAccumulator */) const  {
+Value * StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
     unsupported("reserveCapacity", "Static");
 }
 
@@ -485,143 +485,164 @@ void DynamicBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) 
     unsupported("setCapacity", "Dynamic");
 }
 
-std::pair<Value *, Value *> DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems, Value * const cycleCounterAccumulator) const {
+Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems) const {
 
-    const auto blockWidth = b->getBitBlockWidth();
-    assert (is_power_2(blockWidth));
+    SmallVector<char, 200> buf;
+    raw_svector_ostream name(buf);
 
-    ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
-    Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
+    name << "__DynamicBuffer_reserveCapacity_";
 
-    Value * const remaining = getLinearlyWritableItems(b, produced, consumed, overflowItems);
+    Type * ty = getBaseType();
+    name << ty->getArrayNumElements() << 'x';
+    ty = ty->getArrayElementType();
+    ty = ty->getVectorElementType();
+    name << ty->getIntegerBitWidth()
+         << '_' << mUnderflow
+         << '_' << mOverflow
+         << '_' << mAddressSpace;
 
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-    BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer");
-    BasicBlock * const expanded = b->CreateBasicBlock("expanded");
+    Value * const myHandle = getHandle(b.get());
 
-    b->CreateLikelyCondBr(b->CreateICmpULE(required, remaining), expanded, expandBuffer);
+    Module * const m = b->getModule();
+    Function * func = m->getFunction(name.str());
+    if (func == nullptr) {
 
-    b->SetInsertPoint(expandBuffer);
+        const auto ip = b->saveIP();
 
-    // TODO: indicate when buffer expansions occurs so we can potentially track them in the pipeline?
-    // Report with segno,capacity pair?
+        LLVMContext & C = m->getContext();
+        IntegerType * const sizeTy = b->getSizeTy();
+        FunctionType * funcTy = FunctionType::get(sizeTy, {myHandle->getType(), sizeTy, sizeTy, sizeTy, sizeTy}, false);
+        func = Function::Create(funcTy, Function::InternalLinkage, name.str(), m);
 
-    Value * cycleCounterStart = nullptr;
-    if (cycleCounterAccumulator) {
-        cycleCounterStart = b->CreateReadCycleCounter();
+        b->SetInsertPoint(BasicBlock::Create(C, "entry", func));
+        BasicBlock * const copyLinear = BasicBlock::Create(C, "copyLinear", func);
+        BasicBlock * const copyNonLinear = BasicBlock::Create(C, "copyNonLinear", func);
+        BasicBlock * const storeNewBuffer = BasicBlock::Create(C, "storeNewBuffer", func);
+
+        auto arg = func->arg_begin();
+        auto nextArg = [&]() {
+            assert (arg != func->arg_end());
+            Value * const v = &*arg;
+            std::advance(arg, 1);
+            return v;
+        };
+
+        Value * const handle = nextArg();
+        handle->setName("handle");
+        Value * const produced = nextArg();
+        produced->setName("produced");
+        Value * const consumed = nextArg();
+        consumed->setName("consumed");
+        Value * const required = nextArg();
+        required->setName("required");
+        Value * const overflowItems = nextArg();
+        overflowItems->setName("overflowItems");
+        assert (arg == func->arg_end());
+
+        setHandle(b, handle);
+
+        const auto blockWidth = b->getBitBlockWidth();
+        assert (is_power_2(blockWidth));
+
+        ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
+        Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
+
+        FixedArray<Value *, 2> indices;
+        indices[0] = b->getInt32(0);
+        indices[1] = b->getInt32(Capacity);
+
+        Value * const capacityField = b->CreateGEP(handle, indices);
+        Value * const capacity = b->CreateLoad(capacityField);
+        Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
+        Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
+        Value * const requiredChunks = b->CreateCeilUDiv(required, BLOCK_WIDTH);
+
+        // make sure the new capacity is at least 2x the current capacity and a multiple of it
+        Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
+        Value * newCapacity = b->CreateAdd(unconsumedChunks, requiredChunks);
+        #ifdef NDEBUG
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        #endif
+            Value * const check = b->CreateICmpUGE(newCapacity, capacity);
+            b->CreateAssert(check, "unnecessary buffer expansion occurred");
+        #ifdef NDEBUG
+        }
+        #endif
+        newCapacity = b->CreateRoundUp(newCapacity, capacity);
+
+        Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
+        Value * requiredCapacity = newCapacity;
+        if (mUnderflow || mOverflow) {
+            Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
+            requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
+        }
+        Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
+        newBuffer = addUnderflow(b, newBuffer, mUnderflow);
+
+        indices[1] = b->getInt32(BaseAddress);
+        Value * const bufferField = b->CreateGEP(handle, indices);
+        Value * const buffer = b->CreateLoad(bufferField);
+
+        Value * const consumedOffset = b->CreateURem(consumedChunks, capacity);
+        Value * const producedOffset = b->CreateURem(producedChunks, capacity);
+        Value * const newConsumedOffset = b->CreateURem(consumedChunks, newCapacity);
+        Value * const newProducedOffset = b->CreateURem(producedChunks, newCapacity);
+        Value * const sourceLinear = b->CreateICmpULT(consumedOffset, producedOffset);
+        Value * const targetLinear = b->CreateICmpULT(newConsumedOffset, newProducedOffset);
+        Value * const linearCopy = b->CreateAnd(sourceLinear, targetLinear);
+
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(buffer->getType());
+        Value * const consumedOffsetPtr = b->CreateGEP(buffer, consumedOffset);
+        Value * const newConsumedOffsetPtr = b->CreateGEP(newBuffer, newConsumedOffset);
+        Value * const consumedOffsetPtrInt = b->CreatePtrToInt(consumedOffsetPtr, intPtrTy);
+
+        b->CreateCondBr(linearCopy, copyLinear, copyNonLinear);
+
+        b->SetInsertPoint(copyLinear);
+        b->CreateMemCpy(newConsumedOffsetPtr, consumedOffsetPtr, totalBytesToCopy, blockWidth / 8);
+        b->CreateBr(storeNewBuffer);
+
+        b->SetInsertPoint(copyNonLinear);
+        Value * const bufferLength1 = b->CreateSub(capacity, consumedOffset);
+        Value * const newBufferLength1 = b->CreateSub(newCapacity, newConsumedOffset);
+        Value * const partialLength1 = b->CreateUMin(bufferLength1, newBufferLength1);
+        Value * const capacityPtr = b->CreateGEP(buffer, b->CreateAdd(consumedOffset, bufferLength1));
+        Value * const capacityPtrInt = b->CreatePtrToInt(capacityPtr, intPtrTy);
+        Value * const bytesToCopy1 = b->CreateSub(capacityPtrInt, consumedOffsetPtrInt);
+        b->CreateMemCpy(newConsumedOffsetPtr, consumedOffsetPtr, bytesToCopy1, blockWidth / 8);
+        Value * const sourceOffset = b->CreateURem(b->CreateAdd(consumedOffset, partialLength1), capacity);
+        Value * const sourcePtr = b->CreateGEP(buffer, sourceOffset);
+        Value * const targetOffset = b->CreateURem(b->CreateAdd(newConsumedOffset, partialLength1), newCapacity);
+        Value * const targetPtr = b->CreateGEP(newBuffer, targetOffset);
+        Value * const bytesToCopy2 = b->CreateSub(totalBytesToCopy, bytesToCopy1);
+        b->CreateMemCpy(targetPtr, sourcePtr, bytesToCopy2, blockWidth / 8);
+        b->CreateBr(storeNewBuffer);
+
+        b->SetInsertPoint(storeNewBuffer);
+        indices[1] = b->getInt32(PriorBaseAddress);
+        Value * const priorBufferField = b->CreateGEP(handle, indices);
+        Value * const priorBuffer = b->CreateLoad(priorBufferField);
+        b->CreateStore(buffer, priorBufferField);
+        b->CreateStore(newBuffer, bufferField);
+        b->CreateStore(newCapacity, capacityField);
+
+        Value * const remainingAfterExpand = getLinearlyWritableItems(b, produced, consumed, overflowItems);
+        #ifdef NDEBUG
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        #endif
+            Value * const check2 = b->CreateICmpUGE(remainingAfterExpand, requiredChunks);
+            b->CreateAssert(check2, "buffer expansion error");
+        #ifdef NDEBUG
+        }
+        #endif
+        b->CreateFree(subtractUnderflow(b, priorBuffer, mUnderflow));
+        b->CreateRet(remainingAfterExpand);
+
+        b->restoreIP(ip);
+        setHandle(b, myHandle);
     }
-
-    FixedArray<Value *, 2> indices;
-    indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(Capacity);
-
-    Value * const handle = getHandle(b.get());
-    Value * const capacityField = b->CreateGEP(handle, indices);
-    Value * const capacity = b->CreateLoad(capacityField);
-    Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
-    Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
-    Value * const requiredChunks = b->CreateCeilUDiv(required, BLOCK_WIDTH);
-
-    // make sure the new capacity is at least 2x the current capacity and a multiple of it
-    Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
-    Value * newCapacity = b->CreateAdd(unconsumedChunks, requiredChunks);
-    #ifdef NDEBUG
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-    #endif
-        Value * const check = b->CreateICmpUGE(newCapacity, capacity);
-        b->CreateAssert(check, "unnecessary buffer expansion occurred");
-    #ifdef NDEBUG
-    }
-    #endif
-    newCapacity = b->CreateRoundUp(newCapacity, capacity);
-
-    Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
-
-    Value * requiredCapacity = newCapacity;
-    if (mUnderflow || mOverflow) {
-        Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
-        requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
-    }
-    Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
-    newBuffer = addUnderflow(b, newBuffer, mUnderflow);
-
-    indices[1] = b->getInt32(BaseAddress);
-    Value * const bufferField = b->CreateGEP(handle, indices);
-    Value * const buffer = b->CreateLoad(bufferField);
-
-    Value * const consumedOffset = b->CreateURem(consumedChunks, capacity);
-    Value * const producedOffset = b->CreateURem(producedChunks, capacity);
-    Value * const newConsumedOffset = b->CreateURem(consumedChunks, newCapacity);
-    Value * const newProducedOffset = b->CreateURem(producedChunks, newCapacity);
-    Value * const sourceLinear = b->CreateICmpULT(consumedOffset, producedOffset);
-    Value * const targetLinear = b->CreateICmpULT(newConsumedOffset, newProducedOffset);
-    Value * const linearCopy = b->CreateAnd(sourceLinear, targetLinear);
-
-    DataLayout DL(b->getModule());
-    Type * const intPtrTy = DL.getIntPtrType(buffer->getType());
-    Value * const consumedOffsetPtr = b->CreateGEP(buffer, consumedOffset);
-    Value * const newConsumedOffsetPtr = b->CreateGEP(newBuffer, newConsumedOffset);
-    Value * const consumedOffsetPtrInt = b->CreatePtrToInt(consumedOffsetPtr, intPtrTy);
-
-    BasicBlock * const copyLinear = b->CreateBasicBlock("copyLinear");
-    BasicBlock * const copyNonLinear = b->CreateBasicBlock("copyNonLinear");
-    BasicBlock * const storeNewBuffer = b->CreateBasicBlock("storeNewBuffer");
-    b->CreateCondBr(linearCopy, copyLinear, copyNonLinear);
-
-    b->SetInsertPoint(copyLinear);
-    b->CreateMemCpy(newConsumedOffsetPtr, consumedOffsetPtr, totalBytesToCopy, blockWidth / 8);
-    b->CreateBr(storeNewBuffer);
-
-    b->SetInsertPoint(copyNonLinear);
-    Value * const bufferLength1 = b->CreateSub(capacity, consumedOffset);
-    Value * const newBufferLength1 = b->CreateSub(newCapacity, newConsumedOffset);
-    Value * const partialLength1 = b->CreateUMin(bufferLength1, newBufferLength1);
-    Value * const capacityPtr = b->CreateGEP(buffer, b->CreateAdd(consumedOffset, bufferLength1));
-    Value * const capacityPtrInt = b->CreatePtrToInt(capacityPtr, intPtrTy);
-    Value * const bytesToCopy1 = b->CreateSub(capacityPtrInt, consumedOffsetPtrInt);
-    b->CreateMemCpy(newConsumedOffsetPtr, consumedOffsetPtr, bytesToCopy1, blockWidth / 8);
-    Value * const sourceOffset = b->CreateURem(b->CreateAdd(consumedOffset, partialLength1), capacity);
-    Value * const sourcePtr = b->CreateGEP(buffer, sourceOffset);
-    Value * const targetOffset = b->CreateURem(b->CreateAdd(newConsumedOffset, partialLength1), newCapacity);
-    Value * const targetPtr = b->CreateGEP(newBuffer, targetOffset);
-    Value * const bytesToCopy2 = b->CreateSub(totalBytesToCopy, bytesToCopy1);
-    b->CreateMemCpy(targetPtr, sourcePtr, bytesToCopy2, blockWidth / 8);
-    b->CreateBr(storeNewBuffer);
-
-    b->SetInsertPoint(storeNewBuffer);
-    indices[1] = b->getInt32(PriorBaseAddress);
-    Value * const priorBufferField = b->CreateGEP(handle, indices);
-    Value * const priorBuffer = b->CreateLoad(priorBufferField);
-    b->CreateStore(buffer, priorBufferField);
-    b->CreateStore(newBuffer, bufferField);
-    b->CreateStore(newCapacity, capacityField);
-
-    Value * const remainingAfterExpand = getLinearlyWritableItems(b, produced, consumed, overflowItems);
-    #ifdef NDEBUG
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-    #endif
-        Value * const check2 = b->CreateICmpUGE(remainingAfterExpand, requiredChunks);
-        b->CreateAssert(check2, "buffer expansion error");
-    #ifdef NDEBUG
-    }
-    #endif
-    b->CreateFree(subtractUnderflow(b, priorBuffer, mUnderflow));
-    if (cycleCounterAccumulator) {
-        Value * const cycleCounterEnd = b->CreateReadCycleCounter();
-        Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);
-        Value * const accum = b->CreateAdd(b->CreateLoad(cycleCounterAccumulator), duration);
-        b->CreateStore(accum, cycleCounterAccumulator);
-    }
-    b->CreateBr(expanded);
-
-    b->SetInsertPoint(expanded);
-    PHINode * const writable = b->CreatePHI(b->getSizeTy(), 2);
-    writable->addIncoming(remaining, entryBlock);
-    writable->addIncoming(remainingAfterExpand, storeNewBuffer);
-    PHINode * const wasExpanded = b->CreatePHI(b->getInt1Ty(), 2);
-    wasExpanded->addIncoming(b->getFalse(), entryBlock);
-    wasExpanded->addIncoming(b->getTrue(), storeNewBuffer);
-    return std::make_pair(writable, wasExpanded);
+    return b->CreateCall(func, { myHandle, produced, consumed, required, overflowItems ? overflowItems : b->getSize(0) });
 }
 
 // Linear Buffer
@@ -719,7 +740,7 @@ void LinearBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) c
     unsupported("setCapacity", "Linear");
 }
 
-std::pair<Value *, Value *> LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems, Value * cycleCounterAccumulator) const {
+Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems) const {
 
     ConstantInt * const LOG_2_BIT_BLOCK_WIDTH = b->getSize(std::log2(b->getBitBlockWidth()));
 
@@ -729,11 +750,9 @@ std::pair<Value *, Value *> LinearBuffer::reserveCapacity(BuilderRef b, Value * 
     const auto blockWidth = b->getBitBlockWidth();
     assert (is_power_2(blockWidth));
 
-    BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const copyOrExpand = b->CreateBasicBlock("copyOrExpandBuffer");
     BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer");
     BasicBlock * const copyToBuffer = b->CreateBasicBlock("copyToBuffer");
-    BasicBlock * const expanded = b->CreateBasicBlock("expanded");
 
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
@@ -743,12 +762,6 @@ std::pair<Value *, Value *> LinearBuffer::reserveCapacity(BuilderRef b, Value * 
     Value * const firstCapacityField = b->CreateGEP(handle, indices);
     Value * const firstBlockCapacity = b->CreateLoad(firstCapacityField);
     Value * const firstCapacity = b->CreateShl(firstBlockCapacity, LOG_2_BIT_BLOCK_WIDTH);
-
-    Value * const remaining = b->CreateSub(firstCapacity, produced);
-
-    b->CreateCondBr(b->CreateICmpULT(remaining, required), copyOrExpand, expanded);
-
-    b->SetInsertPoint(copyOrExpand);
 
     if (LLVM_LIKELY(itemWidth < blockWidth)) {
         Constant * const SCALE = b->getSize(blockWidth / itemWidth);
@@ -814,16 +827,8 @@ std::pair<Value *, Value *> LinearBuffer::reserveCapacity(BuilderRef b, Value * 
     b->CreateStore(b->CreateLShr(newCapacity, LOG_2_BIT_BLOCK_WIDTH), firstCapacityField);
     b->CreateStore(newBuffer, firstBufferField);
     Value * const remainingAfterExpand = b->CreateSub(newCapacity, unconsumed);
-    b->CreateBr(expanded);
 
-    b->SetInsertPoint(expanded);
-    PHINode * const writable = b->CreatePHI(b->getSizeTy(), 2);
-    writable->addIncoming(remaining, entryBlock);
-    writable->addIncoming(remainingAfterExpand, copyToBuffer);
-    PHINode * const wasExpanded = b->CreatePHI(b->getInt1Ty(), 2);
-    wasExpanded->addIncoming(b->getFalse(), entryBlock);
-    wasExpanded->addIncoming(b->getTrue(), copyToBuffer);
-    return std::make_pair(writable, wasExpanded);
+    return remainingAfterExpand;
 }
 
 // Constructors

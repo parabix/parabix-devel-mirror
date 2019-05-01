@@ -207,11 +207,15 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createReassociatePass());                // Canonicalizes commutative expressions
     mPassManager->add(createGVNPass());                        // Global value numbering redundant expression elimination pass
     mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
+    #ifdef NDEBUG
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+    #endif
         mPassManager->add(createRemoveRedundantAssertionsPass());
         mPassManager->add(createDeadCodeEliminationPass());
         mPassManager->add(createCFGSimplificationPass());
+    #ifdef NDEBUG
     }
+    #endif
     if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
         mPassManager->add(createTracePass(iBuilder.get(), codegen::TraceOption));
     }

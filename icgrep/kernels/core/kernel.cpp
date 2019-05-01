@@ -144,7 +144,10 @@ Function * Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder>
         FunctionType * const initType = FunctionType::get(b->getInt1Ty(), params, false);
         initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, name, m);
         initFunc->setCallingConv(CallingConv::C);
-        initFunc->setDoesNotThrow();
+//        if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//            initFunc->setDoesNotThrow();
+//        }
+        initFunc->setDoesNotRecurse();
 
         auto arg = initFunc->arg_begin();
         auto setNextArgName = [&](const StringRef name) {
@@ -233,7 +236,10 @@ Function * Kernel::addInitializeThreadLocalDeclaration(const std::unique_ptr<Ker
             FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
             func = Function::Create(funcType, GlobalValue::ExternalLinkage, name, m);
             func->setCallingConv(CallingConv::C);
-            func->setDoesNotThrow();
+//            if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//                func->setDoesNotThrow();
+//            }
+            func->setDoesNotRecurse();
 
             auto arg = func->arg_begin();
             auto setNextArgName = [&](const StringRef name) {
@@ -335,7 +341,10 @@ Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> 
         FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
         doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, name, m);
         doSegment->setCallingConv(CallingConv::C);
-        doSegment->setDoesNotThrow();
+//        if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//            doSegment->setDoesNotThrow();
+//        }
+        doSegment->setDoesNotRecurse();
 
         auto arg = doSegment->arg_begin();
         auto setNextArgName = [&](const StringRef name) {
@@ -802,7 +811,10 @@ Function * Kernel::addFinalizeThreadLocalDeclaration(const std::unique_ptr<Kerne
             FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
             func = Function::Create(funcType, GlobalValue::ExternalLinkage, name, m);
             func->setCallingConv(CallingConv::C);
-            func->setDoesNotThrow();
+//            if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//                func->setDoesNotThrow();
+//            }
+            func->setDoesNotRecurse();
 
             auto arg = func->arg_begin();
             auto setNextArgName = [&](const StringRef name) {
@@ -880,7 +892,11 @@ Function * Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> &
         FunctionType * const terminateType = FunctionType::get(resultType, params, false);
         terminateFunc = Function::Create(terminateType, GlobalValue::ExternalLinkage, name, m);
         terminateFunc->setCallingConv(CallingConv::C);
-        terminateFunc->setDoesNotThrow();
+//        if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//            terminateFunc->setDoesNotThrow();
+//        }
+        terminateFunc->setDoesNotRecurse();
+
         auto args = terminateFunc->arg_begin();
         if (LLVM_LIKELY(isStateful())) {
             (args++)->setName("handle");
@@ -1308,7 +1324,34 @@ Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::Kernel
             initializeThreadLocalInstance(b, initArgs);
         }
 
-        b->CreateCall(doSegment, segmentArgs);
+        #ifdef NDEBUG
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        #endif
+            BasicBlock * const handleCatch = b->CreateBasicBlock("");
+            BasicBlock * const handleDeallocation = b->CreateBasicBlock("");
+
+            IntegerType * const int32Ty = b->getInt32Ty();
+            PointerType * const int8PtrTy = b->getInt8PtrTy();
+            LLVMContext & C = b->getContext();
+            StructType * const caughtResultType = StructType::get(C, { int8PtrTy, int32Ty });
+            Function * const personalityFn = b->getDefaultPersonalityFunction();
+            main->setPersonalityFn(personalityFn);
+
+            b->CreateInvoke(doSegment, handleDeallocation, handleCatch, segmentArgs);
+
+            b->SetInsertPoint(handleCatch);
+            LandingPadInst * const caughtResult = b->CreateLandingPad(caughtResultType, 0);
+            caughtResult->addClause(ConstantPointerNull::get(int8PtrTy));
+            b->CreateCall(b->getBeginCatch(), {b->CreateExtractValue(caughtResult, 0)});
+            b->CreateCall(b->getEndCatch());
+            b->CreateBr(handleDeallocation);
+
+            b->SetInsertPoint(handleDeallocation);
+        #ifdef NDEBUG
+        } else {
+            b->CreateCall(doSegment, segmentArgs);
+        }
+        #endif
         if (hasThreadLocal()) {
             SmallVector<Value *, 2> args;
             if (LLVM_LIKELY(isStateful())) {

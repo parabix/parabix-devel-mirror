@@ -1,4 +1,4 @@
-/*
+﻿/*
  *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
@@ -10,6 +10,7 @@
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/MDBuilder.h>
+#include <llvm/IR/Metadata.h>
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
@@ -21,6 +22,11 @@
 #include <stdio.h>
 #include <boost/format.hpp>
 #include <boost/interprocess/mapped_region.hpp>
+#include <cxxabi.h>
+#ifdef HAS_ADDRESS_SANITIZER
+#include <llvm/Analysis/AliasAnalysis.h>
+#include <llvm/IR/Dominators.h>
+#endif
 
 #if defined(__i386__)
 typedef uint32_t unw_word_t;
@@ -63,7 +69,7 @@ Value * checkHeapAddress(CBuilder * const b, Value * const Ptr, Value * const Si
     }
     Value * const addr = b->CreatePointerCast(Ptr, voidPtrTy);
     Value * check = b->CreateCall(isPoisoned, { addr, b->CreateTrunc(Size, sizeTy) });
-    return b->CreateICmpEQ(check, ConstantPointerNull::get(cast<PointerType>(isPoisoned->getReturnType())));
+    return b->CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy));
 }
 #define CHECK_HEAP_ADDRESS(Ptr, Size, Name) \
 if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
@@ -265,7 +271,7 @@ Value * CBuilder::CreateUnlinkCall(Value * path) {
     return CreateCall(unlinkFunc, path);
 }
 
-Value * CBuilder::CreatePosixFAllocate(llvm::Value * fileDescriptor, llvm::Value * offset, llvm::Value * len) {
+Value * CBuilder::CreatePosixFAllocate(Value * fileDescriptor, Value * offset, Value * len) {
 #if defined(__APPLE__) || defined(_WIN32)
     return nullptr;
 #elif defined(__linux__)
@@ -467,7 +473,7 @@ inline bool CBuilder::hasPosixMemalign() const {
     return mDriver && mDriver->hasExternalFunction("posix_memalign");
 }
 
-Value * CBuilder::CreateRealloc(llvm::Type * const type, llvm::Value * const base, llvm::Value * const ArraySize) {
+Value * CBuilder::CreateRealloc(Type * const type, Value * const base, Value * const ArraySize) {
     Value * size = ConstantExpr::getSizeOf(type);
     if (ArraySize) {
         size = CreateMul(size, CreateZExtOrTrunc(ArraySize, size->getType()));
@@ -719,11 +725,11 @@ PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) 
 }
 
 
-llvm::Value * CBuilder::CreateAtomicFetchAndAdd(Value * const val, Value * const ptr) {
+Value * CBuilder::CreateAtomicFetchAndAdd(Value * const val, Value * const ptr) {
     return CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::AcquireRelease);
 }
 
-llvm::Value * CBuilder::CreateAtomicFetchAndSub(Value * const val, Value * const ptr) {
+Value * CBuilder::CreateAtomicFetchAndSub(Value * const val, Value * const ptr) {
     return CreateAtomicRMW(AtomicRMWInst::Sub, ptr, val, AtomicOrdering::AcquireRelease);
 }
 
@@ -933,8 +939,9 @@ void __report_failure(const char * name, const char * msg, const uintptr_t * tra
         out << "No debug symbols loaded.\n";
     }
     out.resetColor();
+    out << "\n\n";
     out.flush();
-
+    throw nullptr;
 }
 
 #if defined(HAS_MACH_VM_TYPES)
@@ -1049,20 +1056,23 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     Type * const stackTy = IntegerType::get(C, sizeof(uintptr_t) * 8);
     PointerType * const stackPtrTy = stackTy->getPointerTo();
     PointerType * const int8PtrTy = getInt8PtrTy();
-    Function * function = m->getFunction("assert");
-    if (LLVM_UNLIKELY(function == nullptr)) {
+    Function * assertFunc = m->getFunction("assert");
+    if (LLVM_UNLIKELY(assertFunc == nullptr)) {
+
         auto ip = saveIP();
         IntegerType * const int1Ty = getInt1Ty();
-        FunctionType * fty = FunctionType::get(getVoidTy(), { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
-        function = Function::Create(fty, Function::PrivateLinkage, "assert", m);
-        function->setDoesNotThrow();
+        Type * const voidTy = getVoidTy();
+
+        FunctionType * fty = FunctionType::get(voidTy, { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
+        assertFunc = Function::Create(fty, Function::PrivateLinkage, "assert", m);
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
         function->setDoesNotAlias(2);
         #endif
-        BasicBlock * const entry = BasicBlock::Create(C, "", function);
-        BasicBlock * const failure = BasicBlock::Create(C, "", function);
-        BasicBlock * const success = BasicBlock::Create(C, "", function);
-        auto arg = function->arg_begin();
+        BasicBlock * const entry = BasicBlock::Create(C, "", assertFunc);
+        BasicBlock * const failure = BasicBlock::Create(C, "", assertFunc);
+        BasicBlock * const unreachable = BasicBlock::Create(C, "", assertFunc);
+        BasicBlock * const success = BasicBlock::Create(C, "", assertFunc);
+        auto arg = assertFunc->arg_begin();
         arg->setName("assertion");
         Value * assertion = &*arg++;
         arg->setName("name");
@@ -1074,13 +1084,28 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         arg->setName("depth");
         Value * depth = &*arg++;
         SetInsertPoint(entry);
-        IRBuilder<>::CreateCondBr(assertion, success, failure);
-        IRBuilder<>::SetInsertPoint(failure);
-        IRBuilder<>::CreateCall(LinkFunction("__report_failure", __report_failure), { name, msg, trace, depth });
-        CreateExit(-1);
-        IRBuilder<>::CreateBr(success); // necessary to satisfy the LLVM verifier. this is never executed.
+
+
+        assertFunc->addFnAttr(Attribute::UWTable);
+        assertFunc->setPersonalityFn(getDefaultPersonalityFunction());
+
+        CreateCondBr(assertion, success, failure);
+
+        BasicBlock * const rethrow = WriteDefaultRethrowBlock();
+
+        SetInsertPoint(failure);
+        Function * const reportFn = LinkFunction("__report_failure", __report_failure);
+        reportFn->setDoesNotReturn();
+        CreateInvoke(reportFn, unreachable, rethrow, { name, msg, trace, depth });
+
+        // CreateInvokeRethrow(reportFn, { name, msg, trace, depth }, unreachable);
+        SetInsertPoint(unreachable);
+        CreateUnreachable();
+
         SetInsertPoint(success);
-        IRBuilder<>::CreateRetVoid();
+        CreateRetVoid();
+
+
         restoreIP(ip);
     }
     #ifndef NDEBUG
@@ -1165,8 +1190,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     Value * const name = GetString(getKernelName());
     SmallVector<char, 1024> tmp;
     Value * const msg = GetString(failureMessage.toStringRef(tmp));
-    IRBuilder<>::CreateCall(function, {assertion, name, msg, trace, depth});
-
+    IRBuilder<>::CreateCall(assertFunc, {assertion, name, msg, trace, depth});
 }
 
 void CBuilder::CreateExit(const int exitCode) {
@@ -1515,6 +1539,145 @@ unsigned CBuilder::getPageSize() {
     return boost::interprocess::mapped_region::get_page_size();
 }
 
+BasicBlock * CBuilder::WriteDefaultRethrowBlock() {
+
+    const auto ip = saveIP();
+
+    BasicBlock * const current = GetInsertBlock();
+    Function * const f = current->getParent();
+
+    f->setPersonalityFn(getDefaultPersonalityFunction());
+    f->addFnAttr(Attribute::UWTable);
+
+    LLVMContext & C = getContext();
+
+    BasicBlock * const handleCatch = BasicBlock::Create(C, "__catch", f);
+    BasicBlock * const handleRethrow = BasicBlock::Create(C, "__rethrow", f);
+    BasicBlock * const handleResume = BasicBlock::Create(C, "__resume", f);
+    BasicBlock * const handleExit = BasicBlock::Create(C, "__exit", f);
+    BasicBlock * const handleUnreachable = BasicBlock::Create(C, "__unreachable", f);
+
+    PointerType * const int8PtrTy = getInt8PtrTy();
+    IntegerType * const int32Ty = getInt32Ty();
+    StructType * const caughtResultType = StructType::get(C, { int8PtrTy, int32Ty });
+    Constant * const catchAny = ConstantPointerNull::get(int8PtrTy);
+
+    SetInsertPoint(handleCatch);
+    LandingPadInst * const caughtResult = CreateLandingPad(caughtResultType, 1);
+    caughtResult->addClause(catchAny);
+    caughtResult->setCleanup(false);
+    Value * const exception = CreateExtractValue(caughtResult, 0);
+    CallInst * beginCatch = CreateCall(getBeginCatch(), {exception});
+    beginCatch->setTailCall(true);
+    beginCatch->addAttribute(-1, Attribute::NoUnwind);
+
+    InvokeInst * const rethrowInst = CreateInvoke(getRethrow(), handleUnreachable, handleRethrow);
+    rethrowInst->addAttribute(-1, Attribute::NoReturn);
+
+    SetInsertPoint(handleRethrow);
+    LandingPadInst * const caughtResult2 = CreateLandingPad(caughtResultType, 1);
+    caughtResult2->setCleanup(true);
+    CreateInvoke(getEndCatch(), handleResume, handleExit);
+
+    SetInsertPoint(handleResume);
+    CreateResume(caughtResult2);
+
+    SetInsertPoint(handleExit);
+    LandingPadInst * const caughtResult3 = CreateLandingPad(caughtResultType, 1);
+    caughtResult3->addClause(catchAny);
+    Value * const exception3 = CreateExtractValue(caughtResult3, 0);
+    CallInst * beginCatch2 = CreateCall(getBeginCatch(), {exception3});
+    beginCatch2->setTailCall(true);
+    beginCatch2->addAttribute(-1, Attribute::NoUnwind);
+    // should call std::terminate
+    CreateExit(-1);
+    CreateBr(handleUnreachable);
+
+    SetInsertPoint(handleUnreachable);
+    CreateUnreachable();
+
+    restoreIP(ip);
+
+    return handleCatch;
+}
+
+Function * CBuilder::getDefaultPersonalityFunction() {
+    const auto GNU_NAME = "__gxx_personality_v0";
+    Module * const m = getModule();
+    Function * personalityFn = m->getFunction(GNU_NAME);
+    if (personalityFn == nullptr) {
+        FunctionType * const fTy = FunctionType::get(getInt32Ty(), true);
+        personalityFn = Function::Create(fTy, Function::ExternalLinkage, GNU_NAME, m);
+    }
+    return personalityFn;
+}
+
+Function * CBuilder::getAllocateException() {
+    const auto GNU_NAME = "__cxa_allocate_exception";
+    Module * const m = getModule();
+    Function * cxa_alloc_excp = m->getFunction(GNU_NAME);
+    if (cxa_alloc_excp == nullptr) {
+        PointerType * const int8PtrTy = getInt8PtrTy();
+        IntegerType * const int64Ty = getInt64Ty();
+        FunctionType * const fTy = FunctionType::get(int8PtrTy, { int64Ty }, false);
+        cxa_alloc_excp = Function::Create(fTy, Function::ExternalLinkage, GNU_NAME, m);
+        cxa_alloc_excp->addFnAttr(Attribute::NoUnwind);
+    }
+    return cxa_alloc_excp;
+}
+
+Function * CBuilder::getThrow() {
+    const auto GNU_NAME = "__cxa_throw";
+    Module * const m = getModule();
+    Function * cxa_throw = m->getFunction(GNU_NAME);
+    if (cxa_throw == nullptr) {
+        Type * const voidTy = getVoidTy();
+        PointerType * const int8PtrTy = getInt8PtrTy();
+        FunctionType * const fTy = FunctionType::get(voidTy, { int8PtrTy, int8PtrTy, int8PtrTy }, false);
+        cxa_throw = Function::Create(fTy, Function::ExternalLinkage, GNU_NAME, m);
+        cxa_throw->setDoesNotReturn();
+    }
+    return cxa_throw;
+}
+
+Function * CBuilder::getBeginCatch() {
+    const auto GNU_NAME = "__cxa_begin_catch";
+    Module * const m = getModule();
+    Function * cxa_begin = m->getFunction(GNU_NAME);
+    if (cxa_begin == nullptr) {
+        PointerType * const int8PtrTy = getInt8PtrTy();
+        FunctionType * const fTy = FunctionType::get(int8PtrTy, { int8PtrTy }, false);
+        cxa_begin = Function::Create(fTy, Function::ExternalLinkage, GNU_NAME, m);
+        cxa_begin->setDoesNotThrow();
+        cxa_begin->setDoesNotRecurse();
+    }
+    return cxa_begin;
+}
+
+Function * CBuilder::getEndCatch() {
+    const auto GNU_NAME = "__cxa_end_catch";
+    Module * const m = getModule();
+    Function * cxa_end = m->getFunction(GNU_NAME);
+    if (cxa_end == nullptr) {
+        FunctionType * const fTy = FunctionType::get(getVoidTy(), false);
+        cxa_end = Function::Create(fTy, Function::ExternalLinkage, GNU_NAME, m);
+    }
+    return cxa_end;
+}
+
+Function * CBuilder::getRethrow() {
+    const auto GNU_NAME = "__cxa_rethrow";
+    Module * const m = getModule();
+    Function * cxa_rethrow = m->getFunction(GNU_NAME);
+    if (cxa_rethrow == nullptr) {
+        FunctionType * const fTy = FunctionType::get(getVoidTy(), false);
+        cxa_rethrow = Function::Create(fTy, Function::ExternalLinkage, GNU_NAME, m);
+        cxa_rethrow->setDoesNotReturn();
+    }
+    return cxa_rethrow;
+}
+
+
 
 CBuilder::CBuilder(LLVMContext & C)
 : IRBuilder<>(C)
@@ -1528,6 +1691,14 @@ CBuilder::CBuilder(LLVMContext & C)
 struct RemoveRedundantAssertionsPass : public ModulePass {
     static char ID;
     RemoveRedundantAssertionsPass() : ModulePass(ID) { }
+
+    void getAnalysisUsage(AnalysisUsage &AU) const override {
+//        #ifdef HAS_ADDRESS_SANITIZER
+//        AU.addRequired<DominatorTree>();
+//        AU.addRequired<AliasAnalysis>();
+//        AU.addPreserved<AliasAnalysis>();
+//        #endif
+    }
 
     virtual bool runOnModule(Module &M) override;
 };
@@ -1545,20 +1716,72 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
     }
     bool modified = false;
     DenseSet<Value *> S;
-    // TODO: incorporate alias analysis to reduce redundant memory checks?
-    for (auto & F : M) {
+
+    CBuilder builder(M.getContext());
+    builder.setModule(&M);
+
+//    #ifdef HAS_ADDRESS_SANITIZER
+//    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
+//    DenseSet<CallInst *> alreadyTested;
+//    DominatorTree & DT = getAnalysis<DominatorTree>();
+//    AliasAnalysis & AA = getAnalysis<AliasAnalysis>();
+//    #endif
+
+    for (Function & F : M) {
+        S.clear();
+        // scan through each instruction and remove any trivially true or redundant assertions.
         for (auto & B : F) {
-            S.clear();
             for (auto i = B.begin(); i != B.end(); ) {
                 Instruction & inst = *i;
                 if (LLVM_UNLIKELY(isa<CallInst>(inst))) {
                     CallInst & ci = cast<CallInst>(inst);
+                    // if we're using address sanitizer, try to determine whether we're
+                    // rechecking the same address
+//                    #ifdef HAS_ADDRESS_SANITIZER
+//                    if (ci.getCalledFunction() == isPoisoned) {
+//                        bool alreadyProven = false;
+//                        ConstantInt * const length = dyn_cast<ConstantInt>(ci.getArgOperand(1));
+//                        if (length) {
+//                            Value * const ptr = ci.getArgOperand(0);
+//                            for (CallInst * prior : alreadyTested) {
+//                                if (DT.dominates(prior, &ci)) {
+//                                    Value * const priorPtr = prior->getArgOperand(0);
+//                                    ConstantInt * const priorLength = cast<ConstantInt>(prior->getArgOperand(1));
+//                                    const auto result = AA.alias(ptr, length->getLimitedValue(), priorPtr, priorLength->getLimitedValue());
+//                                    if (LLVM_UNLIKELY(result == AliasResult::MustAlias)) {
+//                                        alreadyProven = true;
+//                                        break;
+//                                    }
+//                                }
+//                            }
+//                        }
+//                        if (alreadyProven) {
+//                            PointerType * const voidPtrTy = IntegerType::getInt8PtrTy(M.getContext());
+//                            i = ci.replaceAllUsesWith(ConstantPointerNull::get(voidPtrTy));
+//                            modified = true;
+//                        } else {
+//                            alreadyTested.insert(&ci);
+//                        }
+//                        continue;
+//                    }
+//                    #endif
                     if (ci.getCalledFunction() == assertFunc) {
                         bool remove = false;
                         Value * const check = ci.getOperand(0);
-                        if (LLVM_UNLIKELY(isa<Constant>(check))) {
-                            if (LLVM_UNLIKELY(cast<Constant>(check)->isNullValue())) {
-                                // show all static failures with their compilation context
+                        Constant * static_check = nullptr;
+                        if (isa<Constant>(check)) {
+                            static_check = cast<Constant>(check);
+                        } else if (LLVM_LIKELY(isa<ICmpInst>(check))) {
+                            ICmpInst * const icmp = cast<ICmpInst>(check);
+                            Value * const op0 = icmp->getOperand(0);
+                            Value * const op1 = icmp->getOperand(1);
+                            if (LLVM_UNLIKELY(isa<Constant>(op0) && isa<Constant>(op1))) {
+                                static_check = ConstantExpr::getICmp(icmp->getPredicate(), cast<Constant>(op0), cast<Constant>(op1));
+                            }
+                        }
+                        if (static_check) {
+                            if (LLVM_UNLIKELY(static_check->isNullValue())) {
+                                // show any static failures with their compilation context
                                 auto extract = [](const Value * a) -> const char * {
                                     const GlobalVariable * const g = cast<GlobalVariable>(a->stripPointerCasts());
                                     const ConstantDataArray * const d = cast<ConstantDataArray>(g->getInitializer());
@@ -1568,8 +1791,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 const char * const msg = extract(ci.getOperand(2));
                                 const uintptr_t * const trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
                                 const uint32_t n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
-                                __report_failure(name, msg, trace, n);
-                                exit(-1);
+                                try {
+                                    __report_failure(name, msg, trace, n);
+                                } catch (...) {
+                                    exit(-1);
+                                }
                             }
                             remove = true;
                         } else if (LLVM_UNLIKELY(S.count(check))) {
@@ -1588,6 +1814,52 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                 ++i;
             }
         }
+        // if we have any runtime assertions, replace the calls to each with an invoke.
+        if (LLVM_UNLIKELY(S.empty())) continue;
+
+        // Gather all assertions from the appropriate users of S.
+        SmallVector<CallInst *, 64> assertList;
+        assertList.reserve(S.size());
+        for (Value * s : S) {
+            for (User * u : s->users()) {
+                if (isa<CallInst>(u)) {
+                    CallInst * const c = cast<CallInst>(u);
+                    if (LLVM_LIKELY(c->getCalledFunction() == assertFunc)) {
+                        assertList.push_back(c);
+                        break;
+                    }
+                }
+            }
+        }
+        assert (assertList.size() == S.size());
+        S.clear();
+
+        builder.SetInsertPoint(&F.front());
+        BasicBlock * const rethrow = builder.WriteDefaultRethrowBlock();
+
+        FixedArray<Value *, 5> args;
+
+        for (CallInst * ci : assertList) {
+            BasicBlock * const bb = ci->getParent();
+            assert (ci->getNumArgOperands() == 5);
+            for (unsigned i = 0; i < 5; ++i) {
+                args[i] = ci->getArgOperand(i);
+            }
+            auto next = ci->eraseFromParent();
+            // note: split automatically inserts an unconditional branch to the new block
+            BasicBlock * const assertFinally = bb->splitBasicBlock(next, "__assert_ok");
+            assert(dyn_cast_or_null<BranchInst>(bb->getTerminator()));
+            bb->getTerminator()->eraseFromParent();
+            builder.SetInsertPoint(bb);
+            builder.CreateInvoke(assertFunc, assertFinally, rethrow, args);
+            assert(dyn_cast_or_null<InvokeInst>(bb->getTerminator()));
+        }
     }
+
+
     return modified;
+}
+
+std::string CBuilder::getKernelName() const {
+    report_fatal_error("CBuilder does not have a default kernel name.");
 }

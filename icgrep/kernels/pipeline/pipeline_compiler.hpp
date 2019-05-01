@@ -232,7 +232,6 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned CopyBack = 0;
     unsigned LookAhead = 0;
-    size_t   SymbolicRate = 0;
 
     BufferType Type = BufferType::Internal;
 
@@ -257,10 +256,11 @@ struct BufferRateData {
 
     RelationshipType Port;
     BindingRef Binding;
-    RateValue  Minimum;
-    RateValue  Maximum;
-    RateValue  MinimumFlow;
-    RateValue  MaximumFlow;
+    RateValue Minimum;
+    RateValue Maximum;
+    RateValue MinimumFlow;
+    RateValue MaximumFlow;
+    unsigned  SymbolicRate;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -283,7 +283,8 @@ struct BufferRateData {
                    RateValue minRate, RateValue maxRate)
     : Port(port), Binding(binding)
     , Minimum(minRate), Maximum(maxRate)
-    , MinimumFlow(minRate), MaximumFlow(maxRate) {
+    , MinimumFlow(minRate), MaximumFlow(maxRate)
+    , SymbolicRate(0) {
 
     }
 
@@ -301,9 +302,20 @@ using BufferMap = RelMap<BufferGraph::vertex_descriptor>;
 struct ConsumerNode {
     Value * Consumed = nullptr;
     PHINode * PhiNode = nullptr;
+    unsigned Encountered = 0;
 };
 
-using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, StreamPort>;
+struct ConsumerEdge {
+    unsigned Port = 0;
+    unsigned Index = 0;
+
+    ConsumerEdge() = default;
+
+    ConsumerEdge(StreamPort port, unsigned index)
+    : Port(port.Number), Index(index) { }
+};
+
+using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, ConsumerEdge>;
 
 template <typename Value>
 using StreamSetBufferMap = flat_map<const StreamSetBuffer *, Value>;
@@ -316,20 +328,6 @@ using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigne
 using RelationshipVertex = RelationshipGraph::vertex_descriptor;
 using RelationshipMap = RelMap<RelationshipVertex>;
 
-struct PopCountData {
-    // compilation state
-    PHINode *    PhiNode;
-    Value *      Processed;
-    unsigned     Encountered;
-    Value *      InitialOffset;
-
-    // analysis state
-    RateValue    FieldWidth;
-    bool         UsesConsumedCount;
-
-    PopCountData() = default;
-};
-
 enum CountingType : unsigned {
     Unknown = 0
     , Positive = 1
@@ -338,15 +336,6 @@ enum CountingType : unsigned {
 };
 
 ENABLE_ENUM_FLAGS(CountingType)
-
-struct PopCountEdge {
-    CountingType Type;
-    unsigned     Port;
-    PopCountEdge() : Type(Unknown), Port(0) { }
-    PopCountEdge(const CountingType type, const unsigned port) : Type(type), Port(port) { }
-};
-
-using PopCountGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PopCountEdge>;
 
 using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
@@ -415,12 +404,14 @@ const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 
-
 const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
 const static std::string STATISTICS_BLOCKING_IO_SUFFIX = ".SBY";
+const static std::string STATISTICS_BLOCKING_IO_HISTORY_SUFFIX = ".SHY";
 const static std::string STATISTICS_BUFFER_EXPANSION_SUFFIX = ".SBX";
 const static std::string STATISTICS_STRIDES_PER_SEGMENT_SUFFIX = ".SSPS";
+const static std::string STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX = ".SPIC";
+const static std::string STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX = ".SUIC";
 
 class PipelineCompiler {
 
@@ -495,6 +486,7 @@ protected:
     void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
     void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
     void branchToTargetOrLoopExit(BuilderRef b, const StreamPort port, Value * const cond, BasicBlock * target, Value * const halting);
+    void updatePHINodesForLoopExit(BuilderRef b, Value * halting);
 
     void enterRegionSpan(BuilderRef b);
 
@@ -584,11 +576,14 @@ protected:
     void createConsumedPhiNodes(BuilderRef b);
     void initializeConsumedItemCount(BuilderRef b, const unsigned outputPort, Value * const produced);
     void readConsumedItemCounts(BuilderRef b);
-    void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed) const;
+    void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
 
 // buffer analysis/management functions
 
     BufferGraph makeBufferGraph(BuilderRef b);
+    void initializeBufferGraph(BufferGraph & G) const;
+    void identifySymbolicRates(BufferGraph & G) const;
+    void computeDataFlow(BufferGraph & G) const;
 
     LLVM_READNONE bool isOpenSystem() const {
         return out_degree(PipelineInput, mBufferGraph) != 0 || in_degree(PipelineOutput, mBufferGraph) != 0;
@@ -627,12 +622,26 @@ protected:
 
     void initializeBufferExpansionHistory(BuilderRef b) const;
     Value * getBufferExpansionCycleCounter(BuilderRef b) const;
-    void recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort, const StreamSetBuffer * const buffer, Value * const expanded) const;
+    void recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort, const StreamSetBuffer * const buffer) const;
     void printOptionalBufferExpansionHistory(BuilderRef b);
 
     void initializeStridesPerSegment(BuilderRef b) const;
     void recordStridesPerSegment(BuilderRef b, Value * const numOfStrides) const;
     void printOptionalStridesPerSegment(BuilderRef b) const;
+    void printOptionalBlockedIOPerSegment(BuilderRef b) const;
+
+    void addProducedItemCountDeltaProperties(BuilderRef b, unsigned kernel) const;
+    void recordProducedItemCountDeltas(BuilderRef b) const;
+    void printProducedItemCountDeltas(BuilderRef b) const;
+
+    void addUnconsumedItemCountProperties(BuilderRef b, unsigned kernel) const;
+    void recordUnconsumedItemCounts(BuilderRef b) const;
+    void printUnconsumedItemCounts(BuilderRef b) const;
+
+    void addItemCountDeltaProperties(BuilderRef b, unsigned kernel, const StringRef suffix) const;
+    template <typename VecA, typename VecB>
+    void recordItemCountDeltas(BuilderRef b, const VecA & current, const VecB & prior, const StringRef suffix) const;
+    void printItemCountDeltas(BuilderRef b, const StringRef title, const StringRef suffix) const;
 
 // pipeline analysis functions
 
@@ -670,6 +679,11 @@ protected:
     LLVM_READNONE bool isKernelDataParallel(const unsigned kernel) const;
     LLVM_READNONE bool isOutputCacheAligned(BuilderRef b, const unsigned kernel, const unsigned outputPort) const;
 
+// exception rethrow handling
+
+    void initializeExceptionRethrow(BuilderRef b);
+    Value * invokeKernelOrRethrow(BuilderRef b, Value * const function, ArrayRef<Value *> args);
+
 // misc. functions
 
     Value * getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string &suffix) const;
@@ -684,7 +698,9 @@ protected:
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const StreamPort port) const;
 
-    const StreamPort getReference(const unsigned kernel, const StreamPort port) const;
+    LLVM_READNONE RelationshipGraph::edge_descriptor getReferenceEdge(const unsigned kernel, const StreamPort port) const;
+    LLVM_READNONE unsigned getReferenceBufferVertex(const unsigned kernel, const StreamPort port) const;
+    LLVM_READNONE const StreamPort getReference(const unsigned kernel, const StreamPort port) const;
     const StreamPort getReference(const StreamPort port) const;
 
     LLVM_READNONE unsigned getInputBufferVertex(const unsigned kernelVertex, const unsigned inputPort) const;
@@ -723,7 +739,12 @@ protected:
 
 protected:
 
+
+
     PipelineKernel * const                      mPipelineKernel;
+
+    const bool                                  mCheckAssertions;
+    const bool                                  mTrackIndividualConsumedItemCounts;
 
     unsigned                                    mKernelIndex = 0;
     const Kernel *                              mKernel = nullptr;
@@ -745,12 +766,15 @@ protected:
     BasicBlock *                                mKernelCalculateItemCounts = nullptr;
     BasicBlock *                                mKernelLoopCall = nullptr;
     BasicBlock *                                mKernelTerminationCheck = nullptr;
+    BasicBlock *                                mKernelAbnormalTermination = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelRegionExitLoopCheck = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
+    BasicBlock *                                mRethrowException = nullptr;
+
     Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
     Vec<Value *, 64>                            mPriorConsumedItemCount;
     Vec<Value *, 64>                            mLocallyAvailableItems;
@@ -765,12 +789,15 @@ protected:
     PHINode *                                   mTotalNumOfStrides = nullptr;
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
-    PHINode *                                   mBlockedOnFirstStridePhi = nullptr;
+    PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
     PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mTerminatedExplicitly = nullptr;
+    Value *                                     mBranchToLoopExit = nullptr;
+    bool                                        mBoundedKernel = false;
+
     Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
 
@@ -812,10 +839,6 @@ protected:
     // cycle counter state
     std::array<Value *, 4>                      mCycleCounters;
 
-    // popcount state
-    Value *                                     mPopCountState;
-    flat_map<unsigned, PopCountData>            mPopCountData;
-
     // analysis state
     const RelationshipGraph                     mStreamGraph;
     const RelationshipGraph                     mScalarGraph;
@@ -836,12 +859,12 @@ protected:
 
     const bool                                  mHasZeroExtendedStream;
     bool                                        mHasThreadLocalPipelineState;
+
     ConsumerGraph                               mConsumerGraph;
+
     Vec<Value *>                                mScalarValue;
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
-    PopCountGraph                               mPopCountGraph;
-
 
     std::vector<std::unique_ptr<Kernel>>        mInternalKernels;
     std::vector<std::unique_ptr<Binding>>       mInternalBindings;
@@ -925,6 +948,12 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P)
 : mPipelineKernel(pipelineKernel)
+#ifndef NDEBUG
+, mCheckAssertions(true)
+#else
+, mCheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
+#endif
+, mTrackIndividualConsumedItemCounts(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
 , mStreamGraph(std::move(P.Streams))
 , mScalarGraph(std::move(P.Scalars))
 , LastKernel(P.LastKernel)
@@ -943,10 +972,9 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mScalarValue(LastScalar + 1)
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
-, mPopCountGraph() // makePopCountGraph())
 , mInternalKernels(std::move(P.InternalKernels))
 , mInternalBindings(std::move(P.InternalBindings)) {
-//    initializePopCounts();
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
