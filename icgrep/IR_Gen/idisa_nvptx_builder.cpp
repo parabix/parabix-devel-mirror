@@ -11,7 +11,7 @@
 using namespace llvm;
 
 namespace IDISA {
-    
+
 std::string IDISA_NVPTX20_Builder::getBuilderUniqueName() { return "NVPTX20_" + std::to_string(groupThreads);}
 
 unsigned IDISA_NVPTX20_Builder::getGroupThreads() const{
@@ -20,7 +20,9 @@ unsigned IDISA_NVPTX20_Builder::getGroupThreads() const{
 
 Value * IDISA_NVPTX20_Builder::bitblock_any(Value * val) {
     Type * const int32ty = getInt32Ty();
-    Function * barrierOrFunc = cast<Function>(getModule()->getOrInsertFunction("llvm.nvvm.barrier0.or", FunctionType::get(int32ty, {int32ty})));
+    FunctionType * const barrierOrFuncTy = FunctionType::get(int32ty, {int32ty});
+    Module * const m = getModule();
+    Function * barrierOrFunc = Function::Create(barrierOrFuncTy, Function::ExternalLinkage, "llvm.nvvm.barrier0.or", m);
     Value * nonZero_i1 = CreateICmpUGT(val, ConstantInt::getNullValue(mBitBlockType));
     Value * nonZero_i32 = CreateZExt(CreateBitCast(nonZero_i1, getInt1Ty()), int32ty);
     Value * anyNonZero = CreateCall(barrierOrFunc, nonZero_i32);
@@ -49,7 +51,7 @@ Value * IDISA_NVPTX20_Builder::bitblock_set_bit(Value * pos, const bool safe){
     Value * finalBlockMask = CreateShl(getInt64(1), CreateURem(pos, threadSize));
     return CreateBitCast(CreateAnd(finalBlockMask, finalBlockSelect), mBitBlockType);
 }
-    
+
 std::pair<Value *, Value *> IDISA_NVPTX20_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
     Value * id = CreateCall(tidFunc);
     Value * retVal = CreateCall(mLongAdvanceFunc, {id, a, CreateBitCast(getInt64(shift), mBitBlockType), shiftin});
@@ -73,7 +75,7 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
         /*Type=*/carryTy,
         /*isConstant=*/false,
         /*Linkage=*/GlobalValue::InternalLinkage,
-        /*Initializer=*/0, 
+        /*Initializer=*/0,
         /*Name=*/"carry",
         /*InsertBefore*/nullptr,
         /*TLMode */GlobalValue::NotThreadLocal,
@@ -86,13 +88,13 @@ void IDISA_NVPTX20_Builder::CreateGlobals(){
         /*Type=*/bubbleTy,
         /*isConstant=*/false,
         /*Linkage=*/GlobalValue::InternalLinkage,
-        /*Initializer=*/0, 
+        /*Initializer=*/0,
         /*Name=*/"bubble",
         /*InsertBefore*/nullptr,
         /*TLMode */GlobalValue::NotThreadLocal,
         /*AddressSpace*/ 3,
         /*isExternallyInitialized*/false);
-   
+
     ConstantAggregateZero* carryConstArray = ConstantAggregateZero::get(carryTy);
     carry->setInitializer(carryConstArray);
     ConstantAggregateZero* bubbleConstAray = ConstantAggregateZero::get(bubbleTy);
@@ -106,8 +108,9 @@ void IDISA_NVPTX20_Builder::CreateBuiltinFunctions(){
     Module * const m = getModule();
     FunctionType * barrierTy = FunctionType::get(voidTy, {});
     FunctionType * tIdTy = FunctionType::get(int32ty, {});
-    barrierFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.barrier0", barrierTy));
-    tidFunc = cast<Function>(m->getOrInsertFunction("llvm.nvvm.read.ptx.sreg.tid.x", tIdTy));
+
+    barrierFunc = Function::Create(barrierTy, Function::ExternalLinkage, "llvm.nvvm.barrier0", m);
+    tidFunc = Function::Create(tIdTy, Function::ExternalLinkage, "llvm.nvvm.read.ptx.sreg.tid.x", m);
 }
 
 void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
@@ -115,8 +118,7 @@ void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
     Module * const m = getModule();
     Type * returnType = StructType::get(m->getContext(), {mBitBlockType, mBitBlockType});
     FunctionType * longAdvTy = FunctionType::get(returnType, {int32ty, mBitBlockType, mBitBlockType, mBitBlockType}, false);
-
-    mLongAdvanceFunc = cast<Function>(m->getOrInsertFunction("LongAdvance", longAdvTy));
+    mLongAdvanceFunc = Function::Create(longAdvTy, Function::InternalLinkage, "LongAdvance", m);
     mLongAdvanceFunc->setCallingConv(CallingConv::C);
     auto args = mLongAdvanceFunc->arg_begin();
 
@@ -157,8 +159,8 @@ void IDISA_NVPTX20_Builder::CreateLongAdvanceFunc(){
 
 }
 
-                                           
-                                           
+
+
 void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
   Type * const int64ty = getInt64Ty();
   Type * const int32ty = getInt32Ty();
@@ -166,7 +168,7 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
 
   Type * returnType = StructType::get(m->getContext(), {mBitBlockType, mBitBlockType});
   FunctionType * longAddTy = FunctionType::get(returnType, {int32ty, mBitBlockType, mBitBlockType, mBitBlockType}, false);
-  mLongAddFunc = cast<Function>(m->getOrInsertFunction("LongAdd", longAddTy));
+  mLongAddFunc = Function::Create(longAddTy, Function::InternalLinkage, "LongAdd", m);
   mLongAddFunc->setCallingConv(CallingConv::C);
   Function::arg_iterator args = mLongAddFunc->arg_begin();
 
@@ -247,12 +249,12 @@ void IDISA_NVPTX20_Builder::CreateLongAddFunc(){
 
 void IDISA_NVPTX20_Builder::CreateBallotFunc(){
     Type * const int32ty = getInt32Ty();
-    Type * const int1ty = getInt1Ty();
     Module * const m = getModule();
     FunctionType * ballotTy = FunctionType::get(int32ty, {int1Ty});
-    Function * const ballotFn = cast<Function>(m->getOrInsertFunction("ballot_nvptx", ballotTy));
+    Function * const ballotFn = Function::Create(ballotTy, Function::InternalLinkage, "ballot_nvptx", m);
+
     ballotFn->setCallingConv(CallingConv::C);
-    Function::arg_iterator args = ballotFn->arg_begin();
+    auto args = ballotFn->arg_begin();
 
     Value * const input = &*(args++);
     input->setName("input");
@@ -276,7 +278,7 @@ void IDISA_NVPTX20_Builder::CreateBallotFunc(){
 }
 
 LoadInst * IDISA_NVPTX20_Builder::CreateAtomicLoadAcquire(Value * ptr) {
-    return CreateLoad(ptr);    
+    return CreateLoad(ptr);
 }
 
 StoreInst * IDISA_NVPTX20_Builder::CreateAtomicStoreRelease(Value * val, Value * ptr) {

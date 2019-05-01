@@ -199,7 +199,7 @@ Value * CBuilder::CreateOpenCall(Value * filename, Value * oflag, Value * mode) 
         IntegerType * const int32Ty = getInt32Ty();
         PointerType * const int8PtrTy = getInt8PtrTy();
         FunctionType * openTy = FunctionType::get(int32Ty, {int8PtrTy, int32Ty, int32Ty}, false);
-        openFn = cast<Function>(m->getOrInsertFunction("open", openTy));
+        openFn = Function::Create(openTy, Function::ExternalLinkage, "open", m);
     }
     return CreateCall(openFn, {filename, oflag, mode});
 }
@@ -213,12 +213,8 @@ Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * n
         IntegerType * const sizeTy = getSizeTy();
         IntegerType * const int32Ty = getInt32Ty();
         FunctionType * writeTy = FunctionType::get(sizeTy, {int32Ty, voidPtrTy, sizeTy}, false);
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-        auto atts = AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias);
-#else
-        auto atts = AttributeList().addAttribute(getContext(), 2U, Attribute::NoAlias);
-#endif
-        write = cast<Function>(m->getOrInsertFunction("write", writeTy, atts));
+        write = Function::Create(writeTy, Function::ExternalLinkage, "write", m);
+        write->addAttribute(2U, Attribute::NoAlias);
     }
     buf = CreatePointerCast(buf, voidPtrTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -235,12 +231,8 @@ Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nb
         IntegerType * const sizeTy = getSizeTy();
         IntegerType * const int32Ty = getInt32Ty();
         FunctionType * readTy = FunctionType::get(sizeTy, {int32Ty, voidPtrTy, sizeTy}, false);
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-        auto atts = AttributeSet().addAttribute(getContext(), 2U, Attribute::NoAlias);
-#else
-        auto atts = AttributeList().addAttribute(getContext(), 2U, Attribute::NoAlias);
-#endif
-        readFn = cast<Function>(m->getOrInsertFunction("read", readTy, atts));
+        readFn = Function::Create(readTy, Function::ExternalLinkage, "read", m);
+        readFn->addAttribute(2U, Attribute::NoAlias);
     }
     buf = CreatePointerCast(buf, voidPtrTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -1392,7 +1384,7 @@ Value * CBuilder::CreateMemChr(Value * ptr, Value * byteVal, Value * num) {
         IntegerType * const sizeTy = getSizeTy();
         PointerType * const voidPtrTy = getVoidPtrTy();
         FunctionType * memchrTy = FunctionType::get(voidPtrTy, {voidPtrTy, int32Ty, sizeTy}, false);
-        memchrFn = cast<Function>(m->getOrInsertFunction("memchr", memchrTy));
+        memchrFn = Function::Create(memchrTy, Function::ExternalLinkage, "memchr", m);
     }
     return CreateCall(memchrFn, {ptr, byteVal, num});
 }

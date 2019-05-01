@@ -46,7 +46,7 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
     Module * const m = b->getModule();
 
     FunctionType * scanTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty(), T}, false);
-    Function * scanFunc = cast<Function>(m->getOrInsertFunction("scan_word", scanTy));
+    Function * const scanFunc = Function::Create(scanTy, Function::InternalLinkage, "scan_word", m);
     scanFunc->setCallingConv(CallingConv::C);
     Function::arg_iterator args = scanFunc->arg_begin();
 
@@ -58,7 +58,8 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
     basePos->setName("basePos");
 
     FunctionType * fTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty()}, false);
-    Constant * matchProcessor = m->getOrInsertFunction("wrapped_report_pos", fTy);
+    Function * const matchProcessor = Function::Create(fTy, Function::InternalLinkage, "wrapped_report_pos", m);
+
     BasicBlock * entryBlock = BasicBlock::Create(b->getContext(), "entry", scanFunc, 0);
     BasicBlock * matchesCondBlock = BasicBlock::Create(b->getContext(), "matchesCond", scanFunc, 0);
     BasicBlock * matchesLoopBlock = BasicBlock::Create(b->getContext(), "matchesLoop", scanFunc, 0);

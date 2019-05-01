@@ -42,7 +42,7 @@ void preprocessPipeline(CPUEngineInstance & pxDriver){
     Type * const size_ty = iBuilder->getSizeTy();
     Type * const inputType = iBuilder->getInt8PtrTy();
     FunctionType * mainTy = FunctionType::get(iBuilder->getVoidTy(), {inputType, size_ty, inputType}, false);
-    Function * const mainFn = cast<Function>(m->getOrInsertFunction("Main", mainTy));
+    Function * const mainFn = Function::Create(mainTy, Function::InternalLinkage, "Main", m);
     mainFn->setCallingConv(CallingConv::C);
     iBuilder->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", mainFn, 0));
     Function::arg_iterator args = mainFn->arg_begin();
@@ -62,10 +62,10 @@ void preprocessPipeline(CPUEngineInstance & pxDriver){
     StreamSetBuffer * MatchResults = pxDriver.addBuffer<StaticBuffer>(iBuilder, iBuilder->getStreamSetTy(1, 1), segmentSize * bufferSegments);
     kernel::Kernel * linefeedK = pxDriver.addKernelInstance<kernel::DirectCharacterClassKernelBuilder>(iBuilder, "linefeed", std::vector<re::CC *>{re::makeCC(0x0A)}, 1);
     pxDriver.makeKernelCall(linefeedK, {ByteStream}, {MatchResults});
-    
+
     kernel::Kernel * scanMatchK = pxDriver.addKernelInstance<kernel::CCScanKernel>(iBuilder, 1);
-    pxDriver.makeKernelCall(scanMatchK, {MatchResults}, {}); 
-    
+    pxDriver.makeKernelCall(scanMatchK, {MatchResults}, {});
+
     pxDriver.generatePipelineIR();
     iBuilder->CreateRetVoid();
 
