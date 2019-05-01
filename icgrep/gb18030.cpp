@@ -126,14 +126,21 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     //  All bytes that are neither key nor data of 2 or 4 byte sequences
     //  are ASCII or error.
     //
-    PabloAST * GB_single = pb.createNot(pb.createOr(GB_keys, GB_data), "gb_single");
-    //
-    // GB prefix bytes are the keys that are first in 2 or 4 byte sequences.
-    PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(pb.createAdvance(GB_k2, 1)), "gb_prefix");
+    PabloAST * GB_single = pb.createInFile(pb.createNot(pb.createOr(GB_keys, GB_data), "gb_single"));
+    PabloAST * wf1 = pb.createAnd(GB_single, ccc.compileCC(makeByte(0, 0x7F)));
+    PabloAST * scope3 = pb.createAdvance(GB_k2, 1);
+    PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(scope3), "gb_prefix");
+    PabloAST * scope2 = pb.createAnd(pb.createAdvance(GB_prefix, 1), pb.createNot(GB_k2));
+    // A well formed 2 byte sequence has a key 0x81-0xFE byte followed by a byte in 0x40-0xFE except 0x7F.
+    PabloAST * wf2 = pb.createAnd(scope2, ccc.compileCC(makeCC(makeByte(0x040, 0x7E), makeByte(0x080, 0xFE))));
+    PabloAST * scope4 = pb.createAdvance(scope3, 1, "gb_scope4");
+    // A well formed 4 byte sequence has two consecutive pairs of 0x81-FE 0x30-39 bytes
+    PabloAST * wf4 = pb.createAnd(scope4, GB_4_data);
+    PabloAST * valid = pb.createOr3(wf1, wf2, wf4);
     Var * GB_bytes = getOutputStreamVar("GB_bytes");
-    pb.createAssign(pb.createExtract(GB_bytes, 0), GB_single);
-    pb.createAssign(pb.createExtract(GB_bytes, 1), GB_prefix);
-    pb.createAssign(pb.createExtract(GB_bytes, 2), GB_k2);
+    pb.createAssign(pb.createExtract(GB_bytes, 0), valid);
+    pb.createAssign(pb.createExtract(GB_bytes, 1), scope2);
+    pb.createAssign(pb.createExtract(GB_bytes, 2), scope4);
 }
 
 class GB_18030_ExtractionMasks : public pablo::PabloKernel {
@@ -150,17 +157,23 @@ GB_18030_ExtractionMasks::GB_18030_ExtractionMasks
     (const std::unique_ptr<KernelBuilder> & b,
      StreamSet * GB_bytes, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4)
 : PabloKernel(b, "GB_18030_ExtractionMasks",
-{Binding{"GB_bytes", GB_bytes}},
+{Binding{"GB_bytes", GB_bytes, FixedRate(1), LookAhead(3)}},
 {Binding{"GB_1", GB_1}, Binding{"GB_2", GB_2}, Binding{"GB_3", GB_3}, Binding{"GB_4", GB_4}}) {}
 
 void GB_18030_ExtractionMasks::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> GB_bytes = getInputStreamSet("GB_bytes");
-    PabloAST * GB_single = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(0));
-    PabloAST * GB_prefix = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(1));
-    PabloAST * GB_k2 = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(2));
+    PabloAST * GB_valid = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(0));
+    PabloAST * GB_scope2 = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(1));
+    PabloAST * GB_scope4 = pb.createExtract(getInputStreamVar("GB_bytes"), pb.getInteger(2));
+    PabloAST * GB_prefix2 = pb.createLookahead(GB_scope2, 1);
+    PabloAST * GB_prefix4 = pb.createLookahead(GB_scope4, 3);
+    PabloAST * GB_validPrefix2 = pb.createAnd(pb.createLookahead(GB_valid, 1), GB_prefix2);
+    PabloAST * GB_validPrefix4 = pb.createAnd(pb.createLookahead(GB_valid, 3), GB_prefix4);
+    PabloAST * GB_single = pb.createAnd(GB_valid, pb.createNot(pb.createOr(GB_scope2, GB_scope4)));
+    PabloAST * GB_prefix = pb.createOr(GB_validPrefix2, GB_validPrefix4);
     //
-    // mask1 is for the extraction of the first byte of data for every GB 1, 2 or 4 byte sequence.
+    // mask1 is for the extraction of the first byte of data for every valid GB 1, 2 or 4 byte sequence.
     PabloAST * mask1 = pb.createOr(GB_single, GB_prefix, "gb_mask1");
     //
     // mask2 is for selecting the low 4 bits of the 2nd byte of a sequence (or first of a singleton).
@@ -168,11 +181,11 @@ void GB_18030_ExtractionMasks::generatePabloMethod() {
     PabloAST * mask2 = pb.createOr(GB_single, GB_second, "gb_mask2");
     // mask3 is for the last byte of data for every GB 1 or 2 byte sequence, or the 3rd byte
     // of every 4 byte sequence.
-    PabloAST * GB_2of2 = pb.createAnd(GB_second, pb.createNot(GB_k2));
-    PabloAST * GB_3of4 = pb.createAdvance(pb.createAnd(GB_second, GB_k2), 1);
+    PabloAST * GB_2of2 = pb.createAnd(GB_scope2, GB_valid);
+    PabloAST * GB_3of4 = pb.createAdvance(GB_validPrefix4, 2);
     PabloAST * mask3 = pb.createOr(GB_single, pb.createOr(GB_2of2, GB_3of4), "gb_mask3");
     // mask4 is for selecting the low 4 bits of the last byte of a sequence.
-    PabloAST * mask4 = pb.createOr(GB_single, pb.createOr(GB_2of2, pb.createAdvance(GB_3of4, 1)), "gb_mask4");
+    PabloAST * mask4 = GB_valid;
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_1"), pb.getInteger(0)), mask1);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_2"), pb.getInteger(0)), mask2);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_3"), pb.getInteger(0)), mask3);
@@ -226,7 +239,7 @@ void GB_18030_DoubleByteIndex::generatePabloMethod() {
 
     Var * const gb15_index = getOutputStreamVar("gb15_index");
     for (unsigned i = 0; i < 15; i++) {
-        pb.createAssign(pb.createExtract(gb15_index, pb.getInteger(i)), pb.createAnd(GB2idx[i], GB_2byte));
+        pb.createAssign(pb.createExtract(gb15_index, pb.getInteger(i)), pb.createAnd(GB2idx[i], GB_2byte, "gb2idx[" + std::to_string(i) + "]"));
     }
 }
 
@@ -494,7 +507,7 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     Scalar * TWO = P->CreateConstant(b->getSize(2));
 
     extract(P, GB_bytes, ZERO, GB_mask1, ASCII);
-    extract(P, GB_bytes, TWO, GB_mask2, GB_4byte);
+    extract(P, GB_bytes, TWO, GB_mask4, GB_4byte);
     extract(P, BasisBits, ZERO, GB_mask1, byte1);
     extract(P, BasisBits, ZERO, GB_mask2, nybble1);
     extract(P, BasisBits, ZERO, GB_mask3, byte2);
