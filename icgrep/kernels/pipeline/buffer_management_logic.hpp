@@ -251,7 +251,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-    // printBufferGraph(G, errs());
+//    printBufferGraph(G, errs());
 
     return G;
 }
@@ -608,9 +608,26 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 for (const auto & consumer : make_iterator_range(out_edges(target(output, G), G))) {
                     const BufferRateData & consumptionRate = G[consumer];
                     if (rates.count(consumptionRate.SymbolicRate) == 0) {
-                        const auto a = div_by_non_zero(outputRate.Minimum, outputRate.Maximum);
-                        const auto b = div_by_non_zero(consumptionRate.Minimum, consumptionRate.Maximum);
-                        variance = std::max(variance, b - a);
+
+                        auto compute2 = [div_by_non_zero](const RateValue & a, const RateValue & b) {
+                            if (lcm(a, b) == a) {
+                                return RateValue{0};
+                            }
+                            const auto c = div_by_non_zero(a, b);
+                            return RateValue{c.numerator() % c.denominator(), c.denominator()};
+                        };
+
+                        auto compute = [compute2](const RateValue & a, const RateValue & b) {
+                            if (LLVM_LIKELY(a >= b)) {
+                                return compute2(a, b);
+                            } else {
+                                return compute2(b, a);
+                            }
+                        };
+
+                        const auto a = compute(consumptionRate.Maximum, outputRate.Minimum);
+                        const auto b = compute(outputRate.Maximum, consumptionRate.Minimum);
+                        variance = std::max(variance, std::max(a, b));
                     }
                 }
             }

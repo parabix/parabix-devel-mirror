@@ -11,6 +11,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Metadata.h>
+#include <llvm/IR/Dominators.h>
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
@@ -23,9 +24,10 @@
 #include <boost/format.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <cxxabi.h>
+
+
 #ifdef HAS_ADDRESS_SANITIZER
 #include <llvm/Analysis/AliasAnalysis.h>
-#include <llvm/IR/Dominators.h>
 #endif
 
 #if defined(__i386__)
@@ -1709,17 +1711,25 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
     bool modified = false;
     DenseSet<Value *> S;
 
+
+
+
     CBuilder builder(M.getContext());
     builder.setModule(&M);
+
+
 
 //    #ifdef HAS_ADDRESS_SANITIZER
 //    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
 //    DenseSet<CallInst *> alreadyTested;
-//    DominatorTree & DT = getAnalysis<DominatorTree>();
+
 //    AliasAnalysis & AA = getAnalysis<AliasAnalysis>();
 //    #endif
 
     for (Function & F : M) {
+
+        //DominatorTree & DT = getAnalysis<DominatorTree>(F);
+
         S.clear();
         // scan through each instruction and remove any trivially true or redundant assertions.
         for (auto & B : F) {
@@ -1806,6 +1816,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                 ++i;
             }
         }
+
         // if we have any runtime assertions, replace the calls to each with an invoke.
         if (LLVM_UNLIKELY(S.empty())) continue;
 

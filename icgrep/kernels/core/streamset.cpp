@@ -82,8 +82,8 @@ void StreamSetBuffer::setHandle(BuilderRef b, Value * const handle) const {
     mHandle = handle;
 }
 
-inline void StreamSetBuffer::assertValidStreamIndex(IDISA_Builder * const b, Value * streamIndex) const {
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+void StreamSetBuffer::assertValidStreamIndex(IDISA_Builder * const b, Value * streamIndex) const {
+    if (isa<Constant>(streamIndex) || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * const count = getStreamSetCount(b);
         Value * const withinSet = b->CreateICmpULT(b->CreateZExtOrTrunc(streamIndex, count->getType()), count);
         b->CreateAssert(withinSet, "out-of-bounds stream access");
