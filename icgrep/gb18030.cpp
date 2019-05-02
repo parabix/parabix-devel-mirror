@@ -130,7 +130,7 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     PabloAST * wf1 = pb.createAnd(GB_single, ccc.compileCC(makeByte(0, 0x7F)));
     PabloAST * scope3 = pb.createAdvance(GB_k2, 1);
     PabloAST * GB_prefix = pb.createAnd(GB_keys, pb.createNot(scope3), "gb_prefix");
-    PabloAST * scope2 = pb.createAnd(pb.createAdvance(GB_prefix, 1), pb.createNot(GB_k2));
+    PabloAST * scope2 = pb.createAnd(pb.createAdvance(GB_prefix, 1), pb.createNot(GB_k2), "gb_scope2");
     // A well formed 2 byte sequence has a key 0x81-0xFE byte followed by a byte in 0x40-0xFE except 0x7F.
     PabloAST * wf2 = pb.createAnd(scope2, ccc.compileCC(makeCC(makeByte(0x040, 0x7E), makeByte(0x080, 0xFE))));
     PabloAST * scope4 = pb.createAdvance(scope3, 1, "gb_scope4");
@@ -145,7 +145,7 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
 
 class GB_18030_ExtractionMasks : public pablo::PabloKernel {
 public:
-    GB_18030_ExtractionMasks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * GB_bytes, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4);
+    GB_18030_ExtractionMasks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * GB_bytes, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4, StreamSet * error);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -155,10 +155,10 @@ protected:
 
 GB_18030_ExtractionMasks::GB_18030_ExtractionMasks
     (const std::unique_ptr<KernelBuilder> & b,
-     StreamSet * GB_bytes, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4)
+     StreamSet * GB_bytes, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4, StreamSet * error)
 : PabloKernel(b, "GB_18030_ExtractionMasks",
 {Binding{"GB_bytes", GB_bytes, FixedRate(1), LookAhead(3)}},
-{Binding{"GB_1", GB_1}, Binding{"GB_2", GB_2}, Binding{"GB_3", GB_3}, Binding{"GB_4", GB_4}}) {}
+{Binding{"GB_1", GB_1}, Binding{"GB_2", GB_2}, Binding{"GB_3", GB_3}, Binding{"GB_4", GB_4}, Binding{"error", error}}) {}
 
 void GB_18030_ExtractionMasks::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
@@ -186,10 +186,13 @@ void GB_18030_ExtractionMasks::generatePabloMethod() {
     PabloAST * mask3 = pb.createOr(GB_single, pb.createOr(GB_2of2, GB_3of4), "gb_mask3");
     // mask4 is for selecting the low 4 bits of the last byte of a sequence.
     PabloAST * mask4 = GB_valid;
+    //
+    PabloAST * error1 = pb.createNot(pb.createOr(pb.createOr(mask1, mask2), pb.createOr(mask3, mask4)), "gb_error");
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_1"), pb.getInteger(0)), mask1);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_2"), pb.getInteger(0)), mask2);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_3"), pb.getInteger(0)), mask3);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_4"), pb.getInteger(0)), mask4);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("error"), pb.getInteger(0)), error1);
 }
 
 class GB_18030_DoubleByteIndex : public pablo::PabloKernel {
@@ -494,7 +497,8 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * const GB_mask2 = P->CreateStreamSet(1);
     StreamSet * const GB_mask3 = P->CreateStreamSet(1);
     StreamSet * const GB_mask4 = P->CreateStreamSet(1);
-    P->CreateKernelCall<GB_18030_ExtractionMasks>(GB_bytes, GB_mask1, GB_mask2, GB_mask3, GB_mask4);
+    StreamSet * const error = P->CreateStreamSet(1);
+    P->CreateKernelCall<GB_18030_ExtractionMasks>(GB_bytes, GB_mask1, GB_mask2, GB_mask3, GB_mask4, error);
 
     StreamSet * const ASCII = P->CreateStreamSet(1);    // markers for ASCII data
     StreamSet * const GB_4byte = P->CreateStreamSet(1); // markers for 4-byte sequences
