@@ -20,6 +20,7 @@
 #include <kernels/stdout_kernel.h>
 #include <kernels/deletion.h>
 #include <kernels/pdep_kernel.h>
+#include <kernels/error_monitor_kernel.h>
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>
 #include <pablo/boolean.h>
@@ -45,6 +46,14 @@ using namespace re;
 static cl::OptionCategory gb18030Options("gb18030 Options", "Transcoding control options.");
 
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(gb18030Options));
+enum class GBerrorMode {Abort, DropBadInput, UseReplacementChar};
+static cl::opt<GBerrorMode> GBerrorOption(cl::desc("Treatment of erroneous GB 18030 input (default Abort)"),
+    cl::values(
+        clEnumValN(GBerrorMode::Abort, "abort-on-error", "generate output for all valid GB18030 input up to the first error"),
+        clEnumValN(GBerrorMode::DropBadInput, "drop-bad-characters", "drop bad GB18030 characters from the input"),
+        clEnumValN(GBerrorMode::UseReplacementChar, "use-replacement-char", "replace bad input characters with a replacement character")
+        CL_ENUM_VAL_SENTINEL), cl::cat(gb18030Options), cl::init(GBerrorMode::Abort));
+
 static cl::opt<unsigned> ReplacementCharacter("replacement-character", cl::desc("Codepoint value of the character used to replace any unmapped or invalid input sequence."), cl::init(0xFFFD), cl::cat(gb18030Options));
 static cl::opt<std::string> OutputEncoding("encoding", cl::desc("Output encoding (default: UTF-8)"), cl::init("UTF-8"), cl::cat(gb18030Options));
 
@@ -133,10 +142,10 @@ void GB_18030_ClassifyBytes::generatePabloMethod() {
     PabloAST * scope2 = pb.createAnd(pb.createAdvance(GB_prefix, 1), pb.createNot(GB_k2), "gb_scope2");
     // A well formed 2 byte sequence has a key 0x81-0xFE byte followed by a byte in 0x40-0xFE except 0x7F.
     PabloAST * wf2 = pb.createAnd(scope2, ccc.compileCC(makeCC(makeByte(0x040, 0x7E), makeByte(0x080, 0xFE))));
-    PabloAST * scope4 = pb.createAdvance(scope3, 1, "gb_scope4");
+    PabloAST * scope4 = pb.createAdvance(scope3, 1);
     // A well formed 4 byte sequence has two consecutive pairs of 0x81-FE 0x30-39 bytes
-    PabloAST * wf4 = pb.createAnd(scope4, GB_4_data);
-    PabloAST * valid = pb.createOr3(wf1, wf2, wf4);
+    PabloAST * wf4 = pb.createAnd(scope4, GB_4_data, "gb_wf4");
+    PabloAST * valid = pb.createOr3(wf1, wf2, wf4, "gb_valid");
     Var * GB_bytes = getOutputStreamVar("GB_bytes");
     pb.createAssign(pb.createExtract(GB_bytes, 0), valid);
     pb.createAssign(pb.createExtract(GB_bytes, 1), scope2);
@@ -187,7 +196,7 @@ void GB_18030_ExtractionMasks::generatePabloMethod() {
     // mask4 is for selecting the low 4 bits of the last byte of a sequence.
     PabloAST * mask4 = GB_valid;
     //
-    PabloAST * error1 = pb.createNot(pb.createOr(pb.createOr(mask1, mask2), pb.createOr(mask3, mask4)), "gb_error");
+    PabloAST * error1 = pb.createInFile(pb.createNot(pb.createOr(pb.createOr(mask1, mask2), pb.createOr(mask3, mask4))), "gb_error");
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_1"), pb.getInteger(0)), mask1);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_2"), pb.getInteger(0)), mask2);
     pb.createAssign(pb.createExtract(getOutputStreamVar("GB_3"), pb.getInteger(0)), mask3);
@@ -489,16 +498,44 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
 
-    StreamSet * const GB_bytes = P->CreateStreamSet(3);
+    StreamSet * GB_bytes = P->CreateStreamSet(3);
     P->CreateKernelCall<GB_18030_ClassifyBytes>(BasisBits, GB_bytes);
 
     // Masks for extraction of 1 bit per GB code unit sequence.
-    StreamSet * const GB_mask1 = P->CreateStreamSet(1);
-    StreamSet * const GB_mask2 = P->CreateStreamSet(1);
-    StreamSet * const GB_mask3 = P->CreateStreamSet(1);
-    StreamSet * const GB_mask4 = P->CreateStreamSet(1);
+    StreamSet * GB_mask1 = P->CreateStreamSet(1);
+    StreamSet * GB_mask2 = P->CreateStreamSet(1);
+    StreamSet * GB_mask3 = P->CreateStreamSet(1);
+    StreamSet * GB_mask4 = P->CreateStreamSet(1);
     StreamSet * const error = P->CreateStreamSet(1);
     P->CreateKernelCall<GB_18030_ExtractionMasks>(GB_bytes, GB_mask1, GB_mask2, GB_mask3, GB_mask4, error);
+
+    if (GBerrorOption == GBerrorMode::Abort) {
+        StreamSet * BasisBitsOut = P->CreateStreamSet(8);
+        StreamSet * GB_mask1Out = P->CreateStreamSet(1);
+        StreamSet * GB_mask2Out = P->CreateStreamSet(1);
+        StreamSet * GB_mask3Out = P->CreateStreamSet(1);
+        StreamSet * GB_mask4Out = P->CreateStreamSet(1);
+        StreamSet * GB_bytesOut = P->CreateStreamSet(3);
+        P->CreateKernelCall<ErrorMonitorKernel>(
+            // error stream set
+            error,
+            // monitored stream bindings
+            ErrorMonitorKernel::IOStreamBindings{
+                {BasisBits, BasisBitsOut},
+                {GB_mask1, GB_mask1Out},
+                {GB_mask2, GB_mask2Out},
+                {GB_mask3, GB_mask3Out},
+                {GB_mask4, GB_mask4Out},
+                {GB_bytes, GB_bytesOut}
+            }
+        );
+        BasisBits = BasisBitsOut;
+        GB_mask1 = GB_mask1Out;
+        GB_mask2 = GB_mask2Out;
+        GB_mask3 = GB_mask3Out;
+        GB_mask4 = GB_mask4Out;
+        GB_bytes = GB_bytesOut;
+    }
 
     StreamSet * const ASCII = P->CreateStreamSet(1);    // markers for ASCII data
     StreamSet * const GB_4byte = P->CreateStreamSet(1); // markers for 4-byte sequences

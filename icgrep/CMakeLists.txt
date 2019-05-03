@@ -87,6 +87,8 @@ SET(KERNEL_SRC ${KERNEL_SRC} kernels/source_kernel.cpp kernels/stdout_kernel.cpp
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/s2p_kernel.cpp kernels/p2s_kernel.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/deletion.cpp kernels/swizzle.cpp kernels/hex_convert.cpp)
 
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/error_monitor_kernel.cpp)
+
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)
 if(ENABLE_CUDA_COMPILE)
