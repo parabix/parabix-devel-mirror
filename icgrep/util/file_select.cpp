@@ -342,7 +342,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
                             fileCandidates.append(e.filename().string());
                         }
                     } else if (fs::is_directory(s)) {
-                        if (fs::is_symlink(s) && !DereferenceRecursiveFlag) {
+                        if (fs::is_symlink(e) && !DereferenceRecursiveFlag) {
                             di.increment(errc);
                             continue;
                         }
