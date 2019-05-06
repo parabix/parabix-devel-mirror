@@ -37,7 +37,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
     initializeBufferGraph(G);
     identifySymbolicRates(G);
-    computeDataFlow(G);
+    computeMaximumDataFlow(G);
 
     // fill in any known pipeline I/O buffers
     for (const auto e : make_iterator_range(out_edges(PipelineInput, G))) {
@@ -124,7 +124,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue requiredSpace{producerRate.MaximumFlow};
             RateValue copyBackSpace{getOverflowSize(producer, output, producerRate)};
             RateValue lookAheadSpace{0};
-            unsigned lookBehindSize = 0;
+            unsigned underflowSize = 0;
             bool unboundedLookbehind = false;
 
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::LookBehind))) {
@@ -133,7 +133,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 if (amount == 0) {
                     unboundedLookbehind = true;
                 } else {
-                    lookBehindSize = lookBehind.amount();
+                    underflowSize = lookBehind.amount();
                 }
             }
 
@@ -171,7 +171,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     if (amount == 0) {
                         unboundedLookbehind = true;
                     } else {
-                        lookBehindSize = std::max(lookBehindSize, lookBehind.amount());
+                        underflowSize = std::max(underflowSize, lookBehind.amount());
                     }
                 }
             }
@@ -200,9 +200,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             round_up(copyBackSpace);
             round_up(lookAheadSpace);
 
-            lookBehindSize = round_up_int(lookBehindSize, blockWidth);
+            underflowSize = round_up_int(underflowSize, blockWidth);
 
-            bn.LookBehind = lookBehindSize;
+            bn.LookBehind = underflowSize;
             bn.CopyBack = ceiling(copyBackSpace);
             bn.LookAhead = ceiling(lookAheadSpace);
 
@@ -225,8 +225,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             overflowSize = round_up_int(overflowSize, blockWidth);
 
             // compute the buffer size
-            if (lookBehindSize || overflowSize) {
-                const RateValue bufferCopySpace(std::max(lookBehindSize, overflowSize) * 2);
+            if (underflowSize || overflowSize) {
+                const RateValue bufferCopySpace(std::max(underflowSize, overflowSize) * 2);
                 requiredSpace = std::max(requiredSpace, bufferCopySpace);
             }
 
@@ -238,12 +238,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             assert (codegen::ThreadNum > 0);
 
             if (LLVM_UNLIKELY(unboundedLookbehind)) {
-                buffer = new LinearBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
+                buffer = new LinearBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
             } else if (dynamic) {
                 // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
-                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
+                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
             } else {
-                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, lookBehindSize, 0);
+                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
             }
         }
 
@@ -251,7 +251,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-//    printBufferGraph(G, errs());
+    // printBufferGraph(G, errs());
 
     return G;
 }
@@ -339,7 +339,7 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
     using ReferenceGraph = adjacency_list<vecS, vecS, bidirectionalS>;
 
     using CommonPartialSumRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
-    using CommonFixedRateChangeMap = flat_map<std::pair<RateValue, unsigned>, unsigned>;
+    using CommonFixedRateChangeMap = flat_map<std::tuple<RateValue, unsigned, unsigned>, unsigned>;
 
     CommonPartialSumRateMap P;
     CommonFixedRateChangeMap F;
@@ -422,13 +422,30 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
                 // or streaming fixed rate data at "unaligned" rates, we are potentially
                 // "truncating" the flow of information.
 
-                // TODO: The truncated buffer need not need to be dynamic.
+                auto compatibleFixedRates = [&]() {
+                    if (LLVM_UNLIKELY(binding.hasLookahead())) {
+                        return false;
+                    }
+                    if (outputRate.Minimum != outputRate.Maximum) {
+                        return false;
+                    }
+                    const auto g = lcm(outputRate.Minimum, inputRate.Minimum);
+                    const auto m = std::max(outputRate.Minimum, inputRate.Minimum);
+                    if (LLVM_UNLIKELY(g != m)) {
+                        return false;
+                    }
+                    return true;
+                };
 
-                if ((outputRate.Minimum == outputRate.Maximum) &&
-                    (gcd(outputRate.Minimum, inputRate.Minimum) == std::min(outputRate.Minimum, inputRate.Minimum))) {
+                // TODO: The truncated buffer need not need to be dynamic.
+                if (compatibleFixedRates()) {
                     inputRate.SymbolicRate = outputRate.SymbolicRate;
                 } else {
-                    const auto key = std::make_pair(inputRate.Maximum, outputRate.SymbolicRate);
+                    unsigned la = 0;
+                    if (LLVM_UNLIKELY(binding.hasLookahead())) {
+                        la = binding.getLookahead();
+                    }
+                    const auto key = std::make_tuple(inputRate.Maximum, outputRate.SymbolicRate, la);
                     const auto f = F.find(key);
                     if (f == F.end()) {
                         inputRate.SymbolicRate = add_vertex(M);
@@ -552,7 +569,7 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeDataFlow
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
+void PipelineCompiler::computeMaximumDataFlow(BufferGraph & G) const {
 
     // Since we do not want to create an artifical bottleneck by constructing output buffers that
     // cannot accommodate the full amount of data we could produce given the expected inputs, the
@@ -895,8 +912,7 @@ inline void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
-        Value * const produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        mInitiallyProducedItemCount[i] = produced;
+        mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         if (output.isDeferred()) {
             mInitiallyProducedDeferredItemCount[i] = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
         }
@@ -942,8 +958,8 @@ inline void PipelineCompiler::readFinalProducedItemCounts(BuilderRef b) {
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
-        Value * const diff = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[outputPort]);
-        b->CallPrintInt(prefix + "_producedΔ", diff);
+        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[outputPort]);
+        b->CallPrintInt(prefix + "_producedΔ", producedDelta);
         #endif
     }
 }

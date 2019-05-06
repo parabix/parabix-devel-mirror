@@ -20,8 +20,6 @@ bool lexical_ordering(const Graph & G, Vec & L) {
     using Vertex = typename graph_traits<Graph>::vertex_descriptor;
     using Queue = std::priority_queue<Vertex, std::vector<Vertex>, std::greater<Vertex>>;
 
-
-
     const auto count = num_vertices(G);
 
     SmallVector<unsigned, 4> isolated;

@@ -395,7 +395,6 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
     const auto numOfBuffers = num_vertices(mBufferGraph) - PipelineOutput;
 
     mLocallyAvailableItems.resize(numOfBuffers, nullptr);
-    mPriorConsumedItemCount.resize(numOfBuffers, nullptr);
 
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
 

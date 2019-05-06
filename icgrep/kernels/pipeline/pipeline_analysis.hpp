@@ -495,8 +495,8 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
         addReferenceRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), G);
     }
 
-    // addRegionSelectorKernels(b, kernels, G, internalKernels, internalBindings);
     addPopCountKernels(b, kernels, G, internalKernels, internalBindings);
+    // addRegionSelectorKernels(b, kernels, G, internalKernels, internalBindings);
     const auto p_out = add_vertex(RelationshipNode(pipelineKernel), G);
     addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputStreamSetBindings(), G);
 

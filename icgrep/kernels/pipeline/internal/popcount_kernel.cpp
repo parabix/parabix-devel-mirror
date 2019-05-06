@@ -26,8 +26,12 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 
 
     BasicBlock * const entry = b->GetInsertBlock();
+
     BasicBlock * const popCountLoop = b->CreateBasicBlock("Loop");
+    BasicBlock * const popCountLoopExit = b->CreateBasicBlock("LoopExit");
+    BasicBlock * const popCountFinal = b->CreateBasicBlock("Final");
     BasicBlock * const popCountExit = b->CreateBasicBlock("Exit");
+
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
@@ -37,11 +41,11 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         report_fatal_error("PopCount input stream must be a single stream");
     }
 
-    Value * initialCount = nullptr;
+    Value * position = nullptr;
     if (LLVM_LIKELY(mType != PopCountType::BOTH)) {
-        initialCount = b->getProducedItemCount(OUTPUT_STREAM);
+        position = b->getProducedItemCount(OUTPUT_STREAM);
     } else {
-        initialCount = b->getProducedItemCount(POSITIVE_STREAM);
+        position = b->getProducedItemCount(POSITIVE_STREAM);
     }
 
     // TODO: load the initial counts from a lookbehind
@@ -52,7 +56,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
     Value * initialNegativeCount = nullptr;
 
     if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
-        Value * const array = b->getRawOutputPointer(OUTPUT_STREAM, initialCount);
+        Value * const array = b->getRawOutputPointer(OUTPUT_STREAM, position);
         Value * const count = b->getScalarField(CURRENT_COUNT);
         if (LLVM_LIKELY(mType == PopCountType::POSITIVE)) {
             positiveArray = array;
@@ -62,9 +66,9 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
             initialNegativeCount = count;
         }
     } else { // if (mType == PopCountType::BOTH) {
-        positiveArray = b->getRawOutputPointer(POSITIVE_STREAM, initialCount);
+        positiveArray = b->getRawOutputPointer(POSITIVE_STREAM, position);
         initialPositiveCount = b->getScalarField(POSITIVE_COUNT);
-        negativeArray = b->getRawOutputPointer(NEGATIVE_STREAM, initialCount);
+        negativeArray = b->getRawOutputPointer(NEGATIVE_STREAM, position);
         initialNegativeCount = b->getScalarField(NEGATIVE_COUNT);
     }
 
@@ -114,10 +118,26 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         b->CreateStore(negativePartialSum, ptr);
     }
 
+    BasicBlock * const popCountLoopEnd = b->GetInsertBlock();
     Value * const nextIndex = b->CreateAdd(index, ONE);
-    index->addIncoming(nextIndex, popCountLoop);
+    index->addIncoming(nextIndex, popCountLoopEnd);
     Value * const done = b->CreateICmpNE(nextIndex, numOfStrides);
-    b->CreateCondBr(done, popCountLoop, popCountExit);
+    b->CreateCondBr(done, popCountLoop, popCountLoopExit);
+
+    b->SetInsertPoint(popCountLoopExit);
+    b->CreateUnlikelyCondBr(mIsFinal, popCountFinal, popCountExit);
+
+    // To simplify the pipeline logic, a sentinal value is added at the end of the
+    // stream(s) with the same value as the final count.
+    b->SetInsertPoint(popCountFinal);
+//    Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
+    if (positiveArray) {
+        b->CreateStore(positivePartialSum, b->CreateGEP(positiveArray, ONE));
+    }
+    if (negativeArray) {
+        b->CreateStore(negativePartialSum, b->CreateGEP(negativeArray, ONE));
+    }
+    b->CreateBr(popCountExit);
 
     b->SetInsertPoint(popCountExit);
     if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {

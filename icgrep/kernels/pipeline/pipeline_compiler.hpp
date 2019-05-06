@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 using namespace boost;
 using namespace boost::math;
@@ -540,12 +540,12 @@ protected:
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
     Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
     Value * calculateNumOfLinearItems(BuilderRef b, const StreamPort port);
-    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort);
+    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
-    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort);
+    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool useOverflow = true);
     Value * reserveSufficientCapacity(BuilderRef b, const unsigned outputPort);
-    Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const;
+    Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount) const;
     Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
@@ -583,7 +583,7 @@ protected:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void identifySymbolicRates(BufferGraph & G) const;
-    void computeDataFlow(BufferGraph & G) const;
+    void computeMaximumDataFlow(BufferGraph & G) const;
 
     LLVM_READNONE bool isOpenSystem() const {
         return out_degree(PipelineInput, mBufferGraph) != 0 || in_degree(PipelineOutput, mBufferGraph) != 0;
@@ -776,7 +776,6 @@ protected:
     BasicBlock *                                mRethrowException = nullptr;
 
     Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
-    Vec<Value *, 64>                            mPriorConsumedItemCount;
     Vec<Value *, 64>                            mLocallyAvailableItems;
     Vec<Value *, 16>                            mTerminationSignals;
 

@@ -43,13 +43,10 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     const BufferNode & bn = mBufferGraph[mKernelIndex];
     Constant * const maxStrides = b->getSize(ceiling(bn.Upper));
     mNumOfLinearStrides = b->CreateSub(maxStrides, mCurrentNumOfStrides);
+
     mBoundedKernel = false;
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))) {
         mBranchToLoopExit = b->getFalse();
-    }
-    Value * lastStride = nullptr;
-    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
-        lastStride = b->getFalse();
     }
     for (const auto i : mPortEvaluationOrder) {
         Value * strides = nullptr;
@@ -103,15 +100,17 @@ inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const un
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getAccessibleInputItems
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned inputPort) {
+Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool useOverflow) {
     assert (inputPort < mAccessibleInputItems.size());
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
     Value * const processed = mAlreadyProcessedPhi[inputPort];
     ConstantInt * facsimile = nullptr;
-    const auto size = getLookAhead(getInputBufferVertex(inputPort));
-    if (size) {
-        facsimile = b->getSize(size);
+    if (LLVM_LIKELY(useOverflow)) {
+        const auto size = getLookAhead(getInputBufferVertex(inputPort));
+        if (size) {
+            facsimile = b->getSize(size);
+        }
     }
     const Binding & input = getInputBinding(inputPort);
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
@@ -133,6 +132,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
 
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
+    b->CallPrintInt(prefix + "_available", available);
     b->CallPrintInt(prefix + "_processed", processed);
     b->CallPrintInt(prefix + "_accessible", accessible);
     #endif
@@ -241,12 +241,6 @@ inline Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const u
     if (cycleCounterAccumulator) {
         cycleCounterStart = b->CreateReadCycleCounter();
     }
-
-    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, outputPort});
-    b->CallPrintInt(prefix + "_produced", produced);
-    b->CallPrintInt(prefix + "_consumed", consumed);
-    b->CallPrintInt(prefix + "_required", required);
-
     Value * const newlyWritable = buffer->reserveCapacity(b, produced, consumed, required, copyBack);
     recordBufferExpansionHistory(b, outputPort, buffer);
     if (cycleCounterAccumulator) {
@@ -268,7 +262,7 @@ inline Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const u
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getWritableOutputItems
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned outputPort) {
+Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool useOverflow) {
     assert (outputPort < mWritableOutputItems.size());
     const Binding & output = getOutputBinding(outputPort);
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
@@ -281,9 +275,11 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
                         ": consumed count exceeds produced count");
     }
     ConstantInt * copyBack = nullptr;
-    const auto size = getCopyBack(getOutputBufferVertex(outputPort));
-    if (size) {
-        copyBack = b->getSize(size - 1);
+    if (LLVM_LIKELY(useOverflow)) {
+        const auto size = getCopyBack(getOutputBufferVertex(outputPort));
+        if (size) {
+            copyBack = b->getSize(size - 1);
+        }
     }
     Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
     #ifdef PRINT_DEBUG_MESSAGES
@@ -511,14 +507,14 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         const ProcessingRate & rate = output.getRate();
         Value * writable = mWritableOutputItems[i];
         if (rate.isPartialSum()) {
-            writable = getPartialSumItemCount(b, StreamPort{PortType::Output, i});
+            writable = mOutputStrideLength[i]; // getPartialSumItemCount(b, StreamPort{PortType::Output, i});
         } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
             Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
-//            if (LLVM_UNLIKELY(mCheckAssertions)) {
-//                b->CreateAssert(b->CreateICmpULE(calculated, writable),
-//                                mKernel->getName() + "." + output.getName() +
-//                                ": final calculated fixed rate item count exceeds maximum item count");
-//            }
+            if (LLVM_UNLIKELY(mCheckAssertions)) {
+                b->CreateAssert(b->CreateICmpULE(calculated, writable),
+                                mKernel->getName() + "." + output.getName() +
+                                ": final calculated fixed rate item count exceeds maximum item count");
+            }
             writable = calculated;
         }
 
@@ -932,6 +928,7 @@ inline void PipelineCompiler::loadItemCountsOfCountableRateStreams(BuilderRef b)
  * @brief clearUnwrittenOutputData
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
+
     const auto blockWidth = b->getBitBlockWidth();
     const auto log2BlockWidth = floor_log2(blockWidth);
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(log2BlockWidth);
@@ -1108,7 +1105,6 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamPort 
     const auto ref = getReference(port);
     assert (ref.Type == PortType::Input);
     const auto inputPort = ref.Number;
-    Value * const processed = mAlreadyProcessedPhi[inputPort];
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
 
     Value * prior = nullptr;
@@ -1119,7 +1115,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamPort 
     }
 
     Constant * const ZERO = b->getSize(0);
-    Value * index = processed;
+    Value * position = mAlreadyProcessedPhi[inputPort];
     if (offset) {
         if (LLVM_UNLIKELY(mCheckAssertions)) {
             const auto & binding = getBinding(port);
@@ -1128,30 +1124,22 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamPort 
                             prefix + ": partial sum offset must be non-zero");
         }
         Constant * const ONE = b->getSize(1);
-        index = b->CreateAdd(processed, b->CreateSub(offset, ONE));
+        position = b->CreateAdd(position, b->CreateSub(offset, ONE));
     }
 
-    Value * const currentPtr = buffer->getRawItemPointer(b.get(), ZERO, index);
+    Value * const currentPtr = buffer->getRawItemPointer(b.get(), ZERO, position);
     Value * current = b->CreateLoad(currentPtr);
     if (mBranchToLoopExit) {
         current = b->CreateSelect(mBranchToLoopExit, prior, current);
     }
-    Value * const items = b->CreateSub(current, prior);
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         const auto & binding = getBinding(port);
         const auto prefix = mKernel->getName() + "." + binding.getName();
         b->CreateAssert(b->CreateICmpULE(prior, current),
                         prefix + ": partial sum is not non-decreasing");
-
-        Constant * const ONE = b->getSize(1);
-        Value * const numOfStrides = offset ? offset : ONE;
-        Value * const maxItems = b->CreateMul(numOfStrides, b->getSize(b->getBitBlockWidth()));
-        b->CreateAssert(b->CreateICmpULE(items, maxItems),
-                        prefix + ": partial sum item count exceeds maximum");
     }
-    return items;
+    return b->CreateSub(current, prior);
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getMaximumNumOfPartialSumStrides
@@ -1162,70 +1150,81 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     Constant * const ONE = b->getSize(1);
     Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
 
+
+    Value * initialItemCount = nullptr;
     Value * sourceItemCount = nullptr;
     Value * peekableItemCount = nullptr;
 
+    const auto portNum = port.Number;
     if (port.Type == PortType::Input) {
-        Value * const processed = mAlreadyProcessedPhi[port.Number];
-        sourceItemCount = b->CreateAdd(processed, getAccessibleInputItems(b, port.Number));
-        sourceItemCount = subtractLookahead(b, port.Number, sourceItemCount);
-        Value * const accessible = mAccessibleInputItems[port.Number];
-        peekableItemCount = b->CreateAdd(processed, accessible);
+        initialItemCount = mAlreadyProcessedPhi[portNum];
+        Value * const accessible = mAccessibleInputItems[portNum];
+        if (requiresLookAhead(getInputBufferVertex(portNum))) {
+            Value * const nonOverflowItems = getAccessibleInputItems(b, portNum, false);
+            sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
+            peekableItemCount = b->CreateAdd(initialItemCount, accessible);
+        } else {
+            sourceItemCount = b->CreateAdd(initialItemCount, accessible);
+        }
+        sourceItemCount = subtractLookahead(b, portNum, sourceItemCount);
     } else { // if (port.Type == PortType::Output) {
-        Value * const produced = mAlreadyProducedPhi[port.Number];
-        sourceItemCount = b->CreateAdd(produced, getWritableOutputItems(b, port.Number));
-        Value * const writable = mWritableOutputItems[port.Number];
-        peekableItemCount = b->CreateAdd(produced, writable);
+        initialItemCount = mAlreadyProducedPhi[portNum];
+        Value * const writable = mWritableOutputItems[portNum];
+        if (requiresCopyBack(getOutputBufferVertex(portNum))) {
+            Value * const nonOverflowItems = getWritableOutputItems(b, portNum, false);
+            sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
+            peekableItemCount = b->CreateAdd(initialItemCount, writable);
+        } else {
+            sourceItemCount = b->CreateAdd(initialItemCount, writable);
+        }
     }
 
     const auto ref = getReference(port);
     assert (ref.Type == PortType::Input);
-    const auto inputPort = ref.Number;
-    Value * processed = mAlreadyProcessedPhi[inputPort];
+    const auto refPortNum = ref.Number;
 
-    const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
+    const StreamSetBuffer * const buffer = getInputBuffer(refPortNum);
     const auto prefix = makeBufferName(mKernelIndex, ref) + "_readPartialSum";
 
-    BasicBlock * const popCountEntry =
-        b->GetInsertBlock();
     BasicBlock * const popCountLoop =
         b->CreateBasicBlock(prefix + "Loop", mKernelLoopCall);
-    BasicBlock * const popCountExit =
-        b->CreateBasicBlock(prefix + "Exit", mKernelLoopCall);
+    BasicBlock * const popCountLoopExit =
+        b->CreateBasicBlock(prefix + "LoopExit", mKernelLoopCall);
 
+    Value * const baseOffset = mAlreadyProcessedPhi[refPortNum];
+    Value * const baseAddress = buffer->getRawItemPointer(b.get(), ZERO, baseOffset);
+
+    BasicBlock * const popCountEntry = b->GetInsertBlock();
     b->CreateBr(popCountLoop);
 
-    // TODO: replace this with a parallel icmp check and bitscan?
+    // TODO: replace this with a parallel icmp check and bitscan? binary search with initial
+    // check on the rightmost entry?
+
     b->SetInsertPoint(popCountLoop);
     PHINode * const numOfStrides = b->CreatePHI(sizeTy, 2);
     numOfStrides->addIncoming(mNumOfLinearStrides, popCountEntry);
     PHINode * const nextRequiredItems = b->CreatePHI(sizeTy, 2);
     nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
-
     Value * const strideIndex = b->CreateSub(numOfStrides, ONE);
-    Value * const offset = b->CreateAdd(processed, strideIndex);
-    Value * const prt = buffer->getRawItemPointer(b.get(), ZERO, offset);
-    Value * const requiredItems = b->CreateLoad(prt);
+    Value * const ptr = b->CreateGEP(baseAddress, strideIndex);
+    Value * const requiredItems = b->CreateLoad(ptr);
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);
     nextRequiredItems->addIncoming(requiredItems, popCountLoop);
     numOfStrides->addIncoming(strideIndex, popCountLoop);
-    b->CreateCondBr(hasEnough, popCountExit, popCountLoop);
+    b->CreateCondBr(hasEnough, popCountLoopExit, popCountLoop);
 
-    b->SetInsertPoint(popCountExit);
-    // Since we want to allow the stream to peek into the overflow but not start
-    // in it, check to see if we can support one more stride by using it.
-//    if (LLVM_UNLIKELY(mCheckAssertions)) {
-//        const auto & binding = getBinding(port);
-//        const auto prefix = mKernel->getName() + "." + binding.getName();
-//        b->CreateAssert(b->CreateIsNotNull(numOfStrides),
-//                        prefix + ": number of partial sum strides cannot be zero");
-//    }
-    Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItems, sourceItemCount);
-    Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItems, peekableItemCount);
-    Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
-    return b->CreateSelect(useOverflow, b->CreateAdd(numOfStrides, ONE), numOfStrides);
+    b->SetInsertPoint(popCountLoopExit);
+    Value * finalNumOfStrides = numOfStrides;
+    if (peekableItemCount) {
+        // Since we want to allow the stream to peek into the overflow but not start
+        // in it, check to see if we can support one more stride by using it.
+        Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItems, sourceItemCount);
+        Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItems, peekableItemCount);
+        Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
+        finalNumOfStrides = b->CreateSelect(useOverflow, b->CreateAdd(numOfStrides, ONE), numOfStrides);
+    }
+    return finalNumOfStrides;
 }
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitialStrideLength
@@ -1283,9 +1282,16 @@ inline Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::addLookahead(BuilderRef b, const unsigned inputPort, Value * itemCount) const {
+inline Value * PipelineCompiler::addLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount) const {
     Constant * const lookAhead = getLookahead(b, inputPort);
-    return (lookAhead) ? b->CreateAdd(itemCount, lookAhead) : itemCount;
+    if (LLVM_LIKELY(lookAhead == nullptr)) {
+        return itemCount;
+    }
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
+    b->CallPrintInt(prefix + "_lookAhead", lookAhead);
+    #endif
+    return b->CreateAdd(itemCount, lookAhead);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
