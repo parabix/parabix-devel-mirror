@@ -26,12 +26,8 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 
 
     BasicBlock * const entry = b->GetInsertBlock();
-
     BasicBlock * const popCountLoop = b->CreateBasicBlock("Loop");
-    BasicBlock * const popCountLoopExit = b->CreateBasicBlock("LoopExit");
-    BasicBlock * const popCountFinal = b->CreateBasicBlock("Final");
     BasicBlock * const popCountExit = b->CreateBasicBlock("Exit");
-
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
@@ -122,22 +118,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
     Value * const nextIndex = b->CreateAdd(index, ONE);
     index->addIncoming(nextIndex, popCountLoopEnd);
     Value * const done = b->CreateICmpNE(nextIndex, numOfStrides);
-    b->CreateCondBr(done, popCountLoop, popCountLoopExit);
-
-    b->SetInsertPoint(popCountLoopExit);
-    b->CreateUnlikelyCondBr(mIsFinal, popCountFinal, popCountExit);
-
-    // To simplify the pipeline logic, a sentinal value is added at the end of the
-    // stream(s) with the same value as the final count.
-    b->SetInsertPoint(popCountFinal);
-//    Constant * const MAX_INT = ConstantInt::getAllOnesValue(sizeTy);
-    if (positiveArray) {
-        b->CreateStore(positivePartialSum, b->CreateGEP(positiveArray, ONE));
-    }
-    if (negativeArray) {
-        b->CreateStore(negativePartialSum, b->CreateGEP(negativeArray, ONE));
-    }
-    b->CreateBr(popCountExit);
+    b->CreateCondBr(done, popCountLoop, popCountExit);
 
     b->SetInsertPoint(popCountExit);
     if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
@@ -158,7 +139,7 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{Binding{INPUT, input, FixedRate(b->getBitBlockWidth())}}
 // output stream
-,{Binding{OUTPUT_STREAM, output, FixedRate(), Add1()}}
+,{Binding{OUTPUT_STREAM, output, FixedRate()}}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
@@ -177,8 +158,8 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{Binding{INPUT, input, FixedRate(b->getBitBlockWidth())}}
 // output stream
-,{Binding{POSITIVE_STREAM, positive, FixedRate(), Add1()}
- ,Binding{NEGATIVE_STREAM, negative, FixedRate(), Add1()}}
+,{Binding{POSITIVE_STREAM, positive, FixedRate()}
+ ,Binding{NEGATIVE_STREAM, negative, FixedRate()}}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
