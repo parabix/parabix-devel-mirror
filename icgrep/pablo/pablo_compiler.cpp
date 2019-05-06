@@ -508,7 +508,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             }
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
             Value * EOFmask = b->getScalarField("EOFmask");
-            value = b->simd_and(compileExpression(b, e->getExpr()), b->simd_not(EOFmask));
+            value = b->simd_and(compileExpression(b, e->getExpr()), b->simd_not(EOFmask), stmt->getName());
         } else if (const AtEOF * e = dyn_cast<AtEOF>(stmt)) {
             Value * EOFbit = b->getScalarField("EOFbit");
             value = b->simd_and(compileExpression(b, e->getExpr()), EOFbit);

@@ -122,10 +122,16 @@ void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     Value * lo_bytes[8];
     p2s(b, lo_input, lo_bytes);
     for (unsigned j = 0; j < 8; ++j) {
-        Value * merge0 = b->bitCast(b->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
-        Value * merge1 = b->bitCast(b->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
-        b->storeOutputStreamPack("i16Stream", b->getInt32(0), b->getInt32(2 * j), merge0);
-        b->storeOutputStreamPack("i16Stream", b->getInt32(0), b->getInt32(2 * j + 1), merge1);
+        Value * merged[2];
+        if (mByteNumbering == cc::ByteNumbering::BigEndian) {
+            merged[0] = b->bitCast(b->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
+            merged[1] = b->bitCast(b->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
+        } else {
+            merged[0] = b->bitCast(b->esimd_mergel(8, lo_bytes[j], hi_bytes[j]));
+            merged[1] = b->bitCast(b->esimd_mergeh(8, lo_bytes[j], hi_bytes[j]));
+        }
+        b->storeOutputStreamPack("i16Stream", b->getInt32(0), b->getInt32(2 * j), merged[0]);
+        b->storeOutputStreamPack("i16Stream", b->getInt32(0), b->getInt32(2 * j + 1), merged[1]);
     }
 }
 
@@ -161,14 +167,20 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
 
     Value * offset = ZERO;
     for (unsigned j = 0; j < 8; ++j) {
-        Value * const merge0 = b->bitCast(b->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
-        b->CreateAlignedStore(merge0, b->CreateBitCast(b->CreateGEP(outputPtr, offset), bitBlockPtrTy), 1);
+        Value * merged[2];
+        if (mByteNumbering == cc::ByteNumbering::BigEndian) {
+            merged[0] = b->bitCast(b->esimd_mergel(8, hi_bytes[j], lo_bytes[j]));
+            merged[1] = b->bitCast(b->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
+        } else {
+            merged[0] = b->bitCast(b->esimd_mergel(8, lo_bytes[j], hi_bytes[j]));
+            merged[1] = b->bitCast(b->esimd_mergeh(8, lo_bytes[j], hi_bytes[j]));
+        }
+        b->CreateAlignedStore(merged[0], b->CreateBitCast(b->CreateGEP(outputPtr, offset), bitBlockPtrTy), 1);
         Value * const nextOffset1 = b->CreateZExt(b->CreateExtractElement(unitCounts, b->getInt32(2 * j)), i32Ty);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             b->CreateAssert(b->CreateICmpULE(offset, nextOffset1), "deletion offset is not monotonically non-decreasing");
         }
-        Value * const merge1 = b->bitCast(b->esimd_mergeh(8, hi_bytes[j], lo_bytes[j]));
-        b->CreateAlignedStore(merge1, b->CreateBitCast(b->CreateGEP(outputPtr, nextOffset1), bitBlockPtrTy), 1);
+        b->CreateAlignedStore(merged[1], b->CreateBitCast(b->CreateGEP(outputPtr, nextOffset1), bitBlockPtrTy), 1);
         Value * const nextOffset2 = b->CreateZExt(b->CreateExtractElement(unitCounts, b->getInt32(2 * j + 1)), i32Ty);
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             b->CreateAssert(b->CreateICmpULE(nextOffset1, nextOffset2), "deletion offset is not monotonically non-decreasing");
@@ -199,29 +211,21 @@ P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel:
     }
 }
 
-P2SKernelWithCompressedOutput::P2SKernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b)
-: BlockOrientedKernel(b, "p2s_compress",
-{Binding{b->getStreamSetTy(8, 1), "basisBits"}, Binding{b->getStreamSetTy(1, 1), "extractionMask"}},
-{Binding{b->getStreamSetTy(1, 8), "byteStream", BoundedRate(0, 1)}},
-{}, {}, {}) {
-
-}
-
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u16bits, StreamSet *u16bytes)
-: BlockOrientedKernel(b, "p2s_16",
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u16bits, StreamSet * u16stream, cc::ByteNumbering numbering)
+: BlockOrientedKernel(b, "p2s_16" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", u16bits}},
-{Binding{"i16Stream", u16bytes}},
-{}, {}, {}) {
+{Binding{"i16Stream", u16stream}},
+{}, {}, {}), mByteNumbering(numbering) {
 
 }
 
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                                                 StreamSet * basisBits, StreamSet * extractionMask, StreamSet * i16Stream)
-: BlockOrientedKernel(b, "p2s_16_compress",
+                                                                 StreamSet * basisBits, StreamSet * extractionMask, StreamSet * i16Stream, cc::ByteNumbering numbering)
+: BlockOrientedKernel(b, "p2s_16_compress" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", basisBits},
 Binding{"extractionMask", extractionMask}},
 {Binding{"i16Stream", i16Stream, BoundedRate(0, 1)}},
-{}, {}, {}) {
+{}, {}, {}), mByteNumbering(numbering)  {
 
 }
 
