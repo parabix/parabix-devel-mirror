@@ -46,21 +46,23 @@ private:
 
 class P2S16Kernel final : public BlockOrientedKernel {
 public:
-    P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSet * u16bits, StreamSet * u16bytes);
+    P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSet * u16bits, StreamSet * u16stream, cc::ByteNumbering endianness = cc::ByteNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    cc::ByteNumbering mByteNumbering;
 };
 
 class P2S16KernelWithCompressedOutput final : public BlockOrientedKernel {
 public:
     P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                    StreamSet * basisBits, StreamSet * fieldCounts, StreamSet * i16Stream);
+                                    StreamSet * basisBits, StreamSet * fieldCounts, StreamSet * i16Stream, cc::ByteNumbering endianness = cc::ByteNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    cc::ByteNumbering mByteNumbering;
 };
 
 class P2S21Kernel final : public BlockOrientedKernel {
