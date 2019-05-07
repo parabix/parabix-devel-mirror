@@ -227,6 +227,16 @@ static inline std::string && annotateKernelNameWithPabloDebugFlags(std::string &
     if (codegen::CCCOption == "ternary") {
         name += "+ternary";
     }
+    switch (CarryMode) {
+    case PabloCarryMode::BitBlock:
+        name += "+CMBitBlock";
+        break;
+    case PabloCarryMode::Compressed:
+        name += "+CMCompressed";
+        break;
+    default:
+        llvm_unreachable("Illegal PabloCarryMode");
+    }
     return std::move(name);
 }
 

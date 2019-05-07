@@ -31,6 +31,8 @@
 #else
 #include <pablo/carry_manager.h>
 #endif
+#include <pablo/compressed_carry_manager.h>
+#include <pablo/pablo_toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/core/streamset.h>
 #include <llvm/IR/Module.h>
@@ -877,7 +879,7 @@ Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuild
 
 PabloCompiler::PabloCompiler(PabloKernel * const kernel)
 : mKernel(kernel)
-, mCarryManager(make_unique<CarryManager>())
+, mCarryManager(CarryMode == PabloCarryMode::BitBlock ? make_unique<CarryManager>() : make_unique<CompressedCarryManager>())
 , mBranchCount(0) {
     assert ("PabloKernel cannot be null!" && kernel);
 }

@@ -54,6 +54,14 @@ static cl::bits<PabloCompilationFlags>
                                          clEnumVal(EnableTernaryOpt, "Enable ternary optimization.")
                                          CL_ENUM_VAL_SENTINEL), cl::cat(PabloOptions));
 
+PabloCarryMode CarryMode;
+static cl::opt<PabloCarryMode, true> PabloCarryModeOptions("CarryMode", cl::desc("Carry mode for pablo compiler (default BitBlock)"), 
+    cl::location(CarryMode), cl::ValueOptional,
+    cl::values(
+        clEnumValN(PabloCarryMode::BitBlock, "BitBlock", "All carries are stored as bit blocks."),
+        clEnumValN(PabloCarryMode::Compressed, "Compressed", "When possible, carries are stored as 64-bit integers.")
+        CL_ENUM_VAL_SENTINEL), cl::cat(PabloOptions), cl::init(PabloCarryMode::BitBlock));
+
 bool DebugOptionIsSet(const PabloDebugFlags flag) {return DebugOptions.isSet(flag);}
     
 bool CompileOptionIsSet(const PabloCompilationFlags flag) {return PabloOptimizationsOptions.isSet(flag);}
