@@ -1195,7 +1195,14 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     Value * const baseAddress = buffer->getRawItemPointer(b.get(), ZERO, baseOffset);
 
     BasicBlock * const popCountEntry = b->GetInsertBlock();
-    b->CreateBr(popCountLoop);
+    Value * minimumItemCount = nullptr;
+    if (peekableItemCount) {
+        minimumItemCount = b->CreateLoad(baseAddress);
+        Value * const mustUseOverflow = b->CreateICmpULT(sourceItemCount, minimumItemCount);
+        b->CreateUnlikelyCondBr(mustUseOverflow, popCountLoopExit, popCountLoop);
+    } else {
+        b->CreateBr(popCountLoop);
+    }
 
     // TODO: replace this with a parallel icmp check and bitscan? binary search with initial
     // check on the rightmost entry?
@@ -1214,14 +1221,25 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     b->CreateCondBr(hasEnough, popCountLoopExit, popCountLoop);
 
     b->SetInsertPoint(popCountLoopExit);
-    Value * finalNumOfStrides = numOfStrides;
+    PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
+    numOfStridesPhi->addIncoming(numOfStrides, popCountLoop);
+    PHINode * const requiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    requiredItemsPhi->addIncoming(requiredItems, popCountLoop);
+    PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    nextRequiredItemsPhi->addIncoming(nextRequiredItems, popCountLoop);
+    if (peekableItemCount) {
+        numOfStridesPhi->addIncoming(ZERO, popCountEntry);
+        requiredItemsPhi->addIncoming(ZERO, popCountEntry);
+        nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
+    }
+    Value * finalNumOfStrides = numOfStridesPhi;
     if (peekableItemCount) {
         // Since we want to allow the stream to peek into the overflow but not start
         // in it, check to see if we can support one more stride by using it.
-        Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItems, sourceItemCount);
-        Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItems, peekableItemCount);
+        Value * const endedPriorToBufferEnd = b->CreateICmpNE(requiredItemsPhi, sourceItemCount);
+        Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItemsPhi, peekableItemCount);
         Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
-        finalNumOfStrides = b->CreateSelect(useOverflow, b->CreateAdd(numOfStrides, ONE), numOfStrides);
+        finalNumOfStrides = b->CreateSelect(useOverflow, b->CreateAdd(numOfStridesPhi, ONE), numOfStridesPhi);
     }
     return finalNumOfStrides;
 }

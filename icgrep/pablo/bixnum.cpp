@@ -38,7 +38,7 @@ PabloAST * BixNumCompiler::UGT(BixNum value, unsigned floor) {
 PabloAST * BixNumCompiler::ULE(BixNum value, unsigned floor) {
     return mPB.createNot(UGT(value, floor));
 }
-    
+
 PabloAST * BixNumCompiler::ULT(BixNum value, unsigned floor) {
     return mPB.createNot(UGE(value, floor));
 }
@@ -333,9 +333,9 @@ unsigned BixNumTableCompiler::computeOutputBitsForRange(unsigned lo, unsigned hi
 void BixNumTableCompiler::compileSubTable(PabloBuilder & pb, unsigned lo, PabloAST * subtableSelect) {
     tablePartitionLogic(pb, 0, lo, subtableSelect, mOutput.size());
 }
-    
 
-    
+
+
 void BixNumTableCompiler::innerLogic(PabloBuilder & pb,
                                           unsigned lo,
                                           PabloAST * subtableSelect,
@@ -361,7 +361,7 @@ void BixNumTableCompiler::innerLogic(PabloBuilder & pb,
     unsigned cur_seq_lgth = 1;
     int best_offset = cur_offset;
     unsigned max_seq_lgth = 1;
-    for (int i = lo+1; i <= hi; i++) {
+    for (unsigned i = lo+1; i <= hi; i++) {
         int offset = static_cast<int>(mTable[i]) - i;
         if (offset == cur_offset) {
             cur_seq_lgth++;
@@ -432,7 +432,7 @@ unsigned BixNumRangeTableCompiler::getTableIndex(unsigned inputVal) {
     }
     return loIdx;
 }
-    
+
 unsigned BixNumRangeTableCompiler::consecutiveFrom(unsigned inputVal) {
     unsigned idx = getTableIndex(inputVal);
     if ((idx == mRangeTable.size()-1) || (mRangeTable[idx+1].first >= mInputMax)) {
@@ -476,7 +476,7 @@ void BixNumRangeTableCompiler::innerLogic(PabloBuilder & pb,
         GE_lo_bound = GE_hi_bound;
     }
 }
-    
+
 void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
                                                    unsigned nestingDepth,
                                                    unsigned partitionBase,
@@ -486,7 +486,7 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
         innerLogic(pb, partitionBase, partitionSelect, outputBitsToSet);
         return;
     }
-    
+
     BixNumCompiler bnc(pb);
     unsigned partitionBits = mPartitionBits[nestingDepth];
     unsigned partitionSize = 1 << partitionBits;
@@ -495,7 +495,7 @@ void BixNumTableCompilerInterface::tablePartitionLogic(PabloBuilder & pb,
     // with partitionBase.   The PabloAST expression partitionSelect,
     // is assumed to represent those positions that are properly
     // within the partition.
-    
+
     // Partition into subPartitions...
     // The first subpartition starts at the beginning of the overall partition.
     unsigned subPartitionBase = partitionBase;

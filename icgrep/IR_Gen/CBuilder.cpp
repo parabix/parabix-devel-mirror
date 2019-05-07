@@ -890,6 +890,7 @@ Value * CBuilder::CreatePThreadSelf() {
     return CreateCall(pthreadSelfFunc);
 }
 
+extern "C"
 void __report_failure(const char * name, const char * msg, const uintptr_t * trace, const uint32_t n) {
     // TODO: look into boost stacktrace, available from version 1.65
     raw_fd_ostream out(STDERR_FILENO, false);

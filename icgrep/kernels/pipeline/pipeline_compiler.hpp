@@ -258,8 +258,11 @@ struct BufferRateData {
     BindingRef Binding;
     RateValue Minimum;
     RateValue Maximum;
-    RateValue MinimumFlow;
-    RateValue MaximumFlow;
+    RateValue MinimumExpectedFlow;
+    RateValue MaximumExpectedFlow;
+    RateValue MinimumSpace;
+    RateValue MaximumSpace;
+
     unsigned  SymbolicRate;
 
     unsigned inputPort() const {
@@ -283,7 +286,8 @@ struct BufferRateData {
                    RateValue minRate, RateValue maxRate)
     : Port(port), Binding(binding)
     , Minimum(minRate), Maximum(maxRate)
-    , MinimumFlow(minRate), MaximumFlow(maxRate)
+    , MinimumExpectedFlow(0), MaximumExpectedFlow(0)
+    , MinimumSpace(0), MaximumSpace(0)
     , SymbolicRate(0) {
 
     }
@@ -583,7 +587,7 @@ protected:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void identifySymbolicRates(BufferGraph & G) const;
-    void computeMaximumDataFlow(BufferGraph & G) const;
+    void computeDataFlow(BufferGraph & G) const;
 
     LLVM_READNONE bool isOpenSystem() const {
         return out_degree(PipelineInput, mBufferGraph) != 0 || in_degree(PipelineOutput, mBufferGraph) != 0;
@@ -659,7 +663,6 @@ protected:
 
     static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
-    static void subsitutePopCountKernels(const unsigned lastKernel, const Relationships & popCounts, RelationshipGraph G, RelationshipMap M);
 
     bool hasZeroExtendedStream() const;
 

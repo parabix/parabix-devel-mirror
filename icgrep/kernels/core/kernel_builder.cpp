@@ -252,15 +252,14 @@ Value * KernelBuilder::CreateUDiv2(Value * const number, const ProcessingRate::R
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief CreateCeilUDiv2
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateCeilUDiv2(Value * const number, const ProcessingRate::RateValue & divisor, const Twine & Name) {
+Value * KernelBuilder::CreateCeilUDiv2(Value * number, const ProcessingRate::RateValue & divisor, const Twine & Name) {
     if (divisor.numerator() == 1 && divisor.denominator() == 1) {
         return number;
     }
     Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
-    Value * x = number;
     if (LLVM_UNLIKELY(divisor.denominator() != 1)) {
         Constant * const d = ConstantInt::get(number->getType(), divisor.denominator());
-        x = CreateMul(number, d);
+        number = CreateMul(number, d);
     }
     return CreateCeilUDiv(number, n, Name);
 }
