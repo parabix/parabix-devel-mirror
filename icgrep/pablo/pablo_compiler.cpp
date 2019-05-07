@@ -440,7 +440,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             Value* ifMask = compileExpression(b, sel->getCondition());
             Value* ifTrue = b->simd_and(ifMask, compileExpression(b, sel->getTrueExpr()));
             Value* ifFalse = b->simd_and(b->simd_not(ifMask), compileExpression(b, sel->getFalseExpr()));
-            value = b->simd_or(ifTrue, ifFalse);
+            value = b->simd_or(ifTrue, ifFalse, stmt->getName());
         } else if (isa<Not>(stmt)) {
             value = b->simd_not(compileExpression(b, stmt->getOperand(0)), stmt->getName());
         } else if (isa<Advance>(stmt)) {
