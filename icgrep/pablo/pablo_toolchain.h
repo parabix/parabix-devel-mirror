@@ -27,7 +27,13 @@ enum PabloCompilationFlags {
     EnableProfiling,
     EnableTernaryOpt
 };
-    
+
+enum class PabloCarryMode {
+    BitBlock,
+    Compressed
+};
+extern PabloCarryMode CarryMode;
+
 const llvm::cl::OptionCategory * pablo_toolchain_flags();
 
 bool DebugOptionIsSet(const PabloDebugFlags flag);

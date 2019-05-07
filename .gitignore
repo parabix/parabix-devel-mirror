@@ -18,6 +18,7 @@ llvm-[0-9]*.src
 *.creator.user
 *.creator
 *.includes
+*.vscode
 #
 # Don't track compiled python
 *.pyc
