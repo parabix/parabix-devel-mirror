@@ -513,8 +513,8 @@ inline void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) con
         ConstantInt * const SZ_ZERO = b->getSize(0);
         ConstantInt * const SZ_ONE = b->getSize(1);
 
-        ConstantInt * const FALSE = b->getFalse();
-        ConstantInt * const TRUE = b->getTrue();
+        ConstantInt * const i1_FALSE = b->getFalse();
+        ConstantInt * const i1_TRUE = b->getTrue();
 
         // Print the first title line
         SmallVector<char, 100> buffer;
@@ -619,7 +619,7 @@ inline void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) con
 
         args[2] = segNo;
 
-        Value * writeLine = FALSE;
+        Value * writeLine = i1_FALSE;
         for (unsigned i = 0; i < fieldCount; ++i) {
 
             BasicBlock * const entry = b->GetInsertBlock();
@@ -652,7 +652,7 @@ inline void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) con
             PHINode * const nextWriteLine = b->CreatePHI(boolTy, 3);
             nextWriteLine->addIncoming(writeLine, entry);
             nextWriteLine->addIncoming(writeLine, check);
-            nextWriteLine->addIncoming(TRUE, update);
+            nextWriteLine->addIncoming(i1_TRUE, update);
             writeLine = nextWriteLine;
 
             args[i + 3] = blockedValue;
