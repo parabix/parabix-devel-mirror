@@ -10,6 +10,10 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         case KindId::DEF : out << BOOST_PP_STRINGIZE(DEF); break
     #define NAME_AMOUNT(DEF) \
         case KindId::DEF : out << BOOST_PP_STRINGIZE(DEF) << mAmount; break
+    #define NAME_STRING(DEF) \
+        case KindId::DEF : out << BOOST_PP_STRINGIZE(DEF) << mAmount; break
+
+
     switch (getKind()) {
         NAME_AMOUNT(LookAhead);
         NAME_AMOUNT(LookBehind);
@@ -35,6 +39,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME(InternallySynchronized);
         NAME(InfrequentlyUsed);
         NAME(None);
+        case KindId::__Count: llvm_unreachable("__Count should not be used.");
     }
     #undef NAME
     #undef NAME_AMOUNT

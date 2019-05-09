@@ -275,11 +275,25 @@ public:
     llvm::Value * CreateAtomicFetchAndSub(llvm::Value * val, llvm::Value * ptr);
 
     void CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage) {
-        return __CreateAssert(CreateIsNotNull(assertion), failureMessage);
+        return __CreateAssert(CreateIsNotNull(assertion), failureMessage, {});
+    }
+
+    template <typename ... Args>
+    void CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage, Args ... args) {
+        std::initializer_list<llvm::Value *> a{std::forward<Args>(args)...};
+        assert (a.size() > 0);
+        return __CreateAssert(CreateIsNotNull(assertion), failureMessage, a);
     }
 
     void CreateAssertZero(llvm::Value * assertion, const llvm::Twine failureMessage) {
-        return __CreateAssert(CreateIsNull(assertion), failureMessage);
+        return __CreateAssert(CreateIsNull(assertion), failureMessage, {});
+    }
+
+    template <typename ... Args>
+    void CreateAssertZero(llvm::Value * assertion, const llvm::Twine failureMessage, Args ... args) {
+        std::initializer_list<llvm::Value *> a{std::forward<Args>(args)...};
+        assert (a.size() > 0);
+        return __CreateAssert(CreateIsNull(assertion), failureMessage, a);
     }
 
     void CreateExit(const int exitCode);
@@ -425,7 +439,7 @@ protected:
 
     virtual std::string getKernelName() const;
 
-    void __CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage);
+    void __CreateAssert(llvm::Value * assertion, const llvm::Twine failureMessage, std::initializer_list<llvm::Value *> args);
 
 protected:
 

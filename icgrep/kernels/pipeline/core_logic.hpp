@@ -197,20 +197,21 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     writeLookAheadLogic(b);
     computeFullyProducedItemCounts(b);
     if (LLVM_UNLIKELY(mCheckAssertions && mBoundedKernel)) {
+
         const BufferNode & bn = mBufferGraph[mKernelIndex];
-        std::string tmp;
-        raw_string_ostream msg(tmp);
-        msg << mKernelIndex << ". processed too ";
+        SmallVector<char, 128> tmp;
+        raw_svector_ostream msg(tmp);
         const auto lb = floor(bn.Lower);
         const auto ub = ceiling(bn.Upper);
-        std::string tmp2;
-        raw_string_ostream suffix(tmp2);
-        suffix << " strides for its expected rate (" << lb << "-" << ub << ")";
-        Value * const terminated = b->CreateIsNotNull(mTerminatedPhi);
+        msg << " (" << mKernelIndex << "): processed %d strides"
+               " but expected [" << lb << "," << ub << "]";
+
         Value * const notTooFew = b->CreateICmpUGE(mTotalNumOfStrides, b->getSize(lb));
-        b->CreateAssert(b->CreateOr(terminated, notTooFew), msg.str() + "few" + suffix.str());
         Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStrides, b->getSize(ub));
-        b->CreateAssert(b->CreateOr(terminated, notTooMany), msg.str() + "many" + suffix.str());
+        Value * const withinRange = b->CreateAnd(notTooFew, notTooMany);
+        Value * const terminated = b->CreateIsNotNull(mTerminatedPhi);
+        Value * const valid = b->CreateOr(terminated, withinRange);
+        b->CreateAssert(valid, msg.str(), mTotalNumOfStrides);
     }
     mKernelLoopExitPhiCatch->moveAfter(b->GetInsertBlock());
     b->CreateBr(mKernelLoopExitPhiCatch);

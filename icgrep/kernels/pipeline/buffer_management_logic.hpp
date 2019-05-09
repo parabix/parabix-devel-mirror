@@ -15,15 +15,6 @@
 
 namespace kernel {
 
-raw_ostream & operator << (raw_ostream & os, const RateValue & rv) {
-    if (LLVM_LIKELY(rv.denominator() == 1)) {
-        os << rv.numerator();
-    } else {
-        os << rv.numerator() << '/' << rv.denominator();
-    }
-    return os;
-}
-
 inline RateValue mod(const RateValue & a, const RateValue & b) {
     RateValue n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
     return a - RateValue{floor(n)} * b;
@@ -218,7 +209,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-//    printBufferGraph(G, errs());
+    // printBufferGraph(G, errs());
 
     return G;
 }

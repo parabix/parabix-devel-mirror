@@ -2,6 +2,7 @@
 #define ATTRIBUTES_H
 
 #include <vector>
+#include <llvm/ADT/StringRef.h>
 #include <llvm/Support/Compiler.h>
 #include <assert.h>
 
@@ -225,6 +226,9 @@ struct Attribute {
 
         // This kernel is infrequently used and should be compiled with O1 instead of O3.
 
+        /** COUNT **/
+
+        __Count
     };
 
     KindId getKind() const {
@@ -251,10 +255,6 @@ struct Attribute {
         return mAmount;
     }
 
-    void setAmount(const unsigned amount) {
-        mAmount = amount;
-    }
-
     bool operator == (const Attribute & other) const {
         return mKind == other.mKind && mAmount == other.mAmount;
     }
@@ -272,6 +272,22 @@ private:
     const KindId    mKind;
     unsigned        mAmount;
 };
+
+#if 0
+
+struct IntegerAttribute : public Attribute {
+    IntegerAttribute(const KindId kind, const unsigned k) : Attribute(kind, 0), mValue(k) { }
+private:
+    const unsigned mValue;
+};
+
+struct StringAttribute : public Attribute {
+    StringAttribute(const KindId kind, const llvm::StringRef k) : Attribute(kind, 0), mValue(k) { }
+private:
+    const std::string mValue;
+};
+
+#endif
 
 struct AttributeSet : public std::vector<Attribute> {
 

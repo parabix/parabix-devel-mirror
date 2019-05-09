@@ -10,6 +10,7 @@
 #include "relationship.h"
 #include "streamset.h"
 #include <util/not_null.h>
+#include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/Compiler.h>
 #include <memory>

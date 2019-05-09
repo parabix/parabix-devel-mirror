@@ -18,6 +18,7 @@
 #include <toolchain/toolchain.h>
 #include <toolchain/driver.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -891,13 +892,14 @@ Value * CBuilder::CreatePThreadSelf() {
 }
 
 extern "C"
-void __report_failure(const char * name, const char * msg, const uintptr_t * trace, const uint32_t n) {
+BOOST_NOINLINE
+void __report_failure_v(const char * name, const char * fmt, const uintptr_t * trace, const uint32_t traceLength, const va_list & args) {
     // TODO: look into boost stacktrace, available from version 1.65
     raw_fd_ostream out(STDERR_FILENO, false);
     if (trace) {
         SmallVector<char, 4096> tmp;
         raw_svector_ostream trace_string(tmp);
-        for (uint32_t i = 0; i < n; ++i) {
+        for (uint32_t i = 0; i < traceLength; ++i) {
             const auto pc = trace[i];
             trace_string << format_hex(pc, 16) << "   ";
             #ifdef __APPLE__
@@ -928,7 +930,12 @@ void __report_failure(const char * name, const char * msg, const uintptr_t * tra
         out << name << ": ";
     }
     out.changeColor(raw_fd_ostream::WHITE, true);
-    out << msg << "\n";
+    boost::format msg(fmt);
+    const auto numOfArgs = msg.expected_args();
+    for (int i = 0; i < numOfArgs; ++i) {
+        msg % va_arg(args, size_t);
+    }
+    out << msg.str() << "\n";
     if (trace == nullptr) {
         out.changeColor(raw_fd_ostream::WHITE, true);
         out << "No debug symbols loaded.\n";
@@ -936,7 +943,15 @@ void __report_failure(const char * name, const char * msg, const uintptr_t * tra
     out.resetColor();
     out << "\n\n";
     out.flush();
-    throw nullptr;
+}
+
+extern "C"
+BOOST_NOINLINE
+void __report_failure(const char * name, const char * fmt, const uintptr_t * trace, const uint32_t traceLength, ...) {
+    va_list args;
+    va_start(args, traceLength);
+    __report_failure_v(name, fmt, trace, traceLength, args);
+    va_end(args);
 }
 
 #if defined(HAS_MACH_VM_TYPES)
@@ -1038,7 +1053,7 @@ _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned ski
 }
 #endif
 
-void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage) {
+void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage, std::initializer_list<llvm::Value *> params) {
 
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
         if (LLVM_LIKELY(!cast<Constant>(assertion)->isNullValue())) {
@@ -1051,21 +1066,28 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     Type * const stackTy = IntegerType::get(C, sizeof(uintptr_t) * 8);
     PointerType * const stackPtrTy = stackTy->getPointerTo();
     PointerType * const int8PtrTy = getInt8PtrTy();
+
     Function * assertFunc = m->getFunction("assert");
     if (LLVM_UNLIKELY(assertFunc == nullptr)) {
 
         auto ip = saveIP();
         IntegerType * const int1Ty = getInt1Ty();
+        IntegerType * const int32Ty = getInt32Ty();
+        PointerType * const int8PtrPtrTy = int8PtrTy->getPointerTo();
+        // va_list is platform specific but since we are not directly modifying
+        // any use of this type in LLVM code, just ensure it is large enough.
+        ArrayType * const vaListTy = ArrayType::get(getInt8Ty(), sizeof(va_list));
+        PointerType * const vaListPtrTy = vaListTy->getPointerTo();
         Type * const voidTy = getVoidTy();
 
-        FunctionType * fty = FunctionType::get(voidTy, { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
+
+        FunctionType * fty = FunctionType::get(voidTy, { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, int32Ty }, true);
         assertFunc = Function::Create(fty, Function::PrivateLinkage, "assert", m);
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
         function->setDoesNotAlias(2);
         #endif
         BasicBlock * const entry = BasicBlock::Create(C, "", assertFunc);
         BasicBlock * const failure = BasicBlock::Create(C, "", assertFunc);
-        BasicBlock * const unreachable = BasicBlock::Create(C, "", assertFunc);
         BasicBlock * const success = BasicBlock::Create(C, "", assertFunc);
         auto arg = assertFunc->arg_begin();
         arg->setName("assertion");
@@ -1080,26 +1102,43 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         Value * depth = &*arg++;
         SetInsertPoint(entry);
 
-
-        assertFunc->addFnAttr(Attribute::UWTable);
+        assertFunc->setHasUWTable();
         assertFunc->setPersonalityFn(getDefaultPersonalityFunction());
+
+        Value * const vaList = CreateAlloca(vaListTy);
+        FunctionType * vaFuncTy = FunctionType::get(voidTy, { int8PtrTy }, false);
+        Function * const vaStart = Function::Create(vaFuncTy, Function::ExternalLinkage, "llvm.va_start", m);
+        Function * const vaEnd = Function::Create(vaFuncTy, Function::ExternalLinkage, "llvm.va_end", m);
 
         CreateCondBr(assertion, success, failure);
 
-        BasicBlock * const rethrow = WriteDefaultRethrowBlock();
-
         SetInsertPoint(failure);
-        Function * const reportFn = LinkFunction("__report_failure", __report_failure);
-        reportFn->setDoesNotReturn();
-        CreateInvoke(reportFn, unreachable, rethrow, { name, msg, trace, depth });
+        FunctionType * const rfTy = FunctionType::get(voidTy, { int8PtrTy, int8PtrTy, stackPtrTy, int32Ty, vaListPtrTy }, false);
+        Function * const reportFn = mDriver->addLinkFunction(m, "__report_failure_v", rfTy,
+                                                             reinterpret_cast<void *>(&__report_failure_v));
+        FixedArray<Value *, 5> args;
+        args[0] = name;
+        args[1] = msg;
+        args[2] = trace;
+        args[3] = depth;
+        args[4] = vaList;
 
-        // CreateInvokeRethrow(reportFn, { name, msg, trace, depth }, unreachable);
-        SetInsertPoint(unreachable);
+        CreateCall(vaStart, vaList);
+        CreateCall(reportFn, args);
+        CreateCall(vaEnd, vaList);
+
+        Function * alloc_exception = getAllocateException();
+        Value * const exception = CreateCall(alloc_exception, { ConstantExpr::getSizeOf(int8PtrTy) } );
+        Constant * const nil = ConstantPointerNull::get(int8PtrTy);
+        IRBuilder<>::CreateStore(nil, CreateBitCast(exception, int8PtrPtrTy));
+        // NOTE: the second argument is supposed to point to a std::type_info object.
+        // The external value Clang passes into it is "nil" when RTTI is disabled.
+        // This appears to work here but ought to be verified.
+        CreateCall(getThrow(), { exception, nil, nil });
         CreateUnreachable();
 
         SetInsertPoint(success);
         CreateRetVoid();
-
 
         restoreIP(ip);
     }
@@ -1143,9 +1182,6 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         stack.reserve(n * 2);
     }
     #endif
-    // TODO: look into how to safely use __builtin_return_address(0)?
-
-
     const unsigned FIRST_NON_ASSERT = 2;
     Constant * trace = nullptr;
     ConstantInt * depth = nullptr;
@@ -1184,8 +1220,19 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     #endif
     Value * const name = GetString(getKernelName());
     SmallVector<char, 1024> tmp;
-    Value * const msg = GetString(failureMessage.toStringRef(tmp));
-    IRBuilder<>::CreateCall(assertFunc, {assertion, name, msg, trace, depth});
+    const StringRef fmt = failureMessage.toStringRef(tmp);
+    // TODO: add a check that the number of var_args == number of message args?
+
+
+    SmallVector<Value *, 12> args(5);
+    args[0] = assertion;
+    args[1] = name;
+    args[2] = GetString(fmt);
+    args[3] = trace;
+    args[4] = depth;
+    args.insert(args.end(), params);
+    assert (args.size() == params.size() + 5);
+    IRBuilder<>::CreateCall(assertFunc, args);
 }
 
 void CBuilder::CreateExit(const int exitCode) {
@@ -1794,11 +1841,30 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 const char * const msg = extract(ci.getOperand(2));
                                 const uintptr_t * const trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
                                 const uint32_t n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
-                                try {
-                                    __report_failure(name, msg, trace, n);
-                                } catch (...) {
-                                    exit(-1);
+
+                                boost::format fmt(msg);
+                                for (unsigned i = 5; i < ci.getNumArgOperands(); ++i) {
+                                    Value * const arg = ci.getOperand(3);
+                                    if (LLVM_LIKELY(isa<ConstantInt>(arg))) {
+                                        const auto v = cast<ConstantInt>(arg)->getLimitedValue();
+                                        fmt % v;
+                                    } else if (LLVM_LIKELY(isa<ConstantFP>(arg))) {
+                                        const auto & f = cast<ConstantFP>(arg)->getValueAPF();
+                                        fmt % f.convertToDouble();
+                                    } else if (LLVM_LIKELY(isa<Constant>(arg))) {
+                                        Type * const ty = arg->getType();
+                                        if (ty->isPointerTy()) {
+                                            fmt % extract(arg);
+                                        } else {
+                                            fmt % "<unknown>";
+                                        }
+                                    } else {
+                                        fmt % "<any>";
+                                    }
                                 }
+
+                                __report_failure(name, msg, trace, n);
+                                exit(-1);
                             }
                             remove = true;
                         } else if (LLVM_UNLIKELY(S.count(check))) {
@@ -1841,13 +1907,15 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         builder.SetInsertPoint(&F.front());
         BasicBlock * const rethrow = builder.WriteDefaultRethrowBlock();
 
-        FixedArray<Value *, 5> args;
+        SmallVector<Value *, 16> args;
 
         for (CallInst * ci : assertList) {
             BasicBlock * const bb = ci->getParent();
-            assert (ci->getNumArgOperands() == 5);
-            for (unsigned i = 0; i < 5; ++i) {
-                args[i] = ci->getArgOperand(i);
+            const auto n = ci->getNumArgOperands();
+            assert (n >= 5);
+            args.clear();
+            for (unsigned i = 0; i < n; ++i) {
+                args.push_back(ci->getArgOperand(i));
             }
             auto next = ci->eraseFromParent();
             // note: split automatically inserts an unconditional branch to the new block

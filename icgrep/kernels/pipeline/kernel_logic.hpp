@@ -142,8 +142,9 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
             sanityCheck = b->CreateOr(mIsInputZeroExtended[inputPort], sanityCheck);
         }
         b->CreateAssert(sanityCheck,
-                        mKernel->getName() + "_" + input.getName() +
-                        ": processed count exceeds total count");
+                        input.getName() +
+                        ": processed count (%d) exceeds total count (%d)",
+                        processed, available);
     }
     return accessible;
 }
@@ -271,8 +272,9 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         Value * const sanityCheck = b->CreateICmpULE(consumed, produced);
         b->CreateAssert(sanityCheck,
-                        mKernel->getName() + "_" + output.getName() +
-                        ": consumed count exceeds produced count");
+                        output.getName() +
+                        ": consumed count (%d) exceeds produced count (%d)",
+                        consumed, produced);
     }
     ConstantInt * copyBack = nullptr;
     if (LLVM_LIKELY(useOverflow)) {
@@ -512,8 +514,10 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
             Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
-                                mKernel->getName() + "." + output.getName() +
-                                ": final calculated fixed rate item count exceeds maximum item count");
+                                output.getName() +
+                                ": final calculated fixed rate item count (%d) "
+                                "exceeds maximum item count (%d)",
+                                calculated, writable);
             }
             writable = calculated;
         }
@@ -824,9 +828,13 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
                 assert (mReturnedProcessedItemCountPtr[i]);
                 mProcessedDeferredItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
-                    Value * const isDeferred = b->CreateICmpULE(mProcessedDeferredItemCount[i], mProcessedItemCount[i]);
-                    b->CreateAssert(isDeferred, prefix + ": deferred processed item count exceeds non-deferred");
+                    Value * const deferred = mProcessedDeferredItemCount[i];
+                    Value * const processed = mProcessedItemCount[i];
+                    Value * const isDeferred = b->CreateICmpULE(deferred, processed);
+                    b->CreateAssert(isDeferred, input.getName() +
+                                    ": deferred processed item count (%d) "
+                                    "exceeds non-deferred (%d)",
+                                    deferred, processed);
                 }
             }
         } else if (rate.isBounded() || rate.isUnknown()) {
@@ -1119,9 +1127,8 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamPort 
     if (offset) {
         if (LLVM_UNLIKELY(mCheckAssertions)) {
             const auto & binding = getBinding(port);
-            const auto prefix = mKernel->getName() + "." + binding.getName();
             b->CreateAssert(b->CreateICmpNE(offset, ZERO),
-                            prefix + ": partial sum offset must be non-zero");
+                            binding.getName() + ": partial sum offset must be non-zero");
         }
         Constant * const ONE = b->getSize(1);
         position = b->CreateAdd(position, b->CreateSub(offset, ONE));
@@ -1134,9 +1141,9 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamPort 
     }
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         const auto & binding = getBinding(port);
-        const auto prefix = mKernel->getName() + "." + binding.getName();
         b->CreateAssert(b->CreateICmpULE(prior, current),
-                        prefix + ": partial sum is not non-decreasing");
+                        binding.getName() + ": partial sum is not non-decreasing "
+                                            "(prior %d > current %d)", prior, current);
     }
     return b->CreateSub(current, prior);
 }
