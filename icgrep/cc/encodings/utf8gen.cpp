@@ -25,10 +25,7 @@ UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> 
 Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
 {}, {},
 {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}})
-, mDepositFieldWidth(depositFieldWidth) {
-
-}
-
+, mDepositFieldWidth(depositFieldWidth) {}
 
 void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));

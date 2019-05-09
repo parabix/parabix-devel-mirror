@@ -21,7 +21,7 @@
 // each group of one to four positions for a single character, a deposit mask
 // must have exactly one 1 bit set.  Different deposit masks are used for
 // depositing bits, depending on the destination byte position within the
-// ultimate 4 byte sequencE->
+// ultimate byte sequence.
 //
 // The following deposit masks (shown in little-endian representation) are
 // used for depositing bits.
