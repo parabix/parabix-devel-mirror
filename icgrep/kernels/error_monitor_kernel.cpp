@@ -14,11 +14,11 @@ using namespace llvm;
 namespace kernel {
 
 void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> &b, Value * const numOfStrides) {
-    
+
     const auto numErrorStreams = getInputStreamSet("errorStream")->getNumElements();
     const auto blockWidth = b->getBitBlockWidth();
     IntegerType * const blockWidthTy = b->getIntNTy(blockWidth);
-    
+
     BasicBlock * entryBB = b->GetInsertBlock();
     BasicBlock * loopBB = b->CreateBasicBlock(mName + "_loop");
     BasicBlock * isErrorBB = b->CreateBasicBlock(mName + "_is_error");
@@ -28,6 +28,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::K
     ConstantInt * ZERO = b->getSize(0);
     ConstantInt * ONE = b->getSize(1);
     ConstantInt * BLOCK_TY_ONE = b->getIntN(blockWidth, 1);
+    ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
 
     b->CreateBr(loopBB);
 
@@ -41,6 +42,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::K
         Value * streamBlock = b->loadInputStreamBlock("errorStream", b->getInt32(i), offset);
         accumulator = b->CreateOr(accumulator, streamBlock);
     }
+
     // copy blocks from in streams to out streams
     foreachMonitoredStreamSet([&](std::string const & iName, std::string const & oName) {
         const uint32_t streamCount = getInputStreamSet(iName)->getNumElements();
@@ -56,7 +58,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::K
     Value * nextOffset = b->CreateAdd(ONE, offset);
     offset->addIncoming(nextOffset, loopBB);
     Value * isZero = b->CreateICmpEQ(accumBlock, b->getIntN(blockWidth, 0));
-    Value * moreData = b->CreateICmpULT(offset, numOfStrides);
+    Value * moreData = b->CreateICmpNE(nextOffset, numOfStrides);
     Value * continueLoop = b->CreateAnd(isZero, moreData);
     b->CreateCondBr(continueLoop, loopBB, isErrorBB);
 
@@ -92,29 +94,24 @@ void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::K
         }
     });
 
-    Value * truncatedProduced;
-    if (mStreamNames.size() > 0) {
-        Value * previousProducedItemCount = b->getProducedItemCount(mStreamNames.front().second);
-        truncatedProduced = b->CreateAdd(previousProducedItemCount, b->CreateTrunc(numFwZeros, b->getSizeTy()));
-    } else {
-        truncatedProduced = ZERO;
+    Value * produced = b->CreateMul(offset, BLOCK_WIDTH);
+    if (!mStreamNames.empty()) {
+        Value * prior = b->getProducedItemCount(mStreamNames.front().second);
+        produced = b->CreateAdd(prior, produced);
+        produced = b->CreateAdd(produced, b->CreateZExtOrTrunc(numFwZeros, b->getSizeTy()));
     }
+    foreachMonitoredStreamSet([&](std::string const &, std::string const & oName) {
+        b->setProducedItemCount(oName, produced);
+    });
     b->setTerminationSignal();
     b->CreateBr(exitBB);
 
     // Exit Basic Block
     b->SetInsertPoint(exitBB);
-    PHINode * produced = b->CreatePHI(b->getSizeTy(), 2);
-    produced->addIncoming(truncatedProduced, processErrBB);
-    Value * nonTruncatedProduced = b->getAvailableItemCount("errorStream");
-    produced->addIncoming(nonTruncatedProduced, isErrorBB);
-    foreachMonitoredStreamSet([&](std::string const & iName, std::string const & oName) {
-        b->setProducedItemCount(oName, produced);
-    });
 }
 
-ErrorMonitorKernel::ErrorMonitorKernel(const std::unique_ptr<kernel::KernelBuilder> & b, 
-                                       StreamSet * error, 
+ErrorMonitorKernel::ErrorMonitorKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                       StreamSet * error,
                                        ErrorMonitorKernel::IOStreamBindings bindings)
 : MultiBlockKernel(b, "ErrorMonitorKernel" + std::to_string(error->getNumElements()),
 // inputs
