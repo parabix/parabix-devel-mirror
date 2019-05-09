@@ -117,8 +117,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     if (mBoundedKernel) {
         BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
         BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
+        BasicBlock * const enteringZeroInput = b->CreateBasicBlock(prefix + "_zeroInput", mKernelLoopCall);
         isFinal = b->CreateICmpEQ(mNumOfLinearStrides, b->getSize(0));
-
 
         b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
 
@@ -128,6 +128,10 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
         b->SetInsertPoint(enteringFinalStride);
         calculateFinalItemCounts(b);
+        b->CreateBr(enteringZeroInput);
+
+        b->SetInsertPoint(enteringZeroInput);
+        zeroInputAfterFinalItemCount(b);
         b->CreateBr(mKernelLoopCall);
 
         /// -------------------------------------------------------------------------------------

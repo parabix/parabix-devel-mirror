@@ -437,12 +437,21 @@ inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         linearOutputItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Output, i});
     }
+    phiOutItemCounts(b, linearInputItems, linearOutputItems);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief phiOutItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::phiOutItemCounts(BuilderRef b, const Vec<Value *> & inputs, const Vec<Value *> & outputs) const {
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
     BasicBlock * const exitBlock = b->GetInsertBlock();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        mLinearInputItemsPhi[i]->addIncoming(linearInputItems[i], exitBlock);
+        mLinearInputItemsPhi[i]->addIncoming(inputs[i], exitBlock);
     }
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        mLinearOutputItemsPhi[i]->addIncoming(linearOutputItems[i], exitBlock);
+        mLinearOutputItemsPhi[i]->addIncoming(outputs[i], exitBlock);
     }
 }
 
@@ -454,6 +463,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     Vec<Value *> accessibleItems(numOfInputs);
     const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
     Vec<Value *> pendingItems(numOfOutputs);
+
     for (unsigned i = 0; i < numOfInputs; ++i) {
         accessibleItems[i] = addLookahead(b, i, mAccessibleInputItems[i]);
     }
@@ -462,46 +472,59 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
 
     //   CEILING(PRINCIPAL_OR_MIN(Accessible Item Count / Fixed Input Rate) * Fixed Output Rate)
 
-    // TODO: ZeroExtend attribute must affect the notion of "min" here too.
-
     RateValue rateLCM(1);
     bool noPrincipalStream = true;
+
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
-        if (rate.isFixed()) {
+        if (LLVM_LIKELY(rate.isFixed())) {
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                rateLCM = rate.getRate();
+                assert (noPrincipalStream);
+                assert (!input.hasAttribute(AttrId::ZeroExtended));
                 noPrincipalStream = false;
-                break;
             }
             rateLCM = lcm(rateLCM, rate.getRate());
         }
     }
 
-    bool hasFixedRateOutput = false;
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
-        if (rate.isFixed()) {
+        if (LLVM_LIKELY(rate.isFixed())) {
             rateLCM = lcm(rateLCM, rate.getRate());
-            hasFixedRateOutput = true;
         }
     }
 
     Value * minScaledInverseOfAccessibleInput = nullptr;
-    if (hasFixedRateOutput) {
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const Binding & input = getInputBinding(i);
-            const ProcessingRate & rate = input.getRate();
-            if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = getInputBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
+            if (LLVM_LIKELY(!input.hasAttribute(AttrId::ZeroExtended))) {
                 Value * const scaledInverseOfAccessibleInput =
                     b->CreateMul2(accessibleItems[i], rateLCM / rate.getRate());
                 minScaledInverseOfAccessibleInput =
                     b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
             }
         }
-        assert (minScaledInverseOfAccessibleInput);
+    }
+
+    // truncate any input stream down to the length of the shortest (or principal) stream
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = getInputBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
+            Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
+            if (LLVM_UNLIKELY(mCheckAssertions)) {
+                b->CreateAssert(b->CreateICmpULE(calculated, accessibleItems[i]),
+                                input.getName() +
+                                ": final calculated fixed rate item count (%d) "
+                                "exceeds accessible item count (%d)",
+                                calculated, accessibleItems[i]);
+            }
+            accessibleItems[i] = calculated;
+        }
     }
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
@@ -509,14 +532,14 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         const ProcessingRate & rate = output.getRate();
         Value * writable = mWritableOutputItems[i];
         if (rate.isPartialSum()) {
-            writable = mOutputStrideLength[i]; // getPartialSumItemCount(b, StreamPort{PortType::Output, i});
+            writable = mOutputStrideLength[i];
         } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
             Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
                                 output.getName() +
                                 ": final calculated fixed rate item count (%d) "
-                                "exceeds maximum item count (%d)",
+                                "exceeds writable item count (%d)",
                                 calculated, writable);
             }
             writable = calculated;
@@ -533,13 +556,17 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         pendingItems[i] = writable;
     }
 
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        mLinearInputItemsPhi[i]->addIncoming(accessibleItems[i], exitBlock);
-    }
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        mLinearOutputItemsPhi[i]->addIncoming(pendingItems[i], exitBlock);
-    }
+    phiOutItemCounts(b, accessibleItems, pendingItems);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief zeroInputAfterFinalItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b) {
+
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -608,6 +635,8 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
     }
 }
 
+#if 0
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForLastPartialSegment
  *
@@ -660,6 +689,8 @@ inline Value * PipelineCompiler::noMoreOutputData(BuilderRef b, const unsigned o
     return b->CreateICmpULE(required, writable);
 }
 
+#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeKernelCall
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -673,7 +704,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     // TODO: send in the # of output items we want in the external buffers
 
-    b->setKernel(mPipelineKernel);
+
 
     ArgVec args;
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
@@ -681,8 +712,14 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
-        args.push_back(b->getScalarFieldPtr(makeKernelName(mKernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX));
+        b->setKernel(mPipelineKernel);
+        const auto prefix = makeKernelName(mKernelIndex);
+        Value * const threadLocal = b->getScalarFieldPtr(prefix + KERNEL_THREAD_LOCAL_SUFFIX);
+        b->setKernel(mKernel);
+        args.push_back(threadLocal);
     }
+
+
 
     // If a kernel is internally synchronized, pass the iteration
     // count. Note: this is not the same as the pipeline's logical
@@ -858,7 +895,6 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CallPrintInt(prefix + "_produced'", mProducedItemCount[i]);
         #endif
     }
-    b->setKernel(mKernel);
 
 }
 

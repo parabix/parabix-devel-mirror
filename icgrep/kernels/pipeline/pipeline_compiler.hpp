@@ -496,6 +496,8 @@ protected:
 
     void calculateNonFinalItemCounts(BuilderRef b);
     void calculateFinalItemCounts(BuilderRef b);
+    void zeroInputAfterFinalItemCount(BuilderRef b);
+    void phiOutItemCounts(BuilderRef b, const Vec<Value *> & inputs, const Vec<Value *> & outputs) const;
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
     Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
