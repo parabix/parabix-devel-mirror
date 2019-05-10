@@ -976,24 +976,16 @@ static bool hasNonEmptyCarryStruct(const std::vector<Type *> & state) {
  ** ------------------------------------------------------------------------------------------------------------- */
 StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const scope,
                                    const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
-    return analyse(b, scope, ifDepth, loopDepth, isNestedWithinNonCarryCollapsingLoop, b->getBitBlockType(), b->getBitBlockType());
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief analyse with generic carry and summary types
- ** ------------------------------------------------------------------------------------------------------------- */
-llvm::StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const scope, const unsigned ifDepth, 
-                                         const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop, llvm::Type * carryTy, llvm::Type * summaryTy) {
     assert ("scope cannot be null!" && scope);
     assert ("entry scope (and only the entry scope) must be in scope 0"
             && (mCarryScopes == 0 ? (scope == mKernel->getEntryScope()) : (scope != mKernel->getEntryScope())));
     assert (mCarryScopes < mCarryMetadata.size());
+    Type * const carryTy = b->getBitBlockType();
     Type * const blockTy = b->getBitBlockType();
 
     const unsigned carryScopeIndex = mCarryScopes++;
     const bool nonCarryCollapsingMode = isNonRegularLanguage(scope);
     Type * const carryPackType = ArrayType::get(carryTy, ((loopDepth == 0) ? 1 : 2));
-    Type * const summaryPackType = ArrayType::get(summaryTy, ((loopDepth == 0) ? 1 : 2));
     std::vector<Type *> state;
     for (const Statement * stmt : *scope) {
         if (LLVM_UNLIKELY(isa<Advance>(stmt) || isa<IndexedAdvance>(stmt))) {
@@ -1037,7 +1029,7 @@ llvm::StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBui
                     summaryType = CarryData::ExplicitSummary;
                     // NOTE: summaries are stored differently depending whether we're entering an If or While branch. With an If branch, they
                     // preceed the carry state data and with a While loop they succeed it. This is to help cache prefectching performance.
-                    state.insert(isa<If>(scope->getBranch()) ? state.begin() : state.end(), summaryPackType);
+                    state.insert(isa<If>(scope->getBranch()) ? state.begin() : state.end(), carryPackType);
                 } else {
                     summaryType = CarryData::ImplicitSummary;
                     if (hasNonEmptyCarryStruct(state[0])) {
@@ -1052,7 +1044,7 @@ llvm::StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBui
         // carry state pointer, and summary pointer struct.
         if (LLVM_UNLIKELY(nonCarryCollapsingMode)) {
             mHasNonCarryCollapsingLoops = true;
-            carryState = StructType::get(b->getContext(), {b->getSizeTy(), carryState->getPointerTo(), summaryPackType->getPointerTo()});
+            carryState = StructType::get(b->getContext(), {b->getSizeTy(), carryState->getPointerTo(), carryPackType->getPointerTo()});
             assert (isDynamicallyAllocatedType(carryState));
         }
         cd.setNonCollapsingCarryMode(nonCarryCollapsingMode);
