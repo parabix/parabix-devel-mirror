@@ -1,4 +1,4 @@
-﻿/*
+/*
  *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
@@ -351,9 +351,9 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
     IntegerType * const int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(), int64Ty }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "print_int", m);
-        auto arg = function->arg_begin();
-        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
+        Function * printFn = Function::Create(FT, Function::InternalLinkage, "print_int", m);
+        auto arg = printFn->arg_begin();
+        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", printFn);
         IRBuilder<> builder(entry);
         Value * const fdInt = &*(arg++);
         fdInt->setName("fd");
@@ -368,7 +368,7 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
         args[3] = value;
         builder.CreateCall(GetDprintf(), args);
         builder.CreateRetVoid();
-        printRegister = function;
+        printRegister = printFn;
     }
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
@@ -1061,7 +1061,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         FunctionType * fty = FunctionType::get(voidTy, { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, getInt32Ty() }, false);
         assertFunc = Function::Create(fty, Function::PrivateLinkage, "assert", m);
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-        function->setDoesNotAlias(2);
+        assertFunc->setDoesNotAlias(2);
         #endif
         BasicBlock * const entry = BasicBlock::Create(C, "", assertFunc);
         BasicBlock * const failure = BasicBlock::Create(C, "", assertFunc);
