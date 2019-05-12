@@ -15,33 +15,19 @@ class CompressedCarryManager final : public CarryManager {
 public:
     CompressedCarryManager() noexcept;
 
-    // void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel) override;
-
-    void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb) override;
-
-    // void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-
-    // void finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     /* Entering and leaving loops. */
-
-    // void enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) override;
 
     void enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock) override;
 
     void leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock) override;
 
-    // void leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock) override;
-
     /* Entering and leaving ifs. */
 
-    // void enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) override;
-
-    // void enterIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock) override;
+    void enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) override;
 
     void leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock) override;
-
-    // void leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock) override;
 
     /* Methods for processing individual carry-generating operations. */
 
@@ -53,22 +39,20 @@ public:
 
     /* Methods for getting and setting carry summary values for If statements */
 
-    // llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition) override;
+    llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition) override;
 
     /* Clear carry state for conditional regions */
-
-    // void clearCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb) override;
 
 protected:
 
     llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false) override;
 
     /* Entering and leaving scopes. */
-    // void enterScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) override;
     void leaveScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     /* Methods for processing individual carry-generating operations. */
     llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+
     void setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const carryOut) override;
     // llvm::Value * longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value, const unsigned shiftAmount) override;
     llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::ConstantInt *index) const override;
@@ -79,11 +63,10 @@ protected:
 
 private:
 
+    llvm::Type * mBaseSummaryType = nullptr;
+
     llvm::Value * convertFrameToImplicitSummary(const std::unique_ptr<kernel::KernelBuilder> & b) const;
 
-    uint32_t mNumImplicit = 0;
-    uint32_t mNumExplicit = 0;
-    uint32_t mEmptyCarryState = 0;
 };
 
 }
