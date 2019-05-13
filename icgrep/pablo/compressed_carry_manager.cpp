@@ -88,7 +88,9 @@ static inline unsigned ceil_udiv(const unsigned x, const unsigned y) {
 
 
 static Value * castToSummaryType(const std::unique_ptr<kernel::KernelBuilder> & b, Value * carryOut, Type * summaryTy) {
-    assert (carryOut->getType()->isIntegerTy() || carryOut->getType() == b->getBitBlockType());
+    if (!(carryOut->getType()->isIntegerTy() || carryOut->getType() == b->getBitBlockType())) {
+        assert (false);
+    }
 
     if (carryOut->getType() == summaryTy) {
         return carryOut;
@@ -139,6 +141,14 @@ static Type * toSummaryType(const std::unique_ptr<kernel::KernelBuilder> & b, in
         assert ("unexpected summary type" && summarySize == b->getBitBlockWidth());
         return b->getBitBlockType();
     }
+}
+
+
+static Value * compressImplicitSummary(const std::unique_ptr<kernel::KernelBuilder> & b, Value * summary) {
+    if (summary->getType() == b->getBitBlockType()) {
+        summary = b->CreateBitCast(summary, b->getIntNTy(b->getBitBlockWidth()));
+    }
+    return b->CreateICmpNE(summary, Constant::getNullValue(summary->getType()));
 }
 
 
@@ -260,7 +270,7 @@ void CompressedCarryManager::leaveIfBody(const std::unique_ptr<kernel::KernelBui
         if (mCarryInfo->hasImplicitSummary()) {
             nested = convertFrameToImplicitSummary(b);
             if (nested->getType() != outer->getType()) {
-                nested = b->CreateICmpNE(nested, Constant::getNullValue(nested->getType()));
+                nested = compressImplicitSummary(b, nested);
             }
         }
 
