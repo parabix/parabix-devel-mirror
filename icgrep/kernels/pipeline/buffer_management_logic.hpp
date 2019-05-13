@@ -184,7 +184,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             round_up(overflowSpace);
             round_up(underflowSpace);
 
-            requiredSpace = std::max(requiredSpace, std::max(underflowSpace, overflowSpace) * 2);
+            const auto minRequiredSpace = std::max(underflowSpace, overflowSpace);
+            requiredSpace = std::max(requiredSpace, minRequiredSpace * RateValue{2});
             round_up(requiredSpace);
 
             const auto overflowSize = ceiling(overflowSpace);
@@ -581,7 +582,7 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
             for (const auto & kernelInput : make_iterator_range(in_edges(kernel, G))) {
                 const BufferRateData & inputRate = G[kernelInput];
                 const auto inputBuffer = source(kernelInput, G);
-                if (LLVM_UNLIKELY(inputRate.Maximum == 0)) {
+                if (LLVM_UNLIKELY(inputRate.Maximum == RateValue{0})) {
                     std::string tmp;
                     raw_string_ostream msg(tmp);
                     msg << getKernel(kernel)->getName() << "."

@@ -1,4 +1,4 @@
-﻿/*
+/*
  *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
@@ -36,11 +36,7 @@ typedef uint32_t unw_word_t;
 #else
 typedef uint64_t unw_word_t;
 #endif
-#if defined(HAS_MACH_VM_TYPES)
-#include <mach/vm_types.h>
-extern void _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip);
-static_assert(sizeof(vm_address_t) == sizeof(uintptr_t), "");
-#elif defined(HAS_LIBUNWIND)
+#if defined(HAS_LIBUNWIND)
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
@@ -352,9 +348,9 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
     IntegerType * const int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
         FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(), int64Ty }, false);
-        Function * function = Function::Create(FT, Function::InternalLinkage, "print_int", m);
-        auto arg = function->arg_begin();
-        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", function);
+        Function * printFn = Function::Create(FT, Function::InternalLinkage, "print_int", m);
+        auto arg = printFn->arg_begin();
+        BasicBlock * entry = BasicBlock::Create(getContext(), "entry", printFn);
         IRBuilder<> builder(entry);
         Value * const fdInt = &*(arg++);
         fdInt->setName("fd");
@@ -369,7 +365,7 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
         args[3] = value;
         builder.CreateCall(GetDprintf(), args);
         builder.CreateRetVoid();
-        printRegister = function;
+        printRegister = printFn;
     }
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
@@ -1084,7 +1080,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         FunctionType * fty = FunctionType::get(voidTy, { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, int32Ty }, true);
         assertFunc = Function::Create(fty, Function::PrivateLinkage, "assert", m);
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-        function->setDoesNotAlias(2);
+        assertFunc->setDoesNotAlias(2);
         #endif
         BasicBlock * const entry = BasicBlock::Create(C, "", assertFunc);
         BasicBlock * const failure = BasicBlock::Create(C, "", assertFunc);
@@ -1144,35 +1140,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     }
     #ifndef NDEBUG
     SmallVector<unw_word_t, 64> stack;
-    #if defined(HAS_MACH_VM_TYPES)
-    for (;;) {
-        unsigned int n;
-        _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
-        if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
-            while (n >= 1 && stack[n - 1] == 0) {
-                n -= 1;
-            }
-            stack.set_size(n);
-            break;
-        }
-        stack.reserve(n * 2);
-    }
-    #elif defined(HAS_LIBUNWIND)
-    unw_context_t context;
-    // Initialize cursor to current frame for local unwinding.
-    unw_getcontext(&context);
-    unw_cursor_t cursor;
-    unw_init_local(&cursor, &context);
-    // Unwind frames one by one, going up the frame stack.
-    while (unw_step(&cursor) > 0) {
-        unw_word_t pc;
-        unw_get_reg(&cursor, UNW_REG_IP, &pc);
-        if (pc == 0) {
-            break;
-        }
-        stack.push_back(pc);
-    }
-    #elif defined(HAS_EXECINFO)
+    #if defined(HAS_EXECINFO)
     for (;;) {
         const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
         if (LLVM_LIKELY(n < (int)stack.capacity())) {

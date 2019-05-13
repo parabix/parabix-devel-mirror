@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2015 International Characters.
+ *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
@@ -12,11 +12,6 @@
 
 using namespace llvm;
 
-inline static unsigned floor_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return 31 - __builtin_clz(v);
-}
-
 namespace kernel {
 
 void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -24,7 +19,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Module * const m = b->getModule();
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
-    BasicBlock * const initialBlock = b->CreateBasicBlock("initialBlock");
+    BasicBlock * const scanMatchStride = b->CreateBasicBlock("scanMatchStride");
     BasicBlock * const scanWordIteration = b->CreateBasicBlock("ScanWordIteration");
     BasicBlock * const matches_test_block = b->CreateBasicBlock("matches_test_block");
     BasicBlock * const processMatchesEntry = b->CreateBasicBlock("process_matches_loop");
@@ -33,51 +28,57 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     BasicBlock * const processMatchesExit = b->CreateBasicBlock("matches_done_block");
     BasicBlock * const remaining_breaks_block = b->CreateBasicBlock("remaining_breaks_block");
     BasicBlock * const return_block = b->CreateBasicBlock("return_block");
-    BasicBlock * const scanWordExit = b->CreateBasicBlock("ScanWordExit");
-    BasicBlock * const blocksExit = b->CreateBasicBlock("blocksExit");
+    BasicBlock * const finalizeStride = b->CreateBasicBlock("finalizeStride");
+    BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
     BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
     BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
     IntegerType * const sizeTy = b->getSizeTy();
-    const unsigned fieldCount = b->getBitBlockWidth() / sizeTy->getBitWidth();
-    VectorType * const scanwordVectorType =  VectorType::get(sizeTy, fieldCount);
+    const unsigned scansPerStride = mStride / sizeTy->getBitWidth();
+    PointerType * const scanwordPointerType =  sizeTy->getPointerTo();
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
-    Value * const blocksToDo = b->CreateMul(numOfStrides, b->getSize(mStride / b->getBitBlockWidth()));
+    Constant * const BITBLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    Value * const initialPos = b->getProcessedItemCount("matchResult");
+    //b->CallPrintInt("initialPos", initialPos);
     Value * accumulator = b->getScalarField("accumulator_address");
+    Value * const avail = b->getAvailableItemCount("InputStream");
+    //b->CallPrintInt("numOfStrides", numOfStrides);
+    //b->CallPrintInt("avail", avail);
+    //for (unsigned i = 0; i < mStride/b->getBitBlockWidth(); i++) {
+    //    b->CallPrintRegister("matches[" + std::to_string(i) + "]", b->loadInputStreamBlock("matchResult", ZERO, b->getSize(i)));
+    //}
+    b->CreateBr(scanMatchStride);
 
-    b->CreateBr(initialBlock);
-
-    b->SetInsertPoint(initialBlock);
-    PHINode * const blockOffset = b->CreatePHI(sizeTy, 2);
-    blockOffset->addIncoming(ZERO, entryBlock);
-
-    Value * matches = b->loadInputStreamBlock("matchResult", ZERO, blockOffset);
-    matches = b->CreateBitCast(matches, scanwordVectorType);
-    Value * linebreaks = b->loadInputStreamBlock("lineBreak", ZERO, blockOffset);
-    linebreaks = b->CreateBitCast(linebreaks, scanwordVectorType);
-
-    Value * const blockNo = b->getScalarField("BlockNo");
-    Value * const scanwordPos = b->CreateShl(blockNo, floor_log2(b->getBitBlockWidth()));
+    b->SetInsertPoint(scanMatchStride);
+    PHINode * const positionOffset = b->CreatePHI(sizeTy, 2);
+    positionOffset->addIncoming(ZERO, entryBlock);
+    Value * blockOffset = b->CreateUDiv(positionOffset, BITBLOCK_WIDTH);
+    Value * matches = b->getInputStreamBlockPtr("matchResult", ZERO, blockOffset);
+    matches = b->CreateBitCast(matches, scanwordPointerType);
+    Value * linebreaks = b->getInputStreamBlockPtr("lineBreak", ZERO, blockOffset);
+    linebreaks = b->CreateBitCast(linebreaks, scanwordPointerType);
+    Value * const scanwordPos = b->CreateAdd(initialPos, positionOffset);
     Value * const consumed = b->getProcessedItemCount("InputStream");
     Value * const consumedLines = b->getScalarField("LineNum");
-    Value * const avail = b->getAvailableItemCount("InputStream");
+    //b->CallPrintInt("consumed", consumed);
+    //b->CallPrintInt("consumedPtr", b->getRawInputPointer("InputStream", consumed));
+
     b->CreateBr(scanWordIteration);
 
     b->SetInsertPoint(scanWordIteration);
 
         // while (phiIndex < words per stride)
         PHINode * const phiIndex = b->CreatePHI(sizeTy, 2, "index");
-        phiIndex->addIncoming(ZERO, initialBlock);
+        phiIndex->addIncoming(ZERO, scanMatchStride);
         PHINode * const phiScanwordPos = b->CreatePHI(scanwordPos->getType(), 2, "pos");
-        phiScanwordPos->addIncoming(scanwordPos, initialBlock);
+        phiScanwordPos->addIncoming(scanwordPos, scanMatchStride);
         PHINode * const phiLineStart = b->CreatePHI(consumed->getType(), 2, "recordstart");
-        phiLineStart->addIncoming(consumed, initialBlock);
+        phiLineStart->addIncoming(consumed, scanMatchStride);
         PHINode * const phiLineNum = b->CreatePHI(consumedLines->getType(), 2, "recordnum");
-        phiLineNum->addIncoming(consumedLines, initialBlock);
+        phiLineNum->addIncoming(consumedLines, scanMatchStride);
 
-        Value * const matchWord = b->CreateExtractElement(matches, phiIndex);
-        Value * const recordBreaks = b->CreateExtractElement(linebreaks, phiIndex);
-
+        Value * const matchWord = b->CreateLoad(b->CreateGEP(matches, phiIndex));
+        Value * const recordBreaks = b->CreateLoad(b->CreateGEP(linebreaks, phiIndex));
         // The match scanner works with a loop involving four variables:
         // (a) the bit stream scanword of matches marking the ends of selected records,
         // (b) the bit stream scanword of record_breaks marking the ends of all records,
@@ -135,7 +136,9 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
             Value * matchRecordEnd = b->CreateAdd(phiScanwordPos, b->CreateCountForwardZeroes(phiMatchWord, true));
             // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
             // to access past EOF.
-            Value * const bufLimit = b->CreateSub(b->CreateAdd(scanwordPos, avail), ONE);
+            Value * const bufLimit = b->CreateSub(avail, ONE);
+            //b->CallPrintInt("bufLimit", bufLimit);
+            //b->CallPrintInt("matchRecordEnd", matchRecordEnd);
             matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
             Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
             Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
@@ -183,20 +186,21 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
         phiScanwordPos->addIncoming(nextScanwordPos, return_block);
         Value * nextIndex = b->CreateAdd(phiIndex, ONE);
         phiIndex->addIncoming(nextIndex, return_block);
-        b->CreateLikelyCondBr(b->CreateICmpNE(nextIndex, b->getSize(fieldCount)), scanWordIteration, scanWordExit);
+        b->CreateLikelyCondBr(b->CreateICmpNE(nextIndex, b->getSize(scansPerStride)), scanWordIteration, finalizeStride);
 
-    b->SetInsertPoint(scanWordExit);
-    b->setScalarField("BlockNo", b->CreateAdd(blockNo, ConstantInt::get(blockNo->getType(), 1)));
+    b->SetInsertPoint(finalizeStride);
     b->setScalarField("LineNum", phiFinalRecordNum);
     b->setProcessedItemCount("InputStream", phiFinalRecordStart);
-    Value * const nextBlockOffset = b->CreateAdd(blockOffset, ONE);
-    blockOffset->addIncoming(nextBlockOffset, scanWordExit);
-    b->CreateLikelyCondBr(b->CreateICmpNE(nextBlockOffset, blocksToDo), initialBlock, blocksExit);
+    Value * const nextPositionOffset = b->CreateAdd(positionOffset, b->getSize(mStride));
+    Value * const nextStride = b->CreateUDiv(nextPositionOffset, b->getSize(mStride));
+    positionOffset->addIncoming(nextPositionOffset, finalizeStride);
+    b->CreateLikelyCondBr(b->CreateICmpNE(nextStride, numOfStrides), scanMatchStride, stridesDone);
 
-    b->SetInsertPoint(blocksExit);
+    b->SetInsertPoint(stridesDone);
     b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
+    b->setProcessedItemCount("InputStream", avail);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
     b->CreateCall(finalizer, {accumulator, bufferEnd});
@@ -218,9 +222,9 @@ ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & 
 // output scalars
 {},
 // kernel state
-{InternalScalar{b->getSizeTy(), "BlockNo"}
-,InternalScalar{b->getSizeTy(), "LineNum"}}) {
+{InternalScalar{b->getSizeTy(), "LineNum"}}) {
     addAttribute(SideEffecting());
+    //setStride(b->getBitBlockWidth() * 2);
 }
 
 }
