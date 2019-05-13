@@ -306,9 +306,13 @@ Value * CompressedCarryManager::addCarryInCarryOut(const std::unique_ptr<kernel:
     assert (operation && (NON_ADVANCE_CARRY_STMT(operation)));
     Value * carryIn = getNextCarryIn(b);
     assert(carryIn->getType() == b->getInt8Ty());
+
+    // TODO: remove this zero extend and cast
     carryIn = b->CreateBitCast(b->CreateZExt(carryIn, b->getIntNTy(b->getBitBlockWidth())), b->getBitBlockType());
     Value * carryOut, * result;
     std::tie(carryOut, result) = b->bitblock_add_with_carry(e1, e2, carryIn);
+
+    // TODO: try and remove this extract
     carryOut = b->mvmd_extract(8, carryOut, 0);
     assert (result->getType() == b->getBitBlockType());
     assert (carryOut->getType() == b->getInt8Ty());
@@ -321,11 +325,15 @@ Value * CompressedCarryManager::advanceCarryInCarryOut(const std::unique_ptr<ker
     const auto shiftAmount = advance->getAmount();
     if (LLVM_LIKELY(shiftAmount < LONG_ADVANCE_BREAKPOINT)) {
         Value * carryIn = getNextCarryIn(b);
-        carryIn = b->CreateBitCast(b->CreateZExt(carryIn, b->getIntNTy(b->getBitBlockWidth())), b->getBitBlockType());
+
+        // TODO: remove this zero extend and cast
+        // carryIn = b->CreateBitCast(b->CreateZExt(carryIn, b->getIntNTy(b->getBitBlockWidth())), b->getBitBlockType());
         Value * carryOut, * result;
         std::tie(carryOut, result) = b->bitblock_advance(value, carryIn, shiftAmount);
-        const uint32_t fw = shiftAmount < 8 ? 8 : 64;
-        carryOut = b->mvmd_extract(fw, carryOut, 0);
+
+        // TODO: try and remove this extract
+        // const uint32_t fw = shiftAmount < 8 ? 8 : 64;
+        // carryOut = b->mvmd_extract(fw, carryOut, 0);
         assert (result->getType() == b->getBitBlockType());
         setNextCarryOut(b, carryOut);
         return result;
