@@ -35,11 +35,7 @@ typedef uint32_t unw_word_t;
 #else
 typedef uint64_t unw_word_t;
 #endif
-#if defined(HAS_MACH_VM_TYPES)
-#include <mach/vm_types.h>
-extern void _thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip);
-static_assert(sizeof(vm_address_t) == sizeof(uintptr_t), "");
-#elif defined(HAS_LIBUNWIND)
+#if defined(HAS_LIBUNWIND)
 #define UNW_LOCAL_ONLY
 #include <libunwind.h>
 static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
@@ -939,105 +935,6 @@ void __report_failure(const char * name, const char * msg, const uintptr_t * tra
     throw nullptr;
 }
 
-#if defined(HAS_MACH_VM_TYPES)
-
-/*
- * Copyright (c) 1999, 2007 Apple Inc. All rights reserved.
- *
- * @APPLE_LICENSE_HEADER_START@
- *
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
- *
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
- * limitations under the License.
- *
- * @APPLE_LICENSE_HEADER_END@
- */
-
-#include <pthread.h>
-#include <mach/mach.h>
-#include <mach/vm_statistics.h>
-#include <stdlib.h>
-
-#if defined(__i386__) || defined(__x86_64__)
-#define FP_LINK_OFFSET 1
-#elif defined(__ppc__) || defined(__ppc64__)
-#define FP_LINK_OFFSET 2
-#else
-#error  ********** Unimplemented architecture
-#endif
-
-#define	INSTACK(a)	((uintptr_t)(a) >= stackbot && (uintptr_t)(a) <= stacktop)
-#if defined(__ppc__) || defined(__ppc64__) || defined(__x86_64__)
-#define	ISALIGNED(a)	((((uintptr_t)(a)) & 0xf) == 0)
-#elif defined(__i386__)
-#define	ISALIGNED(a)	((((uintptr_t)(a)) & 0xf) == 8)
-#endif
-
-__private_extern__  __attribute__((noinline))
-void
-_thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip)
-{
-    void *frame, *next;
-    pthread_t self = pthread_self();
-    uintptr_t stacktop = (uintptr_t)(pthread_get_stackaddr_np(self));
-    uintptr_t stackbot = stacktop - (uintptr_t)(pthread_get_stacksize_np(self));
-
-    *nb = 0;
-
-    /* make sure return address is never out of bounds */
-    stacktop -= (FP_LINK_OFFSET + 1) * sizeof(void *);
-
-    /*
-     * The original implementation called the first_frame_address() function,
-     * which returned the stack frame pointer.  The problem was that in ppc,
-     * it was a leaf function, so no new stack frame was set up with
-     * optimization turned on (while a new stack frame was set up without
-     * optimization).  We now inline the code to get the stack frame pointer,
-     * so we are consistent about the stack frame.
-     */
-#if defined(__i386__) || defined(__x86_64__)
-    frame = __builtin_frame_address(0);
-#elif defined(__ppc__) || defined(__ppc64__)
-    /* __builtin_frame_address IS BROKEN IN BEAKER: RADAR #2340421 */
-    __asm__ volatile("mr %0, r1" : "=r" (frame));
-#endif
-    if(!INSTACK(frame) || !ISALIGNED(frame))
-        return;
-#if defined(__ppc__) || defined(__ppc64__)
-    /* back up the stack pointer up over the current stack frame */
-    next = *(void **)frame;
-    if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
-        return;
-    frame = next;
-#endif
-    while (skip--) {
-        next = *(void **)frame;
-        if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
-            return;
-        frame = next;
-    }
-    while (max--) {
-        buffer[*nb] = *(vm_address_t *)(((void **)frame) + FP_LINK_OFFSET);
-        (*nb)++;
-        next = *(void **)frame;
-        if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
-            return;
-        frame = next;
-    }
-}
-#endif
-
 void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage) {
 
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
@@ -1105,35 +1002,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     }
     #ifndef NDEBUG
     SmallVector<unw_word_t, 64> stack;
-    #if defined(HAS_MACH_VM_TYPES)
-    for (;;) {
-        unsigned int n;
-        _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
-        if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
-            while (n >= 1 && stack[n - 1] == 0) {
-                n -= 1;
-            }
-            stack.set_size(n);
-            break;
-        }
-        stack.reserve(n * 2);
-    }
-    #elif defined(HAS_LIBUNWIND)
-    unw_context_t context;
-    // Initialize cursor to current frame for local unwinding.
-    unw_getcontext(&context);
-    unw_cursor_t cursor;
-    unw_init_local(&cursor, &context);
-    // Unwind frames one by one, going up the frame stack.
-    while (unw_step(&cursor) > 0) {
-        unw_word_t pc;
-        unw_get_reg(&cursor, UNW_REG_IP, &pc);
-        if (pc == 0) {
-            break;
-        }
-        stack.push_back(pc);
-    }
-    #elif defined(HAS_EXECINFO)
+    #if defined(HAS_EXECINFO)
     for (;;) {
         const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
         if (LLVM_LIKELY(n < (int)stack.capacity())) {
