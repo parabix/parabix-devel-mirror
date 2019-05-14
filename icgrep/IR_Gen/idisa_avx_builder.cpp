@@ -246,6 +246,19 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
     return std::pair<Value *, Value *>{carry_out, bitCast(sum)};
 }
 
+std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
+    if (shiftin->getType()->isIntegerTy()) {
+        unsigned fw = shiftin->getType()->getIntegerBitWidth();
+        Value * shiftin_bitblock = mvmd_insert(fw, allZeroes(), shiftin, getBitBlockWidth()/fw - 1);
+        Value * shiftout = mvmd_extract(fw, a, getBitBlockWidth()/fw - 1);
+        Value * field_shift = bitCast(mvmd_dslli(fw, a, shiftin_bitblock, 1));
+        Value * shifted = bitCast(CreateOr(CreateLShr(field_shift, fw-shift), CreateShl(a, shift)));
+        return std::pair<Value *, Value *>(shiftout, shifted);
+    } else {
+        return IDISA_SSE2_Builder::bitblock_advance(a, shiftin, shift);
+    }
+}
+
 Value * IDISA_AVX2_Builder::simd_pext(unsigned fieldwidth, Value * v, Value * extract_mask) {
     if (hasBMI2 && ((fieldwidth == 64) || (fieldwidth == 32))) {
         Value * PEXT_f = (fieldwidth == 64) ? Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_pext_64)

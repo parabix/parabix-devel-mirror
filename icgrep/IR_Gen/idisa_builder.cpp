@@ -892,21 +892,20 @@ std::pair<llvm::Value *, llvm::Value *> IDISA_Builder::bitblock_subtract_with_bo
 
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
-    Type * shiftTy = shiftin->getType();
-    if (shiftTy->isIntegerTy()) {
-        unsigned fw = shiftTy->getIntegerBitWidth();
-        Value * shiftin_bitblock = mvmd_insert(fw, allZeroes(), shiftin, getBitBlockWidth()/fw - 1);
-        Value * shiftout = mvmd_extract(fw, a, getBitBlockWidth()/fw - 1);
-        Value * field_shift = mvmd_dslli(fw, a, shiftin_bitblock, 1);
-        Value * shifted = bitCast(CreateOr(CreateLShr(field_shift, fw-shift), CreateShl(a, shift)));
-        return std::pair<Value *, Value *>(shiftout, shifted);
-   } else {
-        Value * shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
-        Value * a_bitblock = CreateBitCast(a, getIntNTy(mBitBlockWidth));
-        Value * shifted = bitCast(CreateOr(CreateShl(a_bitblock, shift), shiftin_bitblock));
-        Value * shiftout = bitCast(CreateLShr(a_bitblock, mBitBlockWidth - shift));
-        return std::pair<Value *, Value *>(shiftout, shifted);
+    Type * const shiftTy = shiftin->getType();
+    Value * shiftin_bitblock;
+    if (shiftTy == mBitBlockType) {
+        shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
+    } else {
+        shiftin_bitblock = CreateZExt(shiftin, getIntNTy(mBitBlockWidth));
     }
+    Value * a_bitblock = CreateBitCast(a, getIntNTy(mBitBlockWidth));
+    Value * shifted = bitCast(CreateOr(CreateShl(a_bitblock, shift), shiftin_bitblock));
+    Value * shiftout = bitCast(CreateLShr(a_bitblock, mBitBlockWidth - shift));
+    if (shiftTy != mBitBlockType) {
+        shiftout = CreateTrunc(CreateBitCast(shiftout, getIntNTy(mBitBlockWidth)), shiftTy);
+    }
+    return std::pair<Value *, Value *>(shiftout, shifted);
 }
 
 // full shift producing {shiftout, shifted}
