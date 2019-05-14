@@ -859,11 +859,22 @@ Value * IDISA_Builder::bitblock_any(Value * a) {
 
 // full add producing {carryout, sum}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_add_with_carry(Value * a, Value * b, Value * carryin) {
+    Type * const carryTy = carryin->getType();
+    if (carryTy != mBitBlockType) {
+        carryin = CreateBitCast(CreateZExt(carryin, getIntNTy(mBitBlockWidth)), mBitBlockType);
+    }
     Value * carrygen = simd_and(a, b);
     Value * carryprop = simd_or(a, b);
     Value * sum = simd_add(mBitBlockWidth, simd_add(mBitBlockWidth, a, b), carryin);
     Value * carryout = CreateBitCast(simd_or(carrygen, simd_and(carryprop, CreateNot(sum))), getIntNTy(mBitBlockWidth));
-    return std::pair<Value *, Value *>(bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1)), bitCast(sum));
+    carryout = bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1));
+    if (carryout->getType() != carryTy) {
+        if (carryout->getType() == mBitBlockType) {
+            carryout = CreateBitCast(carryout, getIntNTy(mBitBlockWidth));
+        }
+        carryout = CreateZExtOrTrunc(carryout, carryTy);
+    }
+    return std::pair<Value *, Value *>(carryout, bitCast(sum));
 }
 
 // full subtract producing {borrowOut, difference}
