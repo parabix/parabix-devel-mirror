@@ -54,7 +54,6 @@ protected:
 class GrepKernelOptions {
     friend class ICGrepKernel;
 public:
-    using Externals = std::vector<std::pair<std::string, StreamSet *>>;
     using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
     GrepKernelOptions() :
         mIndexingAlphabet(&cc::Byte),
@@ -62,7 +61,17 @@ public:
     void setIndexingAlphabet(const cc::Alphabet * a);
     void setSource(StreamSet * s);
     void setResults(StreamSet * r);
-    void addExternal(std::string name, StreamSet * strm);
+
+    void addExternal(std::string name, StreamSet * strm) {
+        mExternals.emplace_back(name, strm, FixedRate());
+    }
+
+    template <typename ... Args>
+    void addExternal(std::string name, StreamSet * strm, Args ... args) {
+        std::initializer_list<Attribute> attrs{std::forward<Args>(args)...};
+        mExternals.emplace_back(name, strm, FixedRate(), attrs);
+    }
+
     void addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis);
     void setRE(re::RE * re);
     void setPrefixRE(re::RE * re);
@@ -78,7 +87,7 @@ private:
     const cc::Alphabet * mIndexingAlphabet;
     StreamSet * mSource;
     StreamSet * mResults;
-    Externals mExternals;
+    Bindings mExternals;
     Alphabets mAlphabets;
     re::RE * mRE;
     re::RE * mPrefixRE;

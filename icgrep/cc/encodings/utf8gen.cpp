@@ -126,10 +126,10 @@ UTF8assembly::UTF8assembly (const std::unique_ptr<KernelBuilder> & b,
  Binding{"dep6_11", deposit6_11, FixedRate(1), ZeroExtended()},
  Binding{"dep12_17", deposit12_17, FixedRate(1), ZeroExtended()},
  Binding{"dep18_20", deposit18_20, FixedRate(1), ZeroExtended()},
- Binding{"u8initial", u8initial},
+ Binding{"u8initial", u8initial, FixedRate(), ZeroExtended()},
  Binding{"u8final", u8final},
- Binding{"u8mask6_11", u8mask6_11},
- Binding{"u8mask12_17", u8mask12_17}},
+ Binding{"u8mask6_11", u8mask6_11, FixedRate(), ZeroExtended()},
+ Binding{"u8mask12_17", u8mask12_17, FixedRate(), ZeroExtended()}},
 {Binding{"u8basis", u8basis}}) {
 
 }

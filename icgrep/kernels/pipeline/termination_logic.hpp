@@ -28,9 +28,8 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
             const auto buffer = source(e, mBufferGraph);
             const auto producer = parent(buffer, mBufferGraph);
             const BufferRateData & rd = mBufferGraph[e];
-            const Binding & input = rd.Binding;
             const auto mayConsumeNoInput = (rd.Minimum.numerator() == 0) && (consumer != PipelineOutput);
-            if (LLVM_UNLIKELY(mayConsumeNoInput || input.hasAttribute(AttrId::ZeroExtended))) {
+            if (LLVM_UNLIKELY(mayConsumeNoInput)) {
                 continue;
             }
             add_edge(producer, consumer, G);

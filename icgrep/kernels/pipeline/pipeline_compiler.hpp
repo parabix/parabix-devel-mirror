@@ -26,6 +26,8 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
+// #define DISABLE_ZERO_EXTEND
+
 using namespace boost;
 using namespace boost::math;
 using namespace boost::adaptors;
@@ -187,7 +189,6 @@ private:
         assert (__find(key) == v);
         return v;
     }
-
 
     BOOST_NOINLINE Vertex __find(const RelationshipNode & key) const {
         const auto f = mMap.find(key.Kernel);
@@ -384,13 +385,15 @@ struct PipelineGraphBundle {
 };
 
 enum CycleCounter {
-  AFTER_SYNCHRONIZATION
+  BEFORE_KERNEL_CALL
+  , INITIAL
+  // ------------------
+  , NUM_OF_STORED_COUNTERS
+  // ------------------
+  , AFTER_SYNCHRONIZATION
   , BUFFER_EXPANSION
   , AFTER_KERNEL_CALL
   , FINAL
-// ------------------
-  , BEFORE_KERNEL_CALL
-  , INITIAL
 };
 
 const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
@@ -494,10 +497,11 @@ protected:
 
     void enterRegionSpan(BuilderRef b);
 
-    void calculateNonFinalItemCounts(BuilderRef b);
-    void calculateFinalItemCounts(BuilderRef b);
-    void zeroInputAfterFinalItemCount(BuilderRef b);
-    void phiOutItemCounts(BuilderRef b, const Vec<Value *> & inputs, const Vec<Value *> & outputs) const;
+    Value * calculateItemCounts(BuilderRef b);
+    void calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
+    void calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
+    void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddress);
+    void phiOutItemCounts(BuilderRef b, const Vec<Value *> & accessibleItems, const Vec<Value *> &inputBaseAddress, const Vec<Value *> & writableItems) const;
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
     Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
@@ -544,7 +548,7 @@ protected:
 
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
-    Value * getInitialStrideLength(BuilderRef b, const StreamPort port);
+    Value * getFirstStrideLength(BuilderRef b, const StreamPort port);
     Value * calculateNumOfLinearItems(BuilderRef b, const StreamPort port);
     Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
@@ -605,7 +609,9 @@ protected:
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
     BufferType getOutputBufferType(const unsigned outputPort) const;
-    Value * epoch(BuilderRef b, const Binding &binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtended = nullptr) const;
+
+    Value * epoch(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtend) const;
+    void calculateInputEpochAddresses(BuilderRef b);
 
     unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
     bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
@@ -813,7 +819,9 @@ protected:
     Vec<Value *>                                mInitiallyProcessedDeferredItemCount;
     Vec<PHINode *>                              mAlreadyProcessedPhi; // entering the segment loop
     Vec<PHINode *>                              mAlreadyProcessedDeferredPhi;
-    Vec<Value *>                                mInputStrideLength;
+    Vec<Value *>                                mInputEpoch;
+    Vec<PHINode *>                              mInputEpochPhi;
+    Vec<Value *>                                mFirstInputStrideLength;
     Vec<Value *>                                mAccessibleInputItems;
     Vec<PHINode *>                              mLinearInputItemsPhi;
     Vec<Value *>                                mReturnedProcessedItemCountPtr; // written by the kernel
@@ -828,7 +836,7 @@ protected:
     Vec<Value *>                                mInitiallyProducedDeferredItemCount;
     Vec<PHINode *>                              mAlreadyProducedPhi; // entering the segment loop
     Vec<PHINode *>                              mAlreadyProducedDeferredPhi;
-    Vec<Value *>                                mOutputStrideLength;
+    Vec<Value *>                                mFirstOutputStrideLength;
     Vec<Value *>                                mWritableOutputItems;
     Vec<Value *>                                mConsumedItemCount;
     Vec<PHINode *>                              mLinearOutputItemsPhi;
@@ -841,7 +849,7 @@ protected:
     Vec<PHINode *>                              mFullyProducedItemCount; // *after* exiting the kernel
 
     // cycle counter state
-    std::array<Value *, 4>                      mCycleCounters;
+    std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
 
     // analysis state
     const RelationshipGraph                     mStreamGraph;

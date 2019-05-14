@@ -1182,6 +1182,8 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
 
     bool hasZeroExtendedStream = false;
 
+    #ifndef DISABLE_ZERO_EXTEND
+
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const RelationshipNode & rn = mStreamGraph[i];
         assert (rn.Type == RelationshipNode::IsKernel);
@@ -1234,6 +1236,8 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
 
         hasZeroExtendedStream = true;
     }
+
+    #endif
 
     return hasZeroExtendedStream;
 }

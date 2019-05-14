@@ -68,10 +68,13 @@ template <typename Graph>
 void __transitive_closure_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
     // Simple topological closure for DAGs
     for (unsigned u : ordering) {
-        for (auto e : make_iterator_range(in_edges(u, G))) {
+        for (const auto & e : make_iterator_range(in_edges(u, G))) {
             const auto s = source(e, G);
-            for (auto f : make_iterator_range(out_edges(u, G))) {
-                add_edge(s, target(f, G), G);
+            for (const auto & f : make_iterator_range(out_edges(u, G))) {
+                const auto t = target(f, G);
+                if (edge(s, t, G).second) continue;
+                typename Graph::edge_property_type p{};
+                add_edge(s, t, p, G);
             }
         }
     }
@@ -86,7 +89,7 @@ void __transitive_reduction_dag(ReverseTopologicalOrdering & ordering, Graph & G
             sources.set(source(e, G));
         }
         for (auto e : make_iterator_range(out_edges(u, G))) {
-            remove_in_edge_if(target(e, G), [&G, &sources](const Edge f) {
+            remove_in_edge_if(target(e, G), [&G, &sources](const Edge & f) {
                 return sources.test(source(f, G));
             }, G);
         }

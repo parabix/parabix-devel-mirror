@@ -363,8 +363,6 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
             }
         }
 
-
-
         // Identify the input rates
         for (const auto & input : make_iterator_range(in_edges(kernel, G))) {
             BufferRateData & inputRate = G[input];
@@ -459,6 +457,25 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
                 }
                 return s;
             }();
+        }
+
+        auto forceNewRate = [&]() {
+            const Kernel * const K = getKernel(kernel);
+            for (const Attribute & attr : K->getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::CanTerminateEarly:
+                    case AttrId::MustExplicitlyTerminate:
+                        return true;
+                    default: continue;
+                }
+            }
+            return false;
+        };
+
+        if (LLVM_UNLIKELY(forceNewRate())) {
+            const auto newSymbolicRate = add_vertex(M);
+            rateIsBoundedBy(newSymbolicRate, symbolicRate);
+            symbolicRate = newSymbolicRate;
         }
 
         // Correct the input rate to be relative to the newly computed symbolic rate.
@@ -1221,22 +1238,45 @@ Value * PipelineCompiler::epoch(BuilderRef b,
                                 const StreamSetBuffer * const buffer,
                                 Value * const position,
                                 Value * const zeroExtended) const {
-
+    assert ("epoch buffer cannot be null!" && buffer);
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
     PointerType * const bufferType = buffer->getPointerType();
     Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
-    Value * baseAddress = buffer->getBaseAddress(b.get());
-    baseAddress = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
+    Value * const baseAddress = buffer->getBaseAddress(b.get());
+    Value * address = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
     if (zeroExtended) {
         // prepareLocalZeroExtendSpace guarantees this will be large enough to satisfy the kernel
         ExternalBuffer tmp(b, binding.getType());
+        assert (mZeroExtendBufferPhi);
         Value * zeroExtension = b->CreatePointerCast(mZeroExtendBufferPhi, bufferType);
         zeroExtension = tmp.getStreamBlockPtr(b.get(), zeroExtension, ZERO, b->CreateNeg(blockIndex));
-        baseAddress = b->CreateSelect(zeroExtended, zeroExtension, baseAddress);
+        address = b->CreateSelect(zeroExtended, zeroExtension, address);
     }
-    baseAddress = b->CreatePointerCast(baseAddress, bufferType);
-    return baseAddress;
+    return b->CreatePointerCast(address, bufferType);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief calculateInputEpochAddresses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::calculateInputEpochAddresses(BuilderRef b) {
+    RelationshipType prior_in{};
+    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+        const BufferRateData & rt = mBufferGraph[e];
+        assert (rt.Port.Type == PortType::Input);
+        assert (prior_in < rt.Port);
+        prior_in = rt.Port;
+        PHINode * processed = nullptr;
+        const auto i = rt.Port.Number;
+        if (mAlreadyProcessedDeferredPhi[i]) {
+            processed = mAlreadyProcessedDeferredPhi[i];
+        } else {
+            processed = mAlreadyProcessedPhi[i];
+        }
+        const auto buffer = source(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[buffer];
+        mInputEpoch[i] = epoch(b, rt.Binding, bn.Buffer, processed, mIsInputZeroExtended[i]);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

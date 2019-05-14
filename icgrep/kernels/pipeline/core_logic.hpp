@@ -103,51 +103,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelLoopEntry);
     determineNumOfLinearStrides(b);
-
-    /// -------------------------------------------------------------------------------------
-    /// KERNEL CALCULATE ITEM COUNTS
-    /// -------------------------------------------------------------------------------------
-
-    // TODO: it would be better to try and statically prove whether a kernel will only ever
-    // need a single "run" per segment rather than allowing only source kernels to have this
-    // optimization.
-
-    Value * isFinal = nullptr;
-
-    if (mBoundedKernel) {
-        BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
-        BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
-        BasicBlock * const enteringZeroInput = b->CreateBasicBlock(prefix + "_zeroInput", mKernelLoopCall);
-        isFinal = b->CreateICmpEQ(mNumOfLinearStrides, b->getSize(0));
-
-        b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
-
-        /// -------------------------------------------------------------------------------------
-        /// KERNEL ENTERING FINAL STRIDE
-        /// -------------------------------------------------------------------------------------
-
-        b->SetInsertPoint(enteringFinalStride);
-        calculateFinalItemCounts(b);
-        b->CreateBr(enteringZeroInput);
-
-        b->SetInsertPoint(enteringZeroInput);
-        zeroInputAfterFinalItemCount(b);
-        b->CreateBr(mKernelLoopCall);
-
-        /// -------------------------------------------------------------------------------------
-        /// KERNEL ENTERING NON-FINAL SEGMENT
-        /// -------------------------------------------------------------------------------------
-
-        b->SetInsertPoint(enteringNonFinalSegment);
-        calculateNonFinalItemCounts(b);
-        b->CreateBr(mKernelLoopCall);
-
-    } else {
-        mNumOfLinearStrides = b->getSize(1);
-        calculateNonFinalItemCounts(b);
-        b->CreateBr(mKernelLoopCall);
-    }
-
+    prepareLocalZeroExtendSpace(b);
+    Value * const isFinal = calculateItemCounts(b);
 
 
     /// -------------------------------------------------------------------------------------
@@ -156,7 +113,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelLoopCall);
    // checkForLastPartialSegment(b, isFinal);
-    prepareLocalZeroExtendSpace(b);
     writeLookBehindLogic(b);
     writeKernelCall(b);
     writeCopyBackLogic(b);
@@ -511,7 +467,10 @@ inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
         mLinearInputItemsPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyAccessible");
+        Type * const bufferTy = getInputBuffer(i)->getPointerType();
+        mInputEpochPhi[i] = b->CreatePHI(bufferTy, 2, prefix + "_baseAddress");
     }
+
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});

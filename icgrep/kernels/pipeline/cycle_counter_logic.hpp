@@ -11,15 +11,13 @@ inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsi
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         // TODO: make these thread local to prevent false sharing and enable
         // analysis of thread distributions?
-        const auto prefix = makeKernelName(kernel);
         IntegerType * const int64Ty = b->getInt64Ty();
 
-        const auto prefix2 = prefix + STATISTICS_CYCLE_COUNT_SUFFIX;
-
-        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
-        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::BUFFER_EXPANSION));
-        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
-        mPipelineKernel->addInternalScalar(int64Ty, prefix2 + std::to_string(CycleCounter::FINAL));
+        const auto prefix = makeKernelName(kernel) + STATISTICS_CYCLE_COUNT_SUFFIX;
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::FINAL));
     }
 
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
@@ -75,7 +73,8 @@ inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsi
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
-        mCycleCounters[type] = b->CreateReadCycleCounter();
+        assert ((unsigned)type < mCycleCounters.size());
+        mCycleCounters[(unsigned)type] = b->CreateReadCycleCounter();
     }
 }
 

@@ -197,29 +197,14 @@ Value * BlockOrientedKernel::getPopCountRateItemCount(const std::unique_ptr<Kern
  * @brief getRemainingItems
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * BlockOrientedKernel::getRemainingItems(const std::unique_ptr<KernelBuilder> & b) {
-    Value * remainingItems = nullptr;
     const auto count = mInputStreamSets.size();
-    if (count == 1) {
-        return mAccessibleInputItems[0];
-    } else {
-        for (unsigned i = 0; i < count; i++) {
-            if (mInputStreamSets[i].isPrincipal()) {
-                return mAccessibleInputItems[i];
-            }
-        }
-        for (unsigned i = 0; i < count; ++i) {
-            const ProcessingRate & r = mInputStreamSets[i].getRate();
-            if (r.isFixed()) {
-                Value * ic = b->CreateCeilUDiv2(mAccessibleInputItems[i], r.getRate());
-                if (remainingItems) {
-                    remainingItems = b->CreateUMin(remainingItems, ic);
-                } else {
-                    remainingItems = ic;
-                }
-            }
+    assert (count > 0);
+    for (unsigned i = 0; i < count; i++) {
+        if (mInputStreamSets[i].isPrincipal()) {
+            return mAccessibleInputItems[i];
         }
     }
-    return remainingItems;
+    return mAccessibleInputItems[0];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

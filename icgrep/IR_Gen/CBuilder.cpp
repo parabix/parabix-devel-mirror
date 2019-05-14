@@ -45,7 +45,6 @@ static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
 static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 #endif
 
-
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
 #define setReturnDoesNotAlias() setDoesNotAlias(0)
 #endif
@@ -370,8 +369,10 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
         num = CreatePtrToInt(value, int64Ty);
-    } else {
+    } else if (value->getType()->isIntegerTy()) {
         num = CreateZExt(value, int64Ty);
+    } else {
+        report_fatal_error("CallPrintInt was given a non-integer/non-pointer value.");
     }
     assert (num->getType()->isIntegerTy());
     CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
@@ -419,8 +420,14 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     ConstantInt * const align = ConstantInt::get(sizeTy, alignment);
     size = CreateZExtOrTrunc(size, sizeTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CreateAssert(size, "CreateAlignedMalloc: 0-byte malloc is implementation defined");
-        CreateAssertZero(CreateURem(size, align), "CreateAlignedMalloc: size must be an integral multiple of alignment.");
+        Constant * const ZERO = ConstantInt::get(sizeTy, 0);
+        __CreateAssert(CreateICmpNE(size, ZERO),
+                       "CreateAlignedMalloc: 0-byte malloc "
+                       "is implementation defined", {});
+
+        __CreateAssert(CreateICmpEQ(CreateURem(size, align), ZERO),
+                       "CreateAlignedMalloc: size (%d) must be an "
+                       "integral multiple of alignment (%d).", {size, align});
     }
     Value * ptr = nullptr;
     if (hasAlignedAlloc()) {
@@ -950,106 +957,7 @@ void __report_failure(const char * name, const char * fmt, const uintptr_t * tra
     va_end(args);
 }
 
-#if defined(HAS_MACH_VM_TYPES)
-
-/*
- * Copyright (c) 1999, 2007 Apple Inc. All rights reserved.
- *
- * @APPLE_LICENSE_HEADER_START@
- *
- * This file contains Original Code and/or Modifications of Original Code
- * as defined in and that are subject to the Apple Public Source License
- * Version 2.0 (the 'License'). You may not use this file except in
- * compliance with the License. Please obtain a copy of the License at
- * http://www.opensource.apple.com/apsl/ and read it before using this
- * file.
- *
- * The Original Code and all software distributed under the License are
- * distributed on an 'AS IS' basis, WITHOUT WARRANTY OF ANY KIND, EITHER
- * EXPRESS OR IMPLIED, AND APPLE HEREBY DISCLAIMS ALL SUCH WARRANTIES,
- * INCLUDING WITHOUT LIMITATION, ANY WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE, QUIET ENJOYMENT OR NON-INFRINGEMENT.
- * Please see the License for the specific language governing rights and
- * limitations under the License.
- *
- * @APPLE_LICENSE_HEADER_END@
- */
-
-#include <pthread.h>
-#include <mach/mach.h>
-#include <mach/vm_statistics.h>
-#include <stdlib.h>
-
-#if defined(__i386__) || defined(__x86_64__)
-#define FP_LINK_OFFSET 1
-#elif defined(__ppc__) || defined(__ppc64__)
-#define FP_LINK_OFFSET 2
-#else
-#error  ********** Unimplemented architecture
-#endif
-
-#define	INSTACK(a)	((uintptr_t)(a) >= stackbot && (uintptr_t)(a) <= stacktop)
-#if defined(__ppc__) || defined(__ppc64__) || defined(__x86_64__)
-#define	ISALIGNED(a)	((((uintptr_t)(a)) & 0xf) == 0)
-#elif defined(__i386__)
-#define	ISALIGNED(a)	((((uintptr_t)(a)) & 0xf) == 8)
-#endif
-
-__private_extern__  __attribute__((noinline))
-void
-_thread_stack_pcs(vm_address_t *buffer, unsigned max, unsigned *nb, unsigned skip)
-{
-    void *frame, *next;
-    pthread_t self = pthread_self();
-    uintptr_t stacktop = (uintptr_t)(pthread_get_stackaddr_np(self));
-    uintptr_t stackbot = stacktop - (uintptr_t)(pthread_get_stacksize_np(self));
-
-    *nb = 0;
-
-    /* make sure return address is never out of bounds */
-    stacktop -= (FP_LINK_OFFSET + 1) * sizeof(void *);
-
-    /*
-     * The original implementation called the first_frame_address() function,
-     * which returned the stack frame pointer.  The problem was that in ppc,
-     * it was a leaf function, so no new stack frame was set up with
-     * optimization turned on (while a new stack frame was set up without
-     * optimization).  We now inline the code to get the stack frame pointer,
-     * so we are consistent about the stack frame.
-     */
-#if defined(__i386__) || defined(__x86_64__)
-    frame = __builtin_frame_address(0);
-#elif defined(__ppc__) || defined(__ppc64__)
-    /* __builtin_frame_address IS BROKEN IN BEAKER: RADAR #2340421 */
-    __asm__ volatile("mr %0, r1" : "=r" (frame));
-#endif
-    if(!INSTACK(frame) || !ISALIGNED(frame))
-        return;
-#if defined(__ppc__) || defined(__ppc64__)
-    /* back up the stack pointer up over the current stack frame */
-    next = *(void **)frame;
-    if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
-        return;
-    frame = next;
-#endif
-    while (skip--) {
-        next = *(void **)frame;
-        if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
-            return;
-        frame = next;
-    }
-    while (max--) {
-        buffer[*nb] = *(vm_address_t *)(((void **)frame) + FP_LINK_OFFSET);
-        (*nb)++;
-        next = *(void **)frame;
-        if(!INSTACK(next) || !ISALIGNED(next) || next <= frame)
-            return;
-        frame = next;
-    }
-}
-#endif
-
-void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessage, std::initializer_list<llvm::Value *> params) {
+void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::initializer_list<llvm::Value *> params) {
 
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
         if (LLVM_LIKELY(!cast<Constant>(assertion)->isNullValue())) {
@@ -1073,7 +981,6 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         // va_list is platform specific but since we are not directly modifying
         // any use of this type in LLVM code, just ensure it is large enough.
         ArrayType * const vaListTy = ArrayType::get(getInt8Ty(), sizeof(va_list));
-        PointerType * const vaListPtrTy = vaListTy->getPointerTo();
         Type * const voidTy = getVoidTy();
 
 
@@ -1101,7 +1008,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         assertFunc->setHasUWTable();
         assertFunc->setPersonalityFn(getDefaultPersonalityFunction());
 
-        Value * const vaList = CreateAlloca(vaListTy);
+        Value * const vaList = CreatePointerCast(CreateAlloca(vaListTy), int8PtrTy);
         FunctionType * vaFuncTy = FunctionType::get(voidTy, { int8PtrTy }, false);
         Function * const vaStart = Function::Create(vaFuncTy, Function::ExternalLinkage, "llvm.va_start", m);
         Function * const vaEnd = Function::Create(vaFuncTy, Function::ExternalLinkage, "llvm.va_end", m);
@@ -1109,9 +1016,11 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         CreateCondBr(assertion, success, failure);
 
         SetInsertPoint(failure);
-        FunctionType * const rfTy = FunctionType::get(voidTy, { int8PtrTy, int8PtrTy, stackPtrTy, int32Ty, vaListPtrTy }, false);
+        FunctionType * const rfTy = FunctionType::get(voidTy, { int8PtrTy, int8PtrTy, stackPtrTy, int32Ty, int8PtrTy }, false);
         Function * const reportFn = mDriver->addLinkFunction(m, "__report_failure_v", rfTy,
                                                              reinterpret_cast<void *>(&__report_failure_v));
+        reportFn->setCallingConv(CallingConv::C);
+
         FixedArray<Value *, 5> args;
         args[0] = name;
         args[1] = msg;
@@ -1128,7 +1037,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
         Constant * const nil = ConstantPointerNull::get(int8PtrTy);
         IRBuilder<>::CreateStore(nil, CreateBitCast(exception, int8PtrPtrTy));
         // NOTE: the second argument is supposed to point to a std::type_info object.
-        // The external value Clang passes into it is "nil" when RTTI is disabled.
+        // The external value Clang passes into it resolves to "null" when RTTI is disabled.
         // This appears to work here but ought to be verified.
         CreateCall(getThrow(), { exception, nil, nil });
         CreateUnreachable();
@@ -1188,7 +1097,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine failureMessag
     #endif
     Value * const name = GetString(getKernelName());
     SmallVector<char, 1024> tmp;
-    const StringRef fmt = failureMessage.toStringRef(tmp);
+    const StringRef fmt = format.toStringRef(tmp);
     // TODO: add a check that the number of var_args == number of message args?
 
 
@@ -1403,6 +1312,9 @@ Value * CBuilder::CreateMemChr(Value * ptr, Value * byteVal, Value * num) {
         PointerType * const voidPtrTy = getVoidPtrTy();
         FunctionType * memchrTy = FunctionType::get(voidPtrTy, {voidPtrTy, int32Ty, sizeTy}, false);
         memchrFn = Function::Create(memchrTy, Function::ExternalLinkage, "memchr", m);
+    }
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CHECK_ADDRESS(ptr, num, "CreateMemChr: Src");
     }
     return CreateCall(memchrFn, {ptr, byteVal, num});
 }
@@ -1810,6 +1722,8 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 const uintptr_t * const trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
                                 const uint32_t n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
 
+                                // since we may not necessarily be able to statically evaluate every varadic param,
+                                // attempt to fill in what constants we can and report <any> for all others.
                                 boost::format fmt(msg);
                                 for (unsigned i = 5; i < ci.getNumArgOperands(); ++i) {
                                     Value * const arg = ci.getOperand(3);

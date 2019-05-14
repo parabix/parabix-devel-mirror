@@ -27,7 +27,7 @@ GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<ker
 "gcb",
 // inputs
 {Binding{"basis", BasisBits},
- Binding{"nonFinal", RequiredStreams}},
+ Binding{"nonFinal", RequiredStreams, FixedRate(), ZeroExtended()}},
 // output
 {Binding{"\\b{g}", GCB_stream, FixedRate(), Add1()}}) {
 

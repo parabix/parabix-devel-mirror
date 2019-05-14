@@ -42,11 +42,11 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     //b->CallPrintInt("initialPos", initialPos);
     Value * accumulator = b->getScalarField("accumulator_address");
     Value * const avail = b->getAvailableItemCount("InputStream");
-    //b->CallPrintInt("numOfStrides", numOfStrides);
-    //b->CallPrintInt("avail", avail);
-    //for (unsigned i = 0; i < mStride/b->getBitBlockWidth(); i++) {
-    //    b->CallPrintRegister("matches[" + std::to_string(i) + "]", b->loadInputStreamBlock("matchResult", ZERO, b->getSize(i)));
-    //}
+//    b->CallPrintInt("numOfStrides", numOfStrides);
+//    b->CallPrintInt("avail", avail);
+//    for (unsigned i = 0; i < mStride/b->getBitBlockWidth(); i++) {
+//        b->CallPrintRegister("matches[" + std::to_string(i) + "]", b->loadInputStreamBlock("matchResult", ZERO, b->getSize(i)));
+//    }
     b->CreateBr(scanMatchStride);
 
     b->SetInsertPoint(scanMatchStride);
@@ -212,9 +212,9 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject)
 : MultiBlockKernel(b, "scanMatch",
 // inputs
-{Binding{"matchResult", Matches, FixedRate(), Principal()}
-,Binding{"lineBreak", LineBreakStream}
-,Binding{"InputStream", ByteStream, FixedRate(), Deferred()}},
+{Binding{"matchResult", Matches, FixedRate() }
+,Binding{"lineBreak", LineBreakStream, FixedRate(), ZeroExtended()}
+,Binding{"InputStream", ByteStream, FixedRate(), { Deferred(), ZeroExtended() }}},
 // outputs
 {},
 // input scalars
@@ -224,7 +224,7 @@ ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & 
 // kernel state
 {InternalScalar{b->getSizeTy(), "LineNum"}}) {
     addAttribute(SideEffecting());
-    //setStride(b->getBitBlockWidth() * 2);
+    setStride(b->getBitBlockWidth() * 2);
 }
 
 }

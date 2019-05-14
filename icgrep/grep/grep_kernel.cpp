@@ -271,7 +271,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 : PabloKernel(kb, "RequiredStreams_UTF8" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
 // input
 {Binding{"source", Source},
- Binding{"lf", LineFeedStream, FixedRate(), LookAhead(1)}},
+ Binding{"lf", LineFeedStream, FixedRate(), { LookAhead(1), ZeroExtended() }}},
 // output
 {Binding{"u8index", RequiredStreams, FixedRate(), Add1()},
  Binding{"UnicodeLB", UnicodeLB, FixedRate()}}) {
@@ -319,21 +319,23 @@ void GrepKernelOptions::setRE(RE * e) {mRE = e;}
 void GrepKernelOptions::setPrefixRE(RE * e) {mPrefixRE = e;}
 void GrepKernelOptions::setSource(StreamSet * s) {mSource = s;}
 void GrepKernelOptions::setResults(StreamSet * r) {mResults = r;}
-void GrepKernelOptions::addExternal(std::string name, StreamSet * strm) {
-    mExternals.emplace_back(name, strm);
-}
+
 void GrepKernelOptions::addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis) {
     mAlphabets.emplace_back(a, basis);
 }
 
 Bindings GrepKernelOptions::streamSetInputBindings() {
     Bindings inputs;
-    inputs.emplace_back("basis", mSource);
-    for (const auto & e : mExternals) {
-        inputs.emplace_back(e.first, e.second);
+    if (mExternals.empty()) {
+        inputs.emplace_back("basis", mSource);
+    } else {
+        inputs.emplace_back("basis", mSource, FixedRate(), ZeroExtended());
+    }
+    for (const auto & a : mExternals) {
+        inputs.emplace_back(a);
     }
     for (const auto & a : mAlphabets) {
-        inputs.emplace_back(a.first->getName() + "_basis", a.second);
+        inputs.emplace_back(a.first->getName() + "_basis", a.second, FixedRate(), ZeroExtended());
     }
     return inputs;
 }
@@ -357,10 +359,10 @@ std::string GrepKernelOptions::getSignature() {
             mSignature += ":" + std::to_string(grep::ByteCClimit);
         }
         mSignature += "/" + mIndexingAlphabet->getName();
-        for (auto e: mExternals) {
-            mSignature += "_" + e.first;
+        for (const auto & e : mExternals) {
+            mSignature += "_" + e.getName();
         }
-        for (auto a: mAlphabets) {
+        for (const auto & a: mAlphabets) {
             mSignature += "_" + a.first->getName();
         }
         if (mPrefixRE) {
@@ -397,7 +399,7 @@ void ICGrepKernel::generatePabloMethod() {
     //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
     RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mIndexingAlphabet));
     for (const auto & e : mOptions->mExternals) {
-        re_compiler.addPrecompiled(e.first, pb.createExtract(getInputStreamVar(e.first), pb.getInteger(0)));
+        re_compiler.addPrecompiled(e.getName(), pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0)));
     }
     for (const auto & a : mOptions->mAlphabets) {
         auto & alpha = a.first;
@@ -527,7 +529,7 @@ MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuil
 : PabloKernel(iBuilder, "MatchedLines",
 // inputs
 {Binding{"matchResults", OriginalMatches}
-,Binding{"lineBreaks", LineBreakStream}},
+,Binding{"lineBreaks", LineBreakStream, FixedRate(), ZeroExtended()}},
 // output
 {Binding{"matchedLines", Matches, FixedRate(), Add1()}}) {
 
@@ -545,7 +547,7 @@ InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBui
 : BlockOrientedKernel(b, "Invert",
 // Inputs
 {Binding{"matchedLines", OriginalMatches},
- Binding{"lineBreaks", LineBreakStream}},
+ Binding{"lineBreaks", LineBreakStream, FixedRate(), ZeroExtended()}},
 // Outputs
 {Binding{"nonMatches", Matches}},
 // Input/Output Scalars and internal state

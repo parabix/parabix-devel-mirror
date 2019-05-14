@@ -75,6 +75,67 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief calculateItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::calculateItemCounts(BuilderRef b) {
+
+
+    // TODO: it would be better to try and statically prove whether a kernel will only ever
+    // need a single "run" per segment rather than allowing only source kernels to have this
+    // optimization.
+
+    Value * isFinal = nullptr;
+
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> accessibleItems(numOfInputs);
+
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> writableItems(numOfOutputs);
+
+    calculateInputEpochAddresses(b);
+
+    if (mBoundedKernel) {
+
+        const auto prefix = makeKernelName(mKernelIndex);
+        BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
+        BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
+        isFinal = b->CreateICmpEQ(mNumOfLinearStrides, b->getSize(0));
+
+        b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
+
+        /// -------------------------------------------------------------------------------------
+        /// KERNEL ENTERING FINAL STRIDE
+        /// -------------------------------------------------------------------------------------
+
+        b->SetInsertPoint(enteringFinalStride);
+        calculateFinalItemCounts(b, accessibleItems, writableItems);
+        Vec<Value *> inputEpochPhi(numOfInputs);
+        zeroInputAfterFinalItemCount(b, accessibleItems, inputEpochPhi);
+        phiOutItemCounts(b, accessibleItems, inputEpochPhi, writableItems);
+        b->CreateBr(mKernelLoopCall);
+
+        /// -------------------------------------------------------------------------------------
+        /// KERNEL ENTERING NON-FINAL SEGMENT
+        /// -------------------------------------------------------------------------------------
+
+        b->SetInsertPoint(enteringNonFinalSegment);
+        calculateNonFinalItemCounts(b, accessibleItems, writableItems);
+        phiOutItemCounts(b, accessibleItems, mInputEpoch, writableItems);
+        b->CreateBr(mKernelLoopCall);
+
+    } else {
+        mNumOfLinearStrides = b->getSize(1);
+        calculateNonFinalItemCounts(b, accessibleItems, writableItems);
+        phiOutItemCounts(b, accessibleItems, mInputEpoch, writableItems);
+        b->CreateBr(mKernelLoopCall);
+    }
+
+    return isFinal;
+
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForSufficientInputData
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const unsigned inputPort) {
@@ -114,6 +175,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
     }
     const Binding & input = getInputBinding(inputPort);
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
+    #ifndef DISABLE_ZERO_EXTEND
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
         // switching to a "zeroed buffer". The size of the buffer will be determined by the final
@@ -129,7 +191,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
         mIsInputZeroExtended[inputPort] = useZeroExtend;
         accessible = b->CreateSelect(useZeroExtend, MAX_INT, accessible);
     }
-
+    #endif
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
     b->CallPrintInt(prefix + "_available", available);
@@ -425,69 +487,41 @@ inline Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const uns
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateNonFinalItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b) {
+inline void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
     assert (mNumOfLinearStrides);
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
-    Vec<Value *> linearInputItems(numOfInputs);
-    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
-    Vec<Value *> linearOutputItems(numOfOutputs);
+    const auto numOfInputs = accessibleItems.size();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        linearInputItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Input, i});
+        accessibleItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Input, i});
     }
+    const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        linearOutputItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Output, i});
-    }
-    phiOutItemCounts(b, linearInputItems, linearOutputItems);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief phiOutItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::phiOutItemCounts(BuilderRef b, const Vec<Value *> & inputs, const Vec<Value *> & outputs) const {
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        mLinearInputItemsPhi[i]->addIncoming(inputs[i], exitBlock);
-    }
-    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        mLinearOutputItemsPhi[i]->addIncoming(outputs[i], exitBlock);
+        writableItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Output, i});
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateFinalItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
-    Vec<Value *> accessibleItems(numOfInputs);
-    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
-    Vec<Value *> pendingItems(numOfOutputs);
-
+inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
+    const auto numOfInputs = accessibleItems.size();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         accessibleItems[i] = addLookahead(b, i, mAccessibleInputItems[i]);
     }
 
     // Record the writable item counts but when determining the number of Fixed writable items calculate:
 
-    //   CEILING(PRINCIPAL_OR_MIN(Accessible Item Count / Fixed Input Rate) * Fixed Output Rate)
+    //   CEILING(MIN(Accessible Item Count / Fixed Input Rate) * Fixed Output Rate)
 
     RateValue rateLCM(1);
-    bool noPrincipalStream = true;
-
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (LLVM_LIKELY(rate.isFixed())) {
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                assert (noPrincipalStream);
-                assert (!input.hasAttribute(AttrId::ZeroExtended));
-                noPrincipalStream = false;
-            }
             rateLCM = lcm(rateLCM, rate.getRate());
         }
     }
 
+    const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
@@ -500,28 +534,28 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
-        if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
-            if (LLVM_LIKELY(!input.hasAttribute(AttrId::ZeroExtended))) {
-                Value * const scaledInverseOfAccessibleInput =
-                    b->CreateMul2(accessibleItems[i], rateLCM / rate.getRate());
-                minScaledInverseOfAccessibleInput =
-                    b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
-            }
+        if (rate.isFixed() && !input.hasAttribute(AttrId::ZeroExtended)) {
+            Value * const scaledInverseOfAccessibleInput =
+                b->CreateMul2(accessibleItems[i], rateLCM / rate.getRate());
+            minScaledInverseOfAccessibleInput =
+                b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
         }
     }
 
-    // truncate any input stream down to the length of the shortest (or principal) stream
+    // truncate any input stream down to the length of the shortest non-ZeroExtended stream
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
             Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
             if (LLVM_UNLIKELY(mCheckAssertions)) {
-                b->CreateAssert(b->CreateICmpULE(calculated, accessibleItems[i]),
-                                input.getName() +
-                                ": final calculated fixed rate item count (%d) "
-                                "exceeds accessible item count (%d)",
-                                calculated, accessibleItems[i]);
+                if (LLVM_LIKELY(!input.hasAttribute(AttrId::ZeroExtended))) {
+                    b->CreateAssert(b->CreateICmpEQ(calculated, accessibleItems[i]),
+                                    input.getName() +
+                                    ": expected final fixed rate item count (%d) "
+                                    "does not match accessible item count (%d)",
+                                    calculated, accessibleItems[i]);
+                }
             }
             accessibleItems[i] = calculated;
         }
@@ -532,7 +566,7 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
         const ProcessingRate & rate = output.getRate();
         Value * writable = mWritableOutputItems[i];
         if (rate.isPartialSum()) {
-            writable = mOutputStrideLength[i];
+            writable = mFirstOutputStrideLength[i];
         } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
             Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
             if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -553,20 +587,159 @@ inline void PipelineCompiler::calculateFinalItemCounts(BuilderRef b) {
                 writable = b->CreateRoundUp(writable, b->getSize(attr.amount()));
             }
         }
-        pendingItems[i] = writable;
+        writableItems[i] = writable;
     }
 
-    phiOutItemCounts(b, accessibleItems, pendingItems);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief zeroInputAfterFinalItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b) {
+void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddress) {
+    const auto numOfInputs = accessibleItems.size();
 
+    const auto blockWidth = b->getBitBlockWidth();
+    const auto log2BlockWidth = floor_log2(blockWidth);
+    Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
+    Constant * const LOG_2_BLOCK_WIDTH = b->getSize(log2BlockWidth);
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
 
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = getInputBinding(i);
+        const ProcessingRate & rate = input.getRate();
 
+        inputBaseAddress[i] = mInputEpoch[i];
 
+        assert (inputBaseAddress[i]);
+
+        if (LLVM_LIKELY(rate.isFixed())) {
+
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
+            const StreamSetBuffer * const buffer = getInputBuffer(i);
+
+            // if this streamset has 0 streams, it exists only to have a produced/processed count.
+            Value * const numOfStreams = buffer->getStreamSetCount(b.get());
+            if (LLVM_LIKELY(isa<ConstantInt>(numOfStreams))) {
+                if (LLVM_UNLIKELY(cast<ConstantInt>(numOfStreams)->getLimitedValue() == 0)) {
+                    continue;
+                }
+            }
+
+            BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_genMaskedInput", mKernelLoopCall);
+            BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelLoopCall);
+            BasicBlock * const maskedInputExit = b->CreateBasicBlock(prefix + "_genMaskedInputExit", mKernelLoopCall);
+            BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectedInput", mKernelLoopCall);
+
+            Value * const tooMany = b->CreateICmpULT(accessibleItems[i], mAccessibleInputItems[i]);
+            Value * computeMask = tooMany;
+            if (mIsInputZeroExtended[i]) {
+                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended[i]));
+            }
+            BasicBlock * const entryBlock = b->GetInsertBlock();
+            b->CreateUnlikelyCondBr(computeMask, maskedInput, selectedInput);
+
+            b->SetInsertPoint(maskedInput);
+            const auto itemWidth = getItemWidth(buffer->getBaseType());
+            Constant * const ITEM_WIDTH = b->getSize(itemWidth);
+            Constant * const streamLength = b->getSize(itemWidth * blockWidth / 8);
+            Value * const strideLength = b->CreateMul(streamLength, numOfStreams);
+
+            // if this is a deferred fixed rate stream, we cannot be sure how many
+            // blocks will have to be provided to the kernel in order to mask out
+            // the truncated input stream.
+
+            Constant * LOG_2_FIELD_SIZE = LOG_2_BLOCK_WIDTH;
+            if (LLVM_LIKELY(itemWidth < blockWidth)) {
+                const auto f = std::log2<unsigned>(blockWidth / itemWidth);
+                LOG_2_FIELD_SIZE = b->getSize(f);
+            }
+
+            #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + " truncating item count to ", accessibleItems[i]);
+            #endif
+
+            Value * numOfStrides = ITEM_WIDTH;
+            Value * start = nullptr;
+            if (LLVM_UNLIKELY(input.isDeferred())) {
+                start = b->CreateLShr(mAlreadyProcessedDeferredPhi[i], LOG_2_FIELD_SIZE);
+                Value * position = b->CreateAdd(mAlreadyProcessedPhi[i], mAccessibleInputItems[i]);
+                if (LLVM_LIKELY(itemWidth < blockWidth)) {
+                    const auto scale = blockWidth / itemWidth;
+                    assert (blockWidth % itemWidth == 0);
+                    Constant * const toAdd = b->getSize(scale - 1);
+                    position = b->CreateAdd(position, toAdd);
+                }
+                Value * const end = b->CreateLShr(position, LOG_2_FIELD_SIZE);
+                numOfStrides = b->CreateSub(end, start);
+            } else {
+                start = b->CreateLShr(mAlreadyProcessedPhi[i], LOG_2_FIELD_SIZE);
+            }
+
+            Value * const segmentLength = b->CreateMul(strideLength, numOfStrides);
+            Value * maskedBuffer = b->CreateAlignedMalloc(segmentLength, blockWidth / 8);
+            ExternalBuffer tmp(b, input.getType());
+            maskedBuffer = b->CreatePointerCast(maskedBuffer, tmp.getPointerType(), "maskedBuffer");
+
+            Value * packIndex = nullptr;
+            Value * maskOffset = b->CreateAnd(accessibleItems[i], BLOCK_MASK);
+            if (itemWidth > 1) {
+                Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
+                packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
+                maskOffset = b->CreateAnd(position, BLOCK_MASK);
+            }
+            Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
+            Value * blockOffset = nullptr;
+            Value * copyLength = nullptr;
+            if (itemWidth > 1 || input.isDeferred()) {
+                Value * const k = b->CreateSub(numOfStrides, ONE);
+                blockOffset = b->CreateAdd(start, k);
+                copyLength = b->CreateMul(strideLength, k);
+            }
+            BasicBlock * const loopEntryBlock = b->GetInsertBlock();
+            b->CreateBr(maskedInputLoop);
+
+            b->SetInsertPoint(maskedInputLoop);
+            PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
+            streamIndex->addIncoming(ZERO, loopEntryBlock);
+
+            Value * inputPtr = nullptr;
+            Value * outputPtr = nullptr;
+            if (blockOffset) {
+                Value * const address = tmp.getStreamBlockPtr(b.get(), mInputEpoch[i], streamIndex, start);
+                b->CreateMemCpy(maskedBuffer, address, copyLength, blockWidth / 8);
+                inputPtr = tmp.getStreamPackPtr(b.get(), mInputEpoch[i], streamIndex, blockOffset, packIndex);
+                outputPtr = tmp.getStreamPackPtr(b.get(), maskedBuffer, streamIndex, ZERO, packIndex);
+            } else {
+                inputPtr = tmp.getStreamBlockPtr(b.get(), mInputEpoch[i], streamIndex, start);
+                outputPtr = tmp.getStreamBlockPtr(b.get(), maskedBuffer, streamIndex, ZERO);
+            }
+            assert (inputPtr->getType() == outputPtr->getType());
+
+            Value * const val = b->CreateBlockAlignedLoad(inputPtr);
+            Value * const maskedVal = b->CreateAnd(val, mask);
+            b->CreateBlockAlignedStore(maskedVal, outputPtr);
+            Value * const nextIndex = b->CreateAdd(streamIndex, ONE);
+            Value * const notDone = b->CreateICmpNE(nextIndex, numOfStreams);
+            streamIndex->addIncoming(nextIndex, maskedInputLoop);
+            b->CreateCondBr(notDone, maskedInputLoop, maskedInputExit);
+
+            b->SetInsertPoint(maskedInputExit);
+            PointerType * const bufferType = buffer->getPointerType();
+            Value * maskedEpoch = tmp.getStreamBlockPtr(b.get(), maskedBuffer, ZERO, b->CreateNeg(start));
+            maskedEpoch = b->CreatePointerCast(maskedEpoch, bufferType);
+            BasicBlock * const loopExit = b->GetInsertBlock();
+            b->CreateBr(selectedInput);
+
+            b->SetInsertPoint(selectedInput);
+            PHINode * const finalEpoch = b->CreatePHI(bufferType, 2);
+            finalEpoch->addIncoming(mInputEpoch[i], entryBlock);
+            finalEpoch->addIncoming(maskedEpoch, loopExit);
+
+            inputBaseAddress[i] = finalEpoch;
+        }
+
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -576,18 +749,30 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
     if (mHasZeroExtendedStream) {
         const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
         mZeroExtendBufferPhi = nullptr;
+        const auto strideSize = mKernel->getStride();
+        const auto blockWidth = b->getBitBlockWidth();
         Value * requiredSpace = nullptr;
+
+        Constant * const ZERO = b->getSize(0);
+        Constant * const ONE = b->getSize(1);
+        Value * const numOfStrides = b->CreateUMax(mNumOfLinearStrides, ONE);
+
         for (unsigned i = 0; i < numOfInputs; ++i) {
             if (mIsInputZeroExtended[i]) {
                 const auto bufferVertex = getInputBufferVertex(i);
                 const BufferNode & bn = mBufferGraph[bufferVertex];
-
                 const Binding & input = getInputBinding(i);
-                Value * requiredBytes = mLinearInputItemsPhi[i]; assert (requiredBytes);
-                Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
-                requiredBytes = b->CreateRoundUp(requiredBytes, BLOCK_WIDTH);
+
+                const auto itemWidth = getItemWidth(input.getType());
+                Constant * const strideFactor = b->getSize(itemWidth * strideSize / 8);
+                Value * requiredBytes = b->CreateMul(numOfStrides, strideFactor); assert (requiredBytes);
                 if (bn.LookAhead) {
-                    requiredBytes = b->CreateAdd(requiredBytes, b->getSize(bn.LookAhead));
+                    const auto lh = (bn.LookAhead * itemWidth);
+                    requiredBytes = b->CreateAdd(requiredBytes, b->getSize(lh));
+                }
+                if (LLVM_LIKELY(itemWidth < blockWidth)) {
+                    Constant * const factor = b->getSize(blockWidth / itemWidth);
+                    requiredBytes = b->CreateRoundUp(requiredBytes, factor);
                 }
                 requiredBytes = b->CreateMul(requiredBytes, bn.Buffer->getStreamSetCount(b.get()));
 
@@ -597,7 +782,6 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
                 } else if (fieldWidth > 8) {
                     requiredBytes = b->CreateMul(requiredBytes, b->getSize(fieldWidth / 8));
                 }
-                Constant * const ZERO = b->getSize(0);
                 requiredBytes = b->CreateSelect(mIsInputZeroExtended[i], requiredBytes, ZERO);
                 requiredSpace = b->CreateUMax(requiredSpace, requiredBytes);
             }
@@ -605,12 +789,12 @@ inline void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
         if (requiredSpace) {
             const auto prefix = makeKernelName(mKernelIndex);
             BasicBlock * const entry = b->GetInsertBlock();
-            BasicBlock * const expandZeroExtension = b->CreateBasicBlock(prefix + "_expandZeroExtensionBuffer", mKernelTerminationCheck);
-            BasicBlock * const executeKernel = b->CreateBasicBlock(prefix + "_executeKernelAfterZeroExtension", mKernelTerminationCheck);
-
+            BasicBlock * const expandZeroExtension =
+                b->CreateBasicBlock(prefix + "_expandZeroExtensionBuffer", mKernelLoopCall);
+            BasicBlock * const executeKernel =
+                b->CreateBasicBlock(prefix + "_executeKernelAfterZeroExtension", mKernelLoopCall);
             Value * const currentSpace = b->CreateLoad(mZeroExtendSpace);
             Value * const currentBuffer = b->CreateLoad(mZeroExtendBuffer);
-
             requiredSpace = b->CreateRoundUp(requiredSpace, b->getSize(b->getCacheAlignment()));
 
             Value * const largeEnough = b->CreateICmpUGE(currentSpace, requiredSpace);
@@ -779,7 +963,8 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
             const Binding & input = rt.Binding;
             assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
 
-            args.push_back(epoch(b, input, bn.Buffer, processed, mIsInputZeroExtended[i]));
+            args.push_back(mInputEpochPhi[i]);
+
             mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
             args.push_back(inputItems); assert (inputItems);
 
@@ -814,7 +999,7 @@ inline void PipelineCompiler::writeKernelCall(BuilderRef b) {
         assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
 
         if (LLVM_LIKELY(bn.Type != BufferType::Managed)) {
-            args.push_back(epoch(b, output, bn.Buffer, produced));
+            args.push_back(epoch(b, output, bn.Buffer, produced, nullptr));
         }
         mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, canTerminate, produced, args);
         if (LLVM_LIKELY(bn.Type == BufferType::Managed)) {
@@ -1007,6 +1192,22 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
         Value * const produced = mFinalProducedPhi[i];
+
+
+
+//        const auto itemWidth = getItemWidth(input.getType());
+//        Constant * const strideFactor = b->getSize(itemWidth * strideSize / 8);
+//        Value * requiredBytes = b->CreateMul(numOfStrides, strideFactor); assert (requiredBytes);
+//        if (bn.LookAhead) {
+//            const auto lh = (bn.LookAhead * itemWidth);
+//            requiredBytes = b->CreateAdd(requiredBytes, b->getSize(lh));
+//        }
+//        if (LLVM_LIKELY(itemWidth < blockWidth)) {
+//            Constant * const factor = b->getSize(blockWidth / itemWidth);
+//            requiredBytes = b->CreateRoundUp(requiredBytes, factor);
+//        }
+//        requiredBytes = b->CreateMul(requiredBytes, bn.Buffer->getStreamSetCount(b.get()));
+
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
         Value * packIndex = nullptr;
@@ -1016,6 +1217,7 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
+
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
         BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);
         BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
@@ -1036,15 +1238,16 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Value * const value = b->CreateBlockAlignedLoad(ptr);
         Value * const maskedValue = b->CreateAnd(value, mask);
         b->CreateBlockAlignedStore(maskedValue, ptr);
+
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
         if (itemWidth > 1) {
             // Since packs are laid out sequentially in memory, it will hopefully be cheaper to zero them out here
             // because they may be within the same cache line.
-            DataLayout DL(b->getModule());
-            Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
             Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
             Value * const start = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, nextPackIndex);
             Value * const startInt = b->CreatePtrToInt(start, intPtrTy);
-            Value * const end = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, b->getSize(itemWidth));
+            Value * const end = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, ITEM_WIDTH);
             Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
             Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
@@ -1062,18 +1265,18 @@ inline void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         // Zero out any blocks we could potentially touch
         if (blocksToZero > 1) {
             Value * const nextBlockIndex = b->CreateAdd(blockIndex, ONE);
-            Constant * const MAX_BLOCKS = b->getSize(blocksToZero);
-            Value * const ptr = buffer->getStreamBlockPtr(b.get(), baseAddress, ZERO, nextBlockIndex);
-            Value * remainingBlocks = b->CreateSub(MAX_BLOCKS, nextBlockIndex);
-            Value * const allCleared = b->CreateICmpULT(MAX_BLOCKS, nextBlockIndex);
-            remainingBlocks = b->CreateSelect(allCleared, ZERO, remainingBlocks);
-            remainingBlocks = b->CreateMul(numOfStreams, remainingBlocks);
-            Constant * const LOG_2_BYTES_PER_BLOCK = b->getSize(floor_log2(blockWidth / 8));
-            Value * const remainingBytes = b->CreateShl(remainingBlocks, LOG_2_BYTES_PER_BLOCK);
+            Value * const start = buffer->getStreamBlockPtr(b.get(), baseAddress, ZERO, nextBlockIndex);
+            Value * const startInt = b->CreatePtrToInt(start, intPtrTy);
+            Constant * const BLOCKS_TO_ZERO = b->getSize(blocksToZero);
+            Value * const limit = b->CreateRoundUp(nextBlockIndex, BLOCKS_TO_ZERO);
+            Value * const toClear = b->CreateSub(limit, nextBlockIndex);
+            Value * const end = b->CreateGEP(start, toClear);
+            Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
+            Value * const remainingBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
             b->CallPrintInt(prefix + "_zeroFill_remainingBytes", remainingBytes);
             #endif
-            b->CreateMemZero(ptr, remainingBytes, blockWidth / 8);
+            b->CreateMemZero(start, remainingBytes, blockWidth / 8);
         }
     }
 }
@@ -1118,12 +1321,12 @@ inline void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
  * @brief getInputStrideLength
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getInputStrideLength(BuilderRef b, const unsigned inputPort) {
-    assert (inputPort < mInputStrideLength.size());
-    if (mInputStrideLength[inputPort]) {
-        return mInputStrideLength[inputPort];
+    assert (inputPort < mFirstInputStrideLength.size());
+    if (mFirstInputStrideLength[inputPort]) {
+        return mFirstInputStrideLength[inputPort];
     } else {
-        Value * const strideLength = getInitialStrideLength(b, StreamPort{PortType::Input, inputPort});
-        mInputStrideLength[inputPort] = strideLength;
+        Value * const strideLength = getFirstStrideLength(b, StreamPort{PortType::Input, inputPort});
+        mFirstInputStrideLength[inputPort] = strideLength;
         return strideLength;
     }
 }
@@ -1132,12 +1335,12 @@ Value * PipelineCompiler::getInputStrideLength(BuilderRef b, const unsigned inpu
  * @brief getOutputStrideLength
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getOutputStrideLength(BuilderRef b, const unsigned outputPort) {
-    assert (outputPort < mOutputStrideLength.size());
-    if (mOutputStrideLength[outputPort]) {
-        return mOutputStrideLength[outputPort];
+    assert (outputPort < mFirstOutputStrideLength.size());
+    if (mFirstOutputStrideLength[outputPort]) {
+        return mFirstOutputStrideLength[outputPort];
     } else {
-        Value * const strideLength = getInitialStrideLength(b, StreamPort{PortType::Output, outputPort});
-        mOutputStrideLength[outputPort] = strideLength;
+        Value * const strideLength = getFirstStrideLength(b, StreamPort{PortType::Output, outputPort});
+        mFirstOutputStrideLength[outputPort] = strideLength;
         return strideLength;
     }
 }
@@ -1288,9 +1491,9 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInitialStrideLength
+ * @brief getFirstStrideLength
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getInitialStrideLength(BuilderRef b, const StreamPort port) {
+Value * PipelineCompiler::getFirstStrideLength(BuilderRef b, const StreamPort port) {
     const auto & binding = getBinding(port);
     const auto & rate = binding.getRate();
     if (LLVM_LIKELY(rate.isFixed() || rate.isBounded())) {
@@ -1309,7 +1512,7 @@ Value * PipelineCompiler::getInitialStrideLength(BuilderRef b, const StreamPort 
     } else if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
         report_fatal_error("internal error: PopCount and NegatedPopCount rates should have been converted to PartialSums.");
     } else if (rate.isRelative()) {
-        Value * const baseRate = getInitialStrideLength(b, getReference(port));
+        Value * const baseRate = getFirstStrideLength(b, getReference(port));
         return b->CreateMul2(baseRate, rate.getRate());
     }
     llvm_unreachable("unexpected rate type");
@@ -1348,10 +1551,6 @@ inline Value * PipelineCompiler::addLookahead(BuilderRef b, const unsigned input
     if (LLVM_LIKELY(lookAhead == nullptr)) {
         return itemCount;
     }
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, inputPort});
-    b->CallPrintInt(prefix + "_lookAhead", lookAhead);
-    #endif
     return b->CreateAdd(itemCount, lookAhead);
 }
 
@@ -1516,6 +1715,22 @@ void PipelineCompiler::itemCountSanityCheck(BuilderRef b, const Binding & bindin
 #endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief phiOutItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::phiOutItemCounts(BuilderRef b, const Vec<Value *> & accessibleItems, const Vec<Value *> & inputEpoch, const Vec<Value *> & writableItems) const {
+    BasicBlock * const exitBlock = b->GetInsertBlock();
+    const auto numOfInputs = accessibleItems.size();
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        mLinearInputItemsPhi[i]->addIncoming(accessibleItems[i], exitBlock);
+        mInputEpochPhi[i]->addIncoming(inputEpoch[i], exitBlock);
+    }
+    const auto numOfOutputs = writableItems.size();
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        mLinearOutputItemsPhi[i]->addIncoming(writableItems[i], exitBlock);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief resetMemoizedFields
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::resetMemoizedFields() {
@@ -1526,7 +1741,9 @@ void PipelineCompiler::resetMemoizedFields() {
     reset(mInitiallyProcessedDeferredItemCount, numOfInputs);
     reset(mAlreadyProcessedPhi, numOfInputs);
     reset(mAlreadyProcessedDeferredPhi, numOfInputs);
-    reset(mInputStrideLength, numOfInputs);
+    reset(mInputEpoch, numOfInputs);
+    reset(mInputEpochPhi, numOfInputs);
+    reset(mFirstInputStrideLength, numOfInputs);
     reset(mAccessibleInputItems, numOfInputs);
     reset(mLinearInputItemsPhi, numOfInputs);
     reset(mReturnedProcessedItemCountPtr, numOfInputs);
@@ -1541,7 +1758,7 @@ void PipelineCompiler::resetMemoizedFields() {
     reset(mInitiallyProducedDeferredItemCount, numOfOutputs);
     reset(mAlreadyProducedPhi, numOfOutputs);
     reset(mAlreadyProducedDeferredPhi, numOfOutputs);
-    reset(mOutputStrideLength, numOfOutputs);
+    reset(mFirstOutputStrideLength, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
     reset(mConsumedItemCount, numOfOutputs);
     reset(mLinearOutputItemsPhi, numOfOutputs);
