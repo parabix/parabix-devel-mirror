@@ -138,7 +138,7 @@ static Type * toSummaryType(const std::unique_ptr<kernel::KernelBuilder> & b, in
     case 64:
         return b->getInt64Ty();
     default:
-        assert ("unexpected summary type" && summarySize == b->getBitBlockWidth());
+        assert ("unexpected summary type" && (uint32_t) summarySize == b->getBitBlockWidth());
         return b->getBitBlockType();
     }
 }
@@ -319,20 +319,10 @@ Value * CompressedCarryManager::advanceCarryInCarryOut(const std::unique_ptr<ker
     const auto shiftAmount = advance->getAmount();
     if (LLVM_LIKELY(shiftAmount < LONG_ADVANCE_BREAKPOINT)) {
         Value * carryIn = getNextCarryIn(b);
-
-        // TODO: remove this zero extend and cast
-        if (shiftAmount != 1) {
-            carryIn = b->CreateBitCast(b->CreateZExt(carryIn, b->getIntNTy(b->getBitBlockWidth())), b->getBitBlockType());
-        }
         Value * carryOut, * result;
         std::tie(carryOut, result) = b->bitblock_advance(value, carryIn, shiftAmount);
-
-        // TODO: try and remove this extract
-        if (carryOut->getType() == b->getBitBlockType()) {
-            const uint32_t fw = shiftAmount < 8 ? 8 : 64;
-            carryOut = b->mvmd_extract(fw, carryOut, 0);
-        }
         assert (result->getType() == b->getBitBlockType());
+        assert (carryOut->getType() == carryIn->getType());
         setNextCarryOut(b, carryOut);
         return result;
     } else {
@@ -459,14 +449,13 @@ Value * CompressedCarryManager::getNextCarryIn(const std::unique_ptr<kernel::Ker
 
 void CompressedCarryManager::setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & b, Value * carryOut) {
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
-    Type * const carryTy = mCarryPackPtr->getType()->getPointerElementType();
-    assert("carry out type does not match carry location type" && carryOut->getType() == carryTy);
+    assert("carry out type does not match carry location type" && carryOut->getType() == mCarryPackPtr->getType()->getPointerElementType());
     if (mCarryInfo->hasSummary()) {
         addToCarryOutSummary(b, carryOut);
     }
     if (mLoopDepth != 0) {
         mCarryPackPtr = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), mNextLoopSelector});
-        assert("carry out type does not match carry location type" && carryOut->getType() == carryTy);
+        assert("carry out type does not match carry location type" && carryOut->getType() == mCarryPackPtr->getType()->getPointerElementType());
         if (LLVM_LIKELY(!mCarryInfo->nonCarryCollapsingMode())) {
             Value * accum = b->CreateLoad(mCarryPackPtr);
             carryOut = b->CreateOr(carryOut, accum);
