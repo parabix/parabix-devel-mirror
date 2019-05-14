@@ -219,8 +219,10 @@ Value * ExternalBuffer::getBaseAddress(IDISA_Builder * const b) const {
     return b->CreateLoad(p);
 }
 
-Value * ExternalBuffer::getOverflowAddress(IDISA_Builder * const /* b */) const {
-    unsupported("getOverflowAddress", "External");
+Value * ExternalBuffer::getOverflowAddress(IDISA_Builder * const b) const {
+    assert (mHandle && "has not been set prior to calling getBaseAddress");
+    Value * const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(Capacity)});
+    return b->CreateLoad(p);
 }
 
 void ExternalBuffer::setCapacity(IDISA_Builder * const b, Value * const capacity) const {

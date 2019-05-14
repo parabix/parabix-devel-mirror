@@ -7,7 +7,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelCycleCountProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel) {
+void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned kernel) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         // TODO: make these thread local to prevent false sharing and enable
         // analysis of thread distributions?
@@ -71,7 +71,7 @@ inline void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsi
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief startOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) {
+void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         assert ((unsigned)type < mCycleCounters.size());
         mCycleCounters[(unsigned)type] = b->CreateReadCycleCounter();
@@ -81,7 +81,7 @@ inline void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief startOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
+Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
     Value * ptr = nullptr;
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         b->setKernel(mPipelineKernel);
@@ -95,7 +95,7 @@ inline Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const {
+void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         b->setKernel(mPipelineKernel);
         Value * const endCount = b->CreateReadCycleCounter();
@@ -112,7 +112,7 @@ inline void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounte
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief selectPrincipleCycleCountBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned kernel) const {
+StreamPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned kernel) const {
     const auto numOfInputs = in_degree(kernel, mBufferGraph);
     assert (degree(kernel, mBufferGraph));
     if (numOfInputs == 0) {
@@ -131,7 +131,7 @@ inline StreamPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsig
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
+void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
 
         // Print the title line
@@ -257,7 +257,7 @@ inline void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief incrementNumberOfSegmentsCounter
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::incrementNumberOfSegmentsCounter(BuilderRef b) const {
+void PipelineCompiler::incrementNumberOfSegmentsCounter(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
         b->setKernel(mPipelineKernel);
         const auto fieldName =
@@ -273,7 +273,7 @@ inline void PipelineCompiler::incrementNumberOfSegmentsCounter(BuilderRef b) con
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordBlockingIO
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::recordBlockingIO(BuilderRef b, const StreamPort port) const {
+void PipelineCompiler::recordBlockingIO(BuilderRef b, const StreamPort port) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
         b->setKernel(mPipelineKernel);
         const auto prefix = makeBufferName(mKernelIndex, port);
@@ -337,7 +337,7 @@ inline void PipelineCompiler::recordBlockingIO(BuilderRef b, const StreamPort po
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalBlockingIOStatistics
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
+void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter))) {
 
         // Print the title line
@@ -500,7 +500,7 @@ inline void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
+void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceBlockedIO))) {
 
         IntegerType * const sizeTy = b->getSizeTy();
@@ -794,7 +794,7 @@ void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const unsigned
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalBufferExpansionHistory
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
+void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
 
         // Print the title line
@@ -1024,7 +1024,7 @@ inline void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::initializeStridesPerSegment(BuilderRef b) const {
+void PipelineCompiler::initializeStridesPerSegment(BuilderRef b) const {
 
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
         b->setKernel(mPipelineKernel);
@@ -1058,7 +1058,7 @@ inline void PipelineCompiler::initializeStridesPerSegment(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::recordStridesPerSegment(BuilderRef b, Value * const numOfStrides) const {
+void PipelineCompiler::recordStridesPerSegment(BuilderRef b, Value * const numOfStrides) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
         // NOTE: this records only the change to attempt to reduce the memory usage of this log.
 
@@ -1148,7 +1148,7 @@ inline void PipelineCompiler::recordStridesPerSegment(BuilderRef b, Value * cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printProducedItemCountDeltas
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
+void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceStridesPerSegment))) {
 
         IntegerType * const sizeTy = b->getSizeTy();
@@ -1295,7 +1295,7 @@ inline void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigned kernel) const {
+void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigned kernel) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
         addItemCountDeltaProperties(b, kernel, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
@@ -1304,7 +1304,7 @@ inline void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
+void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
         recordItemCountDeltas(b, mFullyProducedItemCount, mInitiallyProducedItemCount, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
@@ -1313,7 +1313,7 @@ inline void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
+void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
         printItemCountDeltas(b, "PRODUCED ITEM COUNT DELTAS PER SEGMENT:", STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
@@ -1322,7 +1322,7 @@ inline void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned kernel) const {
+void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned kernel) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
         addItemCountDeltaProperties(b, kernel, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
@@ -1331,7 +1331,7 @@ inline void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, uns
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
+void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
         recordItemCountDeltas(b, mInitiallyProducedItemCount, mConsumedItemCount, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
@@ -1340,7 +1340,7 @@ inline void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::printUnconsumedItemCounts(BuilderRef b) const {
+void PipelineCompiler::printUnconsumedItemCounts(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
         printItemCountDeltas(b, "UNCONSUMED ITEM COUNTS PER SEGMENT:", STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
