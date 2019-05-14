@@ -223,6 +223,8 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
     Type * carryTy = carryin->getType();
     if (carryTy == mBitBlockType) {
         carryin = mvmd_extract(32, carryin, 0);
+    } else {
+        carryin = CreateZExt(carryin, getInt32Ty());
     }
     Value * carrygen = simd_and(e1, e2);
     Value * carryprop = simd_or(e1, e2);
@@ -238,6 +240,8 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
     Value * carry_out = CreateLShr(incrementMask, mBitBlockWidth / 64);
     if (carryTy == mBitBlockType) {
         carry_out = bitCast(CreateZExt(carry_out, getIntNTy(mBitBlockWidth)));
+    } else if (carryTy != carry_out->getType() && carryTy->isIntegerTy()) {
+        carry_out = CreateZExtOrTrunc(carry_out, carryTy);
     }
     return std::pair<Value *, Value *>{carry_out, bitCast(sum)};
 }
