@@ -327,13 +327,16 @@ Value * CompressedCarryManager::advanceCarryInCarryOut(const std::unique_ptr<ker
         Value * carryIn = getNextCarryIn(b);
 
         // TODO: remove this zero extend and cast
-        // carryIn = b->CreateBitCast(b->CreateZExt(carryIn, b->getIntNTy(b->getBitBlockWidth())), b->getBitBlockType());
+        if (shiftAmount != 1)
+            carryIn = b->CreateBitCast(b->CreateZExt(carryIn, b->getIntNTy(b->getBitBlockWidth())), b->getBitBlockType());
         Value * carryOut, * result;
         std::tie(carryOut, result) = b->bitblock_advance(value, carryIn, shiftAmount);
 
         // TODO: try and remove this extract
-        // const uint32_t fw = shiftAmount < 8 ? 8 : 64;
-        // carryOut = b->mvmd_extract(fw, carryOut, 0);
+        if (shiftAmount != 1) {
+            const uint32_t fw = shiftAmount < 8 ? 8 : 64;
+            carryOut = b->mvmd_extract(fw, carryOut, 0);
+        }
         assert (result->getType() == b->getBitBlockType());
         setNextCarryOut(b, carryOut);
         return result;
