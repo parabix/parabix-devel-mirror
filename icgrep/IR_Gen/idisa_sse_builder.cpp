@@ -102,6 +102,7 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
     Value * si = shiftin;
     if (shiftTy != mBitBlockType) {
         si = bitCast(CreateZExt(shiftin, getIntNTy(mBitBlockWidth)));
+        shiftTy = si->getType();
     }
     if (LLVM_UNLIKELY(shift == mBitBlockWidth)) {
         return std::pair<Value *, Value *>(CreateBitCast(a, shiftTy), si);
