@@ -954,12 +954,10 @@ std::pair<Value *, Value *> IDISA_AVX512F_Builder::bitblock_advance(Value * a, V
         Value * const result = simd_or(CreateLShr(a1, fw - shift), CreateShl(fwCast(fw, a), shift));
 
         std::vector<Constant *> v(8, ConstantInt::get(getInt64Ty(), (uint64_t) -1));
-        v[0] = ConstantInt::get(getInt64Ty(), 0x7fffffffffffffff);
+        v[7] = ConstantInt::get(getInt64Ty(), 0x7fffffffffffffff);
         Value * const v8xi64_cout_mask = ConstantVector::get(ArrayRef<Constant *>(v));
         Value * shiftout = CreateICmpUGT(a, v8xi64_cout_mask);
         shiftout = CreateBitCast(shiftout, getInt8Ty());
-        CallPrintRegister("result", result);
-        CallPrintInt("shiftout", shiftout);
         return std::make_pair(shiftout, result);
     } else {
         return IDISA_AVX2_Builder::bitblock_advance(a, shiftin, shift);
