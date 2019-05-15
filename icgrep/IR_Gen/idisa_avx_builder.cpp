@@ -260,13 +260,19 @@ std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_add_with_carry(Value * 
 }
 
 std::pair<Value *, Value *> IDISA_AVX2_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
-    if (shiftin->getType()->isIntegerTy()) {
-        unsigned fw = shiftin->getType()->getIntegerBitWidth();
-        Value * shiftin_bitblock = mvmd_insert(fw, allZeroes(), shiftin, getBitBlockWidth()/fw - 1);
-        Value * shiftout = mvmd_extract(fw, a, getBitBlockWidth()/fw - 1);
-        Value * field_shift = bitCast(mvmd_dslli(fw, a, shiftin_bitblock, 1));
-        Value * shifted = bitCast(CreateOr(CreateLShr(field_shift, fw-shift), CreateShl(a, shift)));
-        return std::pair<Value *, Value *>(shiftout, shifted);
+    if (shiftin->getType() == getInt8Ty() && shift == 1) {
+        const uint32_t fw = mBitBlockWidth / 8;
+        Type * const v32xi8Ty = VectorType::get(getInt8Ty(), 32);
+        Type * const v32xi32Ty = VectorType::get(getInt32Ty(), 32);
+        Value * shiftin_block = CreateInsertElement(Constant::getNullValue(v32xi8Ty), shiftin, (uint64_t) 0);
+        shiftin_block = CreateShuffleVector(shiftin_block, UndefValue::get(v32xi8Ty), Constant::getNullValue(v32xi32Ty));
+        shiftin_block = bitCast(shiftin_block);
+        Value * field_shift = bitCast(mvmd_dslli(fw, a, shiftin_block, 1));
+        Value * shifted = bitCast(CreateOr(CreateLShr(field_shift, fw - shift), CreateShl(a, shift)));
+        Value * shiftout = hsimd_signmask(fw, a);
+        shiftout = CreateTrunc(shiftout, getInt8Ty());
+        shiftout = CreateAnd(shiftout, getInt8(0x80));
+        return std::make_pair(shiftout, shifted);
     } else {
         return IDISA_SSE2_Builder::bitblock_advance(a, shiftin, shift);
     }
