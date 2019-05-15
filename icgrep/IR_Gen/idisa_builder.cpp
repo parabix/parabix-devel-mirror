@@ -187,6 +187,10 @@ Value * IDISA_Builder::simd_eq(unsigned fw, Value * a, Value * b) {
     return CreateSExt(CreateICmpEQ(a1, b1), a1->getType());
 }
 
+Value * IDISA_Builder::simd_any(unsigned fw, Value * a) {
+    return CreateNot(simd_eq(fw, a, allZeroes()));
+}
+
 Value * IDISA_Builder::simd_ne(unsigned fw, Value * a, Value * b) {
     if (fw < 8) UnsupportedFieldWidthError(fw, "ne");
     Value * a1 = fwCast(fw, a);
