@@ -116,6 +116,7 @@ add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_
 add_library(PabloADT ${PABLO_SRC})
 # CCADT is the core library for representing and compiling character classes
 add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/cc_compiler_target.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp cc/cc_kernel.cpp)
+add_library(PabloParser pablo/parser/pablo_parser.cpp)
 # RegExpADT is the core library for representing, parsing and printing regular expressions
 add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/re_empty_set.cpp re/printer_re.cpp re/re_utility.cpp)
 add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp re/re_contextual_simplification.cpp)
@@ -132,12 +133,15 @@ add_dependencies(CodeGen RecompileObjectCache)
 target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
+target_link_libraries (PabloParser CCADT PabloADT)
 target_link_libraries (RegExpADT PabloADT CCADT)
 target_link_libraries (UCDlib RegExpADT PabloADT CCADT) # GrepEngine RegExpCompiler
 target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
 target_link_libraries (GrepEngine RegExpCompiler CodeGen)
 target_link_libraries (FileSelect GrepEngine)
 
+# pablo parser test exectuable, remove when done
+add_executable(pablo pablo.cpp)
 #add_executable(jitdemo2 jitdemo2.cpp)
 add_executable(icgrep icgrep.cpp grep_interface.cpp)
 add_executable(u8u16 u8u16.cpp kernels/zeroextend.cpp)
@@ -154,6 +158,8 @@ add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_g
 add_executable(idisa_test idisa_test.cpp)
 add_executable(cachejanitord ${OBJECT_CACHE_DAEMON_SRC})
 
+# pablo parser test exectuable, remove when done
+target_link_libraries (pablo PabloParser ${REQ_LLVM_LIBRARIES})
 #target_link_libraries (jitdemo2 ${REQ_LLVM_LIBRARIES})
 target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
