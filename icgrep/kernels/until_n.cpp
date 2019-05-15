@@ -46,7 +46,6 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     const auto maximumBlocksPerIteration = packSize / packsPerBlock;
     Constant * const MAXIMUM_BLOCKS_PER_ITERATION = b->getSize(maximumBlocksPerIteration);
     VectorType * const packVectorTy = VectorType::get(sizeTy, packsPerBlock);
-    Value * const ZEROES = Constant::getNullValue(packVectorTy);
 
     BasicBlock * const entry = b->GetInsertBlock();
     Value * const numOfBlocks = b->CreateMul(numOfStrides, BLOCKS_PER_STRIDE);
@@ -73,7 +72,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Value * const blockIndex = b->CreateAdd(baseBlockIndex, localIndex);
     Value * inputValue = b->loadInputStreamBlock("bits", ZERO, blockIndex);
     b->storeOutputStreamBlock("uptoN", ZERO, blockIndex, inputValue);
-    Value * const inputPackValue = b->CreateNot(b->simd_eq(packSize, inputValue, ZEROES));
+    Value * const inputPackValue = b->simd_any(packSize, inputValue);
     Value * iteratorMask = b->CreateZExtOrTrunc(b->hsimd_signmask(packSize, inputPackValue), sizeTy);
     iteratorMask = b->CreateShl(iteratorMask, b->CreateMul(localIndex, PACKS_PER_BLOCK));
     iteratorMask = b->CreateOr(groupMaskPhi, iteratorMask);
