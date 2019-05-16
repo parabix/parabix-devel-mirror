@@ -15,30 +15,34 @@ namespace parse {
 std::unique_ptr<Error> Error::CreateError(std::string const & text,
                                           std::string const & filename,
                                           std::string const & line,
-                                          size_t lineNum, size_t colNum)
+                                          size_t lineNum, size_t colNum,
+                                          std::string const & hint)
 {
-    return std::unique_ptr<Error>(new Error(ErrorType::ERROR, text, filename, line, lineNum, colNum));
+    return std::unique_ptr<Error>(new Error(ErrorType::ERROR, text, filename, line, lineNum, colNum, hint));
 }
 
 std::unique_ptr<Error> Error::CreateWarning(std::string const & text,
                                             std::string const & filename,
                                             std::string const & line,
-                                            size_t lineNum, size_t colNum)
+                                            size_t lineNum, size_t colNum,
+                                            std::string const & hint)
 {
-    return std::unique_ptr<Error>(new Error(ErrorType::WARNING, text, filename, line, lineNum, colNum));
+    return std::unique_ptr<Error>(new Error(ErrorType::WARNING, text, filename, line, lineNum, colNum, hint));
 }
 
 Error::Error(ErrorType type,
              std::string const & text,
              std::string const & filename,
              std::string const & line,
-             size_t lineNum, size_t colNum)
+             size_t lineNum, size_t colNum,
+             std::string const & hint)
 : mType(type)
 , mText(text)
 , mFilename(filename)
 , mLine(line)
 , mLineNum(lineNum)
 , mColNum(colNum)
+, mHint(hint)
 {}
 
 
@@ -59,21 +63,21 @@ ErrorContext::ErrorContext()
 {}
 
 
-void ErrorManager::logError(std::string const & text) {
+void ErrorManager::logError(std::string const & text, std::string const & hint) {
     assert ("location references not set" && mLineNumRef && mColNumRef);
 
-    return logError(text, *mLineRef, *mLineNumRef, *mColNumRef);
+    return logError(text, *mLineRef, *mLineNumRef, *mColNumRef, hint);
 }
 
-void ErrorManager::logWarning(std::string const & text) {
+void ErrorManager::logWarning(std::string const & text, std::string const & hint) {
     assert ("location references not set" && mLineNumRef && mColNumRef);
 
-    return logWarning(text, *mLineRef, *mLineNumRef, *mColNumRef);
+    return logWarning(text, *mLineRef, *mLineNumRef, *mColNumRef, hint);
 }
 
-void ErrorManager::logError(std::string const & text, std::string const & line, size_t lineNum, size_t colNum) {
+void ErrorManager::logError(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint) {
     assert (!mFilename.empty());
-    auto e = Error::CreateError(text, mFilename, line, lineNum, colNum);
+    auto e = Error::CreateError(text, mFilename, line, lineNum, colNum, hint);
     if (mContext.useLivePrint) {
         mContext.outStream << renderError(e);
     }
@@ -84,9 +88,9 @@ void ErrorManager::logError(std::string const & text, std::string const & line, 
     mErrorList.push_back(std::move(e));
 }
 
-void ErrorManager::logWarning(std::string const & text, std::string const & line, size_t lineNum, size_t colNum) {
+void ErrorManager::logWarning(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint) {
     assert (!mFilename.empty());
-    auto e = Error::CreateWarning(text, mFilename, line, lineNum, colNum);
+    auto e = Error::CreateWarning(text, mFilename, line, lineNum, colNum, hint);
     if (mContext.useLivePrint) {
         mContext.outStream << renderError(e);
     }
@@ -119,19 +123,21 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
     std::string errText;
     switch (e->mType) {
     case ErrorType::ERROR:
-        errText += RED + "error" + NORMAL + ":   ";
+        errText += RED + "error" + NORMAL;
         break;
     case ErrorType::WARNING:
-        errText += PURPLE + "warning" + NORMAL + ": ";
+        errText += PURPLE + "warning" + NORMAL;
         break;
     default:
         assert ("invalid enumeration value" && false);
         break;
     }
-    errText += e->mFilename + ":" + std::to_string(e->mLineNum) + ":" + std::to_string(e->mColNum) + ": ";
-    errText += e->mText + "\n";
-    errText += e->mLine;
-    errText += std::string(e->mColNum - 1, ' ') + GREEN + "^" + NORMAL + "\n";
+    errText += " @ " + e->mFilename + ":" + std::to_string(e->mLineNum) + ":" + std::to_string(e->mColNum + 1) + "\n";
+    std::string lineNum = std::to_string(e->mLineNum);
+    std::string padding(lineNum.length(), ' ');
+    errText += " " + padding + " | " + e->mText + "\n";
+    errText += " " + lineNum + " | " + e->mLine + "\n";
+    errText += " " + padding + " | " + std::string(e->mColNum, ' ') + GREEN + "^" + (e->mHint.empty() ? "" : " " + e->mHint) + NORMAL + "\n\n";
     return errText;
 }
 
