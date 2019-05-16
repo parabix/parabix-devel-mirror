@@ -645,6 +645,7 @@ protected:
     llvm::Value *                   mTerminationSignalPtr = nullptr;
     llvm::Value *                   mIsFinal = nullptr;
     llvm::Value *                   mNumOfStrides = nullptr;
+    llvm::Value *                   mFixedRateFactor = nullptr;
     llvm::Value *                   mThreadLocalPtr = nullptr;
     llvm::Value *                   mExternalSegNo = nullptr;
 

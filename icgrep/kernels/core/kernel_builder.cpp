@@ -281,7 +281,7 @@ Value * KernelBuilder::CreateMul2(Value * const number, const ProcessingRate::Ra
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateMulCeil2
+ * @brief CreateCeilUMul2
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * KernelBuilder::CreateCeilUMul2(Value * const number, const ProcessingRate::RateValue & factor, const Twine & Name) {
     if (factor.denominator() == 1) {

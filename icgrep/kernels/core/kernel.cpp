@@ -611,11 +611,11 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     }
     mNumOfStrides = nextArg();
     const auto fixedRateLCM = getFixedRateLCM(this);
-    Value * fixedRateFactor = nullptr;
+    mFixedRateFactor = nullptr;
     if (LLVM_LIKELY(fixedRateLCM.numerator() != 0)) {
-        fixedRateFactor = nextArg();
+        mFixedRateFactor = nextArg();
     }
-    assert (!fixedRateFactor ^ hasFixedRate(this));
+    assert (!mFixedRateFactor ^ hasFixedRate(this));
 
     mIsFinal = b->CreateIsNull(mNumOfStrides);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -683,7 +683,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         if (LLVM_UNLIKELY(requiresItemCount(input))) {
             accessible = nextArg();
         } else {
-            accessible = b->CreateCeilUDiv2(fixedRateFactor, fixedRateLCM / rate.getRate());
+            accessible = b->CreateCeilUMul2(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
         assert (accessible->getType() == sizeTy);
         mAccessibleInputItems[i] = accessible;
@@ -769,7 +769,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             if (requiresItemCount(output)) {
                 writable = nextArg();
             } else {
-                writable = b->CreateCeilUDiv2(fixedRateFactor, fixedRateLCM / rate.getRate());
+                writable = b->CreateCeilUMul2(mFixedRateFactor, rate.getRate() / fixedRateLCM);
             }
             assert (writable->getType() == sizeTy);
             mWritableOutputItems[i] = writable;
@@ -804,6 +804,9 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         props.push_back(mThreadLocalHandle); assert (mThreadLocalHandle);
     }
     props.push_back(mNumOfStrides); assert (mNumOfStrides);
+    if (LLVM_LIKELY(hasFixedRate(this))) {
+        props.push_back(mFixedRateFactor); // fixedRateFactor
+    }
 
     const auto numOfInputs = getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; i++) {
@@ -824,7 +827,9 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         /// ----------------------------------------------------
         /// accessible item count
         /// ----------------------------------------------------
-        props.push_back(mAccessibleInputItems[i]);
+        if (requiresItemCount(input)) {
+            props.push_back(mAccessibleInputItems[i]);
+        }
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
             props.push_back(mPopCountRateArray[i]);
         }
@@ -864,7 +869,7 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         /// ----------------------------------------------------
         if (LLVM_UNLIKELY(isLocalBuffer(output))) {
             props.push_back(mConsumedOutputItems[i]);
-        } else {
+        } else if (requiresItemCount(output)) {
             props.push_back(mWritableOutputItems[i]);
         }
     }
