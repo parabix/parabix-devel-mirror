@@ -476,6 +476,11 @@ inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
         mLinearOutputItemsPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyWritable");
     }
+    mFixedRateFactorPhi = nullptr;
+    if (LLVM_LIKELY(hasFixedRateLCM())) {
+        const auto prefix = makeKernelName(mKernelIndex);
+        mFixedRateFactorPhi = b->CreatePHI(sizeTy, 2, prefix + "_fixedRateFactor");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

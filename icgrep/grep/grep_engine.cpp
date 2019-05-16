@@ -323,7 +323,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             }
         }
         if (hasGCB[i]) { assert (GCB_stream);
-            options->addExternal("\\b{g}", GCB_stream, ZeroExtended());
+            options->addExternal("\\b{g}", GCB_stream);
         }
         if (internalS2P) {
             if (!isWithinByteTestLimit) {
@@ -347,7 +347,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         } else {
             options->addExternal("UTF8_index", U8index);
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-                options->addExternal("UTF8_LB", LineBreakStream, ZeroExtended());
+                options->addExternal("UTF8_LB", LineBreakStream);
             }
             if (CC_Multiplexing) {
                 const auto UnicodeSets = re::collectCCs(mREs[i], cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});

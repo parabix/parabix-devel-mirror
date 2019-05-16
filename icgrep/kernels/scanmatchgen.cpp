@@ -212,9 +212,9 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject)
 : MultiBlockKernel(b, "scanMatch",
 // inputs
-{Binding{"matchResult", Matches, FixedRate() }
-,Binding{"lineBreak", LineBreakStream, FixedRate(), ZeroExtended()}
-,Binding{"InputStream", ByteStream, FixedRate(), { Deferred(), ZeroExtended() }}},
+{Binding{"matchResult", Matches }
+,Binding{"lineBreak", LineBreakStream}
+,Binding{"InputStream", ByteStream, FixedRate(), { Deferred() }}},
 // outputs
 {},
 // input scalars
@@ -467,7 +467,7 @@ void MatchReporter::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder>
     Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_NUMBERS), phiMatchNum));
     // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
     // to access past EOF.
-    Value * const bufLimit = b->CreateSub(avail, b->getSize(1));
+    //Value * const bufLimit = b->CreateSub(avail, b->getSize(1));
     //b->CallPrintInt("bufLimit", bufLimit);
     //b->CallPrintInt("matchRecordStart", matchRecordStart);
     //b->CallPrintInt("matchRecordEnd", matchRecordEnd);

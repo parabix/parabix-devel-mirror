@@ -1429,4 +1429,69 @@ bool PipelineCompiler::isPipelineOutput(const unsigned outputPort) const {
     return false;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeAddGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+AddGraph PipelineCompiler::makeAddGraph() const {
+    // TODO: this should generate formulas to take roundup into account
+    AddGraph G(LastStreamSet + 1);
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        unsigned minAddK = 0;
+        if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
+            minAddK = std::numeric_limits<unsigned>::max();
+            for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const auto buffer = source(e, mBufferGraph);
+                minAddK = std::min<unsigned>(minAddK, G[buffer]);
+                add_edge(buffer, i, G);
+            }
+        }
+        G[i] = minAddK;
+        for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const auto buffer = target(e, mBufferGraph);
+            const BufferRateData & br = mBufferGraph[e];
+            const Binding & output = br.Binding;
+            auto k = minAddK;
+            for (const Attribute & attr : output.getAttributes()) {
+                if (LLVM_UNLIKELY(attr.isAdd())) {
+                    k += attr.amount();
+                }
+            }
+            G[buffer] = k;
+            add_edge(i, buffer, G);
+        }
+    }
+    return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasFixedRateLCM
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::hasFixedRateLCM() {
+    RateValue rateLCM(1);
+    bool hasFixedRate = false;
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = getInputBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            rateLCM = lcm(rateLCM, rate.getRate());
+            hasFixedRate = true;
+        }
+    }
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const Binding & output = getOutputBinding(i);
+        const ProcessingRate & rate = output.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            rateLCM = lcm(rateLCM, rate.getRate());
+            hasFixedRate = true;
+        }
+    }
+    if (LLVM_LIKELY(hasFixedRate)) {
+        mFixedRateLCM = rateLCM;
+    }
+    return hasFixedRate;
+}
+
+
 } // end of namespace

@@ -108,10 +108,10 @@ Value * PipelineCompiler::calculateItemCounts(BuilderRef b) {
         /// -------------------------------------------------------------------------------------
 
         b->SetInsertPoint(enteringFinalStride);
-        calculateFinalItemCounts(b, accessibleItems, writableItems);
+        Value * const finalFactor = calculateFinalItemCounts(b, accessibleItems, writableItems);
         Vec<Value *> inputEpochPhi(numOfInputs);
         zeroInputAfterFinalItemCount(b, accessibleItems, inputEpochPhi);
-        phiOutItemCounts(b, accessibleItems, inputEpochPhi, writableItems);
+        phiOutItemCounts(b, accessibleItems, inputEpochPhi, writableItems, finalFactor);
         b->CreateBr(mKernelLoopCall);
 
         /// -------------------------------------------------------------------------------------
@@ -119,14 +119,14 @@ Value * PipelineCompiler::calculateItemCounts(BuilderRef b) {
         /// -------------------------------------------------------------------------------------
 
         b->SetInsertPoint(enteringNonFinalSegment);
-        calculateNonFinalItemCounts(b, accessibleItems, writableItems);
-        phiOutItemCounts(b, accessibleItems, mInputEpoch, writableItems);
+        Value * const nonFinalFactor = calculateNonFinalItemCounts(b, accessibleItems, writableItems);
+        phiOutItemCounts(b, accessibleItems, mInputEpoch, writableItems, nonFinalFactor);
         b->CreateBr(mKernelLoopCall);
 
     } else {
         mNumOfLinearStrides = b->getSize(1);
-        calculateNonFinalItemCounts(b, accessibleItems, writableItems);
-        phiOutItemCounts(b, accessibleItems, mInputEpoch, writableItems);
+        Value * const nonFinalFactor = calculateNonFinalItemCounts(b, accessibleItems, writableItems);
+        phiOutItemCounts(b, accessibleItems, mInputEpoch, writableItems, nonFinalFactor);
         b->CreateBr(mKernelLoopCall);
     }
 
@@ -487,8 +487,13 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const unsigned o
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateNonFinalItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
+Value * PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
     assert (mNumOfLinearStrides);
+    Value * fixedRateFactor = nullptr;
+    if (mFixedRateFactorPhi) {
+        const RateValue stride(mKernel->getStride());
+        fixedRateFactor  = b->CreateMul2(mNumOfLinearStrides, stride * mFixedRateLCM);
+    }
     const auto numOfInputs = accessibleItems.size();
     for (unsigned i = 0; i < numOfInputs; ++i) {
         accessibleItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Input, i});
@@ -497,78 +502,80 @@ void PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         writableItems[i] = calculateNumOfLinearItems(b, StreamPort{PortType::Output, i});
     }
+
+    return fixedRateFactor;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateFinalItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
+Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
     const auto numOfInputs = accessibleItems.size();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        accessibleItems[i] = addLookahead(b, i, mAccessibleInputItems[i]);
+        Value * accessible = mAccessibleInputItems[i];
+        if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
+            // If this input stream is zero extended, the current input items will be MAX_INT.
+            // However, since we're now in the final stride, so we can bound the stream to:
+            Value * const maxItems = b->CreateAdd(mAlreadyProcessedPhi[i], mFirstInputStrideLength[i]);
+            // But since we may not necessarily be in our zero extension region, we must first
+            // test whether we are:
+            accessible = b->CreateSelect(mIsInputZeroExtended[i], maxItems, accessible);
+        }
+        accessibleItems[i] = accessible;
     }
 
-    // Record the writable item counts but when determining the number of Fixed writable items calculate:
-
-    //   CEILING(MIN(Accessible Item Count / Fixed Input Rate) * Fixed Output Rate)
-
-    RateValue rateLCM(1);
+    Value * minFixedRateFactor = nullptr;
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            rateLCM = lcm(rateLCM, rate.getRate());
+        if (rate.isFixed()) {
+            Value * const fixedRateFactor =
+                b->CreateMul2(accessibleItems[i], mFixedRateLCM / rate.getRate());
+            minFixedRateFactor =
+                b->CreateUMin(minFixedRateFactor, fixedRateFactor);
         }
+    }
+
+    // truncate any fixed rate input down to the length of the shortest stream
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const Binding & input = getInputBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        Value * accessible = accessibleItems[i];
+        if (rate.isFixed() && minFixedRateFactor) {
+            Value * calculated = b->CreateCeilUDiv2(minFixedRateFactor, mFixedRateLCM / rate.getRate());
+            const auto buffer = getInputBufferVertex(i);
+            const auto k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
+            // ... but ensure that it reflects whether it was produced with an Add(k) rate.
+            if (LLVM_UNLIKELY(k > 0)) {
+                ConstantInt * const K = b->getSize(k);
+                Value * const total = b->CreateAdd(calculated, K);
+                calculated = b->CreateSelect(isClosed(b, i), total, calculated);
+            }
+            if (LLVM_UNLIKELY(mCheckAssertions)) {
+                Value * correctItemCount = b->CreateICmpEQ(calculated, accessibleItems[i]);
+                if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
+                    correctItemCount = b->CreateOr(correctItemCount, mIsInputZeroExtended[i]);
+                }
+                b->CreateAssert(correctItemCount,
+                                input.getName() +
+                                ": expected final fixed rate item count (%d) "
+                                "does not match accessible item count (%d)",
+                                calculated, accessibleItems[i]);
+            }
+            accessible = calculated;
+        }
+        accessibleItems[i] = addLookahead(b, i, accessible);
     }
 
     const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            rateLCM = lcm(rateLCM, rate.getRate());
-        }
-    }
-
-    Value * minScaledInverseOfAccessibleInput = nullptr;
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
-        const ProcessingRate & rate = input.getRate();
-        if (rate.isFixed() && !input.hasAttribute(AttrId::ZeroExtended)) {
-            Value * const scaledInverseOfAccessibleInput =
-                b->CreateMul2(accessibleItems[i], rateLCM / rate.getRate());
-            minScaledInverseOfAccessibleInput =
-                b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
-        }
-    }
-
-    // truncate any input stream down to the length of the shortest non-ZeroExtended stream
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
-        const ProcessingRate & rate = input.getRate();
-        if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
-            Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
-            if (LLVM_UNLIKELY(mCheckAssertions)) {
-                if (LLVM_LIKELY(!input.hasAttribute(AttrId::ZeroExtended))) {
-                    b->CreateAssert(b->CreateICmpEQ(calculated, accessibleItems[i]),
-                                    input.getName() +
-                                    ": expected final fixed rate item count (%d) "
-                                    "does not match accessible item count (%d)",
-                                    calculated, accessibleItems[i]);
-                }
-            }
-            accessibleItems[i] = calculated;
-        }
-    }
-
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
-        const ProcessingRate & rate = output.getRate();
         Value * writable = mWritableOutputItems[i];
         if (rate.isPartialSum()) {
             writable = mFirstOutputStrideLength[i];
-        } else if (rate.isFixed() && minScaledInverseOfAccessibleInput) {
-            Value * const calculated = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getRate());
+        } else if (rate.isFixed() && minFixedRateFactor) {
+            Value * const calculated = b->CreateCeilUDiv2(minFixedRateFactor, mFixedRateLCM / rate.getRate());
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
                                 output.getName() +
@@ -589,7 +596,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & acc
         }
         writableItems[i] = writable;
     }
-
+    return minFixedRateFactor;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -930,6 +937,10 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 //    }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
 
+    if (mFixedRateFactorPhi) {
+        args.push_back(mFixedRateFactorPhi);
+    }
+
     RelationshipType prior_in{};
 
     for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
@@ -952,12 +963,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
                 processed = mAlreadyProcessedPhi[i];
             }
 
-            // calculate how many linear items are from the *deferred* position
-            Value * inputItems = mLinearInputItemsPhi[i];
-            if (deferred) {
-                Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
-                inputItems = b->CreateAdd(inputItems, diff);
-            }
             const auto buffer = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[buffer];
             const Binding & input = rt.Binding;
@@ -966,7 +971,16 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
             args.push_back(mInputEpochPhi[i]);
 
             mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
-            args.push_back(inputItems); assert (inputItems);
+
+            if (LLVM_UNLIKELY(requiresItemCount(input))) {
+                // calculate how many linear items are from the *deferred* position
+                Value * inputItems = mLinearInputItemsPhi[i];
+                if (deferred) {
+                    Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
+                    inputItems = b->CreateAdd(inputItems, diff);
+                }
+                args.push_back(inputItems); assert (inputItems);
+            }
 
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
                 //args.push_back(getPositivePopCountArray(b, i));
@@ -1004,9 +1018,16 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, canTerminate, produced, args);
         if (LLVM_LIKELY(bn.Type == BufferType::Managed)) {
             args.push_back(mConsumedItemCount[i]); assert (mConsumedItemCount[i]);
-        } else {
+        } else if (LLVM_UNLIKELY(requiresItemCount(output))) {
             args.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
         }
+
+
+//        if (canTerminate || isAddressable(output)) {
+//            fields.push_back(sizePtrTy); // updatable
+//        } else if (isNonFixedCountable(output)) {
+//            fields.push_back(sizeTy); // constant
+//        }
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -1711,7 +1732,11 @@ void PipelineCompiler::itemCountSanityCheck(BuilderRef b, const Binding & bindin
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief phiOutItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::phiOutItemCounts(BuilderRef b, const Vec<Value *> & accessibleItems, const Vec<Value *> & inputEpoch, const Vec<Value *> & writableItems) const {
+void PipelineCompiler::phiOutItemCounts(BuilderRef b,
+                                        const Vec<Value *> & accessibleItems,
+                                        const Vec<Value *> & inputEpoch,
+                                        const Vec<Value *> & writableItems,
+                                        Value * const fixedRateFactor) const {
     BasicBlock * const exitBlock = b->GetInsertBlock();
     const auto numOfInputs = accessibleItems.size();
     for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -1721,6 +1746,9 @@ void PipelineCompiler::phiOutItemCounts(BuilderRef b, const Vec<Value *> & acces
     const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         mLinearOutputItemsPhi[i]->addIncoming(writableItems[i], exitBlock);
+    }
+    if (fixedRateFactor) {
+        mFixedRateFactorPhi->addIncoming(fixedRateFactor, exitBlock);
     }
 }
 

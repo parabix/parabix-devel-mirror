@@ -100,6 +100,17 @@ LLVM_READNONE inline bool isCountable(const Binding & binding) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isNonFixedCountable
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE inline bool isNonFixedCountable(const Binding & binding) {
+    if (LLVM_UNLIKELY(binding.isDeferred())) {
+        return false;
+    }
+    const ProcessingRate & rate = binding.getRate();
+    return rate.isPartialSum() || rate.isPopCount() || rate.isNegatedPopCount();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isAddressable
  ** ------------------------------------------------------------------------------------------------------------- */
 LLVM_READNONE inline bool isAddressable(const Binding & binding) {
@@ -111,18 +122,10 @@ LLVM_READNONE inline bool isAddressable(const Binding & binding) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief isAnyPopCount
- ** ------------------------------------------------------------------------------------------------------------- */
-LLVM_READNONE inline bool isAnyPopCount(const Binding & binding) {
-    const ProcessingRate & rate = binding.getRate();
-    return rate.isPopCount() || rate.isNegatedPopCount();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 LLVM_READNONE inline bool requiresItemCount(const Binding & binding) {
-    return isAddressable(binding) || isAnyPopCount(binding);
+    return isAddressable(binding) || isNonFixedCountable(binding);
 }
 
 

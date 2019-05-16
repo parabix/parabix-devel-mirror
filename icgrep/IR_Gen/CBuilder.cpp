@@ -19,6 +19,7 @@
 #include <toolchain/driver.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <cstdarg>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -896,7 +897,7 @@ Value * CBuilder::CreatePThreadSelf() {
 
 extern "C"
 BOOST_NOINLINE
-void __report_failure_v(const char * name, const char * fmt, const uintptr_t * trace, const uint32_t traceLength, const va_list & args) {
+void __report_failure_v(const char * name, const char * fmt, const uintptr_t * trace, const uint32_t traceLength, va_list & args) {
     // TODO: look into boost stacktrace, available from version 1.65
     raw_fd_ostream out(STDERR_FILENO, false);
     if (trace) {
@@ -933,12 +934,10 @@ void __report_failure_v(const char * name, const char * fmt, const uintptr_t * t
         out << name << ": ";
     }
     out.changeColor(raw_fd_ostream::WHITE, true);
-    boost::format msg(fmt);
-    const auto numOfArgs = msg.expected_args();
-    for (int i = 0; i < numOfArgs; ++i) {
-        msg % va_arg(args, size_t);
-    }
-    out << msg.str() << "\n";
+    char buffer[1024] = {0};
+    const auto m = std::vsprintf(buffer, fmt, args);
+    assert (m > 0);
+    out.write(buffer, m);
     if (trace == nullptr) {
         out.changeColor(raw_fd_ostream::WHITE, true);
         out << "No debug symbols loaded.\n";
@@ -983,7 +982,6 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         ArrayType * const vaListTy = ArrayType::get(getInt8Ty(), sizeof(va_list));
         Type * const voidTy = getVoidTy();
 
-
         FunctionType * fty = FunctionType::get(voidTy, { int1Ty, int8PtrTy, int8PtrTy, stackPtrTy, int32Ty }, true);
         assertFunc = Function::Create(fty, Function::PrivateLinkage, "assert", m);
         #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -1008,7 +1006,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         assertFunc->setHasUWTable();
         assertFunc->setPersonalityFn(getDefaultPersonalityFunction());
 
-        Value * const vaList = CreatePointerCast(CreateAlloca(vaListTy), int8PtrTy);
+        Value * const vaList = CreatePointerCast(CreateAlignedAlloca(vaListTy, mCacheLineAlignment), int8PtrTy);
         FunctionType * vaFuncTy = FunctionType::get(voidTy, { int8PtrTy }, false);
         Function * const vaStart = Function::Create(vaFuncTy, Function::ExternalLinkage, "llvm.va_start", m);
         Function * const vaEnd = Function::Create(vaFuncTy, Function::ExternalLinkage, "llvm.va_end", m);
@@ -1021,6 +1019,8 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
                                                              reinterpret_cast<void *>(&__report_failure_v));
         reportFn->setCallingConv(CallingConv::C);
 
+        CreateCall(vaStart, vaList);
+
         FixedArray<Value *, 5> args;
         args[0] = name;
         args[1] = msg;
@@ -1028,7 +1028,6 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         args[3] = depth;
         args[4] = vaList;
 
-        CreateCall(vaStart, vaList);
         CreateCall(reportFn, args);
         CreateCall(vaEnd, vaList);
 
@@ -1107,7 +1106,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     args[2] = GetString(fmt);
     args[3] = trace;
     args[4] = depth;
-    args.insert(args.end(), params);
+    args.insert(args.begin() + 5, params);
     assert (args.size() == params.size() + 5);
     IRBuilder<>::CreateCall(assertFunc, args);
 }

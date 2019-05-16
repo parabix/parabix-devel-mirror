@@ -271,7 +271,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
 : PabloKernel(kb, "RequiredStreams_UTF8" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
 // input
 {Binding{"source", Source},
- Binding{"lf", LineFeedStream, FixedRate(), { LookAhead(1), ZeroExtended() }}},
+ Binding{"lf", LineFeedStream, FixedRate(), { LookAhead(1) }}},
 // output
 {Binding{"u8index", RequiredStreams, FixedRate(), Add1()},
  Binding{"UnicodeLB", UnicodeLB, FixedRate()}}) {
@@ -329,13 +329,13 @@ Bindings GrepKernelOptions::streamSetInputBindings() {
     if (mExternals.empty()) {
         inputs.emplace_back("basis", mSource);
     } else {
-        inputs.emplace_back("basis", mSource, FixedRate(), ZeroExtended());
+        inputs.emplace_back("basis", mSource, FixedRate());
     }
     for (const auto & a : mExternals) {
         inputs.emplace_back(a);
     }
     for (const auto & a : mAlphabets) {
-        inputs.emplace_back(a.first->getName() + "_basis", a.second, FixedRate(), ZeroExtended());
+        inputs.emplace_back(a.first->getName() + "_basis", a.second);
     }
     return inputs;
 }
@@ -529,7 +529,7 @@ MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuil
 : PabloKernel(iBuilder, "MatchedLines",
 // inputs
 {Binding{"matchResults", OriginalMatches}
-,Binding{"lineBreaks", LineBreakStream, FixedRate(), ZeroExtended()}},
+,Binding{"lineBreaks", LineBreakStream, FixedRate()}},
 // output
 {Binding{"matchedLines", Matches, FixedRate(), Add1()}}) {
 
@@ -547,7 +547,7 @@ InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBui
 : BlockOrientedKernel(b, "Invert",
 // Inputs
 {Binding{"matchedLines", OriginalMatches},
- Binding{"lineBreaks", LineBreakStream, FixedRate(), ZeroExtended()}},
+ Binding{"lineBreaks", LineBreakStream}},
 // Outputs
 {Binding{"nonMatches", Matches}},
 // Input/Output Scalars and internal state

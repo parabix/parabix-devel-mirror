@@ -328,6 +328,56 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasFixedRate
+ ** ------------------------------------------------------------------------------------------------------------- */
+LLVM_READNONE bool hasFixedRate(const Kernel * const kernel) {
+    const auto n = kernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < n; ++i) {
+        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            return true;
+        }
+    }
+    const auto m = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < m; ++i) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const ProcessingRate & rate = output.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getFixedRateLCM
+ ** ------------------------------------------------------------------------------------------------------------- */
+RateValue getFixedRateLCM(const Kernel * const kernel) {
+    RateValue rateLCM(1);
+    bool hasFixedRate = false;
+    const auto n = kernel->getNumOfStreamInputs();
+    for (unsigned i = 0; i < n; ++i) {
+        const Binding & input = kernel->getInputStreamSetBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            rateLCM = lcm(rateLCM, rate.getRate());
+            hasFixedRate = true;
+        }
+    }
+    const auto m = kernel->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < m; ++i) {
+        const Binding & output = kernel->getOutputStreamSetBinding(i);
+        const ProcessingRate & rate = output.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            rateLCM = lcm(rateLCM, rate.getRate());
+            hasFixedRate = true;
+        }
+    }
+    return hasFixedRate ? rateLCM : RateValue{0};
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------ */
 Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
@@ -341,9 +391,6 @@ Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> 
         FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
         doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, name, m);
         doSegment->setCallingConv(CallingConv::C);
-//        if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-//            doSegment->setDoesNotThrow();
-//        }
         doSegment->setDoesNotRecurse();
 
         auto arg = doSegment->arg_begin();
@@ -362,34 +409,40 @@ Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> 
             setNextArgName("externalSegNo");
         }
         setNextArgName("numOfStrides");
+        if (LLVM_LIKELY(hasFixedRate(this))) {
+            setNextArgName("fixedRateFactor");
+        }
         for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
             const Binding & input = mInputStreamSets[i];
             setNextArgName(input.getName());
             if (LLVM_LIKELY(isAddressable(input) || isCountable(input))) {
                 setNextArgName(input.getName() + "_processed");
             }
-            setNextArgName(input.getName() + "_accessible");
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-                setNextArgName(input.getName() + "_popCountArray");
+            if (requiresItemCount(input)) {
+                setNextArgName(input.getName() + "_accessible");
             }
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-                setNextArgName(input.getName() + "_negatedPopCountArray");
-            }
+//            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+//                setNextArgName(input.getName() + "_popCountArray");
+//            }
+//            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+//                setNextArgName(input.getName() + "_negatedPopCountArray");
+//            }
         }
 
         const auto canTerminate = canSetTerminateSignal();
 
         for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
             const Binding & output = mOutputStreamSets[i];
-            if (LLVM_LIKELY(!isLocalBuffer(output))) {
+            const auto isLocal = isLocalBuffer(output);
+            if (LLVM_LIKELY(!isLocal)) {
                 setNextArgName(output.getName());
             }
             if (LLVM_LIKELY(canTerminate || isAddressable(output) || isCountable(output))) {
                 setNextArgName(output.getName() + "_produced");
             }
-            if (LLVM_LIKELY(isLocalBuffer(output))) {
+            if (LLVM_LIKELY(isLocal)) {
                 setNextArgName(output.getName() + "_consumed");
-            } else {
+            } else if (requiresItemCount(output)) {
                 setNextArgName(output.getName() + "_writable");
             }
         }
@@ -405,9 +458,11 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
 
     IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
+    const auto n = mInputStreamSets.size();
+    const auto m = mOutputStreamSets.size();
 
     std::vector<Type *> fields;
-    fields.reserve(2 + mInputStreamSets.size() + mOutputStreamSets.size());
+    fields.reserve(2 + n + m);
 
     if (LLVM_LIKELY(isStateful())) {
         fields.push_back(mSharedStateType->getPointerTo());  // handle
@@ -419,10 +474,12 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         fields.push_back(sizeTy);
     }
     fields.push_back(sizeTy); // numOfStrides
-
-    for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
+    if (LLVM_LIKELY(hasFixedRate(this))) {
+        fields.push_back(sizeTy); // fixedRateFactor
+    }
+    for (unsigned i = 0; i < n; ++i) {
         Type * const bufferType = mStreamSetInputBuffers[i]->getType();
-        // logical base input address
+        // virtual base input address
         fields.push_back(bufferType->getPointerTo());
         // processed input items
         const Binding & input = mInputStreamSets[i];
@@ -431,22 +488,26 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         } else if (isCountable(input)) {
             fields.push_back(sizeTy); // constant
         }
-        // accessible input items (after non-deferred processed item count)
-        fields.push_back(sizeTy);
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            fields.push_back(sizePtrTy);
+        // accessible input items
+        if (requiresItemCount(input)) {
+            fields.push_back(sizeTy);
         }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            fields.push_back(sizePtrTy);
-        }
+
+//        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+//            fields.push_back(sizePtrTy);
+//        }
+//        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+//            fields.push_back(sizePtrTy);
+//        }
     }
 
     const auto canTerminate = canSetTerminateSignal();
 
-    for (unsigned i = 0; i < mOutputStreamSets.size(); ++i) {
+    for (unsigned i = 0; i < m; ++i) {
         const Binding & output = mOutputStreamSets[i];
-        // logical base output address
-        if (LLVM_LIKELY(!isLocalBuffer(output))) {
+        // virtual base output address
+        const auto isLocal = isLocalBuffer(output);
+        if (LLVM_LIKELY(!isLocal)) {
             Type * const bufferType = mStreamSetOutputBuffers[i]->getType();
             fields.push_back(bufferType->getPointerTo());
         }
@@ -458,7 +519,9 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
         }
         // If this is a local buffer, the next param is its consumed item count;
         // otherwise it'll hold its writable output items.
-        fields.push_back(sizeTy);
+        if (isLocal || requiresItemCount(output)) {
+            fields.push_back(sizeTy);
+        }
     }
     return fields;
 }
@@ -547,6 +610,13 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         mExternalSegNo = nextArg();
     }
     mNumOfStrides = nextArg();
+    const auto fixedRateLCM = getFixedRateLCM(this);
+    Value * fixedRateFactor = nullptr;
+    if (LLVM_LIKELY(fixedRateLCM.numerator() != 0)) {
+        fixedRateFactor = nextArg();
+    }
+    assert (!fixedRateFactor ^ hasFixedRate(this));
+
     mIsFinal = b->CreateIsNull(mNumOfStrides);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle, CBuilder::Protect::WRITE);
@@ -572,12 +642,13 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         /// ----------------------------------------------------
         /// logical buffer base address
         /// ----------------------------------------------------
-        const Binding & input = mInputStreamSets[i];
-        Value * const addr = nextArg();
         auto & buffer = mStreamSetInputBuffers[i];
+        const Binding & input = mInputStreamSets[i];
+        Value * const virtualBaseAddress = nextArg();
+        assert (virtualBaseAddress->getType() == buffer->getPointerType());
         Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
         buffer->setHandle(b, localHandle);
-        buffer->setBaseAddress(b.get(), addr);
+        buffer->setBaseAddress(b.get(), virtualBaseAddress);
         /// ----------------------------------------------------
         /// processed item count
         /// ----------------------------------------------------
@@ -586,6 +657,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         // Mem2Reg can convert it into a PHINode if the item count is updated in
         // a loop; otherwise, it will be discarded in favor of the param itself.
 
+        const ProcessingRate & rate = input.getRate();
         Value * processed = nullptr;
         if (isAddressable(input)) {
             mUpdatableProcessedInputItemPtr[i] = nextArg();
@@ -593,20 +665,27 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         } else if (LLVM_LIKELY(isCountable(input))) {
             processed = nextArg();
         } else { // isRelative
-            const ProcessingRate & rate = input.getRate();
             const auto port = getStreamPort(rate.getReference());
             assert (port.Type == PortType::Input && port.Number < i);
             assert (mProcessedInputItemPtr[port.Number]);
             Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
             processed = b->CreateMul2(ref, rate.getRate());
         }
+        assert (processed);
+        assert (processed->getType() == sizeTy);
         AllocaInst * const processedItems = b->CreateAlloca(sizeTy);
         b->CreateStore(processed, processedItems);
         mProcessedInputItemPtr[i] = processedItems;
         /// ----------------------------------------------------
         /// accessible item count
         /// ----------------------------------------------------
-        Value * const accessible = nextArg();
+        Value * accessible = nullptr;
+        if (LLVM_UNLIKELY(requiresItemCount(input))) {
+            accessible = nextArg();
+        } else {
+            accessible = b->CreateCeilUDiv2(fixedRateFactor, fixedRateLCM / rate.getRate());
+        }
+        assert (accessible->getType() == sizeTy);
         mAccessibleInputItems[i] = accessible;
         Value * capacity = b->CreateAdd(processed, accessible);
         mAvailableInputItems[i] = capacity;
@@ -614,14 +693,13 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             capacity = b->CreateAdd(capacity, b->getSize(input.getLookahead()));
         }
         buffer->setCapacity(b.get(), capacity);
+//        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
+//            mPopCountRateArray[i] = nextArg();
+//        }
 
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-            mPopCountRateArray[i] = nextArg();
-        }
-
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-            mNegatedPopCountRateArray[i] = nextArg();
-        }
+//        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
+//            mNegatedPopCountRateArray[i] = nextArg();
+//        }
     }
 
     // set all of the output buffers
@@ -640,20 +718,24 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
 
         auto & buffer = mStreamSetOutputBuffers[i];
         const Binding & output = mOutputStreamSets[i];
-        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+        const auto isLocal = isLocalBuffer(output);
+        if (LLVM_UNLIKELY(isLocal)) {
             // If an output is a managed buffer, the address is stored within the state instead
             // of being passed in through the function call.
             Value * const handle = getScalarValuePtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
             buffer->setHandle(b, handle);
         } else {
-            Value * const logicalBaseAddress = nextArg();
+            Value * const virtualBaseAddress = nextArg();
+            assert (virtualBaseAddress->getType() == buffer->getPointerType());
             Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
             buffer->setHandle(b, localHandle);
-            buffer->setBaseAddress(b.get(), logicalBaseAddress);
+            buffer->setBaseAddress(b.get(), virtualBaseAddress);
         }
+
         /// ----------------------------------------------------
         /// produced item count
         /// ----------------------------------------------------
+        const ProcessingRate & rate = output.getRate();
         Value * produced = nullptr;
         if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
             mUpdatableProducedOutputItemPtr[i] = nextArg();
@@ -661,30 +743,35 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         } else if (LLVM_LIKELY(isCountable(output))) {
             produced = nextArg();
         } else { // isRelative
-
             // For now, if something is produced at a relative rate to another stream in a kernel that
             // may terminate, its final item count is inherited from its reference stream and cannot
             // be set independently. Should they be independent at early termination?
-
-            const ProcessingRate & rate = output.getRate();
             const auto port = getStreamPort(rate.getReference());
             assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
             const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
             Value * const ref = b->CreateLoad(items[port.Number]);
             produced = b->CreateMul2(ref, rate.getRate());
         }
-
+        assert (produced);
+        assert (produced->getType() == sizeTy);
         AllocaInst * const producedItems = b->CreateAlloca(sizeTy);
         b->CreateStore(produced, producedItems);
         mProducedOutputItemPtr[i] = producedItems;
         /// ----------------------------------------------------
         /// consumed or writable item count
         /// ----------------------------------------------------
-        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+        if (LLVM_UNLIKELY(isLocal)) {
             Value * const consumed = nextArg();
+            assert (consumed->getType() == sizeTy);
             mConsumedOutputItems[i] = consumed;
         } else {
-            Value * writable = nextArg();
+            Value * writable = nullptr;
+            if (requiresItemCount(output)) {
+                writable = nextArg();
+            } else {
+                writable = b->CreateCeilUDiv2(fixedRateFactor, fixedRateLCM / rate.getRate());
+            }
+            assert (writable->getType() == sizeTy);
             mWritableOutputItems[i] = writable;
             Value * const capacity = b->CreateAdd(produced, writable);
             buffer->setCapacity(b.get(), capacity);

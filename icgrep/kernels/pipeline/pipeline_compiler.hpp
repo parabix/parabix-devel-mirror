@@ -213,8 +213,6 @@ private:
     flat_map<const void *, Vertex> mMap;
 };
 
-
-
 enum class BufferType : unsigned {
     Internal = 0
     , Managed = 1
@@ -384,6 +382,8 @@ struct PipelineGraphBundle {
     }
 };
 
+using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, unsigned>;
+
 enum CycleCounter {
   BEFORE_KERNEL_CALL
   , INITIAL
@@ -498,10 +498,10 @@ protected:
     void enterRegionSpan(BuilderRef b);
 
     Value * calculateItemCounts(BuilderRef b);
-    void calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
-    void calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
+    Value * calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
+    Value * calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddress);
-    void phiOutItemCounts(BuilderRef b, const Vec<Value *> & accessibleItems, const Vec<Value *> &inputBaseAddress, const Vec<Value *> & writableItems) const;
+    void phiOutItemCounts(BuilderRef b, const Vec<Value *> & accessibleItems, const Vec<Value *> &inputBaseAddress, const Vec<Value *> & writableItems, Value * const fixedRateFactor) const;
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
     Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
@@ -680,6 +680,10 @@ protected:
     bool isPipelineInput(const unsigned inputPort) const;
     bool isPipelineOutput(const unsigned outputPort) const;
 
+    bool hasFixedRateLCM();
+
+    AddGraph makeAddGraph() const;
+
 // synchronization functions
 
     BufferSetGraph makeBufferSetGraph() const;
@@ -721,6 +725,7 @@ protected:
     const Binding & getInputBinding(const unsigned inputPort) const;
     LLVM_READNONE const BufferGraph::edge_descriptor getInput(const unsigned kernelVertex, const unsigned outputPort) const;
     bool isInputExplicit(const unsigned inputPort) const;
+    const Binding & getProducerOutputBinding(const unsigned inputPort) const;
 
     LLVM_READNONE unsigned getOutputBufferVertex(const unsigned kernelVertex, const unsigned outputPort) const;
     unsigned getOutputBufferVertex(const unsigned outputPort) const;
@@ -804,6 +809,8 @@ protected:
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
+    PHINode *                                   mFixedRateFactorPhi = nullptr;
+    RateValue                                   mFixedRateLCM;
     Value *                                     mTerminatedExplicitly = nullptr;
     Value *                                     mBranchToLoopExit = nullptr;
     bool                                        mBoundedKernel = false;
@@ -877,6 +884,7 @@ protected:
     Vec<Value *>                                mScalarValue;
     const PipelineIOGraph                       mPipelineIOGraph;
     const TerminationGraph                      mTerminationGraph;
+    const AddGraph                              mAddGraph;
 
     std::vector<std::unique_ptr<Kernel>>        mInternalKernels;
     std::vector<std::unique_ptr<Binding>>       mInternalBindings;
@@ -984,6 +992,7 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mScalarValue(LastScalar + 1)
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
+, mAddGraph(makeAddGraph())
 , mInternalKernels(std::move(P.InternalKernels))
 , mInternalBindings(std::move(P.InternalBindings)) {
 

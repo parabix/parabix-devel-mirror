@@ -9,9 +9,15 @@
 // TODO: any buffers that exist only to satisfy the output dependencies are unnecessary.
 // We could prune away kernels if none of their outputs are needed but we'd want some
 // form of "fake" buffer for output streams in which only some are unnecessary. Making a
-// single static buffer thats large enough for one segment and using it as "scratch space"
-// is possible but that could cause unnecessary cache-sharing in theaded models.
-// For threading, we'd want thread local buffers.
+// single static thread local buffer thats large enough for one segment.
+
+// TODO: can we "combine" static stream sets that are used together and use fixed offsets
+// from the first set? Would this improve data locality or (kernel) data prediction
+// performance?
+
+// TODO: generate thread local buffers when we can guarantee all produced data is consumed
+// within the same segment "iteration"? We can eliminate synchronization for kernels that
+// consume purely local data.
 
 namespace kernel {
 
@@ -1342,6 +1348,15 @@ inline bool PipelineCompiler::isInputExplicit(const unsigned inputPort) const {
     const auto vertex = getInput(mKernelIndex, inputPort);
     const BufferRateData & rd = mBufferGraph[vertex];
     return rd.Port.Reason == ReasonType::Explicit;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getProducerOutputBinding
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Binding & PipelineCompiler::getProducerOutputBinding(const unsigned inputPort) const {
+    const auto buffer = getInputBufferVertex(inputPort);
+    const BufferRateData & br = mBufferGraph[in_edge(buffer, mBufferGraph)];
+    return br.Binding;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
