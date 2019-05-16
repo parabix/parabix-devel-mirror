@@ -27,19 +27,22 @@ public:
     static std::unique_ptr<Error> CreateError(std::string const & text,
                                               std::string const & filename,
                                               std::string const & line,
-                                              size_t lineNum, size_t colNum);
+                                              size_t lineNum, size_t colNum,
+                                              std::string const & hint = "");
 
     static std::unique_ptr<Error> CreateWarning(std::string const & text,
                                                 std::string const & filename,
                                                 std::string const & line,
-                                                size_t lineNum, size_t colNum);
+                                                size_t lineNum, size_t colNum,
+                                                std::string const & hint = "");
 
 private:
     Error(ErrorType type,
           std::string const & text,
           std::string const & filename,
           std::string const & line,
-          size_t lineNum, size_t colNum);
+          size_t lineNum, size_t colNum,
+          std::string const & hint);
 
     ErrorType   mType;
     std::string mText;
@@ -47,6 +50,7 @@ private:
     std::string mLine;
     size_t      mLineNum;
     size_t      mColNum;
+    std::string mHint;
 };
 
 
@@ -68,10 +72,10 @@ public:
     ErrorManager() = delete;
     explicit ErrorManager(ErrorContext const & context);
 
-    void logError(std::string const & text);
-    void logWarning(std::string const & text);
-    void logError(std::string const & text, std::string const & line, size_t lineNum, size_t colNum);
-    void logWarning(std::string const & text, std::string const & line, size_t lineNum, size_t colNum);
+    void logError(std::string const & text, std::string const & hint = "");
+    void logWarning(std::string const & text, std::string const & hint = "");
+    void logError(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint = "");
+    void logWarning(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint = "");
 
     bool canContinue() const {
         return mCanContinue;

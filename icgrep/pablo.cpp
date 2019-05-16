@@ -4,8 +4,30 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include <iostream>
+#include <fstream>
+#include <pablo/parser/error.h>
+#include <pablo/parser/simple_lexer.h>
 #include <pablo/parser/pablo_parser.h>
 
+using namespace pablo::parse;
+
 int main(int argc, char ** argv) {
-    return 0;
+    if (argc != 2) {
+        std::cerr << "input file is required\n";
+        return 1;
+    }
+    std::string filename{argv[1]};
+    SimpleLexer lexer{ErrorContext{}};
+    std::ifstream fin{filename};
+    lexer.setFilename(filename);
+    auto tokens = lexer.tokenize(fin);
+    if (tokens == nullptr) {
+        lexer.getErrorManager().dumpErrors();
+        return 1;
+    }
+
+    for (auto const & token : *tokens) {
+        std::cout << *token << "\n";
+    }
 }
