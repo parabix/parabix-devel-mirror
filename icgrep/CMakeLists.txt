@@ -109,6 +109,8 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
+SET(PABLO_PARSER_SRC pablo/parser/pablo_parser.cpp)
+SET(PABLO_PARSER_SRC pablo/parser/error.cpp)
 
 SET (RE_PARSERS_SRC re/parsers/PCRE_parser.cpp re/parsers/ERE_parser.cpp re/parsers/BRE_parser.cpp re/parsers/Prosite_parser.cpp re/parsers/fixed_string_parser.cpp re/parsers/GLOB_parser.cpp re/parsers/parser.cpp)
 
@@ -116,7 +118,7 @@ add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_
 add_library(PabloADT ${PABLO_SRC})
 # CCADT is the core library for representing and compiling character classes
 add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/cc_compiler_target.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp cc/cc_kernel.cpp)
-add_library(PabloParser pablo/parser/pablo_parser.cpp)
+add_library(PabloParser ${PABLO_PARSER_SRC})
 # RegExpADT is the core library for representing, parsing and printing regular expressions
 add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/re_empty_set.cpp re/printer_re.cpp re/re_utility.cpp)
 add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp re/re_contextual_simplification.cpp)
