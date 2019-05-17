@@ -111,7 +111,7 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 SET(PABLO_PARSER_SRC pablo/parser/pablo_parser.cpp)
 SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/error.cpp pablo/parser/token.cpp)
-SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/simple_lexer.cpp)
+SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/simple_lexer.cpp pablo/parser/source_file.cpp)
 
 SET (RE_PARSERS_SRC re/parsers/PCRE_parser.cpp re/parsers/ERE_parser.cpp re/parsers/BRE_parser.cpp re/parsers/Prosite_parser.cpp re/parsers/fixed_string_parser.cpp re/parsers/GLOB_parser.cpp re/parsers/parser.cpp)
 
@@ -136,7 +136,7 @@ add_dependencies(CodeGen RecompileObjectCache)
 target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
-target_link_libraries (PabloParser CCADT PabloADT)
+target_link_libraries (PabloParser CCADT PabloADT ${Boost_LIBRARIES})
 target_link_libraries (RegExpADT PabloADT CCADT)
 target_link_libraries (UCDlib RegExpADT PabloADT CCADT) # GrepEngine RegExpCompiler
 target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)

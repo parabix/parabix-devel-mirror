@@ -19,9 +19,8 @@ int main(int argc, char ** argv) {
     }
     std::string filename{argv[1]};
     SimpleLexer lexer{ErrorContext{}};
-    std::ifstream fin{filename};
-    lexer.setFilename(filename);
-    auto tokens = lexer.tokenize(fin);
+    SourceFile file(filename);
+    auto tokens = lexer.tokenize(file);
     if (tokens == nullptr) {
         lexer.getErrorManager().dumpErrors();
         return 1;

@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include <istream>
 #include <memory>
 #include <vector>
 #include <pablo/parser/error.h>
 #include <pablo/parser/token.h>
+#include <pablo/parser/source_file.h>
 
 namespace pablo {
 namespace parse {
@@ -28,9 +28,7 @@ public:
      * @param in the input stream of characters to tokenize
      * @return a sequence of tokens
      */
-    virtual std::unique_ptr<std::vector<Token *>> tokenize(std::istream & in) = 0;
-
-    virtual void setFilename(std::string const & filename) = 0;
+    virtual std::unique_ptr<std::vector<Token *>> tokenize(SourceFile & sourceFile) = 0;
 
     virtual ErrorManager const & getErrorManager() const = 0;
 
