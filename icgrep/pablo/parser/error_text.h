@@ -12,11 +12,15 @@ namespace pablo {
 namespace parse {
 
 inline std::string errtxt_IllegalSymbol(char c) {
-    return "illegal symbol '" + std::string{c} + "'";
+    return "unexpected symbol '" + std::string{c} + "'";
 }
 
 inline std::string errtxt_IllegalSymbol(std::string const & s) {
-    return "illegal symbol '" + s + "'";
+    return "unexpected symbol '" + s + "'";
+}
+
+inline std::string errtxt_IllegalIntegerLiteral() {
+    return "illegal integer literal";
 }
 
 } // namespace pablo::parse
