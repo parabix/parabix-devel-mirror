@@ -12,6 +12,10 @@
 namespace pablo {
 namespace parse {
 
+inline static bool isTokenSeparator(char c) {
+    return !(std::isalnum(c) || c == '_');
+}
+
 std::unique_ptr<std::vector<Token *>> SimpleLexer::tokenize(std::istream & in) {
     std::unique_ptr<std::vector<Token *>> tokenList(new std::vector<Token *>{});
     while (std::getline(in, mCurrentLine)) {
@@ -76,14 +80,13 @@ Token * SimpleLexer::extractText() {
 
 Token * SimpleLexer::extractIntLiteral() {
     const size_t col = mCurrentColNum;
-    char c = mCurrentLine[mCurrentColNum];
-    std::string builder{};
-    while (std::isdigit(c) && mCurrentColNum < mCurrentLine.length()) {
-        builder.push_back(c);
-        mCurrentColNum++;
-        c = mCurrentLine[mCurrentColNum];
+    size_t consumedCount = 0;
+    int64_t value = std::stol(mCurrentLine.substr(mCurrentColNum), &consumedCount, /* auto base */ 0);
+    mCurrentColNum += consumedCount;
+    if (consumedCount == 0 || (mCurrentColNum < mCurrentLine.length() && !isTokenSeparator(mCurrentLine[mCurrentColNum]))) {
+        mErrorManager.logError(errtxt_IllegalIntegerLiteral(), mCurrentLine, mCurrentLineNum, col);
+        return nullptr;
     }
-    int64_t value = std::stol(builder);
     return Token::CreateIntLiteral(value, mCurrentLineNum, col);
 }
 
