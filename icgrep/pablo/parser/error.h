@@ -10,9 +10,12 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <boost/utility/string_view.hpp>
 
 namespace pablo {
 namespace parse {
+
+class SourceFile;
 
 enum class ErrorType {
     WARNING,
@@ -25,32 +28,28 @@ public:
     friend class ErrorManager;
 
     static std::unique_ptr<Error> CreateError(std::string const & text,
-                                              std::string const & filename,
-                                              std::string const & line,
+                                              SourceFile const * mSource,
                                               size_t lineNum, size_t colNum,
                                               std::string const & hint = "");
 
     static std::unique_ptr<Error> CreateWarning(std::string const & text,
-                                                std::string const & filename,
-                                                std::string const & line,
+                                                SourceFile const * mSource,
                                                 size_t lineNum, size_t colNum,
                                                 std::string const & hint = "");
 
 private:
     Error(ErrorType type,
           std::string const & text,
-          std::string const & filename,
-          std::string const & line,
+          SourceFile const * source,
           size_t lineNum, size_t colNum,
           std::string const & hint);
 
-    ErrorType   mType;
-    std::string mText;
-    std::string mFilename;
-    std::string mLine;
-    size_t      mLineNum;
-    size_t      mColNum;
-    std::string mHint;
+    ErrorType           mType;
+    std::string         mText;
+    SourceFile const *  mSource;
+    size_t              mLineNum;
+    size_t              mColNum;
+    std::string         mHint;
 };
 
 
@@ -74,8 +73,8 @@ public:
 
     void logError(std::string const & text, std::string const & hint = "");
     void logWarning(std::string const & text, std::string const & hint = "");
-    void logError(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint = "");
-    void logWarning(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint = "");
+    void logError(std::string const & text, SourceFile const * source, size_t lineNum, size_t colNum, std::string const & hint = "");
+    void logWarning(std::string const & text, SourceFile const * source, size_t lineNum, size_t colNum, std::string const & hint = "");
 
     bool canContinue() const {
         return mCanContinue;
@@ -87,21 +86,16 @@ public:
 
     void dumpErrors() const;
 
-    void setReferences(std::string const * lineRef, size_t const * lineNumRef, size_t const * colNumRef);
-
-    void setFilename(std::string const & filename) {
-        mFilename = filename;
-    }
+    void setReferences(SourceFile const * sourceRef, size_t const * lineNumRef, size_t const * colNumRef);
 
 private:
     std::string renderError(std::unique_ptr<Error> const & e) const;
 
     ErrorContext                        mContext;
     std::vector<std::unique_ptr<Error>> mErrorList;
-    std::string                         mFilename;
     size_t                              mErrorCount;
     bool                                mCanContinue;
-    std::string const *                 mLineRef;
+    SourceFile const *                  mSourceRef;
     size_t const *                      mLineNumRef;
     size_t const *                      mColNumRef;
 };

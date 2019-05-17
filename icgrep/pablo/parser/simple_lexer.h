@@ -18,9 +18,7 @@ public:
 
     explicit SimpleLexer(ErrorContext const & errorContext);
 
-    std::unique_ptr<std::vector<Token *>> tokenize(std::istream & in) override;
-
-    void setFilename(std::string const & filename) override;
+    std::unique_ptr<std::vector<Token *>> tokenize(SourceFile & sourceFile) override;
 
     ErrorManager const & getErrorManager() const override {
         return mErrorManager;
@@ -32,11 +30,11 @@ private:
     Token * extractIntLiteral();
     Token * extractSymbol();
 
-    ErrorManager    mErrorManager;
-    std::string     mCurrentFilename;
-    std::string     mCurrentLine;
-    size_t          mCurrentLineNum;
-    size_t          mCurrentColNum;
+    ErrorManager        mErrorManager;
+    SourceFile const *  mCurrentSource;
+    boost::string_view  mCurrentLine;
+    size_t              mCurrentLineNum;
+    size_t              mCurrentColNum;
 };
 
 } // namespace pablo::parse

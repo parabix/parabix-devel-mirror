@@ -16,9 +16,11 @@ inline static bool isTokenSeparator(char c) {
     return !(std::isalnum(c) || c == '_');
 }
 
-std::unique_ptr<std::vector<Token *>> SimpleLexer::tokenize(std::istream & in) {
+std::unique_ptr<std::vector<Token *>> SimpleLexer::tokenize(SourceFile & sourceFile) {
+    mCurrentSource = &sourceFile;
+    mErrorManager.setReferences(mCurrentSource, &mCurrentLineNum, &mCurrentColNum);
     std::unique_ptr<std::vector<Token *>> tokenList(new std::vector<Token *>{});
-    while (std::getline(in, mCurrentLine)) {
+    while (sourceFile.nextLine(mCurrentLine)) {
         mCurrentColNum = 0;
         mCurrentLineNum++;
         Token * token = nullptr;
@@ -55,8 +57,8 @@ Token * SimpleLexer::extractText() {
     const size_t col = mCurrentColNum;
     std::string builder{};
     bool canBeIntType = mCurrentLine[mCurrentColNum] == 'i';
-    while (mCurrentColNum <= mCurrentLine.length() && 
-           (std::isalnum(mCurrentLine[mCurrentColNum]) || mCurrentLine[mCurrentColNum] == '_')) 
+    while (mCurrentColNum <= mCurrentLine.length() &&
+           (std::isalnum(mCurrentLine[mCurrentColNum]) || mCurrentLine[mCurrentColNum] == '_'))
     {
         const char c = mCurrentLine[mCurrentColNum];
         builder.push_back(c);
@@ -81,10 +83,10 @@ Token * SimpleLexer::extractText() {
 Token * SimpleLexer::extractIntLiteral() {
     const size_t col = mCurrentColNum;
     size_t consumedCount = 0;
-    int64_t value = std::stol(mCurrentLine.substr(mCurrentColNum), &consumedCount, /* auto base */ 0);
+    int64_t value = std::stol(mCurrentLine.substr(mCurrentColNum).to_string(), &consumedCount, /* auto base */ 0);
     mCurrentColNum += consumedCount;
     if (consumedCount == 0 || (mCurrentColNum < mCurrentLine.length() && !isTokenSeparator(mCurrentLine[mCurrentColNum]))) {
-        mErrorManager.logError(errtxt_IllegalIntegerLiteral(), mCurrentLine, mCurrentLineNum, col);
+        mErrorManager.logError(errtxt_IllegalIntegerLiteral(), mCurrentSource, mCurrentLineNum, col);
         return nullptr;
     }
     return Token::CreateIntLiteral(value, mCurrentLineNum, col);
@@ -161,21 +163,14 @@ Token * SimpleLexer::extractSymbol() {
     return token;
 }
 
-void SimpleLexer::setFilename(std::string const & filename) {
-    mCurrentFilename = filename;
-    mErrorManager.setFilename(filename);
-}
-
 SimpleLexer::SimpleLexer(ErrorContext const & errorContext)
 : Lexer()
 , mErrorManager(errorContext)
-, mCurrentFilename()
+, mCurrentSource(nullptr)
 , mCurrentLine()
 , mCurrentLineNum(0)
 , mCurrentColNum(0)
-{
-    mErrorManager.setReferences(&mCurrentLine, &mCurrentLineNum, &mCurrentColNum);
-}
+{}
 
 } // namespace pablo::parse
 } // namespace pablo

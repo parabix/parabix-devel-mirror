@@ -8,38 +8,35 @@
 
 #include <cassert>
 #include <iostream>
+#include <pablo/parser/source_file.h>
 
 namespace pablo {
 namespace parse {
 
 std::unique_ptr<Error> Error::CreateError(std::string const & text,
-                                          std::string const & filename,
-                                          std::string const & line,
+                                          SourceFile const * source,
                                           size_t lineNum, size_t colNum,
                                           std::string const & hint)
 {
-    return std::unique_ptr<Error>(new Error(ErrorType::ERROR, text, filename, line, lineNum, colNum, hint));
+    return std::unique_ptr<Error>(new Error(ErrorType::ERROR, text, source, lineNum, colNum, hint));
 }
 
 std::unique_ptr<Error> Error::CreateWarning(std::string const & text,
-                                            std::string const & filename,
-                                            std::string const & line,
+                                            SourceFile const * source,
                                             size_t lineNum, size_t colNum,
                                             std::string const & hint)
 {
-    return std::unique_ptr<Error>(new Error(ErrorType::WARNING, text, filename, line, lineNum, colNum, hint));
+    return std::unique_ptr<Error>(new Error(ErrorType::WARNING, text, source, lineNum, colNum, hint));
 }
 
 Error::Error(ErrorType type,
              std::string const & text,
-             std::string const & filename,
-             std::string const & line,
+             SourceFile const * source,
              size_t lineNum, size_t colNum,
              std::string const & hint)
 : mType(type)
 , mText(text)
-, mFilename(filename)
-, mLine(line)
+, mSource(source)
 , mLineNum(lineNum)
 , mColNum(colNum)
 , mHint(hint)
@@ -49,7 +46,7 @@ Error::Error(ErrorType type,
 bool ErrorContext::canUseColor() const {
 #ifdef WIN32
     return false;
-#else 
+#else
     return &outStream == &std::cout || &outStream == &std::cerr;
 #endif
 }
@@ -64,20 +61,19 @@ ErrorContext::ErrorContext()
 
 
 void ErrorManager::logError(std::string const & text, std::string const & hint) {
-    assert ("location references not set" && mLineNumRef && mColNumRef);
+    assert ("location references not set" && mSourceRef && mLineNumRef && mColNumRef);
 
-    return logError(text, *mLineRef, *mLineNumRef, *mColNumRef, hint);
+    return logError(text, mSourceRef, *mLineNumRef, *mColNumRef, hint);
 }
 
 void ErrorManager::logWarning(std::string const & text, std::string const & hint) {
-    assert ("location references not set" && mLineNumRef && mColNumRef);
+    assert ("location references not set" && mSourceRef && mLineNumRef && mColNumRef);
 
-    return logWarning(text, *mLineRef, *mLineNumRef, *mColNumRef, hint);
+    return logWarning(text, mSourceRef, *mLineNumRef, *mColNumRef, hint);
 }
 
-void ErrorManager::logError(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint) {
-    assert (!mFilename.empty());
-    auto e = Error::CreateError(text, mFilename, line, lineNum, colNum, hint);
+void ErrorManager::logError(std::string const & text, SourceFile const * source, size_t lineNum, size_t colNum, std::string const & hint) {
+    auto e = Error::CreateError(text, source, lineNum, colNum, hint);
     if (mContext.useLivePrint) {
         mContext.outStream << renderError(e);
     }
@@ -88,9 +84,8 @@ void ErrorManager::logError(std::string const & text, std::string const & line, 
     mErrorList.push_back(std::move(e));
 }
 
-void ErrorManager::logWarning(std::string const & text, std::string const & line, size_t lineNum, size_t colNum, std::string const & hint) {
-    assert (!mFilename.empty());
-    auto e = Error::CreateWarning(text, mFilename, line, lineNum, colNum, hint);
+void ErrorManager::logWarning(std::string const & text, SourceFile const * source, size_t lineNum, size_t colNum, std::string const & hint) {
+    auto e = Error::CreateWarning(text, source, lineNum, colNum, hint);
     if (mContext.useLivePrint) {
         mContext.outStream << renderError(e);
     }
@@ -108,9 +103,9 @@ void ErrorManager::dumpErrors() const {
     }
 }
 
-void ErrorManager::setReferences(std::string const * lineRef, size_t const * lineNumRef, size_t const * colNumRef) {
-    assert (lineRef && lineNumRef && colNumRef);
-    mLineRef = lineRef;
+void ErrorManager::setReferences(SourceFile const * sourceRef, size_t const * lineNumRef, size_t const * colNumRef) {
+    assert (sourceRef && lineNumRef && colNumRef);
+    mSourceRef = sourceRef;
     mLineNumRef = lineNumRef;
     mColNumRef = colNumRef;
 }
@@ -132,11 +127,15 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
         assert ("invalid enumeration value" && false);
         break;
     }
-    errText += " @ " + e->mFilename + ":" + std::to_string(e->mLineNum) + ":" + std::to_string(e->mColNum + 1) + "\n";
+    errText += " @ " + e->mSource->getFilename() + ":" + std::to_string(e->mLineNum) + ":" + std::to_string(e->mColNum + 1) + "\n";
     std::string lineNum = std::to_string(e->mLineNum);
     std::string padding(lineNum.length(), ' ');
     errText += " " + padding + " | " + e->mText + "\n";
-    errText += " " + lineNum + " | " + e->mLine + "\n";
+    std::string sourceLine = e->mSource->line(e->mLineNum).to_string();
+    // append '\n' to source line if one doesn't exist
+    if (sourceLine.back() != '\n')
+        sourceLine.push_back('\n');
+    errText += " " + lineNum + " | " + sourceLine;
     errText += " " + padding + " | " + std::string(e->mColNum, ' ') + GREEN + "^" + (e->mHint.empty() ? "" : " " + e->mHint) + NORMAL + "\n\n";
     return errText;
 }
@@ -144,10 +143,9 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
 ErrorManager::ErrorManager(ErrorContext const & context)
 : mContext(context)
 , mErrorList()
-, mFilename()
 , mErrorCount(0)
 , mCanContinue(true)
-, mLineRef(nullptr)
+, mSourceRef(nullptr)
 , mLineNumRef(nullptr)
 , mColNumRef(nullptr)
 {
