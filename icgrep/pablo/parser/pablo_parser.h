@@ -6,12 +6,16 @@
 
 #pragma once
 
-#include <istream>
 #include <ostream>
-#include <pablo/pabloAST.h>
+#include <memory>
+#include <vector>
+#include <boost/optional.hpp>
 #include <pablo/pablo_kernel.h>
 
 namespace pablo {
+namespace parse {
+
+class SourceFile;
 
 /**
  * Abstract interface for all pablo parser implementations.
@@ -22,29 +26,32 @@ namespace pablo {
 class PabloParser {
 public:
 
+    virtual ~PabloParser() = default;
+
     /**
-     * Constructs a PabloKernel instance by parsing an input stream.
+     * Constructs a series of PabloKernels by parsing a given source file.
      * 
-     * @param in a input stream to read from
-     * @return a PabloKernel instance or nullptr in the event of an error
+     * @param sourceFile A shared instance to the source file to parse.
+     * @return A series of PabloKernels or boost::none if an error occurred.
      */
-    virtual std::unique_ptr<PabloKernel> parse(std::istream & in) = 0;
+    virtual boost::optional<std::vector<std::unique_ptr<PabloKernel>>> parse(std::shared_ptr<SourceFile> sourceFile) = 0;
 
     /**
      * The reverse operation of parse. Writes pablo source code to an output
-     * stream by reading a given kernel.
+     * stream by reading a given set kernels.
      */
-    virtual void unparse(std::ostream & out, PabloKernel * kernel) = 0;
+    virtual void unparse(std::ostream & out, std::vector<PabloKernel *> const & kernels) = 0;
 
     /**
      * Convenience parse method which accepts a filename to parse instead of
-     * an input stream.
+     * a source file instance.
      * 
-     * @param filename the file to parse
-     * @return a PabloKernel instance or nullptr in the event of an error
+     * @param filename The file to parse.
+     * @return A series of PabloKernels or boost::none if an error occurred.
      */
-    std::unique_ptr<PabloKernel> parse(std::string const & filename);
+    boost::optional<std::vector<std::unique_ptr<PabloKernel>>> parse(std::string const & filename);
 
 };
 
+} // namespace pablo::parse
 } // namespace pablo
