@@ -647,6 +647,8 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     return b->CreateCall(func, { myHandle, produced, consumed, required, overflowItems ? overflowItems : b->getSize(0) });
 }
 
+#if 0
+
 // Linear Buffer
 Type * LinearBuffer::getHandleType(BuilderRef b) const {
     PointerType * typePtr = getPointerType();
@@ -833,18 +835,21 @@ Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * co
     return remainingAfterExpand;
 }
 
+#endif
+
 // Constructors
 
 ExternalBuffer::ExternalBuffer(BuilderRef b, Type * const type,
+                               const bool linear,
                                const unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::ExternalBuffer, b, type, 0, 0, AddressSpace) {
+: StreamSetBuffer(BufferKind::ExternalBuffer, b, type, 0, 0, linear, AddressSpace) {
 
 }
 
 StaticBuffer::StaticBuffer(BuilderRef b, Type * const type,
                            const size_t capacity, const size_t overflowSize, const size_t underflowSize,
-                           const unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, AddressSpace)
+                           const bool linear, const unsigned AddressSpace)
+: StreamSetBuffer(BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
 , mCapacity(capacity / b->getBitBlockWidth()) {
     assert ("static buffer cannot have 0 capacity" && capacity);
     assert ("static buffer capacity must be a multiple of bitblock width"
@@ -855,12 +860,13 @@ StaticBuffer::StaticBuffer(BuilderRef b, Type * const type,
             && (underflowSize % b->getBitBlockWidth()) == 0);
     assert ("static buffer capacity must be at least twice its max(underflow, overflow)"
             && (capacity >= (std::max(underflowSize, overflowSize) * 2)));
+    assert (!linear && " not supported yet");
 }
 
 DynamicBuffer::DynamicBuffer(BuilderRef b, Type * const type,
                              const size_t initialCapacity, const size_t overflowSize, const size_t underflowSize,
-                             const unsigned AddressSpace)
-: StreamSetBuffer(BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, AddressSpace)
+                             const bool linear, const unsigned AddressSpace)
+: StreamSetBuffer(BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
 , mInitialCapacity(initialCapacity / b->getBitBlockWidth()) {
     assert ("dynamic buffer cannot have 0 initial capacity" && initialCapacity);
     assert ("dynamic buffer capacity must be a multiple of bitblock width"
@@ -871,7 +877,10 @@ DynamicBuffer::DynamicBuffer(BuilderRef b, Type * const type,
             && (underflowSize % b->getBitBlockWidth()) == 0);
     assert ("dynamic buffer initial capacity must be at least twice its max(underflow, overflow)"
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
+    assert (!linear && " not supported yet");
 }
+
+#if 0
 
 LinearBuffer::LinearBuffer(BuilderRef b, Type * const type,
                            const size_t initialCapacity, const size_t overflowSize, const size_t underflowSize,
@@ -886,17 +895,21 @@ LinearBuffer::LinearBuffer(BuilderRef b, Type * const type,
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
 }
 
+#endif
 
-StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderRef b,
+StreamSetBuffer::StreamSetBuffer(const BufferKind k,
+                                 BuilderRef b,
                                  Type * const baseType,
-                                 const size_t overflowSize, const size_t underflowSize, const unsigned AddressSpace)
+                                 const size_t overflowSize, const size_t underflowSize,
+                                 const bool linear, const unsigned AddressSpace)
 : mBufferKind(k)
 , mHandle(nullptr)
 , mType(resolveType(b, baseType))
 , mOverflow(overflowSize / b->getBitBlockWidth())
 , mUnderflow(underflowSize / b->getBitBlockWidth())
 , mAddressSpace(AddressSpace)
-, mBaseType(baseType) {
+, mBaseType(baseType)
+, mLinear(linear) {
 
 }
 

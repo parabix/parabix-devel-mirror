@@ -426,7 +426,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
 MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * ByteStream, StreamSet * const Coordinates, Scalar * const callbackObject)
 : MultiBlockKernel(b, "matchReporter" + std::to_string(Coordinates->getNumElements()),
 // inputs
-{Binding{"InputStream", ByteStream, FixedRate(), Deferred()}, Binding{"Coordinates", Coordinates, BoundedRate(0, 1)}},
+{Binding{"InputStream", ByteStream, FixedRate(), Deferred()},
+ Binding{"Coordinates", Coordinates, GreedyRate()}},
                    // outputs
 {},
                    // input scalars

@@ -72,6 +72,10 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                             out << 'F';
                             write(rate.getLowerBound(), out);
                             break;
+                        case KindId::Greedy:
+                            out << 'G';
+                            write(rate.getLowerBound(), out);
+                            break;
                         case KindId::Bounded:
                             out << 'B';
                             write(rate.getLowerBound(), out);
@@ -94,6 +98,7 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                         case KindId::PartialSum:
                             out << 'S';
                             break;
+                        case KindId::__Count: llvm_unreachable("");
                     }
                     out << "  " << binding.getName();
                 }

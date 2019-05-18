@@ -96,7 +96,15 @@ LLVM_READNONE inline bool isCountable(const Binding & binding) {
         return false;
     }
     const ProcessingRate & rate = binding.getRate();
-    return rate.isFixed() || rate.isPartialSum() || rate.isPopCount() || rate.isNegatedPopCount();
+    switch (rate.getKind()) {
+        case ProcessingRate::KindId::Fixed:
+        case ProcessingRate::KindId::PopCount:
+        case ProcessingRate::KindId::NegatedPopCount:
+        case ProcessingRate::KindId::PartialSum:
+            return true;
+        default:
+            return false;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -107,7 +115,14 @@ LLVM_READNONE inline bool isNonFixedCountable(const Binding & binding) {
         return false;
     }
     const ProcessingRate & rate = binding.getRate();
-    return rate.isPartialSum() || rate.isPopCount() || rate.isNegatedPopCount();
+    switch (rate.getKind()) {
+        case ProcessingRate::KindId::PopCount:
+        case ProcessingRate::KindId::NegatedPopCount:
+        case ProcessingRate::KindId::PartialSum:
+            return true;
+        default:
+            return false;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -118,7 +133,14 @@ LLVM_READNONE inline bool isAddressable(const Binding & binding) {
         return true;
     }
     const ProcessingRate & rate = binding.getRate();
-    return rate.isBounded() || rate.isUnknown();
+    switch (rate.getKind()) {
+        case ProcessingRate::KindId::Bounded:
+        case ProcessingRate::KindId::Greedy:
+        case ProcessingRate::KindId::Unknown:
+            return true;
+        default:
+            return false;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -305,7 +305,7 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
     mStreamSetInputBuffers.reserve(numOfInputStreams);
     for (unsigned i = 0; i < numOfInputStreams; ++i) {
         const Binding & input = mInputStreamSets[i];
-        mStreamSetInputBuffers.emplace_back(new ExternalBuffer(b, input.getType()));
+        mStreamSetInputBuffers.emplace_back(new ExternalBuffer(b, input.getType(), true, 0));
     }
 
     mStreamSetOutputBuffers.clear();
@@ -313,7 +313,7 @@ void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
     mStreamSetOutputBuffers.reserve(numOfOutputStreams);
     for (unsigned i = 0; i < numOfOutputStreams; ++i) {
         const Binding & output = mOutputStreamSets[i];
-        mStreamSetOutputBuffers.emplace_back(new ExternalBuffer(b, output.getType()));
+        mStreamSetOutputBuffers.emplace_back(new ExternalBuffer(b, output.getType(), true, 0));
     }
 
     // If an output is a managed buffer, store its handle.

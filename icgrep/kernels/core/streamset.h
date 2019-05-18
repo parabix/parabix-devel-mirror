@@ -66,6 +66,10 @@ public:
         return mUnderflow;
     }
 
+    bool isLinear() const {
+        return mLinear;
+    }
+
     size_t getUnderflowCapacity(BuilderRef b) const;
 
     size_t getOverflowCapacity(BuilderRef b) const;
@@ -121,7 +125,7 @@ protected:
 
     llvm::Value * addOverflow(BuilderRef b, llvm::Value * const bufferCapacity, llvm::Value * const overflowItems, llvm::Value * const consumedOffset) const;
 
-    StreamSetBuffer(const BufferKind k, BuilderRef b, llvm::Type * baseType, const size_t overflowBlocks, const size_t underflowSize, unsigned AddressSpace);
+    StreamSetBuffer(const BufferKind k, BuilderRef b, llvm::Type * baseType, const size_t overflowBlocks, const size_t underflowSize, const bool linear, const unsigned AddressSpace);
 
     static llvm::Type * resolveType(BuilderRef b, llvm::Type * const streamSetType);
 
@@ -140,6 +144,7 @@ protected:
     const unsigned                  mUnderflow;
     const unsigned                  mAddressSpace;
     llvm::Type * const              mBaseType;
+    const bool                      mLinear;
 };
 
 class ExternalBuffer final : public StreamSetBuffer {
@@ -150,7 +155,7 @@ public:
 
     enum Field {BaseAddress, Capacity};
 
-    ExternalBuffer(BuilderRef b, llvm::Type * const type, const unsigned AddressSpace = 0);
+    ExternalBuffer(BuilderRef b, llvm::Type * const type, const bool linear, const unsigned AddressSpace);
 
     void allocateBuffer(BuilderRef b) override;
 
@@ -189,7 +194,8 @@ public:
     }
 
     StaticBuffer(BuilderRef b, llvm::Type * const type,
-                 const size_t capacity, const size_t overflowBlocks, const size_t underflowSize, const unsigned AddressSpace);
+                 const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
+                 const bool linear, const unsigned AddressSpace);
 
     void allocateBuffer(BuilderRef b) override;
 
@@ -243,10 +249,13 @@ class DynamicBuffer final : public StreamSetBuffer {
 
 public:
 
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::DynamicBuffer;}
+    static inline bool classof(const StreamSetBuffer * b) {
+        return b->getBufferKind() == BufferKind::DynamicBuffer;
+    }
 
     DynamicBuffer(BuilderRef b, llvm::Type * type, const size_t initialCapacity,
-                  const size_t overflowSize, const size_t underflowSize, const unsigned AddressSpace);
+                  const size_t overflowSize, const size_t underflowSize,
+                  const bool linear, const unsigned AddressSpace);
 
     void allocateBuffer(BuilderRef b) override;
 
@@ -287,55 +296,6 @@ protected:
 private:
 
     llvm::Value * modByCapacity(IDISA::IDISA_Builder * const b, llvm::Value * const offset) const;
-
-private:
-
-    const size_t    mInitialCapacity;
-
-};
-
-class LinearBuffer final : public StreamSetBuffer {
-
-    friend class KernelBuilder;
-
-    enum Field {ReportedAddress, FirstCapacity, FirstBufferAddress, SecondCapacity, SecondBufferAddress};
-
-public:
-
-    static inline bool classof(const StreamSetBuffer * b) {return b->getBufferKind() == BufferKind::LinearBuffer;}
-
-    LinearBuffer(BuilderRef b, llvm::Type * type, const size_t initialCapacity,
-                 const size_t overflowSize, const size_t underflowSize, const unsigned AddressSpace);
-
-    void allocateBuffer(BuilderRef b) override;
-
-    void releaseBuffer(BuilderRef b) const override;
-
-    llvm::Value * reserveCapacity(BuilderRef b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
-
-    llvm::Value * getLinearlyAccessibleItems(BuilderRef b, llvm::Value * fromPosition, llvm::Value * totalItems, llvm::Value * overflowItems = nullptr) const override;
-
-    llvm::Value * getLinearlyWritableItems(BuilderRef b, llvm::Value * fromPosition, llvm::Value * consumedItems, llvm::Value * overflowItems = nullptr) const override;
-
-    size_t getInitialCapacity() const {
-        return mInitialCapacity;
-    }
-
-protected:
-
-    llvm::Type * getHandleType(BuilderRef b) const override;
-
-    llvm::Value * getBaseAddress(IDISA::IDISA_Builder * const b) const override;
-
-    void setBaseAddress(IDISA::IDISA_Builder * const b, llvm::Value * addr) const override;
-
-    llvm::Value * getStreamLogicalBasePtr(IDISA::IDISA_Builder * const b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const override;
-
-    llvm::Value * getOverflowAddress(IDISA::IDISA_Builder * const b) const override;
-
-    llvm::Value * getCapacity(IDISA::IDISA_Builder * const b) const override;
-
-    void setCapacity(IDISA::IDISA_Builder * const b, llvm::Value * capacity) const override;
 
 private:
 

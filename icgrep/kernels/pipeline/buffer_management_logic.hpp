@@ -12,18 +12,33 @@
 // single static thread local buffer thats large enough for one segment.
 
 // TODO: can we "combine" static stream sets that are used together and use fixed offsets
-// from the first set? Would this improve data locality or (kernel) data prediction
-// performance?
+// from the first set? Would this improve data locality or prefetching?
 
 // TODO: generate thread local buffers when we can guarantee all produced data is consumed
 // within the same segment "iteration"? We can eliminate synchronization for kernels that
 // consume purely local data.
+
+// TODO: if we can prove the liveness of two streams never overlaps, can we reuse the
+// memory space.
 
 namespace kernel {
 
 inline RateValue mod(const RateValue & a, const RateValue & b) {
     RateValue n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
     return a - RateValue{floor(n)} * b;
+}
+
+bool requiresLinearAccess(const Binding & binding) {
+    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Linear))) {
+        return true;
+    }
+    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::LookBehind))) {
+        const auto & lookBehind = binding.findAttribute(AttrId::LookBehind);
+        if (LLVM_UNLIKELY(lookBehind.amount() == 0)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -101,14 +116,40 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         if (bn.Type == BufferType::External) {
             continue;
         }
-        const auto isUnknown = producerRate.Maximum.numerator() == 0;
+
+        const ProcessingRate & rate = output.getRate();
+        const auto isUnknown = rate.isUnknown();
         const auto isManaged = output.hasAttribute(AttrId::ManagedBuffer);
 
         StreamSetBuffer * buffer = nullptr;
         BufferType bufferType = BufferType::Internal;
+
+
+
         if (LLVM_UNLIKELY(isUnknown || isManaged)) {
-            buffer = new ExternalBuffer(b, baseType);
+            const auto linear = output.hasAttribute(AttrId::Linear);
+            buffer = new ExternalBuffer(b, baseType, linear, 0);
             bufferType = BufferType::Managed;
+
+            if (!linear) {
+                for (const auto & ce : make_iterator_range(out_edges(i, G))) {
+                    const Binding & input = G[ce].Binding;
+                    if (LLVM_UNLIKELY(requiresLinearAccess(input))) {
+                        SmallVector<char, 0> tmp;
+                        raw_svector_ostream out(tmp);
+                        const auto consumer = target(ce, G);
+                        out << getKernel(consumer)->getName()
+                            << '.' << input.getName()
+                            << " requires that "
+                            << producer->getName()
+                            << '.' << output.getName()
+                            << " is a Linear buffer.";
+                        report_fatal_error(out.str());
+                    }
+                }
+            }
+
+            // TODO: verify no buffer requires this to be linear?
         } else {
 
             RateValue rounding{producerRate.Maximum};
@@ -119,23 +160,19 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue underflowSpace{0};
             RateValue overflowSpace{producerRate.MaximumSpace - producerRate.MaximumExpectedFlow};
 
-            bool unboundedLookbehind = false;
-
             if (LLVM_UNLIKELY(output.hasAttribute(AttrId::LookBehind))) {
                 const auto & lookBehind = output.findAttribute(AttrId::LookBehind);
                 const auto amount = lookBehind.amount();
-                if (amount == 0) {
-                    unboundedLookbehind = true;
-                } else {
-                    underflowSpace = RateValue{itemWidth * amount, blockWidth};
-                }
+                underflowSpace = RateValue{itemWidth * amount, blockWidth};
             }
 
             // TODO: If we have an open system, then the input rate to this pipeline cannot
             // be bounded a priori. During initialization, we could pass a "suggestion"
             // argument to indicate what the outer pipeline believes its I/O rates will be.
 
-            bool dynamic = false;
+            bool dynamic = output.hasAttribute(AttrId::Deferred);
+
+            bool linear = requiresLinearAccess(output);
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
                 const Binding & input = consumerRate.Binding;
@@ -156,18 +193,19 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 if (consumerRate.SymbolicRate != producerRate.SymbolicRate) {
                     dynamic = true;
                 }
-
+                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
+                    dynamic = true;
+                }
+                if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
+                    linear = true;
+                }
                 // If we have a lookbehind attribute, make sure we have enough underflow
                 // space to satisfy the processing rate.
                 if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
                     const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
                     const auto amount = lookBehind.amount();
-                    if (amount == 0) {
-                        unboundedLookbehind = true;
-                    } else {
-                        RateValue u{itemWidth * amount, blockWidth};
-                        underflowSpace = std::max(underflowSpace, u);
-                    }
+                    RateValue u{itemWidth * amount, blockWidth};
+                    underflowSpace = std::max(underflowSpace, u);
                 }
             }
 
@@ -202,13 +240,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bn.CopyBack = ceiling(copyBackSpace);
             bn.LookAhead = ceiling(lookAheadSpace);
 
-            if (LLVM_UNLIKELY(unboundedLookbehind)) {
-                buffer = new LinearBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
-            } else if (dynamic) {
-                // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
-                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
+            const unsigned addressSpace = 0U;
+            // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
+            if (dynamic) {
+                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, addressSpace);
             } else {
-                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, 0);
+                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, addressSpace);
             }
         }
 
@@ -229,7 +266,9 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
     for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
         const Kernel * const kernel = mStreamGraph[i].Kernel; assert (kernel);
 
-        auto computeBufferRateBounds = [&](const RelationshipType port, const RelationshipNode & bindingNode) {
+        auto computeBufferRateBounds = [&](const RelationshipType port,
+                                           const RelationshipNode & bindingNode,
+                                           const unsigned streamSet) {
             unsigned strideLength = kernel->getStride();
             if (i == PipelineInput || i == PipelineOutput) {
                 strideLength = boost::lcm(codegen::SegmentSize, strideLength);
@@ -239,14 +278,22 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             const ProcessingRate & rate = binding.getRate();
             RateValue lb{rate.getLowerBound()};
             RateValue ub{rate.getUpperBound()};
-            if (LLVM_UNLIKELY(rate.isRelative())) {
+            if (LLVM_UNLIKELY(rate.isGreedy())) {
+                if (LLVM_UNLIKELY(port.Type == PortType::Output)) {
+                    SmallVector<char, 0> tmp;
+                    raw_svector_ostream out(tmp);
+                    out << "Greedy rate cannot be applied an output port: "
+                        << kernel->getName() << "." << binding.getName();
+                    report_fatal_error(out.str());
+                }
+                const auto e = in_edge(streamSet, G);
+                const BufferRateData & br = G[e];
+                ub = std::max(lb, br.Maximum);
+            } else if (LLVM_UNLIKELY(rate.isRelative())) {
                 const Binding & ref = getBinding(getReference(i, port));
                 const ProcessingRate & refRate = ref.getRate();
                 lb *= refRate.getLowerBound();
                 ub *= refRate.getUpperBound();
-            }
-            if (LLVM_UNLIKELY(binding.isDeferred())) {
-                lb = RateValue{0};
             }
             return BufferRateData{port, binding, lb * strideLength, ub * strideLength};
         };
@@ -265,7 +312,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             unsigned streamSet = source(f, mStreamGraph);
             assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
             assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-            add_edge(streamSet, i, computeBufferRateBounds(port, rn), G);
+            add_edge(streamSet, i, computeBufferRateBounds(port, rn, streamSet), G);
         }
 
         // and any outputs
@@ -282,7 +329,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             unsigned streamSet = target(f, mStreamGraph);
             assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
             assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-            add_edge(i, streamSet, computeBufferRateBounds(port, rn), G);
+            add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), G);
         }
     }
 
@@ -798,12 +845,14 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
                 case KindId::ExternalBuffer: bufferType = 'E'; break;
                 case KindId::StaticBuffer: bufferType = 'S'; break;
                 case KindId::DynamicBuffer: bufferType = 'D'; break;
-                case KindId::LinearBuffer: bufferType = 'L'; break;
                 default: llvm_unreachable("unknown buffer type");
             }
-
+            out << bufferType;
+            if (buffer->isLinear()) {
+                out << 'L';
+            }
             Type * ty = buffer->getBaseType();
-            out << bufferType << ':'
+            out << ':'
                 << ty->getArrayNumElements() << 'x';
             ty = ty->getArrayElementType();
             ty = ty->getVectorElementType();
@@ -820,11 +869,9 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
                 case KindId::DynamicBuffer:
                     out << cast<DynamicBuffer>(buffer)->getInitialCapacity();
                     break;
-                case KindId::LinearBuffer:
-                    out << cast<LinearBuffer>(buffer)->getInitialCapacity();
-                    break;
                 default: llvm_unreachable("unknown buffer type");
             }
+
         }
 
         if (bn.LookBehind) {
@@ -1253,7 +1300,7 @@ Value * PipelineCompiler::epoch(BuilderRef b,
     Value * address = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
     if (zeroExtended) {
         // prepareLocalZeroExtendSpace guarantees this will be large enough to satisfy the kernel
-        ExternalBuffer tmp(b, binding.getType());
+        ExternalBuffer tmp(b, binding.getType(), true, buffer->getAddressSpace());
         assert (mZeroExtendBufferPhi);
         Value * zeroExtension = b->CreatePointerCast(mZeroExtendBufferPhi, bufferType);
         zeroExtension = tmp.getStreamBlockPtr(b.get(), zeroExtension, ZERO, b->CreateNeg(blockIndex));

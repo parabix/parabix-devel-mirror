@@ -28,8 +28,13 @@ struct ProcessingRate  {
 
     friend struct Binding;
 
-    enum class KindId {
-        Fixed, Bounded, PopCount, NegatedPopCount, PartialSum, Relative, Unknown
+    enum KindId : unsigned {
+        // countable rates
+        Fixed, PopCount, NegatedPopCount, PartialSum,
+        // addressable (non-countable) rates
+        Relative, Bounded, Greedy, Unknown,
+        // internal
+        __Count
     };
 
     using RateValue = boost::rational<unsigned>;
@@ -59,6 +64,10 @@ struct ProcessingRate  {
 
     bool isBounded() const {
         return mKind == KindId::Bounded;
+    }
+
+    bool isGreedy() const {
+        return mKind == KindId::Greedy;
     }
 
     bool isRelative() const {
@@ -148,13 +157,9 @@ private:
     llvm::StringRef mReference;
 };
 
-inline ProcessingRate FixedRate(const ProcessingRate::RateValue rate) {
+inline ProcessingRate FixedRate(const ProcessingRate::RateValue rate = ProcessingRate::RateValue{1}) {
     assert (rate.numerator() > 0);
     return ProcessingRate(ProcessingRate::KindId::Fixed, rate, rate);
-}
-
-inline ProcessingRate FixedRate() {
-    return FixedRate(ProcessingRate::RateValue{1});
 }
 
 inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
@@ -166,7 +171,11 @@ inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
     }
 }
 
-inline ProcessingRate UnknownRate(const unsigned lower = 0) {
+inline ProcessingRate GreedyRate(const ProcessingRate::RateValue lower = ProcessingRate::RateValue{0}) {
+    return ProcessingRate(ProcessingRate::KindId::Greedy, lower, 0);
+}
+
+inline ProcessingRate UnknownRate(const ProcessingRate::RateValue lower = ProcessingRate::RateValue{0}) {
     return ProcessingRate(ProcessingRate::KindId::Unknown, lower, 0);
 }
 

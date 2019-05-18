@@ -420,7 +420,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 // input streams
 ,{}
 // output streams
-,{Binding{"sourceBuffer", outputStream, FixedRate(), ManagedBuffer()}}
+,{Binding{"sourceBuffer", outputStream, FixedRate(), { ManagedBuffer(), Linear() }}}
 // input scalars
 ,{Binding{"fileDescriptor", fd}}
 // output scalars
@@ -441,7 +441,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 // input streams
 ,{}
 // output streams
-,{Binding{"sourceBuffer", outputStream, FixedRate(), ManagedBuffer()}}
+,{Binding{"sourceBuffer", outputStream, FixedRate(), { ManagedBuffer(), Linear() }}}
 // input scalars
 ,{Binding{"fileDescriptor", fd}}
 // output scalars
@@ -462,7 +462,7 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{}
 // output stream
-,{Binding{"sourceBuffer", outputStream, FixedRate(), ManagedBuffer()}}
+,{Binding{"sourceBuffer", outputStream, FixedRate(), { ManagedBuffer(), Linear() }}}
 // input scalar
 ,{Binding{"useMMap", useMMap}
 , Binding{"fileDescriptor", fd}}
@@ -484,7 +484,7 @@ MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuild
 // input streams
 {},
 // output stream
-{Binding{"sourceBuffer", outputStream, FixedRate(), ManagedBuffer()}},
+{Binding{"sourceBuffer", outputStream, FixedRate(), { ManagedBuffer(), Linear() }}},
 // input scalar
 {Binding{"fileSource", fileSource}, Binding{"fileItems", fileItems}},
 {},

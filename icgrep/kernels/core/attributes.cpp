@@ -38,6 +38,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME(Family);
         NAME(InternallySynchronized);
         NAME(InfrequentlyUsed);
+        NAME(Linear);
         NAME(None);
         case KindId::__Count: llvm_unreachable("__Count should not be used.");
     }

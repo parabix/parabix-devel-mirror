@@ -142,6 +142,11 @@ struct Attribute {
 
         /** INPUT/OUTPUT STREAM ATTRIBUTES **/
 
+        Linear,
+
+        // Either an input buffer is required to be linearly accessible or a managed output
+        // is promised to be linearly accessible.
+
         Misaligned,
 
         // Assume that we cannot statically compute the alignment of this stream set and
@@ -376,6 +381,10 @@ inline Attribute BlockSize(const unsigned k) {
 
 inline Attribute Swizzled() {
     return BlockSize(64);
+}
+
+inline Attribute Linear() {
+    return Attribute(Attribute::KindId::Linear, 0);
 }
 
 inline Attribute Misaligned() {

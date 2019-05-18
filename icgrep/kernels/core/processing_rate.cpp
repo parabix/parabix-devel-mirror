@@ -2,6 +2,7 @@
 #include "kernel.h"
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/raw_ostream.h>
+#include <array>
 
 namespace kernel {
 
@@ -72,34 +73,39 @@ void write(const RateValue & v, llvm::raw_ostream & out) noexcept {
  * @brief print
  ** ------------------------------------------------------------------------------------------------------------- */
 void ProcessingRate::print(const Kernel * const kernel, llvm::raw_ostream & out) const noexcept {
+
+    std::array<char, KindId::__Count> C;
+    C[KindId::Fixed] = 'F';
+    C[KindId::PopCount] = 'P';
+    C[KindId::NegatedPopCount] = 'N';
+    C[KindId::PartialSum] = 'S';
+    C[KindId::Relative] = 'R';
+    C[KindId::Bounded] = 'B';
+    C[KindId::Greedy] = 'G';
+    C[KindId::Unknown] = 'U';
+
     switch (mKind) {
         case KindId::Fixed:
-            out << 'F';
+        case KindId::Greedy:
+        case KindId::Unknown:
+            out << C[mKind];
             write(mLowerBound, out);
             return;
         case KindId::Bounded:
-            out << 'B';
+            out << C[KindId::Bounded];
             write(mLowerBound, out);
             out << '-';
             write(mUpperBound, out);
             return;
-        case KindId::Unknown:
-            out << 'U';
-            write(mLowerBound, out);
-            return;
         case KindId::PopCount:
-            out << 'P';
-            break;
         case KindId::NegatedPopCount:
-            out << 'N';
-            break;
-        case KindId::Relative:
-            out << 'R';
-            break;
         case KindId::PartialSum:
-            out << 'S';
+        case KindId::Relative:
             break;
+        case KindId::__Count:
+            llvm_unreachable("ProcessingRate __Count should not be used.");
     }
+    out << C[mKind];
     write(mLowerBound, out);
     const StreamPort ref = kernel->getStreamPort(mReference);
     switch (ref.Type) {

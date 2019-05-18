@@ -219,12 +219,14 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
             assert (mProcessedItemCount[i]);
             mAlreadyProcessedPhi[i]->addIncoming(mProcessedItemCount[i], ioBoundsCheck);
             if (mAlreadyProcessedDeferredPhi[i]) {
+                assert (mProcessedDeferredItemCount[i]);
                 mAlreadyProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], ioBoundsCheck);
             }
             mFinalProcessedPhi[i]->addIncoming(mProcessedItemCount[i], entryBlock);
 
             mUpdatedProcessedPhi[i]->addIncoming(mProcessedItemCount[i], ioBoundsCheck);
             if (mUpdatedProcessedDeferredPhi[i]) {
+                assert (mProcessedDeferredItemCount[i]);
                 mUpdatedProcessedDeferredPhi[i]->addIncoming(mProcessedDeferredItemCount[i], ioBoundsCheck);
             }
         }

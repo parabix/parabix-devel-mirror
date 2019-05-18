@@ -20,6 +20,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/STLExtras.h>
+#include <llvm/ADT/BitVector.h>
 #include <util/slab_allocator.h>
 #include <algorithm>
 #include <queue>
@@ -1101,6 +1102,7 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "consumer_logic.hpp"
 #include "core_logic.hpp"
 #include "kernel_logic.hpp"
+#include "io_calculation_logic.hpp"
 #include "cycle_counter_logic.hpp"
 #include "pipeline_logic.hpp"
 #include "scalar_logic.hpp"
