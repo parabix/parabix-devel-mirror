@@ -5,13 +5,17 @@
  */
 
 #include "pablo_parser.h"
-#include <fstream>
+
+#include <pablo/parser/source_file.h>
 
 namespace pablo {
+namespace parse {
 
-std::unique_ptr<PabloKernel> PabloParser::parse(std::string const & filename) {
-    std::ifstream fin(filename);
-    return parse(fin);
+boost::optional<std::vector<std::unique_ptr<PabloKernel>>> PabloParser::parse(std::string const & filename) {
+    // TODO: handle boost::exception thrown by SourceFile constructor
+    std::shared_ptr<SourceFile> source(new SourceFile{filename});
+    return parse(source);
 }
 
+} // namespace pablo::parse
 } // namespace pablo

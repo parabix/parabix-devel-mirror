@@ -8,38 +8,41 @@
 
 #include <cassert>
 #include <iostream>
+#include <boost/make_unique.hpp>
 #include <pablo/parser/source_file.h>
+#include <pablo/parser/token.h>
 
 namespace pablo {
 namespace parse {
 
-std::unique_ptr<Error> Error::CreateError(std::string const & text,
-                                          SourceFile const * source,
-                                          size_t lineNum, size_t colNum,
-                                          std::string const & hint)
-{
-    return std::unique_ptr<Error>(new Error(ErrorType::ERROR, text, source, lineNum, colNum, hint));
-}
+using namespace __internal;
 
-std::unique_ptr<Error> Error::CreateWarning(std::string const & text,
-                                            SourceFile const * source,
-                                            size_t lineNum, size_t colNum,
-                                            std::string const & hint)
-{
-    return std::unique_ptr<Error>(new Error(ErrorType::WARNING, text, source, lineNum, colNum, hint));
-}
 
-Error::Error(ErrorType type,
-             std::string const & text,
-             SourceFile const * source,
-             size_t lineNum, size_t colNum,
-             std::string const & hint)
-: mType(type)
-, mText(text)
-, mSource(source)
-, mLineNum(lineNum)
-, mColNum(colNum)
-, mHint(hint)
+Error::Error(Error const &other)
+: type(other.type)
+, text(other.text)
+, source(other.source)
+, lineNum(other.lineNum)
+, colNum(other.colNum)
+, hint(other.hint)
+, width(other.width)
+{}
+
+
+Error::Error(ErrorType type, 
+             std::string const & text, 
+             std::shared_ptr<SourceFile> source, 
+             size_t lineNum, 
+             size_t colNum, 
+             std::string const & hint, 
+             size_t width)
+: type(type)
+, text(text)
+, source(std::move(source))
+, lineNum(lineNum)
+, colNum(colNum)
+, hint(hint)
+, width(width)
 {}
 
 
@@ -51,6 +54,7 @@ bool ErrorContext::canUseColor() const {
 #endif
 }
 
+
 ErrorContext::ErrorContext()
 : outStream(std::cerr)
 , useWarnings(true)
@@ -60,37 +64,62 @@ ErrorContext::ErrorContext()
 {}
 
 
-void ErrorManager::logError(std::string const & text, std::string const & hint) {
-    assert ("location references not set" && mSourceRef && mLineNumRef && mColNumRef);
-
-    return logError(text, mSourceRef, *mLineNumRef, *mColNumRef, hint);
-}
-
-void ErrorManager::logWarning(std::string const & text, std::string const & hint) {
-    assert ("location references not set" && mSourceRef && mLineNumRef && mColNumRef);
-
-    return logWarning(text, mSourceRef, *mLineNumRef, *mColNumRef, hint);
-}
-
-void ErrorManager::logError(std::string const & text, SourceFile const * source, size_t lineNum, size_t colNum, std::string const & hint) {
-    auto e = Error::CreateError(text, source, lineNum, colNum, hint);
-    if (mContext.useLivePrint) {
-        mContext.outStream << renderError(e);
+void ErrorManager::log(std::unique_ptr<Error> e) {
+    switch (e->type) {
+    case ErrorType::WARNING:
+        if (mContext.useLivePrint) {
+            mContext.outStream << renderError(e);
+        }
+        if (mContext.useWarnings) {
+            mErrorList.push_back(std::move(e));
+        }
+        break;
+    case ErrorType::FATAL:
+        mShouldContinue = false;
+        /* fallthrough */
+    case ErrorType::ERROR:
+        if (mContext.useLivePrint) {
+            mContext.outStream << renderError(e);
+        }
+        mErrorList.push_back(std::move(e));
+        mErrorCount++;
+        break;
+    default:
+        assert ("unexpected error type" && false);
+        break;
     }
-    mErrorCount++;
-    if (mContext.useFatalErrors || mErrorCount >= mContext.maxErrorNum) {
-        mCanContinue = false;
-    }
-    mErrorList.push_back(std::move(e));
 }
 
-void ErrorManager::logWarning(std::string const & text, SourceFile const * source, size_t lineNum, size_t colNum, std::string const & hint) {
-    auto e = Error::CreateWarning(text, source, lineNum, colNum, hint);
-    if (mContext.useLivePrint) {
-        mContext.outStream << renderError(e);
-    }
-    mErrorList.push_back(std::move(e));
+
+void ErrorManager::logError(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::ERROR, text, std::move(source), lineNum, colNum, hint, /*width:*/ 1));
 }
+
+
+void ErrorManager::logWarning(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::WARNING, text, std::move(source), lineNum, colNum, hint, /*width:*/ 1));
+}
+
+
+void ErrorManager::logFatalError(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::FATAL, text, std::move(source), lineNum, colNum, hint, /*width:*/ 1));
+}
+
+
+void ErrorManager::logError(Token * t, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::ERROR, text, t->getSourceRef(), t->getLineNum(), t->getColNum(), hint, t->getText().length()));
+}
+
+
+void ErrorManager::logWarning(Token * t, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::WARNING, text, t->getSourceRef(), t->getLineNum(), t->getColNum(), hint, t->getText().length()));
+}
+
+
+void ErrorManager::logFatalError(Token * t, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::FATAL, text, t->getSourceRef(), t->getLineNum(), t->getColNum(), hint, t->getText().length()));
+}
+
 
 void ErrorManager::dumpErrors() const {
     if (!mContext.useLivePrint) {
@@ -103,12 +132,6 @@ void ErrorManager::dumpErrors() const {
     }
 }
 
-void ErrorManager::setReferences(SourceFile const * sourceRef, size_t const * lineNumRef, size_t const * colNumRef) {
-    assert (sourceRef && lineNumRef && colNumRef);
-    mSourceRef = sourceRef;
-    mLineNumRef = lineNumRef;
-    mColNumRef = colNumRef;
-}
 
 std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
     const std::string RED = mContext.canUseColor() ? "\u001b[31m" : "";
@@ -116,7 +139,9 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
     const std::string GREEN = mContext.canUseColor() ? "\u001b[32m" : "";
     const std::string NORMAL = mContext.canUseColor() ? "\u001b[0m" : "";
     std::string errText;
-    switch (e->mType) {
+    switch (e->type) {
+    case ErrorType::FATAL:
+    /* fallthrough */
     case ErrorType::ERROR:
         errText += RED + "error" + NORMAL;
         break;
@@ -127,27 +152,36 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
         assert ("invalid enumeration value" && false);
         break;
     }
-    errText += " @ " + e->mSource->getFilename() + ":" + std::to_string(e->mLineNum) + ":" + std::to_string(e->mColNum + 1) + "\n";
-    std::string lineNum = std::to_string(e->mLineNum);
+    errText += " at " + e->source->getFilename() + ":" + std::to_string(e->lineNum) + ":" + std::to_string(e->colNum) + "\n";
+    std::string lineNum = std::to_string(e->lineNum);
     std::string padding(lineNum.length(), ' ');
-    errText += " " + padding + " | " + e->mText + "\n";
-    std::string sourceLine = e->mSource->line(e->mLineNum).to_string();
+    errText += " " + padding + " | " + e->text + "\n";
+    std::string sourceLine = e->source->line(e->lineNum).to_string();
     // append '\n' to source line if one doesn't exist
     if (sourceLine.back() != '\n')
         sourceLine.push_back('\n');
     errText += " " + lineNum + " | " + sourceLine;
-    errText += " " + padding + " | " + std::string(e->mColNum, ' ') + GREEN + "^" + (e->mHint.empty() ? "" : " " + e->mHint) + NORMAL + "\n\n";
+    std::string marker = "^" + std::string(e->width - 1, '~');
+    errText += " " + padding + " | " + std::string(e->colNum - 1, ' ') + GREEN + marker + (e->hint.empty() ? "" : " " + e->hint) + NORMAL + "\n\n";
     return errText;
 }
+
+
+ErrorManager::ErrorManager()
+: mContext(ErrorContext{})
+, mErrorList()
+, mErrorCount(0)
+, mShouldContinue(true)
+{
+    mErrorList.reserve(mContext.maxErrorNum);
+}
+
 
 ErrorManager::ErrorManager(ErrorContext const & context)
 : mContext(context)
 , mErrorList()
 , mErrorCount(0)
-, mCanContinue(true)
-, mSourceRef(nullptr)
-, mLineNumRef(nullptr)
-, mColNumRef(nullptr)
+, mShouldContinue(true)
 {
     mErrorList.reserve(context.maxErrorNum);
 }
