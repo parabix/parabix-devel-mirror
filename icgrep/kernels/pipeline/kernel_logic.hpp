@@ -454,13 +454,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         } else if (LLVM_UNLIKELY(requiresItemCount(output))) {
             args.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
         }
-
-
-//        if (canTerminate || isAddressable(output)) {
-//            fields.push_back(sizePtrTy); // updatable
-//        } else if (isNonFixedCountable(output)) {
-//            fields.push_back(sizeTy); // constant
-//        }
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {

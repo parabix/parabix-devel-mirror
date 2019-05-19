@@ -1,4 +1,4 @@
-#ifndef IO_CALCULATION_LOGIC_HPP
+﻿#ifndef IO_CALCULATION_LOGIC_HPP
 #define IO_CALCULATION_LOGIC_HPP
 
 #include "pipeline_compiler.hpp"
@@ -444,17 +444,13 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         const ProcessingRate & rate = input.getRate();
         Value * accessible = accessibleItems[i];
         if (rate.isFixed() && minFixedRateFactor) {
-
             const auto factor = rate.getRate() / mFixedRateLCM;
-
             Value * calculated = b->CreateCeilUMul2(minFixedRateFactor, factor);
             const auto buffer = getInputBufferVertex(i);
             const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
             // ... but ensure that it reflects whether it was produced with an Add(k) rate.
             if (LLVM_UNLIKELY(k != RateValue{0})) {
-
                 // (x + (g/h)) * (c/d) = (xh + g) * c/hd
-
                 Constant * const h = b->getSize(k.denominator());
                 Value * const xh = b->CreateMul(minFixedRateFactor, h);
                 Constant * const g = b->getSize(k.numerator());
@@ -476,7 +472,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
             }
             accessible = calculated;
         }
-        accessibleItems[i] = addLookahead(b, i, accessible);
+        accessibleItems[i] = accessible;
     }
 
     const auto numOfOutputs = writableItems.size();
