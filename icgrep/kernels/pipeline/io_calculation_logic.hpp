@@ -344,6 +344,10 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const unsigned
     Value * numOfStrides = nullptr;
     if (LLVM_UNLIKELY(rate.isPartialSum())) {
         numOfStrides = getMaximumNumOfPartialSumStrides(b, StreamPort{PortType::Input, inputPort});
+    } else if (LLVM_UNLIKELY(rate.isGreedy())) {
+        #warning this ought to return nullptr
+        Value * const accessible = mAccessibleInputItems[inputPort];
+        numOfStrides = subtractLookahead(b, inputPort, accessible);
     } else {
         Value * const accessible = mAccessibleInputItems[inputPort];
         Value * const strideLength = getInputStrideLength(b, inputPort);
@@ -440,14 +444,24 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         const ProcessingRate & rate = input.getRate();
         Value * accessible = accessibleItems[i];
         if (rate.isFixed() && minFixedRateFactor) {
-            Value * calculated = b->CreateCeilUMul2(minFixedRateFactor, rate.getRate() / mFixedRateLCM);
+
+            const auto factor = rate.getRate() / mFixedRateLCM;
+
+            Value * calculated = b->CreateCeilUMul2(minFixedRateFactor, factor);
             const auto buffer = getInputBufferVertex(i);
-            const auto k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
+            const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
             // ... but ensure that it reflects whether it was produced with an Add(k) rate.
-            if (LLVM_UNLIKELY(k > 0)) {
-                ConstantInt * const K = b->getSize(k);
-                Value * const total = b->CreateAdd(calculated, K);
-                calculated = b->CreateSelect(isClosed(b, i), total, calculated);
+            if (LLVM_UNLIKELY(k != RateValue{0})) {
+
+                // (x + (g/h)) * (c/d) = (xh + g) * c/hd
+
+                Constant * const h = b->getSize(k.denominator());
+                Value * const xh = b->CreateMul(minFixedRateFactor, h);
+                Constant * const g = b->getSize(k.numerator());
+                Value * const y = b->CreateAdd(xh, g);
+                const auto r = factor / RateValue{k.denominator()};
+                Value * const z = b->CreateCeilUMul2(y, r);
+                calculated = b->CreateSelect(isClosed(b, i), z, calculated);
             }
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 Value * correctItemCount = b->CreateICmpEQ(calculated, accessibleItems[i]);

@@ -498,7 +498,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
-        if (rate.isFixed() || rate.isPartialSum()) {
+        if (rate.isFixed() || rate.isPartialSum() || rate.isGreedy()) {
             mProcessedItemCount[i] = b->CreateAdd(mAlreadyProcessedPhi[i], mLinearInputItemsPhi[i]);
             if (mAlreadyProcessedDeferredPhi[i]) {
                 assert (mReturnedProcessedItemCountPtr[i]);
@@ -512,8 +512,12 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
                                     "exceeds non-deferred (%d)",
                                     deferred, processed);
                 }
+                #ifdef PRINT_DEBUG_MESSAGES
+                const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
+                b->CallPrintInt(prefix + "_processed_deferred'", mProcessedDeferredItemCount[i]);
+                #endif
             }
-        } else if (rate.isBounded() || rate.isGreedy() || rate.isUnknown()) {
+        } else if (rate.isBounded() || rate.isUnknown()) {
             mProcessedItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
         } else {
             llvm_unreachable("unexpected input rate");

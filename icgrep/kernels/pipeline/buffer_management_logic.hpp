@@ -253,7 +253,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.Type = bufferType;
     }
 
-    // printBufferGraph(G, errs());
+    #ifdef PRINT_BUFFER_GRAPH
+    printBufferGraph(G, errs());
+    #endif
 
     return G;
 }

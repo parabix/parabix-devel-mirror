@@ -27,6 +27,8 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
+// #define PRINT_BUFFER_GRAPH
+
 // #define DISABLE_ZERO_EXTEND
 
 using namespace boost;
@@ -383,7 +385,7 @@ struct PipelineGraphBundle {
     }
 };
 
-using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, unsigned>;
+using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, RateValue>;
 
 enum CycleCounter {
   BEFORE_KERNEL_CALL

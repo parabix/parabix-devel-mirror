@@ -33,14 +33,14 @@ private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
 };
 
-class MatchReporter : public MultiBlockKernel {
+class MatchReporter : public SegmentOrientedKernel {
 public:
     MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b,
                   StreamSet * ByteStream, StreamSet * const Coordinates, Scalar * const callbackObject);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 };
 
 }

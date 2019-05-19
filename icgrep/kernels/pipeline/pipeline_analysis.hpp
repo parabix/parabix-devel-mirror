@@ -1440,13 +1440,14 @@ bool PipelineCompiler::isPipelineOutput(const unsigned outputPort) const {
 AddGraph PipelineCompiler::makeAddGraph() const {
     // TODO: this should generate formulas to take roundup into account
     AddGraph G(LastStreamSet + 1);
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        unsigned minAddK = 0;
+    for (auto i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = getKernel(i);
+        RateValue minAddK{0};
         if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
-            minAddK = std::numeric_limits<unsigned>::max();
+            minAddK = RateValue{std::numeric_limits<unsigned>::max()};
             for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto buffer = source(e, mBufferGraph);
-                minAddK = std::min<unsigned>(minAddK, G[buffer]);
+                minAddK = std::min(minAddK, G[buffer]);
                 add_edge(buffer, i, G);
             }
         }
@@ -1455,13 +1456,14 @@ AddGraph PipelineCompiler::makeAddGraph() const {
             const auto buffer = target(e, mBufferGraph);
             const BufferRateData & br = mBufferGraph[e];
             const Binding & output = br.Binding;
-            auto k = minAddK;
+            unsigned k = 0;
             for (const Attribute & attr : output.getAttributes()) {
                 if (LLVM_UNLIKELY(attr.isAdd())) {
                     k += attr.amount();
                 }
             }
-            G[buffer] = k;
+            RateValue addK{k, kernel->getStride()};
+            G[buffer] = minAddK + addK;
             add_edge(i, buffer, G);
         }
     }

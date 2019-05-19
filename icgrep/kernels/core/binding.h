@@ -101,6 +101,7 @@ LLVM_READNONE inline bool isCountable(const Binding & binding) {
         case ProcessingRate::KindId::PopCount:
         case ProcessingRate::KindId::NegatedPopCount:
         case ProcessingRate::KindId::PartialSum:
+        case ProcessingRate::KindId::Greedy:
             return true;
         default:
             return false;
@@ -119,6 +120,7 @@ LLVM_READNONE inline bool isNonFixedCountable(const Binding & binding) {
         case ProcessingRate::KindId::PopCount:
         case ProcessingRate::KindId::NegatedPopCount:
         case ProcessingRate::KindId::PartialSum:
+        case ProcessingRate::KindId::Greedy:
             return true;
         default:
             return false;
@@ -135,7 +137,6 @@ LLVM_READNONE inline bool isAddressable(const Binding & binding) {
     const ProcessingRate & rate = binding.getRate();
     switch (rate.getKind()) {
         case ProcessingRate::KindId::Bounded:
-        case ProcessingRate::KindId::Greedy:
         case ProcessingRate::KindId::Unknown:
             return true;
         default:
