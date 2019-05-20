@@ -348,8 +348,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * blockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, blockIndex);
     Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, blockIndex);
-# TODO: Find something better than the following hack deals with the case that matchResult
-# has reported a match at one past EOF, while there is no linebreak bit at that position.
+//# TODO: Find something better than the following hack deals with the case that matchResult
+//# has reported a match at one past EOF, while there is no linebreak bit at that position.
     breakBitBlock = b->simd_or(breakBitBlock, matchBitBlock);
     //b->CallPrintRegister("matchBitBlock", matchBitBlock);
     //b->CallPrintRegister("breakBitBlock", breakBitBlock);
