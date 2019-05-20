@@ -196,6 +196,20 @@ inline void CPUDriver::preparePassManager() {
     if (IN_DEBUG_MODE || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::VerifyIR))) {
         mPassManager->add(createVerifierPass());
     }
+    if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
+        mPassManager->add(createTracePass(iBuilder.get(), codegen::TraceOption));
+    }
+    if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
+        if (LLVM_LIKELY(mIROutputStream == nullptr)) {
+            if (!codegen::ShowIROption.empty()) {
+                std::error_code error;
+                mIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
+            } else {
+                mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
+            }
+        }
+        mPassManager->add(createPrintModulePass(*mIROutputStream));
+    }
     mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
@@ -216,20 +230,6 @@ inline void CPUDriver::preparePassManager() {
     #ifdef NDEBUG
     }
     #endif
-    if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
-        mPassManager->add(createTracePass(iBuilder.get(), codegen::TraceOption));
-    }
-    if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
-        if (LLVM_LIKELY(mIROutputStream == nullptr)) {
-            if (!codegen::ShowIROption.empty()) {
-                std::error_code error;
-                mIROutputStream = make_unique<raw_fd_ostream>(codegen::ShowIROption, error, sys::fs::OpenFlags::F_None);
-            } else {
-                mIROutputStream = make_unique<raw_fd_ostream>(STDERR_FILENO, false, true);
-            }
-        }
-        mPassManager->add(createPrintModulePass(*mIROutputStream));
-    }
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
         if (!codegen::ShowASMOption.empty()) {
