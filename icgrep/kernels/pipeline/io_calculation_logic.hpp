@@ -591,6 +591,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     Value * initialItemCount = nullptr;
     Value * sourceItemCount = nullptr;
     Value * peekableItemCount = nullptr;
+    Value * minimumItemCount = MAX_INT;
 
     const auto portNum = port.Number;
     if (port.Type == PortType::Input) {
@@ -600,6 +601,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
             Value * const nonOverflowItems = getAccessibleInputItems(b, portNum, false);
             sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
             peekableItemCount = b->CreateAdd(initialItemCount, accessible);
+            minimumItemCount = mFirstInputStrideLength[portNum];
         } else {
             sourceItemCount = b->CreateAdd(initialItemCount, accessible);
         }
@@ -611,6 +613,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
             Value * const nonOverflowItems = getWritableOutputItems(b, portNum, false);
             sourceItemCount = b->CreateAdd(initialItemCount, nonOverflowItems);
             peekableItemCount = b->CreateAdd(initialItemCount, writable);
+            minimumItemCount = mFirstOutputStrideLength[portNum];
         } else {
             sourceItemCount = b->CreateAdd(initialItemCount, writable);
         }
@@ -630,16 +633,15 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
 
     Value * const baseOffset = mAlreadyProcessedPhi[refPortNum];
     Value * const baseAddress = buffer->getRawItemPointer(b.get(), ZERO, baseOffset);
+    // Value * const initialStrideCount = b->CreateUMax(mNumOfLinearStrides, ONE);
 
     BasicBlock * const popCountEntry = b->GetInsertBlock();
-    Value * minimumItemCount = nullptr;
+    Value * enterLoop = b->CreateICmpNE(mNumOfLinearStrides, ZERO);
     if (peekableItemCount) {
-        minimumItemCount = b->CreateLoad(baseAddress);
-        Value * const mustUseOverflow = b->CreateICmpULT(sourceItemCount, minimumItemCount);
-        b->CreateUnlikelyCondBr(mustUseOverflow, popCountLoopExit, popCountLoop);
-    } else {
-        b->CreateBr(popCountLoop);
+        Value * const mustUseOverflow = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
+        enterLoop = b->CreateAnd(enterLoop, mustUseOverflow);
     }
+    b->CreateLikelyCondBr(enterLoop, popCountLoop, popCountLoopExit);
 
     // TODO: replace this with a parallel icmp check and bitscan? binary search with initial
     // check on the rightmost entry?
@@ -659,16 +661,15 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
 
     b->SetInsertPoint(popCountLoopExit);
     PHINode * const numOfStridesPhi = b->CreatePHI(sizeTy, 2);
+    numOfStridesPhi->addIncoming(ZERO, popCountEntry);
     numOfStridesPhi->addIncoming(numOfStrides, popCountLoop);
     PHINode * const requiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    requiredItemsPhi->addIncoming(ZERO, popCountEntry);
     requiredItemsPhi->addIncoming(requiredItems, popCountLoop);
     PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
+    nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
     nextRequiredItemsPhi->addIncoming(nextRequiredItems, popCountLoop);
-    if (peekableItemCount) {
-        numOfStridesPhi->addIncoming(ZERO, popCountEntry);
-        requiredItemsPhi->addIncoming(ZERO, popCountEntry);
-        nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
-    }
+
     Value * finalNumOfStrides = numOfStridesPhi;
     if (peekableItemCount) {
         // Since we want to allow the stream to peek into the overflow but not start

@@ -268,25 +268,30 @@ Value * ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced 
 
 // Internal Buffer
 
-Value * InternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
-    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, modByCapacity(b, blockIndex));
+Value * InternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, LLVM_UNLIKELY(mLinear) ? blockIndex : modByCapacity(b, blockIndex));
 }
 
-Value * InternalBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
-    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, modByCapacity(b, blockIndex), packIndex);
+Value * InternalBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
+    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, LLVM_UNLIKELY(mLinear) ? blockIndex : modByCapacity(b, blockIndex), packIndex);
 }
 
-Value * InternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * baseAddress, Value * const streamIndex, Value * const blockIndex) const {
-    Value * const baseBlockIndex = b->CreateSub(modByCapacity(b, blockIndex), blockIndex);
+Value * InternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+    Value * baseBlockIndex = nullptr;
+    if (LLVM_UNLIKELY(mLinear)) {
+        baseBlockIndex = b->getSize(0);
+    } else {
+        baseBlockIndex = b->CreateSub(modByCapacity(b, blockIndex), blockIndex);
+    }
     return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, baseBlockIndex);
 }
 
-Value * InternalBuffer::getRawItemPointer(IDISA_Builder * const b, Value * streamIndex, Value * absolutePosition) const {
+Value * InternalBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const streamIndex, Value * absolutePosition) const {
     return StreamSetBuffer::getRawItemPointer(b, streamIndex, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
 Value * InternalBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
-    if (mLinear) {
+    if (LLVM_UNLIKELY(mLinear)) {
         return b->CreateSub(totalItems, fromPosition);
     } else {
         Value * const capacity = getCapacity(b.get());
@@ -301,7 +306,7 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const f
 Value * InternalBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fromPosition, Value * const consumedItems, Value * overflowItems) const {
     Value * const capacity = getCapacity(b.get());
     Value * const unconsumedItems = b->CreateSub(fromPosition, consumedItems);
-    if (mLinear) {
+    if (LLVM_UNLIKELY(mLinear)) {
         return b->CreateSub(capacity, unconsumedItems);
     } else {
         Value * const full = b->CreateICmpUGE(unconsumedItems, capacity);
