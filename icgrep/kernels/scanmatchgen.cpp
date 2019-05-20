@@ -345,11 +345,11 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         baseCounts = b->CreatePHI(b->getBitBlockType(), 2);
         baseCounts->addIncoming(b->allZeroes(), stridePrologue);
     }
-    Value * blockIndex = b->CreateAdd(strideBlockOffset, blockNo);
-    Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, blockIndex);
-    Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, blockIndex);
-//# TODO: Find something better than the following hack deals with the case that matchResult
-//# has reported a match at one past EOF, while there is no linebreak bit at that position.
+    Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
+    Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, strideBlockIndex);
+    Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
+// TODO: Find something better than the following hack deals with the case that matchResult
+// has reported a match at one past EOF, while there is no linebreak bit at that position.
     breakBitBlock = b->simd_or(breakBitBlock, matchBitBlock);
     //b->CallPrintRegister("matchBitBlock", matchBitBlock);
     //b->CallPrintRegister("breakBitBlock", breakBitBlock);
@@ -364,8 +364,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     }
     Value * matchWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
     Value * breakWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
-    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockIndex, sw.WORDS_PER_BLOCK)));
-    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockIndex, sw.WORDS_PER_BLOCK)));
+    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)));
+    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)));
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
     matchMaskAccum->addIncoming(matchMask, stridePrecomputation);
     breakMaskAccum->addIncoming(breakMask, stridePrecomputation);
@@ -385,7 +385,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * breakWordBasePtr = b->getInputStreamBlockPtr("lineBreak", sz_ZERO, strideBlockOffset);
     breakWordBasePtr = b->CreateBitCast(breakWordBasePtr, sw.pointerTy);
 
-    Value * finalBreakIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(breakMask));
+    Value * finalBreakIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(breakMask), "finalBreakIdx");
     Value * finalBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, finalBreakIdx)), sizeTy);
     Value * finalLineStartInWord = b->CreateSub(sz_BITS, b->CreateCountReverseZeroes(finalBreakWord));
     Value * finalLineStartPos = b->CreateAdd(stridePos, b->CreateMul(finalBreakIdx, sw.WIDTH));
@@ -413,7 +413,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
 
     // If we have any bits in the current matchWordPhi, continue with those, otherwise load
     // the next match word.
-    Value * matchWordIdx = b->CreateCountForwardZeroes(matchMaskPhi);
+    Value * matchWordIdx = b->CreateCountForwardZeroes(matchMaskPhi, "matchWordIdx");
     Value * nextMatchWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(matchWordBasePtr, matchWordIdx)), sizeTy);
     Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
     Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
@@ -426,13 +426,13 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     // Case (b) is most likely and requires a load of the prior break word.
     // We avoid branching by safely loading a prior word in any case and then
     // using selects to handle cases (a) and (c).
-    Value * priorBreaksThisWord = b->CreateAnd(b->CreateMaskToLowestBitExclusive(theMatchWord), matchBreakWord);
-    Value * priorBreaksInStride = b->CreateAnd(b->CreateMaskToLowestBitExclusive(matchMaskPhi), breakMask);
+    Value * priorBreaksThisWord = b->CreateAnd(b->CreateMaskToLowestBitExclusive(theMatchWord), matchBreakWord, "priorBreaksThisWord");
+    Value * priorBreaksInStride = b->CreateAnd(b->CreateMaskToLowestBitExclusive(matchMaskPhi), breakMask, "priorBreaksInStride");
     Value * inWordCond = b->CreateICmpNE(priorBreaksThisWord, sz_ZERO);
     Value * inStrideCond = b->CreateICmpNE(priorBreaksInStride, sz_ZERO);
-    Value * breakWordIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride));
+    Value * breakWordIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride), "breakWordIdx_");
     // Create a safe index to load; the loaded value will be ignored for cases (a), (c).
-    breakWordIdx = b->CreateSelect(inWordCond, matchWordIdx, b->CreateSelect(inStrideCond, breakWordIdx, sz_ZERO));
+    breakWordIdx = b->CreateSelect(inWordCond, matchWordIdx, b->CreateSelect(inStrideCond, breakWordIdx, sz_ZERO), "breakWordIdx");
     Value * breakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx)), sizeTy);
     // For case (a), we use the previously masked value of the break word.
     breakWord = b->CreateSelect(inWordCond, priorBreaksThisWord, breakWord);   // cases (a) and (b)
