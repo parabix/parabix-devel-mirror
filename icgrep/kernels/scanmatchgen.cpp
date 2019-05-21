@@ -272,7 +272,7 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
 // kernel state
 {InternalScalar{b->getSizeTy(), "LineNum"},
  InternalScalar{b->getSizeTy(), "LineStart"}}) {
-
+  //setStride(1024);
 }
 
 void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -359,7 +359,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         Value * breakCounts = b->hsimd_partial_sum(sw.width, b->simd_popcount(sw.width, breakBitBlock));
         breakCounts = b->simd_add(sw.width, breakCounts, baseCounts);
         b->CreateBlockAlignedStore(b->bitCast(breakCounts), b->CreateGEP(lineCountArrayBlockPtr, blockNo));
-        Value * baseCountsNext = b->bitCast(b->simd_fill(sw.width, b->mvmd_extract(sw.width, breakCounts, sw.indexWidth - 1)));
+        Value * baseCountsNext = b->bitCast(b->simd_fill(sw.width, b->mvmd_extract(sw.width, breakCounts, b->getBitBlockWidth()/sw.width - 1)));
         baseCounts->addIncoming(baseCountsNext, stridePrecomputation);
     }
     Value * matchWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
@@ -418,7 +418,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
     Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
     Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
-    Value * matchEndPos = b->CreateAdd(matchWordPos, b->CreateCountForwardZeroes(theMatchWord));
+    Value * matchEndPos = b->CreateAdd(matchWordPos, b->CreateCountForwardZeroes(theMatchWord), "matchEndPos");
     // Find the prior line break.  There are three possibilities.
     // (a) a prior break in the break word corresponding to the current match word.
     // (b) the last break in a prior word within the current stride.
@@ -440,7 +440,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * lineStartBase = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx, sw.WIDTH));
     Value * lineStartPos = b->CreateAdd(lineStartBase, lineStartInWord);
     // The break position is the line start for cases (a), (b); otherwise use the pending value.
-    Value * matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart);
+    Value * matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
     b->CreateStore(matchStart, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi));
     b->CreateStore(matchEndPos, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi));
     if (mLineNumbering) {
@@ -542,7 +542,7 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
 
     Value * nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
 
-    Value * matchRecordStart = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_STARTS), phiMatchNum));
+    Value * matchRecordStart = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
     Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_ENDS), phiMatchNum));
     Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_NUMBERS), phiMatchNum));
 
