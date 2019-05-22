@@ -178,7 +178,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const Binding & input = consumerRate.Binding;
 
                 rounding = lcm(rounding, consumerRate.Maximum);
-                requiredSpace = std::max(requiredSpace, consumerRate.MaximumExpectedFlow);
+
+                const auto S = producerRate.MaximumExpectedFlow + consumerRate.MaximumExpectedFlow;
+                const auto D = gcd(producerRate.MaximumExpectedFlow, consumerRate.MaximumExpectedFlow);
+                requiredSpace = std::max(requiredSpace, S - D);
+
                 const auto diff = consumerRate.MaximumSpace - consumerRate.MaximumExpectedFlow;
                 overflowSpace = std::max(overflowSpace, diff);
 
@@ -271,10 +275,6 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
         auto computeBufferRateBounds = [&](const RelationshipType port,
                                            const RelationshipNode & bindingNode,
                                            const unsigned streamSet) {
-            unsigned strideLength = kernel->getStride();
-            if (i == PipelineInput || i == PipelineOutput) {
-                strideLength = boost::lcm(codegen::SegmentSize, strideLength);
-            }
             assert (bindingNode.Type == RelationshipNode::IsBinding);
             const Binding & binding = bindingNode.Binding;
             const ProcessingRate & rate = binding.getRate();
@@ -289,15 +289,25 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
                     report_fatal_error(out.str());
                 }
                 const auto e = in_edge(streamSet, G);
-                const BufferRateData & br = G[e];
-                ub = std::max(lb, br.Maximum);
-            } else if (LLVM_UNLIKELY(rate.isRelative())) {
-                const Binding & ref = getBinding(getReference(i, port));
-                const ProcessingRate & refRate = ref.getRate();
-                lb *= refRate.getLowerBound();
-                ub *= refRate.getUpperBound();
+                const BufferRateData & producerBr = G[e];
+                ub = std::max(lb, producerBr.Maximum);
+            } else {
+
+                auto strideLength = kernel->getStride();
+                if (LLVM_UNLIKELY(i == PipelineInput || i == PipelineOutput)) {
+                    strideLength = boost::lcm(codegen::SegmentSize, strideLength);
+                }
+
+                if (LLVM_UNLIKELY(rate.isRelative())) {
+                    const Binding & ref = getBinding(getReference(i, port));
+                    const ProcessingRate & refRate = ref.getRate();
+                    lb *= refRate.getLowerBound();
+                    ub *= refRate.getUpperBound();
+                }
+                lb *= strideLength;
+                ub *= strideLength;
             }
-            return BufferRateData{port, binding, lb * strideLength, ub * strideLength};
+            return BufferRateData{port, binding, lb, ub};
         };
 
         // add in any inputs
@@ -468,11 +478,15 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
                         assert (inputRate.SymbolicRate != outputRate.SymbolicRate);
                     }
                 }
+            } else if (LLVM_UNLIKELY(inputProcessingRate.isGreedy())) {
+                inputRate.SymbolicRate = outputRate.SymbolicRate;
             } else if (LLVM_UNLIKELY(inputProcessingRate.isPartialSum())) {
                 inputRate.SymbolicRate = getReferenceSymbolicRate(inputRate, outputRate.SymbolicRate);
-            } else { // if (rate.isBounded() || rate.isUnknown()) {
+            } else if (inputProcessingRate.isBounded() || inputProcessingRate.isUnknown()) {
                 inputRate.SymbolicRate = add_vertex(M);
                 rateIsBoundedBy(inputRate.SymbolicRate, outputRate.SymbolicRate);
+            } else {
+                llvm_unreachable("unknown rate type");
             }
             rates.insert(inputRate.SymbolicRate);
         }

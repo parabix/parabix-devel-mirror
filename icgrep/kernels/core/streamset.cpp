@@ -474,10 +474,12 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
     name << "__DynamicBuffer_reserveCapacity_";
 
     Type * ty = getBaseType();
-    name << ty->getArrayNumElements() << 'x';
+    const auto streamCount = ty->getArrayNumElements();
+    name << streamCount << 'x';
     ty = ty->getArrayElementType();
     ty = ty->getVectorElementType();
-    name << ty->getIntegerBitWidth()
+    const auto itemWidth = ty->getIntegerBitWidth();
+    name << itemWidth
          << '_' << mUnderflow
          << '_' << mOverflow
          << '_' << mAddressSpace;
@@ -563,13 +565,16 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         indices[1] = b->getInt32(BaseAddress);
         Value * const bufferField = b->CreateGEP(handle, indices);
         Value * const buffer = b->CreateLoad(bufferField);
+        assert (buffer->getType()->getPointerElementType() == mType);
 
         Value * const consumedOffset = b->CreateURem(consumedChunks, capacity);
         Value * const producedOffset = b->CreateURem(producedChunks, capacity);
         Value * const newConsumedOffset = b->CreateURem(consumedChunks, newCapacity);
         Value * const newProducedOffset = b->CreateURem(producedChunks, newCapacity);
-        Value * const sourceLinear = b->CreateICmpULT(consumedOffset, producedOffset);
-        Value * const targetLinear = b->CreateICmpULT(newConsumedOffset, newProducedOffset);
+        Value * const consumedOffsetEnd = b->CreateAdd(consumedOffset, unconsumedChunks);
+        Value * const sourceLinear = b->CreateICmpULE(consumedOffsetEnd, producedOffset);
+        Value * const newConsumedOffsetEnd = b->CreateAdd(newConsumedOffset, unconsumedChunks);
+        Value * const targetLinear = b->CreateICmpULE(newConsumedOffsetEnd, newProducedOffset);
         Value * const linearCopy = b->CreateAnd(sourceLinear, targetLinear);
 
         DataLayout DL(b->getModule());
@@ -588,9 +593,9 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         Value * const bufferLength1 = b->CreateSub(capacity, consumedOffset);
         Value * const newBufferLength1 = b->CreateSub(newCapacity, newConsumedOffset);
         Value * const partialLength1 = b->CreateUMin(bufferLength1, newBufferLength1);
-        Value * const capacityPtr = b->CreateGEP(buffer, b->CreateAdd(consumedOffset, bufferLength1));
-        Value * const capacityPtrInt = b->CreatePtrToInt(capacityPtr, intPtrTy);
-        Value * const bytesToCopy1 = b->CreateSub(capacityPtrInt, consumedOffsetPtrInt);
+        Value * const copyEndPtr = b->CreateGEP(buffer, b->CreateAdd(consumedOffset, partialLength1));
+        Value * const copyEndPtrInt = b->CreatePtrToInt(copyEndPtr, intPtrTy);
+        Value * const bytesToCopy1 = b->CreateSub(copyEndPtrInt, consumedOffsetPtrInt);
         b->CreateMemCpy(newConsumedOffsetPtr, consumedOffsetPtr, bytesToCopy1, blockWidth / 8);
         Value * const sourceOffset = b->CreateURem(b->CreateAdd(consumedOffset, partialLength1), capacity);
         Value * const sourcePtr = b->CreateGEP(buffer, sourceOffset);
@@ -601,13 +606,35 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
         b->CreateBr(storeNewBuffer);
 
         b->SetInsertPoint(storeNewBuffer);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            BasicBlock * const entryBlock = b->GetInsertBlock();
+            BasicBlock * const checkNewBuffer = b->CreateBasicBlock();
+            BasicBlock * const checkNewBufferExit = b->CreateBasicBlock();
+            b->CreateBr(checkNewBuffer);
+
+            b->SetInsertPoint(checkNewBuffer);
+            PHINode * const index = b->CreatePHI(sizeTy, 2);
+            index->addIncoming(consumedChunks, entryBlock);
+            Value * const sourceOffset = b->CreateURem(index, capacity);
+            Value * const sourcePtr = b->CreateGEP(buffer, sourceOffset);
+            Value * const targetOffset = b->CreateURem(index, newCapacity);
+            Value * const targetPtr = b->CreateGEP(newBuffer, targetOffset);
+            assert (sourcePtr->getType() == targetPtr->getType());
+            Value * const valid = b->CreateMemCmp(sourcePtr, targetPtr, CHUNK_SIZE);
+            b->CreateAssertZero(valid, "dynamic buffer expansion failed to correctly copy the data");
+            Value * const nextIndex = b->CreateAdd(index, b->getSize(1));
+            index->addIncoming(nextIndex, checkNewBuffer);
+            Value * const notDone = b->CreateICmpNE(nextIndex, producedChunks);
+            b->CreateCondBr(notDone, checkNewBuffer, checkNewBufferExit);
+
+            b->SetInsertPoint(checkNewBufferExit);
+        }
         indices[1] = b->getInt32(PriorBaseAddress);
         Value * const priorBufferField = b->CreateGEP(handle, indices);
         Value * const priorBuffer = b->CreateLoad(priorBufferField);
         b->CreateStore(buffer, priorBufferField);
         b->CreateStore(newBuffer, bufferField);
         b->CreateStore(newCapacity, capacityField);
-
         Value * const remainingAfterExpand = getLinearlyWritableItems(b, produced, consumed, overflowItems);
         #ifdef NDEBUG
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -847,19 +874,16 @@ DynamicBuffer::DynamicBuffer(BuilderRef b, Type * const type,
     assert ("a linear buffer cannot have an overflow" && (!linear || overflowSize == 0));
 }
 
-InternalBuffer::InternalBuffer(const BufferKind k,
-                               BuilderRef b, Type * const baseType,
-                               const size_t overflowSize, const size_t underflowSize,
-                               const bool linear, const unsigned AddressSpace)
+inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderRef b, Type * const baseType,
+                                      const size_t overflowSize, const size_t underflowSize,
+                                      const bool linear, const unsigned AddressSpace)
 : StreamSetBuffer(k, b, baseType, overflowSize, underflowSize, linear, AddressSpace) {
 
 }
 
-StreamSetBuffer::StreamSetBuffer(const BufferKind k,
-                                 BuilderRef b,
-                                 Type * const baseType,
-                                 const size_t overflowSize, const size_t underflowSize,
-                                 const bool linear, const unsigned AddressSpace)
+inline StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderRef b, Type * const baseType,
+                                        const size_t overflowSize, const size_t underflowSize,
+                                        const bool linear, const unsigned AddressSpace)
 : mBufferKind(k)
 , mHandle(nullptr)
 , mType(resolveType(b, baseType))

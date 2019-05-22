@@ -27,15 +27,16 @@
 #include <boost/interprocess/mapped_region.hpp>
 #include <cxxabi.h>
 
-
 #ifdef HAS_ADDRESS_SANITIZER
 #include <llvm/Analysis/AliasAnalysis.h>
 #endif
 
 #if defined(__i386__)
 typedef uint32_t unw_word_t;
+#define PRISz PRId32
 #else
 typedef uint64_t unw_word_t;
+#define PRISz PRId64
 #endif
 #if defined(HAS_LIBUNWIND)
 #define UNW_LOCAL_ONLY
@@ -1417,7 +1418,7 @@ Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine & Na
         }
         Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
         // exctracting an element from a position that exceeds the length of the vector is undefined
-        CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx is greater than Vec size");
+        __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRISz ") is greater than Vec size (%" PRISz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateExtractElement(Vec, Idx, Name);
 }
@@ -1429,7 +1430,7 @@ Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, 
         }
         Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
         // inserting an element into a position that exceeds the length of the vector is undefined
-        CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx is greater than Vec size");
+        __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRISz ") is greater than Vec size (%" PRISz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateInsertElement(Vec, NewElt, Idx, Name);
 }
@@ -1726,24 +1727,25 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 boost::format fmt(msg);
                                 for (unsigned i = 5; i < ci.getNumArgOperands(); ++i) {
                                     Value * const arg = ci.getOperand(3);
-                                    if (LLVM_LIKELY(isa<ConstantInt>(arg))) {
-                                        const auto v = cast<ConstantInt>(arg)->getLimitedValue();
-                                        fmt % v;
-                                    } else if (LLVM_LIKELY(isa<ConstantFP>(arg))) {
-                                        const auto & f = cast<ConstantFP>(arg)->getValueAPF();
-                                        fmt % f.convertToDouble();
-                                    } else if (LLVM_LIKELY(isa<Constant>(arg))) {
-                                        Type * const ty = arg->getType();
-                                        if (ty->isPointerTy()) {
-                                            fmt % extract(arg);
+                                    if (LLVM_LIKELY(isa<Constant>(arg))) {
+                                        if (LLVM_LIKELY(isa<ConstantInt>(arg))) {
+                                            const auto v = cast<ConstantInt>(arg)->getLimitedValue();
+                                            fmt % v;
+                                        } else if (isa<ConstantFP>(arg)) {
+                                            const auto & f = cast<ConstantFP>(arg)->getValueAPF();
+                                            fmt % f.convertToDouble();
                                         } else {
-                                            fmt % "<unknown>";
+                                            Type * const ty = arg->getType();
+                                            if (ty->isPointerTy()) {
+                                                fmt % extract(arg);
+                                            } else {
+                                                fmt % "<unknown>";
+                                            }
                                         }
                                     } else {
                                         fmt % "<any>";
                                     }
                                 }
-
                                 __report_failure(name, msg, trace, n);
                                 exit(-1);
                             }

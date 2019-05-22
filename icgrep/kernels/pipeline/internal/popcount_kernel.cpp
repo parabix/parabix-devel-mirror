@@ -15,8 +15,15 @@ const std::string CURRENT_COUNT = "currentCount";
 const std::string POSITIVE_COUNT = "positiveCount";
 const std::string NEGATIVE_COUNT = "negativeCount";
 
+using RateValue = ProcessingRate::RateValue;
+
 bool isNotConstantOne(Value * const value) {
     return !isa<Constant>(value) || !cast<Constant>(value)->isOneValue();
+}
+
+inline static unsigned ceil_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -32,6 +39,13 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
     IntegerType * const sizeTy = b->getSizeTy();
+
+    const Binding & input = getInputStreamSetBinding(INPUT);
+    const ProcessingRate & rate = input.getRate();
+    const RateValue & rv = rate.getRate();
+    assert (rv.denominator() == 1);
+    const auto inputWidth = rv.numerator();
+    const auto blockWidth = b->getBitBlockWidth();
 
     if (isNotConstantOne(b->getInputStreamSetCount(INPUT))) {
         report_fatal_error("PopCount input stream must be a single stream");
@@ -83,19 +97,76 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         negativeSum = b->CreatePHI(sizeTy, 2);
         negativeSum->addIncoming(initialNegativeCount, entry);
     }
-    Value * value = b->loadInputStreamBlock(INPUT, ZERO, index);
-    if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
-        value = b->CreateNot(value);
+
+    Value * sum = nullptr;
+    if (LLVM_UNLIKELY(inputWidth < blockWidth)) {
+        report_fatal_error("popcount input width < block width is not supported yet.");
+    } else {
+
+        const auto step = inputWidth / blockWidth;
+        assert (inputWidth % blockWidth == 0);
+        Constant * const STEP = b->getSize(step);
+        Value * const baseIndex = b->CreateMul(index, STEP);
+
+        // half adder will require the same number of pop count steps when n < 4
+        if (step < 4) {
+            for (unsigned i = 0; i < step; ++i) {
+                Constant * const I = b->getSize(i);
+                Value * const idx = b->CreateOr(baseIndex, I);
+                Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
+                if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
+                    value = b->CreateNot(value);
+                }
+                Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(value), sizeTy);
+                if (i == 0) {
+                    sum = count;
+                } else {
+                    sum = b->CreateAdd(sum, count);
+                }
+            }
+        } else {
+            const auto m = ceil_log2(step + 2);
+            SmallVector<Value *, 64> adders(m);
+            // load the first block
+            Value * value = b->loadInputStreamBlock(INPUT, ZERO, baseIndex);
+            if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
+                value = b->CreateNot(value);
+            }
+            adders[0] = value;
+            // load and half-add the subsequent blocks
+            for (unsigned i = 1; i < step; ++i) {
+                Constant * const I = b->getSize(i);
+                Value * const idx = b->CreateOr(baseIndex, I);
+                Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
+                if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
+                    value = b->CreateNot(value);
+                }
+                const auto k = ceil_log2(i + 1);
+                assert (k < m);
+                for (unsigned j = 0; j < k; ++j) {
+                    Value * const sum_in = adders[j];
+                    Value * const sum_out = b->simd_xor(sum_in, value);
+                    Value * const carry_out = b->simd_and(sum_in, value);
+                    adders[j] = sum_out;
+                    value = carry_out;
+                }
+                adders[k] = value;
+            }
+            // sum the half adders
+            for (unsigned i = 0; i < m; ++i) {
+                Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(value), sizeTy);
+                if (i == 0) {
+                    sum = count;
+                } else {
+                    sum = b->CreateAdd(sum, b->CreateShl(count, i));
+                }
+            }
+        }
     }
 
-    // TODO: parallelize the partial sum when we're reasonably sure that we'll
-    // have enough data to be worth it on average. Ideally, we'd also want
-    // to know whether we'd ever need to finish counting sequentially.
-
-    Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(value), sizeTy);
     Value * positivePartialSum = nullptr;
     if (positiveArray) {
-        positivePartialSum = b->CreateAdd(positiveSum, count);
+        positivePartialSum = b->CreateAdd(positiveSum, sum);
         positiveSum->addIncoming(positivePartialSum, popCountLoop);
         Value * const ptr = b->CreateGEP(positiveArray, index);
         b->CreateStore(positivePartialSum, ptr);
@@ -103,12 +174,12 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 
     Value * negativePartialSum = nullptr;
     if (negativeArray) {
-        Value * negCount = count;
+        Value * negSum = sum;
         if (positiveArray) {
-            Constant * blockWidth = b->getSize(b->getBitBlockWidth());
-            negCount = b->CreateSub(blockWidth, count);
+            Constant * const INPUT_WIDTH = b->getSize(inputWidth);
+            negSum = b->CreateSub(INPUT_WIDTH, sum);
         }
-        negativePartialSum = b->CreateAdd(negativeSum, negCount);
+        negativePartialSum = b->CreateAdd(negativeSum, negSum);
         negativeSum->addIncoming(negativePartialSum, popCountLoop);
         Value * const ptr = b->CreateGEP(negativeArray, index);
         b->CreateStore(negativePartialSum, ptr);
@@ -134,10 +205,10 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, StreamSet * input, StreamSet * const output)
-: MultiBlockKernel(b, "PopCount" + std::string{type == PopCountType::POSITIVE ? "P" : "N"}
+PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const output)
+    : MultiBlockKernel(b, "PopCount" + std::string{type == PopCountType::POSITIVE ? "P" : "N"} + std::to_string(stepFactor)
 // input streams
-,{Binding{INPUT, input, FixedRate(b->getBitBlockWidth())}}
+,{Binding{INPUT, input, FixedRate(stepFactor)}}
 // output stream
 ,{Binding{OUTPUT_STREAM, output, FixedRate()}}
 // unnused I/O scalars
@@ -153,10 +224,10 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, StreamSet * input, StreamSet * const positive, StreamSet * const negative)
-: MultiBlockKernel(b, ".PopCountB"
+PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const positive, StreamSet * const negative)
+: MultiBlockKernel(b, ".PopCountB" + std::to_string(stepFactor)
 // input streams
-,{Binding{INPUT, input, FixedRate(b->getBitBlockWidth())}}
+,{Binding{INPUT, input, FixedRate(stepFactor)}}
 // output stream
 ,{Binding{POSITIVE_STREAM, positive, FixedRate()}
  ,Binding{NEGATIVE_STREAM, negative, FixedRate()}}

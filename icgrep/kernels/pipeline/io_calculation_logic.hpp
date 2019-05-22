@@ -623,20 +623,32 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     assert (ref.Type == PortType::Input);
     const auto refPortNum = ref.Number;
 
-    const StreamSetBuffer * const buffer = getInputBuffer(refPortNum);
+    // get the popcount kernel's input rate so we can calculate the
+    // step factor for this kernel's usage of pop count partial sum
+    // stream.
+    const auto refInput = getInput(mKernelIndex, refPortNum);
+    const BufferRateData & refInputRate = mBufferGraph[refInput];
+    const auto refBufferVertex = getInputBufferVertex(refPortNum);
+    const auto refOuput = in_edge(refBufferVertex, mBufferGraph);
+    const BufferRateData & refOutputRate = mBufferGraph[refOuput];
+    const auto stepFactor = refInputRate.Maximum / refOutputRate.Maximum;
+
+    assert (stepFactor.denominator() == 1);
+    const auto step = stepFactor.numerator();
+    Constant * const STEP = b->getSize(step);
+
+    const StreamSetBuffer * const buffer = mBufferGraph[refBufferVertex].Buffer;
     const auto prefix = makeBufferName(mKernelIndex, ref) + "_readPartialSum";
 
     BasicBlock * const popCountLoop =
         b->CreateBasicBlock(prefix + "Loop", mKernelLoopCall);
     BasicBlock * const popCountLoopExit =
         b->CreateBasicBlock(prefix + "LoopExit", mKernelLoopCall);
-
     Value * const baseOffset = mAlreadyProcessedPhi[refPortNum];
     Value * const baseAddress = buffer->getRawItemPointer(b.get(), ZERO, baseOffset);
-    // Value * const initialStrideCount = b->CreateUMax(mNumOfLinearStrides, ONE);
-
     BasicBlock * const popCountEntry = b->GetInsertBlock();
-    Value * enterLoop = b->CreateICmpNE(mNumOfLinearStrides, ZERO);
+    Value * const initialStrideCount = b->CreateMul(mNumOfLinearStrides, STEP);
+    Value * enterLoop = b->CreateICmpNE(initialStrideCount, ZERO);
     if (peekableItemCount) {
         Value * const mustUseOverflow = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
         enterLoop = b->CreateAnd(enterLoop, mustUseOverflow);
@@ -648,10 +660,10 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
 
     b->SetInsertPoint(popCountLoop);
     PHINode * const numOfStrides = b->CreatePHI(sizeTy, 2);
-    numOfStrides->addIncoming(mNumOfLinearStrides, popCountEntry);
+    numOfStrides->addIncoming(initialStrideCount, popCountEntry);
     PHINode * const nextRequiredItems = b->CreatePHI(sizeTy, 2);
     nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
-    Value * const strideIndex = b->CreateSub(numOfStrides, ONE);
+    Value * const strideIndex = b->CreateSub(numOfStrides, STEP);
     Value * const ptr = b->CreateGEP(baseAddress, strideIndex);
     Value * const requiredItems = b->CreateLoad(ptr);
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);
@@ -669,7 +681,6 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     PHINode * const nextRequiredItemsPhi = b->CreatePHI(sizeTy, 2);
     nextRequiredItemsPhi->addIncoming(minimumItemCount, popCountEntry);
     nextRequiredItemsPhi->addIncoming(nextRequiredItems, popCountLoop);
-
     Value * finalNumOfStrides = numOfStridesPhi;
     if (peekableItemCount) {
         // Since we want to allow the stream to peek into the overflow but not start

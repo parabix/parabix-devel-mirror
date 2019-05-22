@@ -655,8 +655,9 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
     struct Edge {
         CountingType Type;
         StreamPort   Port;
-        Edge() : Type(Unknown), Port() { }
-        Edge(const CountingType type, const StreamPort port) : Type(type), Port(port) { }
+        unsigned     StrideLength;
+        Edge() : Type(Unknown), Port(), StrideLength() { }
+        Edge(const CountingType type, const StreamPort port, unsigned stepFactor) : Type(type), Port(port), StrideLength(stepFactor) { }
     };
 
     using Graph = adjacency_list<vecS, vecS, directedS, Relationship *, Edge>;
@@ -688,15 +689,16 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
                         const RelationshipNode & rn = G[refStreamVertex];
                         assert (rn.Type == RelationshipNode::IsBinding);
                         const Binding & refBinding = rn.Binding;
+                        const ProcessingRate & refRate = refBinding.getRate();
                         Relationship * const refStream = refBinding.getRelationship();
                         const auto f = M.find(refStream);
                         Vertex refVertex = 0;
                         if (LLVM_UNLIKELY(f != M.end())) {
                             refVertex = f->second;
                         } else {
-                            if (LLVM_UNLIKELY(refBinding.isDeferred() || !refBinding.getRate().isFixed())) {
-                                std::string tmp;
-                                raw_string_ostream msg(tmp);
+                            if (LLVM_UNLIKELY(refBinding.isDeferred() || !refRate.isFixed())) {
+                                SmallVector<char, 0> tmp;
+                                raw_svector_ostream msg(tmp);
                                 msg << kernel->getName();
                                 msg << ": pop count reference ";
                                 msg << refBinding.getName();
@@ -706,8 +708,18 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
                             refVertex = add_vertex(refStream, H);
                             M.emplace(refStream, refVertex);
                         }
+                        const RateValue strideLength = refRate.getRate() * kernel->getStride();
+                        if (LLVM_UNLIKELY(strideLength.denominator() != 1)) {
+                            SmallVector<char, 0> tmp;
+                            raw_svector_ostream msg(tmp);
+                            msg << kernel->getName();
+                            msg << ": pop count reference ";
+                            msg << refBinding.getName();
+                            msg << " cannot have a rational rate";
+                            report_fatal_error(msg.str());
+                        }
                         const auto type = rate.isPopCount() ? CountingType::Positive : CountingType::Negative;
-                        add_edge(refVertex, i, Edge{type, port}, H);
+                        add_edge(refVertex, i, Edge{type, port, strideLength.numerator()}, H);
                         return;
                     }
                 }
@@ -738,11 +750,18 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
     for (auto i = numOfKernels; i < n; ++i) {
 
+        unsigned strideLength = 0;
         CountingType type = CountingType::Unknown;
         for (const auto & e : make_iterator_range(out_edges(i, H))) {
             const Edge & ed = H[e];
             type |= ed.Type;
+            if (strideLength == 0) {
+                strideLength = ed.StrideLength;
+            } else {
+                strideLength = boost::gcd(strideLength, ed.StrideLength);
+            }
         }
+        assert (strideLength != 1);
         assert (type != CountingType::Unknown);
 
         StreamSet * positive = nullptr;
@@ -756,17 +775,16 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
         }
 
         StreamSet * const input = cast<StreamSet>(H[i]); assert (input);
-
         PopCountKernel * popCountKernel = nullptr;
         switch (type) {
             case CountingType::Positive:
-                popCountKernel = new PopCountKernel(b, PopCountKernel::POSITIVE, input, positive);
+                popCountKernel = new PopCountKernel(b, PopCountKernel::POSITIVE, strideLength, input, positive);
                 break;
             case CountingType::Negative:
-                popCountKernel = new PopCountKernel(b, PopCountKernel::NEGATIVE, input, negative);
+                popCountKernel = new PopCountKernel(b, PopCountKernel::NEGATIVE, strideLength, input, negative);
                 break;
             case CountingType::Both:
-                popCountKernel = new PopCountKernel(b, PopCountKernel::BOTH, input, positive, negative);
+                popCountKernel = new PopCountKernel(b, PopCountKernel::BOTH, strideLength, input, positive, negative);
                 break;
             default: llvm_unreachable("unknown counting type?");
         }
@@ -789,14 +807,14 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
             const auto streamVertex = G.find(stream);
 
             // append the popcount rate stream to the kernel
-            Binding * const popCount = new Binding("#popcount" + std::to_string(ed.Port.Number), stream, FixedRate({1, kernel->getStride()}));
+            RateValue stepRate{ed.StrideLength, strideLength * kernel->getStride()};
+            Binding * const popCount = new Binding("#popcount" + std::to_string(ed.Port.Number), stream, FixedRate(stepRate));
             internalBindings.emplace_back(popCount);
             const auto popCountBinding = G.add(popCount);
 
             const unsigned portNum = in_degree(consumer, G);
             add_edge(streamVertex, popCountBinding, RelationshipType{PortType::Input, portNum, ReasonType::ImplicitPopCount}, G);
             add_edge(popCountBinding, consumer, RelationshipType{PortType::Input, portNum, ReasonType::ImplicitPopCount}, G);
-
 
             auto rebind_reference = [&](const unsigned binding) {
 

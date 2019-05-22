@@ -272,11 +272,11 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
 // kernel state
 {InternalScalar{b->getSizeTy(), "LineNum"},
  InternalScalar{b->getSizeTy(), "LineStart"}}) {
-  //setStride(1024);
+   setStride(2048);
 }
 
 void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
-    bool mLineNumbering = true;
+    const bool mLineNumbering = true;
 
     // Determine the parameters for two-level scanning.
     ScanWordParameters sw(b, mStride);
@@ -441,7 +441,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * lineStartPos = b->CreateAdd(lineStartBase, lineStartInWord);
     // The break position is the line start for cases (a), (b); otherwise use the pending value.
     Value * matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
-    b->CreateStore(matchStart, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi));
+    b->CreateStore(matchStart, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi), "matchStartStart");
     b->CreateStore(matchEndPos, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi));
     if (mLineNumbering) {
         // We must handle cases (a), (b), (c)
@@ -505,7 +505,7 @@ MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, S
 : SegmentOrientedKernel(b, "matchReporter" + std::to_string(Coordinates->getNumElements()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()},
- Binding{"Coordinates", Coordinates, FixedRate()}},
+ Binding{"Coordinates", Coordinates, GreedyRate(1)}},
 // outputs
 {},
 // input scalars
@@ -543,8 +543,8 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     Value * nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
 
     Value * matchRecordStart = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
-    Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_ENDS), phiMatchNum));
-    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_NUMBERS), phiMatchNum));
+    Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_ENDS), phiMatchNum), "matchEndLoad");
+    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_NUMBERS), phiMatchNum), "matchNumLoad");
 
     // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
     // to access past EOF.
