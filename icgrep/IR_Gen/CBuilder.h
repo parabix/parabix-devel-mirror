@@ -322,8 +322,10 @@ public:
     llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits);
 
     llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits);
-
-    llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length);
+    
+    virtual llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos);
+    
+    virtual llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length);
 
     llvm::Value * CreateCeilLog2(llvm::Value * value);
 

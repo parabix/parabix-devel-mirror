@@ -1176,6 +1176,13 @@ Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits) {
     return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits));
 }
 
+Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos) {
+    Type * Ty = bits->getType();
+    Constant * one = Constant::getIntegerValue(Ty, APInt(Ty->getScalarSizeInBits(), 1));
+    Value * mask = CreateSub(CreateShl(one, pos), one);
+    return CreateAnd(bits, mask);
+}
+
 Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length) {
     Constant * One = ConstantInt::get(bits->getType(), 1);
     return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One));

@@ -21,13 +21,20 @@ public:
     : IDISA_Builder(C, AVX_width, vectorWidth, laneWidth)
     , IDISA_SSE2_Builder(C, vectorWidth, laneWidth)
     {
+        llvm::StringMap<bool> features;
+        hasBMI1 = llvm::sys::getHostCPUFeatures(features) && features.lookup("bmi");
+        hasBMI2 = llvm::sys::getHostCPUFeatures(features) && features.lookup("bmi2");
     }
 
     virtual std::string getBuilderUniqueName() override;
 
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
-
+    llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos) override;
+    
     ~IDISA_AVX_Builder() {}
+protected:
+    bool hasBMI1;
+    bool hasBMI2;
 };
 
 class IDISA_AVX2_Builder : public IDISA_AVX_Builder {
@@ -36,8 +43,6 @@ public:
     IDISA_AVX2_Builder(llvm::LLVMContext & C, unsigned vectorWidth, unsigned laneWidth)
     : IDISA_Builder(C, AVX_width, vectorWidth, laneWidth)
     , IDISA_AVX_Builder(C, vectorWidth, laneWidth) {
-        llvm::StringMap<bool> features;
-        hasBMI2 = llvm::sys::getHostCPUFeatures(features) && features.lookup("bmi2");
     }
 
     virtual std::string getBuilderUniqueName() override;
@@ -58,11 +63,8 @@ public:
     llvm::Value * mvmd_compress(unsigned fw, llvm::Value * a, llvm::Value * select_mask) override;
     llvm::Value * simd_pext(unsigned fw, llvm::Value * v, llvm::Value * extract_mask) override;
     llvm::Value * simd_pdep(unsigned fw, llvm::Value * v, llvm::Value * deposit_mask) override;
-    
 
     ~IDISA_AVX2_Builder() {}
-protected:
-    bool hasBMI2;
 };
 
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 8, 0)
