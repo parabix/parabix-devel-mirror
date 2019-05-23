@@ -24,7 +24,7 @@ RE * FileGLOB_Parser::parse_alt() {
 }
 
 RE * FileGLOB_Parser::parse_seq() {
-    mExcludeDotContext = true;
+    mPathComponentStartContext = true;
     std::vector<RE *> seq;
     if (!mCursor.more()) return makeSeq();
     for (;;) {
@@ -61,10 +61,15 @@ const codepoint_t FILE_PATH_SEPARATOR = '/';
 //     (c) a period ('.') when it appears as the first character of a
 //         filename or path component (immediately after a '/').
 
-static RE * makeAnyCC() {
+static RE * makeAnyFileCC() {
     return makeComplement(makeCC(makeCC(NUL), makeCC(FILE_PATH_SEPARATOR)));
 }
-
+    
+//  Allowing PATH separator for /**/ in GLOB_kind == GIT mode.
+static RE * makeAnyPathCC() {
+    return makeComplement(makeCC(NUL));
+}
+    
 static RE * makeAnyButDot() {
     return makeComplement(makeCC(makeCC(makeCC(NUL), makeCC(FILE_PATH_SEPARATOR)), makeCC('.')));
 }
@@ -72,37 +77,43 @@ static RE * makeAnyButDot() {
 RE * FileGLOB_Parser::parse_next_item() {
     if (mCursor.noMore()) return nullptr;
     if (accept('?')) {
-        if (mExcludeDotContext) {
-            mExcludeDotContext = false;  // After this ? metacharacter.
+        if (mPathComponentStartContext) {
+            mPathComponentStartContext = false;  // After this ? metacharacter.
             return makeAnyButDot();
         }
-        else return makeAnyCC();
+        else return makeAnyFileCC();
     } else if (accept('*')) {
-        // Accept and discard any additional (reundant) '*' characters,
-        // and then check for a ? character.
+        // Check for pattern beginning **/, containing /**/, or ending /**, and
+        // process according to GIT special GLOB rules if required.
+        if ((mGLOB_kind == GLOB_kind::GIT) && mPathComponentStartContext && accept('*')) {
+            if (mCursor.noMore() || at(PATTERN_PATH_SEPARATOR))
+                return makeRep(makeAnyPathCC(), 0, Rep::UNBOUNDED_REP);
+        }
+        // Otherwise fall through and ignore redundant * characters (normal GLOB rule).
+        // Then check for a ? character.
         while (accept('*')) {}
         if (at('?')) {
             // Accept the ? and build the ?* regexp in place of *?
-            RE * first = parse_next_item();  // Checks/sets mExcludeDotContext as required.
-            return makeSeq({first, makeRep(makeAnyCC(), 0, Rep::UNBOUNDED_REP)});
-        } else if (mExcludeDotContext) {
-            mExcludeDotContext = false;   // After this * metacharacter.
-            return makeRep(makeSeq({makeAnyButDot(), makeRep(makeAnyCC(), 0, Rep::UNBOUNDED_REP)}), 0, 1);
+            RE * first = parse_next_item();  // Checks/sets mPathComponentStartContext as required.
+            return makeSeq({first, makeRep(makeAnyFileCC(), 0, Rep::UNBOUNDED_REP)});
+        } else if (mPathComponentStartContext) {
+            mPathComponentStartContext = false;   // After this * metacharacter.
+            return makeRep(makeSeq({makeAnyButDot(), makeRep(makeAnyFileCC(), 0, Rep::UNBOUNDED_REP)}), 0, 1);
         } else {
-            return makeRep(makeAnyCC(), 0, Rep::UNBOUNDED_REP);
+            return makeRep(makeAnyFileCC(), 0, Rep::UNBOUNDED_REP);
         }
     } else if (accept('\\')) {
-        mExcludeDotContext = at('/');
+        mPathComponentStartContext = at('/');
         return makeCC(parse_literal_codepoint());
     } else if (accept('[')) {
         RE * cc = parse_bracket_expr();
-        mExcludeDotContext = false; // After the bracket expression, which cannot match /
+        mPathComponentStartContext = false; // After the bracket expression, which cannot match /
         return cc;
     } else if (accept(PATTERN_PATH_SEPARATOR)) {
-        mExcludeDotContext = true;
+        mPathComponentStartContext = true;
         return makeCC(FILE_PATH_SEPARATOR);
     } else {
-        mExcludeDotContext = false;
+        mPathComponentStartContext = false;
         return makeCC(parse_literal_codepoint());
     }
 }
@@ -146,15 +157,15 @@ RE * FileGLOB_Parser::parse_bracket_expr () {
     } while (mCursor.more() && !at(']'));
     require(']');
     if (negated) {
-        if (mExcludeDotContext) {
-            // In mExcludeDotContext, a dot cannot be matched by a negated bracket expression
+        if (mPathComponentStartContext) {
+            // In mPathComponentStartContext, a dot cannot be matched by a negated bracket expression
             items.push_back(makeCC('.'));
         }
         return makeComplement(makeAlt(items.begin(), items.end()));
     }
     else {
         RE * t = makeAlt(items.begin(), items.end());
-        if (mExcludeDotContext) {
+        if (mPathComponentStartContext) {
             t = makeDiff(t, makeCC('.'));
         }
         return t;
