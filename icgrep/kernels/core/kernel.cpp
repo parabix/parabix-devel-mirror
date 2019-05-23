@@ -648,7 +648,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         assert (virtualBaseAddress->getType() == buffer->getPointerType());
         Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
         buffer->setHandle(b, localHandle);
-        buffer->setBaseAddress(b.get(), virtualBaseAddress);
+        buffer->setBaseAddress(b, virtualBaseAddress);
         /// ----------------------------------------------------
         /// processed item count
         /// ----------------------------------------------------
@@ -692,7 +692,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         if (input.hasLookahead()) {
             capacity = b->CreateAdd(capacity, b->getSize(input.getLookahead()));
         }
-        buffer->setCapacity(b.get(), capacity);
+        buffer->setCapacity(b, capacity);
 //        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
 //            mPopCountRateArray[i] = nextArg();
 //        }
@@ -729,7 +729,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             assert (virtualBaseAddress->getType() == buffer->getPointerType());
             Value * const localHandle = b->CreateAlloca(buffer->getHandleType(b));
             buffer->setHandle(b, localHandle);
-            buffer->setBaseAddress(b.get(), virtualBaseAddress);
+            buffer->setBaseAddress(b, virtualBaseAddress);
         }
 
         /// ----------------------------------------------------
@@ -774,7 +774,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             assert (writable->getType() == sizeTy);
             mWritableOutputItems[i] = writable;
             Value * const capacity = b->CreateAdd(produced, writable);
-            buffer->setCapacity(b.get(), capacity);
+            buffer->setCapacity(b, capacity);
         }
     }
     assert (arg == args.end());
@@ -814,7 +814,7 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
         /// logical buffer base address
         /// ----------------------------------------------------
         const auto & buffer = mStreamSetInputBuffers[i];
-        props.push_back(buffer->getBaseAddress(b.get()));
+        props.push_back(buffer->getBaseAddress(b));
         /// ----------------------------------------------------
         /// processed item count
         /// ----------------------------------------------------
@@ -854,7 +854,7 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
             Value * const handle = getScalarValuePtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
             props.push_back(handle);
         } else {
-            props.push_back(buffer->getBaseAddress(b.get()));
+            props.push_back(buffer->getBaseAddress(b));
         }
         /// ----------------------------------------------------
         /// produced item count

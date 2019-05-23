@@ -14,6 +14,8 @@ class KernelBuilder : public virtual IDISA::IDISA_Builder {
     friend class PipelineGenerator;
 public:
 
+    using Rational = boost::rational<unsigned>;
+
     // Get the value of a scalar field for the current instance.
     llvm::Value * getScalarFieldPtr(const llvm::StringRef fieldName);
 
@@ -132,14 +134,19 @@ public:
         mKernel = kernel;
     }
 
-    // overloading wrongly subsitutes this for CBuilder function. renamed for now until I can investigate why.
-    llvm::Value * CreateUDiv2(llvm::Value * const number, const ProcessingRate::RateValue & divisor, const llvm::Twine & Name = "");
+    llvm::Value * CreateUDiv2(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateCeilUDiv2(llvm::Value * const number, const ProcessingRate::RateValue & divisor, const llvm::Twine & Name = "");
+    llvm::Value * CreateCeilUDiv2(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateMul2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateCeilUMul2(llvm::Value * const number, const ProcessingRate::RateValue & factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateCeilUMul2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+
+    llvm::Value * CreateURem2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+
+    llvm::Value * CreateRoundDown2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+
+    llvm::Value * CreateRoundUp2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
     unsigned getStride() const {
         return mStride;

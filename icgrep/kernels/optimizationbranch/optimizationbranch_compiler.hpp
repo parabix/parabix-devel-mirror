@@ -444,7 +444,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     const RelationshipRef & condRef = getConditionRef(mStreamSetGraph);
     const StreamSetBuffer * const condBuffer = mBranch->getInputStreamSetBuffer(condRef.Index);
 
-    Value * const numOfConditionStreams = condBuffer->getStreamSetCount(b.get());
+    Value * const numOfConditionStreams = condBuffer->getStreamSetCount(b);
     Value * const numOfConditionBlocks = b->CreateMul(numOfConditionStreams, BLOCKS_PER_STRIDE);
 
     // Store the base pointer to our condition stream prior to iterating through it incase
@@ -791,7 +791,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             mProcessedInputItems[path.Index] = processed;
             // logical base input address
             const StreamSetBuffer * const buffer = mBranch->getInputStreamSetBuffer(host.Index);
-            mBaseInputAddress[path.Index] = buffer->getBaseAddress(b.get());
+            mBaseInputAddress[path.Index] = buffer->getBaseAddress(b);
             // accessible input items (after non-deferred processed item count)
             Value * const accessible = mBranch->getAccessibleInputItems(path.Index);
             Value * const provided = calculateAccessibleOrWritableItems(b, kernel, input, firstIndex, lastIndex, accessible);
@@ -828,7 +828,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             #endif
             // logical base input address
             const StreamSetBuffer * const buffer = mBranch->getOutputStreamSetBuffer(host.Index);
-            mBaseOutputAddress[path.Index] = buffer->getBaseAddress(b.get());
+            mBaseOutputAddress[path.Index] = buffer->getBaseAddress(b);
             // writable output items
             Value * const writable = mBranch->getWritableOutputItems(path.Index);
             Value * const provided = calculateAccessibleOrWritableItems(b, kernel, output, firstIndex, lastIndex, writable);

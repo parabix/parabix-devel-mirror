@@ -98,7 +98,7 @@ void DirectorySearch::addToOutputStream(const std::unique_ptr<kernel::KernelBuil
     Value * size = b->CreateZExtOrTrunc(nameLength, unconsumed->getType());
     size = b->CreateMul(size, ConstantInt::get(size->getType(), 16));
     size = b->CreateAdd(size, unconsumed);
-    buffer->setCapacity(b.get(), size);
+    buffer->setCapacity(b, size);
     b->CreateBr(writeName);
     // write the name to the buffer
     b->setInsertPoint(writeName);

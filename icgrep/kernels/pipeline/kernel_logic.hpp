@@ -59,7 +59,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             const StreamSetBuffer * const buffer = getInputBuffer(i);
 
             // if this streamset has 0 streams, it exists only to have a produced/processed count.
-            Value * const numOfStreams = buffer->getStreamSetCount(b.get());
+            Value * const numOfStreams = buffer->getStreamSetCount(b);
             if (LLVM_LIKELY(isa<ConstantInt>(numOfStreams))) {
                 if (LLVM_UNLIKELY(cast<ConstantInt>(numOfStreams)->getLimitedValue() == 0)) {
                     continue;
@@ -146,13 +146,13 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             Value * inputPtr = nullptr;
             Value * outputPtr = nullptr;
             if (blockOffset) {
-                Value * const address = tmp.getStreamBlockPtr(b.get(), mInputEpoch[i], streamIndex, start);
+                Value * const address = tmp.getStreamBlockPtr(b, mInputEpoch[i], streamIndex, start);
                 b->CreateMemCpy(maskedBuffer, address, copyLength, blockWidth / 8);
-                inputPtr = tmp.getStreamPackPtr(b.get(), mInputEpoch[i], streamIndex, blockOffset, packIndex);
-                outputPtr = tmp.getStreamPackPtr(b.get(), maskedBuffer, streamIndex, ZERO, packIndex);
+                inputPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, blockOffset, packIndex);
+                outputPtr = tmp.getStreamPackPtr(b, maskedBuffer, streamIndex, ZERO, packIndex);
             } else {
-                inputPtr = tmp.getStreamBlockPtr(b.get(), mInputEpoch[i], streamIndex, start);
-                outputPtr = tmp.getStreamBlockPtr(b.get(), maskedBuffer, streamIndex, ZERO);
+                inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], streamIndex, start);
+                outputPtr = tmp.getStreamBlockPtr(b, maskedBuffer, streamIndex, ZERO);
             }
             assert (inputPtr->getType() == outputPtr->getType());
 
@@ -166,7 +166,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             b->SetInsertPoint(maskedInputExit);
             PointerType * const bufferType = buffer->getPointerType();
-            Value * maskedEpoch = tmp.getStreamBlockPtr(b.get(), maskedBuffer, ZERO, b->CreateNeg(start));
+            Value * maskedEpoch = tmp.getStreamBlockPtr(b, maskedBuffer, ZERO, b->CreateNeg(start));
             maskedEpoch = b->CreatePointerCast(maskedEpoch, bufferType);
             BasicBlock * const loopExit = b->GetInsertBlock();
             b->CreateBr(selectedInput);
@@ -214,7 +214,7 @@ void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
                     Constant * const factor = b->getSize(blockWidth / itemWidth);
                     requiredBytes = b->CreateRoundUp(requiredBytes, factor);
                 }
-                requiredBytes = b->CreateMul(requiredBytes, bn.Buffer->getStreamSetCount(b.get()));
+                requiredBytes = b->CreateMul(requiredBytes, bn.Buffer->getStreamSetCount(b));
 
                 const auto fieldWidth = input.getFieldWidth();
                 if (fieldWidth < 8) {
@@ -667,8 +667,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
         BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);
         BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
-        Value * const numOfStreams = buffer->getStreamSetCount(b.get());
-        Value * const baseAddress = buffer->getBaseAddress(b.get());
+        Value * const numOfStreams = buffer->getStreamSetCount(b);
+        Value * const baseAddress = buffer->getBaseAddress(b);
         BasicBlock * const entry = b->GetInsertBlock();
         b->CreateBr(maskLoop);
 
@@ -677,9 +677,9 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         streamIndex->addIncoming(ZERO, entry);
         Value * ptr = nullptr;
         if (itemWidth > 1) {
-            ptr = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, packIndex);
+            ptr = buffer->getStreamPackPtr(b, baseAddress, streamIndex, blockIndex, packIndex);
         } else {
-            ptr = buffer->getStreamBlockPtr(b.get(), baseAddress, streamIndex, blockIndex);
+            ptr = buffer->getStreamBlockPtr(b, baseAddress, streamIndex, blockIndex);
         }
         Value * const value = b->CreateBlockAlignedLoad(ptr);
         Value * const maskedValue = b->CreateAnd(value, mask);
@@ -691,12 +691,13 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             // Since packs are laid out sequentially in memory, it will hopefully be cheaper to zero them out here
             // because they may be within the same cache line.
             Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
-            Value * const start = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, nextPackIndex);
+            Value * const start = buffer->getStreamPackPtr(b, baseAddress, streamIndex, blockIndex, nextPackIndex);
             Value * const startInt = b->CreatePtrToInt(start, intPtrTy);
-            Value * const end = buffer->getStreamPackPtr(b.get(), baseAddress, streamIndex, blockIndex, ITEM_WIDTH);
+            Value * const end = buffer->getStreamPackPtr(b, baseAddress, streamIndex, blockIndex, ITEM_WIDTH);
             Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
             Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
+            b->CallPrintInt(prefix + "_zeroFill_packStart", start);
             b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);
             #endif
             b->CreateMemZero(start, remainingPackBytes, blockWidth / 8);
@@ -716,12 +717,12 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
         if (blocksToZero > 1) {
             Value * const nextBlockIndex = b->CreateAdd(blockIndex, ONE);
-            Value * const startPtr = buffer->getStreamBlockPtr(b.get(), baseAddress, ZERO, nextBlockIndex);
+            Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, nextBlockIndex);
             Value * const startInt = b->CreatePtrToInt(startPtr, intPtrTy);
             Value * const consumedIndex = b->CreateLShr(mConsumedItemCount[i], LOG_2_BLOCK_WIDTH);
-            Value * const consumedPtr = buffer->getStreamBlockPtr(b.get(), baseAddress, ZERO, consumedIndex);
+            Value * const consumedPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, consumedIndex);
             Value * const consumedInt = b->CreatePtrToInt(consumedPtr, intPtrTy);
-            Value * bufferEnd = buffer->getOverflowAddress(b.get());
+            Value * bufferEnd = buffer->getOverflowAddress(b);
             if (numOfLookaheadBlocks) {
                 bufferEnd = b->CreateGEP(bufferEnd, b->getInt32(numOfLookaheadBlocks));
             }
@@ -730,7 +731,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endInt = b->CreateSelect(consumedBefore, bufferEndInt, consumedInt);
             Value * const remainingBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_zeroFill_remainingBytes", remainingBytes);
+            b->CallPrintInt(prefix + "_zeroFill_bufferStart", startPtr);
+            b->CallPrintInt(prefix + "_zeroFill_remainingBufferBytes", remainingBytes);
             #endif
             b->CreateMemZero(startPtr, remainingBytes, blockWidth / 8);
         }

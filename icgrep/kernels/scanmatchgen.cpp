@@ -259,7 +259,7 @@ enum MatchCoordinatesEnum {LINE_STARTS = 0, LINE_ENDS = 1, LINE_NUMBERS = 2};
 
 MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                StreamSet * const Matches, StreamSet * const LineBreakStream,
-                                               StreamSet * const Coordinates)
+                                               StreamSet * const Coordinates, unsigned strideBlocks)
 : MultiBlockKernel(b, "matchCoordinates" + std::to_string(Coordinates->getNumElements()),
 // inputs
 {Binding{"matchResult", Matches}, Binding{"lineBreak", LineBreakStream}},
@@ -272,7 +272,7 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
 // kernel state
 {InternalScalar{b->getSizeTy(), "LineNum"},
  InternalScalar{b->getSizeTy(), "LineStart"}}) {
-   setStride(2048);
+   setStride(b->getBitBlockWidth() * strideBlocks);
 }
 
 void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -364,8 +364,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     }
     Value * matchWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
     Value * breakWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
-    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)));
-    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)));
+    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "matchMask");
+    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "breakMask");
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
     matchMaskAccum->addIncoming(matchMask, stridePrecomputation);
     breakMaskAccum->addIncoming(breakMask, stridePrecomputation);
@@ -408,7 +408,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     matchMaskPhi->addIncoming(matchMask, updateLineInfo);
     PHINode * const matchWordPhi = b->CreatePHI(sizeTy, 2);
     matchWordPhi->addIncoming(sz_ZERO, updateLineInfo);
-    PHINode * const matchNumPhi = b->CreatePHI(sizeTy, 2);
+    PHINode * const matchNumPhi = b->CreatePHI(sizeTy, 2, "matchNumPhi");
     matchNumPhi->addIncoming(currenMatchCount, updateLineInfo);
 
     // If we have any bits in the current matchWordPhi, continue with those, otherwise load
@@ -440,9 +440,18 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * lineStartBase = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx, sw.WIDTH));
     Value * lineStartPos = b->CreateAdd(lineStartBase, lineStartInWord);
     // The break position is the line start for cases (a), (b); otherwise use the pending value.
-    Value * matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
-    b->CreateStore(matchStart, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi), "matchStartStart");
-    b->CreateStore(matchEndPos, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi));
+    Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
+
+    Value * const matchStartPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi);
+    b->CallPrintInt("matchStart", matchStart);
+    b->CallPrintInt("matchStartPtr.LINE_STARTS", matchStartPtr);
+    b->CreateStore(matchStart, matchStartPtr);
+
+    Value * const lineEndsPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi);
+    b->CallPrintInt("matchEndPos", matchEndPos);
+    b->CallPrintInt("matchStartPtr.LINE_ENDS", lineEndsPtr);
+    b->CreateStore(matchEndPos, lineEndsPtr);
+
     if (mLineNumbering) {
         // We must handle cases (a), (b), (c)
         // Get the line number for all positions up to and including the break word.

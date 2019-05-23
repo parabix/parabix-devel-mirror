@@ -50,6 +50,19 @@ Value * IDISA_AVX_Builder::hsimd_signmask(unsigned fw, Value * a) {
     return IDISA_SSE2_Builder::hsimd_signmask(fw, a);
 }
 
+Value * IDISA_AVX_Builder::CreateZeroHiBitsFrom(Value * bits, Value * pos) {
+    Type * Ty = bits->getType();
+    if (hasBMI1 && (Ty == getInt64Ty())) {
+        Value * bzhi_64 = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_bzhi_64);
+        return CreateCall(bzhi_64, {bits, pos});
+    }
+    if (hasBMI1 && (Ty == getInt32Ty())) {
+        Value * bzhi_32 = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_bmi_bzhi_32);
+        return CreateCall(bzhi_32, {bits, pos});
+    }
+    return CBuilder::CreateZeroHiBitsFrom(bits, pos);
+}
+
 std::string IDISA_AVX2_Builder::getBuilderUniqueName() {
     return mBitBlockWidth != 256 ? "AVX2_" + std::to_string(mBitBlockWidth) : "AVX2";
 }

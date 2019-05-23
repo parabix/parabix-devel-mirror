@@ -564,7 +564,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamPort 
         position = b->CreateAdd(position, b->CreateSub(offset, ONE));
     }
 
-    Value * const currentPtr = buffer->getRawItemPointer(b.get(), ZERO, position);
+    Value * const currentPtr = buffer->getRawItemPointer(b, ZERO, position);
     Value * current = b->CreateLoad(currentPtr);
     if (mBranchToLoopExit) {
         current = b->CreateSelect(mBranchToLoopExit, prior, current);
@@ -645,7 +645,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     BasicBlock * const popCountLoopExit =
         b->CreateBasicBlock(prefix + "LoopExit", mKernelLoopCall);
     Value * const baseOffset = mAlreadyProcessedPhi[refPortNum];
-    Value * const baseAddress = buffer->getRawItemPointer(b.get(), ZERO, baseOffset);
+    Value * const baseAddress = buffer->getRawItemPointer(b, ZERO, baseOffset);
     BasicBlock * const popCountEntry = b->GetInsertBlock();
     Value * const initialStrideCount = b->CreateMul(mNumOfLinearStrides, STEP);
     Value * enterLoop = b->CreateICmpNE(initialStrideCount, ZERO);

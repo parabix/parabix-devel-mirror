@@ -26,7 +26,7 @@ class MatchCoordinatesKernel : public MultiBlockKernel {
 public:
     MatchCoordinatesKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                            StreamSet * const Matches, StreamSet * const LineBreakStream,
-                           StreamSet * const Coordinates);
+                           StreamSet * const Coordinates, unsigned strideBlocks = 1);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:

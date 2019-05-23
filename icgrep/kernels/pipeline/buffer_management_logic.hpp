@@ -1146,7 +1146,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
         const BufferNode & bn = mBufferGraph[bufferVertex];
         if (bn.LookBehind) {
             const StreamSetBuffer * const buffer = bn.Buffer;
-            Value * const capacity = buffer->getCapacity(b.get());
+            Value * const capacity = buffer->getCapacity(b);
             Value * const produced = mAlreadyProducedPhi[i];
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Constant * const underflow = b->getSize(bn.LookBehind);
@@ -1166,7 +1166,7 @@ inline void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
         const BufferNode & bn = mBufferGraph[bufferVertex];
         if (bn.CopyBack) {
             const StreamSetBuffer * const buffer = bn.Buffer;
-            Value * const capacity = buffer->getCapacity(b.get());
+            Value * const capacity = buffer->getCapacity(b);
             Value * const priorOffset = b->CreateURem(mAlreadyProducedPhi[i], capacity);
             Value * const produced = mProducedItemCount[i];
             Value * const producedOffset = b->CreateURem(produced, capacity);
@@ -1194,7 +1194,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
 
             const StreamSetBuffer * const buffer = bn.Buffer;
 
-            Value * const capacity = buffer->getCapacity(b.get());
+            Value * const capacity = buffer->getCapacity(b);
             Value * const initial = mInitiallyProducedItemCount[i];
             Value * const produced = mUpdatedProducedPhi[i];
 
@@ -1266,18 +1266,18 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     const auto itemWidth = getItemWidth(buffer->getBaseType());
     const auto blockWidth = b->getBitBlockWidth();
     assert ((itemsToCopy % blockWidth) == 0);
-    Value * const numOfStreams = buffer->getStreamSetCount(b.get());
+    Value * const numOfStreams = buffer->getStreamSetCount(b);
     Value * const overflowSize = b->getSize(itemsToCopy * itemWidth / 8);
     Value * const bytesToCopy = b->CreateMul(overflowSize, numOfStreams);
     Value * source = nullptr;
     Value * target = nullptr;
 
     if (mode == CopyMode::LookAhead) {
-        source = buffer->getBaseAddress(b.get());
-        target = buffer->getOverflowAddress(b.get());
+        source = buffer->getBaseAddress(b);
+        target = buffer->getOverflowAddress(b);
     } else  {
-        source = buffer->getOverflowAddress(b.get());
-        target = buffer->getBaseAddress(b.get());
+        source = buffer->getOverflowAddress(b);
+        target = buffer->getBaseAddress(b);
         if (mode == CopyMode::LookBehind) {
             DataLayout DL(b->getModule());
             Type * const intPtrTy = DL.getIntPtrType(source->getType());
@@ -1312,14 +1312,14 @@ Value * PipelineCompiler::epoch(BuilderRef b,
     Constant * const ZERO = b->getSize(0);
     PointerType * const bufferType = buffer->getPointerType();
     Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
-    Value * const baseAddress = buffer->getBaseAddress(b.get());
-    Value * address = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
+    Value * const baseAddress = buffer->getBaseAddress(b);
+    Value * address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
     if (zeroExtended) {
         // prepareLocalZeroExtendSpace guarantees this will be large enough to satisfy the kernel
         ExternalBuffer tmp(b, binding.getType(), true, buffer->getAddressSpace());
         assert (mZeroExtendBufferPhi);
         Value * zeroExtension = b->CreatePointerCast(mZeroExtendBufferPhi, bufferType);
-        zeroExtension = tmp.getStreamBlockPtr(b.get(), zeroExtension, ZERO, b->CreateNeg(blockIndex));
+        zeroExtension = tmp.getStreamBlockPtr(b, zeroExtension, ZERO, b->CreateNeg(blockIndex));
         address = b->CreateSelect(zeroExtended, zeroExtension, address);
     }
     return b->CreatePointerCast(address, bufferType);

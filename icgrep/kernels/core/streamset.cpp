@@ -18,15 +18,18 @@ namespace llvm { class Function; }
 
 using namespace llvm;
 using IDISA::IDISA_Builder;
-using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+
+using Rational = boost::rational<unsigned>;
 
 namespace kernel {
+
+using BuilderPtr = StreamSetBuffer::BuilderPtr;
 
 LLVM_ATTRIBUTE_NORETURN void unsupported(const char * const function, const char * const bufferType) {
     report_fatal_error(StringRef{function} + " is not supported by " + bufferType + "Buffers");
 }
 
-LLVM_READNONE inline Constant * nullPointerFor(BuilderRef b, Type * type, const unsigned underflow) {
+LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr b, Type * type, const unsigned underflow) {
     if (LLVM_LIKELY(underflow == 0)) {
         return ConstantPointerNull::get(cast<PointerType>(type));
     } else {
@@ -38,11 +41,11 @@ LLVM_READNONE inline Constant * nullPointerFor(BuilderRef b, Type * type, const 
     }
 }
 
-LLVM_READNONE inline Constant * nullPointerFor(BuilderRef b, Value * ptr, const unsigned underflow) {
+LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr b, Value * ptr, const unsigned underflow) {
     return nullPointerFor(b, ptr->getType(), underflow);
 }
 
-LLVM_READNONE inline Value * addUnderflow(BuilderRef b, Value * ptr, const unsigned underflow) {
+LLVM_READNONE inline Value * addUnderflow(BuilderPtr b, Value * ptr, const unsigned underflow) {
     if (LLVM_LIKELY(underflow == 0)) {
         return ptr;
     } else {
@@ -53,7 +56,7 @@ LLVM_READNONE inline Value * addUnderflow(BuilderRef b, Value * ptr, const unsig
     }
 }
 
-LLVM_READNONE inline Value * subtractUnderflow(BuilderRef b, Value * ptr, const unsigned underflow) {
+LLVM_READNONE inline Value * subtractUnderflow(BuilderPtr b, Value * ptr, const unsigned underflow) {
     if (LLVM_LIKELY(underflow == 0)) {
         return ptr;
     } else {
@@ -64,11 +67,11 @@ LLVM_READNONE inline Value * subtractUnderflow(BuilderRef b, Value * ptr, const 
     }
 }
 
-inline Value * StreamSetBuffer::getHandle(IDISA_Builder * const /* b */) const {
+inline Value * StreamSetBuffer::getHandle(BuilderPtr /* b */) const {
     return mHandle;
 }
 
-void StreamSetBuffer::setHandle(BuilderRef b, Value * const handle) const {
+void StreamSetBuffer::setHandle(BuilderPtr b, Value * const handle) const {
     assert ("handle cannot be null!" && handle);
     assert ("handle is not of the correct type" && handle->getType() == getHandlePointerType(b));
     #ifndef NDEBUG
@@ -82,7 +85,7 @@ void StreamSetBuffer::setHandle(BuilderRef b, Value * const handle) const {
     mHandle = handle;
 }
 
-void StreamSetBuffer::assertValidStreamIndex(IDISA_Builder * const b, Value * streamIndex) const {
+void StreamSetBuffer::assertValidStreamIndex(BuilderPtr b, Value * streamIndex) const {
     if (isa<Constant>(streamIndex) || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * const count = getStreamSetCount(b);
         Value * const withinSet = b->CreateICmpULT(b->CreateZExtOrTrunc(streamIndex, count->getType()), count);
@@ -90,17 +93,17 @@ void StreamSetBuffer::assertValidStreamIndex(IDISA_Builder * const b, Value * st
     }
 }
 
-Value * StreamSetBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+Value * StreamSetBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     assertValidStreamIndex(b, streamIndex);
     return b->CreateGEP(baseAddress, {blockIndex, streamIndex});
 }
 
-Value * StreamSetBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * blockIndex, Value * const packIndex) const {
+Value * StreamSetBuffer::getStreamPackPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * blockIndex, Value * const packIndex) const {
     assertValidStreamIndex(b, streamIndex);
     return b->CreateGEP(baseAddress, {blockIndex, streamIndex, packIndex});
 }
 
-Value * StreamSetBuffer::getStreamSetCount(IDISA_Builder * const b) const {
+Value * StreamSetBuffer::getStreamSetCount(BuilderPtr b) const {
     size_t count = 1;
     if (isa<ArrayType>(getBaseType())) {
         count = getBaseType()->getArrayNumElements();
@@ -108,11 +111,11 @@ Value * StreamSetBuffer::getStreamSetCount(IDISA_Builder * const b) const {
     return b->getSize(count);
 }
 
-size_t StreamSetBuffer::getUnderflowCapacity(BuilderRef b) const {
+size_t StreamSetBuffer::getUnderflowCapacity(BuilderPtr b) const {
     return mUnderflow * b->getBitBlockWidth();
 }
 
-size_t StreamSetBuffer::getOverflowCapacity(BuilderRef b) const {
+size_t StreamSetBuffer::getOverflowCapacity(BuilderPtr b) const {
     return mOverflow * b->getBitBlockWidth();
 }
 
@@ -124,32 +127,42 @@ size_t StreamSetBuffer::getOverflowCapacity(BuilderRef b) const {
  * In the case of a stream whose fields are less than one byte (8 bits) in size, the pointer is to the containing byte.
  * The type of the pointer is i8* for fields of 8 bits or less, otherwise iN* for N-bit fields.
  */
-Value * StreamSetBuffer::getRawItemPointer(IDISA_Builder * const b, Value * streamIndex, Value * absolutePosition) const {
-    Value * ptr = getBaseAddress(b);
-    Type * itemTy = mBaseType->getArrayElementType()->getVectorElementType();
+Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Value * absolutePosition) const {
+    Type * const itemTy = mBaseType->getArrayElementType()->getVectorElementType();
+    PointerType * const itemPtrTy = itemTy->getPointerTo(mAddressSpace);
     const auto itemWidth = itemTy->getPrimitiveSizeInBits();
-    assert (is_power_2(itemWidth));
+    const auto blockWidth = b->getBitBlockWidth();
+
     IntegerType * const sizeTy = b->getSizeTy();
     streamIndex = b->CreateZExt(streamIndex, sizeTy);
     absolutePosition = b->CreateZExt(absolutePosition, sizeTy);
 
-    if (LLVM_LIKELY(itemWidth < 8)) {
-        Constant * const itemsPerByte = b->getSize(8 / itemWidth);
+    Value * baseAddress = getBaseAddress(b);
+
+    if (LLVM_UNLIKELY(itemWidth < 8)) {
         if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
-            b->CreateAssertZero(b->CreateURem(absolutePosition, itemsPerByte), "absolutePosition must be byte aligned");
+            const Rational itemsPerByte{8, itemWidth};
+            b->CreateAssertZero(b->CreateURem2(absolutePosition, itemsPerByte),
+                                "absolutePosition must be byte aligned");
         }
-        absolutePosition = b->CreateUDiv(absolutePosition, itemsPerByte);
-        itemTy = b->getInt8Ty();
+        PointerType * const int8PtrTy = b->getInt8PtrTy(mAddressSpace);
+        baseAddress = b->CreatePointerCast(baseAddress, int8PtrTy);
+    } else {
+        baseAddress = b->CreatePointerCast(baseAddress, itemPtrTy);
     }
-    Constant * const itemsPerVector = ConstantExpr::getUDiv(ConstantExpr::getSizeOf(mType), ConstantExpr::getSizeOf(itemTy));
-    Value * blockOffset = b->CreateMul(b->CreateRoundDown(absolutePosition, itemsPerVector), getStreamSetCount(b));
-    Value * const streamOffset = b->CreateMul(streamIndex, itemsPerVector);
-    Value * const itemOffset = b->CreateURem(absolutePosition, itemsPerVector);
+    const Rational streamLength{blockWidth * itemWidth, 8};
+    Value * const blockOffset = b->CreateMul(b->CreateRoundDown2(absolutePosition, streamLength), getStreamSetCount(b));
+    Value * const streamOffset = b->CreateMul2(streamIndex, streamLength);
+    Value * const itemOffset = b->CreateURem2(absolutePosition, streamLength);
     Value * const position = b->CreateAdd(b->CreateAdd(blockOffset, streamOffset), itemOffset);
-    return b->CreateGEP(b->CreatePointerCast(ptr, itemTy->getPointerTo()), position);
+    Value * ptr = b->CreateGEP(baseAddress, position);
+    if (LLVM_UNLIKELY(itemWidth < 8)) {
+        ptr = b->CreatePointerCast(ptr, itemPtrTy);
+    }
+    return ptr;
 }
 
-Value * StreamSetBuffer::addOverflow(BuilderRef b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
+Value * StreamSetBuffer::addOverflow(BuilderPtr b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
     if (overflowItems) {
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             Value * const overflowCapacity = b->getSize(getOverflowCapacity(b));
@@ -167,7 +180,7 @@ Value * StreamSetBuffer::addOverflow(BuilderRef b, Value * const bufferCapacity,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief resolveType
  ** ------------------------------------------------------------------------------------------------------------- */
-Type * StreamSetBuffer::resolveType(BuilderRef b, Type * const streamSetType) {
+Type * StreamSetBuffer::resolveType(BuilderPtr b, Type * const streamSetType) {
     unsigned numElements = 1;
     Type * type = streamSetType;
     if (LLVM_LIKELY(type->isArrayTy())) {
@@ -194,66 +207,66 @@ Type * StreamSetBuffer::resolveType(BuilderRef b, Type * const streamSetType) {
 
 // External Buffer
 
-Type * ExternalBuffer::getHandleType(BuilderRef b) const {
+Type * ExternalBuffer::getHandleType(BuilderPtr b) const {
     PointerType * const ptrTy = getPointerType();
     IntegerType * const sizeTy = b->getSizeTy();
     return StructType::get(b->getContext(), {ptrTy, sizeTy});
 }
 
-void ExternalBuffer::allocateBuffer(BuilderRef /* b */) {
+void ExternalBuffer::allocateBuffer(BuilderPtr /* b */) {
     unsupported("allocateBuffer", "External");
 }
 
-void ExternalBuffer::releaseBuffer(BuilderRef /* b */) const {
+void ExternalBuffer::releaseBuffer(BuilderPtr /* b */) const {
     // this buffer is not responsible for free-ing th data associated with it
 }
 
-void ExternalBuffer::setBaseAddress(IDISA_Builder * const b, Value * const addr) const {
+void ExternalBuffer::setBaseAddress(BuilderPtr b, Value * const addr) const {
     assert (mHandle && "has not been set prior to calling setBaseAddress");
     Value * const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(BaseAddress)});
     b->CreateStore(b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType()), p);
 }
 
-Value * ExternalBuffer::getBaseAddress(IDISA_Builder * const b) const {
+Value * ExternalBuffer::getBaseAddress(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getBaseAddress");
     Value * const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(BaseAddress)});
     return b->CreateLoad(p);
 }
 
-Value * ExternalBuffer::getOverflowAddress(IDISA_Builder * const b) const {
+Value * ExternalBuffer::getOverflowAddress(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getBaseAddress");
     Value * const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(Capacity)});
     return b->CreateLoad(p);
 }
 
-void ExternalBuffer::setCapacity(IDISA_Builder * const b, Value * const capacity) const {
+void ExternalBuffer::setCapacity(BuilderPtr b, Value * const capacity) const {
     assert (mHandle && "has not been set prior to calling setCapacity");
     Value *  const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(Capacity)});
     b->CreateStore(b->CreateZExt(capacity, b->getSizeTy()), p);
 }
 
-Value * ExternalBuffer::getCapacity(IDISA_Builder * const b) const {
+Value * ExternalBuffer::getCapacity(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getCapacity");
     Value * const p = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(Capacity)});
     return b->CreateLoad(p);
 }
 
-Value * ExternalBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const fromPosition, Value * const totalItems, Value * /* overflowItems */) const {
+Value * ExternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * /* overflowItems */) const {
     return b->CreateSub(totalItems, fromPosition);
 }
 
-Value * ExternalBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fromPosition, Value * const /* consumed */, Value * /* overflowItems */) const {
+Value * ExternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const /* consumed */, Value * /* overflowItems */) const {
     assert (fromPosition);
-    Value * const capacity = getCapacity(b.get());
+    Value * const capacity = getCapacity(b);
     assert (fromPosition->getType() == capacity->getType());
     return b->CreateSub(capacity, fromPosition);
 }
 
-Value * ExternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * baseAddress, Value * const streamIndex, Value * /* blockIndex */) const {
+Value * ExternalBuffer::getStreamLogicalBasePtr(BuilderPtr b, Value * baseAddress, Value * const streamIndex, Value * /* blockIndex */) const {
     return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, b->getSize(0));
 }
 
-inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value * blockIndex) const {
+inline void ExternalBuffer::assertValidBlockIndex(BuilderPtr b, Value * blockIndex) const {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * const blockCount = b->CreateCeilUDiv(getCapacity(b), b->getSize(b->getBitBlockWidth()));
         blockIndex = b->CreateZExtOrTrunc(blockIndex, blockCount->getType());
@@ -262,21 +275,21 @@ inline void ExternalBuffer::assertValidBlockIndex(IDISA_Builder * const b, Value
     }
 }
 
-Value * ExternalBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
+Value * ExternalBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
     unsupported("reserveCapacity", "External");
 }
 
 // Internal Buffer
 
-Value * InternalBuffer::getStreamBlockPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+Value * InternalBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, LLVM_UNLIKELY(mLinear) ? blockIndex : modByCapacity(b, blockIndex));
 }
 
-Value * InternalBuffer::getStreamPackPtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
+Value * InternalBuffer::getStreamPackPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
     return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, LLVM_UNLIKELY(mLinear) ? blockIndex : modByCapacity(b, blockIndex), packIndex);
 }
 
-Value * InternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
+Value * InternalBuffer::getStreamLogicalBasePtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     Value * baseBlockIndex = nullptr;
     if (LLVM_UNLIKELY(mLinear)) {
         baseBlockIndex = b->getSize(0);
@@ -286,15 +299,15 @@ Value * InternalBuffer::getStreamLogicalBasePtr(IDISA_Builder * const b, Value *
     return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, baseBlockIndex);
 }
 
-Value * InternalBuffer::getRawItemPointer(IDISA_Builder * const b, Value * const streamIndex, Value * absolutePosition) const {
+Value * InternalBuffer::getRawItemPointer(BuilderPtr b, Value * const streamIndex, Value * absolutePosition) const {
     return StreamSetBuffer::getRawItemPointer(b, streamIndex, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
-Value * InternalBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
+Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
     if (LLVM_UNLIKELY(mLinear)) {
         return b->CreateSub(totalItems, fromPosition);
     } else {
-        Value * const capacity = getCapacity(b.get());
+        Value * const capacity = getCapacity(b);
         Value * const availableItems = b->CreateSub(totalItems, fromPosition);
         Value * const fromOffset = b->CreateURem(fromPosition, capacity);
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
@@ -303,8 +316,8 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderRef b, Value * const f
     }
 }
 
-Value * InternalBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fromPosition, Value * const consumedItems, Value * overflowItems) const {
-    Value * const capacity = getCapacity(b.get());
+Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const consumedItems, Value * overflowItems) const {
+    Value * const capacity = getCapacity(b);
     Value * const unconsumedItems = b->CreateSub(fromPosition, consumedItems);
     if (LLVM_UNLIKELY(mLinear)) {
         return b->CreateSub(capacity, unconsumedItems);
@@ -322,20 +335,20 @@ Value * InternalBuffer::getLinearlyWritableItems(BuilderRef b, Value * const fro
 
 // Static Buffer
 
-Type * StaticBuffer::getHandleType(BuilderRef /* b */) const {
+Type * StaticBuffer::getHandleType(BuilderPtr /* b */) const {
     return getPointerType();
 }
 
-void StaticBuffer::allocateBuffer(BuilderRef b) {
-    Value * const handle = getHandle(b.get());
+void StaticBuffer::allocateBuffer(BuilderPtr b) {
+    Value * const handle = getHandle(b);
     assert (handle && "has not been set prior to calling allocateBuffer");
     Constant * size = b->getSize(mCapacity + mUnderflow + mOverflow);
     Value * const buffer = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
     b->CreateStore(addUnderflow(b, buffer, mUnderflow), handle);
 }
 
-void StaticBuffer::releaseBuffer(BuilderRef b) const {
-    Value * const handle = getHandle(b.get());
+void StaticBuffer::releaseBuffer(BuilderPtr b) const {
+    Value * const handle = getHandle(b);
     Value * buffer = b->CreateLoad(handle);
     b->CreateFree(subtractUnderflow(b, buffer, mUnderflow));
     b->CreateStore(nullPointerFor(b, buffer, mUnderflow), handle);
@@ -345,7 +358,7 @@ inline bool isCapacityGuaranteed(const Value * const index, const size_t capacit
     return isa<ConstantInt>(index) ? cast<ConstantInt>(index)->getLimitedValue() < capacity : false;
 }
 
-Value * StaticBuffer::modByCapacity(IDISA_Builder * const b, Value * const offset) const {
+Value * StaticBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
     assert (offset->getType()->isIntegerTy());
     if (LLVM_UNLIKELY(isCapacityGuaranteed(offset, mCapacity))) {
         return offset;
@@ -358,33 +371,33 @@ Value * StaticBuffer::modByCapacity(IDISA_Builder * const b, Value * const offse
     }
 }
 
-Value * StaticBuffer::getCapacity(IDISA_Builder * const b) const {
+Value * StaticBuffer::getCapacity(BuilderPtr b) const {
     return b->getSize(mCapacity * b->getBitBlockWidth());
 }
 
-void StaticBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) const {
+void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Static");
 }
 
-Value * StaticBuffer::getBaseAddress(IDISA_Builder * const b) const {
+Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
     return b->CreateLoad(getHandle(b));
 }
 
-void StaticBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {
+void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const {
     unsupported("setBaseAddress", "Static");
 }
 
-Value * StaticBuffer::getOverflowAddress(IDISA_Builder * const b) const {
+Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     return b->CreateGEP(getBaseAddress(b), b->getSize(mCapacity));
 }
 
-Value * StaticBuffer::reserveCapacity(BuilderRef /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
+Value * StaticBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
     unsupported("reserveCapacity", "Static");
 }
 
 // Dynamic Buffer
 
-Type * DynamicBuffer::getHandleType(BuilderRef b) const {
+Type * DynamicBuffer::getHandleType(BuilderPtr b) const {
     PointerType * const typePtr = getPointerType();
     IntegerType * const sizeTy = b->getSizeTy();
     FixedArray<Type *, 3> types;
@@ -394,13 +407,13 @@ Type * DynamicBuffer::getHandleType(BuilderRef b) const {
     return StructType::get(b->getContext(), types);
 }
 
-void DynamicBuffer::allocateBuffer(BuilderRef b) {
+void DynamicBuffer::allocateBuffer(BuilderPtr b) {
     assert (mHandle && "has not been set prior to calling allocateBuffer");
     // note: when adding extensible stream sets, make sure to set the initial count here.
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(BaseAddress);
-    Value * const handle = getHandle(b.get());
+    Value * const handle = getHandle(b);
     Value * const baseAddressField = b->CreateGEP(handle, indices);
     Constant * size = b->getSize(mInitialCapacity + mUnderflow + mOverflow);
     Value * const baseAddress = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
@@ -413,9 +426,9 @@ void DynamicBuffer::allocateBuffer(BuilderRef b) {
     b->CreateStore(b->getSize(mInitialCapacity), capacityField);
 }
 
-void DynamicBuffer::releaseBuffer(BuilderRef b) const {
+void DynamicBuffer::releaseBuffer(BuilderPtr b) const {
     /* Free the dynamically allocated buffer(s). */
-    Value * const handle = getHandle(b.get());
+    Value * const handle = getHandle(b);
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(PriorBaseAddress);
@@ -431,22 +444,22 @@ void DynamicBuffer::releaseBuffer(BuilderRef b) const {
     b->CreateStore(nullPtr, baseAddressField);
 }
 
-void DynamicBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {
+void DynamicBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const {
     unsupported("setBaseAddress", "Dynamic");
 }
 
-Value * DynamicBuffer::getBaseAddress(IDISA_Builder * const b) const {
+Value * DynamicBuffer::getBaseAddress(BuilderPtr b) const {
     Value * const ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(BaseAddress)});
     return b->CreateLoad(ptr);
 }
 
-Value * DynamicBuffer::getOverflowAddress(IDISA_Builder * const b) const {
+Value * DynamicBuffer::getOverflowAddress(BuilderPtr b) const {
     Value * const capacityPtr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(Capacity)});
     Value * const capacity = b->CreateLoad(capacityPtr);
     return b->CreateGEP(getBaseAddress(b), capacity);
 }
 
-Value * DynamicBuffer::modByCapacity(IDISA_Builder * const b, Value * const offset) const {
+Value * DynamicBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
     assert (offset->getType()->isIntegerTy());
     if (isCapacityGuaranteed(offset, mInitialCapacity)) {
         return offset;
@@ -457,16 +470,16 @@ Value * DynamicBuffer::modByCapacity(IDISA_Builder * const b, Value * const offs
     }
 }
 
-Value * DynamicBuffer::getCapacity(IDISA_Builder * const b) const {
+Value * DynamicBuffer::getCapacity(BuilderPtr b) const {
     Value * ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(Capacity)});
     return b->CreateMul(b->CreateLoad(ptr), b->getSize(b->getBitBlockWidth()));
 }
 
-void DynamicBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) const {
+void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Dynamic");
 }
 
-Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems) const {
+Value * DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems) const {
 
     SmallVector<char, 200> buf;
     raw_svector_ostream name(buf);
@@ -484,7 +497,7 @@ Value * DynamicBuffer::reserveCapacity(BuilderRef b, Value * const produced, Val
          << '_' << mOverflow
          << '_' << mAddressSpace;
 
-    Value * const myHandle = getHandle(b.get());
+    Value * const myHandle = getHandle(b);
 
     Module * const m = b->getModule();
     Function * func = m->getFunction(name.str());
@@ -702,7 +715,7 @@ void LinearBuffer::allocateBuffer(BuilderRef b) {
 
 void LinearBuffer::releaseBuffer(BuilderRef b) const {
     /* Free the dynamically allocated buffer(s). */
-    Value * const handle = getHandle(b.get());
+    Value * const handle = getHandle(b);
     Value * priorAddressField = b->CreateGEP(handle, {b->getInt32(0), b->getInt32(SecondBufferAddress)});
     Value * priorAddress = b->CreateLoad(priorAddressField);
     b->CreateFree(subtractUnderflow(b, priorAddress, mUnderflow));
@@ -714,27 +727,27 @@ void LinearBuffer::releaseBuffer(BuilderRef b) const {
     b->CreateStore(nullPtr, baseAddressField);
 }
 
-void LinearBuffer::setBaseAddress(IDISA_Builder * const /* b */, Value * /* addr */) const {
+void LinearBuffer::setBaseAddress(BuilderRef /* b */, Value * /* addr */) const {
     unsupported("setBaseAddress", "Linear");
 }
 
-Value * LinearBuffer::getBaseAddress(IDISA_Builder * const b) const {
+Value * LinearBuffer::getBaseAddress(BuilderRef b) const {
     Value * const ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(ReportedAddress)});
     return b->CreateLoad(ptr);
 }
 
-Value * LinearBuffer::getOverflowAddress(IDISA_Builder * const b) const {
+Value * LinearBuffer::getOverflowAddress(BuilderRef b) const {
     Value * const capacityPtr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(FirstCapacity)});
     Value * const capacity = b->CreateLoad(capacityPtr);
     return b->CreateGEP(getBaseAddress(b), capacity);
 }
 
-Value * LinearBuffer::getCapacity(IDISA_Builder * const b) const {
+Value * LinearBuffer::getCapacity(BuilderRef b) const {
     Value * ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(FirstCapacity)});
     return b->CreateMul(b->CreateLoad(ptr), b->getSize(b->getBitBlockWidth()));
 }
 
-void LinearBuffer::setCapacity(IDISA_Builder * const /* b */, Value * /* c */) const {
+void LinearBuffer::setCapacity(BuilderRef /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Linear");
 }
 
@@ -756,7 +769,7 @@ Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * co
     indices[0] = b->getInt32(0);
     indices[1] = b->getInt32(FirstCapacity);
 
-    Value * const handle = getHandle(b.get());
+    Value * const handle = getHandle(b);
     Value * const firstCapacityField = b->CreateGEP(handle, indices);
     Value * const firstBlockCapacity = b->CreateLoad(firstCapacityField);
     Value * const firstCapacity = b->CreateShl(firstBlockCapacity, LOG_2_BIT_BLOCK_WIDTH);
@@ -805,7 +818,7 @@ Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * co
     Value * const consumedOffset = b->CreateLShr(consumed, LOG_2_BIT_BLOCK_WIDTH);
     Value * const consumedAddr = b->CreateGEP(reportedAddr, consumedOffset);
 
-    Value * const numOfStreams = getStreamSetCount(b.get());
+    Value * const numOfStreams = getStreamSetCount(b);
 
     Value * unconsumedBytes = b->CreateMul(unconsumed, numOfStreams);
     if (LLVM_LIKELY(itemWidth < 8)) {
@@ -833,14 +846,14 @@ Value * LinearBuffer::reserveCapacity(BuilderRef b, Value * produced, Value * co
 
 // Constructors
 
-ExternalBuffer::ExternalBuffer(BuilderRef b, Type * const type,
+ExternalBuffer::ExternalBuffer(BuilderPtr b, Type * const type,
                                const bool linear,
                                const unsigned AddressSpace)
 : StreamSetBuffer(BufferKind::ExternalBuffer, b, type, 0, 0, linear, AddressSpace) {
 
 }
 
-StaticBuffer::StaticBuffer(BuilderRef b, Type * const type,
+StaticBuffer::StaticBuffer(BuilderPtr b, Type * const type,
                            const size_t capacity, const size_t overflowSize, const size_t underflowSize,
                            const bool linear, const unsigned AddressSpace)
 : InternalBuffer(BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
@@ -857,7 +870,7 @@ StaticBuffer::StaticBuffer(BuilderRef b, Type * const type,
     assert ("a linear buffer cannot have an overflow" && (!linear || overflowSize == 0));
 }
 
-DynamicBuffer::DynamicBuffer(BuilderRef b, Type * const type,
+DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
                              const size_t initialCapacity, const size_t overflowSize, const size_t underflowSize,
                              const bool linear, const unsigned AddressSpace)
 : InternalBuffer(BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
@@ -874,14 +887,14 @@ DynamicBuffer::DynamicBuffer(BuilderRef b, Type * const type,
     assert ("a linear buffer cannot have an overflow" && (!linear || overflowSize == 0));
 }
 
-inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderRef b, Type * const baseType,
+inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,
                                       const size_t overflowSize, const size_t underflowSize,
                                       const bool linear, const unsigned AddressSpace)
 : StreamSetBuffer(k, b, baseType, overflowSize, underflowSize, linear, AddressSpace) {
 
 }
 
-inline StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderRef b, Type * const baseType,
+inline StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,
                                         const size_t overflowSize, const size_t underflowSize,
                                         const bool linear, const unsigned AddressSpace)
 : mBufferKind(k)

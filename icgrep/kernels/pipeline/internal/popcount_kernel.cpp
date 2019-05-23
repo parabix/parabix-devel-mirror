@@ -21,6 +21,11 @@ bool isNotConstantOne(Value * const value) {
     return !isa<Constant>(value) || !cast<Constant>(value)->isOneValue();
 }
 
+inline static unsigned floor_log2(const unsigned v) {
+    assert ("log2(0) is undefined!" && v != 0);
+    return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
+}
+
 inline static unsigned ceil_log2(const unsigned v) {
     assert ("log2(0) is undefined!" && v != 0);
     return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
@@ -31,10 +36,6 @@ inline static unsigned ceil_log2(const unsigned v) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
 
-
-    BasicBlock * const entry = b->GetInsertBlock();
-    BasicBlock * const popCountLoop = b->CreateBasicBlock("Loop");
-    BasicBlock * const popCountExit = b->CreateBasicBlock("Exit");
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
@@ -82,6 +83,9 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         initialNegativeCount = b->getScalarField(NEGATIVE_COUNT);
     }
 
+    BasicBlock * const entry = b->GetInsertBlock();
+    BasicBlock * const popCountLoop = b->CreateBasicBlock("Loop");
+    BasicBlock * const popCountExit = b->CreateBasicBlock("Exit");
     b->CreateBr(popCountLoop);
 
     b->SetInsertPoint(popCountLoop);
@@ -132,6 +136,9 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
             if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                 value = b->CreateNot(value);
             }
+
+            b->CallPrintRegister("value0", value);
+
             adders[0] = value;
             // load and half-add the subsequent blocks
             for (unsigned i = 1; i < step; ++i) {
@@ -141,20 +148,28 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
                 }
-                const auto k = ceil_log2(i + 1);
-                assert (k < m);
-                for (unsigned j = 0; j < k; ++j) {
-                    Value * const sum_in = adders[j];
+                b->CallPrintRegister("value" + std::to_string(i), value);
+
+                const auto k = floor_log2(i);
+                for (unsigned j = 0; j <= k; ++j) {
+                    Value * const sum_in = adders[j]; assert (sum_in);
                     Value * const sum_out = b->simd_xor(sum_in, value);
                     Value * const carry_out = b->simd_and(sum_in, value);
                     adders[j] = sum_out;
+
+                    b->CallPrintRegister(" adders" + std::to_string(i) + "," + std::to_string(j), sum_out);
+
                     value = carry_out;
                 }
-                adders[k] = value;
+                const auto l = floor_log2(i + 1);
+                adders[l] = value;
+
+                b->CallPrintRegister(" adders" + std::to_string(i) + "," + std::to_string(l) + " *", value);
+
             }
             // sum the half adders
             for (unsigned i = 0; i < m; ++i) {
-                Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(value), sizeTy);
+                Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(adders[i]), sizeTy);
                 if (i == 0) {
                     sum = count;
                 } else {

@@ -723,7 +723,7 @@ void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
                     b->CreateStore(SZ_ONE, b->CreateGEP(traceData, {ZERO, ONE}));
                     // then the initial record
                     b->CreateStore(SZ_ZERO, b->CreateGEP(entryData, {ZERO, ZERO}));
-                    b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(entryData, {ZERO, ONE}));
+                    b->CreateStore(buffer->getCapacity(b), b->CreateGEP(entryData, {ZERO, ONE}));
                     const auto n = entryTy->getArrayNumElements(); assert (n > 3);
                     unsigned sizeTyWidth = b->getSizeTy()->getIntegerBitWidth() / 8;
                     Constant * const length = b->getSize(sizeTyWidth * (n - 2));
@@ -769,7 +769,7 @@ void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const unsigned
         // segment num  0
         b->CreateStore(mSegNo, b->CreateGEP(entryArray, {traceIndex, ZERO}));
         // new capacity 1
-        b->CreateStore(buffer->getCapacity(b.get()), b->CreateGEP(entryArray, {traceIndex, ONE}));
+        b->CreateStore(buffer->getCapacity(b), b->CreateGEP(entryArray, {traceIndex, ONE}));
         // produced item count 2
         Value * const produced = mAlreadyProducedPhi[outputPort];
         b->CreateStore(produced, b->CreateGEP(entryArray, {traceIndex, TWO}));
