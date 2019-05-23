@@ -14,9 +14,11 @@
 //  IEEE-1003.1 XCU section  2.13 Pattern Matching Notation
 
 namespace re {
+    enum class GLOB_kind {Posix, GIT};
     class FileGLOB_Parser : public RE_Parser  {
     public:
-        FileGLOB_Parser(const std::string & glob) : RE_Parser(glob), mExcludeDotContext(true) {
+        FileGLOB_Parser(const std::string & glob, GLOB_kind k = GLOB_kind::Posix) : RE_Parser(glob),
+            mGLOB_kind(k), mPathComponentStartContext(true) {
             mReSyntax = RE_Syntax::FileGLOB;
         }
 
@@ -27,9 +29,9 @@ namespace re {
         RE * parse_bracket_expr();
         RE * range_extend(RE * e1);
     private:
-        bool mExcludeDotContext;
+        GLOB_kind mGLOB_kind;
+        bool mPathComponentStartContext;
     };
 }
-
 
 #endif
