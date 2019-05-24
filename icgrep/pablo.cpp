@@ -44,15 +44,26 @@ WordCountFunctionType wcPipelineGen(CPUDriver & pxDriver, std::shared_ptr<PabloP
     Scalar * const fileDescriptor = P->getInputScalar("fd");
     StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
-    auto CountableStream = ByteStream;
     auto BasisBits = P->CreateStreamSet(8, 1);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-    CountableStream = BasisBits;
+
+    StreamSet * const WhiteSpaceStream = P->CreateStreamSet(1, 1);
+
+    P->CreateKernelCall<pablo::PabloSourceKernel>(
+        parser,
+        source,
+        std::string("CC_WhiteSpace"),
+        kernel::Bindings{{"basisBits", BasisBits}},
+        kernel::Bindings{{"ws", WhiteSpaceStream}},
+        kernel::Bindings{},
+        kernel::Bindings{}
+    );
+
     Kernel * const wck = P->CreateKernelCall<pablo::PabloSourceKernel>(
         parser,
         source,
-        std::string("WordCountKernel"),
-        kernel::Bindings{{"countable", CountableStream}},
+        std::string("WordCountLogic"),
+        kernel::Bindings{{"ws", WhiteSpaceStream}},
         kernel::Bindings{},
         kernel::Bindings{},
         kernel::Bindings{{iBuilder->getInt64Ty(), "wc"}}
