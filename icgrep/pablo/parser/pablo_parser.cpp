@@ -6,15 +6,16 @@
 
 #include "pablo_parser.h"
 
+#include <pablo/parser/kernel_signature.h>
 #include <pablo/parser/source_file.h>
 
 namespace pablo {
 namespace parse {
 
-boost::optional<std::vector<std::unique_ptr<PabloKernel>>> PabloParser::parse(std::string const & filename) {
+bool PabloParser::parseKernel(std::string const & filename, PabloSourceKernel * kernel, std::string const & kernelName) {
     // TODO: handle boost::exception thrown by SourceFile constructor
     std::shared_ptr<SourceFile> source(new SourceFile{filename});
-    return parse(source);
+    return parseKernel(source, kernel, kernelName);
 }
 
 } // namespace pablo::parse

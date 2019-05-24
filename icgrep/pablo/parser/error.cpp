@@ -29,12 +29,12 @@ Error::Error(Error const &other)
 {}
 
 
-Error::Error(ErrorType type, 
-             std::string const & text, 
-             std::shared_ptr<SourceFile> source, 
-             size_t lineNum, 
-             size_t colNum, 
-             std::string const & hint, 
+Error::Error(ErrorType type,
+             std::string const & text,
+             std::shared_ptr<SourceFile> source,
+             size_t lineNum,
+             size_t colNum,
+             std::string const & hint,
              size_t width)
 : type(type)
 , text(text)
@@ -66,6 +66,12 @@ ErrorContext::ErrorContext()
 
 void ErrorManager::log(std::unique_ptr<Error> e) {
     switch (e->type) {
+    case ErrorType::NOTE:
+        if (mContext.useLivePrint) {
+            mContext.outStream << renderError(e);
+        }
+        mErrorList.push_back(std::move(e));
+        break;
     case ErrorType::WARNING:
         if (mContext.useLivePrint) {
             mContext.outStream << renderError(e);
@@ -74,6 +80,8 @@ void ErrorManager::log(std::unique_ptr<Error> e) {
             mErrorList.push_back(std::move(e));
         }
         break;
+    case ErrorType::TEXT_ONLY:
+        /* fallthrough */
     case ErrorType::FATAL:
         mShouldContinue = false;
         /* fallthrough */
@@ -88,6 +96,11 @@ void ErrorManager::log(std::unique_ptr<Error> e) {
         assert ("unexpected error type" && false);
         break;
     }
+}
+
+
+void ErrorManager::logTextError(std::shared_ptr<SourceFile> source, std::string const & text) {
+    log(boost::make_unique<Error>(ErrorType::TEXT_ONLY, text, std::move(source), 0, 0, "", 0));
 }
 
 
@@ -106,6 +119,11 @@ void ErrorManager::logFatalError(std::shared_ptr<SourceFile> source, size_t line
 }
 
 
+void ErrorManager::logNote(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::NOTE, text, std::move(source), lineNum, colNum, hint, /*width*/ 1));
+}
+
+
 void ErrorManager::logError(Token * t, std::string const & text, std::string const & hint) {
     log(boost::make_unique<Error>(ErrorType::ERROR, text, t->getSourceRef(), t->getLineNum(), t->getColNum(), hint, t->getText().length()));
 }
@@ -118,6 +136,11 @@ void ErrorManager::logWarning(Token * t, std::string const & text, std::string c
 
 void ErrorManager::logFatalError(Token * t, std::string const & text, std::string const & hint) {
     log(boost::make_unique<Error>(ErrorType::FATAL, text, t->getSourceRef(), t->getLineNum(), t->getColNum(), hint, t->getText().length()));
+}
+
+
+void ErrorManager::logNote(Token * t, std::string const & text, std::string const & hint) {
+    log(boost::make_unique<Error>(ErrorType::NOTE, text, t->getSourceRef(), t->getLineNum(), t->getColNum(), hint, t->getText().length()));
 }
 
 
@@ -134,12 +157,18 @@ void ErrorManager::dumpErrors() const {
 
 
 std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
+    const std::string BLACK = mContext.canUseColor() ? "\u001b[90m" : "";
     const std::string RED = mContext.canUseColor() ? "\u001b[31m" : "";
     const std::string PURPLE = mContext.canUseColor() ? "\u001b[35m" : "";
     const std::string GREEN = mContext.canUseColor() ? "\u001b[32m" : "";
     const std::string NORMAL = mContext.canUseColor() ? "\u001b[0m" : "";
     std::string errText;
     switch (e->type) {
+    case ErrorType::TEXT_ONLY:
+        errText += RED + "error" + NORMAL;
+        errText += " in " + e->source->getFilename() + "\n";
+        errText += e->text + "\n\n";
+        return errText;
     case ErrorType::FATAL:
     /* fallthrough */
     case ErrorType::ERROR:
@@ -147,6 +176,9 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
         break;
     case ErrorType::WARNING:
         errText += PURPLE + "warning" + NORMAL;
+        break;
+    case ErrorType::NOTE:
+        errText += BLACK + "note" + NORMAL;
         break;
     default:
         assert ("invalid enumeration value" && false);
