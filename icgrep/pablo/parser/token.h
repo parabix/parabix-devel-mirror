@@ -25,6 +25,7 @@ enum class TokenType {
     INT_LITERAL,    // [0-9]+
     INT_TYPE,       // i[1-9][0-9]*
     KERNEL,         // kernel
+    TYPE,           // type
     WHILE,          // while
 
     /* === Symbols === */
@@ -33,6 +34,8 @@ enum class TokenType {
     ASSIGN,         // =
     BAR,            // |
     COMMA,          // ,
+    DOT,            // .
+    MUTABLE_ASSIGN, // :=
     SIG,            // ::
     TILDE,          // ~
     CARET,          // ^
@@ -53,7 +56,7 @@ std::string to_string(TokenType const & type);
 
 /**
  * Contains data about a single pablo token.
- * 
+ *
  * Also exposes static methods for constructing new token instances. New token
  * instances are allocated using a slab allocater.
  */
@@ -77,8 +80,8 @@ public:
     }
 
     template<typename IntType>
-    static Token * CreateIntLiteral(IntType value, size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
-        return Create(TokenType::INT_LITERAL, std::to_string(value), lineNum, colNum, source, static_cast<uint64_t>(value));
+    static Token * CreateIntLiteral(std::string const & text, IntType value, size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::INT_LITERAL, text, lineNum, colNum, source, static_cast<uint64_t>(value));
     }
 
     static Token * CreateIntType(uint_fast16_t size, size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
@@ -87,6 +90,10 @@ public:
 
     static Token * CreateKernel(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::KERNEL, "kernel", lineNum, colNum, source);
+    }
+
+    static Token * CreateType(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::TYPE, "type", lineNum, colNum, source);
     }
 
     static Token * CreateWhile(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
@@ -111,6 +118,14 @@ public:
 
     static Token * CreateComma(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::COMMA, ",", lineNum, colNum, source);
+    }
+
+    static Token * CreateDot(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::DOT, ".", lineNum, colNum, source);
+    }
+
+    static Token * CreateMutableAssign(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::MUTABLE_ASSIGN, ":=", lineNum, colNum, source);
     }
 
     static Token * CreateSig(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {

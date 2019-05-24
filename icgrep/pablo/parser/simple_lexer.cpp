@@ -76,6 +76,8 @@ Token * SimpleLexer::extractText() {
         return Token::CreateIf(mCurrentLineNum, col, mCurrentSource);
     } else if (builder == "while") {
         return Token::CreateWhile(mCurrentLineNum, col, mCurrentSource);
+    } else if (builder == "type") {
+        return Token::CreateType(mCurrentLineNum, col, mCurrentSource);
     } else {
         return Token::CreateIdentifier(builder, mCurrentLineNum, col, mCurrentSource);
     }
@@ -91,7 +93,8 @@ Token * SimpleLexer::extractIntLiteral() {
         mErrorManager->logError(mCurrentSource, mCurrentLineNum, col + 1 /*to 1-indexed*/, errtxt_IllegalIntegerLiteral());
         return nullptr;
     }
-    return Token::CreateIntLiteral(value, mCurrentLineNum, col, mCurrentSource);
+    std::string text = mCurrentLine.substr(col, consumedCount).to_string();
+    return Token::CreateIntLiteral(text, value, mCurrentLineNum, col, mCurrentSource);
 }
 
 
@@ -111,6 +114,9 @@ Token * SimpleLexer::extractSymbol() {
         break;
     case ',':
         token = Token::CreateComma(mCurrentLineNum, col, mCurrentSource);
+        break;
+    case '.':
+        token = Token::CreateDot(mCurrentLineNum, col, mCurrentSource);
         break;
     case '~':
         token = Token::CreateTilde(mCurrentLineNum, col, mCurrentSource);
@@ -145,6 +151,8 @@ Token * SimpleLexer::extractSymbol() {
     case ':':
         if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == ':') {
             token = Token::CreateSig(mCurrentLineNum, col, mCurrentSource);
+        } else if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == '=') {
+            token = Token::CreateMutableAssign(mCurrentLineNum, col, mCurrentSource);
         } else {
             mErrorManager->logError(mCurrentSource, mCurrentLineNum, mCurrentColNum + 1 /*to 1-indexed*/, errtxt_IllegalSymbol(c), "::");
         }

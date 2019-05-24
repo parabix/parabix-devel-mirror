@@ -10,12 +10,15 @@
 
 #include <memory>
 #include <vector>
+#include <llvm/ADT/StringMap.h>
 #include <pablo/parser/error.h>
 #include <pablo/parser/lexer.h>
+#include <pablo/parser/symbol_table.h>
 #include <pablo/parser/token.h>
 
 namespace pablo {
 
+class PabloAST;
 class PabloBuilder;
 
 namespace parse {
@@ -25,38 +28,59 @@ public:
     RecursiveParser() = delete;
     RecursiveParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<ErrorManager> errorDelegate);
 
-    boost::optional<std::vector<std::unique_ptr<PabloKernel>>> parse(std::shared_ptr<SourceFile> sourceFile) override;
+    bool parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) override;
 
     void unparse(std::ostream & out, std::vector<PabloKernel *> const & kernels) override;
 
+    inline std::shared_ptr<ErrorManager> getErrorManager() const override { return mErrorManager; }
+
 private:
 
-    std::unique_ptr<PabloKernel> parseKernelSignature();
-    void parseBlock(PabloBuilder & pb);
-    void parseStatement(PabloBuilder & pb);
-    void parseIf(PabloBuilder & pb);
-    void parseWhile(PabloBuilder & pb);
-    void parseAssign(PabloBuilder & pb);
-    void parseExpression(PabloBuilder & pb);
-    void parseTerm(PabloBuilder & pb);
-    void parsePrimitive(PabloBuilder & pb);
-    void parseLiteral(PabloBuilder & pb);
-    void parseVariable(PabloBuilder & pb);
-    void parseFunctionCall(PabloBuilder & pb);
+    class ParserState {
+    public:
+        ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel);
+        ~ParserState();
 
-    Token * nextToken() { 
-        return mIndex < mTokenList.size() ? mTokenList[mIndex++] : nullptr;
-    }
+        RecursiveParser *   parser;
+        PabloBuilder *      pb;
+        PabloSourceKernel * kernel;
+        size_t              index;
+        SymbolTable *       symbolTable;
 
-    Token * peekToken() const {
-        return mIndex < mTokenList.size() ? mTokenList[mIndex] : nullptr; 
-    }
+        Token * nextToken();
+        Token * peekToken();
+        Token * peekAhead(size_t n);
+
+        void pushSymbolTable();
+        void popSymbolTable();
+    };
+
+
+    void locateKernels();
+
+    boost::optional<PabloKernelSignature> parseKernelSignature(ParserState & state);
+    boost::optional<PabloKernelSignature::SignatureBindings> parseSignatureBindingList(ParserState & state, bool isInput);
+    PabloKernelSignature::Type * parseSigType(ParserState & state);
+    PabloAST * parseBlock(ParserState & state);
+    PabloAST * parseStatement(ParserState & state);
+    PabloAST * parseIf(ParserState & state);
+    PabloAST * parseWhile(ParserState & state);
+    PabloAST * parseAssign(ParserState & state);
+    PabloAST * parseExpression(ParserState & state);
+    PabloAST * extendExpression(PabloAST * lhs, ParserState & state);
+    PabloAST * parseTerm(ParserState & state);
+    PabloAST * extendTerm(PabloAST * lhs, ParserState & state);
+    PabloAST * parseFactor(ParserState & state);
+    PabloAST * parsePrimitive(ParserState & state);
+    PabloAST * parseFunctionCall(ParserState & state);
+    PabloAST * parseVariable(ParserState & state);
+    PabloAST * parseLiteral(ParserState & state);
 
     std::unique_ptr<Lexer>          mLexer;
     std::shared_ptr<ErrorManager>   mErrorManager;
     std::vector<Token *>            mTokenList;
-    size_t                          mIndex;
     std::shared_ptr<SourceFile>     mCurrentSource;
+    llvm::StringMap<size_t>         mKernelLocations;
 };
 
 } // namespace pablo::parse
