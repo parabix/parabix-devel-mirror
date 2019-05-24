@@ -4,8 +4,6 @@
 #include <kernels/pipeline_kernel.h>
 #include <kernels/core/streamset.h>
 #include <kernels/kernel_builder.h>
-#include <kernels/pipeline/regionselectionkernel.h>
-#include <kernels/pipeline/internal/popcount_kernel.h>
 #include <kernels/core/refwrapper.h>
 #include <util/extended_boost_graph_containers.h>
 #include <toolchain/toolchain.h>
@@ -234,8 +232,8 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned CopyBack = 0;
     unsigned LookAhead = 0;
-
     BufferType Type = BufferType::Internal;
+    bool ThreadLocal = false;
 
     ~BufferNode() {
         if (LLVM_LIKELY(Type != BufferType::External)) {
@@ -596,6 +594,7 @@ protected:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void identifySymbolicRates(BufferGraph & G) const;
+    void identifyThreadLocalBuffers(BufferGraph & G) const;
     void computeDataFlow(BufferGraph & G) const;
 
     LLVM_READNONE bool isOpenSystem() const {
@@ -1098,7 +1097,7 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 
 } // end of namespace
 
-#include "pipeline_analysis.hpp"
+#include "analysis/analysis.hpp"
 #include "buffer_management_logic.hpp"
 #include "termination_logic.hpp"
 #include "consumer_logic.hpp"

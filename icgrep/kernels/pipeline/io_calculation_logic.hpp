@@ -284,6 +284,12 @@ Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const unsigned
     if (cycleCounterAccumulator) {
         cycleCounterStart = b->CreateReadCycleCounter();
     }
+
+    // TODO: we need to calculate the total amount required assuming we process all input. This currently
+    // has a flaw in which if the input buffers had been expanded sufficiently yet processing had been
+    // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
+    // which could result in free'ing the "old" buffer twice.
+
     Value * const newlyWritable = buffer->reserveCapacity(b, produced, consumed, required, copyBack);
     recordBufferExpansionHistory(b, outputPort, buffer);
     if (cycleCounterAccumulator) {

@@ -76,7 +76,7 @@ SET(KERNEL_SRC ${KERNEL_SRC} kernels/core/kernel.cpp kernels/core/streamset.cpp 
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/core/kernel_builder.cpp)
 
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/pipeline_kernel.cpp)
-SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/regionselectionkernel.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/internal/regionselectionkernel.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/internal/popcount_kernel.cpp)
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/pipeline/pipeline_builder.cpp)
 
