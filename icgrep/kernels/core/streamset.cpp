@@ -150,7 +150,7 @@ Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Va
     Value * const streamSetOffset = b->CreateMul(baseOffset, streamCount);
     Value * const streamOffset = b->CreateMul(streamIndex, BLOCK_WIDTH);
     Value * const itemOffset = b->CreateURem(absolutePosition, BLOCK_WIDTH);
-    Value * const position = b->CreateOr(b->CreateOr(streamSetOffset, streamOffset), itemOffset);
+    Value * const position = b->CreateAdd(b->CreateAdd(streamSetOffset, streamOffset), itemOffset);
     PointerType * const itemPtrTy = itemTy->getPointerTo(mAddressSpace);
     Value * const baseAddress = b->CreatePointerCast(getBaseAddress(b), itemPtrTy);
     return b->CreateGEP(baseAddress, position);
