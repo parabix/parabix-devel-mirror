@@ -443,13 +443,13 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
 
     Value * const matchStartPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi);
-    b->CallPrintInt("matchStart", matchStart);
-    b->CallPrintInt("matchStartPtr.LINE_STARTS", matchStartPtr);
+//    b->CallPrintInt("matchStart", matchStart);
+//    b->CallPrintInt("matchStartPtr.LINE_STARTS", matchStartPtr);
     b->CreateStore(matchStart, matchStartPtr);
 
     Value * const lineEndsPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi);
-    b->CallPrintInt("matchEndPos", matchEndPos);
-    b->CallPrintInt("matchStartPtr.LINE_ENDS", lineEndsPtr);
+//    b->CallPrintInt("matchEndPos", matchEndPos);
+//    b->CallPrintInt("matchStartPtr.LINE_ENDS", lineEndsPtr);
     b->CreateStore(matchEndPos, lineEndsPtr);
 
     if (mLineNumbering) {

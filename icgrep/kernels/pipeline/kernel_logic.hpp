@@ -697,39 +697,28 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
             Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_zeroFill_packStart", start);
+            b->CallPrintInt(prefix + "_zeroFill_packStart", startInt);
             b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);
             #endif
             b->CreateMemZero(start, remainingPackBytes, blockWidth / 8);
         }
-        Value * const nextStreamIndex = b->CreateAdd(streamIndex, ONE);
         BasicBlock * const maskLoopExit = b->GetInsertBlock();
+        Value * const nextStreamIndex = b->CreateAdd(streamIndex, ONE);
         streamIndex->addIncoming(nextStreamIndex, maskLoopExit);
         Value * const notDone = b->CreateICmpNE(nextStreamIndex, numOfStreams);
         b->CreateCondBr(notDone, maskLoop, maskExit);
 
         b->SetInsertPoint(maskExit);
         // Zero out any blocks we could potentially touch
-
-        // NOTE: this code is clearing more than necessary since it will zero all unconsumed data after
-        // the kernels final production. This allows us to ignore the impact of deferred streams or
-        // streams that are produced/processed at "unaligned" rates (GCD = 1).
-
         if (blocksToZero > 1) {
-            Value * const nextBlockIndex = b->CreateAdd(blockIndex, ONE);
-            Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, nextBlockIndex);
-            Value * const startInt = b->CreatePtrToInt(startPtr, intPtrTy);
-            Value * const consumedIndex = b->CreateLShr(mConsumedItemCount[i], LOG_2_BLOCK_WIDTH);
-            Value * const consumedPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, consumedIndex);
-            Value * const consumedInt = b->CreatePtrToInt(consumedPtr, intPtrTy);
-            Value * bufferEnd = buffer->getOverflowAddress(b);
-            if (numOfLookaheadBlocks) {
-                bufferEnd = b->CreateGEP(bufferEnd, b->getInt32(numOfLookaheadBlocks));
-            }
-            Value * const bufferEndInt = b->CreatePtrToInt(bufferEnd, intPtrTy);
-            Value * const consumedBefore = b->CreateICmpULT(consumedInt, startInt);
-            Value * const endInt = b->CreateSelect(consumedBefore, bufferEndInt, consumedInt);
-            Value * const remainingBytes = b->CreateSub(endInt, startInt);
+            Value * const nextStrideBlockIndex = b->CreateAdd(blockIndex, ONE);
+            Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, nextStrideBlockIndex);
+            Constant * const NUM_OF_BLOCKS = b->getSize(numOfBlocks);
+            Constant * const BLOCKS_TO_ZERO = b->getSize(blocksToZero);
+            Value * const blockOffset = b->CreateURem(nextStrideBlockIndex, NUM_OF_BLOCKS);
+            Value * const remainingBlocks = b->CreateSub(BLOCKS_TO_ZERO, blockOffset);
+            Constant * const BLOCK_SIZE = b->getSize(blockWidth / 8);
+            Value * const remainingBytes = b->CreateMul(remainingBlocks, BLOCK_SIZE);
             #ifdef PRINT_DEBUG_MESSAGES
             b->CallPrintInt(prefix + "_zeroFill_bufferStart", startPtr);
             b->CallPrintInt(prefix + "_zeroFill_remainingBufferBytes", remainingBytes);

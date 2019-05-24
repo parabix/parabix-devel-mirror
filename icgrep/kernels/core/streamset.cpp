@@ -129,37 +129,31 @@ size_t StreamSetBuffer::getOverflowCapacity(BuilderPtr b) const {
  */
 Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Value * absolutePosition) const {
     Type * const itemTy = mBaseType->getArrayElementType()->getVectorElementType();
-    PointerType * const itemPtrTy = itemTy->getPointerTo(mAddressSpace);
     const auto itemWidth = itemTy->getPrimitiveSizeInBits();
-    const auto blockWidth = b->getBitBlockWidth();
 
     IntegerType * const sizeTy = b->getSizeTy();
     streamIndex = b->CreateZExt(streamIndex, sizeTy);
     absolutePosition = b->CreateZExt(absolutePosition, sizeTy);
 
-    Value * baseAddress = getBaseAddress(b);
-
     if (LLVM_UNLIKELY(itemWidth < 8)) {
-        if (codegen::DebugOptionIsSet(codegen::EnableAsserts)) {
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             const Rational itemsPerByte{8, itemWidth};
             b->CreateAssertZero(b->CreateURem2(absolutePosition, itemsPerByte),
                                 "absolutePosition must be byte aligned");
         }
-        PointerType * const int8PtrTy = b->getInt8PtrTy(mAddressSpace);
-        baseAddress = b->CreatePointerCast(baseAddress, int8PtrTy);
-    } else {
-        baseAddress = b->CreatePointerCast(baseAddress, itemPtrTy);
     }
-    const Rational streamLength{blockWidth * itemWidth, 8};
-    Value * const blockOffset = b->CreateMul(b->CreateRoundDown2(absolutePosition, streamLength), getStreamSetCount(b));
-    Value * const streamOffset = b->CreateMul2(streamIndex, streamLength);
-    Value * const itemOffset = b->CreateURem2(absolutePosition, streamLength);
-    Value * const position = b->CreateAdd(b->CreateAdd(blockOffset, streamOffset), itemOffset);
-    Value * ptr = b->CreateGEP(baseAddress, position);
-    if (LLVM_UNLIKELY(itemWidth < 8)) {
-        ptr = b->CreatePointerCast(ptr, itemPtrTy);
-    }
-    return ptr;
+
+    const auto blockWidth = b->getBitBlockWidth();
+    Constant * const BLOCK_WIDTH = b->getSize(blockWidth);
+    Value * const baseOffset = b->CreateRoundDown(absolutePosition, BLOCK_WIDTH);
+    Value * const streamCount = getStreamSetCount(b);
+    Value * const streamSetOffset = b->CreateMul(baseOffset, streamCount);
+    Value * const streamOffset = b->CreateMul(streamIndex, BLOCK_WIDTH);
+    Value * const itemOffset = b->CreateURem(absolutePosition, BLOCK_WIDTH);
+    Value * const position = b->CreateOr(b->CreateOr(streamSetOffset, streamOffset), itemOffset);
+    PointerType * const itemPtrTy = itemTy->getPointerTo(mAddressSpace);
+    Value * const baseAddress = b->CreatePointerCast(getBaseAddress(b), itemPtrTy);
+    return b->CreateGEP(baseAddress, position);
 }
 
 Value * StreamSetBuffer::addOverflow(BuilderPtr b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {

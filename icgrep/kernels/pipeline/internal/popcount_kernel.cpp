@@ -136,9 +136,6 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
             if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                 value = b->CreateNot(value);
             }
-
-            b->CallPrintRegister("value0", value);
-
             adders[0] = value;
             // load and half-add the subsequent blocks
             for (unsigned i = 1; i < step; ++i) {
@@ -148,24 +145,16 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
                 }
-                b->CallPrintRegister("value" + std::to_string(i), value);
-
                 const auto k = floor_log2(i);
                 for (unsigned j = 0; j <= k; ++j) {
                     Value * const sum_in = adders[j]; assert (sum_in);
                     Value * const sum_out = b->simd_xor(sum_in, value);
                     Value * const carry_out = b->simd_and(sum_in, value);
                     adders[j] = sum_out;
-
-                    b->CallPrintRegister(" adders" + std::to_string(i) + "," + std::to_string(j), sum_out);
-
                     value = carry_out;
                 }
                 const auto l = floor_log2(i + 1);
                 adders[l] = value;
-
-                b->CallPrintRegister(" adders" + std::to_string(i) + "," + std::to_string(l) + " *", value);
-
             }
             // sum the half adders
             for (unsigned i = 0; i < m; ++i) {
