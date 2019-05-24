@@ -272,7 +272,8 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
 // kernel state
 {InternalScalar{b->getSizeTy(), "LineNum"},
  InternalScalar{b->getSizeTy(), "LineStart"}}) {
-   setStride(b->getBitBlockWidth() * strideBlocks);
+     // The stride size must be limited so that the scanword mask is a single size_t value.
+     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
 }
 
 void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {

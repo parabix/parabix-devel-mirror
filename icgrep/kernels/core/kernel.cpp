@@ -1816,7 +1816,7 @@ inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
         name += "-Ibranch";
     }
 //    name += "_O" + std::to_string((int)codegen::OptLevel);
-    return name;
+    return std::move(name);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
