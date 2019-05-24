@@ -116,7 +116,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         if (step < 4) {
             for (unsigned i = 0; i < step; ++i) {
                 Constant * const I = b->getSize(i);
-                Value * const idx = b->CreateOr(baseIndex, I);
+                Value * const idx = b->CreateAdd(baseIndex, I);
                 Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
