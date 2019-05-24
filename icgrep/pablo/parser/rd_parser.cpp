@@ -6,7 +6,6 @@
 
 #include "rd_parser.h"
 
-#include <iostream>
 #include <kernels/core/streamset.h>
 #include <llvm/Support/Casting.h>
 #include <pablo/builder.hpp>
@@ -78,6 +77,16 @@ Token * RecursiveParser::ParserState::peekAhead(size_t n) {
         return parser->mTokenList.back();
     }
     return parser->mTokenList[index + n - 1];
+}
+
+
+Token * RecursiveParser::ParserState::prevToken() {
+    assert (parser->mTokenList[index]);
+    if (index > 0) {
+        assert (parser->mTokenList[index - 1]);
+        return parser->mTokenList[index - 1];
+    }
+    return parser->mTokenList[index];
 }
 
 
@@ -337,6 +346,18 @@ PabloAST * RecursiveParser::parseWhile(ParserState & state) {
 PabloAST * RecursiveParser::parseAssign(ParserState & state) {
     Token * const assignee = state.nextToken();
     assert (assignee->getType() == TokenType::IDENTIFIER);
+    Token * index = nullptr;
+    if (state.peekToken()->getType() == TokenType::L_SBRACE) {
+        state.nextToken(); // consume '['
+        index = state.nextToken();
+        TOKEN_CHECK_FATAL(index, TokenType::INT_LITERAL, "expected integer literal");
+        TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_SBRACE, "expected ']'");
+    } else if (state.peekToken()->getType() == TokenType::DOT) {
+        state.nextToken(); // consume '.'
+        index = state.nextToken();
+        TOKEN_CHECK_FATAL(index, TokenType::IDENTIFIER, "expected name");
+    }
+
     Token * const op = state.nextToken();
     if (op->getType() != TokenType::ASSIGN && op->getType() != TokenType::MUTABLE_ASSIGN) {
         mErrorManager->logFatalError(op, errtxt_UnexpectedToken(op), "expected '=' or ':='");
@@ -344,11 +365,23 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
     }
 
     PabloAST * const expr = parseExpression(state);
+    if (expr == nullptr) {
+        return nullptr;
+    }
     if (op->getType() == TokenType::ASSIGN) {
-        return state.symbolTable->assign(assignee, expr);
+        if (index == nullptr) {
+            return state.symbolTable->assign(assignee, expr);
+        } else {
+            return state.symbolTable->indexedAssign(assignee, index, expr);
+        }
     } else {
-        assert (op->getType() == TokenType::MUTABLE_ASSIGN);
-        return state.symbolTable->createVar(assignee, expr);
+        if (index == nullptr) {
+            assert (op->getType() == TokenType::MUTABLE_ASSIGN);
+            return state.symbolTable->createVar(assignee, expr);
+        } else {
+            mErrorManager->logFatalError(op, "unnecessary mutable indexed assign", "use '=' instead");
+            return nullptr;
+        }
     }
 }
 
@@ -455,8 +488,34 @@ PabloAST * RecursiveParser::parsePrimitive(ParserState & state) {
 
 
 PabloAST * RecursiveParser::parseFunctionCall(ParserState & state) {
-    mErrorManager->logError(state.peekToken(), "function calls are not supported yet");
-    return nullptr;
+    Token * const identifier = state.nextToken();
+    assert (identifier->getType() == TokenType::IDENTIFIER);
+    TOKEN_CHECK_FATAL(state.nextToken(), TokenType::L_PAREN, "expected '('");
+    std::vector<Token *> argTokens{};
+    std::vector<PabloAST *> args{};
+    if (state.peekToken()->getType() != TokenType::R_PAREN) {
+        Token * argStartToken = state.peekToken();
+        PabloAST * arg = parseExpression(state);
+        if (arg == nullptr) {
+            return nullptr;
+        }
+        Token * argEndToken = state.prevToken();
+        argTokens.push_back(Token::CreateImaginaryField(argStartToken, argEndToken));
+        args.push_back(arg);
+        while (state.peekToken()->getType() == TokenType::COMMA) {
+            state.nextToken(); // consume ','
+            argStartToken = state.peekToken();
+            arg = parseExpression(state);
+            if (arg == nullptr) {
+                return nullptr;
+            }
+            argEndToken = state.prevToken();
+            argTokens.push_back(Token::CreateImaginaryField(argStartToken, argEndToken));
+            args.push_back(arg);
+        }
+    }
+    TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_PAREN, "expected ')'");
+    return createFunctionCall(state, identifier, argTokens, args);
 }
 
 
@@ -481,8 +540,8 @@ PabloAST * RecursiveParser::parseLiteral(ParserState & state) {
     Token * const peek = state.peekToken();
     TokenType peekType = peek->getType();
     if (peekType == TokenType::INT_LITERAL) {
-        mErrorManager->logFatalError(peek, "scalar int literals are not supported yet");
-        return nullptr;
+        Token * integer = state.nextToken();
+        return llvm::cast<PabloAST>(state.pb->getInteger((int64_t) integer->getValue()));
     } else if (peekType == TokenType::L_ANGLE) {
         state.nextToken(); // consume '<'
         Token * const i = state.nextToken();
@@ -502,6 +561,133 @@ PabloAST * RecursiveParser::parseLiteral(ParserState & state) {
         mErrorManager->logFatalError(peek, errtxt_UnexpectedToken(peek), "expected scalar or stream literal");
         return nullptr;
     }
+}
+
+
+typedef PabloAST *(*FnGen)(ErrorManager * em, 
+                           Token * funcToken, 
+                           std::vector<Token *> const & argTokens, 
+                           PabloBuilder *, 
+                           std::vector<PabloAST *> const &);
+
+static std::unique_ptr<llvm::StringMap<FnGen>> functionGenMap = nullptr;
+
+#define FUNC_GEN_DEF(FUNCTION, BODY) \
+functionGenMap->insert({FUNCTION, [](ErrorManager * em, Token * funcToken, std::vector<Token *> const & argTokens, PabloBuilder * pb, std::vector<PabloAST *> const & args) -> PabloAST * BODY})
+
+#define ASSERT_ARG_NUM(COUNT) \
+if (args.size() != COUNT) {\
+    em->logFatalError(funcToken, errtxt_InvalidArgNum(funcToken->getText(), COUNT)); \
+    return nullptr; \
+}
+
+#define ASSERT_ARG_TYPE_INT(ARG_IDX) \
+if (!llvm::isa<Integer>(args[(ARG_IDX)])) { \
+    em->logFatalError(argTokens[(ARG_IDX)], errtxt_InvalidArgType(), "expected 'integer'"); \
+    return nullptr; \
+}
+
+static inline void lazyInitializeFunctionGenMap() {
+    if (functionGenMap != nullptr) {
+        return;
+    } else {
+        functionGenMap = std::unique_ptr<llvm::StringMap<FnGen>>(new llvm::StringMap<FnGen>{});
+    }
+
+    FUNC_GEN_DEF("advance", {
+        ASSERT_ARG_NUM(2);
+        ASSERT_ARG_TYPE_INT(1);
+        return pb->createAdvance(args[0], llvm::cast<Integer>(args[1]));
+    });
+
+    FUNC_GEN_DEF("indexedAdvance", {
+        ASSERT_ARG_NUM(3);
+        ASSERT_ARG_TYPE_INT(1);
+        return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[3]));
+    });
+
+    FUNC_GEN_DEF("lookahead", {
+        ASSERT_ARG_NUM(2);
+        ASSERT_ARG_TYPE_INT(1);
+        return pb->createLookahead(args[0], llvm::cast<Integer>(args[1]));
+    });
+
+    FUNC_GEN_DEF("repeat", {
+        ASSERT_ARG_NUM(2);
+        ASSERT_ARG_TYPE_INT(0);
+        return pb->createRepeat(llvm::cast<Integer>(args[0]), args[1]);
+    });
+    
+    FUNC_GEN_DEF("packL", {
+        ASSERT_ARG_NUM(2);
+        ASSERT_ARG_TYPE_INT(0);
+        return pb->createPackL(llvm::cast<Integer>(args[0]), args[1]);
+    });
+    
+    FUNC_GEN_DEF("packH", {
+        ASSERT_ARG_NUM(2);
+        ASSERT_ARG_TYPE_INT(0);
+        return pb->createPackH(llvm::cast<Integer>(args[0]), args[1]);
+    });
+
+    FUNC_GEN_DEF("matchStar", {
+        ASSERT_ARG_NUM(2);
+        return pb->createMatchStar(args[0], args[1]);
+    });
+
+    FUNC_GEN_DEF("scanThru", {
+        ASSERT_ARG_NUM(2);
+        return pb->createScanThru(args[0], args[1]);
+    });
+
+    FUNC_GEN_DEF("scanTo", {
+        ASSERT_ARG_NUM(2);
+        return pb->createScanTo(args[0], args[1]);
+    });
+
+
+    FUNC_GEN_DEF("advanceThenScanThru", {
+        ASSERT_ARG_NUM(2);
+        return pb->createAdvanceThenScanThru(args[0], args[1]);
+    });
+
+    FUNC_GEN_DEF("advanceThenScanTo", {
+        ASSERT_ARG_NUM(2);
+        return pb->createAdvanceThenScanTo(args[0], args[1]);
+    });
+
+    FUNC_GEN_DEF("sel", {
+        ASSERT_ARG_NUM(3);
+        return pb->createSel(args[0], args[1], args[2]);
+    });
+
+    FUNC_GEN_DEF("count", {
+        ASSERT_ARG_NUM(1);
+        return pb->createCount(args[0]);
+    });
+
+    FUNC_GEN_DEF("inFile", {
+        ASSERT_ARG_NUM(1);
+        return pb->createInFile(args[0]);
+    });
+
+    FUNC_GEN_DEF("atEOF", {
+        ASSERT_ARG_NUM(1);
+        return pb->createAtEOF(args[0]);
+    });
+}
+
+
+PabloAST * RecursiveParser::createFunctionCall(ParserState & state, Token * func, std::vector<Token *> const & argTokens, std::vector<PabloAST *> const & args) {
+    assert (argTokens.size() == args.size());
+    lazyInitializeFunctionGenMap();
+    std::string id = func->getText();
+    auto it = functionGenMap->find(id);
+    if (it == functionGenMap->end()) {
+        mErrorManager->logFatalError(func, errtxt_UndefinedFunction(id));
+        return nullptr;
+    }
+    return (it->getValue())(mErrorManager.get(), func, argTokens, state.pb, args);
 }
 
 

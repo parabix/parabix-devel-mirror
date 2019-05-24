@@ -50,6 +50,7 @@ private:
         Token * nextToken();
         Token * peekToken();
         Token * peekAhead(size_t n);
+        Token * prevToken();
 
         void pushSymbolTable();
         void popSymbolTable();
@@ -75,6 +76,8 @@ private:
     PabloAST * parseFunctionCall(ParserState & state);
     PabloAST * parseVariable(ParserState & state);
     PabloAST * parseLiteral(ParserState & state);
+
+    PabloAST * createFunctionCall(ParserState & state, Token * func, std::vector<Token *> const & argTokens, std::vector<PabloAST *> const & args);
 
     std::unique_ptr<Lexer>          mLexer;
     std::shared_ptr<ErrorManager>   mErrorManager;

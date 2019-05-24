@@ -60,5 +60,17 @@ inline std::string errtxt_NonIndexableSymbol(std::string const & name) {
     return "'" + name + "' is of a non-indexable type";
 }
 
+inline std::string errtxt_InvalidArgNum(std::string const & funcName, size_t expectedNum) {
+    return "invalid number of arguments for '" + funcName + "', expected " + std::to_string(expectedNum);
+}
+
+inline std::string errtxt_InvalidArgType() {
+    return "invalid argument type";
+}
+
+inline std::string errtxt_UndefinedFunction(std::string const & name) {
+    return "undefined function '" + name + "'";
+}
+
 } // namespace pablo::parse
 } // namespace pablo

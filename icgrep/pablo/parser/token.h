@@ -49,6 +49,8 @@ enum class TokenType {
     R_BRACE,        // }
     L_ANGLE,        // <
     R_ANGLE,        // >
+
+    IMAGINARY_FIELD // not an actual token, used for error messages
 };
 
 std::string to_string(TokenType const & type);
@@ -170,6 +172,14 @@ public:
 
     static Token * CreateRAngle(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::R_ANGLE, ">", lineNum, colNum, source);
+    }
+
+    static Token * CreateImaginaryField(Token * start, Token * end) {
+        if (start == end) {
+            return start;
+        }
+        size_t width = start->mLineNum == end->mLineNum ? (end->mColNum + end->mText.length()) - start->mColNum : 1;
+        return Create(TokenType::IMAGINARY_FIELD, std::string(width, ' '),  start->mLineNum, start->mColNum - 1, start->mSourceRef);
     }
 
 public:
