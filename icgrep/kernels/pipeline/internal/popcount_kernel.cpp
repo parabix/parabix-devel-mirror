@@ -26,11 +26,6 @@ inline static unsigned floor_log2(const unsigned v) {
     return ((sizeof(unsigned) * CHAR_BIT) - 1U) - __builtin_clz(v);
 }
 
-inline static unsigned ceil_log2(const unsigned v) {
-    assert ("log2(0) is undefined!" && v != 0);
-    return (sizeof(unsigned) * CHAR_BIT) - __builtin_clz(v - 1U);
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiBlockLogic
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -47,6 +42,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
     assert (rv.denominator() == 1);
     const auto inputWidth = rv.numerator();
     const auto blockWidth = b->getBitBlockWidth();
+    const auto sizeWidth = sizeTy->getBitWidth();
 
     if (isNotConstantOne(b->getInputStreamSetCount(INPUT))) {
         report_fatal_error("PopCount input stream must be a single stream");
@@ -112,6 +108,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         Constant * const STEP = b->getSize(step);
         Value * const baseIndex = b->CreateMul(index, STEP);
 
+        Value * partialSumVector = nullptr;
         // half adder will require the same number of pop count steps when n < 4
         if (step < 4) {
             for (unsigned i = 0; i < step; ++i) {
@@ -121,15 +118,15 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
                 }
-                Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(value), sizeTy);
+                Value * const count = b->simd_popcount(sizeWidth, value);
                 if (i == 0) {
-                    sum = count;
+                    partialSumVector = count;
                 } else {
-                    sum = b->CreateAdd(sum, count);
+                    partialSumVector = b->CreateAdd(partialSumVector, count);
                 }
             }
         } else {
-            const auto m = ceil_log2(step + 2);
+            const auto m = floor_log2(step + 1) + 1;
             SmallVector<Value *, 64> adders(m);
             // load the first block
             Value * value = b->loadInputStreamBlock(INPUT, ZERO, baseIndex);
@@ -140,7 +137,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
             // load and half-add the subsequent blocks
             for (unsigned i = 1; i < step; ++i) {
                 Constant * const I = b->getSize(i);
-                Value * const idx = b->CreateOr(baseIndex, I);
+                Value * const idx = b->CreateAdd(baseIndex, I);
                 Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
@@ -154,18 +151,25 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
                     value = carry_out;
                 }
                 const auto l = floor_log2(i + 1);
-                adders[l] = value;
+                if (k < l) {
+                    adders[l] = value;
+                }
             }
             // sum the half adders
             for (unsigned i = 0; i < m; ++i) {
-                Value * const count = b->CreateZExtOrTrunc(b->bitblock_popcount(adders[i]), sizeTy);
+                Value * const count = b->simd_popcount(sizeWidth, adders[i]);
                 if (i == 0) {
-                    sum = count;
+                    partialSumVector = count;
                 } else {
-                    sum = b->CreateAdd(sum, b->CreateShl(count, i));
+                    partialSumVector = b->CreateAdd(partialSumVector, b->CreateShl(count, i));
                 }
             }
         }
+
+        const auto field = blockWidth / sizeWidth;
+        assert (blockWidth % sizeWidth == 0);
+        Value * const partialSum = b->hsimd_partial_sum(sizeWidth, partialSumVector);
+        sum = b->mvmd_extract(sizeWidth, partialSum, field - 1);
     }
 
     Value * positivePartialSum = nullptr;
