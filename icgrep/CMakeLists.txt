@@ -52,7 +52,7 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit nat
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.46 REQUIRED COMPONENTS system filesystem iostreams)
+find_package(Boost 1.61 REQUIRED COMPONENTS system filesystem iostreams)
 message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
 
 include_directories("${Boost_INCLUDE_DIRS}")
