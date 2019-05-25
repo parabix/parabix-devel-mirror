@@ -22,6 +22,8 @@
 #include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
 #include <llvm/Support/raw_ostream.h>
 
+#include <pablo/printer_pablos.h>
+
 using namespace boost;
 using namespace boost::container;
 using namespace llvm;
@@ -88,7 +90,7 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
     ExpressionTable expressions(et);
     VariableTable variables(vt);
 
-    if (Branch * br = block->getBranch()) {
+    if (While * br = dyn_cast_or_null<While>(block->getBranch())) {
         assert ("block has a branch but the expression and variable tables were not supplied" && et && vt);
         for (Var * var : br->getEscaped()) {
             variables.put(var, var);
@@ -121,7 +123,6 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
                 continue;
             }
             variables.put(var, value);
-
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
 
             Branch * const br = cast<Branch>(stmt);
@@ -165,7 +166,6 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
             }
 
         } else {
-
             // demote any uses of any Var whose value is in scope
             for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
                 PabloAST * op = stmt->getOperand(i);
@@ -644,14 +644,17 @@ static bool isTrivial(const PabloBlock * const block) {
  ** ------------------------------------------------------------------------------------------------------------- */
 static Statement * flatten(Branch * const br) {
     Statement * stmt = br;
-    Statement * nested = br->getBody()->front();
+    Statement * const first = br->getBody()->front();
+    Statement * nested = first;
     while (nested) {
         Statement * next = nested->removeFromParent();
         nested->insertAfter(stmt);
         stmt = nested;
         nested = next;
     }
-    return br->eraseFromParent();
+    Statement * const result = br->eraseFromParent();
+    assert (first == nullptr || result == first);
+    return result;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
