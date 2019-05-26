@@ -73,7 +73,7 @@ static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable exp
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
 static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(true));
 static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
-static cl::opt<int> MatchCoordinateBlocks("match-coordinates", cl::desc("Enable experimental MatchCoordinates kernels with a given number of blocks per stride"), cl::init(0));
+static cl::opt<int> MatchCoordinateBlocks("match-coordinates", cl::desc("Enable experimental MatchCoordinates kernels with a given number of blocks per stride"), cl::init(1));
 const unsigned DefaultByteCClimit = 6;
 
 unsigned ByteCClimit;
@@ -89,9 +89,27 @@ void GrepCallBackObject::handle_signal(unsigned s) {
     }
 }
 
+const unsigned CoordsPerMatch = 3;
+enum MatchCoordinatesEnum {LINE_STARTS = 0, LINE_ENDS = 1, LINE_NUMBERS = 2};
+#define line_start(coordIdx)  coords[coordIdx + LINE_STARTS]
+#define line_end(coordIdx)  coords[coordIdx + LINE_ENDS]
+#define line_num(coordIdx)  coords[coordIdx + LINE_NUMBERS]
+#define line_num1(coordIdx)  coords[coordIdx + LINE_NUMBERS] + 1
+#define line_length(coordIdx)  coords[coordIdx + LINE_ENDS] - coords[coordIdx + LINE_STARTS] + 1
+
+void MatchAccumulator::report_matches(char * buffer_base, size_t coordsCount, size_t * coords) {
+    for (unsigned i = 0; i < coordsCount; i+=CoordsPerMatch) {
+        accumulate_match(line_num(i), &buffer_base[line_start(i)], &buffer_base[line_end(i)]);
+    }
+}
+
 extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end) {
     assert ("passed a null accumulator" && accum_addr);
     reinterpret_cast<MatchAccumulator *>(accum_addr)->accumulate_match(lineNum, line_start, line_end);
+}
+
+extern "C" void report_matches_wrapper(intptr_t accum_addr, char * buffer_base, size_t coordsCount, size_t * coords) {
+    reinterpret_cast<MatchAccumulator *>(accum_addr)->report_matches(buffer_base, coordsCount, coords);
 }
 
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
@@ -455,6 +473,52 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
         }
     }
 }
+    
+void EmitMatch::report_matches(char * buffer_base, size_t coordsCount, size_t * coords) {
+    if (coordsCount == 0) return;
+    std::string colonSep = ":";
+    if (mInitialTab) colonSep = "\t:";
+    if (mShowLineNumbers && mShowByteNumbers) {
+        for (unsigned i = 0; i < coordsCount; i+=CoordsPerMatch) {
+            mResultStr << mLinePrefix << line_num1(i) << colonSep << line_start(i) << colonSep;
+            mResultStr.write(&buffer_base[line_start(i)], line_length(i));
+            mLineCount++;
+        }
+    } else if (mShowLineNumbers) {
+        for (unsigned i = 0; i < coordsCount; i+=CoordsPerMatch) {
+            mResultStr << mLinePrefix << line_num1(i) << colonSep;
+            mResultStr.write(&buffer_base[line_start(i)], line_length(i));
+            mLineCount++;
+        }
+    } else if (mShowByteNumbers) {
+        for (unsigned i = 0; i < coordsCount; i+=CoordsPerMatch) {
+            mResultStr << mLinePrefix << line_start(i) << colonSep;
+            mResultStr.write(&buffer_base[line_start(i)], line_length(i));
+            mLineCount++;
+       }
+    } else {
+        for (unsigned i = 0; i < coordsCount; i+=CoordsPerMatch) {
+            mResultStr << mLinePrefix;
+            mResultStr.write(&buffer_base[line_start(i)], line_length(i));
+            mLineCount++;
+       }
+    }
+    unsigned last_byte_pos = line_end(coordsCount-3);
+    unsigned last_byte = buffer_base[last_byte_pos];
+    mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
+    if (LLVM_UNLIKELY(!mTerminated)) {
+        if (last_byte == 0x85) {  //  Possible NEL terminator.
+            mTerminated = (last_byte_pos >= 1) && (static_cast<unsigned>(buffer_base[last_byte_pos-1]) == 0xC2);
+        }
+        else {
+            // Possible LS or PS terminators.
+            mTerminated = (last_byte_pos >= 2) && (static_cast<unsigned>(buffer_base[last_byte_pos-2]) == 0xE2)
+                                       && (static_cast<unsigned>(buffer_base[last_byte_pos-1]) == 0x80)
+                                       && ((last_byte == 0xA8) || (last_byte == 0xA9));
+        }
+    }
+}
+
 
 void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) mResultStr << "\n";
@@ -483,11 +547,11 @@ void EmitMatchesEngine::grepCodeGen() {
     std::tie(LineBreakStream, Matches) = grepPipeline(E, ByteStream);
 
     if (MatchCoordinateBlocks > 0) {
-        StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
+        StreamSet * MatchCoords = E->CreateStreamSet(1, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(Matches, LineBreakStream, MatchCoords, MatchCoordinateBlocks);
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
         Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, callbackObject);
-        mGrepDriver.LinkFunction(matchK, "accumulate_match_wrapper", accumulate_match_wrapper);
+        mGrepDriver.LinkFunction(matchK, "report_matches_wrapper", report_matches_wrapper);
         mGrepDriver.LinkFunction(matchK, "finalize_match_wrapper", finalize_match_wrapper);
     } else {
         Scalar * const callbackObject = E->getInputScalar("callbackObject");

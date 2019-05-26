@@ -264,7 +264,7 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
 // inputs
 {Binding{"matchResult", Matches}, Binding{"lineBreak", LineBreakStream}},
 // outputs
-{Binding{"Coordinates", Coordinates, PopcountOf("matchResult")}},
+{Binding{"Coordinates", Coordinates, BoundedRate(0,3)}},
 // input scalars
 {},
 // output scalars
@@ -272,12 +272,11 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
 // kernel state
 {InternalScalar{b->getSizeTy(), "LineNum"},
  InternalScalar{b->getSizeTy(), "LineStart"}}) {
-     // The stride size must be limited so that the scanword mask is a single size_t value.
-     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+  setStride(b->getBitBlockWidth() * strideBlocks);
 }
 
 void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
-    const bool mLineNumbering = true;
+    bool mLineNumbering = true;
 
     // Determine the parameters for two-level scanning.
     ScanWordParameters sw(b, mStride);
@@ -286,6 +285,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
+    Constant * sz_COORDINATES = mLineNumbering ? b->getSize(3) : b->getSize(2);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_MAXBIT = b->getSize(SIZE_T_BITS - 1);
     Type * sizeTy = b->getSizeTy();
@@ -312,15 +312,15 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         // Bitcast the lineNumberArrayptr to access by scanWord number
         lineCountArrayWordPtr = b->CreateBitCast(lineCountArrayBlockPtr, sw.pointerTy);
     }
-    Value * const initialMatchCount = b->getProducedItemCount("Coordinates");
+    Value * const initialCoordCount = b->getProducedItemCount("Coordinates");
     b->CreateBr(stridePrologue);
 
     b->SetInsertPoint(stridePrologue);
     // Set up the loop variables as PHI nodes at the beginning of each stride.
     PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
     strideNo->addIncoming(sz_ZERO, entryBlock);
-    PHINode * const currenMatchCount = b->CreatePHI(sizeTy, 2);
-    currenMatchCount->addIncoming(initialMatchCount, entryBlock);
+    PHINode * const currenCoordCount = b->CreatePHI(sizeTy, 2);
+    currenCoordCount->addIncoming(initialCoordCount, entryBlock);
     PHINode * const pendingLineStart = b->CreatePHI(sizeTy, 2);
     pendingLineStart->addIncoming(initialLineStart, entryBlock);
     PHINode * pendingLineNum = nullptr;
@@ -409,8 +409,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     matchMaskPhi->addIncoming(matchMask, updateLineInfo);
     PHINode * const matchWordPhi = b->CreatePHI(sizeTy, 2);
     matchWordPhi->addIncoming(sz_ZERO, updateLineInfo);
-    PHINode * const matchNumPhi = b->CreatePHI(sizeTy, 2, "matchNumPhi");
-    matchNumPhi->addIncoming(currenMatchCount, updateLineInfo);
+    PHINode * const coordNumPhi = b->CreatePHI(sizeTy, 2, "coordNumPhi");
+    coordNumPhi->addIncoming(currenCoordCount, updateLineInfo);
 
     // If we have any bits in the current matchWordPhi, continue with those, otherwise load
     // the next match word.
@@ -441,18 +441,9 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * lineStartBase = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx, sw.WIDTH));
     Value * lineStartPos = b->CreateAdd(lineStartBase, lineStartInWord);
     // The break position is the line start for cases (a), (b); otherwise use the pending value.
-    Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
-
-    Value * const matchStartPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi);
-//    b->CallPrintInt("matchStart", matchStart);
-//    b->CallPrintInt("matchStartPtr.LINE_STARTS", matchStartPtr);
-    b->CreateStore(matchStart, matchStartPtr);
-
-    Value * const lineEndsPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi);
-//    b->CallPrintInt("matchEndPos", matchEndPos);
-//    b->CallPrintInt("matchStartPtr.LINE_ENDS", lineEndsPtr);
-    b->CreateStore(matchEndPos, lineEndsPtr);
-
+    Value * matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
+    b->CreateStore(matchStart, b->getRawOutputPointer("Coordinates", b->CreateAdd(b->getInt32(LINE_STARTS), coordNumPhi)));
+    b->CreateStore(matchEndPos, b->getRawOutputPointer("Coordinates", b->CreateAdd(b->getInt32(LINE_ENDS), coordNumPhi)));
     if (mLineNumbering) {
         // We must handle cases (a), (b), (c)
         // Get the line number for all positions up to and including the break word.
@@ -463,7 +454,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         // For case (c), there are no line breaks.
         lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, sz_ZERO);
         Value * lineNum = b->CreateAdd(pendingLineNum, lineCountInStride);
-        b->CreateStore(lineNum, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_NUMBERS), matchNumPhi));
+        b->CreateStore(lineNum, b->getRawOutputPointer("Coordinates", b->CreateAdd(b->getInt32(LINE_NUMBERS), coordNumPhi)));
         //b->CallPrintInt("  lineNum", lineNum);
     }
     //  We've dealt with the match, now prepare for the next one, if any.
@@ -475,15 +466,15 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     BasicBlock * currentBB = b->GetInsertBlock();
     matchMaskPhi->addIncoming(nextMatchMask, currentBB);
     matchWordPhi->addIncoming(dropMatch, currentBB);
-    Value * nextMatchNum = b->CreateAdd(matchNumPhi, sz_ONE);
-    matchNumPhi->addIncoming(nextMatchNum, currentBB);
+    Value * nextCoordNum = b->CreateAdd(coordNumPhi, sz_COORDINATES);
+    coordNumPhi->addIncoming(nextCoordNum, currentBB);
     b->CreateCondBr(b->CreateICmpNE(nextMatchMask, sz_ZERO), strideCoordinateLoop, strideCoordinatesDone);
 
     b->SetInsertPoint(strideCoordinatesDone);
-    PHINode * finalStrideMatchCount = b->CreatePHI(sizeTy, 3);
-    finalStrideMatchCount->addIncoming(currenMatchCount, strideMasksReady);
-    finalStrideMatchCount->addIncoming(currenMatchCount, updateLineInfo);
-    finalStrideMatchCount->addIncoming(nextMatchNum, currentBB);
+    PHINode * finalStrideCoordCount = b->CreatePHI(sizeTy, 3);
+    finalStrideCoordCount->addIncoming(currenCoordCount, strideMasksReady);
+    finalStrideCoordCount->addIncoming(currenCoordCount, updateLineInfo);
+    finalStrideCoordCount->addIncoming(nextCoordNum, currentBB);
     PHINode * strideFinalLineStart = b->CreatePHI(sizeTy, 3);
     strideFinalLineStart->addIncoming(pendingLineStart, strideMasksReady);
     strideFinalLineStart->addIncoming(finalLineStartPos, updateLineInfo);
@@ -496,7 +487,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         strideFinalLineNumPhi->addIncoming(strideFinalLineNum, currentBB);
     }
     strideNo->addIncoming(nextStrideNo, strideCoordinatesDone);
-    currenMatchCount->addIncoming(finalStrideMatchCount, strideCoordinatesDone);
+    currenCoordCount->addIncoming(finalStrideCoordCount, strideCoordinatesDone);
     pendingLineStart->addIncoming(strideFinalLineStart, strideCoordinatesDone);
     if (mLineNumbering) {
         pendingLineNum->addIncoming(strideFinalLineNumPhi, strideCoordinatesDone);
@@ -508,14 +499,14 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     if (mLineNumbering) {
         b->setScalarField("LineNum", strideFinalLineNumPhi);
     }
-    // b->setProducedItemCount("Coordinates", finalStrideMatchCount);
+    b->setProducedItemCount("Coordinates", finalStrideCoordCount);
 }
 
 MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * ByteStream, StreamSet * const Coordinates, Scalar * const callbackObject)
 : SegmentOrientedKernel(b, "matchReporter" + std::to_string(Coordinates->getNumElements()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()},
- Binding{"Coordinates", Coordinates, GreedyRate(1)}},
+ Binding{"Coordinates", Coordinates, GreedyRate(30)}},
 // outputs
 {},
 // input scalars
@@ -524,7 +515,7 @@ MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, S
 {},
 // kernel state
 {}) {
-    setStride(1);
+    //setStride(1);
     addAttribute(SideEffecting());
 }
 
@@ -532,51 +523,30 @@ MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, S
 
 void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
     Module * const m = b->getModule();
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-    BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");
-    BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
-    BasicBlock * const exit = b->CreateBasicBlock("exit");
-
+    BasicBlock * finalizeMatchReporter = b->CreateBasicBlock("finalizeMatchReporter");
+    BasicBlock * matchReporterExit = b->CreateBasicBlock("matchReporterExit");
     Value * accumulator = b->getScalarField("accumulator_address");
-    Value * const avail = b->getAvailableItemCount("InputStream");
-    Value * matchesProcessed = b->getProcessedItemCount("Coordinates");
-    Value * matchesAvail = b->getAvailableItemCount("Coordinates");
-
-    Constant * const sz_ONE = b->getSize(1);
-
-    b->CreateCondBr(b->CreateICmpNE(matchesProcessed, matchesAvail), processMatchCoordinates, exit);
-
-    b->SetInsertPoint(processMatchCoordinates);
-    PHINode * phiMatchNum = b->CreatePHI(b->getSizeTy(), 2, "matchNum");
-    phiMatchNum->addIncoming(matchesProcessed, entryBlock);
-
-    Value * nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
-
-    Value * matchRecordStart = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
-    Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_ENDS), phiMatchNum), "matchEndLoad");
-    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("Coordinates", b->getInt32(LINE_NUMBERS), phiMatchNum), "matchNumLoad");
-
-    // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
-    // to access past EOF.
-    Value * const bufLimit = b->CreateSub(avail, sz_ONE);
-    matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
-
-    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
-    Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
-    Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
-    auto argi = dispatcher->arg_begin();
-    const auto matchRecNumArg = &*(argi++);
-    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
-    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
-    Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
-    phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
-    b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
-
-    b->SetInsertPoint(coordinatesDone);
+    Value * coordsProcessed = b->getProcessedItemCount("Coordinates");
+    Value * coordsAvail = b->getAvailableItemCount("Coordinates");
+    Function * const dispatcher = m->getFunction("report_matches_wrapper"); assert (dispatcher);
+    Value * processed = b->getProcessedItemCount("InputStream");
+    Value * basePtr = b->CreateGEP(b->getRawInputPointer("InputStream", processed), b->CreateNeg(processed));
+    Value * coordsStartsPtr = b->getRawInputPointer("Coordinates", coordsProcessed);
+    Value * coordsCount = b->CreateSub(coordsAvail, coordsProcessed, "coordsCount");
+    b->CreateCall(dispatcher, {accumulator, basePtr, coordsCount, coordsStartsPtr});
+    //FIXME - the following depends on 3 coordinates per match with the second last one being the
+    // end coordinate of the last match identified.
+    Value * lastCoord = b->CreateSub(coordsAvail, b->getSize(2), "lastCoord");
+    Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("Coordinates", lastCoord));
     b->setProcessedItemCount("InputStream", matchRecordEnd);
-    b->CreateBr(exit);
-
-    b->SetInsertPoint(exit);
+    b->CreateCondBr(mIsFinal, finalizeMatchReporter, matchReporterExit);
+    b->SetInsertPoint(finalizeMatchReporter);
+    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    Value * avail = b->getAvailableItemCount("InputStream");
+    Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
+    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    b->CreateBr(matchReporterExit);
+    b->SetInsertPoint(matchReporterExit);
 }
 
 }

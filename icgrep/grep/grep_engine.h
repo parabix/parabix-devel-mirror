@@ -49,10 +49,13 @@ public:
     MatchAccumulator() {}
     virtual ~MatchAccumulator() {}
     virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
+    virtual void report_matches(char * buffer_base, size_t coordsCount, size_t * coords);
     virtual void finalize_match(char * buffer_end) {}  // default: no op
 };
 
 extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
+
+extern "C" void report_matches_wrapper(intptr_t accum_addr, char * buffer_base, size_t coordsCount, size_t * coords);
 
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
 
@@ -107,7 +110,6 @@ protected:
 
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
-
     std::string linePrefix(std::string fileName);
 
 protected:
@@ -155,15 +157,18 @@ public:
     EmitMatch(std::string linePrefix, bool showLineNumbers, bool initialTab, std::ostringstream & strm)
         : mLinePrefix(linePrefix),
         mShowLineNumbers(showLineNumbers),
+        mShowByteNumbers(false),
         mInitialTab(initialTab),
         mLineCount(0),
         mTerminated(true),
         mResultStr(strm) {}
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
+    void report_matches(char * buffer_base, size_t coordsCount, size_t * coords) override;
     void finalize_match(char * buffer_end) override;
 protected:
     std::string mLinePrefix;
     bool mShowLineNumbers;
+    bool mShowByteNumbers;
     bool mInitialTab;
     size_t mLineCount;
     bool mTerminated;
