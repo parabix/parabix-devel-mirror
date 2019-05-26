@@ -222,6 +222,12 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
         lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, sz_ZERO);
         matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
     }
+    // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
+    // to access past EOF.
+    Value * const bufLimit = b->CreateSub(avail, sz_ONE);
+    //b->CallPrintInt("bufLimit", bufLimit);
+    //b->CallPrintInt("matchEndPos", matchRecordEnd);
+    matchEndPos = b->CreateUMin(matchEndPos, bufLimit);
 
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
     Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
@@ -279,7 +285,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 }
 
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks)
-: MultiBlockKernel(b, "scanMatch",
+    : MultiBlockKernel(b, "scanMatch" + std::to_string(strideBlocks),
 // inputs
 {Binding{"matchResult", Matches }
 ,Binding{"lineBreak", LineBreakStream}

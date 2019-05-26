@@ -73,7 +73,7 @@ static cl::opt<bool> PabloTransposition("enable-pablo-s2p", cl::desc("Enable exp
 static cl::opt<bool> CC_Multiplexing("CC-multiplexing", cl::desc("Enable CC multiplexing."), cl::init(false));
 static cl::opt<bool> PropertyKernels("enable-property-kernels", cl::desc("Enable Unicode property kernels."), cl::init(true));
 static cl::opt<bool> MultithreadedSimpleRE("enable-simple-RE-kernels", cl::desc("Enable individual CC kernels for simple REs."), cl::init(false));
-static cl::opt<int> ScanMatchBlocks("scanmatch-blocks", cl::desc("Scanmatch blocks per stride"), cl::init(1));
+static cl::opt<int> ScanMatchBlocks("scanmatch-blocks", cl::desc("Scanmatch blocks per stride"), cl::init(4));
 static cl::opt<int> MatchCoordinateBlocks("match-coordinates", cl::desc("Enable experimental MatchCoordinates kernels with a given number of blocks per stride"), cl::init(0));
 const unsigned DefaultByteCClimit = 6;
 
