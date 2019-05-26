@@ -16,6 +16,7 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
         const auto prefix = makeKernelName(kernel) + STATISTICS_CYCLE_COUNT_SUFFIX;
         mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_SYNCHRONIZATION));
         mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::BUFFER_EXPANSION));
+        mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_COPY));
         mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
         mPipelineKernel->addInternalScalar(int64Ty, prefix + std::to_string(CycleCounter::FINAL));
     }
@@ -157,7 +158,8 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
                  "      RATE " // cycles per item,
                  " SYNC " // synchronization %,
                  " BUFF " // buffer expansion %,
-                 " OVER " // overhead %,
+                 " COPY " // look ahead + copy back + look behind %,
+                 " PIPE " // pipeline overhead %,
                  "  EXEC " // execution %,
                  "    %%\n"; // % of Total CPU Cycles.
 
@@ -179,11 +181,12 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
                 "%10.2f " // cycles per item,
                 "%5.1f " // synchronization %,
                 "%5.1f " // buffer expansion %,
+                "%5.1f " // look ahead + copy back + look behind %,
                 "%5.1f " // overhead %,
                 "%6.1f " // execution %,
                 "%5.1f\n"; // % of Total CPU Cycles.
 
-        FixedArray<Value *, 12> args;
+        FixedArray<Value *, 13> args;
         args[0] = STDERR;
         args[1] = b->GetString(line.str());
 
@@ -214,22 +217,37 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             Value * const fBufferExpandCycles = b->CreateUIToFP(bufferExpandCycles, doubleTy);
             Value * const fBufferExpandCycles100 = b->CreateFMul(fBufferExpandCycles, fOneHundred);
 
+            Value * iKnownOverheads = b->CreateAdd(synchronizationCycles, bufferExpandCycles);
+
             Value * const executionCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_KERNEL_CALL));
             Value * const fExecutionCycles = b->CreateUIToFP(executionCycles, doubleTy);
             Value * const fExecutionCycles100 = b->CreateFMul(fExecutionCycles, fOneHundred);
 
+            iKnownOverheads = b->CreateAdd(iKnownOverheads, executionCycles);
+
+            Value * const copyCycles = b->getScalarField(prefix + std::to_string(CycleCounter::AFTER_COPY));
+            Value * const fCopyCycles = b->CreateUIToFP(copyCycles, doubleTy);
+            Value * const fCopyCycles100 = b->CreateFMul(fCopyCycles, fOneHundred);
+
+            iKnownOverheads = b->CreateAdd(iKnownOverheads, copyCycles);
+
             Value * const cycles = b->getScalarField(prefix + std::to_string(CycleCounter::FINAL));
             Value * const fCycles = b->CreateUIToFP(cycles, doubleTy);
 
+            Value * const iInternalOverhead = b->CreateSub(cycles, iKnownOverheads);
+
             Value * const fSynchronizationPerc = b->CreateFDiv(fSynchronizationCycles100, fCycles);
             Value * const fBufferExpandPerc = b->CreateFDiv(fBufferExpandCycles100, fCycles);
+            Value * const fCopyPerc = b->CreateFDiv(fCopyCycles100, fCycles);
             Value * const fExecutionPerc = b->CreateFDiv(fExecutionCycles100, fCycles);
 
-            Value * const fKnownOverheads = b->CreateFAdd(b->CreateFAdd(fSynchronizationCycles100, fBufferExpandPerc), fExecutionCycles100);
             Value * const fCyclesPerItem = b->CreateFDiv(fCycles, fItems);
             Value * const fCycles100 = b->CreateFMul(fCycles, fOneHundred);
 
-            Value * const fUnknownOverhead = b->CreateFDiv(b->CreateFSub(fCycles100, fKnownOverheads), fCycles);
+            Value * const fUnknownOverheads = b->CreateUIToFP(iInternalOverhead, doubleTy);
+            Value * const fUnknownOverheads100 = b->CreateFMul(fUnknownOverheads, fOneHundred);
+            Value * const fUnknownOverhead = b->CreateFDiv(fUnknownOverheads100, fCycles);
+
             Value * const fPercentageOfTotal = b->CreateFDiv(fCycles100, fTotalCycles);
 
             const Kernel * const kernel = getKernel(i);
@@ -240,9 +258,10 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
             args[6] = fCyclesPerItem;
             args[7] = fSynchronizationPerc;
             args[8] = fBufferExpandPerc;
-            args[9] = fUnknownOverhead;
-            args[10] = fExecutionPerc;
-            args[11] = fPercentageOfTotal;
+            args[9] = fCopyPerc;
+            args[10] = fUnknownOverhead;
+            args[11] = fExecutionPerc;
+            args[12] = fPercentageOfTotal;
 
             b->CreateCall(b->GetDprintf(), args);
         }

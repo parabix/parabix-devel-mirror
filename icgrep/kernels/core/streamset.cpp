@@ -301,11 +301,14 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const f
     if (LLVM_UNLIKELY(mLinear)) {
         return b->CreateSub(totalItems, fromPosition);
     } else {
+
+
+
         Value * const capacity = getCapacity(b);
-        Value * const availableItems = b->CreateSub(totalItems, fromPosition);
         Value * const fromOffset = b->CreateURem(fromPosition, capacity);
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
         Value * const linearSpace = b->CreateSub(capacityWithOverflow, fromOffset);
+        Value * const availableItems = b->CreateSub(totalItems, fromPosition);
         return b->CreateUMin(availableItems, linearSpace);
     }
 }

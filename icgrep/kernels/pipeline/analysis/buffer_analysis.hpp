@@ -180,7 +180,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const Binding & input = consumerRate.Binding;
 
                 rounding = lcm(rounding, consumerRate.Maximum);
-
                 const auto S = producerRate.MaximumExpectedFlow + consumerRate.MaximumExpectedFlow;
                 const auto D = gcd(producerRate.MaximumExpectedFlow, consumerRate.MaximumExpectedFlow);
                 requiredSpace = std::max(requiredSpace, S - D);
@@ -202,6 +201,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
                     dynamic = true;
                 }
+
                 if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
                     linear = true;
                 }
@@ -235,7 +235,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             round_up(underflowSpace);
 
             const auto minRequiredSpace = std::max(underflowSpace, overflowSpace);
-            requiredSpace = std::max(requiredSpace, minRequiredSpace * RateValue{2});
+            requiredSpace = std::max(requiredSpace, minRequiredSpace * RateValue{2, blockWidth});
             round_up(requiredSpace);
 
             const auto overflowSize = ceiling(overflowSpace);
@@ -346,7 +346,6 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), G);
         }
     }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -531,15 +530,18 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
         }
 
         auto forceNewRate = [&]() {
-            const Kernel * const K = getKernel(kernel);
-            for (const Attribute & attr : K->getAttributes()) {
-                switch (attr.getKind()) {
-                    case AttrId::CanTerminateEarly:
-                    case AttrId::MustExplicitlyTerminate:
-                        return true;
-                    default: continue;
-                }
-            }
+
+            // Is it safe to ignore this?
+
+//            const Kernel * const K = getKernel(kernel);
+//            for (const Attribute & attr : K->getAttributes()) {
+//                switch (attr.getKind()) {
+//                    case AttrId::CanTerminateEarly:
+//                    case AttrId::MustExplicitlyTerminate:
+//                        return true;
+//                    default: continue;
+//                }
+//            }
             return false;
         };
 
@@ -614,8 +616,37 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
  * @brief identifyThreadLocalBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::identifyThreadLocalBuffers(BufferGraph & G) const {
-
-
+    for (auto stream = FirstStreamSet; stream <= LastStreamSet; ++stream) {
+        bool threadLocal = true;
+        auto shares_data_across_thread = [](const Binding & binding) {
+            for (const Attribute & attr : binding.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::Deferred:
+                    case AttrId::LookBehind:
+                    case AttrId::LookAhead:
+                        return true;
+                    default: continue;
+                }
+            }
+            return false;
+        };
+        const auto & e = in_edge(stream, G);
+        const BufferRateData & input = G[e];
+        if (shares_data_across_thread(input.Binding)) {
+            threadLocal = false;
+        } else {
+            const auto symRate = input.SymbolicRate;
+            for (const auto & e : make_iterator_range(out_edges(stream, G))) {
+                const BufferRateData & output = G[e];
+                if (output.SymbolicRate != symRate || shares_data_across_thread(output.Binding)) {
+                    threadLocal = false;
+                    break;
+                }
+            }
+        }
+        BufferNode & bn = G[stream];
+        bn.ThreadLocal = threadLocal;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -686,14 +717,29 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 // for each producer of the input ...
                 for (const auto & producer : make_iterator_range(in_edges(inputBuffer, G))) {
                     const BufferRateData & outputRate = G[producer];
-                    const auto min_expected = outputRate.MinimumExpectedFlow / inputRate.Maximum;
-                    lower_expected = std::min(lower_expected, min_expected);
-                    const auto min_absolute = outputRate.MinimumSpace / inputRate.Maximum;
-                    lower_absolute = std::min(lower_absolute, min_absolute);
-                    const auto max_expected = div_by_non_zero(outputRate.MaximumExpectedFlow, inputRate.Minimum);
-                    upper_expected = std::min(upper_expected, max_expected);
-                    const auto max_absolute = div_by_non_zero(outputRate.MaximumSpace, inputRate.Minimum);
-                    upper_absolute = std::min(upper_absolute, max_absolute);
+                    const Binding & binding = inputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    // If the input rate is greedy, base the calculations off the production rate
+                    // not the consumption. Note outputRate.Maximum instead of inputRate.Minimum.
+                    if (LLVM_UNLIKELY(rate.isGreedy())) {
+                        const auto min_expected = outputRate.MinimumExpectedFlow / outputRate.Maximum;
+                        lower_expected = std::min(lower_expected, min_expected);
+                        const auto min_absolute = outputRate.MinimumSpace / outputRate.Maximum;
+                        lower_absolute = std::min(lower_absolute, min_absolute);
+                        const auto max_expected = div_by_non_zero(outputRate.MaximumExpectedFlow, outputRate.Maximum);
+                        upper_expected = std::min(upper_expected, max_expected);
+                        const auto max_absolute = div_by_non_zero(outputRate.MaximumSpace, outputRate.Maximum);
+                        upper_absolute = std::min(upper_absolute, max_absolute);
+                    } else {
+                        const auto min_expected = outputRate.MinimumExpectedFlow / inputRate.Maximum;
+                        lower_expected = std::min(lower_expected, min_expected);
+                        const auto min_absolute = outputRate.MinimumSpace / inputRate.Maximum;
+                        lower_absolute = std::min(lower_absolute, min_absolute);
+                        const auto max_expected = div_by_non_zero(outputRate.MaximumExpectedFlow, inputRate.Minimum);
+                        upper_expected = std::min(upper_expected, max_expected);
+                        const auto max_absolute = div_by_non_zero(outputRate.MaximumSpace, inputRate.Minimum);
+                        upper_absolute = std::min(upper_absolute, max_absolute);
+                    }
                 }
             }
 
@@ -805,7 +851,7 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out) {
+void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out) const {
 
     using KindId = StreamSetBuffer::BufferKind;
 

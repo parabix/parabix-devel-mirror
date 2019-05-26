@@ -386,13 +386,15 @@ struct PipelineGraphBundle {
 using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, RateValue>;
 
 enum CycleCounter {
-  BEFORE_KERNEL_CALL
-  , INITIAL
+  INITIAL
+  , BEFORE_KERNEL_CALL
+  , BEFORE_COPY
   // ------------------
   , NUM_OF_STORED_COUNTERS
   // ------------------
   , AFTER_SYNCHRONIZATION
   , BUFFER_EXPANSION
+  , AFTER_COPY
   , AFTER_KERNEL_CALL
   , FINAL
 };
@@ -522,7 +524,7 @@ protected:
     void writeLookAheadLogic(BuilderRef b);
     void writeLookBehindLogic(BuilderRef b);
     enum class CopyMode { CopyBack, LookAhead, LookBehind };
-    void copy(BuilderRef b, const CopyMode mode, Value * cond, const unsigned outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy) const;
+    void copy(BuilderRef b, const CopyMode mode, Value * cond, const unsigned outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy);
 
 
     void computeFullyProcessedItemCounts(BuilderRef b);
@@ -746,7 +748,7 @@ protected:
     LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
 
 
-    void printBufferGraph(const BufferGraph & G, raw_ostream & out);
+    void printBufferGraph(const BufferGraph & G, raw_ostream & out) const;
 
     void verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const;
 

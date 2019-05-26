@@ -322,7 +322,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
                             const unsigned outputPort, const StreamSetBuffer * const buffer,
-                            const unsigned itemsToCopy) const {
+                            const unsigned itemsToCopy) {
 
     auto makeSuffix = [](CopyMode mode) {
         switch (mode) {
@@ -341,6 +341,9 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
 
     b->SetInsertPoint(copyStart);
+
+    startCycleCounter(b, CycleCounter::BEFORE_COPY);
+
     const auto itemWidth = getItemWidth(buffer->getBaseType());
     const auto blockWidth = b->getBitBlockWidth();
     assert ((itemsToCopy % blockWidth) == 0);
@@ -369,6 +372,8 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     }
 
     b->CreateMemCpy(target, source, bytesToCopy, blockWidth / 8);
+
+    updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
 
     b->CreateBr(copyExit);
 
