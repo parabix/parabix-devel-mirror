@@ -241,7 +241,11 @@ struct ScanWordParameters {
     Constant * WORDS_PER_STRIDE;
 
     ScanWordParameters(const std::unique_ptr<KernelBuilder> & b, unsigned stride) :
+#ifdef PREFER_NARROW_SCANWIDTH
     width(std::max(BITS_PER_BYTE, stride/SIZE_T_BITS)),
+#else
+    width(std::min(SIZE_T_BITS, stride/BITS_PER_BYTE)),
+#endif
     indexWidth(stride/width),
     Ty(b->getIntNTy(width)),
     pointerTy(Ty->getPointerTo()),
@@ -250,7 +254,7 @@ struct ScanWordParameters {
     WORDS_PER_BLOCK(b->getSize(b->getBitBlockWidth()/width)),
     WORDS_PER_STRIDE(b->getSize(indexWidth))
     {   //  The stride must be a power of 2 and a multiple of the BitBlock width.
-        assert((((stride & (stride - 1)) == 0) && (stride >= b->getBitBlockWidth())));
+        assert((((stride & (stride - 1)) == 0) && (stride >= b->getBitBlockWidth()) && (stride <= SIZE_T_BITS * SIZE_T_BITS)));
     }
 };
 
