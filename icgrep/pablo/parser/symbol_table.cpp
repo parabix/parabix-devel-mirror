@@ -65,60 +65,20 @@ SymbolTable::Entry & SymbolTable::Entry::operator = (Entry && other) {
     return *this;
 }
 
-PabloAST * SymbolTable::createVar(Token * token, PabloAST * value) {
-    std::string name = token->getText();
-    auto optEntry = localFind(name);
-    if (optEntry) {
-        mErrorManager->logError(token, errtxt_RedefinitionError(name));
-        mErrorManager->logNote(optEntry.value().token, errtxt_PreviousDefinitionNote());
-        return nullptr;
-    }
-    optEntry = higherFind(name);
-    if (optEntry) {
-        Entry const & e = optEntry.value();
-        if (e.attr[Entry::INPUT] || e.attr[Entry::OUTPUT]) {
-            // it is an error to redeclare an I/O variable
-            mErrorManager->logError(token, errtxt_RedefineIOVarError());
-            return nullptr;
-        } else {
-            mErrorManager->logWarning(token, errtxt_HidesDeclaration(name));
-            mErrorManager->logNote(e.token, errtxt_PreviousDefinitionNote());
-        }
-    }
-    PabloAST * const var = mBuilder->createVar(token->getText(), value);
-    Entry entry(var, token, {Entry::MUTABLE, Entry::HAS_VALUE});
-    mEntries.insert({name, std::move(entry)});
-    return var;
-}
-
 
 PabloAST * SymbolTable::assign(Token * token, PabloAST * value) {
     std::string name = token->getText();
-    auto optEntry = localFind(name);
-    if (!optEntry) {
-        optEntry = higherFind(name);
-        if (optEntry && !optEntry.value().attr[Entry::MUTABLE]) {
-            // Found an entry in a higher symbol table, but it was not a mutable
-            // symbol. In this case, we don't want to overwrite the symbol so
-            // treat it like we didn't find one at all.
-            optEntry = boost::none;
-        }
-    }
+    auto optEntry = find(name);
     if (optEntry) {
         Entry & e = *optEntry;
-        if (e.attr[Entry::MUTABLE]) {
-            PabloAST * const var = e.value;
-            assert (var);
-            Assign * const assign = mBuilder->createAssign(var, value);
-            e.attr.set(Entry::USED_MUTABLE);
-            return llvm::cast<PabloAST>(assign);
-        } else {
-            // must be in local scope
-            mEntries[name] = Entry(value, token, {Entry::HAS_VALUE});
-            return value;
-        }
+        e.attr.set(Entry::HAS_VALUE);
+        PabloAST * const var = e.value;
+        assert (var);
+        Assign * const assign = mBuilder->createAssign(var, value);
+        return llvm::cast<PabloAST>(assign);
     } else {
-        Entry entry(value, token, {Entry::HAS_VALUE});
+        Var * const var = mBuilder->createVar(token->getText(), value);
+        Entry entry(var, token, {Entry::HAS_VALUE});
         mEntries.insert({name, std::move(entry)});
         return value;
     }
@@ -133,7 +93,7 @@ PabloAST * SymbolTable::indexedAssign(Token * token, Token * index, PabloAST * v
         return nullptr;
     }
     Entry & e = optEntry.value();
-    if (!e.attr[Entry::INDEXABLE] || !e.attr[Entry::MUTABLE]) {
+    if (!e.attr[Entry::INDEXABLE]) {
         mErrorManager->logError(token, errtxt_NonIndexableSymbol(name));
         mErrorManager->logNote(e.token, errtxt_DefinitionNote(name));
         return nullptr;
@@ -164,7 +124,6 @@ PabloAST * SymbolTable::indexedAssign(Token * token, Token * index, PabloAST * v
     PabloAST * const var = e.value;
     assert (llvm::isa<Var>(var));
     Assign * const assign = mBuilder->createAssign(mBuilder->createExtract(llvm::cast<Var>(var), (int64_t) idx), value);
-    e.attr.set(Entry::USED_MUTABLE);
     return llvm::cast<PabloAST>(assign);
 }
 
@@ -172,16 +131,7 @@ PabloAST * SymbolTable::indexedAssign(Token * token, Token * index, PabloAST * v
 PabloAST * SymbolTable::lookup(Token * identifier) {
     assert (identifier->getType() == TokenType::IDENTIFIER);
     std::string name = identifier->getText();
-    auto optEntry = localFind(name);
-    if (!optEntry) {
-        optEntry = higherFind(name);
-        if (optEntry && !optEntry.value().attr[Entry::MUTABLE]) {
-            // Found an entry in a higher symbol table, but it was not a mutable
-            // symbol. In this case, we don't want to overwrite the symbol so
-            // treat it like we didn't find one at all.
-            optEntry = boost::none;
-        }
-    }
+    auto optEntry = find(name);
     if (!optEntry) {
         mErrorManager->logError(identifier, errtxt_UseOfUndefinedSymbol(name));
         return nullptr;
@@ -199,7 +149,7 @@ PabloAST * SymbolTable::indexedLookup(Token * identifier, Token * index) {
         return nullptr;
     }
     Entry const & e = optEntry.value();
-    if (!e.attr[Entry::INDEXABLE] || !e.attr[Entry::MUTABLE]) {
+    if (!e.attr[Entry::INDEXABLE]) {
         mErrorManager->logError(identifier, errtxt_NonIndexableSymbol(name));
         mErrorManager->logNote(e.token, errtxt_DefinitionNote(name));
         return nullptr;
@@ -245,13 +195,13 @@ void SymbolTable::addInputVar(Token * identifier, PabloType * type, PabloSourceK
         mErrorManager->logFatalError(identifier, "input scalars are not supported in pablo kernels");
     } else if (llvm::isa<StreamType>(type)) {
         var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::INPUT, Entry::MUTABLE, Entry::HAS_VALUE});
+        e = Entry(var, identifier, {Entry::INPUT, Entry::HAS_VALUE});
     } else if (llvm::isa<StreamSetType>(type)) {
         var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::INPUT, Entry::MUTABLE, Entry::HAS_VALUE, Entry::INDEXABLE});
+        e = Entry(var, identifier, {Entry::INPUT, Entry::HAS_VALUE, Entry::INDEXABLE});
     } else if (llvm::isa<NamedStreamSetType>(type)) {
         var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::INPUT, Entry::MUTABLE, Entry::HAS_VALUE, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
+        e = Entry(var, identifier, {Entry::INPUT, Entry::HAS_VALUE, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
     } else {
         llvm_unreachable(("invalid input type: " + type->asString(true)).c_str());
     }
@@ -276,16 +226,16 @@ void SymbolTable::addOutputVar(Token * identifier, PabloType * type, PabloSource
     Entry e;
     if (llvm::isa<ScalarType>(type)) {
         var = kernel->getOutputScalarVar(identifier->getText());
-        e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE});
+        e = Entry(var, identifier, {Entry::OUTPUT});
     } else if (llvm::isa<StreamType>(type)) {
         var = kernel->getOutputStreamVar(identifier->getText());
-        e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE});
+        e = Entry(var, identifier, {Entry::OUTPUT});
     } else if (llvm::isa<StreamSetType>(type)) {
         var = kernel->getOutputStreamVar(identifier->getText());
-        e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE, Entry::INDEXABLE});
+        e = Entry(var, identifier, {Entry::OUTPUT, Entry::INDEXABLE});
     } else if (llvm::isa<NamedStreamSetType>(type)) {
-        var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
+        var = kernel->getOutputStreamVar(name);
+        e = Entry(var, identifier, {Entry::OUTPUT, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
     } else {
         llvm_unreachable(("invalid output type: " + type->asString(true)).c_str());
     }

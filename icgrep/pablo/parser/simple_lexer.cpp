@@ -151,8 +151,6 @@ Token * SimpleLexer::extractSymbol() {
     case ':':
         if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == ':') {
             token = Token::CreateSig(mCurrentLineNum, col, mCurrentSource);
-        } else if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == '=') {
-            token = Token::CreateMutableAssign(mCurrentLineNum, col, mCurrentSource);
         } else {
             mErrorManager->logError(mCurrentSource, mCurrentLineNum, mCurrentColNum + 1 /*to 1-indexed*/, errtxt_IllegalSymbol(c), "::");
         }

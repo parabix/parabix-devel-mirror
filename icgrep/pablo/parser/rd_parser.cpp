@@ -448,30 +448,15 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
         TOKEN_CHECK_FATAL(index, TokenType::IDENTIFIER, "expected name");
     }
 
-    Token * const op = state.nextToken();
-    if (op->getType() != TokenType::ASSIGN && op->getType() != TokenType::MUTABLE_ASSIGN) {
-        mErrorManager->logFatalError(op, errtxt_UnexpectedToken(op), "expected '=' or ':='");
-        return nullptr;
-    }
-
+    TOKEN_CHECK_FATAL(state.nextToken(), TokenType::ASSIGN, "expected '='");
     PabloAST * const expr = parseExpression(state);
     if (expr == nullptr) {
         return nullptr;
     }
-    if (op->getType() == TokenType::ASSIGN) {
-        if (index == nullptr) {
-            return state.symbolTable->assign(assignee, expr);
-        } else {
-            return state.symbolTable->indexedAssign(assignee, index, expr);
-        }
+    if (index == nullptr) {
+        return state.symbolTable->assign(assignee, expr);
     } else {
-        if (index == nullptr) {
-            assert (op->getType() == TokenType::MUTABLE_ASSIGN);
-            return state.symbolTable->createVar(assignee, expr);
-        } else {
-            mErrorManager->logFatalError(op, "unnecessary mutable indexed assign", "use '=' instead");
-            return nullptr;
-        }
+        return state.symbolTable->indexedAssign(assignee, index, expr);
     }
 }
 

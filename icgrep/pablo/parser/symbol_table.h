@@ -32,30 +32,10 @@ public:
     SymbolTable(std::shared_ptr<ErrorManager> errorDelegate, PabloBuilder * pb, SymbolTable * parent);
 
     /**
-     * Creates a new mutable var entry in this symbol table with a given value.
-     * 
-     * - Logs an error if an entry with the same name already exists in this
-     *   symbol table. Returns `nullptr` in this case.
-     * 
-     * - Logs a warning if an entry with the same name exists in a higher level
-     *   symbol table (this new var will hide the old one).
-     * 
-     * @param token The identifier token which declared the variable.
-     * @param value The value to assign to the variable.
-     * @return AST node for the assignment or `nullptr` if an error occurred.
-     */
-    PabloAST * createVar(Token * token, PabloAST * value);
-
-    /**
      * Assigns a value to a symbol inferred from an identifier token. 
      * 
-     * If no such symbol can be deduced from the token, a new, local, symbol is
-     * created and then assigned to. This will iff unable to find either a
-     * local symbol in this table or a mutable var symbol in this or higher
-     * tables.
-     * 
-     * If the assignee is a mutable var, the necessary instructions will be
-     * created to perform the assignment.
+     * If no such symbol can be deduced from the token, a new, symbol is
+     * created and then assigned to.
      * 
      * @param token The identifier token to assign to (the assignee).
      * @param value The value to assign to the assignee.
@@ -133,8 +113,6 @@ private:
         enum Attr : size_t {
             INPUT,          // is the symbol a kernel input
             OUTPUT,         // is the symbol a kernel output
-            MUTABLE,        // is the symbol mutable (i.e., assignable from an inner scope)
-            USED_MUTABLE,   // has this mutable entry been used (i.e., assigned from an inner scope)
             HAS_VALUE,      // does the symbol have a value or is it uninitialized
             INDEXABLE,      // is the symbol indexable, either by '[]' or by '.'
             DOT_INDEXABLE,  // is the symbol indexable via '.' notation
