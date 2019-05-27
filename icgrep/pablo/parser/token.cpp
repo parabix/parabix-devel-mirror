@@ -30,6 +30,8 @@ std::string to_string(TokenType const & type) {
         CASE_AS_STRING(BAR);
         CASE_AS_STRING(COMMA);
         CASE_AS_STRING(DOT);
+        CASE_AS_STRING(MINUS);
+        CASE_AS_STRING(PLUS);
         CASE_AS_STRING(SIG);
         CASE_AS_STRING(TILDE);
         CASE_AS_STRING(CARET);

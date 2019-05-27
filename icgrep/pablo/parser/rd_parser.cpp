@@ -496,11 +496,11 @@ PabloAST * RecursiveParser::extendExpression(PabloAST * lhs, ParserState & state
 
 
 PabloAST * RecursiveParser::parseTerm(ParserState & state) {
-    PabloAST * const factor = parseFactor(state);
-    if (factor == nullptr) {
+    PabloAST * const arithExpr = parseArithmeticExpr(state);
+    if (arithExpr == nullptr) {
         return nullptr;
     }
-    return extendTerm(factor, state);
+    return extendTerm(arithExpr, state);
 }
 
 
@@ -509,14 +509,42 @@ PabloAST * RecursiveParser::extendTerm(PabloAST * lhs, ParserState & state) {
     TokenType const type = t->getType();
     if (type == TokenType::AND) {
         state.nextToken(); // consume '&'
+        PabloAST * const arithExpr = parseArithmeticExpr(state);
+        if (arithExpr == nullptr) {
+            return nullptr;
+        }
+        PabloAST * const term = state.pb->createAnd(lhs, arithExpr);
+        return extendTerm(term, state);
+    }
+    return lhs;
+}
+
+
+PabloAST * RecursiveParser::parseArithmeticExpr(ParserState & state) {
+    PabloAST * const factor = parseFactor(state);
+    if (factor == nullptr) {
+        return nullptr;
+    }
+    return extendArithmeticExpr(factor, state);
+}
+
+
+PabloAST * RecursiveParser::extendArithmeticExpr(PabloAST * lhs, ParserState & state) {
+    Token * const t = state.peekToken();
+    TokenType const type = t->getType();
+    if (type == TokenType::MINUS || type == TokenType::PLUS) {
+        state.nextToken(); // consume '-' or '+'
         PabloAST * const factor = parseFactor(state);
         if (factor == nullptr) {
             return nullptr;
         }
-        PabloAST * const term = state.pb->createAnd(lhs, factor);
-        return extendTerm(term, state);
+        PabloAST * arithExpr = type == TokenType::MINUS 
+                             ? state.pb->createSubtract(lhs, factor)
+                             : state.pb->createAdd(lhs, factor);
+        return extendArithmeticExpr(arithExpr, state);
+    } else {
+        return lhs;
     }
-    return lhs;
 }
 
 
