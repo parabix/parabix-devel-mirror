@@ -11,6 +11,7 @@
 #include <pablo/pablo_source_kernel.h>
 #include <pablo/ps_assign.h>
 #include <pablo/parser/error_text.h>
+#include <pablo/parser/pablo_type.h>
 #include <pablo/parser/token.h>
 
 namespace pablo {
@@ -19,24 +20,28 @@ namespace parse {
 SymbolTable::Entry::Entry()
 : value(nullptr)
 , token(nullptr)
+, type(nullptr)
 , attr(0)
 {}
 
 SymbolTable::Entry::Entry(Entry const & other)
 : value(other.value)
 , token(other.token)
+, type(other.type)
 , attr(other.attr)
 {}
 
 SymbolTable::Entry::Entry(Entry && other)
 : value(other.value)
 , token(other.token)
+, type(other.type)
 , attr(std::move(other.attr))
 {}
 
 SymbolTable::Entry::Entry(PabloAST * value, Token * token, std::initializer_list<Attr> attr)
 : value(value)
 , token(token)
+, type(nullptr)
 , attr(0)
 {
     for (auto const & a : attr) {
@@ -47,6 +52,7 @@ SymbolTable::Entry::Entry(PabloAST * value, Token * token, std::initializer_list
 SymbolTable::Entry & SymbolTable::Entry::operator = (Entry const & other) {
     this->value = other.value;
     this->token = other.token;
+    this->type = other.type;
     this->attr = other.attr;
     return *this;
 }
@@ -54,6 +60,7 @@ SymbolTable::Entry & SymbolTable::Entry::operator = (Entry const & other) {
 SymbolTable::Entry & SymbolTable::Entry::operator = (Entry && other) {
     this->value = other.value;
     this->token = other.token;
+    this->type = other.type;
     this->attr = std::move(other.attr);
     return *this;
 }
@@ -131,11 +138,29 @@ PabloAST * SymbolTable::indexedAssign(Token * token, Token * index, PabloAST * v
         mErrorManager->logNote(e.token, errtxt_DefinitionNote(name));
         return nullptr;
     }
+    uint64_t idx = 0;
     if (index->getType() != TokenType::INT_LITERAL) {
-        mErrorManager->logError(index, "non-integer indexing is not supported at this time");
-        return nullptr;
+        if (!e.attr[Entry::DOT_INDEXABLE]) {
+            mErrorManager->logError(token, errtxt_VarNotDotIndexable(name));
+            return nullptr;
+        }
+        assert (e.type && llvm::isa<NamedStreamSetType>(e.type));
+        auto streamset = llvm::cast<NamedStreamSetType>(e.type);
+        bool found = false;
+        for (auto const & n : streamset->getStreamNames()) {
+            if (n == index->getText()) {
+                found = true;
+                break;
+            }
+            idx++;
+        }
+        if (!found) {
+            mErrorManager->logError(index, errtxt_InvalidStreamName(name, index->getText()));
+            return nullptr;
+        }
+    } else {
+        idx = index->getValue();
     }
-    uint64_t idx = index->getValue();
     PabloAST * const var = e.value;
     assert (llvm::isa<Var>(var));
     Assign * const assign = mBuilder->createAssign(mBuilder->createExtract(llvm::cast<Var>(var), (int64_t) idx), value);
@@ -179,32 +204,58 @@ PabloAST * SymbolTable::indexedLookup(Token * identifier, Token * index) {
         mErrorManager->logNote(e.token, errtxt_DefinitionNote(name));
         return nullptr;
     }
+    uint64_t idx = 0;
     if (index->getType() != TokenType::INT_LITERAL) {
-        mErrorManager->logError(index, "non-integer indexing is not supported at this time");
-        return nullptr;
+        if (!e.attr[Entry::DOT_INDEXABLE]) {
+            mErrorManager->logError(identifier, errtxt_VarNotDotIndexable(name));
+            return nullptr;
+        }
+        assert (e.type && llvm::isa<NamedStreamSetType>(e.type));
+        auto streamset = llvm::cast<NamedStreamSetType>(e.type);
+        bool found = false;
+        for (auto const & n : streamset->getStreamNames()) {
+            if (n == index->getText()) {
+                found = true;
+                break;
+            }
+            idx++;
+        }
+        if (!found) {
+            mErrorManager->logError(index, errtxt_InvalidStreamName(name, index->getText()));
+            return nullptr;
+        }
+    } else {
+        idx = index->getValue();
     }
-    auto idx = (int64_t) index->getValue();
     PabloAST * const var = e.value;
     assert (llvm::isa<Var>(var));
     return mBuilder->createExtract(llvm::cast<Var>(var), idx);
 }
 
 
-void SymbolTable::addInputVar(Token * identifier, PabloKernelSignature::Type * type, PabloSourceKernel * kernel) {
+void SymbolTable::addInputVar(Token * identifier, PabloType * type, PabloSourceKernel * kernel) {
+    if (LLVM_UNLIKELY(llvm::isa<AliasType>(type))) {
+        addInputVar(identifier, llvm::cast<AliasType>(type)->getAliasedType(), kernel);
+        return;
+    }
     std::string name = identifier->getText();
     PabloAST * var = nullptr;
     Entry e;
-    if (llvm::isa<PabloKernelSignature::IntType>(type)) {
+    if (llvm::isa<ScalarType>(type)) {
         mErrorManager->logFatalError(identifier, "input scalars are not supported in pablo kernels");
-    } else if (llvm::isa<PabloKernelSignature::StreamType>(type)) {
+    } else if (llvm::isa<StreamType>(type)) {
         var = kernel->getInputStreamVar(name);
         e = Entry(var, identifier, {Entry::INPUT, Entry::MUTABLE, Entry::HAS_VALUE});
-    } else if (llvm::isa<PabloKernelSignature::StreamSetType>(type)) {
+    } else if (llvm::isa<StreamSetType>(type)) {
         var = kernel->getInputStreamVar(name);
         e = Entry(var, identifier, {Entry::INPUT, Entry::MUTABLE, Entry::HAS_VALUE, Entry::INDEXABLE});
+    } else if (llvm::isa<NamedStreamSetType>(type)) {
+        var = kernel->getInputStreamVar(name);
+        e = Entry(var, identifier, {Entry::INPUT, Entry::MUTABLE, Entry::HAS_VALUE, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
     } else {
-        llvm_unreachable("invalid type");
+        llvm_unreachable(("invalid input type: " + type->asString(true)).c_str());
     }
+    e.type = type;
     assert (e.value != nullptr && e.token != nullptr);
     auto rt = mEntries.insert({name, std::move(e)});
     if (!rt.second) {
@@ -215,22 +266,30 @@ void SymbolTable::addInputVar(Token * identifier, PabloKernelSignature::Type * t
 }
 
 
-void SymbolTable::addOutputVar(Token * identifier, PabloKernelSignature::Type * type, PabloSourceKernel * kernel) {
+void SymbolTable::addOutputVar(Token * identifier, PabloType * type, PabloSourceKernel * kernel) {
+    if (LLVM_UNLIKELY(llvm::isa<AliasType>(type))) {
+        addOutputVar(identifier, llvm::cast<AliasType>(type)->getAliasedType(), kernel);
+        return;
+    }
     std::string name = identifier->getText();
     PabloAST * var = nullptr;
     Entry e;
-    if (llvm::isa<PabloKernelSignature::IntType>(type)) {
+    if (llvm::isa<ScalarType>(type)) {
         var = kernel->getOutputScalarVar(identifier->getText());
         e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE});
-    } else if (llvm::isa<PabloKernelSignature::StreamType>(type)) {
+    } else if (llvm::isa<StreamType>(type)) {
         var = kernel->getOutputStreamVar(identifier->getText());
         e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE});
-    } else if (llvm::isa<PabloKernelSignature::StreamSetType>(type)) {
+    } else if (llvm::isa<StreamSetType>(type)) {
         var = kernel->getOutputStreamVar(identifier->getText());
         e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE, Entry::INDEXABLE});
+    } else if (llvm::isa<NamedStreamSetType>(type)) {
+        var = kernel->getInputStreamVar(name);
+        e = Entry(var, identifier, {Entry::OUTPUT, Entry::MUTABLE, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
     } else {
-        llvm_unreachable("invalid type");
+        llvm_unreachable(("invalid output type: " + type->asString(true)).c_str());
     }
+    e.type = type;
     assert (e.value != nullptr && e.token != nullptr);
     auto rt = mEntries.insert({name, std::move(e)});
     if (!rt.second) {

@@ -110,7 +110,7 @@ IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
 SET(PABLO_PARSER_SRC pablo/parser/pablo_parser.cpp)
-SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/error.cpp pablo/parser/token.cpp pablo/pablo_source_kernel.cpp pablo/parser/kernel_signature.cpp pablo/parser/symbol_table.cpp)
+SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/error.cpp pablo/parser/token.cpp pablo/pablo_source_kernel.cpp pablo/parser/kernel_signature.cpp pablo/parser/symbol_table.cpp pablo/parser/pablo_type.cpp)
 SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/simple_lexer.cpp pablo/parser/source_file.cpp pablo/parser/rd_parser.cpp)
 
 SET (RE_PARSERS_SRC re/parsers/PCRE_parser.cpp re/parsers/ERE_parser.cpp re/parsers/BRE_parser.cpp re/parsers/Prosite_parser.cpp re/parsers/fixed_string_parser.cpp re/parsers/GLOB_parser.cpp re/parsers/parser.cpp)
@@ -131,6 +131,10 @@ add_library(LZ4_Lib lz4/lz4_frame_decoder.cpp kernels/pdep_kernel.cpp lz4/lz4_de
 # force the compiler to compile the object cache to ensure that the versioning information is up to date
 add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
 add_dependencies(CodeGen RecompileObjectCache)
+
+# instal pablo source files
+add_custom_target(InstallPabloLangSource ALL cp ${CMAKE_CURRENT_SOURCE_DIR}/pablo-src/** $ENV{HOME}/.cache/parabix)
+add_dependencies(PabloParser InstallPabloLangSource)
 
 # add the executable
 target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
@@ -154,6 +158,7 @@ add_executable(u32u8 u32u8.cpp kernels/pdep_kernel.cpp cc/encodings/utf8gen.cpp)
 add_executable(u32u16 u32u16.cpp kernels/pdep_kernel.cpp cc/encodings/utf16gen.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
+add_executable(wc-pablo wc_pablo.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp)
 # add_executable(lz4d lz4d.cpp lz4/lz4_frame_decoder.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
 add_executable(lz4_decoder lz4_decoder.cpp)
@@ -172,6 +177,7 @@ target_link_libraries (u32u8 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boos
 target_link_libraries (u32u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (base64 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (wc-pablo UCDlib PabloADT PabloParser CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries (editd PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 # target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
