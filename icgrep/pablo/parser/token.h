@@ -35,7 +35,6 @@ enum class TokenType {
     BAR,            // |
     COMMA,          // ,
     DOT,            // .
-    MUTABLE_ASSIGN, // :=
     SIG,            // ::
     TILDE,          // ~
     CARET,          // ^
@@ -124,10 +123,6 @@ public:
 
     static Token * CreateDot(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::DOT, ".", lineNum, colNum, source);
-    }
-
-    static Token * CreateMutableAssign(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
-        return Create(TokenType::MUTABLE_ASSIGN, ":=", lineNum, colNum, source);
     }
 
     static Token * CreateSig(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
