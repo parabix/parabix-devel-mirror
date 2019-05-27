@@ -72,5 +72,25 @@ inline std::string errtxt_UndefinedFunction(std::string const & name) {
     return "undefined function '" + name + "'";
 }
 
+inline std::string errtxt_RedeclaredStreamName() {
+    return "redeclaration of stream name within this type";
+}
+
+inline std::string errtxt_DuplicateTypeDefinition(std::string const & name) {
+    return "duplicate definition of type '" + name + "'";
+}
+
+inline std::string errtxt_UndefinedTypename(std::string const & name) {
+    return "undefined typename or alias '" + name + "'";
+}
+
+inline std::string errtxt_VarNotDotIndexable(std::string const & name) {
+    return "'" + name + "' is not indexable via '.' notation";
+}
+
+inline std::string errtxt_InvalidStreamName(std::string const & name, std::string const & streamName) {
+    return "'" + name + "' does not contain a stream named: '" + streamName + "'";
+}
+
 } // namespace pablo::parse
 } // namespace pablo

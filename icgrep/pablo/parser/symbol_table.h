@@ -22,6 +22,7 @@ class PabloSourceKernel;
 
 namespace parse {
 
+class PabloType;
 class Token;
 
 class SymbolTable {
@@ -111,19 +112,19 @@ public:
      * Registers a kernel input parameter in this symbol table.
      * 
      * @param identifier    The identifier token for the parameter.
-     * @param type          Signature type of the parameter.
+     * @param type          Type of the parameter.
      * @param kernel        The kernel which the parameter belongs to.
      */
-    void addInputVar(Token * identifier, PabloKernelSignature::Type * type, PabloSourceKernel * kernel);
+    void addInputVar(Token * identifier, PabloType * type, PabloSourceKernel * kernel);
 
     /**
      * Registers a kernel output parameter in this symbol table.
      * 
      * @param identifier    The identifier token for the parameter.
-     * @param type          Signature type of the parameter.
+     * @param type          Type of the parameter.
      * @param kernel        The kernel which the parameter belongs to.
      */
-    void addOutputVar(Token * identifier, PabloKernelSignature::Type * type, PabloSourceKernel * kernel);
+    void addOutputVar(Token * identifier, PabloType * type, PabloSourceKernel * kernel);
 
     inline SymbolTable * getParent() const noexcept { return mParent; }
 
@@ -149,6 +150,7 @@ private:
 
         PabloAST *      value;
         Token *         token;
+        PabloType *     type;
         std::bitset<8>  attr;
     };
 

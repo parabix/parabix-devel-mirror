@@ -6,47 +6,37 @@
 
 #include "kernel_signature.h"
 
+#include <llvm/Support/raw_ostream.h>
+
 namespace pablo {
 namespace parse {
 
-PabloKernelSignature::Type::Allocator PabloKernelSignature::Type::mAllocator;
-
-std::string PabloKernelSignature::IntType::asString() const {
-    return "i" + std::to_string(mBitWidth);
-}
-
-std::string PabloKernelSignature::StreamType::asString() const {
-    return "<" + mElementType->asString() + ">";
-}
-
-std::string PabloKernelSignature::StreamSetType::asString() const {
-    return "<" + mElementType->asString() + ">" + "[" + std::to_string(mStreamCount) + "]";
-}
-
-}
-}
-
-std::ostream & operator << (std::ostream & out, pablo::parse::PabloKernelSignature const & sig) {
-    out << "kernel " << sig.getName() << " :: [";
-    for (size_t i = 0; i < sig.getInputBindings().size(); ++i) {
+std::string PabloKernelSignature::asString() const noexcept {
+    std::string str;
+    llvm::raw_string_ostream out(str);
+    out << "kernel " << getName() << " :: [";
+    for (size_t i = 0; i < getInputBindings().size(); ++i) {
         std::string name;
-        pablo::parse::PabloKernelSignature::Type * type;
-        std::tie(name, type) = sig.getInputBindings()[i];
+        pablo::parse::PabloType * type;
+        std::tie(name, type) = getInputBindings()[i];
         out << type->asString() << " " << name;
-        if (i != sig.getInputBindings().size() - 1) {
+        if (i != getInputBindings().size() - 1) {
             out << ", ";
         }
     }
     out << "] -> [";
-    for (size_t i = 0; i < sig.getOutputBindings().size(); ++i) {
+    for (size_t i = 0; i < getOutputBindings().size(); ++i) {
         std::string name;
-        pablo::parse::PabloKernelSignature::Type * type;
-        std::tie(name, type) = sig.getOutputBindings()[i];
+        pablo::parse::PabloType * type;
+        std::tie(name, type) = getOutputBindings()[i];
         out << type->asString() << " " << name;
-        if (i != sig.getOutputBindings().size() - 1) {
+        if (i != getOutputBindings().size() - 1) {
             out << ", ";
         }
     }
     out << "]";
-    return out;
+    return out.str();
 }
+
+} // namespace pablo::parse
+} // namespace pablo

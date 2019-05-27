@@ -38,6 +38,7 @@ private:
 
     class ParserState {
     public:
+        ParserState(RecursiveParser * parser, size_t index);
         ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel);
         ~ParserState();
 
@@ -57,11 +58,12 @@ private:
     };
 
 
-    void locateKernels();
+    void initializeParser();
 
     boost::optional<PabloKernelSignature> parseKernelSignature(ParserState & state);
     boost::optional<PabloKernelSignature::SignatureBindings> parseSignatureBindingList(ParserState & state, bool isInput);
-    PabloKernelSignature::Type * parseSigType(ParserState & state);
+    PabloType * parseSigType(ParserState & state);
+    PabloType * parseTypeDefinition(ParserState & state);
     PabloAST * parseBlock(ParserState & state);
     PabloAST * parseStatement(ParserState & state);
     PabloAST * parseIf(ParserState & state);
@@ -84,6 +86,7 @@ private:
     std::vector<Token *>            mTokenList;
     std::shared_ptr<SourceFile>     mCurrentSource;
     llvm::StringMap<size_t>         mKernelLocations;
+    llvm::StringMap<PabloType *>    mTypeDefTable;
 };
 
 } // namespace pablo::parse

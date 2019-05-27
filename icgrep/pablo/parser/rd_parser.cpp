@@ -6,6 +6,7 @@
 
 #include "rd_parser.h"
 
+#include <unordered_set>
 #include <kernels/core/streamset.h>
 #include <llvm/Support/Casting.h>
 #include <pablo/builder.hpp>
@@ -13,6 +14,7 @@
 #include <pablo/pe_ones.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/parser/error_text.h>
+#include <pablo/parser/pablo_type.h>
 #include <pablo/ps_assign.h>
 
 
@@ -104,6 +106,15 @@ void RecursiveParser::ParserState::popSymbolTable() {
 }
 
 
+RecursiveParser::ParserState::ParserState(RecursiveParser * parser, size_t index)
+: parser(parser)
+, pb(nullptr)
+, kernel(nullptr)
+, index(index)
+, symbolTable(nullptr)
+{}
+
+
 RecursiveParser::ParserState::ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel)
 : parser(parser)
 , pb(pb)
@@ -115,8 +126,9 @@ RecursiveParser::ParserState::ParserState(RecursiveParser * parser, PabloBuilder
 }
 
 RecursiveParser::ParserState::~ParserState() {
-    assert (symbolTable);
-    popSymbolTable();
+    if (symbolTable) {
+        popSymbolTable();
+    }
     assert (symbolTable == nullptr);
 }
 
@@ -130,7 +142,7 @@ bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloS
             return false;
         }
         mTokenList = std::move(optList.value());
-        locateKernels();
+        initializeParser();
     }
     if (!mErrorManager->shouldContinue()) {
         return false;
@@ -159,17 +171,32 @@ bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloS
 }
 
 
-void RecursiveParser::locateKernels() {
+void RecursiveParser::initializeParser() {
     for (size_t i = 0, j = 1; j < mTokenList.size(); i++, j++) {
-        Token * const kernel = mTokenList[i];
+        Token * const keyword = mTokenList[i];
         Token * const identifier = mTokenList[j];
-        if (kernel->getType() == TokenType::KERNEL &&  identifier->getType() == TokenType::IDENTIFIER) {
+
+        if (keyword->getType() == TokenType::TYPE) {
+            ParserState state(this, i);
+            PabloType * const definedType = parseTypeDefinition(state);
+            if (definedType == nullptr) {
+                return;
+            }
+            assert (identifier->getType() == TokenType::IDENTIFIER);
+            auto itOk = mTypeDefTable.insert({identifier->getText(), definedType});
+            if (!itOk.second) {
+                mErrorManager->logFatalError(identifier, errtxt_DuplicateTypeDefinition(identifier->getText()));
+                return;
+            }
+        }
+
+        if (keyword->getType() == TokenType::KERNEL && identifier->getType() == TokenType::IDENTIFIER) {
             auto rt = mKernelLocations.try_emplace(identifier->getText(), i);
             if (!rt.second) {
                 size_t prev = mKernelLocations.lookup(identifier->getText());
                 Token * p = mTokenList[prev];
-                std::string loc = std::to_string(p->getLineNum()) + ":" + std::to_string(p->getColNum());
-                mErrorManager->logFatalError(identifier, "duplicate kernel declaration", "previous declaration at " + loc);
+                mErrorManager->logFatalError(identifier, "duplicate kernel declaration");
+                mErrorManager->logNote(p, errtxt_PreviousDefinitionNote());
             }
         }
     }
@@ -232,29 +259,92 @@ boost::optional<PabloKernelSignature::SignatureBindings> RecursiveParser::parseS
 }
 
 
-PabloKernelSignature::Type * RecursiveParser::parseSigType(ParserState & state) {
+PabloType * RecursiveParser::parseSigType(ParserState & state) {
     Token * const t = state.nextToken();
     TokenType const type = t->getType();
-    if (type == TokenType::INT_TYPE) {
-        return new PabloKernelSignature::IntType(t->getValue());
+    if (type == TokenType::IDENTIFIER) {
+        auto it = mTypeDefTable.find(t->getText());
+        if (it == mTypeDefTable.end()) {
+            mErrorManager->logFatalError(t, errtxt_UndefinedTypename(t->getText()));
+            return nullptr;
+        }
+        return it->getValue();
+    } else if (type == TokenType::INT_TYPE) {
+        return new ScalarType(t->getValue());
     } else if (type == TokenType::L_ANGLE) {
         Token * const elemType = state.nextToken();
         TOKEN_CHECK_FATAL(elemType, TokenType::INT_TYPE, "expected integer type (e.g., 'i8')");
         TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_ANGLE, "expected '>'");
-        auto elemTy = new PabloKernelSignature::IntType(elemType->getValue());
-        if (state.peekToken()->getType() == TokenType::L_SBRACE) {
-            state.nextToken(); // consume '['
-            Token * const streamCount = state.nextToken();
-            TOKEN_CHECK_FATAL(streamCount, TokenType::INT_LITERAL, "expected an integer literal");
-            TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_SBRACE, "expected a ']'");
-            return new PabloKernelSignature::StreamSetType(elemTy, streamCount->getValue());
-        } else {
-            return new PabloKernelSignature::StreamType(elemTy);
+        if (state.peekToken()->getType() != TokenType::L_SBRACE) {
+            return new StreamType(elemType->getValue());
         }
+
+        // dealing with a streamset type
+        state.nextToken(); // consume '['
+        Token * const streamCount = state.nextToken();
+        TOKEN_CHECK_FATAL(streamCount, TokenType::INT_LITERAL, "expected an integer literal");
+        TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_SBRACE, "expected a ']'");
+        StreamSetType * const streamSetType = new StreamSetType(elemType->getValue(), streamCount->getValue());
+        if (state.peekToken()->getType() != TokenType::L_BRACE) {
+            return streamSetType;
+        }
+
+        // dealing with a streamset with named streams
+        state.nextToken(); // consume '{'
+        std::vector<Token *> nameList{};
+        std::unordered_set<Token *> nameSet{};
+        Token * identifier = state.nextToken();
+        TOKEN_CHECK_FATAL(identifier, TokenType::IDENTIFIER, "expected a name");
+        nameSet.insert(identifier);
+        nameList.push_back(identifier);
+        while (state.peekToken()->getType() == TokenType::COMMA) {
+            state.nextToken(); // consume ','
+            identifier = state.nextToken();
+            std::unordered_set<Token *>::iterator it;
+            bool ok;
+            std::tie(it, ok) = nameSet.insert(identifier);
+            if (!ok) {
+                mErrorManager->logError(identifier, errtxt_RedeclaredStreamName());
+                mErrorManager->logNote(*it, errtxt_PreviousDefinitionNote());
+                return nullptr;
+            }
+            nameList.push_back(identifier);
+        }
+        TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_BRACE, "expected '}'");
+        std::vector<std::string> names{};
+        for (auto const & t : nameList) {
+            names.push_back(t->getText());
+        }
+        return new NamedStreamSetType(PabloType::GenerateAnonymousTypeName(), streamSetType, names);
     } else {
         mErrorManager->logFatalError(t, "expected type");
         return nullptr;
     }
+}
+
+
+PabloType * RecursiveParser::parseTypeDefinition(ParserState & state) {
+    assert (state.peekToken()->getType() == TokenType::TYPE);
+    state.nextToken(); // consume 'type'
+    Token * const identifier = state.nextToken();
+    TOKEN_CHECK_FATAL(identifier, TokenType::IDENTIFIER, "expected a typename");
+    TOKEN_CHECK_FATAL(state.nextToken(), TokenType::ASSIGN, "expected '='");
+    PabloType * type = parseSigType(state);
+    if (type == nullptr) {
+        return nullptr;
+    }
+    if (llvm::isa<NamedStreamSetType>(type)) {
+        llvm::cast<NamedStreamSetType>(type)->setTypeName(identifier->getText());
+        auto names = llvm::cast<NamedStreamSetType>(type)->getStreamNames();
+    } else {
+        type = new AliasType(identifier->getText(), type);
+    }
+    // make sure there isn't any bad tokens after the definition
+    if (state.peekToken()->getType() != TokenType::TYPE && state.peekToken()->getType() != TokenType::KERNEL) {
+        mErrorManager->logFatalError(state.peekToken(), "unexpected top level declaration", "expected 'type' or 'kernel'");
+        return nullptr;
+    }
+    return type;
 }
 
 
@@ -594,84 +684,84 @@ static inline void lazyInitializeFunctionGenMap() {
         functionGenMap = std::unique_ptr<llvm::StringMap<FnGen>>(new llvm::StringMap<FnGen>{});
     }
 
-    FUNC_GEN_DEF("advance", {
+    FUNC_GEN_DEF("Advance", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(1);
         return pb->createAdvance(args[0], llvm::cast<Integer>(args[1]));
     });
 
-    FUNC_GEN_DEF("indexedAdvance", {
+    FUNC_GEN_DEF("IndexedAdvance", {
         ASSERT_ARG_NUM(3);
         ASSERT_ARG_TYPE_INT(1);
         return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[3]));
     });
 
-    FUNC_GEN_DEF("lookahead", {
+    FUNC_GEN_DEF("Lookahead", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(1);
         return pb->createLookahead(args[0], llvm::cast<Integer>(args[1]));
     });
 
-    FUNC_GEN_DEF("repeat", {
+    FUNC_GEN_DEF("Repeat", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(0);
         return pb->createRepeat(llvm::cast<Integer>(args[0]), args[1]);
     });
     
-    FUNC_GEN_DEF("packL", {
+    FUNC_GEN_DEF("PackL", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(0);
         return pb->createPackL(llvm::cast<Integer>(args[0]), args[1]);
     });
     
-    FUNC_GEN_DEF("packH", {
+    FUNC_GEN_DEF("PackH", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(0);
         return pb->createPackH(llvm::cast<Integer>(args[0]), args[1]);
     });
 
-    FUNC_GEN_DEF("matchStar", {
+    FUNC_GEN_DEF("MatchStar", {
         ASSERT_ARG_NUM(2);
         return pb->createMatchStar(args[0], args[1]);
     });
 
-    FUNC_GEN_DEF("scanThru", {
+    FUNC_GEN_DEF("ScanThru", {
         ASSERT_ARG_NUM(2);
         return pb->createScanThru(args[0], args[1]);
     });
 
-    FUNC_GEN_DEF("scanTo", {
+    FUNC_GEN_DEF("ScanTo", {
         ASSERT_ARG_NUM(2);
         return pb->createScanTo(args[0], args[1]);
     });
 
 
-    FUNC_GEN_DEF("advanceThenScanThru", {
+    FUNC_GEN_DEF("AdvanceThenScanThru", {
         ASSERT_ARG_NUM(2);
         return pb->createAdvanceThenScanThru(args[0], args[1]);
     });
 
-    FUNC_GEN_DEF("advanceThenScanTo", {
+    FUNC_GEN_DEF("AdvanceThenScanTo", {
         ASSERT_ARG_NUM(2);
         return pb->createAdvanceThenScanTo(args[0], args[1]);
     });
 
-    FUNC_GEN_DEF("sel", {
+    FUNC_GEN_DEF("Sel", {
         ASSERT_ARG_NUM(3);
         return pb->createSel(args[0], args[1], args[2]);
     });
 
-    FUNC_GEN_DEF("count", {
+    FUNC_GEN_DEF("Count", {
         ASSERT_ARG_NUM(1);
         return pb->createCount(args[0]);
     });
 
-    FUNC_GEN_DEF("inFile", {
+    FUNC_GEN_DEF("InFile", {
         ASSERT_ARG_NUM(1);
         return pb->createInFile(args[0]);
     });
 
-    FUNC_GEN_DEF("atEOF", {
+    FUNC_GEN_DEF("AtEOF", {
         ASSERT_ARG_NUM(1);
         return pb->createAtEOF(args[0]);
     });
@@ -698,6 +788,7 @@ RecursiveParser::RecursiveParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<E
 , mTokenList()
 , mCurrentSource(nullptr)
 , mKernelLocations()
+, mTypeDefTable()
 {}
 
 } // namespace pablo::parse

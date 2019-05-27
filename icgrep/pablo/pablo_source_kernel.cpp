@@ -20,8 +20,6 @@ void PabloSourceKernel::generatePabloMethod() {
         auto em = mParser->getErrorManager();
         em->dumpErrors();
         llvm::report_fatal_error("parse error", false);
-    } else {
-        PabloPrinter::print(this, llvm::errs());
     }
 }
 
