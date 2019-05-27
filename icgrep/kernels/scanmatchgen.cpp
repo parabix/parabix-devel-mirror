@@ -187,7 +187,8 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
     Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
     Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
-    Value * matchEndPos = b->CreateAdd(matchWordPos, b->CreateCountForwardZeroes(theMatchWord), "matchEndPos");
+    Value * matchEndPosInWord = b->CreateCountForwardZeroes(theMatchWord);
+    Value * matchEndPos = b->CreateAdd(matchWordPos, matchEndPosInWord, "matchEndPos");
     // Find the prior line break.  There are three possibilities.
     // (a) a prior break in the break word corresponding to the current match word.
     // (b) the last break in a prior word within the current stride.
@@ -195,8 +196,8 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     // Case (b) is most likely and requires a load of the prior break word.
     // We avoid branching by safely loading a prior word in any case and then
     // using selects to handle cases (a) and (c).
-    Value * priorBreaksThisWord = b->CreateAnd(b->CreateMaskToLowestBitExclusive(theMatchWord), matchBreakWord, "priorBreaksThisWord");
-    Value * priorBreaksInStride = b->CreateAnd(b->CreateMaskToLowestBitExclusive(matchMaskPhi), breakMask, "priorBreaksInStride");
+    Value * priorBreaksThisWord = b->CreateZeroHiBitsFrom(matchBreakWord, matchEndPosInWord);
+    Value * priorBreaksInStride = b->CreateZeroHiBitsFrom(breakMask, matchWordIdx);
     Value * inWordCond = b->CreateICmpNE(priorBreaksThisWord, sz_ZERO);
     Value * inStrideCond = b->CreateICmpNE(priorBreaksInStride, sz_ZERO);
     Value * breakWordIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride), "breakWordIdx_");
@@ -466,7 +467,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
     Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
     Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
-    Value * matchEndPos = b->CreateAdd(matchWordPos, b->CreateCountForwardZeroes(theMatchWord), "matchEndPos");
+    Value * matchEndPosInWord = b->CreateCountForwardZeroes(theMatchWord);
+    Value * matchEndPos = b->CreateAdd(matchWordPos, matchEndPosInWord, "matchEndPos");
     // Find the prior line break.  There are three possibilities.
     // (a) a prior break in the break word corresponding to the current match word.
     // (b) the last break in a prior word within the current stride.
@@ -474,8 +476,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     // Case (b) is most likely and requires a load of the prior break word.
     // We avoid branching by safely loading a prior word in any case and then
     // using selects to handle cases (a) and (c).
-    Value * priorBreaksThisWord = b->CreateAnd(b->CreateMaskToLowestBitExclusive(theMatchWord), matchBreakWord, "priorBreaksThisWord");
-    Value * priorBreaksInStride = b->CreateAnd(b->CreateMaskToLowestBitExclusive(matchMaskPhi), breakMask, "priorBreaksInStride");
+    Value * priorBreaksThisWord = b->CreateZeroHiBitsFrom(matchBreakWord, matchEndPosInWord);
+    Value * priorBreaksInStride = b->CreateZeroHiBitsFrom(breakMask, matchWordIdx);
     Value * inWordCond = b->CreateICmpNE(priorBreaksThisWord, sz_ZERO);
     Value * inStrideCond = b->CreateICmpNE(priorBreaksInStride, sz_ZERO);
     Value * breakWordIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride), "breakWordIdx_");
