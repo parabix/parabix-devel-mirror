@@ -1062,6 +1062,11 @@ Constant * IDISA_Builder::bit_interleave_byteshuffle_table(unsigned fw) {
     return ConstantVector::get(bit_interleave);
 }
 
+void IDISA_Builder::setNontemporal(StoreInst * s) {
+    s->setMetadata(LLVMContext::MD_nontemporal,
+                   MDNode::get(getContext(), {ConstantAsMetadata::get(getInt32(1))}));
+}
+
 IDISA_Builder::IDISA_Builder(LLVMContext & C, unsigned nativeVectorWidth, unsigned vectorWidth, unsigned laneWidth)
 : CBuilder(C)
 , mNativeBitBlockWidth(nativeVectorWidth)
