@@ -747,6 +747,19 @@ StoreInst * CBuilder::CreateAtomicStoreRelease(Value * val, Value * ptr) {
     return inst;
 }
 
+void CBuilder::setNontemporal(StoreInst * s) {
+    s->setMetadata(LLVMContext::MD_nontemporal,
+                   MDNode::get(getContext(), {ConstantAsMetadata::get(getInt32(1))}));
+}
+
+Value * CBuilder::CreatePrefetch(Value * ptr, PrefetchRW mode, unsigned locality, CacheType c) {
+    Value * prefetchIntrin = Intrinsic::getDeclaration(getModule(), Intrinsic::prefetch);
+    Value * modeVal = getInt32(mode == PrefetchRW::Read ? 0 : 1);
+    Value * localityVal = getInt32(locality > 3 ? 3 : locality);
+    Value * cacheKind = getInt32(c == CacheType::Instruction ? 0 : 1);
+    return CreateCall(prefetchIntrin, {CreateBitCast(ptr, getInt8PtrTy()), modeVal, localityVal, cacheKind}); 
+}
+
 PointerType * LLVM_READNONE CBuilder::getFILEptrTy() {
     if (mFILEtype == nullptr) {
         mFILEtype = StructType::create(getContext(), "struct._IO_FILE");

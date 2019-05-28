@@ -85,8 +85,6 @@ public:
         return CreateBlockAlignedLoad(CreateGEP(ptr, indices));
     }
 
-    void setNontemporal(llvm::StoreInst * s);
-
     llvm::StoreInst * CreateBlockAlignedStore(llvm::Value * const value, llvm::Value * const ptr) {
         return CreateAlignedStore(value, ptr, mBitBlockWidth / 8);
     }

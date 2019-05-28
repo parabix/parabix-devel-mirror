@@ -338,6 +338,13 @@ public:
 
     llvm::Function * LinkFunction(llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const;
 
+    // Set the nontemporal metadata attribute for a store instruction.
+    void setNontemporal(llvm::StoreInst * s);
+
+    enum class PrefetchRW {Read, Write};
+    enum class CacheType {Instruction, Data};
+    llvm::Value * CreatePrefetch(llvm::Value * ptr, PrefetchRW mode, unsigned locality, CacheType c);
+
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const char * Name);
 
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const llvm::Twine & Name = "");
