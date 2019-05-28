@@ -1,0 +1,394 @@
+#
+# Copyright (c) 2019 International Characters.
+# This software is licensed to the public under the Open Software License 3.0.
+# icgrep is a trademark of International Characters.
+#
+
+type BasisBits = <i1>[8]
+
+type U8 = <i1>[1] {
+    suffix
+}
+
+type Lex = <i1>[27] {
+    CR,
+    LF,
+    HT,
+    SP,
+    CRLF,
+    RefStart,
+    Semicolon,
+    Colon,
+    LAngle,
+    RAngle,
+    LBracket,
+    RBracket,
+    Exclam,
+    QMark,
+    Hyphen,
+    Equals,
+    SQuote,
+    DQuote,
+    Slash,
+    Hash,
+    x,
+    ASCII_name_start,
+    ASCII_name_char,
+    NameScan,
+    Digit,
+    Hex,
+    WS
+}
+
+type Marker = <i1>[3] {
+    LAngle_scope,
+    Ref_opener,
+    CD_closer
+}
+
+type CtCDPI_Callouts = <i1>[8] {
+    Ct_starts,
+    Ct_ends,
+    CD_starts,
+    CD_ends,
+    PI_starts,
+    PI_name_starts,
+    PI_name_ends,
+    PI_ends
+}
+
+type Ref_Callouts = <i1>[6] {
+    GenRef_starts,
+    GenRef_ends,
+    DecRef_starts,
+    DecRef_ends,
+    HexRef_starts,
+    HexRef_ends
+}
+
+type Tag_Callouts = <i1>[9] {
+    ElemName_starts,
+    ElemName_ends,
+    AttName_starts,
+    AttName_ends,
+    AttVal_starts,
+    AttVal_ends,
+    AttVal_spans,
+    EmptyTag_marks,
+    EndTag_marks
+}
+
+type ID_Callouts = <i1>[4] {
+    pubid_start,
+    pubid_end,
+    sysid_start,
+    sysid_end
+}
+
+type Check_streams = <i1>[6] {
+    misc_mask,
+    non_ascii_name_starts,
+    non_ascii_names,
+    tag_marks,
+    name_follows,
+    att_refs
+}
+
+type DTD_Callouts = <i1>[17] {
+    root_name_start,
+    root_name_follow,
+    pubid_start,
+    pubid_end,
+    sysid_start,
+    sysid_end,
+    PERef_starts,
+    PERef_ends,
+    PI_starts,
+    PI_name_follows,
+    PI_ends,
+    notation_name_start,
+    notation_name_follow,
+    notation_pubid_start,
+    notation_pubid_end,
+    notation_sysid_start,
+    notation_sysid_end
+}
+
+type Error = <i1>[5] {
+    IllegalChar,
+    UTF8_Error,
+    PI_Error,
+    CT_Error,
+    CT_CD_PI_Error
+}
+
+
+
+
+kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, Error err] {
+    temp1 = basis_bits[7] | basis_bits[6]
+    temp2 = basis_bits[5] & ~basis_bits[4]
+    temp3 = temp2 & ~temp1
+    temp4 = basis_bits[2] & ~basis_bits[3]
+    temp5 = basis_bits[1] & ~basis_bits[0]
+    temp6 = temp4 & temp5
+    lex.RefStart = temp3 & temp6
+    temp7 = basis_bits[5] & basis_bits[4]
+    temp8 = temp7 & ~temp1
+    temp9 = basis_bits[3] & ~basis_bits[2]
+    temp10 = basis_bits[1] & basis_bits[0]
+    temp11 = temp9 & temp10
+    lex.Semicolon = temp8 & temp11
+    temp12 = basis_bits[3] & basis_bits[2]
+    temp13 = basis_bits[1] | basis_bits[0]
+    temp14 = temp12 & ~temp13
+    lex.LAngle = temp8 & temp14
+    temp15 = temp12 & temp5
+    lex.RAngle = temp8 & temp15
+    temp16 = basis_bits[6] & ~basis_bits[7]
+    temp17 = basis_bits[4] & ~basis_bits[5]
+    temp18 = temp16 & temp17
+    lex.LBracket = temp18 & temp11
+    temp19 = basis_bits[0] & ~basis_bits[1]
+    temp20 = temp12 & temp19
+    lex.RBracket = temp18 & temp20
+    temp21 = basis_bits[3] | basis_bits[2]
+    temp22 = temp19 & ~temp21
+    lex.Exclam = temp3 & temp22
+    temp23 = temp12 & temp10
+    lex.QMark = temp8 & temp23
+    lex.Hyphen = temp3 & temp20
+    lex.Equals = temp8 & temp20
+    temp24 = temp4 & temp10
+    lex.SQuote = temp3 & temp24
+    temp25 = temp5 & ~temp21
+    lex.DQuote = temp3 & temp25
+    lex.Slash = temp3 & temp23
+    temp26 = temp10 & ~temp21
+    lex.Hash = temp3 & temp26
+    temp27 = temp16 & temp7
+    temp28 = temp9 & ~temp13
+    lex.x = temp27 & temp28
+    temp29 = temp9 & temp5
+    lex.Colon = temp8 & temp29
+    temp30 = temp18 & temp23
+    temp31 = temp30 | lex.Colon
+    temp32 = temp16 & ~basis_bits[5]
+    temp33 = basis_bits[2] | temp10
+    temp34 = basis_bits[3] & temp33
+    temp35 = ~temp34
+    temp36 = temp21 | temp13
+    temp37 = (basis_bits[4] & temp35) | (~(basis_bits[4]) & temp36)
+    temp38 = temp32 & temp37
+    temp39 = temp31 | temp38
+    temp40 = temp16 & basis_bits[5]
+    temp41 = temp40 & temp37
+    lex.ASCII_name_start = temp39 | temp41
+    temp42 = temp30 | lex.Hyphen
+    temp43 = temp3 & temp15
+    temp44 = temp42 | temp43
+    temp45 = temp8 & ~temp34
+    temp46 = temp44 | temp45
+    temp47 = temp46 | temp38
+    lex.ASCII_name_char = temp47 | temp41
+    lex.NameScan = lex.ASCII_name_char | basis_bits[7]
+    temp48 = temp1 | basis_bits[5]
+    x00_x1F = ~temp48
+    temp49 = basis_bits[5] | basis_bits[4]
+    temp50 = temp1 | temp49
+    lex.CR = temp20 & ~temp50
+    lex.LF = temp29 & ~temp50
+    temp51 = temp9 & temp19
+    lex.HT = temp51 & ~temp50
+    lex.SP = temp3 & ~temp36
+    temp52 = temp20 | temp29
+    temp53 = temp52 | temp51
+    temp54 = temp53 & ~temp50
+    lex.WS = temp54 | lex.SP
+    temp55 = basis_bits[2] | basis_bits[1]
+    temp56 = basis_bits[3] & temp55
+    lex.Digit = temp8 & ~temp56
+    temp57 = temp16 & ~temp49
+    temp58 = temp57 & ~basis_bits[3]
+    temp59 = ~temp10
+    temp60 = (basis_bits[2] & temp59)|(~(basis_bits[2]) & temp13)
+    temp61 = temp58 & temp60
+    temp62 = lex.Digit | temp61
+    temp63 = temp16 & temp2
+    temp64 = temp63 & ~basis_bits[3]
+    temp65 = temp64 & temp60
+    lex.Hex = temp62 | temp65
+    err.IllegalChar = x00_x1F & ~lex.WS
+
+    ### Validate_utf8(basis_bits, u8):
+    unibyte = ~basis_bits[7]
+    suffix = <0>
+    u8_error = <0>
+    u8_FFFE_FFFF = <0>
+    u8anyscope = <0> #local
+    if basis_bits[7] {
+        prefix = basis_bits[7] & basis_bits[6]
+        prefix2 = prefix & ~basis_bits[5]
+        prefix3 = prefix & temp2
+        prefix4 = prefix & temp7
+        suffix = basis_bits[7] & ~basis_bits[6]
+        temp66 = prefix & ~temp49
+        temp67 = temp21 | basis_bits[1]
+        temp68 = temp66 & ~temp67
+        temp69 = basis_bits[2] & temp13
+        temp70 = basis_bits[3] | temp69
+        temp71 = prefix4 & temp70
+        badprefix = temp68 | temp71
+        u8_error = badprefix
+        scope22 = Advance(prefix2, 1)
+        u8anyscope = scope22
+        if prefix3 | prefix4 {
+            xE0 = prefix3 & ~temp36
+            xED = prefix3 & temp20
+            xF0 = prefix4 & ~temp36
+            temp72 = temp4 & ~temp13
+            xF4 = prefix4 & temp72
+            xA0_xBF = suffix & basis_bits[5]
+            x80_x9F = suffix & ~basis_bits[5]
+            x90_xBF = suffix & temp49
+            x80_x8F = suffix & ~temp49
+            xEF = prefix3 & temp23
+            temp73 = suffix & temp7
+            xBF = temp73 & temp23
+            xBE = temp73 & temp15
+
+            scope32 = Advance(prefix3, 1)
+            scope33 = Advance(scope32, 1)
+            scope42 = Advance(prefix4, 1)
+            scope43 = Advance(scope42, 1)
+            scope44 = Advance(scope43, 1)
+
+            E0_F0_scope = Advance(xE0 | xF0, 1)
+            ED_F4_scope = Advance(xED | xF4, 1)
+            xE0_scope = scope32 & E0_F0_scope
+            xED_scope = scope32 & ED_F4_scope
+            xF0_scope = scope42 & E0_F0_scope
+            xF4_scope = scope42 & ED_F4_scope
+            xEF_scope = Advance(xEF, 1)
+
+            u8lastscope = scope22 | scope33 | scope44
+            u8anyscope = u8lastscope | scope32 | scope42 | scope43
+
+            u8error1 = xE0_scope & x80_x9F
+            u8error2 = xED_scope & xA0_xBF
+            u8error3 = xF0_scope & x80_x8F
+            u8error4 = xF4_scope & x90_xBF
+
+            u8_error = u8_error | u8error1 | u8error2 | u8error3 | u8error4
+
+            EF_BF_pending = Advance(xEF_scope & xBF, 1)
+
+            u8_FFFE_FFFF = (EF_BF_pending & (xBE | xBF))
+        }
+        u8mismatch = u8anyscope ^ suffix
+        u8_error = u8_error | u8mismatch | u8_FFFE_FFFF
+        err.UTF8_Error = u8_error
+    }
+}
+
+
+kernel Parse_CtCDPI
+:: [Lex lex]
+-> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, Error err]
+{
+    ctCDPI_Callouts.Ct_starts = <0>
+    ctCDPI_Callouts.Ct_ends = <0>
+    ctCDPI_Callouts.CD_starts = <0>
+    ctCDPI_Callouts.CD_ends = <0>
+    ctCDPI_Callouts.PI_starts = <0>
+    ctCDPI_Callouts.PI_name_starts = <0>
+    ctCDPI_Callouts.PI_name_ends = <0>
+    ctCDPI_Callouts.PI_ends = <0>
+    CtCDPI_starts = <0>
+    CtCDPI_ends = <0>
+    ctCDPI_mask = <0>
+
+    v = lex.LAngle | lex.Hyphen
+    w = lex.Hyphen | lex.QMark
+    v1 = Advance(v, 1)
+    w1 = Advance(w, 1)
+
+    LAngle_scope = v1 & ~w1
+    PI_opener = LAngle_scope & lex.QMark
+    CtCD_opener= LAngle_scope & lex.Exclam
+    CtCDPI_opener = PI_opener | CtCD_opener
+    CD_closer = <0>
+
+    DoubleHyphen = v1 & w1 & lex.Hyphen
+    if lex.RBracket {
+        DoubleRBracket = Advance(lex.RBracket, 1) & lex.RBracket
+        CD_closer = Advance(DoubleRBracket, 1) & lex.RAngle
+    }
+    PI_closer = w1 & ~v1 & lex.RAngle
+
+    # Initiate the scan
+    CtCDPI_Cursor = ScanTo(~Advance(<1>, 1), CtCDPI_opener)
+    while CtCDPI_Cursor {
+        CtCDPI_starts = CtCDPI_starts | CtCDPI_Cursor
+        PI_Cursor = CtCDPI_Cursor & PI_opener
+        CD_Ct_Cursor = Advance(CtCDPI_Cursor & ~PI_Cursor, 1)
+        CD_Cursor = CD_Ct_Cursor & lex.LBracket
+        Ct_Cursor = CD_Ct_Cursor & lex.Hyphen
+
+        # PI processing
+        if PI_Cursor {
+            ctCDPI_Callouts.PI_starts = ctCDPI_Callouts.PI_starts |  PI_Cursor
+            PI_Cursor = Advance(PI_Cursor, 1)
+            ctCDPI_Callouts.PI_name_starts = ctCDPI_Callouts.PI_name_starts |  PI_Cursor
+            PI_name_end = ScanThru(PI_Cursor, lex.NameScan)
+            PI_error = PI_Cursor & PI_name_end
+            PI_noWS = PI_name_end & ~lex.WS
+            PI_error = PI_error |  PI_noWS & ~lex.QMark | Advance(PI_noWS, 1) & ~PI_closer
+            err.PI_Error = PI_error
+            ctCDPI_Callouts.PI_name_ends = ctCDPI_Callouts.PI_name_ends |  PI_name_end
+            PI_Cursor = ScanTo(PI_name_end, PI_closer)
+            ctCDPI_Callouts.PI_ends = ctCDPI_Callouts.PI_ends |  PI_Cursor
+            CtCDPI_ends = CtCDPI_ends |  PI_Cursor
+        }
+
+        # CDATA section processing
+        if CD_Cursor {
+            ctCDPI_Callouts.CD_starts = ctCDPI_Callouts.CD_starts |  CD_Cursor
+            CD_Cursor = ScanTo(CD_Cursor, CD_closer)
+            ctCDPI_Callouts.CD_ends = ctCDPI_Callouts.CD_ends |  CD_Cursor
+            CtCDPI_ends = CtCDPI_ends |  CD_Cursor
+        }
+
+        # Comment processing
+        if Ct_Cursor {
+            ctCDPI_Callouts.Ct_starts = ctCDPI_Callouts.Ct_starts |  Ct_Cursor
+            Ct_Cursor = Advance(Ct_Cursor, 1)
+            Ct_error = Ct_Cursor & ~ lex.Hyphen
+            # Advance twice past <!--, so that we don't treat <!---
+            # as being a terminated comment.
+            Ct_Cursor = Advance(Ct_Cursor, 2)
+            Ct_Cursor = Advance(ScanTo(Ct_Cursor, DoubleHyphen), 1)
+            err.CT_Error = Ct_error | Ct_Cursor & ~lex.RAngle
+            ctCDPI_Callouts.Ct_ends = ctCDPI_Callouts.Ct_ends |  Ct_Cursor
+            CtCDPI_ends = CtCDPI_ends |  Ct_Cursor
+        }
+
+        # Common processing
+        CtCDPI_Cursor = PI_Cursor | CD_Cursor | Ct_Cursor
+        ctCDPI_mask = (CtCDPI_ends - CtCDPI_starts) | CtCDPI_ends
+
+        # If any of the Comment, CDATA or PI markups are unterminated, it is an error.
+        ctCDPI_error = AtEOF(ctCDPI_mask)
+        err.CT_CD_PI_Error = ctCDPI_error
+
+        CtCDPI_Cursor = ScanTo(CtCDPI_Cursor, CtCDPI_opener)
+    }
+
+    CtPIMask = Advance(ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends, 1) - (ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts)
+    check_streams.misc_mask = InFile(lex.WS | lex.LAngle | CtPIMask | CtCDPI_starts)
+
+    # Identify the remaining significant markers for XML processing.
+    marker.LAngle_scope = LAngle_scope & ~ctCDPI_mask
+    marker.Ref_opener = lex.RefStart & ~ctCDPI_mask
+    marker.CD_closer = CD_closer & ~ctCDPI_mask
+}

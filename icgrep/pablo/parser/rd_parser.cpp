@@ -533,15 +533,17 @@ PabloAST * RecursiveParser::extendArithmeticExpr(PabloAST * lhs, ParserState & s
     Token * const t = state.peekToken();
     TokenType const type = t->getType();
     if (type == TokenType::MINUS || type == TokenType::PLUS) {
-        state.nextToken(); // consume '-' or '+'
-        PabloAST * const factor = parseFactor(state);
-        if (factor == nullptr) {
-            return nullptr;
-        }
-        PabloAST * arithExpr = type == TokenType::MINUS 
-                             ? state.pb->createSubtract(lhs, factor)
-                             : state.pb->createAdd(lhs, factor);
-        return extendArithmeticExpr(arithExpr, state);
+        mErrorManager->logTextError(mCurrentSource, "'-' and '+' don't do what you think they do! remove this functionality");
+        return nullptr;
+        // state.nextToken(); // consume '-' or '+'
+        // PabloAST * const factor = parseFactor(state);
+        // if (factor == nullptr) {
+        //     return nullptr;
+        // }
+        // PabloAST * arithExpr = type == TokenType::MINUS 
+        //                      ? state.pb->createSubtract(lhs, factor)
+        //                      : state.pb->createAdd(lhs, factor);
+        // return extendArithmeticExpr(arithExpr, state);
     } else {
         return lhs;
     }
