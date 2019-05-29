@@ -99,6 +99,8 @@ public:
         , Repeat
         , PackH
         , PackL
+        // Intrinsics
+        , IntrinsicCall
     };
 
     inline ClassTypeId getClassTypeId() const noexcept {
@@ -267,6 +269,22 @@ public:
 protected:
 
     explicit Statement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
+    : NamedPabloAST(id, type, name, allocator)
+    , mOperands(operands.size())
+    , mOperand(allocator.allocate(mOperands))
+    , mNext(nullptr)
+    , mPrev(nullptr)
+    , mParent(nullptr) {
+        unsigned i = 0;
+        for (PabloAST * const value : operands) {
+            assert (value);
+            mOperand[i] = value;
+            value->addUser(this);
+            ++i;
+        }
+    }
+
+    explicit Statement(const ClassTypeId id, llvm::Type * const type, std::vector<PabloAST *> operands, const String * const name, Allocator & allocator)
     : NamedPabloAST(id, type, name, allocator)
     , mOperands(operands.size())
     , mOperand(allocator.allocate(mOperands))

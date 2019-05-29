@@ -332,6 +332,7 @@ kernel Parse_CtCDPI
         CtCDPI_starts = CtCDPI_starts | CtCDPI_Cursor
         PI_Cursor = CtCDPI_Cursor & PI_opener
         CD_Ct_Cursor = Advance(CtCDPI_Cursor & ~PI_Cursor, 1)
+        # CD_Ct_Cursor = PrintRegister(CD_Ct_Cursor)
         CD_Cursor = CD_Ct_Cursor & lex.LBracket
         Ct_Cursor = CD_Ct_Cursor & lex.Hyphen
 
@@ -363,7 +364,7 @@ kernel Parse_CtCDPI
         if Ct_Cursor {
             ctCDPI_Callouts.Ct_starts = ctCDPI_Callouts.Ct_starts |  Ct_Cursor
             Ct_Cursor = Advance(Ct_Cursor, 1)
-            Ct_error = Ct_Cursor & ~ lex.Hyphen
+            Ct_error = Ct_Cursor & ~lex.Hyphen
             # Advance twice past <!--, so that we don't treat <!---
             # as being a terminated comment.
             Ct_Cursor = Advance(Ct_Cursor, 2)
@@ -375,17 +376,17 @@ kernel Parse_CtCDPI
 
         # Common processing
         CtCDPI_Cursor = PI_Cursor | CD_Cursor | Ct_Cursor
-        ctCDPI_mask = (CtCDPI_ends - CtCDPI_starts) | CtCDPI_ends
+        ctCDPI_mask = InclusiveSpan(CtCDPI_starts, CtCDPI_ends)
+        # ctCDPI_mask = (CtCDPI_ends - CtCDPI_starts) | CtCDPI_ends
 
         # If any of the Comment, CDATA or PI markups are unterminated, it is an error.
         ctCDPI_error = AtEOF(ctCDPI_mask)
         err.CT_CD_PI_Error = ctCDPI_error
 
-        CtCDPI_Cursor = ScanTo(CtCDPI_Cursor, CtCDPI_opener)
+        CtCDPI_Cursor = InFile(ScanTo(CtCDPI_Cursor, CtCDPI_opener))
     }
 
-    CtPIMask = Advance(ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends, 1) - (ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts)
-    check_streams.misc_mask = InFile(lex.WS | lex.LAngle | CtPIMask | CtCDPI_starts)
+    # check_streams.misc_mask = (lex.WS | lex.LAngle | InclusiveSpan(ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts, ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends) | CtCDPI_starts) & EOF_mask
 
     # Identify the remaining significant markers for XML processing.
     marker.LAngle_scope = LAngle_scope & ~ctCDPI_mask

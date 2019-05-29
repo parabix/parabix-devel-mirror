@@ -2,8 +2,10 @@
 #define EXPRESSION_MAP_HPP
 
 #include <pablo/pabloAST.h>
+#include <pablo/pablo_intrinsic.h>
 #include <util/slab_allocator.h>
 #include <map>
+#include <vector>
 
 namespace pablo {
 
@@ -144,6 +146,11 @@ struct ExpressionTable {
         return mQuaternary.findOrCall(std::move(functor), typeId, expr1, expr2, expr3, expr4, std::forward<Params>(params)...);
     }
 
+    template<class Functor, typename... Params>
+    inline PabloAST * findIntrinsicOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, std::vector<PabloAST *> argv, Params... params) noexcept {
+        return mIntrinsic.findOrCall(std::move(functor), typeId, std::move(argv), std::forward<Params>(params)...);
+    }
+
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) noexcept {
         const auto typeId = stmt->getClassTypeId();
         switch (typeId) {
@@ -168,6 +175,8 @@ struct ExpressionTable {
                 return mTernary.findOrAdd(stmt, typeId, stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2));
             case PabloAST::ClassTypeId::Ternary:
                 return mQuaternary.findOrAdd(stmt, typeId, stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2), stmt->getOperand(3));
+            case PabloAST::ClassTypeId::IntrinsicCall:
+                return mIntrinsic.findOrAdd(stmt, typeId, llvm::cast<IntrinsicCall>(stmt)->getArgv());
             default:
                 return std::make_pair(stmt, true);
         }
@@ -178,6 +187,7 @@ private:
     FixedArgMap<void *, void *>                 mBinary;
     FixedArgMap<void *, void *, void *>         mTernary;
     FixedArgMap<void *, void *, void *, void *> mQuaternary;
+    FixedArgMap<std::vector<PabloAST *>>        mIntrinsic;
 };
 
 }

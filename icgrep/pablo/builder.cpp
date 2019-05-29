@@ -2,6 +2,7 @@
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
 #include <pablo/branch.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
@@ -980,6 +981,41 @@ PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * 
 
 PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * b, PabloAST * c, const llvm::StringRef prefix) {
     return MAKE_NAMED_QUATERNARY(Ternary, prefix, mask, a, b, c);
+}
+
+PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv) {
+    return [&](){
+        struct __intrinsic_functor {
+            inline PabloAST * operator () (std::vector<PabloAST *> argv) {
+                return cast<PabloAST>(mPb->createIntrinsicCall(mIn, std::move(argv)));
+            }
+            inline __intrinsic_functor(PabloBlock * pb, Intrinsic intrinsic)
+            : mPb(pb), mIn(intrinsic)
+            {}
+            PabloBlock * const mPb;
+            Intrinsic          mIn;
+        };
+        __intrinsic_functor functor(mPb, intrinsic);
+        return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, std::move(argv)));
+    }();
+}
+
+PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const llvm::StringRef prefix) {
+    return [&](){
+        struct __intrinsic_functor {
+            inline PabloAST * operator () (std::vector<PabloAST *> argv) {
+                return cast<PabloAST>(mPb->createIntrinsicCall(mIn, std::move(argv), mPrefix));
+            }
+            inline __intrinsic_functor(PabloBlock * pb, Intrinsic intrinsic, llvm::StringRef prefix)
+            : mPb(pb), mIn(intrinsic), mPrefix(prefix)
+            {}
+            PabloBlock * const mPb;
+            Intrinsic          mIn;
+            llvm::StringRef    mPrefix;
+        };
+        __intrinsic_functor functor(mPb, intrinsic, prefix);
+        return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, std::move(argv)));
+    }();
 }
 
 

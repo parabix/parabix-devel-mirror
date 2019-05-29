@@ -62,7 +62,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     StreamSet * const Lex = P->CreateStreamSet(27, 1);
     StreamSet * const U8 = P->CreateStreamSet(1, 1);
-    StreamSet * const Error = P->CreateStreamSet(5, 1);
+    StreamSet * const LexError = P->CreateStreamSet(5, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -73,13 +73,14 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         Bindings { // Output Stream Bindings
             Binding {"lex", Lex}, 
             Binding {"u8", U8}, 
-            Binding {"err", Error} 
+            Binding {"err", LexError} 
         }
     );
 
     StreamSet * const Marker = P->CreateStreamSet(3, 1);
     StreamSet * const CtCDPI_Callouts = P->CreateStreamSet(8, 1);
     StreamSet * const Check_streams = P->CreateStreamSet(6, 1);
+    StreamSet * const Error = P->CreateStreamSet(5, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,

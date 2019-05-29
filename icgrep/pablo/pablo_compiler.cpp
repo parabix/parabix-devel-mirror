@@ -11,6 +11,7 @@
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
 #include <pablo/branch.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
@@ -609,6 +610,54 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             Value * const op1 = compileExpression(b, stmt->getOperand(2));
             Value * const op2 = compileExpression(b, stmt->getOperand(3));
             value = b->simd_ternary(mask, b->bitCast(op0), b->bitCast(op1), b->bitCast(op2));
+        } else if (const IntrinsicCall * const call = dyn_cast<IntrinsicCall>(stmt)) {
+            std::vector<Value *> argv{};
+            for (PabloAST * const arg : call->getArgv()) {
+                argv.push_back(compileExpression(b, arg));
+            }
+            size_t expectedArgCount = 0;
+            bool validIntrinsic = true;
+
+            #define ASSERT_ARG_COUNT(N) \
+            expectedArgCount = N; \
+            if (argv.size() != expectedArgCount) { break; } \
+
+            switch (call->getIntrinsic()) {
+            case Intrinsic::InclusiveSpan:
+                ASSERT_ARG_COUNT(2);
+                value = b->simd_or(argv[1], mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
+                break;
+            case Intrinsic::PrintRegister:
+                ASSERT_ARG_COUNT(1);
+                b->CallPrintRegister(stmt->getName(), argv[0]);
+                value = argv[0];
+                break;
+            default:
+                validIntrinsic = false;
+                break;
+            }
+
+            #undef ASSERT_ARG_COUNT
+
+            // error checking
+            if (!validIntrinsic) {
+                std::string tmp;
+                raw_string_ostream out(tmp);
+                out << "PabloCompiler: intrinsic id " 
+                    << (uint32_t) call->getIntrinsic() 
+                    << " was not recognized by the compiler";
+                report_fatal_error(out.str());
+            }
+            if (expectedArgCount != argv.size()) {
+                std::string tmp;
+                raw_string_ostream out(tmp);
+                out << "PabloCompiler: intrinsic id " 
+                    << (uint32_t) call->getIntrinsic() << ": "
+                    << "invlaid number of arguments, "
+                    << "expected " << expectedArgCount << ","
+                    << "got " << argv.size();
+                report_fatal_error(out.str());
+            }
         } else {
             std::string tmp;
             raw_string_ostream out(tmp);
