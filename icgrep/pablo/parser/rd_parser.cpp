@@ -11,6 +11,7 @@
 #include <llvm/Support/Casting.h>
 #include <pablo/builder.hpp>
 #include <pablo/branch.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_ones.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/parser/error_text.h>
@@ -779,6 +780,16 @@ static inline void lazyInitializeFunctionGenMap() {
     FUNC_GEN_DEF("AtEOF", {
         ASSERT_ARG_NUM(1);
         return pb->createAtEOF(args[0]);
+    });
+
+    FUNC_GEN_DEF("InclusiveSpan", {
+        ASSERT_ARG_NUM(2);
+        return pb->createIntrinsicCall(Intrinsic::InclusiveSpan, {args[0], args[1]});
+    });
+
+    FUNC_GEN_DEF("PrintRegister", {
+        ASSERT_ARG_NUM(1);
+        return pb->createIntrinsicCall(Intrinsic::PrintRegister, {args[0]});
     });
 }
 

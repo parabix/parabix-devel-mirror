@@ -11,6 +11,7 @@
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <pablo/branch.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
@@ -52,7 +53,16 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
 using TypeId = PabloAST::ClassTypeId;
 
 inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const stmt) {
-    return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt) && !isa<IndexedAdvance>(stmt);
+    if (IntrinsicCall const * call = dyn_cast<IntrinsicCall>(stmt)) {
+        switch (call->getIntrinsic()) {
+        case Intrinsic::InclusiveSpan:
+            return true;
+        default:
+            return false;
+        }
+    } else {
+        return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt) && !isa<IndexedAdvance>(stmt);
+    }
 }
 
 #define LONG_ADVANCE_BREAKPOINT 64
@@ -587,6 +597,19 @@ Value * CarryManager::addCarryInCarryOut(const std::unique_ptr<kernel::KernelBui
     Value * carryOut, * result;
     std::tie(carryOut, result) = b->bitblock_add_with_carry(e1, e2, carryIn);
     setNextCarryOut(b, carryOut);
+    assert (result->getType() == b->getBitBlockType());
+    return result;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief subBorrowInBorrowOut
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * CarryManager::subBorrowInBorrowOut(const std::unique_ptr<kernel::KernelBuilder> & b, const Statement * operation, Value * const e1, Value * const e2) {
+    assert (operation);
+    Value * const borrowIn = getNextCarryIn(b);
+    Value * borrowOut, * result;
+    std::tie(borrowOut, result) = b->bitblock_subtract_with_borrow(e1, e2, borrowIn);
+    setNextCarryOut(b, borrowOut);
     assert (result->getType() == b->getBitBlockType());
     return result;
 }

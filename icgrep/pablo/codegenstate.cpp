@@ -9,6 +9,7 @@
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
 #include <pablo/branch.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_infile.h>
@@ -339,6 +340,12 @@ Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, 
     CHECK_SAME_TYPE(a, b);
     CHECK_SAME_TYPE(b, c);
     return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
+}
+
+
+
+IntrinsicCall * PabloBlock::createIntrinsicCall(Intrinsic intrinsic, llvm::Type * type, std::vector<PabloAST *> argv, const String * name) {
+    return insertAtInsertionPoint(new (mAllocator) IntrinsicCall(intrinsic, type, std::move(argv), name, mAllocator));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

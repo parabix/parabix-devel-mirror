@@ -26,6 +26,7 @@ namespace pablo { class While; }
 namespace pablo { class Count; }
 namespace pablo { class Extract; }
 namespace pablo { class InFile; }
+namespace pablo { enum class Intrinsic; class IntrinsicCall; }
 namespace pablo { class LessThan; }
 namespace pablo { class Equals; }
 namespace pablo { class Lookahead; }
@@ -307,6 +308,17 @@ public:
     }
 
     PackL * createPackL(Integer * fieldWidth, PabloAST * value, const String * const name = nullptr);
+
+    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const llvm::StringRef prefix) {
+        return createIntrinsicCall(intrinsic, std::move(argv), makeName(prefix));
+    }
+
+    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const String * name = nullptr) {
+        assert (argv.size() > 0);
+        return createIntrinsicCall(intrinsic, (*argv.begin())->getType(), std::move(argv), name);
+    }
+
+    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::Type * type, std::vector<PabloAST *> argv, const String * name = nullptr);
 
     PabloBlock * getPredecessor() const;
 

@@ -182,6 +182,7 @@ const String & Statement::getName() const {
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
             MAKE_PREFIX(Ternary, "ternary");
+            MAKE_PREFIX(IntrinsicCall, "intrinsic_call");
             default: llvm_unreachable("invalid statement type");
         }
         #undef MAKE_PREFIX
