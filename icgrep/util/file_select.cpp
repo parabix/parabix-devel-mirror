@@ -339,16 +339,16 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
                         // If there was an error, we leave the file in the fileCandidates
                         // list for later error processing.
                         if (!NoMessagesFlag) {
-                            fileCandidates.append(e.filename().string());
+                            fileCandidates.append(e.string());
                         }
                     } else if (fs::is_directory(s)) {
                         if (fs::is_symlink(e) && !DereferenceRecursiveFlag) {
                             di.increment(errc);
                             continue;
                         }
-                        subdirCandidates.append(e.filename().string());
+                        subdirCandidates.append(e.string());
                     } else if (fs::is_regular_file(s) || DevicesFlag == Read) {
-                        fileCandidates.append(e.filename().string());
+                        fileCandidates.append(e.string());
                     }
                     boost::system::error_code errc2;
                     di.increment(errc2);
@@ -356,8 +356,8 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
                 }
                 // For each directory, update counts for candidates generated at this level.
                 //
-                directoryAccum.addDirectory(dirpath, subdirCandidates.getCandidateCount());
-                fileAccum.addDirectory(dirpath, fileCandidates.getCandidateCount());
+                directoryAccum.setFullPathEntries(subdirCandidates.getCandidateCount());
+                fileAccum.setFullPathEntries(fileCandidates.getCandidateCount());
             }
 
 
