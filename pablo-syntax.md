@@ -4,8 +4,7 @@
 
 ``` bnf
 <expression> ::=  <term> | <expression> "|" <term> | <expression> "^" <term>
-<term> ::=  <arithmetic-expr> | <term> "&" <arithmetic-expr>
-<arithmetic-expr> ::= <factor> | <arithmetic-expr> "+" <factor> | <arithmetic-expr> "-" <factor>
+<term> ::=  <arithmetic-expr> | <term> "&" <factor>
 <factor> ::= <primitive> | "~" <primitive>
 <primitive> ::= <literal> | <variable> | <function-call> | "(" <expression> ")"
 <literal> ::= <int> | "<" <int> ">"
