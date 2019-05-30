@@ -88,8 +88,6 @@ private:
     PabloAST * extendExpression(PabloAST * lhs, ParserState & state);
     PabloAST * parseTerm(ParserState & state);
     PabloAST * extendTerm(PabloAST * lhs, ParserState & state);
-    PabloAST * parseArithmeticExpr(ParserState & state);
-    PabloAST * extendArithmeticExpr(PabloAST * lhs, ParserState & state);
     PabloAST * parseFactor(ParserState & state);
     PabloAST * parsePrimitive(ParserState & state);
     PabloAST * parseFunctionCall(ParserState & state);
