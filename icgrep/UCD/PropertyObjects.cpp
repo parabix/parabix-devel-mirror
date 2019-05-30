@@ -105,7 +105,7 @@ const UnicodeSet EnumeratedPropertyObject::GetCodepointSetMatchingPattern(re::RE
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr);
+    engine.grepCodeGen(pattern);
     engine.doGrep(aligned, n, accum);
     //grepBuffer(pattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
@@ -247,7 +247,7 @@ const UnicodeSet ExtensionPropertyObject::GetCodepointSetMatchingPattern(re::RE 
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr);
+    engine.grepCodeGen(pattern);
     engine.doGrep(aligned, n, accum);
     alloc.deallocate(aligned, 0);
     
@@ -372,7 +372,7 @@ const UnicodeSet NumericPropertyObject::GetCodepointSetMatchingPattern(re::RE * 
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr);
+    engine.grepCodeGen(pattern);
     engine.doGrep(mStringBuffer, mBufSize, accum);
     //grepBuffer(pattern, mStringBuffer, mBufSize, &accum);
     return accum.getAccumulatedSet();
@@ -416,7 +416,7 @@ const UnicodeSet StringPropertyObject::GetCodepointSetMatchingPattern(re::RE * p
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr);
+    engine.grepCodeGen(pattern);
     const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
     engine.doGrep(mStringBuffer, bufSize, accum);
     matched.insert(accum.getAccumulatedSet());
@@ -476,7 +476,7 @@ const UnicodeSet StringOverridePropertyObject::GetCodepointSetMatchingPattern(re
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
-    engine.grepCodeGen(pattern, nullptr);
+    engine.grepCodeGen(pattern);
     const unsigned bufSize = mStringOffsets[mExplicitCps.size()];
     engine.doGrep(mStringBuffer, bufSize, accum);
     base_set.insert(accum.getAccumulatedSet());

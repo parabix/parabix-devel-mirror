@@ -17,6 +17,7 @@
 #include <re/re_start.h>
 #include <re/re_end.h>
 #include <re/re_cc.h>
+#include <re/re_assertion.h>
 #include <re/re_toolchain.h>
 #include <re/printer_re.h>
 #include <grep/grep_engine.h>
@@ -88,29 +89,33 @@ re::RE * anchorToFullFileName(re::RE * glob) {
 
 bool UseStdIn;
 
-re::RE * getDirectoryExcludePattern() {
-    if (ExcludeDirFlag != "") {
-        auto excludeDir = re::RE_Parser::parse(ExcludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        return anchorToFullFileName(excludeDir);
-    } else {
-        return re::makeAlt();  // matches nothing, so excludes nothing.
-    }
-}
-
-re::RE * getDirectoryIncludePattern() {
+re::RE * getDirectoryPattern() {
+    re::RE * dirRE = nullptr;
     if (IncludeDirFlag != "") {
         auto dir = re::RE_Parser::parse(IncludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        return anchorToFullFileName(dir);
+        dirRE = anchorToFullFileName(dir);
     } else {
-        return re::makeEnd();  // matches every line..
+        dirRE = re::makeEnd();
     }
+    if (ExcludeDirFlag == "") {
+        return dirRE;
+    }
+    re::RE * excl = re::RE_Parser::parse(ExcludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+    return re::makeSeq({dirRE, re::makeNegativeLookBehindAssertion(anchorToFullFileName(excl))});
 }
-
-re::RE * getFileExcludePattern() {
-    std::vector<re::RE *> patterns;
+    
+re::RE * getFilePattern() {
+    re::RE * fileRE = nullptr;
+    if (IncludeFlag != "") {
+        re::RE * includeSpec = re::RE_Parser::parse(IncludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+        fileRE = anchorToFullFileName(includeSpec);
+    } else {
+        fileRE = re::makeEnd();  // matches every line.
+    }
+    std::vector<re::RE *> excluded_patterns;
     if (ExcludeFlag != "") {
         re::RE * glob = re::RE_Parser::parse(ExcludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        patterns.push_back(glob);
+        excluded_patterns.push_back(glob);
     }
     if (ExcludeFromFlag != "") {
         std::ifstream globFile(ExcludeFromFlag.c_str());
@@ -118,25 +123,16 @@ re::RE * getFileExcludePattern() {
         if (globFile.is_open()) {
             while (std::getline(globFile, r)) {
                 re::RE * glob = re::RE_Parser::parse(r, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-                patterns.push_back(glob);
+                excluded_patterns.push_back(glob);
             }
             globFile.close();
         }
     }
-    if (patterns.empty()) return re::makeAlt();  // matches nothing, so excludes nothing.
-    return anchorToFullFileName(re::makeAlt(patterns.begin(), patterns.end()));
+    if (excluded_patterns.empty()) return fileRE;
+    re::RE * exclRE = anchorToFullFileName(re::makeAlt(excluded_patterns.begin(), excluded_patterns.end()));
+    return re::makeSeq({fileRE, re::makeNegativeLookBehindAssertion(exclRE)});
 }
-
-re::RE * getFileIncludePattern() {
-    if (IncludeFlag != "") {
-        re::RE * includeSpec = re::RE_Parser::parse(IncludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        includeSpec = anchorToFullFileName(includeSpec);
-        return includeSpec;
-    } else {
-        return re::makeEnd();  // matches every line.
-    }
-}
-
+    
 namespace fs = boost::filesystem;
 
 //
@@ -294,7 +290,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         CPUDriver driver("driver");
         grep::InternalSearchEngine directorySelectEngine(driver);
         directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-        directorySelectEngine.grepCodeGen(getDirectoryIncludePattern(), getDirectoryExcludePattern());
+        directorySelectEngine.grepCodeGen(getDirectoryPattern());
 
         // The initial grep search determines which of the command line directories to process.
         // Each of these candidates is a full path return from command line argument processing.
@@ -374,7 +370,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     CPUDriver driver("driver");
     grep::InternalSearchEngine fileSelectEngine(driver);
     fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-    fileSelectEngine.grepCodeGen(getFileIncludePattern(), getFileExcludePattern());
+    fileSelectEngine.grepCodeGen(getFilePattern());
     fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
     return collectedPaths;
 }

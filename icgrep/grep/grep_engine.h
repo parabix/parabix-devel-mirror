@@ -211,7 +211,7 @@ public:
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
-    void grepCodeGen(re::RE * matchingRE, re::RE * invertedRE);
+    void grepCodeGen(re::RE * matchingRE);
 
     void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
 

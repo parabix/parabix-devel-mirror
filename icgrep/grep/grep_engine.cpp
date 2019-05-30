@@ -703,7 +703,7 @@ InternalSearchEngine::InternalSearchEngine(BaseDriver &driver) :
     mGrepDriver(driver),
     mMainMethod(nullptr) {}
 
-void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE) {
+void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     auto & idb = mGrepDriver.getBuilder();
     mSaveSegmentPipelineParallel = codegen::SegmentPipelineParallel;
     codegen::SegmentPipelineParallel = false;
@@ -714,22 +714,12 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
     } else {// if (mGrepRecordBreak == GrepRecordBreakKind::LF)
         breakCC = re::makeByte(0x0A);
     }
-    bool excludeNothing = (excludedRE == nullptr) || (isa<re::Alt>(excludedRE) && cast<re::Alt>(excludedRE)->empty());
-    bool matchAllLines = (matchingRE == nullptr) || isa<re::End>(matchingRE);
-    if (!matchAllLines) {
-        matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
-        matchingRE = regular_expression_passes(matchingRE);
-        matchingRE = re::exclude_CC(matchingRE, breakCC);
-        matchingRE = resolveAnchors(matchingRE, breakCC);
-        matchingRE = toUTF8(matchingRE);
-    }
-    if (!excludeNothing) {
-        excludedRE = resolveCaseInsensitiveMode(excludedRE, mCaseInsensitive);
-        excludedRE = regular_expression_passes(excludedRE);
-        excludedRE = re::exclude_CC(excludedRE, breakCC);
-        excludedRE = resolveAnchors(excludedRE, breakCC);
-        excludedRE = toUTF8(excludedRE);
-    }
+
+    matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
+    matchingRE = regular_expression_passes(matchingRE);
+    matchingRE = re::exclude_CC(matchingRE, breakCC);
+    matchingRE = resolveAnchors(matchingRE, breakCC);
+    matchingRE = toUTF8(matchingRE);
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
                                        Binding{idb->getSizeTy(), "length"},
@@ -740,54 +730,21 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE, re::RE * excludedRE)
     StreamSet * ByteStream = E->CreateStreamSet(1, 8);
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
-
     StreamSet * RecordBreakStream = E->CreateStreamSet();
     const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
 
-    StreamSet * BasisBits = nullptr;
+    StreamSet * BasisBits = E->CreateStreamSet(8);
+    E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
-    if (matchAllLines && excludeNothing) {
-        E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, ByteStream, RecordBreakStream);
-    } else {
-        BasisBits = E->CreateStreamSet(8);
-        E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-        E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
-    }
-
-    StreamSet * MatchingRecords = nullptr;
-    if (matchAllLines) {
-        MatchingRecords = RecordBreakStream;
-    } else {
-        StreamSet * MatchResults = E->CreateStreamSet();
-        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-        options->setRE(matchingRE);
-        options->setSource(BasisBits);
-        options->setResults(MatchResults);
-        E->CreateKernelCall<ICGrepKernel>(std::move(options));
-        MatchingRecords = E->CreateStreamSet();
-        E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
-    }
-    if (!excludeNothing) {
-        StreamSet * ExcludedResults = E->CreateStreamSet();
-        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-        options->setRE(excludedRE);
-        options->setSource(BasisBits);
-        options->setResults(ExcludedResults);
-        E->CreateKernelCall<ICGrepKernel>(std::move(options));
-        StreamSet * ExcludedRecords = E->CreateStreamSet();
-        E->CreateKernelCall<MatchedLinesKernel>(ExcludedResults, RecordBreakStream, ExcludedRecords);
-
-        if (!matchAllLines) {
-            StreamSet * nonExcluded = E->CreateStreamSet();
-            E->CreateKernelCall<InvertMatchesKernel>(ExcludedRecords, RecordBreakStream, nonExcluded);
-            StreamSet * const included = MatchingRecords;
-            MatchingRecords = E->CreateStreamSet();
-            E->CreateKernelCall<StreamsIntersect>(std::vector<StreamSet *>{included, nonExcluded}, MatchingRecords);
-        } else {
-            MatchingRecords = E->CreateStreamSet();
-            E->CreateKernelCall<InvertMatchesKernel>(ExcludedRecords, RecordBreakStream, MatchingRecords);
-        }
-    }
+    StreamSet * MatchResults = E->CreateStreamSet();
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+    options->setRE(matchingRE);
+    options->setSource(BasisBits);
+    options->setResults(MatchResults);
+    E->CreateKernelCall<ICGrepKernel>(std::move(options));
+    StreamSet * MatchingRecords = E->CreateStreamSet();
+    E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
 
     Kernel * scanMatchK = E->CreateKernelCall<ScanMatchKernel>(MatchingRecords, RecordBreakStream, ByteStream, E->getInputScalar(2));
     mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
