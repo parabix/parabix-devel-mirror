@@ -506,11 +506,11 @@ PabloAST * RecursiveParser::extendExpression(PabloAST * lhs, ParserState & state
 
 
 PabloAST * RecursiveParser::parseTerm(ParserState & state) {
-    PabloAST * const arithExpr = parseArithmeticExpr(state);
-    if (arithExpr == nullptr) {
+    PabloAST * const factor = parseFactor(state);
+    if (factor == nullptr) {
         return nullptr;
     }
-    return extendTerm(arithExpr, state);
+    return extendTerm(factor, state);
 }
 
 
@@ -519,44 +519,14 @@ PabloAST * RecursiveParser::extendTerm(PabloAST * lhs, ParserState & state) {
     TokenType const type = t->getType();
     if (type == TokenType::AND) {
         state.nextToken(); // consume '&'
-        PabloAST * const arithExpr = parseArithmeticExpr(state);
-        if (arithExpr == nullptr) {
+        PabloAST * const factor = parseFactor(state);
+        if (factor == nullptr) {
             return nullptr;
         }
-        PabloAST * const term = state.pb->createAnd(lhs, arithExpr);
+        PabloAST * const term = state.pb->createAnd(lhs, factor);
         return extendTerm(term, state);
     }
     return lhs;
-}
-
-
-PabloAST * RecursiveParser::parseArithmeticExpr(ParserState & state) {
-    PabloAST * const factor = parseFactor(state);
-    if (factor == nullptr) {
-        return nullptr;
-    }
-    return extendArithmeticExpr(factor, state);
-}
-
-
-PabloAST * RecursiveParser::extendArithmeticExpr(PabloAST * lhs, ParserState & state) {
-    Token * const t = state.peekToken();
-    TokenType const type = t->getType();
-    if (type == TokenType::MINUS || type == TokenType::PLUS) {
-        mErrorManager->logTextError(state.sourceData->file, "'-' and '+' don't do what you think they do! remove this functionality");
-        return nullptr;
-        // state.nextToken(); // consume '-' or '+'
-        // PabloAST * const factor = parseFactor(state);
-        // if (factor == nullptr) {
-        //     return nullptr;
-        // }
-        // PabloAST * arithExpr = type == TokenType::MINUS 
-        //                      ? state.pb->createSubtract(lhs, factor)
-        //                      : state.pb->createAdd(lhs, factor);
-        // return extendArithmeticExpr(arithExpr, state);
-    } else {
-        return lhs;
-    }
 }
 
 
