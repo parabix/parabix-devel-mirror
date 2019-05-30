@@ -7,6 +7,7 @@
 #pragma once
 
 #include <vector>
+#include <boost/make_unique.hpp>
 #include <pablo/parser/error.h>
 #include <pablo/parser/lexer.h>
 
@@ -21,6 +22,12 @@ namespace parse {
  * errors.
  */
 class SimpleLexer final : public Lexer {
+public:
+
+    static std::unique_ptr<Lexer> Create(std::shared_ptr<ErrorManager> errorDelegate) {
+        return boost::make_unique<SimpleLexer>(std::move(errorDelegate));
+    }
+
 public:
 
     SimpleLexer() = delete;
