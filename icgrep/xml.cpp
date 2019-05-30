@@ -111,30 +111,29 @@ int main(int argc, char ** argv) {
     const int fd = open(inputFile.c_str(), O_RDONLY);
     if (LLVM_UNLIKELY(fd == -1)) {
         if (errno == EACCES) {
-            std::cerr << "wc: " << inputFile << ": Permission denied.\n";
+            std::cerr << "xml: " << inputFile << ": Permission denied.\n";
         }
         else if (errno == ENOENT) {
-            std::cerr << "wc: " << inputFile << ": No such file.\n";
+            std::cerr << "xml: " << inputFile << ": No such file.\n";
         }
         else {
-            std::cerr << "wc: " << inputFile << ": Failed.\n";
+            std::cerr << "xml: " << inputFile << ": Failed.\n";
         }
         return errno;
     }
     if (stat(inputFile.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)) {
-        std::cerr << "wc: " << inputFile << ": Is a directory.\n";
+        std::cerr << "xml: " << inputFile << ": Is a directory.\n";
         close(fd);
         return -1;
     }
 
-    CPUDriver pxDriver("wc-pablo");
-    auto em = std::make_shared<ErrorManager>();
-    auto lexer = llvm::make_unique<SimpleLexer>(em);
-    auto parser = std::make_shared<RecursiveParser>(std::move(lexer), em);
-    SmallString<128> path;
-    sys::path::home_directory(path);
-    sys::path::append(path, ".cache", "parabix", "xml.pablo");
-    auto source = std::make_shared<SourceFile>(std::string(path.c_str()));
+    CPUDriver pxDriver("xml-pablo");
+    auto em = ErrorManager::Create();
+    auto parser = RecursiveParser::Create(SimpleLexer::Create(em), em);
+    auto source = SourceFile::Relative("xml.pablo");
+    if (source == nullptr) {
+        std::cerr << "pablo-parser: error loading pablo source file: xml.pablo\n";
+    }
     auto xmlProcessFuncPtr = xmlPipelineGen(pxDriver, parser, source);
 
     xmlProcessFuncPtr(fd);
