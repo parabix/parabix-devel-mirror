@@ -23,9 +23,6 @@ class SourceFile;
 
 /**
  * Abstract interface for all pablo parser implementations.
- *
- * The two primary methods, parse and unparse, must be inverse operations in
- * all implementations (i.e., parse(unparse(X)) == X for all valid X).
  */
 class PabloParser {
 public:
@@ -46,12 +43,6 @@ public:
      * @return `true` iff parse was successful, `false` otherwise.
      */
     virtual bool parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) = 0;
-
-    /**
-     * The reverse operation of parse. Writes pablo source code to an output
-     * stream by reading a given set kernels.
-     */
-    virtual void unparse(std::ostream & out, std::vector<PabloKernel *> const & kernels) = 0;
 
     /**
      * Returns a pointer to this parser's error manager delegate.

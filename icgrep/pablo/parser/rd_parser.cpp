@@ -56,10 +56,10 @@ namespace parse {
 
 
 Token * RecursiveParser::ParserState::nextToken() {
-    assert (parser->mTokenList[index]);
-    Token * t = parser->mTokenList[index];
+    assert (sourceData->tokenList[index]);
+    Token * t = sourceData->tokenList[index];
     if (t->getType() != TokenType::EOF_TOKEN) {
-        assert (index < parser->mTokenList.size() - 1);
+        assert (index < sourceData->tokenList.size() - 1);
         index++;
     }
     return t;
@@ -67,29 +67,29 @@ Token * RecursiveParser::ParserState::nextToken() {
 
 
 Token * RecursiveParser::ParserState::peekToken() {
-    assert (parser->mTokenList[index]);
-    return parser->mTokenList[index];
+    assert (sourceData->tokenList[index]);
+    return sourceData->tokenList[index];
 }
 
 
 Token * RecursiveParser::ParserState::peekAhead(size_t n) {
-    assert (parser->mTokenList[index]);
+    assert (sourceData->tokenList[index]);
     // n - 1 as we are already pointing at the next token
     // peekAhead(1) is equivalent to peekToken()
-    if (index + n - 1 >= parser->mTokenList.size()) {
-        return parser->mTokenList.back();
+    if (index + n - 1 >= sourceData->tokenList.size()) {
+        return sourceData->tokenList.back();
     }
-    return parser->mTokenList[index + n - 1];
+    return sourceData->tokenList[index + n - 1];
 }
 
 
 Token * RecursiveParser::ParserState::prevToken() {
-    assert (parser->mTokenList[index]);
+    assert (sourceData->tokenList[index]);
     if (index > 0) {
-        assert (parser->mTokenList[index - 1]);
-        return parser->mTokenList[index - 1];
+        assert (sourceData->tokenList[index - 1]);
+        return sourceData->tokenList[index - 1];
     }
-    return parser->mTokenList[index];
+    return sourceData->tokenList[index];
 }
 
 
@@ -107,21 +107,23 @@ void RecursiveParser::ParserState::popSymbolTable() {
 }
 
 
-RecursiveParser::ParserState::ParserState(RecursiveParser * parser, size_t index)
+RecursiveParser::ParserState::ParserState(RecursiveParser * parser, size_t index, SourceData * sourceData)
 : parser(parser)
 , pb(nullptr)
 , kernel(nullptr)
 , index(index)
 , symbolTable(nullptr)
+, sourceData(sourceData)
 {}
 
 
-RecursiveParser::ParserState::ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel)
+RecursiveParser::ParserState::ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel, SourceData * sourceData)
 : parser(parser)
 , pb(pb)
 , kernel(kernel)
 , index(0)
 , symbolTable(nullptr)
+, sourceData(sourceData)
 {
     pushSymbolTable();
 }
@@ -136,29 +138,37 @@ RecursiveParser::ParserState::~ParserState() {
 
 bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) {
     assert (kernel);
+    assert (!kernelName.empty());
 
-    if (mTokenList.empty()) {
+    // Construct source data for the source file or get existing source data if
+    // we've already processed this file before.
+    SourceData * data = nullptr;
+    auto it = mSources.find(sourceFile.get());
+    if (it == mSources.end()) {
         auto optList = mLexer->tokenize(sourceFile);
-        if (!optList) {
+        if (!optList)
             return false;
-        }
-        mTokenList = std::move(optList.value());
-        initializeParser();
+        data = generateSourceDate(sourceFile, *optList);
+        if (data == nullptr)
+            return false;
+        mSources.insert({sourceFile.get(), data});
+    } else {
+        data = it->second;
     }
-    if (!mErrorManager->shouldContinue()) {
+
+    // Construct parser state object.
+    PabloBuilder pb(kernel->getEntryScope());
+    ParserState state(this, &pb, kernel, data);
+
+    // Find location of the kernel to parse.
+    auto kernelLocIt = data->kernelLocations.find(kernelName);
+    if (kernelLocIt == data->kernelLocations.end()) {
+        mErrorManager->logTextError(sourceFile, "No defintion for '" + kernelName + "' found.");
         return false;
     }
-    mCurrentSource = sourceFile;
-    PabloBuilder pb(kernel->getEntryScope());
-    ParserState state(this, &pb, kernel);
-    if (!kernelName.empty()) {
-        auto location = mKernelLocations.find(kernelName);
-        if (location == mKernelLocations.end()) {
-            mErrorManager->logTextError(mCurrentSource, "No defintion for '" + kernelName + "' found.");
-            return false;
-        }
-        state.index = location->getValue();
-    }
+    state.index = kernelLocIt->getValue();
+
+    // Parse kernel.
     auto signature = parseKernelSignature(state);
     if (!signature || !mErrorManager->shouldContinue()) {
         return false;
@@ -172,40 +182,39 @@ bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloS
 }
 
 
-void RecursiveParser::initializeParser() {
-    for (size_t i = 0, j = 1; j < mTokenList.size(); i++, j++) {
-        Token * const keyword = mTokenList[i];
-        Token * const identifier = mTokenList[j];
+RecursiveParser::SourceData * RecursiveParser::generateSourceDate(std::shared_ptr<SourceFile> file, std::vector<Token *> const & tokenList) {
+    llvm::StringMap<size_t> kernelLocations{};
+    llvm::StringMap<PabloType *> typeDefTable{};
+    for (size_t i = 0, j = 1; j < tokenList.size(); i++, j++) {
+        Token * const keyword = tokenList[i];
+        Token * const identifier = tokenList[j];
 
         if (keyword->getType() == TokenType::TYPE) {
-            ParserState state(this, i);
+            SourceData tmpSourceData{file, tokenList, {}, {}};
+            ParserState state(this, i, &tmpSourceData);
             PabloType * const definedType = parseTypeDefinition(state);
             if (definedType == nullptr) {
-                return;
+                return nullptr;
             }
             assert (identifier->getType() == TokenType::IDENTIFIER);
-            auto itOk = mTypeDefTable.insert({identifier->getText(), definedType});
+            auto itOk = typeDefTable.insert({identifier->getText(), definedType});
             if (!itOk.second) {
                 mErrorManager->logFatalError(identifier, errtxt_DuplicateTypeDefinition(identifier->getText()));
-                return;
+                return nullptr;
             }
         }
 
         if (keyword->getType() == TokenType::KERNEL && identifier->getType() == TokenType::IDENTIFIER) {
-            auto rt = mKernelLocations.try_emplace(identifier->getText(), i);
+            auto rt = kernelLocations.try_emplace(identifier->getText(), i);
             if (!rt.second) {
-                size_t prev = mKernelLocations.lookup(identifier->getText());
-                Token * p = mTokenList[prev];
+                size_t prev = kernelLocations.lookup(identifier->getText());
+                Token * p = tokenList[prev];
                 mErrorManager->logFatalError(identifier, "duplicate kernel declaration");
                 mErrorManager->logNote(p, errtxt_PreviousDefinitionNote());
             }
         }
     }
-}
-
-
-void RecursiveParser::unparse(std::ostream & out, std::vector<PabloKernel *> const & kernels) {
-    // TODO: implement me!
+    return new SourceData{std::move(file), tokenList, std::move(kernelLocations), std::move(typeDefTable)};
 }
 
 
@@ -264,8 +273,8 @@ PabloType * RecursiveParser::parseSigType(ParserState & state) {
     Token * const t = state.nextToken();
     TokenType const type = t->getType();
     if (type == TokenType::IDENTIFIER) {
-        auto it = mTypeDefTable.find(t->getText());
-        if (it == mTypeDefTable.end()) {
+        auto it = state.sourceData->typeDefTable.find(t->getText());
+        if (it == state.sourceData->typeDefTable.end()) {
             mErrorManager->logFatalError(t, errtxt_UndefinedTypename(t->getText()));
             return nullptr;
         }
@@ -534,7 +543,7 @@ PabloAST * RecursiveParser::extendArithmeticExpr(PabloAST * lhs, ParserState & s
     Token * const t = state.peekToken();
     TokenType const type = t->getType();
     if (type == TokenType::MINUS || type == TokenType::PLUS) {
-        mErrorManager->logTextError(mCurrentSource, "'-' and '+' don't do what you think they do! remove this functionality");
+        mErrorManager->logTextError(state.sourceData->file, "'-' and '+' don't do what you think they do! remove this functionality");
         return nullptr;
         // state.nextToken(); // consume '-' or '+'
         // PabloAST * const factor = parseFactor(state);
@@ -811,11 +820,15 @@ RecursiveParser::RecursiveParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<E
 : PabloParser()
 , mLexer(std::move(lexer))
 , mErrorManager(std::move(errorDelegate))
-, mTokenList()
-, mCurrentSource(nullptr)
-, mKernelLocations()
-, mTypeDefTable()
+, mSources()
 {}
+
+
+RecursiveParser::~RecursiveParser() {
+    for (auto const & kv : mSources) {
+        delete kv.second;
+    }
+}
 
 } // namespace pablo::parse
 } // namespace pablo
