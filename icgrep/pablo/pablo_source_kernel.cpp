@@ -12,6 +12,8 @@
 #include <pablo/parser/pablo_parser.h>
 #include <pablo/parser/source_file.h>
 
+#include <pablo/pretty_printer.h>
+
 namespace pablo {
 
 void PabloSourceKernel::generatePabloMethod() {
@@ -21,6 +23,7 @@ void PabloSourceKernel::generatePabloMethod() {
         em->dumpErrors();
         llvm::report_fatal_error("parse error", false);
     }
+    // PrettyPrint(this, llvm::errs());
 }
 
 PabloSourceKernel::PabloSourceKernel(std::unique_ptr<kernel::KernelBuilder> const & builder,
