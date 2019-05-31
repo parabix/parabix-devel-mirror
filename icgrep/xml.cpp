@@ -11,6 +11,8 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/error_monitor_kernel.h>
+#include <kernels/p2s_kernel.h>
+#include <kernels/stdout_kernel.h>
 #include <kernels/core/streamset.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
@@ -62,7 +64,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     StreamSet * const Lex = P->CreateStreamSet(27, 1);
     StreamSet * const U8 = P->CreateStreamSet(1, 1);
-    StreamSet * const LexError = P->CreateStreamSet(5, 1);
+    StreamSet * const LexError = P->CreateStreamSet(2, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -80,7 +82,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     StreamSet * const Marker = P->CreateStreamSet(3, 1);
     StreamSet * const CtCDPI_Callouts = P->CreateStreamSet(8, 1);
     StreamSet * const Check_streams = P->CreateStreamSet(6, 1);
-    StreamSet * const Error = P->CreateStreamSet(5, 1);
+    StreamSet * const CT_CD_PI_Error = P->CreateStreamSet(3, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -92,9 +94,73 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
             Binding {"marker", Marker},
             Binding {"ctCDPI_Callouts", CtCDPI_Callouts},
             Binding {"check_streams", Check_streams},
+            Binding {"err", CT_CD_PI_Error}
+        }
+    );
+
+    StreamSet * const TagError = P->CreateStreamSet(1, 1);
+    StreamSet * const TagCallouts = P->CreateStreamSet(9, 1);
+    StreamSet * const PrintStream = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        xmlPabloSrc,
+        "ParseTags",
+        Bindings { // Input Stream Bindings
+            Binding {"lex", Lex},
+            Binding {"marker", Marker}
+        },
+        Bindings { // Output Stream Bindings
+            Binding {"tag_Callouts", TagCallouts},
+            Binding {"err", TagError},
+            Binding {"print", PrintStream}
+        }
+    );
+
+    StreamSet * const Error = P->CreateStreamSet(6, 1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        xmlPabloSrc,
+        "ErrorCombiner",
+        Bindings { // Input Stream Bindings
+            Binding {"lexErr", LexError},
+            Binding {"ccpErr", CT_CD_PI_Error},
+            Binding {"tagErr", TagError}
+        },
+        Bindings { // Output Stream Bindings
             Binding {"err", Error}
         }
     );
+
+    StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        xmlPabloSrc,
+        "MaskedBasisBits",
+        Bindings {
+            Binding {"basisBits", BasisBits},
+            Binding {"mask", PrintStream}
+        },
+        Bindings {
+            Binding {"maskedBasisBits", MaskedBasisBits}
+        }
+    );
+
+    StreamSet * const PrintableMaskedBasisBits = P->CreateStreamSet(8, 1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        xmlPabloSrc,
+        "PrintableMaskedBasisBits",
+        Bindings {
+            Binding {"basisBits", MaskedBasisBits},
+        },
+        Bindings {
+            Binding {"printableBasisBits", PrintableMaskedBasisBits}
+        }
+    );
+
+    StreamSet * const ErrorBytes = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<P2SKernel>(PrintableMaskedBasisBits, ErrorBytes);
+    P->CreateKernelCall<StdOutKernel>(ErrorBytes);
 
     Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(Error, ErrorMonitorKernel::IOStreamBindings{});
     Scalar * const errCode = emk->getOutputScalar("errorCode");

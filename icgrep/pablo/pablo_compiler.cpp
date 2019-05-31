@@ -643,13 +643,26 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             if (argv.size() != expectedArgCount) { break; } \
 
             switch (call->getIntrinsic()) {
+            case Intrinsic::SpanUpTo:
+                ASSERT_ARG_COUNT(2);
+                value = mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]);
+                break;
             case Intrinsic::InclusiveSpan:
                 ASSERT_ARG_COUNT(2);
                 value = b->simd_or(argv[1], mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
                 break;
+            case Intrinsic::ExclusiveSpan:
+                ASSERT_ARG_COUNT(2);
+                value = b->simd_and(b->simd_not(argv[0]), mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
+                break;
             case Intrinsic::PrintRegister:
                 ASSERT_ARG_COUNT(1);
-                b->CallPrintRegister(stmt->getName(), argv[0]);
+                {
+                    std::string tmp;
+                    raw_string_ostream out(tmp);
+                    PabloPrinter::print(cast<PabloAST>(stmt), out);
+                    b->CallPrintRegister(out.str(), argv[0]);
+                }
                 value = argv[0];
                 break;
             default:

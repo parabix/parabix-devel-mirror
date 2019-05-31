@@ -54,12 +54,7 @@ using TypeId = PabloAST::ClassTypeId;
 
 inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const stmt) {
     if (IntrinsicCall const * call = dyn_cast<IntrinsicCall>(stmt)) {
-        switch (call->getIntrinsic()) {
-        case Intrinsic::InclusiveSpan:
-            return true;
-        default:
-            return false;
-        }
+        return call->isCarryProducing() && !call->isAdvanceType();
     } else {
         return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt) && !isa<IndexedAdvance>(stmt);
     }

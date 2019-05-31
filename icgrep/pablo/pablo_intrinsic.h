@@ -13,7 +13,9 @@
 namespace pablo {
 
 enum class Intrinsic {
+    SpanUpTo,
     InclusiveSpan,
+    ExclusiveSpan,
     PrintRegister
 };
 
@@ -34,6 +36,21 @@ public:
 
     llvm::ArrayRef<PabloAST *> getArgv() const noexcept {
         return llvm::ArrayRef<PabloAST *>(mOperand, mOperands);
+    }
+
+    inline bool isCarryProducing() const noexcept {
+        switch (mIntrinsic) {
+            case Intrinsic::SpanUpTo:
+            case Intrinsic::InclusiveSpan:
+            case Intrinsic::ExclusiveSpan:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    inline bool isAdvanceType() const noexcept {
+        return false;
     }
 
 protected:

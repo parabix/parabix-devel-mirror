@@ -782,14 +782,24 @@ static inline void lazyInitializeFunctionGenMap() {
         return pb->createAtEOF(args[0]);
     });
 
+    FUNC_GEN_DEF("SpanUpTo", {
+        ASSERT_ARG_NUM(2);
+        return pb->createIntrinsicCall(Intrinsic::SpanUpTo, args);
+    });
+
     FUNC_GEN_DEF("InclusiveSpan", {
         ASSERT_ARG_NUM(2);
-        return pb->createIntrinsicCall(Intrinsic::InclusiveSpan, {args[0], args[1]});
+        return pb->createIntrinsicCall(Intrinsic::InclusiveSpan, args);
+    });
+
+    FUNC_GEN_DEF("ExclusiveSpan", {
+        ASSERT_ARG_NUM(2);
+        return pb->createIntrinsicCall(Intrinsic::ExclusiveSpan, args);
     });
 
     FUNC_GEN_DEF("PrintRegister", {
         ASSERT_ARG_NUM(1);
-        return pb->createIntrinsicCall(Intrinsic::PrintRegister, {args[0]});
+        return pb->createIntrinsicCall(Intrinsic::PrintRegister, args);
     });
 }
 
