@@ -2,6 +2,8 @@
 #define BRANCH_H
 
 #include <pablo/pabloAST.h>
+#include <llvm/ADT/SmallVector.h>
+
 namespace pablo { class Var; }
 namespace pablo { class PabloBlock; }
 
@@ -12,7 +14,7 @@ class Branch : public Statement {
     friend class Statement;
     friend class Simplifier;
 public:
-    using EscapedVars = std::vector<Var *>;
+    using EscapedVars = llvm::SmallVector<Var *, 16>;
     static bool classof(const PabloAST * e) {
         switch (e->getClassTypeId()) {
             case ClassTypeId::If:
@@ -43,14 +45,9 @@ public:
     PabloBlock * setBody(PabloBlock * const body);
     EscapedVars getEscaped() const;
 protected:
-    void addEscaped(PabloAST * const node);
-    void removeEscaped(PabloAST * const node);
     Branch(const ClassTypeId typeId, PabloAST * condition, PabloBlock * body, Allocator & allocator);
 protected:
     PabloBlock *    mBody;
-    unsigned        mEscapedCount;
-    unsigned        mEscapedCapacity;
-    PabloAST **     mEscaped;
     bool            mRegular;
 };
 

@@ -4,10 +4,14 @@
 #include <pablo/pabloAST.h>
 #include <pablo/pablo_intrinsic.h>
 #include <util/slab_allocator.h>
+#include <llvm/ADT/ArrayRef.h>
 #include <map>
-#include <vector>
 
 namespace pablo {
+
+inline bool operator < (const llvm::ArrayRef<PabloAST *> & A, const llvm::ArrayRef<PabloAST *> & B) {
+    return std::lexicographical_compare(A.begin(), A.end(), B.begin(), B.end());
+}
 
 template<typename... Args>
 struct FixedArgMap {
@@ -67,8 +71,12 @@ struct FixedArgMap {
         return false;
     }
 
-    inline PabloAST * find(const PabloAST::ClassTypeId type, Args... args) const noexcept {
+    PabloAST * find(const PabloAST::ClassTypeId type, Args... args) const noexcept {
         return find(std::make_tuple(type, args...));
+    }
+
+    void clear() {
+        mMap.clear();
     }
 
 private:
@@ -127,28 +135,36 @@ struct ExpressionTable {
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr, Params... params) noexcept {
+    PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr, Params... params) noexcept {
         return mUnary.findOrCall(std::move(functor), typeId, expr, std::forward<Params>(params)...);
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findBinaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, Params... params) noexcept {
+    PabloAST * findBinaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, Params... params) noexcept {
         return mBinary.findOrCall(std::move(functor), typeId, expr1, expr2, std::forward<Params>(params)...);
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findTernaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, void * expr3, Params... params) noexcept {
+    PabloAST * findTernaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, void * expr3, Params... params) noexcept {
         return mTernary.findOrCall(std::move(functor), typeId, expr1, expr2, expr3, std::forward<Params>(params)...);
     }
 
     template <class Functor, typename... Params>
-    inline PabloAST * findQuaternaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, void * expr3, void * expr4, Params... params) noexcept {
+    PabloAST * findQuaternaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr1, void * expr2, void * expr3, void * expr4, Params... params) noexcept {
         return mQuaternary.findOrCall(std::move(functor), typeId, expr1, expr2, expr3, expr4, std::forward<Params>(params)...);
     }
 
     template<class Functor, typename... Params>
-    inline PabloAST * findIntrinsicOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, std::vector<PabloAST *> argv, Params... params) noexcept {
-        return mIntrinsic.findOrCall(std::move(functor), typeId, std::move(argv), std::forward<Params>(params)...);
+    PabloAST * findIntrinsicOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, const Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, Params... params) noexcept {
+        return mIntrinsic.findOrCall(std::move(functor), typeId, intrinsic, std::move(argv), std::forward<Params>(params)...);
+    }
+
+    void clear() {
+        mUnary.clear();
+        mBinary.clear();
+        mTernary.clear();
+        mQuaternary.clear();
+        mIntrinsic.clear();
     }
 
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) noexcept {
@@ -176,18 +192,18 @@ struct ExpressionTable {
             case PabloAST::ClassTypeId::Ternary:
                 return mQuaternary.findOrAdd(stmt, typeId, stmt->getOperand(0), stmt->getOperand(1), stmt->getOperand(2), stmt->getOperand(3));
             case PabloAST::ClassTypeId::IntrinsicCall:
-                return mIntrinsic.findOrAdd(stmt, typeId, llvm::cast<IntrinsicCall>(stmt)->getArgv());
+                return mIntrinsic.findOrAdd(stmt, typeId, llvm::cast<IntrinsicCall>(stmt)->getIntrinsic(), llvm::cast<IntrinsicCall>(stmt)->getArgv());
             default:
                 return std::make_pair(stmt, true);
         }
     }
 
 private:
-    FixedArgMap<void *>                         mUnary;
-    FixedArgMap<void *, void *>                 mBinary;
-    FixedArgMap<void *, void *, void *>         mTernary;
-    FixedArgMap<void *, void *, void *, void *> mQuaternary;
-    FixedArgMap<std::vector<PabloAST *>>        mIntrinsic;
+    FixedArgMap<void *>                                 mUnary;
+    FixedArgMap<void *, void *>                         mBinary;
+    FixedArgMap<void *, void *, void *>                 mTernary;
+    FixedArgMap<void *, void *, void *, void *>         mQuaternary;
+    FixedArgMap<Intrinsic, llvm::ArrayRef<PabloAST *>>  mIntrinsic;
 };
 
 }

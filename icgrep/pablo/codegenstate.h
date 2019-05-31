@@ -155,9 +155,9 @@ public:
 
     TerminateAt * createTerminateAt(PabloAST * strm, Integer * code, const String * const name);
 
-    Extract * createExtract(Var * array, Integer * index);
+    Extract * createExtract(Var * const array, Integer * const index);
 
-    Assign * createAssign(PabloAST * const var, PabloAST * const value);
+    Assign * createAssign(Var * const var, PabloAST * const value);
 
     And * createAnd(PabloAST * expr1, PabloAST * expr2, const llvm::StringRef prefix) {
         return createAnd(expr1, expr2, makeName(prefix));
@@ -309,16 +309,16 @@ public:
 
     PackL * createPackL(Integer * fieldWidth, PabloAST * value, const String * const name = nullptr);
 
-    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const llvm::StringRef prefix) {
+    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const llvm::StringRef prefix) {
         return createIntrinsicCall(intrinsic, std::move(argv), makeName(prefix));
     }
 
-    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const String * name = nullptr) {
+    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const String * name = nullptr) {
         assert (argv.size() > 0);
-        return createIntrinsicCall(intrinsic, (*argv.begin())->getType(), std::move(argv), name);
+        return createIntrinsicCall(intrinsic, (*argv.begin())->getType(), argv, name);
     }
 
-    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::Type * type, std::vector<PabloAST *> argv, const String * name = nullptr);
+    IntrinsicCall * createIntrinsicCall(Intrinsic intrinsic, llvm::Type * type, llvm::ArrayRef<PabloAST *> argv, const String * name = nullptr);
 
     PabloBlock * getPredecessor() const;
 

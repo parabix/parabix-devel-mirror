@@ -62,6 +62,8 @@ private:
 
     void addBranchCounter(const std::unique_ptr<kernel::KernelBuilder> & b);
 
+    const Var * findInputParam(const Statement * const stmt, const Var * const param) const;
+
     llvm::Value * getPointerToVar(const std::unique_ptr<kernel::KernelBuilder> & b, const Var * var, llvm::Value * index1, llvm::Value * index2 = nullptr);
 
     llvm::Value * compileExpression(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloAST * expr, const bool ensureLoaded = true);

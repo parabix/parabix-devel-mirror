@@ -115,7 +115,7 @@ public:
 
     PabloAST * createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef prefix);
 
-    Assign * createAssign(PabloAST * const variable, PabloAST * const value){
+    Assign * createAssign(Var * const variable, PabloAST * const value){
         return mPb->createAssign(variable, value);
     }
 

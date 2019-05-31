@@ -233,7 +233,7 @@ public:
         return false;
     }
 
-    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to);
+    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to, const bool recursive = false);
 
     inline PabloAST * getOperand(const unsigned index) const noexcept {
         assert (index < getNumOperands());

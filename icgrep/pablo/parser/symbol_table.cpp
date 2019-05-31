@@ -72,7 +72,7 @@ PabloAST * SymbolTable::assign(Token * token, PabloAST * value) {
     if (optEntry) {
         Entry & e = *optEntry;
         e.attr.set(Entry::HAS_VALUE);
-        PabloAST * const var = e.value;
+        Var * const var = llvm::cast<Var>(e.value);
         assert (var);
         Assign * const assign = mBuilder->createAssign(var, value);
         return llvm::cast<PabloAST>(assign);
@@ -177,9 +177,8 @@ PabloAST * SymbolTable::indexedLookup(Token * identifier, Token * index) {
     } else {
         idx = index->getValue();
     }
-    PabloAST * const var = e.value;
-    assert (llvm::isa<Var>(var));
-    return mBuilder->createExtract(llvm::cast<Var>(var), idx);
+    Var * const var = llvm::cast<Var>(e.value);
+    return mBuilder->createExtract(var, idx);
 }
 
 

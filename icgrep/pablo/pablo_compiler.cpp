@@ -41,6 +41,8 @@
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
 
+#include <pablo/printer_pablos.h>
+
 using namespace llvm;
 
 namespace pablo {
@@ -89,29 +91,60 @@ void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mCarryManager->finalizeCodeGen(b);
 }
 
+const Var * PabloCompiler::findInputParam(const Statement * const stmt, const Var * const param) const {
+    const Var * expr = param;
+    while (isa<Extract>(expr)) {
+        expr = cast<Extract>(expr)->getArray();
+    }
+    const Var * const var = cast<Var>(expr);
+    if (LLVM_LIKELY(var->isKernelParameter())) {
+        return param;
+    } else { // has an input been assigned to a Var?
+        for (const PabloAST * const user : var->users()) {
+            if (const Assign * const assign = dyn_cast<Assign>(user)) {
+                if (assign->getVariable() == var) {
+                    const PabloAST * const ref = assign->getValue();
+                    if (LLVM_LIKELY(isa<Var>(ref) && dominates(assign, stmt))) {
+                        const Var * expr = cast<Var>(ref);
+                        while (isa<Extract>(expr)) {
+                            expr = cast<Extract>(expr)->getArray();
+                        }
+                        for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
+                            if (expr == mKernel->getInput(i)) {
+                                // found a matching assign/ref to an input var
+                                return cast<Var>(ref);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
 void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
-            PabloAST * input = la->getExpression();
-            if (isa<Extract>(input)) {
-                input = cast<Extract>(input)->getArray();
+            const PabloAST * array = findInputParam(stmt, la->getExpression());
+            while (array && isa<Extract>(array)) {
+                array = cast<Extract>(array)->getArray();
             }
             bool notFound = true;
-            if (LLVM_LIKELY(isa<Var>(input))) {
-                for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
-                    if (input == mKernel->getInput(i)) {
-                        const auto & binding = mKernel->getInputStreamSetBinding(i);
-                        if (LLVM_UNLIKELY(!binding.hasLookahead() || binding.getLookahead() < la->getAmount())) {
-                            std::string tmp;
-                            raw_string_ostream out(tmp);
-                            input->print(out);
-                            out << " must have a lookahead attribute of at least " << la->getAmount();
-                            report_fatal_error(out.str());
-                        }
-                        notFound = false;
-                        break;
+            for (unsigned i = 0; i < mKernel->getNumOfInputs(); ++i) {
+                const Var * const input = mKernel->getInput(i);
+                if (array == input) {
+                    const auto & binding = mKernel->getInputStreamSetBinding(i);
+                    if (LLVM_UNLIKELY(!binding.hasLookahead() || binding.getLookahead() < la->getAmount())) {
+                        std::string tmp;
+                        raw_string_ostream out(tmp);
+                        array->print(out);
+                        out << " must have a lookahead attribute of at least " << la->getAmount();
+                        report_fatal_error(out.str());
                     }
+                    notFound = false;
+                    break;
                 }
             }
             if (LLVM_UNLIKELY(notFound)) {
@@ -173,15 +206,7 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
 
     for (const Var * var : ifStatement->getEscaped()) {
         if (LLVM_UNLIKELY(var->isKernelParameter())) {
-            Value * marker = nullptr;
-            if (var->isScalar()) {
-                marker = b->getScalarFieldPtr(var->getName());
-            } else if (var->isReadOnly()) {
-                marker = b->getInputStreamBlockPtr(var->getName(), b->getInt32(0));
-            } else if (var->isReadNone()) {
-                marker = b->getOutputStreamBlockPtr(var->getName(), b->getInt32(0));
-            }
-            mMarker[var] = marker;
+            mMarker[var] = compileExpression(b, var, false);
         } else {
             auto f = mMarker.find(var);
             if (LLVM_UNLIKELY(f == mMarker.end())) {
@@ -288,15 +313,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 
     for (const Var * var : escaped) {
         if (LLVM_UNLIKELY(var->isKernelParameter())) {
-            Value * marker = nullptr;
-            if (var->isScalar()) {
-                marker = b->getScalarFieldPtr(var->getName());
-            } else if (var->isReadOnly()) {
-                marker = b->getInputStreamBlockPtr(var->getName(), b->getInt32(0));
-            } else if (var->isReadNone()) {
-                marker = b->getOutputStreamBlockPtr(var->getName(), b->getInt32(0));
-            }
-            mMarker[var] = marker;
+            mMarker[var] = compileExpression(b, var, false);
         }
     }
 
@@ -319,7 +336,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     // (4) The loop bound, if any.
 #endif
 
-    std::vector<std::pair<const Var *, PHINode *>> variants;
+    std::vector<std::pair<const PabloAST *, PHINode *>> variants;
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const auto var : escaped) {
@@ -334,7 +351,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
             report_fatal_error(out.str());
         }
         Value * entryValue = f->second;
-        PHINode * phi = b->CreatePHI(entryValue->getType(), 2, var->getName());
+        PHINode * phi = b->CreatePHI(entryValue->getType(), 2); // , var->getName()
         phi->addIncoming(entryValue, whileEntryBlock);
         f->second = phi;
         assert(mMarker[var] == phi);
@@ -370,7 +387,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 
     // and for any variant nodes in the loop body
     for (const auto variant : variants) {
-        const Var * var; PHINode * incomingPhi;
+        const PabloAST * var; PHINode * incomingPhi;
         std::tie(var, incomingPhi) = variant;
         const auto f = mMarker.find(var);
         if (LLVM_UNLIKELY(f == mMarker.end())) {
@@ -503,7 +520,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
         } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
             expr = cast<Assign>(stmt)->getVariable();
             value = compileExpression(b, cast<Assign>(stmt)->getValue());
-            if (isa<Extract>(expr) || (isa<Var>(expr) && cast<Var>(expr)->isKernelParameter())) {
+            if (cast<Var>(expr)->isKernelParameter()) {
                 Value * const ptr = compileExpression(b, expr, false);
                 Type * const elemTy = ptr->getType()->getPointerElementType();
                 b->CreateAlignedStore(b->CreateZExt(value, elemTy), ptr, getAlignment(elemTy));
@@ -527,7 +544,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             value = b->CreateAdd(b->mvmd_extract(fieldWidth, bitBlockCount, 0), countSoFar, "countSoFar");
             b->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
-            PabloAST * stream = l->getExpression();
+            const Var * stream = findInputParam(l, l->getExpression());
             Value * index = nullptr;
             if (LLVM_UNLIKELY(isa<Extract>(stream))) {
                 index = compileExpression(b, cast<Extract>(stream)->getIndex(), true);
@@ -537,13 +554,13 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             }
             const auto bit_shift = (l->getAmount() % b->getBitBlockWidth());
             const auto block_shift = (l->getAmount() / b->getBitBlockWidth());
-            Value * ptr = b->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, b->getSize(block_shift));
+            Value * ptr = b->getInputStreamBlockPtr(stream->getName(), index, b->getSize(block_shift));
             // Value * base = b->CreatePointerCast(b->getBaseAddress(cast<Var>(stream)->getName()), ptr->getType());
             Value * lookAhead = b->CreateBlockAlignedLoad(ptr);
             if (LLVM_UNLIKELY(bit_shift == 0)) {  // Simple case with no intra-block shifting.
                 value = lookAhead;
             } else { // Need to form shift result from two adjacent blocks.
-                Value * ptr1 = b->getInputStreamBlockPtr(cast<Var>(stream)->getName(), index, b->getSize(block_shift + 1));
+                Value * ptr1 = b->getInputStreamBlockPtr(stream->getName(), index, b->getSize(block_shift + 1));
                 Value * lookAhead1 = b->CreateBlockAlignedLoad(ptr1);
                 if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
                     value = b->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
@@ -611,10 +628,13 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             Value * const op2 = compileExpression(b, stmt->getOperand(3));
             value = b->simd_ternary(mask, b->bitCast(op0), b->bitCast(op1), b->bitCast(op2));
         } else if (const IntrinsicCall * const call = dyn_cast<IntrinsicCall>(stmt)) {
+            const auto n = call->getNumOperands();
             std::vector<Value *> argv{};
-            for (PabloAST * const arg : call->getArgv()) {
+            for (unsigned i = 0; i < n; ++i) {
+                PabloAST * const arg = call->getOperand(i);
                 argv.push_back(compileExpression(b, arg));
             }
+
             size_t expectedArgCount = 0;
             bool validIntrinsic = true;
 
@@ -643,15 +663,15 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             if (!validIntrinsic) {
                 std::string tmp;
                 raw_string_ostream out(tmp);
-                out << "PabloCompiler: intrinsic id " 
-                    << (uint32_t) call->getIntrinsic() 
+                out << "PabloCompiler: intrinsic id "
+                    << (uint32_t) call->getIntrinsic()
                     << " was not recognized by the compiler";
                 report_fatal_error(out.str());
             }
             if (expectedArgCount != argv.size()) {
                 std::string tmp;
                 raw_string_ostream out(tmp);
-                out << "PabloCompiler: intrinsic id " 
+                out << "PabloCompiler: intrinsic id "
                     << (uint32_t) call->getIntrinsic() << ": "
                     << "invlaid number of arguments, "
                     << "expected " << expectedArgCount << ","
@@ -708,26 +728,32 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
             value = b->allOnes();
         } else if (isa<Extract>(expr)) {
             const Extract * const extract = cast<Extract>(expr);
-            const Var * const var = cast<Var>(extract->getArray());
+            const Var * const var = extract->getArray();
             Value * const index = compileExpression(b, extract->getIndex());
             value = getPointerToVar(b, var, index);
         } else if (LLVM_UNLIKELY(isa<Var>(expr))) {
             const Var * const var = cast<Var>(expr);
-            if (LLVM_LIKELY(var->isKernelParameter() && var->isScalar())) {
-                value = b->getScalarFieldPtr(var->getName());
-            } else { // use before def error
-                std::string tmp;
-                raw_string_ostream out(tmp);
-                out << "PabloCompiler: ";
-                expr->print(out);
-                out << " is not a scalar value or was used before definition";
-                report_fatal_error(out.str());
+            if (LLVM_UNLIKELY(var->isKernelParameter())) {
+                if (var->isScalar()) {
+                    return b->getScalarFieldPtr(var->getName());
+                } else if (var->isReadOnly()) {
+                    return b->getInputStreamBlockPtr(var->getName(), b->getInt32(0));
+                } else if (var->isReadNone()) {
+                    return b->getOutputStreamBlockPtr(var->getName(), b->getInt32(0));
+                }
             }
+            // use before def error
+            SmallVector<char, 128> tmp;
+            raw_svector_ostream out(tmp);
+            out << "PabloCompiler: ";
+            expr->print(out);
+            out << " is not a scalar value or was used before definition";
+            report_fatal_error(out.str());
         } else if (LLVM_UNLIKELY(isa<Operator>(expr))) {
             const Operator * const op = cast<Operator>(expr);
             const PabloAST * lh = op->getLH();
             const PabloAST * rh = op->getRH();
-            if ((isa<Var>(lh) || isa<Extract>(lh)) || (isa<Var>(rh) || isa<Extract>(rh))) {
+            if (isa<Var>(lh) || isa<Var>(rh)) {
                 if (getIntegerBitWidth(lh->getType()) != getIntegerBitWidth(rh->getType())) {
                     llvm::report_fatal_error("Integer types must be identical!");
                 }
@@ -738,22 +764,23 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
 
                 Value * baseLhv = nullptr;
                 Value * lhvStreamIndex = nullptr;
-                if (isa<Var>(lh)) {
-                    lhvStreamIndex = b->getInt32(0);
-                } else if (isa<Extract>(lh)) {
+                if (isa<Extract>(lh)) {
                     lhvStreamIndex = compileExpression(b, cast<Extract>(lh)->getIndex());
                     lh = cast<Extract>(lh)->getArray();
+                } else if (isa<Var>(lh)) {
+                    lhvStreamIndex = b->getInt32(0);
+
                 } else {
                     baseLhv = compileExpression(b, lh);
                 }
 
                 Value * baseRhv = nullptr;
                 Value * rhvStreamIndex = nullptr;
-                if (isa<Var>(rh)) {
-                    rhvStreamIndex = b->getInt32(0);
-                } else if (isa<Extract>(rh)) {
+                if (isa<Extract>(rh)) {
                     rhvStreamIndex = compileExpression(b, cast<Extract>(rh)->getIndex());
                     rh = cast<Extract>(rh)->getArray();
+                } else if (isa<Var>(rh)) {
+                    rhvStreamIndex = b->getInt32(0);
                 } else {
                     baseRhv = compileExpression(b, rh);
                 }
