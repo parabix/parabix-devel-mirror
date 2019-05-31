@@ -343,7 +343,8 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                 options->setPrefixRE(prefixRE);
                 options->setRE(suffixRE);
             }
-            Kernel * LB_nullK = P->CreateKernelCall<CharacterClassKernelBuilder>( "breakCC", std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream, callbackObject);
+            const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
+            Kernel * LB_nullK = P->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream, callbackObject);
             mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
         } else {
             options->addExternal("UTF8_index", U8index);
@@ -727,6 +728,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
 
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
+    Scalar * const callbackObject = E->getInputScalar(2);
     StreamSet * ByteStream = E->CreateStreamSet(1, 8);
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
@@ -746,9 +748,17 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     StreamSet * MatchingRecords = E->CreateStreamSet();
     E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
 
-    Kernel * scanMatchK = E->CreateKernelCall<ScanMatchKernel>(MatchingRecords, RecordBreakStream, ByteStream, E->getInputScalar(2));
-    mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
-    mGrepDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", finalize_match_wrapper);
+    if (MatchCoordinateBlocks > 0) {
+        StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
+        E->CreateKernelCall<MatchCoordinatesKernel>(MatchingRecords, RecordBreakStream, MatchCoords, MatchCoordinateBlocks);
+        Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, callbackObject);
+        mGrepDriver.LinkFunction(matchK, "accumulate_match_wrapper", accumulate_match_wrapper);
+        mGrepDriver.LinkFunction(matchK, "finalize_match_wrapper", finalize_match_wrapper);
+    } else {
+        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(MatchingRecords, RecordBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
+        mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
+        mGrepDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", finalize_match_wrapper);
+    }
 
     mMainMethod = E->compile();
 }

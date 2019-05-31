@@ -622,7 +622,7 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
 
     b->SetInsertPoint(coordinatesDone);
-    b->setProcessedItemCount("InputStream", matchRecordEnd);
+    //b->setProcessedItemCount("InputStream", matchRecordEnd);
     b->CreateBr(exit);
 
     b->SetInsertPoint(exit);

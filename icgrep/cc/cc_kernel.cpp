@@ -54,16 +54,11 @@ void CharacterClassKernelBuilder::generatePabloMethod() {
         ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("sourceStream"));
     }
     Var * outputVar = getOutputStreamVar("ccStream");
-    PabloAST * nonNull = nullptr;
     if (mAbortOnNull) {
-        PabloAST * nullCC = pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
-        nonNull = pb.createNot(nullCC);
+        pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
     }
     for (unsigned i = 0; i < mCharClasses.size(); ++i) {
         PabloAST * cc = ccc->compileCC(mCharClasses[i]);
-        if (mAbortOnNull) {
-            cc = pb.createAnd(nonNull, cc);
-        }
         pb.createAssign(pb.createExtract(outputVar, i), cc);
     }
 }

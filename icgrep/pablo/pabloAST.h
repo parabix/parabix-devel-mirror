@@ -109,6 +109,10 @@ public:
         return mType;
     }
 
+    inline bool isSideEffecting() const noexcept {
+        return mSideEffecting;
+    }
+
     inline user_iterator user_begin() noexcept {
         return mUsers.begin();
     }
@@ -153,6 +157,7 @@ protected:
     PabloAST(const ClassTypeId id, llvm::Type * const type, Allocator & allocator) noexcept
     : mClassTypeId(id)
     , mType(type)
+    , mSideEffecting(false)
     , mUsers(allocator) {
         #ifndef NDEBUG
         // is nullary type?
@@ -170,6 +175,8 @@ protected:
         }
         #endif
     }
+    void setSideEffecting() {mSideEffecting = true;}
+
     bool addUser(PabloAST * const user) noexcept;
 
     bool removeUser(PabloAST * const user) noexcept;
@@ -179,6 +186,7 @@ protected:
 private:
     const ClassTypeId       mClassTypeId;
     llvm::Type * const      mType;
+    bool                    mSideEffecting;
     Users                   mUsers;
 };
 

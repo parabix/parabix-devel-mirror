@@ -31,6 +31,7 @@ public:
 protected:
     explicit TerminateAt(PabloAST * strm, PabloAST * code, const String * name, Allocator & allocator)
     : Statement(ClassTypeId::TerminateAt, strm->getType(), {strm, code}, name, allocator) {
+        setSideEffecting();
         assert(llvm::isa<Integer>(code));
     }
 };

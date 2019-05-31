@@ -749,7 +749,7 @@ void deadCodeElimination(PabloBlock * const block) {
 
     for (Statement * stmt = block->back(), * prior; stmt; stmt = prior) {
         prior = stmt->getPrevNode();
-        if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
+        if (LLVM_UNLIKELY((stmt->getNumUses() == 0) && (!stmt->isSideEffecting()))) {
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 written.clear();
                 deadCodeElimination(cast<Branch>(stmt)->getBody());
