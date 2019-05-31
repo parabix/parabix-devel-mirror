@@ -21,6 +21,7 @@ namespace pablo { class PabloBlock; }
 namespace pablo { class PabloCompiler; }
 namespace pablo { class String; }
 namespace pablo { class Var; }
+namespace pablo { class Extract; }
 namespace pablo { class Zeroes; }
 
 namespace pablo {
@@ -38,6 +39,9 @@ public:
     using KernelBuilder = kernel::KernelBuilder;
 
     using Allocator = SlabAllocator<PabloAST *>;
+
+    template <typename T, unsigned n>
+    using Vec = llvm::SmallVector<T, n>;
 
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId()  == PabloAST::ClassTypeId::Kernel;
@@ -160,7 +164,9 @@ protected:
         mCarryDataTy = carryDataTy;
     }
 
-    Var * makeVariable(const String * name, llvm::Type * const type);
+    Var * makeVariable(const String * const name, llvm::Type * const type);
+
+    Extract * makeExtract(Var * const array, PabloAST * const index);
 
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
@@ -193,11 +199,11 @@ private:
     llvm::StructType *               mCarryDataTy;
     llvm::LLVMContext *              mContext;
 
-    std::vector<Var *>               mInputs;
-    std::vector<Var *>               mOutputs;
-    std::vector<PabloAST *>          mConstants;
-    std::vector<Var *>               mVariables;
-    std::vector<Var *>               mScalarOutputVars;
+    Vec<Var *, 16>                   mInputs;
+    Vec<Var *, 16>                   mOutputs;
+    Vec<PabloAST *, 16>              mConstants;
+    Vec<Var *, 64>                   mVariables;
+    Vec<Var *, 16>                   mScalarOutputVars;
 };
 
 }

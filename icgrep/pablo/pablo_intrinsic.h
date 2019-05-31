@@ -7,8 +7,8 @@
 #ifndef PABLO_INTRINSIC_H
 #define PABLO_INTRINSIC_H
 
-#include <initializer_list>
 #include <pablo/pabloAST.h>
+#include <llvm/ADT/ArrayRef.h>
 
 namespace pablo {
 
@@ -28,23 +28,22 @@ public:
     }
     virtual ~IntrinsicCall() {}
 
-    inline Intrinsic getIntrinsic() const noexcept {
+    Intrinsic getIntrinsic() const noexcept {
         return mIntrinsic;
     }
 
-    inline std::vector<PabloAST *> const & getArgv() const noexcept {
-        return mArgv;
+    llvm::ArrayRef<PabloAST *> getArgv() const noexcept {
+        return llvm::ArrayRef<PabloAST *>(mOperand, mOperands);
     }
 
 protected:
-    IntrinsicCall(Intrinsic intrinsic, llvm::Type * type, std::vector<PabloAST *> argv, const String * name, Allocator & allocator)
+    IntrinsicCall(Intrinsic intrinsic, llvm::Type * type, llvm::ArrayRef<PabloAST *> argv, const String * name, Allocator & allocator)
     : Statement(ClassTypeId::IntrinsicCall, type, argv, name, allocator)
     , mIntrinsic(intrinsic)
-    , mArgv(std::move(argv))
     {}
 
-    Intrinsic               mIntrinsic;
-    std::vector<PabloAST *> mArgv;
+    const Intrinsic               mIntrinsic;
+
 };
 
 } // namespace pablo

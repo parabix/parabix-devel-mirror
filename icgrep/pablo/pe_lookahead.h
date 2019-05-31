@@ -9,6 +9,7 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/pe_integer.h>
+#include <pablo/pe_var.h>
 
 namespace pablo {
 
@@ -23,8 +24,8 @@ public:
     }
     virtual ~Lookahead() {
     }
-    inline PabloAST * getExpression() const {
-        return getOperand(0);
+    inline Var * getExpression() const {
+        return llvm::cast<Var>(getOperand(0));
     }
     inline unsigned getAmount() const {
         return llvm::cast<Integer>(getOperand(1))->value();

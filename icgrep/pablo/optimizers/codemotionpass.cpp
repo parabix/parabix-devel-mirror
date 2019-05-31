@@ -123,7 +123,11 @@ struct CodeMotionPassContainer {
                 getScopesOfAllUsers(def);
             }
         } else {
-            getScopesOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt);
+            PabloAST * expr = stmt;
+            if (isa<Assign>(stmt)) {
+                expr = cast<Assign>(stmt)->getVariable();
+            }
+            getScopesOfAllUsers(expr);
         }
         if (LLVM_UNLIKELY(mScopes.empty())) {
             return;
@@ -141,7 +145,13 @@ struct CodeMotionPassContainer {
                     getInScopeDominatorsOfAllUsers(def, block);
                 }
             } else {
-                getInScopeDominatorsOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt, block);
+
+                PabloAST * expr = stmt;
+                if (isa<Assign>(stmt)) {
+                    expr = cast<Assign>(stmt)->getVariable();
+                }
+
+                getInScopeDominatorsOfAllUsers(expr, block);
             }
             Branch * branch = nullptr;
             Statement * temp = stmt;

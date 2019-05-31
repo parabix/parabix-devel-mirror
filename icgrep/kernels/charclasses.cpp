@@ -84,7 +84,7 @@ void CharClassesKernel::generatePabloMethod() {
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]);
         if (t != nameMap.end()) {
-            PabloAST * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
+            Extract * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
             pb.createAssign(r, pb.createInFile(t->second));
         } else {
             llvm::report_fatal_error("Can't compile character classes.");
@@ -129,7 +129,7 @@ void ByteClassesKernel::generatePabloMethod() {
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]);
         if (t != nameMap.end()) {
-            PabloAST * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
+            Extract * const r = pb.createExtract(getOutput(0), pb.getInteger(i));
             pb.createAssign(r, pb.createInFile(t->second));
         } else {
             llvm::report_fatal_error("Can't compile character classes.");

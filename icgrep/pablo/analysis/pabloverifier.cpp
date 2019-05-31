@@ -59,7 +59,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 }
             }
             if (isa<Branch>(user)) {
-                for (const PabloAST * var : cast<Branch>(user)->getEscaped()) {
+                for (const Var * var : cast<Branch>(user)->getEscaped()) {
                     if (var == expr) {
                         notFound = false;
                         ++uses;
@@ -76,7 +76,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 throw std::runtime_error(str.str());
             }
         } else if (isa<Var>(expr)) {
-            if (LLVM_UNLIKELY(isa<Branch>(use) || isa<Operator>(use) || isa<PabloKernel>(use))) {
+            if (LLVM_UNLIKELY(isa<Branch>(use) || isa<Extract>(use) || isa<Operator>(use) || isa<PabloKernel>(use))) {
                 ++uses;
             } else {
                 std::string tmp;
@@ -85,7 +85,7 @@ void testUsers(const PabloAST * expr, const ScopeSet & validScopes) {
                 PabloPrinter::print(use, str);
                 str << " is a user of ";
                 PabloPrinter::print(expr, str);
-                str << " but can only be a user of a Branch, Operator or Kernel.";
+                str << " but can only be a user of a Branch, Extract, Operator or Kernel.";
                 throw std::runtime_error(str.str());
             }
         } else if (const Operator * const user = dyn_cast<Operator>(use)) {

@@ -763,7 +763,7 @@ PabloAST * PabloBuilder::createXor3(PabloAST * expr1, PabloAST * expr2, PabloAST
         return createXor(expr2, createZeroes(expr1->getType()));
     } else if (equals(expr2, expr3)) {
         return createXor(expr1, createZeroes(expr2->getType()));
-    } 
+    }
     return createTernary(0x96, expr1, expr2, expr3, prefix);
 }
 
@@ -984,38 +984,33 @@ PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * 
 }
 
 PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv) {
-    return [&](){
-        struct __intrinsic_functor {
-            inline PabloAST * operator () (std::vector<PabloAST *> argv) {
-                return cast<PabloAST>(mPb->createIntrinsicCall(mIn, std::move(argv)));
-            }
-            inline __intrinsic_functor(PabloBlock * pb, Intrinsic intrinsic)
-            : mPb(pb), mIn(intrinsic)
-            {}
-            PabloBlock * const mPb;
-            Intrinsic          mIn;
-        };
-        __intrinsic_functor functor(mPb, intrinsic);
-        return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, std::move(argv)));
-    }();
+    struct __intrinsic_functor {
+        inline PabloAST * operator () (Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv) {
+            return cast<PabloAST>(mPb->createIntrinsicCall(intrinsic, argv));
+        }
+        inline __intrinsic_functor(PabloBlock * pb)
+        : mPb(pb)
+        {}
+        PabloBlock * const mPb;
+    };
+    __intrinsic_functor functor(mPb);
+    return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, intrinsic, argv));
 }
 
 PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const llvm::StringRef prefix) {
-    return [&](){
-        struct __intrinsic_functor {
-            inline PabloAST * operator () (std::vector<PabloAST *> argv) {
-                return cast<PabloAST>(mPb->createIntrinsicCall(mIn, std::move(argv), mPrefix));
-            }
-            inline __intrinsic_functor(PabloBlock * pb, Intrinsic intrinsic, llvm::StringRef prefix)
-            : mPb(pb), mIn(intrinsic), mPrefix(prefix)
-            {}
-            PabloBlock * const mPb;
-            Intrinsic          mIn;
-            llvm::StringRef    mPrefix;
-        };
-        __intrinsic_functor functor(mPb, intrinsic, prefix);
-        return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, std::move(argv)));
-    }();
+    struct __intrinsic_functor {
+        inline PabloAST * operator () (Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv) {
+            return cast<PabloAST>(mPb->createIntrinsicCall(intrinsic, argv, mPrefix));
+        }
+        inline __intrinsic_functor(PabloBlock * pb, llvm::StringRef prefix)
+        : mPb(pb), mPrefix(prefix)
+        {}
+        PabloBlock * const mPb;
+        Intrinsic          mIn;
+        llvm::StringRef    mPrefix;
+    };
+    __intrinsic_functor functor(mPb, prefix);
+    return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, intrinsic, argv));
 }
 
 

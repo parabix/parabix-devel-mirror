@@ -219,7 +219,7 @@ void CarryManager::initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder
 
     mCarrySummaryStack.push_back(Constant::getNullValue(carryTy));
 
-    if (mHasLoop) {        
+    if (mHasLoop) {
         mLoopSelector[0] = iBuilder->getScalarField("selector");
         mLoopSelector[1] = iBuilder->CreateXor(mLoopSelector[0], ConstantInt::get(mLoopSelector[0]->getType(), 1));
     }
@@ -988,7 +988,7 @@ inline void CarryManager::writeCarryOutSummary(const std::unique_ptr<kernel::Ker
  * @brief addToCarryOutSummary
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void CarryManager::addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, Value * const value) {
-    assert ("cannot add null summary value!" && value);    
+    assert ("cannot add null summary value!" && value);
     assert ("summary stack is empty!" && !mCarrySummaryStack.empty());
     assert ("current scope does not have a summary!" && mCarryInfo->hasSummary());
     Value * const currentSummary = mCarrySummaryStack.back();
@@ -1171,7 +1171,7 @@ StructType * CarryManager::analyse(const std::unique_ptr<kernel::KernelBuilder> 
                 if (state[0]->isStructTy()) {
                     summaryType = CarryData::BorrowedSummary;
                 }
-            }            
+            }
         }
         carryState = StructType::get(iBuilder->getContext(), state);
         // If we're in a loop and cannot use collapsing carry mode, convert the carry state struct into a capacity,

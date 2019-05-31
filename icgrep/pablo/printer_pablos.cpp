@@ -14,6 +14,7 @@
 #include <pablo/pe_count.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_integer.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_lookahead.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_ones.h>
@@ -182,6 +183,13 @@ void PabloPrinter::print(const Statement * stmt, raw_ostream & out, const bool e
             out << " = pablo.AtEOF(";
             print(e->getExpr(), out);
             out << ")";
+        } else if (const IntrinsicCall * intr = dyn_cast<IntrinsicCall>(stmt)) {
+            out << " = <Intrinsic>{";
+            for (unsigned i = 0; i < intr->getNumOperands(); ++i) {
+                if (i) out << ", ";
+                print(intr->getOperand(i), out);
+            }
+            out << "}";
         } else if (const TerminateAt * s = dyn_cast<TerminateAt>(stmt)) {
             out << " = pablo.TerminateAt(";
             print(s->getExpr(), out);

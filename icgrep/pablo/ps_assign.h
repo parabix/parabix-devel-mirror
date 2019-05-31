@@ -8,6 +8,7 @@
 #define PS_SETMARKER_H
 
 #include <pablo/pe_string.h>
+#include <pablo/pe_var.h>
 
 namespace pablo {
 
@@ -22,8 +23,8 @@ public:
     }
     virtual ~Assign() {
     }
-    inline PabloAST * getVariable() const {
-        return getOperand(0);
+    inline Var * getVariable() const {
+        return llvm::cast<Var>(getOperand(0));
     }
     inline PabloAST * getValue() const {
         return getOperand(1);
@@ -32,7 +33,7 @@ public:
         return setOperand(1, value);
     }
 protected:
-    explicit Assign(PabloAST * variable, PabloAST * expr, Allocator & allocator)
+    explicit Assign(Var * variable, PabloAST * expr, Allocator & allocator)
     : Statement(ClassTypeId::Assign, nullptr, {variable, expr}, nullptr, allocator) {
 
     }
