@@ -132,6 +132,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
             Statement * const next = evaluateBranch(cast<Branch>(stmt), expressions, variables);
             if (LLVM_UNLIKELY(next != nullptr)) {
+                assert (next != stmt);
                 assert (next->getParent() == currentScope);
                 stmt = next;
                 continue;
@@ -143,7 +144,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
                 // demote any uses of any Var whose value is in scope
                 if (LLVM_UNLIKELY(isa<Var>(op))) {
                     PabloAST * const var = variables.get(op);
-                    if (LLVM_UNLIKELY(var != nullptr && var != op)) { assert (var);
+                    if (LLVM_UNLIKELY(var != nullptr && var != op)) {
                         stmt->setOperand(i, var);
                     }
                 }
@@ -151,6 +152,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
 
             PabloAST * const folded = triviallyFold(stmt, currentScope);
             if (folded) {
+                assert (folded != stmt);
                 Statement * const prior = stmt->getPrevNode();
                 stmt->replaceWith(folded);
                 // Since folding a statement may result in inserting new
@@ -169,6 +171,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
             bool added = false;
             std::tie(replacement, added) = expressions.findOrAdd(stmt);
             if (!added) {
+                assert (replacement != stmt);
                 stmt = stmt->replaceWith(replacement);
                 continue;
             }
@@ -213,13 +216,17 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
     }
 
     PabloAST * cond = br->getCondition();
-    if (isa<Var>(cond)) {
-        PabloAST * const value = nestedVariables.get(cast<Var>(cond));
-        if (value && cond != value) {
-            cond = value;
-            br->setCondition(cond);
+    auto subsituteCondValue = [&]() {
+        if (isa<Var>(cond)) {
+            PabloAST * const value = nestedVariables.get(cast<Var>(cond));
+            if (value && cond != value) {
+                cond = value;
+                br->setCondition(cond);
+            }
         }
-    }
+    };
+
+    subsituteCondValue();
 
     // Test whether we can ever take this branch
     if (LLVM_UNLIKELY(isa<Zeroes>(cond))) {
@@ -237,8 +244,15 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 
     // Process the Branch body
     ExpressionTable nestedExpressions(&expressions);
-    mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
-    redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+
+    auto processBranchBody = [&]() {
+        mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
+        redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        assert (mNonZero.back() == cond);
+        mNonZero.pop_back();
+    };
+
+    processBranchBody();
 
     // If this block has a branch statement leading into it, we can verify whether an escaped value
     // was updated within this block and update the preceeding block's variable state appropriately.
@@ -249,10 +263,9 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
         for (Var * const var : escaped) {
             nestedVariables.put(var, variables.get(var));
         }
-        redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        subsituteCondValue();
+        processBranchBody();
     }
-    assert (mNonZero.back() == cond);
-    mNonZero.pop_back();
 
     // Check whether the cost of testing the condition and taking the branch with
     // 100% correct prediction rate exceeds the cost of the body itself
