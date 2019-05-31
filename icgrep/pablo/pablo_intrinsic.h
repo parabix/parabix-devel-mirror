@@ -47,6 +47,7 @@ public:
         default:
             llvm_unreachable("unexpected intrinsic");
         }
+        #undef CASE
     }
 
     inline bool isCarryProducing() const noexcept {
@@ -70,7 +71,7 @@ protected:
     , mIntrinsic(intrinsic)
     {}
 
-    const Intrinsic               mIntrinsic;
+    const Intrinsic mIntrinsic;
 
 };
 
