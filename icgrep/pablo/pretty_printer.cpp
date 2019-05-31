@@ -97,7 +97,7 @@ static void PrintStatement(Statement const * stmt, raw_ostream & out, const bool
             PrintExpression(notNode->getExpr(), out);
         } else if (IntrinsicCall const * call = dyn_cast<IntrinsicCall>(stmt)) {
             out << call->getIntrinsicName() << "(";
-            for (size_t i = 0; i < call->users().size(); ++i) {
+            for (size_t i = 0; i < call->getNumOperands(); ++i) {
                 if (i) out << ", ";
                 PrintExpression(call->getOperand(i), out);
             }
