@@ -95,7 +95,7 @@ if(ENABLE_CUDA_COMPILE)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_nvptx_builder.cpp)
 endif()
 
-SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp)
+SET(PABLO_SRC pablo/pabloAST.cpp pablo/branch.cpp pablo/codegenstate.cpp pablo/builder.cpp pablo/symbol_generator.cpp pablo/printer_pablos.cpp pablo/pablo_toolchain.cpp pablo/pretty_printer.cpp)
 SET(PABLO_SRC ${PABLO_SRC} pablo/pablo_kernel.cpp pablo/pablo_compiler.cpp pablo/bixnum.cpp)
 IF (CARRYPACK_MANAGER)
 SET(PABLO_SRC ${PABLO_SRC} pablo/carrypack_manager.cpp)
