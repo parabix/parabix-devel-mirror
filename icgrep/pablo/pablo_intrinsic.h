@@ -45,6 +45,7 @@ public:
         default:
             llvm_unreachable("unexpected intrinsic");
         }
+        #undef CASE
     }
 
 
@@ -54,7 +55,7 @@ protected:
     , mIntrinsic(intrinsic)
     {}
 
-    const Intrinsic               mIntrinsic;
+    const Intrinsic mIntrinsic;
 
 };
 
