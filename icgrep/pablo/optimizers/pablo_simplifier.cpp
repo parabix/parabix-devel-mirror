@@ -259,10 +259,6 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
     if (phiEscapedVars(escaped, nestedVariables, variables)) {
         // If we modified the escaped vars, reevaluate the branch.
         nestedExpressions.clear();
-        nestedVariables.clear();
-        for (Var * const var : escaped) {
-            nestedVariables.put(var, variables.get(var));
-        }
         subsituteCondValue();
         processBranchBody();
     }
@@ -279,9 +275,23 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief phiEscapedVars
  ** ------------------------------------------------------------------------------------------------------------- */
-bool phiEscapedVars(const EscapedVars & escaped, const VariableTable & inner, VariableTable & outer) {
+bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
 
     const auto n = escaped.size();
+
+    SmallVector<PabloAST *, 16> incoming(n);
+    SmallVector<PabloAST *, 16> outgoing(n);
+    SmallVector<PabloAST *, 16> initial(n);
+    SmallVector<PabloAST *, 16> result(n);
+    bool modified = false;
+
+    for (unsigned i = 0; i < n; ++i) {
+        Var * const var = escaped[i];
+        incoming[i] = outer.get(var);
+        outgoing[i] = inner.get(var);
+        initial[i] = escaped[i];
+        result[i] = escaped[i];
+    }
 
     // CASE 1:
 
@@ -293,22 +303,12 @@ bool phiEscapedVars(const EscapedVars & escaped, const VariableTable & inner, Va
     //               a = x                      ...
     //             y = a op z                y = x op z
 
-    SmallVector<PabloAST *, 16> incoming(n);
-    SmallVector<PabloAST *, 16> outgoing(n);
-    SmallVector<PabloAST *, 16> result(n);
-    bool modified = false;
-
     for (unsigned i = 0; i < n; ++i) {
-        Var * const var = escaped[i];
-        incoming[i] = outer.get(var);
-        outgoing[i] = inner.get(var);
-        PabloAST * value = var;
         if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
-            value = incoming[i];
+            initial[i] = incoming[i];
+            result[i] = incoming[i];
             modified = true;
         }
-        result[i] = value;
-        outer.put(var, value);
     }
 
     // CASE 2:
@@ -326,13 +326,25 @@ bool phiEscapedVars(const EscapedVars & escaped, const VariableTable & inner, Va
     for (unsigned i = 0; i < n; ++i) {
         for (unsigned j = 0; j < i; ++j) {
             if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
-                outer.put(escaped[i], result[j]);
+                initial[i] = initial[j];
                 result[i] = result[j];
                 modified = true;
                 break;
             }
         }
     }
+
+    for (unsigned i = 0; i < n; ++i) {
+        outer.put(escaped[i], result[i]);
+    }
+
+    if (modified) {
+        inner.clear();
+        for (unsigned i = 0; i < n; ++i) {
+            inner.put(escaped[i], initial[i]);
+        }
+    }
+
     return modified;
 }
 
@@ -857,11 +869,13 @@ struct LiveVarSet : public flat_set<const Var *> {
         return true;
     }
 
-    void remove(const Var * const var) noexcept {
+    bool remove(const Var * const var) noexcept {
         const auto f = find(var);
         if (LLVM_LIKELY(f != end())) {
             erase(f);
+            return true;
         }
+        return false;
     }
 
     void put(const Var * const var) noexcept {
@@ -923,12 +937,12 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet) {
                 }
 
                 if (LLVM_LIKELY(keep)) {
+                    LiveVarSet nested(liveSet);
                     if (isa<While>(stmt)) {
                         for (const Var * var : escaped) {
-                            liveSet.put(var);
+                            nested.put(var);
                         }
                     }
-                    LiveVarSet nested(liveSet);
                     deadCodeElimination(cast<Branch>(stmt)->getBody(), nested);
                     // propagate any Var usages that were not dominated by an Assign.
                     if (isa<While>(stmt)) {

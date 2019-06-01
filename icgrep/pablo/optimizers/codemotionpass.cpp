@@ -9,9 +9,6 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
 
-#include <llvm/Support/raw_ostream.h>
-#include <pablo/printer_pablos.h>
-
 using namespace llvm;
 
 namespace pablo {
@@ -205,9 +202,7 @@ struct CodeMotionPassContainer {
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 // Trust that any escaped values of an inner branch is a variant.
                 for (const Var * var : cast<Branch>(stmt)->getEscaped()) {
-                    if (LLVM_LIKELY(mTainted.count(var))) {
-                        mVariants.insert(var);
-                    }
+                    mTainted.insert(var);
                 }
             } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
                 const Assign * const a = cast<Assign>(stmt);
@@ -226,8 +221,6 @@ struct CodeMotionPassContainer {
                 }
             }
         }
-
-        assert ("A loop without any variants is an infinite loop" && !mVariants.empty());
 
         mVariants.reserve(mTainted.size());
         mTainted.clear();
@@ -261,7 +254,6 @@ struct CodeMotionPassContainer {
                 stmt = next;
             }
         }
-
         mVariants.clear();
     }
 
