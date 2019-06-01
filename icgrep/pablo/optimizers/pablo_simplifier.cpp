@@ -277,6 +277,66 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief phiEscapedVars
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool phiEscapedVars(const EscapedVars & escaped, const VariableTable & inner, VariableTable & outer) {
+
+    const auto n = escaped.size();
+
+    // CASE 1:
+
+    // Detect when Var a is assigned the same value within the branch as its original value
+    // and replace a with the value.
+
+    //             a = x                     ...
+    //             branch a:        =>       branch x:
+    //               a = x                      ...
+    //             y = a op z                y = x op z
+
+    SmallVector<PabloAST *, 16> incoming(n);
+    SmallVector<PabloAST *, 16> outgoing(n);
+    SmallVector<PabloAST *, 16> result(n);
+    bool modified = false;
+
+    for (unsigned i = 0; i < n; ++i) {
+        Var * const var = escaped[i];
+        incoming[i] = outer.get(var);
+        outgoing[i] = inner.get(var);
+        PabloAST * value = var;
+        if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
+            value = incoming[i];
+            modified = true;
+        }
+        result[i] = value;
+        outer.put(var, value);
+    }
+
+    // CASE 2:
+
+    // Detect when two Vars, a and b, are assigned identical values and replace future uses
+    // of b with a -- assuming a is not reassigned a different variable outside of the scope.
+    // Dead code elimination will remove the redundant assignments to b.
+
+    //             a = x                     a = x
+    //             b = x                     ...
+    //             branch b:                 branch a:
+    //                a = y         =>          a = y
+    //                b = y                     ...
+
+    for (unsigned i = 0; i < n; ++i) {
+        for (unsigned j = 0; j < i; ++j) {
+            if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
+                outer.put(escaped[i], result[j]);
+                result[i] = result[j];
+                modified = true;
+                break;
+            }
+        }
+    }
+    return modified;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isRedundantAssign
  ** ------------------------------------------------------------------------------------------------------------- */
 bool isRedundantAssign(Assign * const assign, VariableTable & variables) {
@@ -770,67 +830,6 @@ void strengthReduction(PabloBlock * const block) {
         }
         stmt = stmt->getNextNode();
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief phiEscapedVars
- ** ------------------------------------------------------------------------------------------------------------- */
-bool phiEscapedVars(const EscapedVars & escaped, const VariableTable & inner, VariableTable & outer) {
-
-    const auto n = escaped.size();
-
-    // CASE 1:
-
-    // Detect when Var a is assigned the same value within the branch as its original value
-    // and replace a with the value.
-
-    //             a = x                     ...
-    //             branch a:        =>       branch x:
-    //               a = x                      ...
-    //             y = a op z                y = x op z
-
-    SmallVector<PabloAST *, 16> incoming(n);
-    SmallVector<PabloAST *, 16> outgoing(n);
-    SmallVector<PabloAST *, 16> result(n);
-    bool modified = false;
-
-    for (unsigned i = 0; i < n; ++i) {
-        Var * const var = escaped[i];
-        incoming[i] = outer.get(var);
-        outgoing[i] = inner.get(var);
-        PabloAST * value = var;
-        if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
-            value = incoming[i];
-            modified = true;
-        }
-        result[i] = value;
-        outer.put(var, value);
-    }
-
-    // CASE 2:
-
-    // Detect when two Vars, a and b, are assigned identical values and replace future uses
-    // of b with a -- assuming a is not reassigned a different variable outside of the scope.
-    // Dead code elimination will remove the redundant assignments to b.
-
-    //             a = x                     a = x
-    //             b = x                     ...
-    //             branch b:                 branch a:
-    //                a = y         =>          a = y
-    //                b = y                     ...
-
-    for (unsigned i = 0; i < n; ++i) {
-        for (unsigned j = 0; j < i; ++j) {
-            if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
-                outer.put(escaped[i], result[j]);
-                result[i] = result[j];
-                modified = true;
-                break;
-            }
-        }
-    }
-
-    return modified;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
