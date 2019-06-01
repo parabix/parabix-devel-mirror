@@ -9,33 +9,65 @@
 
 namespace pablo {
 
-inline bool operator < (const llvm::ArrayRef<PabloAST *> & A, const llvm::ArrayRef<PabloAST *> & B) {
+template<typename T>
+inline bool operator < (const llvm::ArrayRef<T> & A, const llvm::ArrayRef<T> & B) {
     return std::lexicographical_compare(A.begin(), A.end(), B.begin(), B.end());
+}
+
+template <typename T>
+inline void __byval(llvm::ArrayRef<T> & t, ProxyAllocator<uint8_t> & alloc) noexcept {
+    ProxyAllocator<T> A{alloc};
+    t = t.copy(A);
+}
+
+template <typename T>
+inline void __byval(T &, ProxyAllocator<uint8_t> &) noexcept { }
+
+template<unsigned I, typename Tuple>
+struct __make_byval_impl {
+    static void doit(Tuple & t, ProxyAllocator<uint8_t> & alloc) noexcept {
+        __make_byval_impl<I - 1, Tuple>::doit(t, alloc);
+        __byval(std::get<I>(t), alloc);
+    }
+};
+
+template<typename Tuple>
+struct __make_byval_impl<0, Tuple> {
+    static void doit(Tuple & t, ProxyAllocator<uint8_t> & alloc) noexcept {
+        __byval(std::get<0>(t), alloc);
+    }
+};
+
+template<typename Tuple>
+inline Tuple & make_byval(Tuple & t, ProxyAllocator<uint8_t> & alloc) noexcept {
+    __make_byval_impl<std::tuple_size<Tuple>::value - 1, Tuple>::doit(t, alloc);
+    return t;
 }
 
 template<typename... Args>
 struct FixedArgMap {
     enum {N = sizeof...(Args)};
-    typedef FixedArgMap<Args...> Type;
-    typedef std::tuple<PabloAST::ClassTypeId, Args...> Key;
     friend struct ExpressionTable;
 
-    explicit FixedArgMap(const Type * predecessor = nullptr) noexcept
-    : mPredecessor(predecessor) {
+    using Type = FixedArgMap<Args...>;
+    using Key = std::tuple<PabloAST::ClassTypeId, Args...>;
+    using Allocator = SlabAllocator<uint8_t>;
+    using MapAllocator = ProxyAllocator<std::pair<Key, PabloAST *>>;
+    using Map = std::map<Key, PabloAST *, std::less<Key>, MapAllocator>;
+
+    explicit FixedArgMap(Allocator & allocator, const Type * predecessor = nullptr) noexcept
+    : mPredecessor(predecessor)
+    , mMap(MapAllocator{allocator}) {
 
     }
 
-    explicit FixedArgMap(Type && other) noexcept
+    explicit FixedArgMap(Type && other, Allocator & allocator) noexcept
     : mPredecessor(other.mPredecessor)
-    , mMap(std::move(other.mMap)) {
-
+    , mMap(MapAllocator{allocator}) {
+        assert (other.mMap.empty());
     }
 
-    FixedArgMap & operator=(Type && other) noexcept {
-        mPredecessor = other.mPredecessor;
-        mMap = std::move(other.mMap);
-        return *this;
-    }
+    FixedArgMap & operator=(Type && other) noexcept = delete;
 
     template <class Functor, typename... Params>
     PabloAST * findOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, Args... args, Params... params) noexcept {
@@ -45,7 +77,7 @@ struct FixedArgMap {
             return f;
         }
         PabloAST * const object = functor(std::forward<Args>(args)..., std::forward<Params>(params)...);
-        mMap.insert(std::make_pair(std::move(key), object));
+        insert(std::move(key), object);
         return object;
     }
 
@@ -55,7 +87,7 @@ struct FixedArgMap {
         if (entry) {
             return std::make_pair(entry, false);
         }
-        mMap.insert(std::make_pair(std::move(key), object));
+        insert(std::move(key), object);
         return std::make_pair(object, true);
     }
 
@@ -81,6 +113,11 @@ struct FixedArgMap {
 
 private:
 
+    void insert(Key && key, PabloAST * const object) noexcept {
+        ProxyAllocator<uint8_t> alloc{mMap.get_allocator()};
+        mMap.insert(std::make_pair(std::move(make_byval(key, alloc)), object));
+    }
+
     PabloAST * find(const Key & key) const {
         // check this map to see if we have it
         auto itr = mMap.find(key);
@@ -101,38 +138,48 @@ private:
     }
 
 private:
-    const Type *                mPredecessor;
-    std::map<Key, PabloAST *>   mMap;
+    const Type * const mPredecessor;
+    Map                mMap;
 };
 
 struct ExpressionTable {
 
-    explicit ExpressionTable(ExpressionTable * predecessor = nullptr) noexcept {
-        if (predecessor) {
-            mUnary.mPredecessor = &(predecessor->mUnary);
-            mBinary.mPredecessor = &(predecessor->mBinary);
-            mTernary.mPredecessor = &(predecessor->mTernary);
-            mQuaternary.mPredecessor = &(predecessor->mQuaternary);
-        }
-    }
+    using Allocator = SlabAllocator<uint8_t>;
+    using UnaryT = FixedArgMap<void *>;
+    using BinaryT = FixedArgMap<void *, void *>;
+    using TernaryT = FixedArgMap<void *, void *, void *>;
+    using QuaternaryT = FixedArgMap<void *, void *, void *, void *>;
+    using IntrinsicT = FixedArgMap<Intrinsic, llvm::ArrayRef<PabloAST *>>;
 
-    explicit ExpressionTable(ExpressionTable & other) = delete;
-
-    explicit ExpressionTable(ExpressionTable && other) noexcept
-    : mUnary(std::move(other.mUnary))
-    , mBinary(std::move(other.mBinary))
-    , mTernary(std::move(other.mTernary))
-    , mQuaternary(std::move(other.mQuaternary)) {
+    #define CON(Type) m##Type(mAllocator, predecessor ? &(predecessor->m##Type) : nullptr)
+    explicit ExpressionTable(ExpressionTable * predecessor = nullptr) noexcept
+    : CON(Unary)
+    , CON(Binary)
+    , CON(Ternary)
+    , CON(Quaternary)
+    , CON(Intrinsic) {
 
     }
+    #undef CON
 
-    ExpressionTable & operator=(ExpressionTable && other) noexcept {
-        mUnary = std::move(other.mUnary);
-        mBinary = std::move(other.mBinary);
-        mTernary = std::move(other.mTernary);
-        mQuaternary = std::move(other.mQuaternary);
-        return *this;
+    ExpressionTable(ExpressionTable & other) = delete;
+
+    #define MOVE(Type) m##Type(std::move(other.m##Type), mAllocator)
+    ExpressionTable(ExpressionTable && other)
+    : MOVE(Unary)
+    , MOVE(Binary)
+    , MOVE(Ternary)
+    , MOVE(Quaternary)
+    , MOVE(Intrinsic) {
+
     }
+    #undef MOVE
+
+    ExpressionTable & operator=(ExpressionTable && other) = delete;
+
+    // NOTE: this deconstructor is *required* to ensure the correct order of "deleting"
+    // the internal maps before releasing the slab(s).
+    ~ExpressionTable() noexcept { clear(); }
 
     template <class Functor, typename... Params>
     PabloAST * findUnaryOrCall(Functor && functor, const PabloAST::ClassTypeId typeId, void * expr, Params... params) noexcept {
@@ -165,6 +212,7 @@ struct ExpressionTable {
         mTernary.clear();
         mQuaternary.clear();
         mIntrinsic.clear();
+        mAllocator.Reset();
     }
 
     std::pair<PabloAST *, bool> findOrAdd(Statement * stmt) noexcept {
@@ -199,11 +247,13 @@ struct ExpressionTable {
     }
 
 private:
-    FixedArgMap<void *>                                 mUnary;
-    FixedArgMap<void *, void *>                         mBinary;
-    FixedArgMap<void *, void *, void *>                 mTernary;
-    FixedArgMap<void *, void *, void *, void *>         mQuaternary;
-    FixedArgMap<Intrinsic, llvm::ArrayRef<PabloAST *>>  mIntrinsic;
+
+    UnaryT          mUnary;
+    BinaryT         mBinary;
+    TernaryT        mTernary;
+    QuaternaryT     mQuaternary;
+    IntrinsicT      mIntrinsic;
+    Allocator       mAllocator;
 };
 
 }
