@@ -40,6 +40,7 @@
 #include <llvm/IR/Type.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
+#include <boost/container/flat_set.hpp>
 
 #include <pablo/printer_pablos.h>
 
@@ -48,6 +49,8 @@ using namespace llvm;
 namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
+
+using Vars = boost::container::flat_set<const Var *>;
 
 inline static unsigned getAlignment(const Type * const type) {
     return type->getPrimitiveSizeInBits() / 8;
@@ -178,6 +181,17 @@ inline void PabloCompiler::compileBlock(const std::unique_ptr<kernel::KernelBuil
     }
 }
 
+Vars getRootVars(const Branch * const branch) {
+    Vars vars;
+    for (Var * var : branch->getEscaped()) {
+        while (isa<Extract>(var)) {
+            var = cast<Extract>(var)->getArray();
+        }
+        vars.insert(var);
+    }
+    return vars;
+}
+
 void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, const If * const ifStatement) {
     //
     //  The If-ElseZero stmt:
@@ -204,9 +218,11 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
 
     std::vector<std::pair<const Var *, Value *>> incoming;
 
-    for (const Var * var : ifStatement->getEscaped()) {
+    const auto escaped = getRootVars(ifStatement);
+
+    for (const Var * var : escaped) {
         if (LLVM_UNLIKELY(var->isKernelParameter())) {
-            mMarker[var] = compileExpression(b, var, false);
+            mMarker.emplace(var, compileExpression(b, var, false));
         } else {
             auto f = mMarker.find(var);
             if (LLVM_UNLIKELY(f == mMarker.end())) {
@@ -286,8 +302,10 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
             ifStatement->print(out);
             report_fatal_error(out.str());
         }
-
-        PHINode * phi = b->CreatePHI(incoming->getType(), 2, var->getName());
+        SmallVector<char, 64> tmp;
+        raw_svector_ostream name(tmp);
+        PabloPrinter::print(var, name);
+        PHINode * phi = b->CreatePHI(incoming->getType(), 2, name.str());
         phi->addIncoming(incoming, ifEntryBlock);
         phi->addIncoming(outgoing, ifExitBlock);
         f->second = phi;
@@ -302,7 +320,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 
     BasicBlock * whileEntryBlock = b->GetInsertBlock();
 
-    const auto escaped = whileStatement->getEscaped();
+    const auto escaped = getRootVars(whileStatement);
 
 #ifdef ENABLE_BOUNDED_WHILE
     PHINode * bound_phi = nullptr;  // Needed for bounded while loops.
@@ -313,7 +331,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
 
     for (const Var * var : escaped) {
         if (LLVM_UNLIKELY(var->isKernelParameter())) {
-            mMarker[var] = compileExpression(b, var, false);
+            mMarker.insert({var, compileExpression(b, var, false)});
         }
     }
 
@@ -336,26 +354,31 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     // (4) The loop bound, if any.
 #endif
 
-    std::vector<std::pair<const PabloAST *, PHINode *>> variants;
+    std::vector<std::pair<const Var *, PHINode *>> variants;
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const auto var : escaped) {
-        auto f = mMarker.find(var);
-        if (LLVM_UNLIKELY(f == mMarker.end())) {
-            std::string tmp;
-            raw_string_ostream out(tmp);
-            out << "PHINode creation error: ";
-            var->print(out);
-            out << " is uninitialized prior to entering ";
-            whileStatement->print(out);
-            report_fatal_error(out.str());
+        if (LLVM_UNLIKELY(!var->isKernelParameter())) {
+            auto f = mMarker.find(var);
+            if (LLVM_UNLIKELY(f == mMarker.end())) {
+                std::string tmp;
+                raw_string_ostream out(tmp);
+                out << "PHINode creation error: ";
+                var->print(out);
+                out << " is uninitialized prior to entering ";
+                whileStatement->print(out);
+                report_fatal_error(out.str());
+            }
+            Value * entryValue = f->second;
+            SmallVector<char, 64> tmp;
+            raw_svector_ostream name(tmp);
+            PabloPrinter::print(var, name);
+            PHINode * const phi = b->CreatePHI(entryValue->getType(), 2, name.str());
+            phi->addIncoming(entryValue, whileEntryBlock);
+            f->second = phi;
+            assert(mMarker[var] == phi);
+            variants.emplace_back(var, phi);
         }
-        Value * entryValue = f->second;
-        PHINode * phi = b->CreatePHI(entryValue->getType(), 2); // , var->getName()
-        phi->addIncoming(entryValue, whileEntryBlock);
-        f->second = phi;
-        assert(mMarker[var] == phi);
-        variants.emplace_back(var, phi);
     }
 #ifdef ENABLE_BOUNDED_WHILE
     if (whileStatement->getBound()) {
