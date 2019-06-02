@@ -79,11 +79,11 @@ outer_loop: continue;
  * @brief getEscaped
  ** ------------------------------------------------------------------------------------------------------------- */
 Branch::EscapedVars Branch::getEscaped() const {
-    const auto f = getParent()->getParent();
-    const auto n = f->getNumOfVariables();
+    const auto kernel = getParent()->getParent();
+    const auto n = kernel->getNumOfVariables();
     EscapedVars escaped;
     for (unsigned i = 0; i < n; ++i) {
-        Var * const var = f->getVariable(i);
+        Var * const var = kernel->getVariable(i);
         if (escapes(var, this)) {
             escaped.push_back(var);
         }
