@@ -887,6 +887,19 @@ private:
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isOutputExtract
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool isOutputExtract(const Var * var, const LiveVarSet & set) {
+    while (isa<Extract>(var)) {
+        var = cast<Extract>(var)->getArray();
+        if (set.contains(var)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
 void deadCodeElimination(PabloKernel * const kernel) {
@@ -899,17 +912,8 @@ void deadCodeElimination(PabloKernel * const kernel) {
     const auto m = kernel->getNumOfVariables();
     for (unsigned i = 0; i < m; ++i) {
         Var * const var = kernel->getVariable(i);
-        if (isa<Extract>(var)) {
-            Var * ext = var;
-            for (;;) {
-                ext = cast<Extract>(ext)->getArray();
-                if (LLVM_LIKELY(ext->getClassTypeId() == PabloAST::ClassTypeId::Var)) {
-                    break;
-                }
-            }
-            if (variables.contains(ext)) {
-                variables.put(var);
-            }
+        if (LLVM_UNLIKELY(isOutputExtract(var, variables))) {
+            variables.put(var);
         }
     }
     deadCodeElimination(kernel->getEntryScope(), variables);
@@ -949,8 +953,8 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet) {
                         for (const Var * var : escaped) {
                             liveSet.remove(var);
                         }
+                        liveSet.insert(nested.begin(), nested.end());
                     }
-                    liveSet.insert(nested.begin(), nested.end());
                     continue;
                 }
             } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {

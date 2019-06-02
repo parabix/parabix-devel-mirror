@@ -294,9 +294,9 @@ public:
         return mPb->createWhile(condition, builder.mPb);
     }
 
-    PabloAST * createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv);
+    PabloAST * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv);
 
-    PabloAST * createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const llvm::StringRef prefix);
+    PabloAST * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const llvm::StringRef prefix);
 
     /// Statement Iterator Wrappers
 
