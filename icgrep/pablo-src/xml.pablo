@@ -522,10 +522,9 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagE
             ParseError = ParseError | (AttValPos | AttValEnd) & ~(lex.DQuote | lex.SQuote)
             AttValFollow = Advance(AttValEnd, 1)
             tag_Callouts.AttVal_ends = tag_Callouts.AttVal_ends | AttValFollow
-            AfterWS = ScanThru(AttValFollow, lex.WS)
-            AttListEnd = AttListEnd | AfterWS & AttListDelim
-            AttNameStart = AfterWS & ~AttListDelim
-            AttNameStart = PrintRegister(AttNameStart)
+            AfterWS_2 = ScanThru(AttValFollow, lex.WS)
+            AttListEnd = AttListEnd | AfterWS_2 & AttListDelim
+            AttNameStart = AfterWS_2 & ~AttListDelim
             ParseError = ParseError | AttValFollow & AttNameStart
         }
     }
@@ -552,13 +551,6 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagE
         
         
     # Attribute value spans
-#	tag_Callouts.AttVal_spans = tag_Callouts.AttVal_ends - tag_Callouts.AttVal_starts
-    # print[0] = tag_Callouts.AttVal_starts
-    a = PrintRegister(tag_Callouts.AttVal_starts)
-    b = PrintRegister(tag_Callouts.AttVal_ends)
-
-    x = SpanUpTo(a, b)
-    x = PrintRegister(x)
-    tag_Callouts.AttVal_spans = x
+    tag_Callouts.AttVal_spans =  SpanUpTo(tag_Callouts.AttVal_starts, tag_Callouts.AttVal_ends)
     print[0] = tag_Callouts.AttVal_spans
 }
