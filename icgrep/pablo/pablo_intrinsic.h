@@ -9,6 +9,7 @@
 
 #include <pablo/pabloAST.h>
 #include <llvm/ADT/ArrayRef.h>
+#include <llvm/ADT/StringRef.h>
 
 namespace pablo {
 
@@ -38,6 +39,17 @@ public:
         return llvm::ArrayRef<PabloAST *>(mOperand, mOperands);
     }
 
+    inline llvm::StringRef getIntrinsicName() const noexcept {
+        #define CASE(INTRINSIC) case Intrinsic::INTRINSIC: return #INTRINSIC
+        switch (mIntrinsic) {
+            CASE(InclusiveSpan);
+            CASE(PrintRegister);
+        default:
+            llvm_unreachable("unexpected intrinsic");
+        }
+        #undef CASE
+    }
+
     inline bool isCarryProducing() const noexcept {
         switch (mIntrinsic) {
             case Intrinsic::SpanUpTo:
@@ -59,7 +71,7 @@ protected:
     , mIntrinsic(intrinsic)
     {}
 
-    const Intrinsic               mIntrinsic;
+    const Intrinsic mIntrinsic;
 
 };
 

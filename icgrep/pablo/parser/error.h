@@ -82,6 +82,12 @@ struct ErrorContext {
 class ErrorManager {
 public:
 
+    static std::shared_ptr<ErrorManager> Create() {
+        return std::make_shared<ErrorManager>();
+    }
+
+public:
+
     /**
      * Constructs an instance using the default ErrorContext.
      */

@@ -213,13 +213,14 @@ int main(int argc, char *argv[]) {
     if (CountBytes) wc_modes += "c";
 
     CPUDriver pxDriver("wc-pablo");
-    auto em = std::make_shared<ErrorManager>();
-    auto lexer = llvm::make_unique<SimpleLexer>(em);
-    auto parser = std::make_shared<RecursiveParser>(std::move(lexer), em);
-    SmallString<128> path;
-    sys::path::home_directory(path);
-    sys::path::append(path, ".cache", "parabix", "wc.pablo");
-    auto source = std::make_shared<SourceFile>(std::string(path.c_str()));
+    auto em = ErrorManager::Create();
+    auto lexer = SimpleLexer::Create(em);
+    auto parser = RecursiveParser::Create(std::move(lexer), em);
+    auto source = SourceFile::Relative("wc.pablo");
+    if (source == nullptr) {
+        std::cerr << "pablo-parser: error loading pablo source file\n";
+        return -1;
+    }
     auto wordCountFunctionPtr = wcPipelineGen(pxDriver, parser, source);
 
     lineCount.resize(fileCount);
