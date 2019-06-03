@@ -268,11 +268,16 @@ std::pair<re::RE *, re::RE *> parseIgnoreFile(fs::path dirpath, std::string igno
     return std::make_pair(updatedDirRE, updatedFileRE);
 }
 
-void recursiveFileSelect(fs::path dirpath, re::RE * directoryRE, re::RE * fileRE, std::vector<fs::path> & collectedPaths) {
+void recursiveFileSelect(fs::path dirpath,
+                         grep::InternalSearchEngine & inheritedDirectoryEngine, re::RE * directoryRE,
+                         grep::InternalSearchEngine & inheritedFileEngine, re::RE * fileRE,
+                         std::vector<fs::path> & collectedPaths) {
+
     // First update the search REs with any local .gitignore or other exclude file.
+    bool hasLocalIgnoreFile = !ExcludePerDirectory.empty() && fs::exists(dirpath/ExcludePerDirectory);
     re::RE * updatedDirRE = directoryRE;
     re::RE * updatedFileRE = fileRE;
-    if (!ExcludePerDirectory.empty()) {
+    if (hasLocalIgnoreFile) {
         std::tie(updatedDirRE, updatedFileRE) = parseIgnoreFile(dirpath, ExcludePerDirectory, directoryRE, fileRE);
     }
     // Gather files and subdirectories.
@@ -321,26 +326,37 @@ void recursiveFileSelect(fs::path dirpath, re::RE * directoryRE, re::RE * fileRE
     fileAccum.setFullPathEntries(fileCandidates.getCandidateCount());
     directoryAccum.setFullPathEntries(subdirCandidates.getCandidateCount());
 
-    //
-    // Apply the file selection RE to choose files for processing, adding
-    // them to the global list of selected files.
-    CPUDriver driver("driver");
-    grep::InternalSearchEngine fileSelectEngine(driver);
-    fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-    fileSelectEngine.grepCodeGen(updatedFileRE);
-    fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
-
-    //
-    // Now select subdirectories for recursive processing.
-    grep::InternalSearchEngine directorySelectEngine(driver);
-    directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-    directorySelectEngine.grepCodeGen(updatedDirRE);
-    directorySelectEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
-
-    //
-    // Work through the subdirectories, invoking the recursive processing for each.
-    for (const auto & dirpath : selectedDirectories) {
-        recursiveFileSelect(dirpath, updatedDirRE, updatedFileRE, collectedPaths);
+    if (hasLocalIgnoreFile) {
+        // Compile the update file and directory selection REs, and apply them to
+        // choose files and directories for processing.
+        // Apply the file selection RE to choose files for processing, adding
+        // them to the global list of selected files.
+        CPUDriver driver("driver");
+        grep::InternalSearchEngine fileSelectEngine(driver);
+        fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
+        fileSelectEngine.grepCodeGen(updatedFileRE);
+        fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
+        // Now select subdirectories for recursive processing.
+        grep::InternalSearchEngine directorySelectEngine(driver);
+        directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
+        directorySelectEngine.grepCodeGen(updatedDirRE);
+        directorySelectEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
+        // Work through the subdirectories, invoking the recursive processing for each.
+        for (const auto & subdir : selectedDirectories) {
+            recursiveFileSelect(subdir,
+                                directorySelectEngine, updatedDirRE,
+                                fileSelectEngine, updatedFileRE,
+                                collectedPaths);
+        }
+    } else {
+        inheritedFileEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
+        inheritedDirectoryEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
+        for (const auto & subdir : selectedDirectories) {
+            recursiveFileSelect(subdir,
+                                inheritedDirectoryEngine, directoryRE,
+                                inheritedFileEngine, fileRE,
+                                collectedPaths);
+        }
     }
 }
 
@@ -456,9 +472,11 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
             std::tie(directoryRE, fileSelectRE) = parseIgnoreFile(fs::current_path(), ExcludePerDirectory, directoryRE, fileSelectRE);
         }
         // Select files from subdirectories using the recursive process.
-
         for (const auto & dirpath : selectedDirectories) {
-            recursiveFileSelect(dirpath, directoryRE, fileSelectRE, collectedPaths);
+            recursiveFileSelect(dirpath,
+                                directorySelectEngine, directoryRE,
+                                fileSelectEngine, fileSelectRE,
+                                collectedPaths);
         }
     }
     return collectedPaths;
