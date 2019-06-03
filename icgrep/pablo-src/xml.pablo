@@ -525,7 +525,6 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagE
             AfterWS = ScanThru(AttValFollow, lex.WS)
             AttListEnd = AttListEnd | AfterWS & AttListDelim
             AttNameStart = AfterWS & ~AttListDelim
-            AttNameStart = PrintRegister(AttNameStart)
             ParseError = ParseError | AttValFollow & AttNameStart
         }
     }

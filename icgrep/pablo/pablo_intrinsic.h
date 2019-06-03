@@ -42,7 +42,9 @@ public:
     inline llvm::StringRef getIntrinsicName() const noexcept {
         #define CASE(INTRINSIC) case Intrinsic::INTRINSIC: return #INTRINSIC
         switch (mIntrinsic) {
+            CASE(SpanUpTo);
             CASE(InclusiveSpan);
+            CASE(ExclusiveSpan);
             CASE(PrintRegister);
         default:
             llvm_unreachable("unexpected intrinsic");

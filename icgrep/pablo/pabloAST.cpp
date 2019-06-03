@@ -8,6 +8,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pe_var.h>
 #include <pablo/boolean.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
@@ -180,7 +181,11 @@ const String & Statement::getName() const {
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
             MAKE_PREFIX(Ternary, "ternary");
-            MAKE_PREFIX(IntrinsicCall, "intrinsic_call");
+
+            case ClassTypeId::IntrinsicCall:
+                prefix = cast<IntrinsicCall>(this)->getIntrinsicName().lower().c_str();
+                length = __length(prefix);
+                break;
             default: llvm_unreachable("invalid statement type");
         }
         #undef MAKE_PREFIX
