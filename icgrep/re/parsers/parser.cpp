@@ -55,6 +55,9 @@ RE * RE_Parser::parse(const std::string & regular_expression, ModeFlagSet initia
         case RE_Syntax::FileGLOB:
             parser = make_unique<FileGLOB_Parser>(regular_expression);
             break;
+        case RE_Syntax::GitGLOB:
+            parser = make_unique<FileGLOB_Parser>(regular_expression, GLOB_kind::GIT);
+            break;
         case RE_Syntax ::PROSITE:
             parser = make_unique<RE_Parser_PROSITE>(regular_expression);
             break;

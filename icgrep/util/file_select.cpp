@@ -11,7 +11,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <boost/filesystem.hpp>
 #include <toolchain/toolchain.h>
-#include <re/parsers/parser.h>
+#include <re/re_re.h>
 #include <re/re_alt.h>
 #include <re/re_seq.h>
 #include <re/re_start.h>
@@ -19,6 +19,7 @@
 #include <re/re_cc.h>
 #include <re/re_assertion.h>
 #include <re/re_toolchain.h>
+#include <re/parsers/parser.h>
 #include <re/printer_re.h>
 #include <grep/grep_engine.h>
 #include <grep/searchable_buffer.h>
@@ -56,9 +57,13 @@ std::string ExcludeFromFlag;
 static cl::opt<std::string, true> ExcludeFromOption("exclude-from", cl::location(ExcludeFromFlag), cl::desc("Exclude files matching filename GLOB patterns from the given file."), cl::cat(Input_Options));
 
 std::string ExcludeDirFlag;
-static cl::opt<std::string, true> ExcludeDirOption("exclude-dir", cl::location(ExcludeDirFlag), cl::desc("Exclude directories matching the given pattern."),
-                                                   cl::init(".svn"), cl::cat(Input_Options));
-
+    static cl::opt<std::string, true> ExcludeDirOption("exclude-dir", cl::location(ExcludeDirFlag), cl::desc("Exclude directories matching the given pattern."),
+                                                       cl::init(".svn"), cl::cat(Input_Options));
+    
+static cl::opt<std::string> ExcludePerDirectory("exclude-per-directory",
+                                                cl::desc(".gitignore (default) or other file specifying files to exclude."),
+                                                cl::init(".gitignore"), cl::cat(Input_Options));
+    
 std::string IncludeDirFlag;
 static cl::opt<std::string, true> IncludeDirOption("include-dir", cl::location(IncludeDirFlag), cl::desc("Include directories matching the given pattern."), cl::cat(Input_Options));
 
@@ -194,6 +199,150 @@ void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_s
         mCollectedPaths.emplace_back(mDirectoryList[mDirectoryIndex]/std::string(name_start, name_end - name_start));
     }
 }
+    
+//
+// Parsing files using .gitignore conventions.
+// Given REs that select directories and files to be processed, override
+// these selections for each directory or file that is to be ignored.
+//
+std::pair<re::RE *, re::RE *> parseIgnoreFile(fs::path dirpath, std::string ignoreFileName, re::RE * dirRE, re::RE * fileSelectRE) {
+    fs::path ignoreFilePath = dirpath/ignoreFileName;
+    re::RE * updatedDirRE = dirRE;
+    re::RE * updatedFileRE = fileSelectRE;
+    std::ifstream ignoreFile(ignoreFilePath.string());
+    if (ignoreFile.is_open()) {
+        std::string line;
+        while (std::getline(ignoreFile, line)) {
+            bool is_directory_only_pattern = false;
+            bool is_include_override = false;
+            if (line.empty() || (line[0] == '#')) continue;  // skip empty and comment lines.
+            unsigned line_start = 0;
+            unsigned line_end = line.size() - 1;
+            while ((line[line_end] == ' ') && (line_end > 0)) {
+                line_end--;
+            }
+            if (line_end == 0) continue;  // skip blank lines.
+            if (line[line_end] == '\\') {
+                // Escape character found, but is it an escaped escape (\\)?
+                // Determine whether we have an odd or even number of escapes.
+                unsigned escape_pos = line_end;
+                while ((escape_pos > 0) && (line[escape_pos-1] == '\\')) {
+                    escape_pos--;
+                }
+                if (((line_end - escape_pos) & 1) == 1) {
+                    // Odd number of escapes - the final space is escaped, not trimmed.
+                    line_end++;
+                }
+            }
+            if (line[line_end] == '/') {
+                is_directory_only_pattern = true;
+                line_end--;
+            }
+            if (line[0] == '!') { // negated ignore is an overriding include.
+                is_include_override = true;
+                line_start++;
+            }
+            // Convert any local patterns to full path patterns.
+            if (line[0] == '/') {
+                line_start++;
+            }
+            if ((line_start != 0) || (line_end != line.size() - 1)) {
+                line = line.substr(line_start, line_end - line_start + 1);
+            }
+            re::RE * lineRE = re::RE_Parser::parse(line, re::DEFAULT_MODE, re::RE_Syntax::GitGLOB);
+            if (is_include_override) {
+                updatedDirRE = re::makeAlt({updatedDirRE, lineRE});
+                if (!is_directory_only_pattern) {
+                    updatedFileRE = re::makeAlt({updatedFileRE, lineRE});
+                }
+            } else { // A path to be ignored.
+                lineRE = makeNegativeLookBehindAssertion(lineRE);
+                updatedDirRE = re::makeSeq({updatedDirRE, lineRE});
+                if (!is_directory_only_pattern) {
+                    updatedFileRE = re::makeSeq({updatedFileRE, lineRE});
+                }
+            }
+        }
+        ignoreFile.close();
+    }
+    return std::make_pair(updatedDirRE, updatedFileRE);
+}
+
+void recursiveFileSelect(fs::path dirpath, re::RE * directoryRE, re::RE * fileRE, std::vector<fs::path> & collectedPaths) {
+    // First update the search REs with any local .gitignore or other exclude file.
+    re::RE * updatedDirRE = directoryRE;
+    re::RE * updatedFileRE = fileRE;
+    if (!ExcludePerDirectory.empty()) {
+        std::tie(updatedDirRE, updatedFileRE) = parseIgnoreFile(dirpath, ExcludePerDirectory, directoryRE, fileRE);
+    }
+    // Gather files and subdirectories.
+    grep::SearchableBuffer subdirCandidates;
+    grep::SearchableBuffer fileCandidates;
+    
+    boost::system::error_code errc;
+    fs::directory_iterator di(dirpath, errc);
+    if (errc) {
+        // If we cannot enter the directory, keep it in the list of files,
+        // for possible error reporting.
+        if (!NoMessagesFlag) {
+            collectedPaths.push_back(dirpath);
+        }
+        return;
+    }
+    const auto di_end = fs::directory_iterator();
+    while (di != di_end) {
+        const auto & e = di->path();
+        boost::system::error_code errc;
+        const auto s = fs::status(e, errc);
+        if (errc) {
+            // If there was an error, we leave the file in the fileCandidates
+            // list for later error processing.
+            if (!NoMessagesFlag) {
+                fileCandidates.append(e.string());
+            }
+        } else if (fs::is_directory(s)) {
+            if (fs::is_symlink(e) && !DereferenceRecursiveFlag) {
+                di.increment(errc);
+                continue;
+            }
+            subdirCandidates.append(e.string());
+        } else if (fs::is_regular_file(s) || DevicesFlag == Read) {
+            fileCandidates.append(e.string());
+        }
+        boost::system::error_code errc2;
+        di.increment(errc2);
+        if (errc2) break;
+    }
+    // For each directory, update counts for candidates generated at this level.
+    //
+    FileSelectAccumulator fileAccum(collectedPaths);
+    std::vector<fs::path> selectedDirectories;
+    FileSelectAccumulator directoryAccum(selectedDirectories);
+    fileAccum.setFullPathEntries(fileCandidates.getCandidateCount());
+    directoryAccum.setFullPathEntries(subdirCandidates.getCandidateCount());
+
+    //
+    // Apply the file selection RE to choose files for processing, adding
+    // them to the global list of selected files.
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine fileSelectEngine(driver);
+    fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
+    fileSelectEngine.grepCodeGen(updatedFileRE);
+    fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
+
+    //
+    // Now select subdirectories for recursive processing.
+    grep::InternalSearchEngine directorySelectEngine(driver);
+    directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
+    directorySelectEngine.grepCodeGen(updatedDirRE);
+    directorySelectEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
+
+    //
+    // Work through the subdirectories, invoking the recursive processing for each.
+    for (const auto & dirpath : selectedDirectories) {
+        recursiveFileSelect(dirpath, updatedDirRE, updatedFileRE, collectedPaths);
+    }
+}
 
 std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     // The vector to accumulate the full list of collected files to be searched.
@@ -235,14 +384,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         return collectedPaths;
     }
 
-    // Otherwise we need to filter paths according to some include/exclude rules.
-
-    FileSelectAccumulator fileAccum(collectedPaths);
-
-    // At each level we gather candidate file and directory names and then
-    // filter the names based on -include, -exclude, -include-dir, -excclude-dir,
-    // and -exclude-from settings.
-    //
+    // Otherwise we may need to filter paths according to some include/exclude rules.
     grep::SearchableBuffer dirCandidates;
     grep::SearchableBuffer fileCandidates;
 
@@ -277,7 +419,19 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
 
     auto commandLineDirCandidates = dirCandidates.getCandidateCount();
     auto commandLineFileCandidates = fileCandidates.getCandidateCount();
+    FileSelectAccumulator fileAccum(collectedPaths);
     fileAccum.setFullPathEntries(commandLineFileCandidates);
+    //
+    // Apply the file selection RE to choose files for processing, adding
+    // them to the global list of selected files.
+    re::RE * fileSelectRE = getFilePattern();
+    CPUDriver driver("driver");
+    grep::InternalSearchEngine fileSelectEngine(driver);
+    fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
+    fileSelectEngine.grepCodeGen(fileSelectRE);
+    fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
+    //
+    //
     if (commandLineDirCandidates > 0) {
         // Recursive processing of directories has been requested and we have
         // candidate directories from the command line.
@@ -286,92 +440,27 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         // include/exclude filtering at each level of processing.
         std::vector<fs::path> selectedDirectories;
         FileSelectAccumulator directoryAccum(selectedDirectories);
-
+        re::RE * directoryRE = getDirectoryPattern();
         CPUDriver driver("driver");
         grep::InternalSearchEngine directorySelectEngine(driver);
         directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-        directorySelectEngine.grepCodeGen(getDirectoryPattern());
+        directorySelectEngine.grepCodeGen(directoryRE);
 
         // The initial grep search determines which of the command line directories to process.
         // Each of these candidates is a full path return from command line argument processing.
         directoryAccum.setFullPathEntries(dirCandidates.getCandidateCount());
         directorySelectEngine.doGrep(dirCandidates.data(), dirCandidates.size(), directoryAccum);
-        grep::SearchableBuffer subdirCandidates;
+        
+        // Now check for a .gitignore or other exclude file for recursive processing.
+        if (!ExcludePerDirectory.empty()) {
+            std::tie(directoryRE, fileSelectRE) = parseIgnoreFile(fs::current_path(), ExcludePerDirectory, directoryRE, fileSelectRE);
+        }
+        // Select files from subdirectories using the recursive process.
 
-        while (!selectedDirectories.empty()) {
-            // We now iterate through the full list of directories, gathering
-            // entries from each.
-            // (a) File entries are added into the global list of fileCandidates.
-            // (b) Directory entries are added into a new list of candidates at each level.
-
-            std::vector<fs::path> currentDirectories;
-            assert (currentDirectories.empty());
-            currentDirectories.swap(selectedDirectories);
-            assert (selectedDirectories.empty());
-            assert (!currentDirectories.empty());
-
-            subdirCandidates.reset();
-            directoryAccum.reset();
-
-            // Iterate through all directories, collecting subdirectory and file candidates.
-            for (const auto & dirpath : currentDirectories) {
-                boost::system::error_code errc;
-                fs::directory_iterator di(dirpath, errc);
-                if (errc) {
-                    // If we cannot enter the directory, keep it in the list of files,
-                    // for possible error reporting.
-                    if (!NoMessagesFlag) {
-                        fileCandidates.append(dirpath.filename().string());
-                    }
-                    continue;
-                }
-
-                const auto di_end = fs::directory_iterator();
-                while (di != di_end) {
-                    const auto & e = di->path();
-                    boost::system::error_code errc;
-                    const auto s = fs::status(e, errc);
-                    if (errc) {
-                        // If there was an error, we leave the file in the fileCandidates
-                        // list for later error processing.
-                        if (!NoMessagesFlag) {
-                            fileCandidates.append(e.string());
-                        }
-                    } else if (fs::is_directory(s)) {
-                        if (fs::is_symlink(e) && !DereferenceRecursiveFlag) {
-                            di.increment(errc);
-                            continue;
-                        }
-                        subdirCandidates.append(e.string());
-                    } else if (fs::is_regular_file(s) || DevicesFlag == Read) {
-                        fileCandidates.append(e.string());
-                    }
-                    boost::system::error_code errc2;
-                    di.increment(errc2);
-                    if (errc2) break;
-                }
-                // For each directory, update counts for candidates generated at this level.
-                //
-                directoryAccum.setFullPathEntries(subdirCandidates.getCandidateCount());
-                fileAccum.setFullPathEntries(fileCandidates.getCandidateCount());
-            }
-
-
-            // Now do the search to produce the next level of selected subdirectories
-            directorySelectEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
-            // Thre search result has been written to directoryList, continue while we
-            // have new subdirectories.
+        for (const auto & dirpath : selectedDirectories) {
+            recursiveFileSelect(dirpath, directoryRE, fileSelectRE, collectedPaths);
         }
     }
-    //  All directories have been processed and all the fileCandidates in the SearchBuffer.
-    //  Now determine which of the candidates should included or excluded from the search.
-    //  The results will be accumulated in collectedPaths.
-
-    CPUDriver driver("driver");
-    grep::InternalSearchEngine fileSelectEngine(driver);
-    fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
-    fileSelectEngine.grepCodeGen(getFilePattern());
-    fileSelectEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
     return collectedPaths;
 }
 

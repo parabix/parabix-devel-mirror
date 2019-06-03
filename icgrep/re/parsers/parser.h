@@ -15,7 +15,7 @@ namespace re { class Name; }
 
 namespace re {
 
-enum RE_Syntax {FixedStrings, BRE, ERE, FileGLOB, PCRE, PROSITE};
+enum RE_Syntax {FixedStrings, BRE, ERE, FileGLOB, GitGLOB, PCRE, PROSITE};
 
 enum ModeFlagType : unsigned {
     DEFAULT_MODE = 0,
@@ -160,7 +160,6 @@ protected:
     
     inline char get1() { return *mCursor++;}
 
-    
     RE_Parser(const std::string & regular_expression);
 
     RE_Parser(const std::string & regular_expression, ModeFlagSet initialFlags);
