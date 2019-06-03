@@ -460,6 +460,9 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
 
     TOKEN_CHECK_FATAL(state.nextToken(), TokenType::ASSIGN, "expected '='");
     PabloAST * const expr = parseExpression(state);
+    if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
+        s->setName(state.pb->makeName(assignee->getText()));
+    }
     if (expr == nullptr) {
         return nullptr;
     }
