@@ -7,12 +7,29 @@
 #include "pablo_type.h"
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/raw_ostream.h>
 
 namespace pablo {
 namespace parse {
 
 PabloType::Allocator PabloType::mAllocator;
 size_t PabloType::mNextAnonId = 0;
+
+inline llvm::StringRef copyText(llvm::StringRef text, PabloType::Allocator & alloc) {
+    ProxyAllocator<char> A(alloc);
+    return text.copy(A);
+}
+
+inline llvm::ArrayRef<llvm::StringRef> copyArray(std::vector<std::string> array, PabloType::Allocator & alloc) {
+    const auto n = array.size();
+    llvm::SmallVector<llvm::StringRef, 64> tmp(n);
+    for (unsigned i = 0; i != n; ++i) {
+        tmp[i] = copyText(array[i], alloc);
+    }
+    llvm::ArrayRef<llvm::StringRef> out(tmp);
+    ProxyAllocator<llvm::StringRef> A(alloc);
+    return out.copy(A);
+}
 
 bool ScalarType::equals(PabloType const * other) const noexcept {
     if (llvm::isa<ScalarType>(other)) {
@@ -83,12 +100,18 @@ bool AliasType::equals(PabloType const * other) const noexcept {
 }
 
 std::string AliasType::asString(bool verbose) const noexcept {
-    return mTypeName +  (verbose ? " (aka " +  mAliasedType->asString() : "") + ")";
+    if (verbose) {
+        llvm::SmallVector<char, 256> tmp;
+        llvm::raw_svector_ostream out(tmp);
+        out << mTypeName << " (aka " << mAliasedType->asString() << ")";
+        return out.str().str();
+    }
+    return mTypeName.str();
 }
 
-AliasType::AliasType(std::string typeName, PabloType * aliasType)
+AliasType::AliasType(llvm::StringRef typeName, PabloType * aliasType)
 : PabloType(ClassTypeId::ALIAS)
-, mTypeName(std::move(typeName))
+, mTypeName(copyText(typeName, mAllocator))
 , mAliasedType(aliasType)
 {}
 
@@ -117,15 +140,20 @@ bool NamedStreamSetType::equals(PabloType const * other) const noexcept {
 }
 
 std::string NamedStreamSetType::asString(bool verbose) const noexcept {
-    return mTypeName + (verbose ? " (aka " +  mAliasedType->asString() : "") + ")";
+    if (verbose) {
+        llvm::SmallVector<char, 256> tmp;
+        llvm::raw_svector_ostream out(tmp);
+        out << mTypeName << " (aka " << mAliasedType->asString() << ")";
+        return out.str().str();
+    }
+    return mTypeName.str();
 }
 
-NamedStreamSetType::NamedStreamSetType(std::string typeName, StreamSetType * aliasType, std::vector<std::string> const & streamNames)
+NamedStreamSetType::NamedStreamSetType(llvm::StringRef typeName, StreamSetType * aliasType, std::vector<std::string> const & streamNames)
 : PabloType(ClassTypeId::NAMED_STREAMSET)
-, mTypeName(typeName)
+, mTypeName(copyText(typeName, mAllocator))
 , mAliasedType(aliasType)
-, mStreamNames(streamNames)
-{
+, mStreamNames(copyArray(streamNames, mAllocator)) {
     assert (mStreamNames.size() == aliasType->getStreamCount());
 }
 
