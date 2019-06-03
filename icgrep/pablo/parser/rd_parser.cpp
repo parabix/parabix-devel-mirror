@@ -649,10 +649,10 @@ PabloAST * RecursiveParser::parseLiteral(ParserState & state) {
 }
 
 
-typedef PabloAST *(*FnGen)(ErrorManager * em, 
-                           Token * funcToken, 
-                           std::vector<Token *> const & argTokens, 
-                           PabloBuilder *, 
+typedef PabloAST *(*FnGen)(ErrorManager * em,
+                           Token * funcToken,
+                           std::vector<Token *> const & argTokens,
+                           PabloBuilder *,
                            std::vector<PabloAST *> const &);
 
 static std::unique_ptr<llvm::StringMap<FnGen>> functionGenMap = nullptr;
@@ -688,7 +688,7 @@ static inline void lazyInitializeFunctionGenMap() {
     FUNC_GEN_DEF("IndexedAdvance", {
         ASSERT_ARG_NUM(3);
         ASSERT_ARG_TYPE_INT(1);
-        return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[3]));
+        return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[2]));
     });
 
     FUNC_GEN_DEF("Lookahead", {
@@ -702,13 +702,13 @@ static inline void lazyInitializeFunctionGenMap() {
         ASSERT_ARG_TYPE_INT(0);
         return pb->createRepeat(llvm::cast<Integer>(args[0]), args[1]);
     });
-    
+
     FUNC_GEN_DEF("PackL", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(0);
         return pb->createPackL(llvm::cast<Integer>(args[0]), args[1]);
     });
-    
+
     FUNC_GEN_DEF("PackH", {
         ASSERT_ARG_NUM(2);
         ASSERT_ARG_TYPE_INT(0);
@@ -761,14 +761,24 @@ static inline void lazyInitializeFunctionGenMap() {
         return pb->createAtEOF(args[0]);
     });
 
+    FUNC_GEN_DEF("SpanUpTo", {
+        ASSERT_ARG_NUM(2);
+        return pb->createIntrinsicCall(Intrinsic::SpanUpTo, args);
+    });
+
     FUNC_GEN_DEF("InclusiveSpan", {
         ASSERT_ARG_NUM(2);
-        return pb->createIntrinsicCall(Intrinsic::InclusiveSpan, {args[0], args[1]});
+        return pb->createIntrinsicCall(Intrinsic::InclusiveSpan, args);
+    });
+
+    FUNC_GEN_DEF("ExclusiveSpan", {
+        ASSERT_ARG_NUM(2);
+        return pb->createIntrinsicCall(Intrinsic::ExclusiveSpan, args);
     });
 
     FUNC_GEN_DEF("PrintRegister", {
         ASSERT_ARG_NUM(1);
-        return pb->createIntrinsicCall(Intrinsic::PrintRegister, {args[0]});
+        return pb->createIntrinsicCall(Intrinsic::PrintRegister, args);
     });
 }
 

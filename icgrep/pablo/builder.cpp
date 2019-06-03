@@ -983,7 +983,7 @@ PabloAST * PabloBuilder::createTernary(Integer * mask, PabloAST * a, PabloAST * 
     return MAKE_NAMED_QUATERNARY(Ternary, prefix, mask, a, b, c);
 }
 
-PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv) {
+PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv) {
     struct __intrinsic_functor {
         inline PabloAST * operator () (Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv) {
             return cast<PabloAST>(mPb->createIntrinsicCall(intrinsic, argv));
@@ -997,7 +997,7 @@ PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<Pa
     return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, intrinsic, argv));
 }
 
-PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<PabloAST *> argv, const llvm::StringRef prefix) {
+PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const llvm::StringRef prefix) {
     struct __intrinsic_functor {
         inline PabloAST * operator () (Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv) {
             return cast<PabloAST>(mPb->createIntrinsicCall(intrinsic, argv, mPrefix));
@@ -1012,6 +1012,7 @@ PabloAST * PabloBuilder::createIntrinsicCall(Intrinsic intrinsic, std::vector<Pa
     __intrinsic_functor functor(mPb, prefix);
     return cast<PabloAST>(mExprTable.findIntrinsicOrCall(functor, TypeId::IntrinsicCall, intrinsic, argv));
 }
+
 
 
 }

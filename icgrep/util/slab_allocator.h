@@ -32,8 +32,8 @@ public:
     }
 
     template<typename Type = T>
-    inline void deallocate(Type * p, size_type size = 0) noexcept {
-        mAllocator.Deallocate(p, size);
+    inline void deallocate(Type * /* p */, size_type /* size */ = 0) noexcept {
+
     }
 
     inline size_type max_size() const {
@@ -71,7 +71,7 @@ private:
 template <typename T = uint8_t>
 class ProxyAllocator {
     using LLVMAllocator = typename SlabAllocator<T>::LLVMAllocator;
-    template<typename U> friend class ProxyAllocator;    
+    template<typename U> friend class ProxyAllocator;
 public:
     using value_type = T;
     using pointer = value_type*;
@@ -96,8 +96,13 @@ public:
     }
 
     template<typename Type = T>
-    inline void deallocate(Type * p, size_type size = 0) noexcept {
-        mAllocator->Deallocate(p, size);
+    inline Type * Allocate(size_type n) noexcept {
+        return allocate<Type>(n, nullptr);
+    }
+
+    template<typename Type = T>
+    inline void deallocate(Type * /*p */, size_type /* size */ = 0) noexcept {
+
     }
 
     inline size_type max_size() const noexcept {
@@ -119,8 +124,8 @@ public:
     }
 
     inline ProxyAllocator() noexcept = delete;
-    template <class U> inline ProxyAllocator(ProxyAllocator<U> & a) noexcept : mAllocator(a.mAllocator) {}
     template <class U> inline ProxyAllocator(ProxyAllocator<U> && a) noexcept : mAllocator(a.mAllocator) {}
+    template <class U> inline ProxyAllocator(const ProxyAllocator<U> & a) noexcept : mAllocator(const_cast<LLVMAllocator *>(a.mAllocator)) {}
     template <class U> inline ProxyAllocator (const SlabAllocator<U> & a) noexcept : mAllocator(const_cast<LLVMAllocator *>(&a.mAllocator)) {}
 private:
     LLVMAllocator * const mAllocator;

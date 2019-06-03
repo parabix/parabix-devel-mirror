@@ -14,7 +14,9 @@
 namespace pablo {
 
 enum class Intrinsic {
+    SpanUpTo,
     InclusiveSpan,
+    ExclusiveSpan,
     PrintRegister
 };
 
@@ -48,6 +50,20 @@ public:
         #undef CASE
     }
 
+    inline bool isCarryProducing() const noexcept {
+        switch (mIntrinsic) {
+            case Intrinsic::SpanUpTo:
+            case Intrinsic::InclusiveSpan:
+            case Intrinsic::ExclusiveSpan:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    inline bool isAdvanceType() const noexcept {
+        return false;
+    }
 
 protected:
     IntrinsicCall(Intrinsic intrinsic, llvm::Type * type, llvm::ArrayRef<PabloAST *> argv, const String * name, Allocator & allocator)

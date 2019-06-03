@@ -132,6 +132,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
             Statement * const next = evaluateBranch(cast<Branch>(stmt), expressions, variables);
             if (LLVM_UNLIKELY(next != nullptr)) {
+                assert (next != stmt);
                 assert (next->getParent() == currentScope);
                 stmt = next;
                 continue;
@@ -143,7 +144,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
                 // demote any uses of any Var whose value is in scope
                 if (LLVM_UNLIKELY(isa<Var>(op))) {
                     PabloAST * const var = variables.get(op);
-                    if (LLVM_UNLIKELY(var != nullptr && var != op)) { assert (var);
+                    if (LLVM_UNLIKELY(var != nullptr && var != op)) {
                         stmt->setOperand(i, var);
                     }
                 }
@@ -151,6 +152,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
 
             PabloAST * const folded = triviallyFold(stmt, currentScope);
             if (folded) {
+                assert (folded != stmt);
                 Statement * const prior = stmt->getPrevNode();
                 stmt->replaceWith(folded);
                 // Since folding a statement may result in inserting new
@@ -169,6 +171,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
             bool added = false;
             std::tie(replacement, added) = expressions.findOrAdd(stmt);
             if (!added) {
+                assert (replacement != stmt);
                 stmt = stmt->replaceWith(replacement);
                 continue;
             }
@@ -213,13 +216,17 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
     }
 
     PabloAST * cond = br->getCondition();
-    if (isa<Var>(cond)) {
-        PabloAST * const value = nestedVariables.get(cast<Var>(cond));
-        if (value && cond != value) {
-            cond = value;
-            br->setCondition(cond);
+    auto subsituteCondValue = [&]() {
+        if (isa<Var>(cond)) {
+            PabloAST * const value = nestedVariables.get(cast<Var>(cond));
+            if (value && cond != value) {
+                cond = value;
+                br->setCondition(cond);
+            }
         }
-    }
+    };
+
+    subsituteCondValue();
 
     // Test whether we can ever take this branch
     if (LLVM_UNLIKELY(isa<Zeroes>(cond))) {
@@ -237,22 +244,24 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 
     // Process the Branch body
     ExpressionTable nestedExpressions(&expressions);
-    mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
-    redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+
+    auto processBranchBody = [&]() {
+        mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
+        redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        assert (mNonZero.back() == cond);
+        mNonZero.pop_back();
+    };
+
+    processBranchBody();
 
     // If this block has a branch statement leading into it, we can verify whether an escaped value
     // was updated within this block and update the preceeding block's variable state appropriately.
     if (phiEscapedVars(escaped, nestedVariables, variables)) {
         // If we modified the escaped vars, reevaluate the branch.
         nestedExpressions.clear();
-        nestedVariables.clear();
-        for (Var * const var : escaped) {
-            nestedVariables.put(var, variables.get(var));
-        }
-        redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        subsituteCondValue();
+        processBranchBody();
     }
-    assert (mNonZero.back() == cond);
-    mNonZero.pop_back();
 
     // Check whether the cost of testing the condition and taking the branch with
     // 100% correct prediction rate exceeds the cost of the body itself
@@ -261,6 +270,82 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
     }
 
     return nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief phiEscapedVars
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
+
+    const auto n = escaped.size();
+
+    SmallVector<PabloAST *, 16> incoming(n);
+    SmallVector<PabloAST *, 16> outgoing(n);
+    SmallVector<PabloAST *, 16> initial(n);
+    SmallVector<PabloAST *, 16> result(n);
+    bool modified = false;
+
+    for (unsigned i = 0; i < n; ++i) {
+        Var * const var = escaped[i];
+        incoming[i] = outer.get(var);
+        outgoing[i] = inner.get(var);
+        initial[i] = escaped[i];
+        result[i] = escaped[i];
+    }
+
+    // CASE 1:
+
+    // Detect when Var a is assigned the same value within the branch as its original value
+    // and replace a with the value.
+
+    //             a = x                     ...
+    //             branch a:        =>       branch x:
+    //               a = x                      ...
+    //             y = a op z                y = x op z
+
+    for (unsigned i = 0; i < n; ++i) {
+        if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
+            initial[i] = incoming[i];
+            result[i] = incoming[i];
+            modified = true;
+        }
+    }
+
+    // CASE 2:
+
+    // Detect when two Vars, a and b, are assigned identical values and replace future uses
+    // of b with a -- assuming a is not reassigned a different variable outside of the scope.
+    // Dead code elimination will remove the redundant assignments to b.
+
+    //             a = x                     a = x
+    //             b = x                     ...
+    //             branch b:                 branch a:
+    //                a = y         =>          a = y
+    //                b = y                     ...
+
+    for (unsigned i = 0; i < n; ++i) {
+        for (unsigned j = 0; j < i; ++j) {
+            if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
+                initial[i] = initial[j];
+                result[i] = result[j];
+                modified = true;
+                break;
+            }
+        }
+    }
+
+    for (unsigned i = 0; i < n; ++i) {
+        outer.put(escaped[i], result[i]);
+    }
+
+    if (modified) {
+        inner.clear();
+        for (unsigned i = 0; i < n; ++i) {
+            inner.put(escaped[i], initial[i]);
+        }
+    }
+
+    return modified;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -760,67 +845,6 @@ void strengthReduction(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief phiEscapedVars
- ** ------------------------------------------------------------------------------------------------------------- */
-bool phiEscapedVars(const EscapedVars & escaped, const VariableTable & inner, VariableTable & outer) {
-
-    const auto n = escaped.size();
-
-    // CASE 1:
-
-    // Detect when Var a is assigned the same value within the branch as its original value
-    // and replace a with the value.
-
-    //             a = x                     ...
-    //             branch a:        =>       branch x:
-    //               a = x                      ...
-    //             y = a op z                y = x op z
-
-    SmallVector<PabloAST *, 16> incoming(n);
-    SmallVector<PabloAST *, 16> outgoing(n);
-    SmallVector<PabloAST *, 16> result(n);
-    bool modified = false;
-
-    for (unsigned i = 0; i < n; ++i) {
-        Var * const var = escaped[i];
-        incoming[i] = outer.get(var);
-        outgoing[i] = inner.get(var);
-        PabloAST * value = var;
-        if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
-            value = incoming[i];
-            modified = true;
-        }
-        result[i] = value;
-        outer.put(var, value);
-    }
-
-    // CASE 2:
-
-    // Detect when two Vars, a and b, are assigned identical values and replace future uses
-    // of b with a -- assuming a is not reassigned a different variable outside of the scope.
-    // Dead code elimination will remove the redundant assignments to b.
-
-    //             a = x                     a = x
-    //             b = x                     ...
-    //             branch b:                 branch a:
-    //                a = y         =>          a = y
-    //                b = y                     ...
-
-    for (unsigned i = 0; i < n; ++i) {
-        for (unsigned j = 0; j < i; ++j) {
-            if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
-                outer.put(escaped[i], result[j]);
-                result[i] = result[j];
-                modified = true;
-                break;
-            }
-        }
-    }
-
-    return modified;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief LiveVarSet
  ** ------------------------------------------------------------------------------------------------------------- */
 struct LiveVarSet : public flat_set<const Var *> {
@@ -845,11 +869,13 @@ struct LiveVarSet : public flat_set<const Var *> {
         return true;
     }
 
-    void remove(const Var * const var) noexcept {
+    bool remove(const Var * const var) noexcept {
         const auto f = find(var);
         if (LLVM_LIKELY(f != end())) {
             erase(f);
+            return true;
         }
+        return false;
     }
 
     void put(const Var * const var) noexcept {
@@ -859,6 +885,19 @@ struct LiveVarSet : public flat_set<const Var *> {
 private:
     const LiveVarSet * const mOuter;
 };
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isOutputExtract
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool isOutputExtract(const Var * var, const LiveVarSet & set) {
+    while (isa<Extract>(var)) {
+        var = cast<Extract>(var)->getArray();
+        if (set.contains(var)) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
@@ -873,17 +912,8 @@ void deadCodeElimination(PabloKernel * const kernel) {
     const auto m = kernel->getNumOfVariables();
     for (unsigned i = 0; i < m; ++i) {
         Var * const var = kernel->getVariable(i);
-        if (isa<Extract>(var)) {
-            Var * ext = var;
-            for (;;) {
-                ext = cast<Extract>(ext)->getArray();
-                if (LLVM_LIKELY(ext->getClassTypeId() == PabloAST::ClassTypeId::Var)) {
-                    break;
-                }
-            }
-            if (variables.contains(ext)) {
-                variables.put(var);
-            }
+        if (LLVM_UNLIKELY(isOutputExtract(var, variables))) {
+            variables.put(var);
         }
     }
     deadCodeElimination(kernel->getEntryScope(), variables);
@@ -911,20 +941,20 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet) {
                 }
 
                 if (LLVM_LIKELY(keep)) {
+                    LiveVarSet nested(liveSet);
                     if (isa<While>(stmt)) {
                         for (const Var * var : escaped) {
-                            liveSet.put(var);
+                            nested.put(var);
                         }
                     }
-                    LiveVarSet nested(liveSet);
                     deadCodeElimination(cast<Branch>(stmt)->getBody(), nested);
                     // propagate any Var usages that were not dominated by an Assign.
                     if (isa<While>(stmt)) {
                         for (const Var * var : escaped) {
                             liveSet.remove(var);
                         }
+                        liveSet.insert(nested.begin(), nested.end());
                     }
-                    liveSet.insert(nested.begin(), nested.end());
                     continue;
                 }
             } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {

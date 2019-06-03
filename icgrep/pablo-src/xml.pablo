@@ -6,6 +6,44 @@
 
 type BasisBits = <i1>[8]
 
+
+#
+# Masks off basis bits according to a given mask stream.
+#
+kernel MaskedBasisBits :: [BasisBits basisBits, <i1>[1] mask] -> [BasisBits maskedBasisBits] {
+    or = basisBits[0] | basisBits[2] | basisBits[4] | basisBits[5] | basisBits[6] | basisBits[7]
+    and = basisBits[1] & basisBits[3]
+    lf = ~or & and
+    m = mask[0] | lf
+
+    maskedBasisBits[0] = basisBits[0] & m
+    maskedBasisBits[1] = basisBits[1] & m
+    maskedBasisBits[2] = basisBits[2] & m
+    maskedBasisBits[3] = basisBits[3] & m
+    maskedBasisBits[4] = basisBits[4] & m
+    maskedBasisBits[5] = basisBits[5] & m
+    maskedBasisBits[6] = basisBits[6] & m
+    maskedBasisBits[7] = basisBits[7] & m
+}
+
+#
+# Converts masked basis bits into a printable format.
+# Replaces 0x00 bytes with '.' (i.e., 0x2E).
+#
+kernel PrintableMaskedBasisBits :: [BasisBits basisBits] -> [BasisBits printableBasisBits] {
+    x = ~(basisBits[0] | basisBits[1] | basisBits[2] | basisBits[3] | basisBits[4] | basisBits[5] | basisBits[6] | basisBits[7])
+
+    printableBasisBits[0] = basisBits[0] | <0>
+    printableBasisBits[1] = basisBits[1] |  x
+    printableBasisBits[2] = basisBits[2] |  x
+    printableBasisBits[3] = basisBits[3] |  x
+    printableBasisBits[4] = basisBits[4] | <0>
+    printableBasisBits[5] = basisBits[5] |  x
+    printableBasisBits[6] = basisBits[6] | <0>
+    printableBasisBits[7] = basisBits[7] | <0>
+}
+
+
 type U8 = <i1>[1] {
     suffix
 }
@@ -114,18 +152,44 @@ type DTD_Callouts = <i1>[17] {
     notation_sysid_end
 }
 
-type Error = <i1>[5] {
+
+type LexError = <i1>[2] {
     IllegalChar,
-    UTF8_Error,
+    UTF8_Error
+}
+
+type CT_CD_PI_Error = <i1>[3] {
     PI_Error,
     CT_Error,
     CT_CD_PI_Error
 }
 
+type TagError = <i1>[1] {
+    Tag_Error
+}
+
+type Error = <i1>[6] {
+    IllegalChar,
+    UTF8_Error,
+    PI_Error,
+    CT_Error,
+    CT_CD_PI_Error,
+    Tag_Error
+}
+
+
+kernel ErrorCombiner :: [LexError lexErr, CT_CD_PI_Error ccpErr, TagError tagErr] -> [Error err] {
+    err.IllegalChar = lexErr.IllegalChar
+    err.UTF8_Error = lexErr.UTF8_Error
+    err.PI_Error = ccpErr.PI_Error
+    err.CT_Error = ccpErr.CT_Error
+    err.CT_CD_PI_Error = ccpErr.CT_CD_PI_Error
+    err.Tag_Error = tagErr.Tag_Error
+}
 
 
 
-kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, Error err] {
+kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, LexError err] {
     temp1 = basis_bits[7] | basis_bits[6]
     temp2 = basis_bits[5] & ~basis_bits[4]
     temp3 = temp2 & ~temp1
@@ -294,7 +358,7 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, E
 
 kernel Parse_CtCDPI
 :: [Lex lex]
--> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, Error err]
+-> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, CT_CD_PI_Error err]
 {
     ctCDPI_Callouts.Ct_starts = <0>
     ctCDPI_Callouts.Ct_ends = <0>
@@ -332,7 +396,6 @@ kernel Parse_CtCDPI
         CtCDPI_starts = CtCDPI_starts | CtCDPI_Cursor
         PI_Cursor = CtCDPI_Cursor & PI_opener
         CD_Ct_Cursor = Advance(CtCDPI_Cursor & ~PI_Cursor, 1)
-        # CD_Ct_Cursor = PrintRegister(CD_Ct_Cursor)
         CD_Cursor = CD_Ct_Cursor & lex.LBracket
         Ct_Cursor = CD_Ct_Cursor & lex.Hyphen
 
@@ -392,4 +455,103 @@ kernel Parse_CtCDPI
     marker.LAngle_scope = LAngle_scope & ~ctCDPI_mask
     marker.Ref_opener = lex.RefStart & ~ctCDPI_mask
     marker.CD_closer = CD_closer & ~ctCDPI_mask
+}
+
+
+kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagError err, <i1>[1] print] {
+
+    EqExpected = <0>
+    AttListEnd = <0>
+    
+    # Delimiters for scans.
+    DQuoteDelim = lex.DQuote | lex.LAngle
+    SQuoteDelim = lex.SQuote | lex.LAngle
+    AttListDelim = lex.Slash | lex.RAngle
+    
+    # Start the parallel parsing by inspecting the character
+    # after the opening "<" of a tag.
+    tag_Callouts.ElemName_starts = marker.LAngle_scope & ~lex.Slash
+    tag_Callouts.EndTag_marks = marker.LAngle_scope & lex.Slash
+    
+    # Start Tag/Empty Element Tag Parsing
+
+    # Advance all cursors by scanning through the tag name.
+    tag_Callouts.ElemName_ends = ScanThru(tag_Callouts.ElemName_starts, lex.NameScan)
+    # Must have at least one name character for a legal start tag.
+    # Mark any occurrences of null names as errors.
+    ParseError = tag_Callouts.ElemName_starts & tag_Callouts.ElemName_ends
+    
+    # Initialize the accumulators for attribute name and value positions.
+    tag_Callouts.AttName_starts = <0>  
+    tag_Callouts.AttName_ends = <0>
+    tag_Callouts.AttVal_starts = <0>
+    tag_Callouts.AttVal_ends = <0>
+    # After the element name, there may or may not be an attlist.
+
+    if tag_Callouts.ElemName_ends & lex.WS {
+        AfterWS = ScanThru(tag_Callouts.ElemName_ends, lex.WS)
+        AttListEnd = AfterWS & AttListDelim
+        AttNameStart = AfterWS & ~AttListDelim
+        
+        DQuoteAttVal = <0>
+        SQuoteAttVal = <0>
+        AttValEnd = <0>
+        
+
+        #
+        # The following loop iterates through attributes within a start tag.
+        # Because all start tags are processed in parallel, the number of
+        # iterations is the maximum number of attributes found in any one
+        # start tag, plus one.
+        while AttNameStart {
+            ParseError = ParseError | AttNameStart &~ lex.NameScan
+            tag_Callouts.AttName_starts = tag_Callouts.AttName_starts | AttNameStart
+            AttNameFollow = ScanThru(AttNameStart, lex.NameScan)
+            tag_Callouts.AttName_ends = tag_Callouts.AttName_ends | AttNameFollow
+            # Scan through WS to the expected '=' delimiter.
+            EqExpected = ScanThru(AttNameFollow, lex.WS)
+
+            ParseError = ParseError | EqExpected &~ lex.Equals
+            AttValPos = AdvanceThenScanThru(EqExpected, lex.WS)
+            tag_Callouts.AttVal_starts = tag_Callouts.AttVal_starts | AttValPos
+            DQuoteAttVal = AttValPos & lex.DQuote
+            SQuoteAttVal = AttValPos & lex.SQuote
+            DQuoteAttEnd = AdvanceThenScanTo(DQuoteAttVal, DQuoteDelim)
+            SQuoteAttEnd = AdvanceThenScanTo(SQuoteAttVal, SQuoteDelim)
+            AttValEnd = DQuoteAttEnd | SQuoteAttEnd
+            ParseError = ParseError | (AttValPos | AttValEnd) & ~(lex.DQuote | lex.SQuote)
+            AttValFollow = Advance(AttValEnd, 1)
+            tag_Callouts.AttVal_ends = tag_Callouts.AttVal_ends | AttValFollow
+            AfterWS = ScanThru(AttValFollow, lex.WS)
+            AttListEnd = AttListEnd | AfterWS & AttListDelim
+            AttNameStart = AfterWS & ~AttListDelim
+            AttNameStart = PrintRegister(AttNameStart)
+            ParseError = ParseError | AttValFollow & AttNameStart
+        }
+    }
+
+    # else:
+    #     # No WS character after ElemName; must be at the end
+    #     AttListEnd = tag_Callouts.ElemName_ends & AttListDelim
+    #     ParseError = ParseError | tag_Callouts.ElemName_ends & ~AttListDelim
+
+    STagEnds = AttListEnd & lex.RAngle
+    # Mark any "/" characters found as the ends of empty element tags.
+    tag_Callouts.EmptyTag_marks = Advance(AttListEnd & lex.Slash, 1)
+    
+    ParseError = ParseError | tag_Callouts.EmptyTag_marks & ~lex.RAngle
+
+    # End Tag Parsing
+
+    EndTagEnds = AdvanceThenScanThru(tag_Callouts.EndTag_marks, lex.NameScan)
+    if EndTagEnds & lex.WS {
+        EndTagEnds = ScanThru(EndTagEnds, lex.WS)
+    }
+    ParseError = ParseError | EndTagEnds & ~lex.RAngle
+    err.Tag_Error = ParseError
+        
+        
+    # Attribute value spans
+    tag_Callouts.AttVal_spans =  SpanUpTo(tag_Callouts.AttVal_starts, tag_Callouts.AttVal_ends)
+    print[0] = tag_Callouts.AttVal_spans
 }
