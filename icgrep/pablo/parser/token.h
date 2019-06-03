@@ -12,6 +12,7 @@
 #include <string>
 #include <pablo/parser/source_file.h>
 #include <util/slab_allocator.h>
+#include <llvm/ADT/StringRef.h>
 
 namespace pablo {
 namespace parse {
@@ -173,7 +174,7 @@ public:
         if (start == end) {
             return start;
         }
-        size_t width = start->mLineNum == end->mLineNum ? (end->mColNum + end->mText.length()) - start->mColNum : 1;
+        size_t width = start->mLineNum == end->mLineNum ? (end->mColNum + end->mText.size()) - start->mColNum : 1;
         return Create(TokenType::IMAGINARY_FIELD, std::string(width, ' '),  start->mLineNum, start->mColNum - 1, start->mSourceRef);
     }
 
@@ -190,14 +191,14 @@ public:
     uint64_t getValue() const { return mValue; }
 private:
 
-    Token(TokenType type, std::string const & text, std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value);
+    Token(TokenType type, llvm::StringRef text, std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value);
 
     void * operator new (size_t size) {
         return mAllocator.allocate<uint8_t>(size);
     }
 
-    TokenType                   mType;
-    std::string                 mText;
+    const TokenType             mType;
+    llvm::StringRef             mText;
     std::shared_ptr<SourceFile> mSourceRef;
     size_t                      mLineNum;
     size_t                      mColNum;

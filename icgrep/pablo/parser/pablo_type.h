@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 #include <util/slab_allocator.h>
+#include <llvm/ADT/StringRef.h>
+#include <llvm/ADT/ArrayRef.h>
 
 #define PABLO_SUBTYPE(KIND) \
 static inline bool classof(PabloType const * t) {return t->getClassTypeId() == ClassTypeId::KIND;} \
@@ -59,7 +61,7 @@ protected:
 
 class ScalarType final : public PabloType {
 public:
-    PABLO_SUBTYPE(SCALAR);
+    PABLO_SUBTYPE(SCALAR)
 
     explicit ScalarType(size_t bitWidth);
     bool equals(PabloType const * other) const noexcept override;
@@ -75,7 +77,7 @@ private:
 
 class StreamType final : public PabloType {
 public:
-    PABLO_SUBTYPE(STREAM);
+    PABLO_SUBTYPE(STREAM)
 
     explicit StreamType(size_t elementBitWidth);
     bool equals(PabloType const * other) const noexcept override;
@@ -91,7 +93,7 @@ private:
 
 class StreamSetType final : public PabloType {
 public:
-    PABLO_SUBTYPE(STREAMSET);
+    PABLO_SUBTYPE(STREAMSET)
 
     StreamSetType(size_t elementBitWidth, size_t streamCount);
     bool equals(PabloType const * other) const noexcept override;
@@ -111,19 +113,19 @@ private:
 
 class AliasType : public PabloType {
 public:
-    PABLO_SUBTYPE(ALIAS);
+    PABLO_SUBTYPE(ALIAS)
 
     virtual ~AliasType() {}
 
-    AliasType(std::string typeName, PabloType * aliasType);
+    AliasType(llvm::StringRef typeName, PabloType * aliasType);
     bool equals(PabloType const * other) const noexcept override;
     std::string asString(bool verbose = false) const noexcept override;
 
-    inline std::string const & getTypeName() const noexcept {
+    inline llvm::StringRef getTypeName() const noexcept {
         return mTypeName;
     }
 
-    inline PabloType * getAliasedType() const noexcept { 
+    inline PabloType * getAliasedType() const noexcept {
         return mAliasedType;
     }
 
@@ -131,38 +133,40 @@ public:
         mTypeName = name;
     }
 protected:
-    std::string mTypeName;
-    PabloType * mAliasedType;
+    llvm::StringRef mTypeName;
+    PabloType *     mAliasedType;
 };
 
 
 class NamedStreamSetType final : public PabloType {
 public:
-    PABLO_SUBTYPE(NAMED_STREAMSET);
+    PABLO_SUBTYPE(NAMED_STREAMSET)
 
-    NamedStreamSetType(std::string typeName, StreamSetType * aliasType, std::vector<std::string> const & streamNames);
+    NamedStreamSetType(llvm::StringRef typeName, StreamSetType * aliasType, std::vector<std::string> const & streamNames);
     bool equals(PabloType const * other) const noexcept override;
     std::string asString(bool verbose = false) const noexcept override;
 
-    inline std::string const & getTypeName() const noexcept {
+    inline llvm::StringRef getTypeName() const noexcept {
         return mTypeName;
     }
 
-    inline PabloType * getAliasedType() const noexcept { 
+    inline PabloType * getAliasedType() const noexcept {
         return mAliasedType;
     }
 
-    inline std::vector<std::string> const & getStreamNames() const noexcept {
+    inline llvm::ArrayRef<llvm::StringRef> const & getStreamNames() const noexcept {
         return mStreamNames;
     }
 
-    inline void setTypeName(std::string const & name) noexcept {
-        mTypeName = name;
+    void setTypeName(llvm::StringRef name) noexcept {
+        ProxyAllocator<char> A(PabloType::mAllocator);
+        mTypeName = name.copy(A);
     }
+
 private:
-    std::string mTypeName;
-    PabloType * mAliasedType;
-    std::vector<std::string> mStreamNames;
+    llvm::StringRef                 mTypeName;
+    PabloType *                     mAliasedType;
+    llvm::ArrayRef<llvm::StringRef> mStreamNames;
 };
 
 } // namespace pablo::parse

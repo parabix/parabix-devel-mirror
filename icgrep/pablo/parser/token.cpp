@@ -48,10 +48,14 @@ std::string to_string(TokenType const & type) {
     }
 }
 
+llvm::StringRef copyText(const llvm::StringRef & text, Token::Allocator & alloc) {
+    ProxyAllocator<char> A(alloc);
+    return text.copy(A);
+}
 
-Token::Token(TokenType type, std::string const & text, std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value)
+Token::Token(TokenType type, llvm::StringRef text, std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value)
 : mType(type)
-, mText(text)
+, mText(std::move(copyText(text, mAllocator)))
 , mSourceRef(std::move(source))
 , mLineNum(lineNum)
 , mColNum(colNum + 1) // convert from 0-indexed to 1-indexed
