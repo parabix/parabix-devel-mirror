@@ -275,7 +275,7 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief phiEscapedVars
  ** ------------------------------------------------------------------------------------------------------------- */
-bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
+static bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
 
     const auto n = escaped.size();
 
@@ -351,7 +351,7 @@ bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, Variable
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isRedundantAssign
  ** ------------------------------------------------------------------------------------------------------------- */
-bool isRedundantAssign(Assign * const assign, VariableTable & variables) {
+static bool isRedundantAssign(Assign * const assign, VariableTable & variables) {
     PabloAST * const var = assign->getVariable();
     PabloAST * const prior = variables.get(var);
     PabloAST * value = assign->getValue();
@@ -720,7 +720,7 @@ bool isBasicBinaryOp(PabloAST * stmt) {
  * If this inner block is composed of only Boolean logic and Assign statements and there are fewer than 3
  * statements, just add the statements in the inner block to the current block
  ** ------------------------------------------------------------------------------------------------------------- */
-bool isTrivial(const PabloBlock * const block) {
+static bool isTrivial(const PabloBlock * const block) {
     unsigned computations = 0;
     for (const Statement * stmt : *block) {
         switch (stmt->getClassTypeId()) {
@@ -743,7 +743,7 @@ bool isTrivial(const PabloBlock * const block) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief flatten
  ** ------------------------------------------------------------------------------------------------------------- */
-Statement * flatten(Branch * const br) {
+static Statement * flatten(Branch * const br) {
     Statement * stmt = br;
     Statement * const first = br->getBody()->front();
     Statement * nested = first;
@@ -916,43 +916,35 @@ void deadCodeElimination(PabloKernel * const kernel) {
             variables.put(var);
         }
     }
-    deadCodeElimination(kernel->getEntryScope(), variables);
+    deadCodeElimination(kernel->getEntryScope(), variables, false);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet) {
+void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const bool scanOnly) {
     for (Statement * stmt = block->back(), * prior; stmt; stmt = prior) {
         prior = stmt->getPrevNode();
         if (LLVM_UNLIKELY((stmt->getNumUses() == 0) && (!stmt->isSideEffecting()))) {
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-
-                const auto escaped = cast<Branch>(stmt)->getEscaped();
-                bool keep = false;
-                // If none of the escaped vars from this branch are read,
-                // delete the branch.
-
+                auto escaped = cast<Branch>(stmt)->getEscaped();
+                std::sort(escaped.begin(), escaped.end());
+                LiveVarSet nested(liveSet);
+                if (LLVM_UNLIKELY(isa<While>(stmt))) {
+                    // gather any Vars whose incoming value is read within the loop
+                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, true);
+                    // and make sure the Cond is within our set of nested vars
+                    nested.put(cast<Var>(cast<While>(stmt)->getCondition()));
+                }
                 for (const Var * var : escaped) {
-                    if (liveSet.contains(var)) {
-                        keep = true;
-                        break;
+                    if (LLVM_LIKELY(liveSet.contains(var))) {
+                        nested.put(var);
                     }
                 }
-
-                if (LLVM_LIKELY(keep)) {
-                    LiveVarSet nested(liveSet);
-                    if (isa<While>(stmt)) {
-                        for (const Var * var : escaped) {
-                            nested.put(var);
-                        }
-                    }
-                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested);
-                    // propagate any Var usages that were not dominated by an Assign.
-                    if (isa<While>(stmt)) {
-                        for (const Var * var : escaped) {
-                            liveSet.remove(var);
-                        }
+                // If none of the escaped vars from this branch are read, delete it.
+                if (LLVM_LIKELY(!nested.empty())) {
+                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, false);
+                    if (LLVM_UNLIKELY(isa<While>(stmt))) {
                         liveSet.insert(nested.begin(), nested.end());
                     }
                     continue;
@@ -964,11 +956,14 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet) {
                     if (isa<Var>(value)) {
                         liveSet.put(cast<Var>(value));
                     }
-                    liveSet.remove(var);
-                    continue;
+                    if (liveSet.remove(var)) {
+                        continue;
+                    }
                 }
             }
-            stmt->eraseFromParent();
+            if (LLVM_LIKELY(!scanOnly)) {
+                stmt->eraseFromParent();
+            }
         } else {
             const auto n = stmt->getNumOperands();
             for (unsigned i = 0; i < n; ++i) {
