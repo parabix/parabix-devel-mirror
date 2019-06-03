@@ -118,9 +118,6 @@ Token * SimpleLexer::extractSymbol() {
     case '.':
         token = Token::CreateDot(mCurrentLineNum, col, mCurrentSource);
         break;
-    case '+':
-        token = Token::CreatePlus(mCurrentLineNum, col, mCurrentSource);
-        break;
     case '~':
         token = Token::CreateTilde(mCurrentLineNum, col, mCurrentSource);
         break;
@@ -163,7 +160,7 @@ Token * SimpleLexer::extractSymbol() {
         if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == '>') {
             token = Token::CreateArrow(mCurrentLineNum, col, mCurrentSource);
         } else {
-            token = Token::CreateMinus(mCurrentLineNum, col, mCurrentSource);
+            mErrorManager->logError(mCurrentSource, mCurrentLineNum, mCurrentColNum + 1 /*to 1-indexed*/, errtxt_IllegalSymbol(c), "->");
         }
         mCurrentColNum++;
         break;

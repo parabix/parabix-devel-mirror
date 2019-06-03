@@ -6,10 +6,34 @@
 
 #include "source_file.h"
 
-#include <iostream>
+#include <llvm/ADT/SmallString.h>
+#include <llvm/Support/Path.h>
 
 namespace pablo {
 namespace parse {
+
+inline static std::string appendToBasePath(std::string const & filename) {
+    llvm::SmallString<128> path{};
+    llvm::sys::path::home_directory(path);
+    llvm::sys::path::append(path, ".cache", "parabix", filename);
+    return std::string(path.c_str());
+}
+
+std::shared_ptr<SourceFile> SourceFile::Relative(std::string const & path) {
+    try {
+        return std::make_shared<SourceFile>(appendToBasePath(path));
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+std::shared_ptr<SourceFile> SourceFile::Absolute(std::string const & path) {
+    try {
+        return std::make_shared<SourceFile>(path);
+    } catch (...) {
+        return nullptr;
+    }
+}
 
 bool SourceFile::nextLine(boost::string_view & view) {
     if (mCursor == mSource.end())

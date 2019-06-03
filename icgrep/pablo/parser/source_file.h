@@ -24,6 +24,34 @@ namespace parse {
  */
 class SourceFile {
 public:
+
+    /**
+     * Creates a source file instance by opening the file at a path relative to
+     * some static base path.
+     * 
+     * The base path is: $HOME/.cache/parabix
+     * 
+     * @param path  The path to the source file relative to the base path. For
+     *              example, path = "src.pablo" will get the file:
+     *              '$HOME/.cache/parabix/src.pablo'.
+     * @return A pointer to the newly created source file or nullptr if unable
+     *  to open the file.
+     */
+    static std::shared_ptr<SourceFile> Relative(std::string const & path);
+
+    /**
+     * Creates a source file instance by opening the file at an unmodified path.
+     * The path supplied to the function will not be modified i.e., 'src.pablo'
+     * will get the file named 'src.pablo' in the current working directory of
+     * the application.
+     * 
+     * @param path  A path to a source file.
+     * @return A pointer to the newly created source file or nullptr if unable
+     *  to open the file.
+     */
+    static std::shared_ptr<SourceFile> Absolute(std::string const & path);
+
+public:
     SourceFile() = delete;
     explicit SourceFile(std::string const & filename);
     ~SourceFile();

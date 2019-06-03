@@ -35,8 +35,6 @@ enum class TokenType {
     BAR,            // |
     COMMA,          // ,
     DOT,            // .
-    MINUS,          // -
-    PLUS,           // +
     SIG,            // ::
     TILDE,          // ~
     CARET,          // ^
@@ -125,14 +123,6 @@ public:
 
     static Token * CreateDot(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::DOT, ".", lineNum, colNum, source);
-    }
-
-    static Token * CreateMinus(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
-        return Create(TokenType::MINUS, "-", lineNum, colNum, source);
-    }
-
-    static Token * CreatePlus(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
-        return Create(TokenType::PLUS, "+", lineNum, colNum, source);
     }
 
     static Token * CreateSig(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
