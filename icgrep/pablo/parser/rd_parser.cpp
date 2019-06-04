@@ -345,7 +345,6 @@ PabloType * RecursiveParser::parseTypeDefinition(ParserState & state) {
     }
     if (llvm::isa<NamedStreamSetType>(type)) {
         llvm::cast<NamedStreamSetType>(type)->setTypeName(identifier->getText());
-        auto names = llvm::cast<NamedStreamSetType>(type)->getStreamNames();
     } else {
         type = new AliasType(identifier->getText(), type);
     }
@@ -446,25 +445,28 @@ PabloAST * RecursiveParser::parseWhile(ParserState & state) {
 PabloAST * RecursiveParser::parseAssign(ParserState & state) {
     Token * const assignee = state.nextToken();
     assert (assignee->getType() == TokenType::IDENTIFIER);
+    std::string name = assignee->getText();
     Token * index = nullptr;
     if (state.peekToken()->getType() == TokenType::L_SBRACE) {
         state.nextToken(); // consume '['
         index = state.nextToken();
         TOKEN_CHECK_FATAL(index, TokenType::INT_LITERAL, "expected integer literal");
         TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_SBRACE, "expected ']'");
+        name += "[" + index->getText() + "]";
     } else if (state.peekToken()->getType() == TokenType::DOT) {
         state.nextToken(); // consume '.'
         index = state.nextToken();
         TOKEN_CHECK_FATAL(index, TokenType::IDENTIFIER, "expected name");
+        name += "." + index->getText();
     }
 
     TOKEN_CHECK_FATAL(state.nextToken(), TokenType::ASSIGN, "expected '='");
     PabloAST * const expr = parseExpression(state);
-    if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
-        s->setName(state.pb->makeName(assignee->getText()));
-    }
     if (expr == nullptr) {
         return nullptr;
+    }
+    if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
+        s->setName(state.pb->makeName(name));
     }
     if (index == nullptr) {
         return state.symbolTable->assign(assignee, expr);
