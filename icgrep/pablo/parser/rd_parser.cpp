@@ -460,14 +460,34 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
         name += "." + index->getText();
     }
 
-    TOKEN_CHECK_FATAL(state.nextToken(), TokenType::ASSIGN, "expected '='");
-    PabloAST * const expr = parseExpression(state);
+    Token * const op = state.nextToken();
+    TokenType const opTy = op->getType();
+    if (opTy != TokenType::ASSIGN && opTy != TokenType::OR_ASSIGN && opTy != TokenType::AND_ASSIGN) {
+        mErrorManager->logFatalError(op, errtxt_UnexpectedToken(op), "expected: '=', '&=', or '|='");
+        return nullptr;
+    }
+
+    PabloAST * expr = parseExpression(state);
     if (expr == nullptr) {
         return nullptr;
     }
+
+    if (opTy != TokenType::ASSIGN) {
+        PabloAST * var = index == nullptr 
+                       ? state.symbolTable->lookup(assignee) 
+                       : state.symbolTable->indexedLookup(assignee, index);
+
+        if (opTy == TokenType::AND_ASSIGN) {
+            expr = state.pb->createAnd(var, expr);
+        } else if (opTy == TokenType::OR_ASSIGN) {
+            expr = state.pb->createOr(var, expr);
+        }
+    }
+
     if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
         s->setName(state.pb->makeName(name));
     }
+    
     if (index == nullptr) {
         return state.symbolTable->assign(assignee, expr);
     } else {

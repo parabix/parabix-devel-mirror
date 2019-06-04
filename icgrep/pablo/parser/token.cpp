@@ -33,6 +33,8 @@ std::string to_string(TokenType const & type) {
         CASE_AS_STRING(SIG);
         CASE_AS_STRING(TILDE);
         CASE_AS_STRING(CARET);
+        CASE_AS_STRING(AND_ASSIGN);
+        CASE_AS_STRING(OR_ASSIGN);
         CASE_AS_STRING(L_PAREN);
         CASE_AS_STRING(R_PAREN);
         CASE_AS_STRING(L_SBRACE);

@@ -18,7 +18,7 @@
 ``` bnf
 <block> ::= {<statement>}
 <statement> ::= <assignment> | <if> | <while>
-<assignment> ::= <variable> "=" <expression>
+<assignment> ::= <variable> "=" <expression> | <variable> "|=" <expression> | <variable> "&=" <expression>
 <if> ::= "if" <expr>  <block>
 <while> ::= "while" <expr>  <block>
 ```

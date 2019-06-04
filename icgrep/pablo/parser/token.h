@@ -40,6 +40,10 @@ enum class TokenType {
     TILDE,          // ~
     CARET,          // ^
 
+    /* === Combinded Symbols === */
+    AND_ASSIGN,     // &=
+    OR_ASSIGN,      // |=
+
     /* === Braces === */
     L_PAREN,        // (
     R_PAREN,        // )
@@ -136,6 +140,14 @@ public:
 
     static Token * CreateCaret(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::CARET, "^", lineNum, colNum, source);
+    }
+
+    static Token * CreateAndAssign(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::AND_ASSIGN, "&=", lineNum, colNum, source);
+    }
+
+    static Token * CreateOrAssign(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::OR_ASSIGN, "|=", lineNum, colNum, source);
     }
 
     static Token * CreateLParen(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
