@@ -703,7 +703,8 @@ InternalSearchEngine::InternalSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),
     mGrepDriver(driver),
-    mMainMethod(nullptr) {}
+    mMainMethod(nullptr),
+    mNumOfThreads(1) {}
 
 void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     auto & idb = mGrepDriver.getBuilder();
@@ -724,6 +725,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
                                        Binding{idb->getSizeTy(), "length"},
                                        Binding{idb->getIntAddrTy(), "accumulator"}});
+    E->setNumOfThreads(mNumOfThreads);
 
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);

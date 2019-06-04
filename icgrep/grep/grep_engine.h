@@ -220,6 +220,7 @@ private:
     bool mCaseInsensitive;
     BaseDriver & mGrepDriver;
     void * mMainMethod;
+    unsigned mNumOfThreads;
 };
 
 }

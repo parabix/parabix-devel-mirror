@@ -10,6 +10,7 @@ llvm-[0-9]*.src
 *.bak
 *.kate-swp
 *~
+.git/
 .DS_Store
 #
 # Don't track IDE files
