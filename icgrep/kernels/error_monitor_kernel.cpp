@@ -129,6 +129,7 @@ mName("ErrorMonitorKernel" + std::to_string(error->getNumElements())),
 mStreamNames()
 {
     addAttribute(CanTerminateEarly());
+    addAttribute(SideEffecting());
     for (auto binding : bindings) {
         auto names = generateNewStreamSetNames();
         mStreamNames.push_back(names);
