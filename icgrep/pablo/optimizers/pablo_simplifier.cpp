@@ -117,7 +117,8 @@ void redundancyElimination(PabloKernel * const kernel) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief redundancyElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & expressions, VariableTable & variables) {
+bool redundancyElimination(PabloBlock * const currentScope, ExpressionTable & expressions, VariableTable & variables) {
+    bool hasSideEffects = false;
     const auto baseNonZeroEntries = mNonZero.size();
     Statement * stmt = currentScope->front();
     while (stmt) {
@@ -176,6 +177,10 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
                 continue;
             }
 
+            if (LLVM_UNLIKELY(stmt->isSideEffecting())) {
+                hasSideEffects = true;
+            }
+
             // Attempt to extend our set of trivially non-zero statements.
             if (isa<Or>(stmt)) {
                 for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
@@ -199,6 +204,7 @@ void redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
 
     // Erase any local non-zero entries that were discovered while processing this scope
     mNonZero.erase(mNonZero.begin() + baseNonZeroEntries, mNonZero.end());
+    return hasSideEffects;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -247,7 +253,10 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 
     auto processBranchBody = [&]() {
         mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
-        redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        const auto hasSideEffects = redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        if (LLVM_UNLIKELY(hasSideEffects)) {
+            br->setSideEffecting(true);
+        }
         assert (mNonZero.back() == cond);
         mNonZero.pop_back();
     };
@@ -925,10 +934,10 @@ void deadCodeElimination(PabloKernel * const kernel) {
 void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const bool scanOnly) {
     for (Statement * stmt = block->back(), * prior; stmt; stmt = prior) {
         prior = stmt->getPrevNode();
-        if (LLVM_UNLIKELY((stmt->getNumUses() == 0) && (!stmt->isSideEffecting()))) {
+        if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
+            const auto sideEffecting = stmt->isSideEffecting();
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 auto escaped = cast<Branch>(stmt)->getEscaped();
-                std::sort(escaped.begin(), escaped.end());
                 LiveVarSet nested(liveSet);
                 if (LLVM_UNLIKELY(isa<While>(stmt))) {
                     // gather any Vars whose incoming value is read within the loop
@@ -942,7 +951,7 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const b
                     }
                 }
                 // If none of the escaped vars from this branch are read, delete it.
-                if (LLVM_LIKELY(!nested.empty())) {
+                if (LLVM_LIKELY(!nested.empty() || sideEffecting)) {
                     deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, false);
                     if (LLVM_UNLIKELY(isa<While>(stmt))) {
                         liveSet.insert(nested.begin(), nested.end());
@@ -961,7 +970,7 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const b
                     }
                 }
             }
-            if (LLVM_LIKELY(!scanOnly)) {
+            if (LLVM_LIKELY(!scanOnly && !sideEffecting)) {
                 stmt->eraseFromParent();
             }
         } else {

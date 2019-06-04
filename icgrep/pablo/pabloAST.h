@@ -145,6 +145,10 @@ public:
         return mUsers.size();
     }
 
+    void setSideEffecting(const bool value = true) {
+        mSideEffecting = value;
+    }
+
     void * operator new (std::size_t size, Allocator & allocator) noexcept {
         return allocator.allocate<uint8_t>(size);
     }
@@ -156,6 +160,7 @@ public:
     void print(llvm::raw_ostream & O) const;
 
 protected:
+
     PabloAST(const ClassTypeId id, llvm::Type * const type, Allocator & allocator) noexcept
     : mClassTypeId(id)
     , mType(type)
@@ -177,7 +182,6 @@ protected:
         }
         #endif
     }
-    void setSideEffecting() {mSideEffecting = true;}
 
     bool addUser(PabloAST * const user) noexcept;
 
