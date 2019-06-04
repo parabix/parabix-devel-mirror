@@ -78,7 +78,7 @@ KernelBuilder * GetIDISA_Builder(llvm::LLVMContext & C) {
         if (hostCPUFeatures.hasAVX512F) codegen::BlockSize = 512;
         else
 #endif
-        if (hostCPUFeatures.hasAVX2) codegen::BlockSize = 256;
+        if (true || hostCPUFeatures.hasAVX2) codegen::BlockSize = 256;
         else codegen::BlockSize = 128;
     }
     else if (((codegen::BlockSize & (codegen::BlockSize - 1)) != 0) || (codegen::BlockSize < 64)) {
