@@ -705,15 +705,30 @@ static inline void lazyInitializeFunctionGenMap() {
     }
 
     FUNC_GEN_DEF("Advance", {
-        ASSERT_ARG_NUM(2);
-        ASSERT_ARG_TYPE_INT(1);
-        return pb->createAdvance(args[0], llvm::cast<Integer>(args[1]));
+        if (args.size() < 1 || args.size() > 2) {
+            em->logFatalError(funcToken, "invalid number of arguments for 'Advance', expected 1 or 2");
+            return nullptr;
+        }
+
+        if (args.size() == 2) {
+            ASSERT_ARG_TYPE_INT(1);
+            return pb->createAdvance(args[0], llvm::cast<Integer>(args[1]));
+        } else {
+            return pb->createAdvance(args[0], 1);
+        }
     });
 
     FUNC_GEN_DEF("IndexedAdvance", {
-        ASSERT_ARG_NUM(3);
-        ASSERT_ARG_TYPE_INT(1);
-        return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[2]));
+        if (args.size() < 2 || args.size() > 3) {
+            em->logFatalError(funcToken, "invalid number of arguments for 'IndexedAdvance', expected 2, or 3");
+        }
+
+        if (args.size() == 3) {
+            ASSERT_ARG_TYPE_INT(2);
+            return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[2]));
+        } else {
+            return pb->createIndexedAdvance(args[0], args[1], 1);
+        }
     });
 
     FUNC_GEN_DEF("Lookahead", {
