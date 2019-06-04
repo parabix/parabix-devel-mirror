@@ -166,7 +166,9 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
     std::string sourceLine{};
     std::string filename{};
     if (auto source = e->source.lock()) {
-        sourceLine = source->line(e->lineNum).to_string();
+        if (e->lineNum != 0) { // lineNum == 0 for text only errors
+            sourceLine = source->line(e->lineNum).to_string();
+        }
         filename = source->getFilename();
     } else {
         assert ("source file reference is no longer valid" && false);
