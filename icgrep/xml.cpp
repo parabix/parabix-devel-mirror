@@ -50,7 +50,7 @@ extern "C" void printErrorCode(uint64_t errCode) {
 
 typedef void(*XMLProcessFunctionType)(uint32_t fd);
 
-XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<PabloParser> parser, std::shared_ptr<SourceFile> xmlPabloSrc) {
+XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<PabloParser> parser, std::shared_ptr<SourceFile> xmlPabloSrc, std::shared_ptr<SourceFile> debugSource) {
     auto & iBuilder = pxDriver.getBuilder();
     Type * const i32Ty = iBuilder->getInt32Ty();
     auto P = pxDriver.makePipeline({Binding{i32Ty, "fd"}});
@@ -116,7 +116,40 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
-    StreamSet * const Error = P->CreateStreamSet(6, 1);
+    StreamSet * const RefError = P->CreateStreamSet(1, 1);
+    StreamSet * const RefCallouts = P->CreateStreamSet(6, 1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        xmlPabloSrc,
+        "ParseRef",
+        Bindings { // Input Stream Bindings
+            Binding {"lex", Lex},
+            Binding {"marker", Marker}
+        },
+        Bindings { // Output Stream Bindings
+            Binding {"ref_Callouts", RefCallouts},
+            Binding {"err", RefError}
+        }
+    );
+
+    StreamSet * const NameError = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        xmlPabloSrc,
+        "ValidateXmlNames",
+        Bindings { // Input Stream Bindings
+            Binding {"ctCDPI_Callouts", CtCDPI_Callouts},
+            Binding {"ref_Callouts", RefCallouts},
+            Binding {"tag_Callouts", TagCallouts},
+            Binding {"lex", Lex},
+            Binding {"u8", U8}
+        },
+        Bindings { // Output Stream Bindings
+            Binding {"err", NameError}
+        }
+    );
+
+    StreamSet * const Error = P->CreateStreamSet(8, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -124,7 +157,9 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         Bindings { // Input Stream Bindings
             Binding {"lexErr", LexError},
             Binding {"ccpErr", CT_CD_PI_Error},
-            Binding {"tagErr", TagError}
+            Binding {"tagErr", TagError},
+            Binding {"refErr", RefError},
+            Binding {"nameErr", NameError}
         },
         Bindings { // Output Stream Bindings
             Binding {"err", Error}
@@ -134,32 +169,19 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
-        xmlPabloSrc,
-        "MaskedBasisBits",
+        debugSource,
+        "MaskBasisBits",
         Bindings {
             Binding {"basisBits", BasisBits},
             Binding {"mask", PrintStream}
         },
         Bindings {
-            Binding {"maskedBasisBits", MaskedBasisBits}
-        }
-    );
-
-    StreamSet * const PrintableMaskedBasisBits = P->CreateStreamSet(8, 1);
-    P->CreateKernelCall<PabloSourceKernel>(
-        parser,
-        xmlPabloSrc,
-        "PrintableMaskedBasisBits",
-        Bindings {
-            Binding {"basisBits", MaskedBasisBits},
-        },
-        Bindings {
-            Binding {"printableBasisBits", PrintableMaskedBasisBits}
+            Binding {"masked", MaskedBasisBits}
         }
     );
 
     StreamSet * const ErrorBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(PrintableMaskedBasisBits, ErrorBytes);
+    P->CreateKernelCall<P2SKernel>(MaskedBasisBits, ErrorBytes);
     P->CreateKernelCall<StdOutKernel>(ErrorBytes);
 
     Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(Error, ErrorMonitorKernel::IOStreamBindings{});
@@ -196,11 +218,15 @@ int main(int argc, char ** argv) {
     CPUDriver pxDriver("xml-pablo");
     auto em = ErrorManager::Create();
     auto parser = RecursiveParser::Create(SimpleLexer::Create(em), em);
-    auto source = SourceFile::Relative("xml.pablo");
-    if (source == nullptr) {
+    auto xmlSource = SourceFile::Relative("xml.pablo");
+    auto debugSource = SourceFile::Relative("debug.pablo");
+    if (xmlSource == nullptr) {
         std::cerr << "pablo-parser: error loading pablo source file: xml.pablo\n";
     }
-    auto xmlProcessFuncPtr = xmlPipelineGen(pxDriver, parser, source);
+    if (debugSource == nullptr) {
+        std::cerr << "pablo-parser: error loading pablo source file: debug.pablo\n";
+    }
+    auto xmlProcessFuncPtr = xmlPipelineGen(pxDriver, parser, xmlSource, debugSource);
 
     xmlProcessFuncPtr(fd);
     close(fd);
