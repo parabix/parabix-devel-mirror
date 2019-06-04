@@ -318,7 +318,7 @@ add_test(
 add_test(
   NAME u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -thread-num=2")
 
 add_test(
   NAME u32u8_test
@@ -363,7 +363,7 @@ add_custom_target (proptest
 
 add_custom_target (u8u16_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/u8u16
-  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -enable-segment-pipeline-parallel")
+  COMMAND ./run_all "${CMAKE_BINARY_DIR}/u8u16 -thread-num=2")
 
 add_custom_target (u32u8_test
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
