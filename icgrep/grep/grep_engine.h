@@ -218,7 +218,6 @@ public:
 private:
     GrepRecordBreakKind mGrepRecordBreak;
     bool mCaseInsensitive;
-    bool mSaveSegmentPipelineParallel;
     BaseDriver & mGrepDriver;
     void * mMainMethod;
 };

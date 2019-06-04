@@ -99,9 +99,6 @@ static cl::opt<unsigned, true> ThreadNumOption("thread-num", cl::location(Thread
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
 
-static cl::opt<bool, true> segmentPipelineParallelOption("enable-segment-pipeline-parallel", cl::location(SegmentPipelineParallel), cl::init(false),
-                                                         cl::desc("Enable multithreading with segment pipeline parallelism."), cl::cat(CodeGenOptions));
-
 static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
                                  cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
 
@@ -117,8 +114,6 @@ static cl::opt<std::string, true> CCTypeOption("ccc-type", cl::location(CCCOptio
                                             cl::desc("The character class compiler"), cl::value_desc("[binary, ternary]"));
 
 CodeGenOpt::Level OptLevel;
-
-bool SegmentPipelineParallel;
 
 const char * ObjectCacheDir;
 

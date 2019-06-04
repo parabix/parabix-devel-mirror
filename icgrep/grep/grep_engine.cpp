@@ -707,8 +707,6 @@ InternalSearchEngine::InternalSearchEngine(BaseDriver &driver) :
 
 void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     auto & idb = mGrepDriver.getBuilder();
-    mSaveSegmentPipelineParallel = codegen::SegmentPipelineParallel;
-    codegen::SegmentPipelineParallel = false;
 
     re::CC * breakCC = nullptr;
     if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
@@ -768,7 +766,6 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length, MatchAccumulator *);
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
     f(search_buffer, bufferLength, &accum);
-    codegen::SegmentPipelineParallel = mSaveSegmentPipelineParallel;
 }
 
 GrepEngine::~GrepEngine() { }
