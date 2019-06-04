@@ -55,7 +55,7 @@ llvm::StringRef copyText(const llvm::StringRef & text, Token::Allocator & alloc)
     return text.copy(A);
 }
 
-Token::Token(TokenType type, llvm::StringRef text, std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value)
+Token::Token(TokenType type, llvm::StringRef text, std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value)
 : mType(type)
 , mText(std::move(copyText(text, mAllocator)))
 , mSourceRef(std::move(source))
@@ -73,9 +73,13 @@ std::ostream & operator << (std::ostream & out, pablo::parse::Token const & toke
         << pablo::parse::to_string(token.getType()) << " "
         << std::setw(24) << std::left
         << "'" + token.getText() + "'"
-        << " @ "
-        << token.getSourceRef()->getFilename() << ":"
-        << token.getLineNum() << ":"
-        << token.getColNum() ;
+        << " @ ";
+    if (auto src = token.getSourceRef().lock()) {
+        out << src->getFilename() << ":";
+    } else {
+        out << "<filename not available>:";
+    }
+    out << token.getLineNum() << ":"
+        << token.getColNum();
     return out;
 }

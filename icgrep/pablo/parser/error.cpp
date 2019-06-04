@@ -31,7 +31,7 @@ Error::Error(Error const &other)
 
 Error::Error(ErrorType type,
              std::string const & text,
-             std::shared_ptr<SourceFile> source,
+             std::weak_ptr<SourceFile> source,
              size_t lineNum,
              size_t colNum,
              std::string const & hint,
@@ -99,27 +99,27 @@ void ErrorManager::log(std::unique_ptr<Error> e) {
 }
 
 
-void ErrorManager::logTextError(std::shared_ptr<SourceFile> source, std::string const & text) {
+void ErrorManager::logTextError(std::weak_ptr<SourceFile> source, std::string const & text) {
     log(boost::make_unique<Error>(ErrorType::TEXT_ONLY, text, std::move(source), 0, 0, "", 0));
 }
 
 
-void ErrorManager::logError(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+void ErrorManager::logError(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
     log(boost::make_unique<Error>(ErrorType::ERROR, text, std::move(source), lineNum, colNum, hint, /*width:*/ 1));
 }
 
 
-void ErrorManager::logWarning(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+void ErrorManager::logWarning(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
     log(boost::make_unique<Error>(ErrorType::WARNING, text, std::move(source), lineNum, colNum, hint, /*width:*/ 1));
 }
 
 
-void ErrorManager::logFatalError(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+void ErrorManager::logFatalError(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
     log(boost::make_unique<Error>(ErrorType::FATAL, text, std::move(source), lineNum, colNum, hint, /*width:*/ 1));
 }
 
 
-void ErrorManager::logNote(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
+void ErrorManager::logNote(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint) {
     log(boost::make_unique<Error>(ErrorType::NOTE, text, std::move(source), lineNum, colNum, hint, /*width*/ 1));
 }
 
@@ -162,11 +162,22 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
     const std::string PURPLE = mContext.canUseColor() ? "\u001b[35m" : "";
     const std::string GREEN = mContext.canUseColor() ? "\u001b[32m" : "";
     const std::string NORMAL = mContext.canUseColor() ? "\u001b[0m" : "";
-    std::string errText;
+    std::string errText{};
+    std::string sourceLine{};
+    std::string filename{};
+    if (auto source = e->source.lock()) {
+        sourceLine = source->line(e->lineNum).to_string();
+        filename = source->getFilename();
+    } else {
+        assert ("source file reference is no longer valid" && false);
+        sourceLine = "<source file information is not available>";
+        filename = sourceLine;
+    }
+
     switch (e->type) {
     case ErrorType::TEXT_ONLY:
         errText += RED + "error" + NORMAL;
-        errText += " in " + e->source->getFilename() + "\n";
+        errText += " in " + filename + "\n";
         errText += e->text + "\n\n";
         return errText;
     case ErrorType::FATAL:
@@ -184,11 +195,11 @@ std::string ErrorManager::renderError(std::unique_ptr<Error> const & e) const {
         assert ("invalid enumeration value" && false);
         break;
     }
-    errText += " at " + e->source->getFilename() + ":" + std::to_string(e->lineNum) + ":" + std::to_string(e->colNum) + "\n";
+    
+    errText += " at " + filename + ":" + std::to_string(e->lineNum) + ":" + std::to_string(e->colNum) + "\n";
     std::string lineNum = std::to_string(e->lineNum);
     std::string padding(lineNum.length(), ' ');
     errText += " " + padding + " | " + e->text + "\n";
-    std::string sourceLine = e->source->line(e->lineNum).to_string();
     // append '\n' to source line if one doesn't exist
     if (sourceLine.back() != '\n')
         sourceLine.push_back('\n');
