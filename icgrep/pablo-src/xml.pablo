@@ -203,12 +203,13 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, E
     err.IllegalChar = x00_x1F & ~lex.WS
 
     ### Validate_utf8(basis_bits, u8):
-    unibyte = ~basis_bits[7]
-    suffix = <0>
-    u8_error = <0>
-    u8_FFFE_FFFF = <0>
-    u8anyscope = <0> #local
     if basis_bits[7] {
+        suffix = <0>
+        u8_error = <0>
+        u8_FFFE_FFFF = <0>
+        u8anyscope = <0> #local
+        unibyte = ~basis_bits[7]
+
         prefix = basis_bits[7] & basis_bits[6]
         prefix2 = prefix & ~basis_bits[5]
         prefix3 = prefix & temp2

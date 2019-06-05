@@ -96,6 +96,12 @@ Extract * PabloKernel::makeExtract(Var * const array, PabloAST * const index) {
         throw std::runtime_error(out.str());
     }
     Extract * const ext = new (mAllocator) Extract(type, array, index, mAllocator);
+    for (auto const & user : array->users()) {
+        if (isa<PabloKernel>(user)) {
+            ext->addUser(this);
+            break;
+        }
+    }
     mVariables.push_back(ext);
     return ext;
 }
