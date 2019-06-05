@@ -452,12 +452,14 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
         index = state.nextToken();
         TOKEN_CHECK_FATAL(index, TokenType::INT_LITERAL, "expected integer literal");
         TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_SBRACE, "expected ']'");
-        name += "[" + index->getText() + "]";
     } else if (state.peekToken()->getType() == TokenType::DOT) {
         state.nextToken(); // consume '.'
         index = state.nextToken();
         TOKEN_CHECK_FATAL(index, TokenType::IDENTIFIER, "expected name");
-        name += "." + index->getText();
+    }
+
+    if (index != nullptr) {
+        name += "_at_" + index->getText();
     }
 
     Token * const op = state.nextToken();
@@ -485,7 +487,7 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
     }
 
     if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
-        s->setName(state.pb->makeName(name));
+        s->setName(state.pb->makeName("_" + name));
     }
     
     if (index == nullptr) {
