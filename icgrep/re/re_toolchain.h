@@ -23,18 +23,19 @@ namespace re { class Name; class Start; class End; class CC; class Seq; class Al
 namespace re {
 
 enum RE_PrintFlags {
-    ShowREs, ShowAllREs, ShowStrippedREs, ShowSimplifiedREs
+    ShowREs, ShowAllREs
 };
     
 enum RE_AlgorithmFlags {
-    DisableLog2BoundedRepetition, DisableIfHierarchy, DisableMatchStar, DisableUnicodeMatchStar, 
-    DisableUnicodeLineBreak, UsePregeneratedUnicode
+    DisableLog2BoundedRepetition, DisableIfHierarchy, DisableMatchStar
 };
     
 bool LLVM_READONLY PrintOptionIsSet(RE_PrintFlags flag);
 bool LLVM_READONLY AlgorithmOptionIsSet(RE_AlgorithmFlags flag);
-    
+
 extern int IfInsertionGap;
+
+std::string AnnotateWithREflags(std::string name);
 
 const llvm::cl::OptionCategory * LLVM_READONLY re_toolchain_flags();
     
