@@ -94,30 +94,7 @@ type Check_streams = <i1>[6] {
     att_refs
 }
 
-type LexError = <i1>[2] {
-    IllegalChar,
-    UTF8_Error
-}
-
-type CT_CD_PI_Error = <i1>[3] {
-    PI_Error,
-    CT_Error,
-    CT_CD_PI_Error
-}
-
-type TagError = <i1>[1] {
-    Tag_Error
-}
-
-type RefError = <i1>[1] {
-    Ref_Error
-}
-
-type NameError = <i1>[1] {
-    Name_Error
-}
-
-type Error = <i1>[8] {
+type Error = <i1>[9] {
     IllegalChar,
     UTF8_Error,
     PI_Error,
@@ -125,24 +102,12 @@ type Error = <i1>[8] {
     CT_CD_PI_Error,
     Tag_Error,
     Ref_Error,
-    Name_Error
+    Name_Error,
+    CheckStreams_Error
 }
 
 
-kernel ErrorCombiner :: [LexError lexErr, CT_CD_PI_Error ccpErr, TagError tagErr, RefError refErr, NameError nameErr] -> [Error err] {
-    err.IllegalChar = lexErr.IllegalChar
-    err.UTF8_Error = lexErr.UTF8_Error
-    err.PI_Error = ccpErr.PI_Error
-    err.CT_Error = ccpErr.CT_Error
-    err.CT_CD_PI_Error = ccpErr.CT_CD_PI_Error
-    err.Tag_Error = tagErr.Tag_Error
-    err.Ref_Error = refErr.Ref_Error
-    err.Name_Error = nameErr.Name_Error
-}
-
-
-
-kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, LexError err] {
+kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, Error err] {
     temp1 = basis_bits[7] | basis_bits[6]
     temp2 = basis_bits[5] & ~basis_bits[4]
     temp3 = temp2 & ~temp1
@@ -311,7 +276,7 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, L
 
 kernel Parse_CtCDPI
 :: [Lex lex]
--> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, CT_CD_PI_Error err]
+-> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, Error err]
 {
     ctCDPI_Callouts.Ct_starts = <0>
     ctCDPI_Callouts.Ct_ends = <0>
@@ -402,7 +367,7 @@ kernel Parse_CtCDPI
         CtCDPI_Cursor = InFile(ScanTo(CtCDPI_Cursor, CtCDPI_opener))
     }
 
-    # check_streams.misc_mask = (lex.WS | lex.LAngle | InclusiveSpan(ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts, ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends) | CtCDPI_starts) & EOF_mask
+    check_streams.misc_mask = InFile(lex.WS | lex.LAngle | InclusiveSpan(ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts, ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends) | CtCDPI_starts)
 
     # Identify the remaining significant markers for XML processing.
     marker.LAngle_scope = LAngle_scope & ~ctCDPI_mask
@@ -411,7 +376,7 @@ kernel Parse_CtCDPI
 }
 
 
-kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagError err, <i1>[1] print] {
+kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Error err, <i1>[1] print] {
 
     EqExpected = <0>
     AttListEnd = <0>
@@ -509,8 +474,9 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagE
 }
 
 
-kernel ParseRef :: [Lex lex, Marker marker] -> [Ref_Callouts ref_Callouts, RefError err] {
+kernel ParseRef :: [Lex lex, Marker marker] -> [Ref_Callouts ref_Callouts, Error err] {
     # All remaining "&" must be reference start characters; parse them.
+    # err.Ref_Error = <0>
     if marker.Ref_opener {
         Ref_scope = Advance(marker.Ref_opener, 1)
         NumRef2 = Ref_scope & lex.Hash
@@ -536,7 +502,7 @@ kernel ParseRef :: [Lex lex, Marker marker] -> [Ref_Callouts ref_Callouts, RefEr
 
 kernel ValidateXmlNames 
 :: [CtCDPI_Callouts ctCDPI_Callouts, Ref_Callouts ref_Callouts, Tag_Callouts tag_Callouts, Lex lex, U8 u8]
--> [NameError err] 
+-> [Check_streams check_streams, Error err] 
 {
     PI_names = SpanUpTo(ctCDPI_Callouts.PI_name_starts, ctCDPI_Callouts.PI_name_ends)
     GenRefs = SpanUpTo(ref_Callouts.GenRef_starts, ref_Callouts.GenRef_ends)
@@ -555,6 +521,14 @@ kernel ValidateXmlNames
     ncname_err = ncname_stream & lex.Colon
     err.Name_Error = void_prefix_err | local_part_err | colon2_err | ncname_err
 
-    # check_streams.non_ascii_name_starts = name_start & ~lex.ASCII_name_start
-    # check_streams.non_ascii_names = (name_stream & ~name_start) & ~lex.ASCII_name_char & ~u8.suffix
+    check_streams.non_ascii_name_starts = name_start & ~lex.ASCII_name_start
+    check_streams.non_ascii_names = (name_stream & ~name_start) & ~lex.ASCII_name_char & ~u8.suffix
+}
+
+
+kernel DoCheckStreams :: [Marker marker, Tag_Callouts tag_Callouts] -> [Check_streams check_streams, Error err] {
+    err.CheckStreams_Error = marker.CD_closer & ~tag_Callouts.AttVal_spans
+    check_streams.tag_marks = tag_Callouts.EmptyTag_marks
+    check_streams.name_follows = tag_Callouts.ElemName_ends
+    check_streams.att_refs = tag_Callouts.AttVal_spans & marker.Ref_opener
 }

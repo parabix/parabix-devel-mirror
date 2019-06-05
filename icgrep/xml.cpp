@@ -13,6 +13,7 @@
 #include <kernels/error_monitor_kernel.h>
 #include <kernels/p2s_kernel.h>
 #include <kernels/stdout_kernel.h>
+#include <kernels/streams_merge.h>
 #include <kernels/core/streamset.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
@@ -44,13 +45,14 @@ static cl::opt<std::string, true> inputFileOption(cl::Positional, cl::location(i
 
 
 extern "C" void printErrorCode(uint64_t errCode) {
-    std::cout << "Exit with error code: " << errCode << " (i.e., " << std::bitset<8>((uint8_t) errCode) << ")\n";
+    std::cout << "Exit with error code: " << errCode << "\n";
 }
 
 
 typedef void(*XMLProcessFunctionType)(uint32_t fd);
 
 XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<PabloParser> parser, std::shared_ptr<SourceFile> xmlPabloSrc, std::shared_ptr<SourceFile> debugSource) {
+    const size_t ERROR_STREAM_COUNT = 9;
     auto & iBuilder = pxDriver.getBuilder();
     Type * const i32Ty = iBuilder->getInt32Ty();
     auto P = pxDriver.makePipeline({Binding{i32Ty, "fd"}});
@@ -64,7 +66,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     StreamSet * const Lex = P->CreateStreamSet(27, 1);
     StreamSet * const U8 = P->CreateStreamSet(1, 1);
-    StreamSet * const LexError = P->CreateStreamSet(2, 1);
+    StreamSet * const LexError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -81,8 +83,8 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     StreamSet * const Marker = P->CreateStreamSet(3, 1);
     StreamSet * const CtCDPI_Callouts = P->CreateStreamSet(8, 1);
-    StreamSet * const Check_streams = P->CreateStreamSet(6, 1);
-    StreamSet * const CT_CD_PI_Error = P->CreateStreamSet(3, 1);
+    StreamSet * const CT_CD_PI_CheckStreams = P->CreateStreamSet(6, 1);
+    StreamSet * const CT_CD_PI_Error = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -93,12 +95,12 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         Bindings { // Output Stream Bindings
             Binding {"marker", Marker},
             Binding {"ctCDPI_Callouts", CtCDPI_Callouts},
-            Binding {"check_streams", Check_streams},
+            Binding {"check_streams", CT_CD_PI_CheckStreams},
             Binding {"err", CT_CD_PI_Error}
         }
     );
 
-    StreamSet * const TagError = P->CreateStreamSet(1, 1);
+    StreamSet * const TagError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     StreamSet * const TagCallouts = P->CreateStreamSet(9, 1);
     StreamSet * const PrintStream = P->CreateStreamSet(1, 1);
     P->CreateKernelCall<PabloSourceKernel>(
@@ -116,7 +118,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
-    StreamSet * const RefError = P->CreateStreamSet(1, 1);
+    StreamSet * const RefError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     StreamSet * const RefCallouts = P->CreateStreamSet(6, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
@@ -132,7 +134,8 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
-    StreamSet * const NameError = P->CreateStreamSet(1, 1);
+    StreamSet * const Name_CheckStreams = P->CreateStreamSet(6, 1);
+    StreamSet * const NameError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -145,25 +148,37 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
             Binding {"u8", U8}
         },
         Bindings { // Output Stream Bindings
+            Binding {"check_streams", Name_CheckStreams},
             Binding {"err", NameError}
         }
     );
 
-    StreamSet * const Error = P->CreateStreamSet(8, 1);
+    StreamSet * const CS_CheckStreams = P->CreateStreamSet(6, 1);
+    StreamSet * const CheckStreamsError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
-        "ErrorCombiner",
+        "DoCheckStreams",
         Bindings { // Input Stream Bindings
-            Binding {"lexErr", LexError},
-            Binding {"ccpErr", CT_CD_PI_Error},
-            Binding {"tagErr", TagError},
-            Binding {"refErr", RefError},
-            Binding {"nameErr", NameError}
+            Binding {"marker", Marker},
+            Binding {"tag_Callouts", TagCallouts}
         },
         Bindings { // Output Stream Bindings
-            Binding {"err", Error}
+            Binding {"check_streams", CS_CheckStreams},
+            Binding {"err", CheckStreamsError}
         }
+    );
+
+    StreamSet * const Error = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
+    P->CreateKernelCall<StreamsMerge>(
+        std::vector<StreamSet *>{LexError, CT_CD_PI_Error, TagError, RefError, NameError, CheckStreamsError}, 
+        Error
+    );
+
+    StreamSet * const CheckStreams = P->CreateStreamSet(6, 1);
+    P->CreateKernelCall<StreamsMerge>(
+        std::vector<StreamSet *>{CT_CD_PI_CheckStreams, Name_CheckStreams, CS_CheckStreams},
+        CheckStreams
     );
 
     StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
