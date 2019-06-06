@@ -204,6 +204,7 @@ public:
     // full add producing {carryout, sum}
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin);
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_subtract_with_borrow(llvm::Value * a, llvm::Value * b, llvm::Value * borrowin);
+    virtual std::pair<llvm::Value *, llvm::Value *> bitblock_subtract_with_propagate(llvm::Value * a, llvm::Value * b, llvm::Value * propagateIn);
     // full shift producing {shiftout, shifted}
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift);
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift);

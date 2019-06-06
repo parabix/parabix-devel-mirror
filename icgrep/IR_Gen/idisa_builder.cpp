@@ -893,6 +893,21 @@ std::pair<llvm::Value *, llvm::Value *> IDISA_Builder::bitblock_subtract_with_bo
     return std::make_pair(bitCast(borrowOut), bitCast(difference));
 }
 
+// full subtrace producing {propagateOut, difference}
+std::pair<Value *, Value *> IDISA_Builder::bitblock_subtract_with_propagate(Value * a, Value * b, Value * const propagateIn) {
+    Value * in = propagateIn;
+    if (propagateIn->getType() != mBitBlockType) {
+        in = bitCast(CreateZExt(propagateIn, getIntNTy(mBitBlockWidth)));
+    }
+    Value * partial = simd_sub(mBitBlockWidth, a, simd_or(b, in));
+    Value * propagateOut = simd_srli(mBitBlockWidth, partial, mBitBlockWidth - 1);
+    if (propagateIn->getType() == mBitBlockType) {
+        propagateOut = bitCast(propagateOut);
+    } else {
+        propagateOut = CreateTrunc(propagateOut, propagateIn->getType());
+    }
+    return std::make_pair(propagateOut, bitCast(partial));
+}
 
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
