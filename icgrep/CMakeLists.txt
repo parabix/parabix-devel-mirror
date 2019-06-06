@@ -132,6 +132,7 @@ add_dependencies(CodeGen RecompileObjectCache)
 
 # install pablo source files
 add_custom_target(InstallPabloLangSource ALL cp ${CMAKE_CURRENT_SOURCE_DIR}/pablo-src/** $ENV{HOME}/.cache/parabix)
+add_dependencies(InstallPabloLangSource RecompileObjectCache)
 add_dependencies(PabloParser InstallPabloLangSource)
 
 # add the executable

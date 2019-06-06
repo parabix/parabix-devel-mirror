@@ -36,6 +36,14 @@ public:
                       kernel::Bindings outputStreamBindings,
                       kernel::Bindings inputScalarBindings,
                       kernel::Bindings outputScalarBindings);
+
+    bool isCachable() const override {
+        return true;
+    }
+
+    bool hasSignature() const override {
+        return false;
+    }
 private:
     void generatePabloMethod();
 
