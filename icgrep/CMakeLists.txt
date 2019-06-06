@@ -52,7 +52,7 @@ llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit nat
 set(Boost_USE_STATIC_LIBS ON)
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.46 REQUIRED COMPONENTS system filesystem iostreams)
+find_package(Boost 1.61 REQUIRED COMPONENTS system filesystem iostreams)
 message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
 
 include_directories("${Boost_INCLUDE_DIRS}")
@@ -109,6 +109,7 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
+SET(PABLO_PARSER_SRC pablo/parser/pablo_parser.cpp pablo/parser/error.cpp pablo/parser/token.cpp pablo/pablo_source_kernel.cpp pablo/parser/kernel_signature.cpp pablo/parser/symbol_table.cpp pablo/parser/pablo_type.cpp pablo/parser/simple_lexer.cpp pablo/parser/source_file.cpp pablo/parser/rd_parser.cpp)
 
 SET (RE_PARSERS_SRC re/parsers/PCRE_parser.cpp re/parsers/ERE_parser.cpp re/parsers/BRE_parser.cpp re/parsers/Prosite_parser.cpp re/parsers/fixed_string_parser.cpp re/parsers/GLOB_parser.cpp re/parsers/parser.cpp)
 
@@ -116,6 +117,7 @@ add_library(CodeGen ${TOOLCHAIN_SRC} ${DRIVER_SRC} ${OBJECT_CACHE_SRC} ${KERNEL_
 add_library(PabloADT ${PABLO_SRC})
 # CCADT is the core library for representing and compiling character classes
 add_library(CCADT re/re_re.cpp re/re_cc.cpp cc/cc_compiler.cpp cc/cc_compiler_target.cpp cc/alphabet.cpp cc/multiplex_CCs.cpp UCD/unicode_set.cpp cc/cc_kernel.cpp)
+add_library(PabloParser ${PABLO_PARSER_SRC})
 # RegExpADT is the core library for representing, parsing and printing regular expressions
 add_library(RegExpADT re/re_rep.cpp re/re_diff.cpp re/re_intersect.cpp re/re_range.cpp re/re_assertion.cpp re/re_empty_set.cpp re/printer_re.cpp re/re_utility.cpp)
 add_library(RegExpCompiler ${RE_PARSERS_SRC} re/casing.cpp re/to_utf8.cpp re/re_nullable.cpp re/re_simplifier.cpp re/re_star_normal.cpp re/re_minimizer.cpp re/re_local.cpp re/re_compiler.cpp re/re_analysis.cpp re/re_toolchain.cpp re/re_name_resolve.cpp re/re_name_gather.cpp re/collect_ccs.cpp re/re_multiplex.cpp re/re_utility.cpp re/grapheme_clusters.cpp re/exclude_CC.cpp re/replaceCC.cpp re/validation.cpp re/Unicode/decomposition.cpp re/Unicode/equivalence.cpp re/re_contextual_simplification.cpp)
@@ -128,10 +130,16 @@ add_library(LZ4_Lib lz4/lz4_frame_decoder.cpp kernels/pdep_kernel.cpp lz4/lz4_de
 add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
 add_dependencies(CodeGen RecompileObjectCache)
 
+# install pablo source files
+add_custom_target(InstallPabloLangSource ALL cp ${CMAKE_CURRENT_SOURCE_DIR}/pablo-src/** $ENV{HOME}/.cache/parabix)
+add_dependencies(InstallPabloLangSource RecompileObjectCache)
+add_dependencies(PabloParser InstallPabloLangSource)
+
 # add the executable
 target_link_libraries (CodeGen ${REQ_LLVM_LIBRARIES})
 target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
+target_link_libraries (PabloParser CCADT PabloADT ${Boost_LIBRARIES})
 target_link_libraries (RegExpADT PabloADT CCADT)
 target_link_libraries (UCDlib RegExpADT PabloADT CCADT) # GrepEngine RegExpCompiler
 target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
@@ -147,6 +155,8 @@ add_executable(u32u8 u32u8.cpp kernels/pdep_kernel.cpp cc/encodings/utf8gen.cpp)
 add_executable(u32u16 u32u16.cpp kernels/pdep_kernel.cpp cc/encodings/utf16gen.cpp)
 add_executable(base64 base64.cpp kernels/radix64.cpp)
 add_executable(wc wc.cpp)
+add_executable(wc-pablo wc_pablo.cpp)
+add_executable(xml xml.cpp)
 add_executable(editd editd/editd.cpp editd/pattern_compiler.cpp editd/editdscan_kernel.cpp editd/editd_gpu_kernel.cpp editd/editd_cpu_kernel.cpp kernels/streams_merge.cpp)
 # add_executable(lz4d lz4d.cpp lz4/lz4_frame_decoder.cpp kernels/lz4/lz4_index_decoder.cpp kernels/lz4/lz4_bytestream_decoder.cpp)
 add_executable(lz4_decoder lz4_decoder.cpp)
@@ -163,6 +173,8 @@ target_link_libraries (u32u8 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boos
 target_link_libraries (u32u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (base64 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (wc UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
+target_link_libraries (wc-pablo UCDlib PabloADT PabloParser CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
+target_link_libraries (xml UCDlib PabloADT PabloParser CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 target_link_libraries (editd PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 # target_link_libraries (lz4d PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (lz4_decoder LZ4_Lib PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})

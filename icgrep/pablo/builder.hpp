@@ -115,7 +115,7 @@ public:
 
     PabloAST * createLookahead(PabloAST * expr, not_null<Integer *> shiftAmount, const llvm::StringRef prefix);
 
-    Assign * createAssign(PabloAST * const variable, PabloAST * const value){
+    Assign * createAssign(Var * const variable, PabloAST * const value){
         return mPb->createAssign(variable, value);
     }
 
@@ -293,6 +293,10 @@ public:
     While * createWhile(PabloAST * condition, PabloBuilder & builder) {
         return mPb->createWhile(condition, builder.mPb);
     }
+
+    PabloAST * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv);
+
+    PabloAST * createIntrinsicCall(Intrinsic intrinsic, llvm::ArrayRef<PabloAST *> argv, const llvm::StringRef prefix);
 
     /// Statement Iterator Wrappers
 

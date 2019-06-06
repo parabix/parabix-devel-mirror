@@ -21,6 +21,8 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
 #include <llvm/Support/raw_ostream.h>
+#include <queue>
+#include <pablo/printer_pablos.h>
 
 using namespace boost;
 using namespace boost::container;
@@ -30,50 +32,66 @@ namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
 
-using ScopeMap = flat_map<PabloBlock *, unsigned>;
+using EscapedVars = Branch::EscapedVars;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief VariableTable
  ** ------------------------------------------------------------------------------------------------------------- */
 struct VariableTable {
 
-    VariableTable(VariableTable * predecessor = nullptr)
-    : mPredecessor(predecessor) {
+    VariableTable() noexcept
+    : mOuter(nullptr) {
 
     }
 
-    PabloAST * get(PabloAST * const var) const {
+    VariableTable(const VariableTable & outer) noexcept
+    : mOuter(&outer) {
+
+    }
+
+    PabloAST * get(const PabloAST * const var) const noexcept {
         const auto f = mMap.find(var);
         if (f == mMap.end()) {
-            return (mPredecessor) ? mPredecessor->get(var) : nullptr;
+            return (mOuter) ? mOuter->get(var) : nullptr;
         }
         return f->second;
     }
 
-    void put(PabloAST * const var, PabloAST * value) {
+    void put(const PabloAST * const var, PabloAST * value) noexcept {
         const auto f = mMap.find(var);
         if (LLVM_LIKELY(f == mMap.end())) {
             mMap.emplace(var, value);
         } else {
             f->second = value;
         }
-        assert (get(var) == value);
+    }
+
+    void clear() {
+        mMap.clear();
     }
 
 private:
-    VariableTable * const mPredecessor;
-    flat_map<PabloAST *, PabloAST *> mMap;
+    const VariableTable * const mOuter;
+    flat_map<const PabloAST *, PabloAST *> mMap;
 };
 
 struct PassContainer {
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructor
+ ** ------------------------------------------------------------------------------------------------------------- */
+PassContainer()
+: UseTernaryOptimizations(CompileOptionIsSet(EnableTernaryOpt)) {
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief run
  ** ------------------------------------------------------------------------------------------------------------- */
 void run(PabloKernel * const kernel) {
-    redundancyElimination(kernel->getEntryScope(), nullptr, nullptr, CompileOptionIsSet(EnableTernaryOpt));
+    redundancyElimination(kernel);
     strengthReduction(kernel->getEntryScope());
-    deadCodeElimination(kernel->getEntryScope());
+    deadCodeElimination(kernel);
 }
 
 protected:
@@ -84,101 +102,58 @@ protected:
  * Note: Do not recursively delete statements in this function. The ExpressionTable could use deleted statements
  * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
-void redundancyElimination(PabloBlock * const block, ExpressionTable * const et, VariableTable * const vt, const bool ternaryMode) {
-    ExpressionTable expressions(et);
-    VariableTable variables(vt);
-
-    if (Branch * br = block->getBranch()) {
-        assert ("block has a branch but the expression and variable tables were not supplied" && et && vt);
-        for (Var * var : br->getEscaped()) {
-            variables.put(var, var);
-        }
+void redundancyElimination(PabloKernel * const kernel) {
+    VariableTable variables;
+    const auto n = kernel->getNumOfInputs();
+    for (unsigned i = 0; i < n; ++i) {
+        Var * const input = kernel->getInput(i);
+        variables.put(input, input);
     }
+    PabloBlock * const entryScope = kernel->getEntryScope();
+    ExpressionTable expressions;
+    redundancyElimination(entryScope, expressions, variables);
+}
 
-    mInScope.push_back(block);
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief redundancyElimination
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool redundancyElimination(PabloBlock * const currentScope, ExpressionTable & expressions, VariableTable & variables) {
+    bool hasSideEffects = false;
     const auto baseNonZeroEntries = mNonZero.size();
-    Statement * stmt = block->front();
+    Statement * stmt = currentScope->front();
     while (stmt) {
+
         if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-            Assign * const assign = cast<Assign>(stmt);
-            PabloAST * const var = assign->getVariable();
-            PabloAST * value = assign->getValue();
-            if (LLVM_UNLIKELY(var == value)) {
+
+            if (isRedundantAssign(cast<Assign>(stmt), variables)) {
                 stmt = stmt->eraseFromParent();
                 continue;
             }
-            while (LLVM_UNLIKELY(isa<Var>(value))) {
-                PabloAST * next = variables.get(cast<Var>(value));
-                if (LLVM_LIKELY(next == nullptr || next == value)) {
-                    break;
-                }
-                value = next;
-                assign->setValue(value);
-            }
-            if (LLVM_UNLIKELY(variables.get(var) == value)) {
-                stmt = stmt->eraseFromParent();
-                continue;
-            }
-            variables.put(var, value);
 
         } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-
-            Branch * const br = cast<Branch>(stmt);
-            PabloAST * cond = br->getCondition();
-            if (isa<Var>(cond)) {
-                PabloAST * const value = variables.get(cast<Var>(cond));
-                if (value) {
-                    cond = value;
-                    if (isa<If>(br)) {
-                        br->setCondition(cond);
-                    }
-                }
-            }
-
-            // Test whether we can ever take this branch
-            if (LLVM_UNLIKELY(isa<Zeroes>(cond))) {
-                stmt = stmt->eraseFromParent();
+            Statement * const next = evaluateBranch(cast<Branch>(stmt), expressions, variables);
+            if (LLVM_UNLIKELY(next != nullptr)) {
+                assert (next != stmt);
+                assert (next->getParent() == currentScope);
+                stmt = next;
                 continue;
             }
-
-            // If we're guaranteed to take this branch, flatten it.
-            if (LLVM_LIKELY(isa<If>(br)) && LLVM_UNLIKELY(isNonZero(cond))) {
-                stmt = flatten(br);
-                continue;
-            }
-
-            // Mark the cond as non-zero prior to processing the inner scope.
-            mNonZero.push_back(cond);
-            // Process the Branch body
-            redundancyElimination(br->getBody(), &expressions, &variables, ternaryMode);
-            assert (mNonZero.back() == cond);
-            mNonZero.pop_back();
-
-            if (LLVM_LIKELY(isa<If>(br))) {
-                // Check whether the cost of testing the condition and taking the branch with
-                // 100% correct prediction rate exceeds the cost of the body itself
-                if (LLVM_UNLIKELY(isTrivial(br->getBody()))) {
-                    stmt = flatten(br);
-                    continue;
-                }
-            }
-
         } else {
 
-            // demote any uses of any Var whose value is in scope
             for (unsigned i = 0; i < stmt->getNumOperands(); ++i) {
-                PabloAST * op = stmt->getOperand(i);
+                PabloAST * const op = stmt->getOperand(i);
+                // demote any uses of any Var whose value is in scope
                 if (LLVM_UNLIKELY(isa<Var>(op))) {
-                    PabloAST * const value = variables.get(cast<Var>(op));
-                    if (value && value != op) {
-                        stmt->setOperand(i, value);
+                    PabloAST * const var = variables.get(op);
+                    if (LLVM_UNLIKELY(var != nullptr && var != op)) {
+                        stmt->setOperand(i, var);
                     }
                 }
             }
 
-            PabloAST * const folded = triviallyFold(stmt, block, ternaryMode);
+            PabloAST * const folded = triviallyFold(stmt, currentScope);
             if (folded) {
+                assert (folded != stmt);
                 Statement * const prior = stmt->getPrevNode();
                 stmt->replaceWith(folded);
                 // Since folding a statement may result in inserting new
@@ -186,7 +161,7 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
                 // manner that we must re-evaluate it, check the statement
                 // after the prior to ensure that we traverse the AST in
                 // sequential order.
-                stmt = prior ? prior->getNextNode() : block->front();
+                stmt = prior ? prior->getNextNode() : currentScope->front();
                 continue;
             }
 
@@ -197,8 +172,13 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
             bool added = false;
             std::tie(replacement, added) = expressions.findOrAdd(stmt);
             if (!added) {
+                assert (replacement != stmt);
                 stmt = stmt->replaceWith(replacement);
                 continue;
+            }
+
+            if (LLVM_UNLIKELY(stmt->isSideEffecting())) {
+                hasSideEffects = true;
             }
 
             // Attempt to extend our set of trivially non-zero statements.
@@ -224,73 +204,205 @@ void redundancyElimination(PabloBlock * const block, ExpressionTable * const et,
 
     // Erase any local non-zero entries that were discovered while processing this scope
     mNonZero.erase(mNonZero.begin() + baseNonZeroEntries, mNonZero.end());
+    return hasSideEffects;
+}
 
-    assert (mInScope.back() == block);
-    mInScope.pop_back();
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief evaluateBranch
+ ** ------------------------------------------------------------------------------------------------------------- */
+Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, VariableTable & variables) {
+
+    // Construct the nested variable table
+    VariableTable nestedVariables(variables);
+    const auto escaped = br->getEscaped();
+    if (LLVM_UNLIKELY(isa<While>(br))) {
+        for (Var * const var : escaped) {
+            nestedVariables.put(var, var);
+        }
+    }
+
+    PabloAST * cond = br->getCondition();
+    auto subsituteCondValue = [&]() {
+        if (isa<Var>(cond)) {
+            PabloAST * const value = nestedVariables.get(cast<Var>(cond));
+            if (value && cond != value) {
+                cond = value;
+                br->setCondition(cond);
+            }
+        }
+    };
+
+    subsituteCondValue();
+
+    // Test whether we can ever take this branch
+    if (LLVM_UNLIKELY(isa<Zeroes>(cond))) {
+        return br->eraseFromParent();
+    }
+
+    // If we're guaranteed to take this branch, flatten it.
+    if (LLVM_UNLIKELY(isNonZero(cond))) {
+        if (LLVM_LIKELY(isa<If>(br))) {
+            return flatten(br);
+        } else {
+            report_fatal_error("While condition is guaranteed to be non-zero");
+        }
+    }
+
+    // Process the Branch body
+    ExpressionTable nestedExpressions(&expressions);
+
+    auto processBranchBody = [&]() {
+        mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
+        const auto hasSideEffects = redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
+        if (LLVM_UNLIKELY(hasSideEffects)) {
+            br->setSideEffecting(true);
+        }
+        assert (mNonZero.back() == cond);
+        mNonZero.pop_back();
+    };
+
+    processBranchBody();
 
     // If this block has a branch statement leading into it, we can verify whether an escaped value
     // was updated within this block and update the preceeding block's variable state appropriately.
-
-    Branch * const br = block->getBranch();
-    if (LLVM_LIKELY(br != nullptr)) {
-
-        // When removing identical escaped values, we have to consider that the identical Vars could
-        // be assigned new differing values later in the outer body. Thus instead of replacing them
-        // directly, we map future uses of the duplicate Var to the initial one. The DCE pass will
-        // later mark any Assign statement as dead if the Var is never read.
-
-        const auto escaped = br->getEscaped();
-        const auto n = escaped.size();
-
-        SmallVector<PabloAST *, 16> variable(n);
-        SmallVector<PabloAST *, 16> incoming(n);
-        SmallVector<PabloAST *, 16> outgoing(n);
-        for (unsigned i = 0; i < n; ++i) {
-            variable[i] = escaped[i];
-            incoming[i] = vt->get(variable[i]);
-            outgoing[i] = variables.get(variable[i]);
-            if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
-                variable[i] = incoming[i];
-            } else {
-                for (unsigned j = 0; j < i; ++j) {
-                    if (LLVM_UNLIKELY((outgoing[j] == outgoing[i]) && (incoming[j] == incoming[i]))) {
-                        variable[i] = variable[j];
-                        break;
-                    }
-                }
-            }
-            vt->put(escaped[i], variable[i]);
-        }
-
+    if (phiEscapedVars(escaped, nestedVariables, variables)) {
+        // If we modified the escaped vars, reevaluate the branch.
+        nestedExpressions.clear();
+        subsituteCondValue();
+        processBranchBody();
     }
 
+    // Check whether the cost of testing the condition and taking the branch with
+    // 100% correct prediction rate exceeds the cost of the body itself
+    if (LLVM_LIKELY(isa<If>(br)) && LLVM_UNLIKELY(isTrivial(br->getBody()))) {
+        return flatten(br);
+    }
+
+    return nullptr;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief phiEscapedVars
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
+
+    const auto n = escaped.size();
+
+    SmallVector<PabloAST *, 16> incoming(n);
+    SmallVector<PabloAST *, 16> outgoing(n);
+    SmallVector<PabloAST *, 16> initial(n);
+    SmallVector<PabloAST *, 16> result(n);
+    bool modified = false;
+
+    for (unsigned i = 0; i < n; ++i) {
+        Var * const var = escaped[i];
+        incoming[i] = outer.get(var);
+        outgoing[i] = inner.get(var);
+        initial[i] = escaped[i];
+        result[i] = escaped[i];
+    }
+
+    // CASE 1:
+
+    // Detect when Var a is assigned the same value within the branch as its original value
+    // and replace a with the value.
+
+    //             a = x                     ...
+    //             branch a:        =>       branch x:
+    //               a = x                      ...
+    //             y = a op z                y = x op z
+
+    for (unsigned i = 0; i < n; ++i) {
+        if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
+            initial[i] = incoming[i];
+            result[i] = incoming[i];
+            modified = true;
+        }
+    }
+
+    // CASE 2:
+
+    // Detect when two Vars, a and b, are assigned identical values and replace future uses
+    // of b with a -- assuming a is not reassigned a different variable outside of the scope.
+    // Dead code elimination will remove the redundant assignments to b.
+
+    //             a = x                     a = x
+    //             b = x                     ...
+    //             branch b:                 branch a:
+    //                a = y         =>          a = y
+    //                b = y                     ...
+
+    for (unsigned i = 0; i < n; ++i) {
+        for (unsigned j = 0; j < i; ++j) {
+            if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
+                initial[i] = initial[j];
+                result[i] = result[j];
+                modified = true;
+                break;
+            }
+        }
+    }
+
+    for (unsigned i = 0; i < n; ++i) {
+        outer.put(escaped[i], result[i]);
+    }
+
+    if (modified) {
+        inner.clear();
+        for (unsigned i = 0; i < n; ++i) {
+            inner.put(escaped[i], initial[i]);
+        }
+    }
+
+    return modified;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isRedundantAssign
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool isRedundantAssign(Assign * const assign, VariableTable & variables) {
+    PabloAST * const var = assign->getVariable();
+    PabloAST * const prior = variables.get(var);
+    PabloAST * value = assign->getValue();
+    while (LLVM_UNLIKELY(isa<Var>(value))) {
+        if (LLVM_UNLIKELY(var == value || prior == value)) {
+            return true;
+        }
+        PabloAST * const next = variables.get(cast<Var>(value));
+        if (LLVM_LIKELY(next == nullptr || next == value)) {
+            break;
+        }
+        value = next;
+        assign->setValue(value);
+    }
+    variables.put(var, value);
+    return false;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFold(Statement * stmt, PabloBlock * const currentScope) {
     if (isa<Not>(stmt)) {
-        return triviallyFoldNot(stmt, block, ternaryMode);
+        return triviallyFoldNot(stmt, currentScope);
     } else if (isa<And>(stmt)) {
-        return triviallyFoldAnd(stmt, block, ternaryMode);
+        return triviallyFoldAnd(stmt, currentScope);
     } else if (isa<Or>(stmt)) {
-        return triviallyFoldOr(stmt, block, ternaryMode);
+        return triviallyFoldOr(stmt, currentScope);
     } else if (isa<Xor>(stmt)) {
-        return triviallyFoldXor(stmt, block, ternaryMode);
+        return triviallyFoldXor(stmt, currentScope);
     } else if (isa<Advance>(stmt)) {
-        return triviallyFoldAdvance(stmt, block, ternaryMode);
+        return triviallyFoldAdvance(stmt, currentScope);
     } else if (isa<ScanThru>(stmt)) {
-        return triviallyFoldScanThru(stmt, block, ternaryMode);
+        return triviallyFoldScanThru(stmt, currentScope);
     } else if (isa<MatchStar>(stmt)) {
-        return triviallyFoldMatchStar(stmt, block, ternaryMode);
+        return triviallyFoldMatchStar(stmt, currentScope);
     } else if (isa<Lookahead>(stmt)) {
-        return triviallyFoldLookAhead(stmt, block, ternaryMode);
+        return triviallyFoldLookAhead(stmt, currentScope);
     } else if (LLVM_UNLIKELY(isa<Sel>(stmt))) {
-        return triviallyFoldSel(stmt, block, ternaryMode);
+        return triviallyFoldSel(stmt, currentScope);
     } else if (LLVM_UNLIKELY(isa<Add>(stmt) || isa<Subtract>(stmt))) {
-        return triviallyFoldAddOrSub(stmt, block, ternaryMode);
+        return triviallyFoldAddOrSub(stmt, currentScope);
     }
     return nullptr;
 }
@@ -298,7 +410,7 @@ static PabloAST * triviallyFold(Statement * stmt, PabloBlock * const block, cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation Not
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block) {
     assert(isa<Not>(stmt));
     PabloAST * value = cast<Not>(stmt)->getExpr();
     if (LLVM_UNLIKELY(isa<Not>(value))) {
@@ -307,7 +419,7 @@ static PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block, c
         return block->createOnes(stmt->getType()); // ¬0 ⇔ 1
     } else if (LLVM_UNLIKELY(isa<Ones>(value))) {
         return block->createZeroes(stmt->getType()); // ¬1 ⇔ 0
-    } else if (ternaryMode) {
+    } else if (UseTernaryOptimizations) {
         if (auto ternary = dyn_cast<Ternary>(value)) { // ¬Ternary(m, a, b, c) ⇔ Ternary(¬m, a, b, c)
             block->setInsertPoint(stmt);
             const uint8_t mask = ternary->getMask()->value();
@@ -320,11 +432,12 @@ static PabloAST * triviallyFoldNot(Statement * stmt, PabloBlock * const block, c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initial fold of binary operations And and Or
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldBinaryAndOr(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldBinaryAndOr(Statement * stmt, PabloBlock * const block) {
     assert(isa<And>(stmt) || isa<Or>(stmt));
-    PabloAST * op[2];
+    std::array<PabloAST *, 2> op;
     op[0] = stmt->getOperand(0);
     op[1] = stmt->getOperand(1);
+
     for (unsigned i = 0; i < 2; ++i) {
         if (const Not * const n = dyn_cast<Not>(op[i])) {
             if (LLVM_UNLIKELY(n->getExpr() == op[1 - i])) {
@@ -342,6 +455,7 @@ static PabloAST * triviallyFoldBinaryAndOr(Statement * stmt, PabloBlock * const 
             }
         }
     }
+
     if (LLVM_UNLIKELY(op[0] == op[1])) {
         return op[0];
     } else {
@@ -356,15 +470,15 @@ static PabloAST * triviallyFoldBinaryAndOr(Statement * stmt, PabloBlock * const 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation And
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block) {
     assert(isa<And>(stmt));
-    PabloAST * folded = triviallyFoldBinaryAndOr(stmt, block, ternaryMode);
+    PabloAST * const folded = triviallyFoldBinaryAndOr(stmt, block);
     if (folded) {
-        return triviallyFold(cast<Statement>(folded), block, ternaryMode);
+        return folded;
     }
-    if (ternaryMode) {
-        SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
-        if (!op.empty()) {
+    if (UseTernaryOptimizations) {
+        std::array<PabloAST *, 3> op;
+        if (triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, op)) {
             PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
             if (isa<And>(basic_op)) {
                 return block->createAnd3(op[2], op[0], op[1]);
@@ -381,15 +495,15 @@ static PabloAST * triviallyFoldAnd(Statement * stmt, PabloBlock * const block, c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation Or
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldOr(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldOr(Statement * stmt, PabloBlock * const block) {
     assert(isa<Or>(stmt));
-    PabloAST * folded = triviallyFoldBinaryAndOr(stmt, block, ternaryMode);
+    PabloAST * const folded = triviallyFoldBinaryAndOr(stmt, block);
     if (folded) {
-        return triviallyFold(cast<Statement>(folded), block, ternaryMode);
+        return folded;
     }
-    if (ternaryMode) {
-        SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
-        if (!op.empty()) {
+    if (UseTernaryOptimizations) {
+        std::array<PabloAST *, 3> op;
+        if (triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, op)) {
             PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
             if (isa<And>(basic_op)) {
                 return block->createOrAnd(op[2], op[0], op[1]);
@@ -406,9 +520,9 @@ static PabloAST * triviallyFoldOr(Statement * stmt, PabloBlock * const block, co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation Xor
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block) {
     assert(isa<Xor>(stmt));
-    PabloAST * op[2];
+    std::array<PabloAST *, 2> op;
     op[0] = stmt->getOperand(0);
     op[1] = stmt->getOperand(1);
     if (LLVM_UNLIKELY(op[0] == op[1])) {
@@ -451,13 +565,13 @@ static PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block, c
 
     if (LLVM_UNLIKELY(negated)) {
         Not * const negated = block->createNot(expr);
-        PabloAST * const folded = triviallyFold(negated, block, ternaryMode);
+        PabloAST * const folded = triviallyFold(negated, block);
         expr = folded ? folded : negated;
     }
 
-    if (ternaryMode && isa<PabloAST>(stmt) && equals(expr, cast<PabloAST>(stmt))) {
-        SmallVector<PabloAST *, 3> op = triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, ternaryMode);
-        if (!op.empty()) {
+    if (UseTernaryOptimizations && isa<PabloAST>(stmt) && equals(expr, cast<PabloAST>(stmt))) {
+        std::array<PabloAST *, 3> op;
+        if (triviallyFoldBasicBinOp(stmt, stmt->getOperand(0), stmt->getOperand(1), block, op)) {
             PabloAST * basic_op = isBasicBinaryOp(stmt->getOperand(0)) ? stmt->getOperand(0) : stmt->getOperand(1);
             if (isa<And>(basic_op)) {
                 expr = block->createXorAnd(op[2], op[0], op[1]);
@@ -475,7 +589,7 @@ static PabloAST * triviallyFoldXor(Statement * stmt, PabloBlock * const block, c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation Advance
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldAdvance(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldAdvance(Statement * stmt, PabloBlock * const block) {
     assert(isa<Advance>(stmt));
     Advance * const adv = cast<Advance>(stmt);
     if (LLVM_UNLIKELY(isa<Zeroes>(adv->getExpression()) || adv->getAmount() == 0)) {
@@ -487,7 +601,7 @@ static PabloAST * triviallyFoldAdvance(Statement * stmt, PabloBlock * const bloc
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation ScanThru
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldScanThru(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldScanThru(Statement * stmt, PabloBlock * const block) {
     assert(isa<ScanThru>(stmt));
     ScanThru * const st = cast<ScanThru>(stmt);
     if (LLVM_UNLIKELY(isa<Zeroes>(st->getScanFrom()) || isa<Zeroes>(st->getScanThru()))) {
@@ -507,7 +621,7 @@ static PabloAST * triviallyFoldScanThru(Statement * stmt, PabloBlock * const blo
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation MatchStar
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldMatchStar(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldMatchStar(Statement * stmt, PabloBlock * const block) {
     assert(isa<MatchStar>(stmt));
     MatchStar * const mstar = cast<MatchStar>(stmt);
     if (LLVM_UNLIKELY(isa<Zeroes>(mstar->getMarker()) || isa<Zeroes>(mstar->getCharClass()))) {
@@ -522,7 +636,7 @@ static PabloAST * triviallyFoldMatchStar(Statement * stmt, PabloBlock * const bl
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation LookAhead
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldLookAhead(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldLookAhead(Statement * stmt, PabloBlock * const block) {
     assert(isa<Lookahead>(stmt));
     Lookahead * const la = cast<Lookahead>(stmt);
     if (LLVM_UNLIKELY(isa<Zeroes>(la->getExpression()) || la->getAmount() == 0)) {
@@ -534,7 +648,7 @@ static PabloAST * triviallyFoldLookAhead(Statement * stmt, PabloBlock * const bl
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operation Sel
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldSel(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldSel(Statement * stmt, PabloBlock * const block) {
     assert(isa<Sel>(stmt));
     Sel * const sel = cast<Sel>(stmt);
     if (LLVM_UNLIKELY(isa<Zeroes>(sel->getCondition()))) {
@@ -545,21 +659,21 @@ static PabloAST * triviallyFoldSel(Statement * stmt, PabloBlock * const block, c
     }
     if (LLVM_UNLIKELY(isa<Zeroes>(sel->getTrueExpr()))) {
         block->setInsertPoint(stmt->getPrevNode());
-        PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
-        return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block, ternaryMode);
+        PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block);
+        return triviallyFold(block->createAnd(sel->getFalseExpr(), negCond), block);
     }
     if (LLVM_UNLIKELY(isa<Ones>(sel->getTrueExpr()))) {
         block->setInsertPoint(stmt->getPrevNode());
-        return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block, ternaryMode);
+        return triviallyFold(block->createOr(sel->getCondition(), sel->getFalseExpr()), block);
     }
     if (LLVM_UNLIKELY(isa<Zeroes>(sel->getFalseExpr()))) {
         block->setInsertPoint(stmt->getPrevNode());
-        return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block, ternaryMode);
+        return triviallyFold(block->createAnd(sel->getCondition(), sel->getTrueExpr()), block);
     }
     if (LLVM_UNLIKELY(isa<Ones>(sel->getFalseExpr()))) {
         block->setInsertPoint(stmt->getPrevNode());
-        PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block, ternaryMode);
-        return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block, ternaryMode);
+        PabloAST * const negCond = triviallyFold(block->createNot(sel->getCondition()), block);
+        return triviallyFold(block->createOr(sel->getTrueExpr(), negCond), block);
     }
     return nullptr;
 }
@@ -567,7 +681,7 @@ static PabloAST * triviallyFoldSel(Statement * stmt, PabloBlock * const block, c
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fold operations Add or Subtraction
  ** ------------------------------------------------------------------------------------------------------------- */
-static PabloAST * triviallyFoldAddOrSub(Statement * stmt, PabloBlock * const block, const bool ternaryMode) {
+PabloAST * triviallyFoldAddOrSub(Statement * stmt, PabloBlock * const block) {
     assert(isa<Add>(stmt) || isa<Subtract>(stmt));
     if (LLVM_UNLIKELY(isa<Integer>(stmt->getOperand(0)) && isa<Integer>(stmt->getOperand(1)))) {
         const Integer * const int0 = cast<Integer>(stmt->getOperand(0));
@@ -580,36 +694,32 @@ static PabloAST * triviallyFoldAddOrSub(Statement * stmt, PabloBlock * const blo
         }
         return block->getInteger(result);
     }
-
-
-
     return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief helper function to fold basic operation operands
  ** ------------------------------------------------------------------------------------------------------------- */
-static SmallVector<PabloAST *, 3> triviallyFoldBasicBinOp(Statement * stmt, PabloAST * expr1, PabloAST * expr2, PabloBlock * const block, const bool ternaryMode) {
-    SmallVector<PabloAST *, 3> op;
+bool triviallyFoldBasicBinOp(Statement * stmt, PabloAST * expr1, PabloAST * expr2, PabloBlock * const block, std::array<PabloAST *, 3> & op) {
     if (isBasicBinaryOp(expr1)) {
-        op.push_back(cast<Statement>(expr1)->getOperand(0));
-        op.push_back(cast<Statement>(expr1)->getOperand(1));
-        op.push_back(expr2);
+        op[0] = cast<Statement>(expr1)->getOperand(0);
+        op[1] = cast<Statement>(expr1)->getOperand(1);
+        op[2] = expr2;
     } else if (isBasicBinaryOp(expr2)) {
-        op.push_back(cast<Statement>(expr2)->getOperand(0));
-        op.push_back(cast<Statement>(expr2)->getOperand(1));
-        op.push_back(expr1);
+        op[0] = cast<Statement>(expr2)->getOperand(0);
+        op[1] = cast<Statement>(expr2)->getOperand(1);
+        op[2] = expr1;
     } else {
-        return op;
+        return false;
     }
     block->setInsertPoint(stmt);
-    return op;
+    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief check if op is And, Or or Xor
  ** ------------------------------------------------------------------------------------------------------------- */
-static bool isBasicBinaryOp(PabloAST * stmt) {
+bool isBasicBinaryOp(PabloAST * stmt) {
     return isa<Or>(stmt) || isa<Xor>(stmt) || isa<And>(stmt);
 }
 
@@ -644,14 +754,17 @@ static bool isTrivial(const PabloBlock * const block) {
  ** ------------------------------------------------------------------------------------------------------------- */
 static Statement * flatten(Branch * const br) {
     Statement * stmt = br;
-    Statement * nested = br->getBody()->front();
+    Statement * const first = br->getBody()->front();
+    Statement * nested = first;
     while (nested) {
         Statement * next = nested->removeFromParent();
         nested->insertAfter(stmt);
         stmt = nested;
         nested = next;
     }
-    return br->eraseFromParent();
+    Statement * const result = br->eraseFromParent();
+    assert (first == nullptr || result == first);
+    return result;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -741,34 +854,146 @@ void strengthReduction(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief LiveVarSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct LiveVarSet : public flat_set<const Var *> {
+
+    using ExtVec = SmallVector<const PabloAST *, 4>;
+
+    LiveVarSet() noexcept
+    : mOuter(nullptr) {
+
+    }
+
+    LiveVarSet(const LiveVarSet & outer) noexcept
+    : mOuter(&outer) {
+
+    }
+
+    bool contains(const Var * const var) const noexcept {
+        const auto f = find(var);
+        if (f == end()) {
+            return (mOuter) ? mOuter->contains(var) : false;
+        }
+        return true;
+    }
+
+    bool remove(const Var * const var) noexcept {
+        const auto f = find(var);
+        if (LLVM_LIKELY(f != end())) {
+            erase(f);
+            return true;
+        }
+        return false;
+    }
+
+    void put(const Var * const var) noexcept {
+        insert(var);
+    }
+
+private:
+    const LiveVarSet * const mOuter;
+};
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isOutputExtract
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool isOutputExtract(const Var * var, const LiveVarSet & set) {
+    while (isa<Extract>(var)) {
+        var = cast<Extract>(var)->getArray();
+        if (set.contains(var)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void deadCodeElimination(PabloBlock * const block) {
+void deadCodeElimination(PabloKernel * const kernel) {
+    LiveVarSet variables;
+    const auto n = kernel->getNumOfOutputs();
+    for (unsigned i = 0; i < n; ++i) {
+        variables.put(kernel->getOutput(i));
+    }
+    // add in any Extract nodes of one of our output Vars
+    const auto m = kernel->getNumOfVariables();
+    for (unsigned i = 0; i < m; ++i) {
+        Var * const var = kernel->getVariable(i);
+        if (LLVM_UNLIKELY(isOutputExtract(var, variables))) {
+            variables.put(var);
+        }
+    }
+    deadCodeElimination(kernel->getEntryScope(), variables, false);
+}
 
-    flat_set<PabloAST *> written;
-
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief deadCodeElimination
+ ** ------------------------------------------------------------------------------------------------------------- */
+void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const bool scanOnly) {
     for (Statement * stmt = block->back(), * prior; stmt; stmt = prior) {
         prior = stmt->getPrevNode();
-        if (LLVM_UNLIKELY((stmt->getNumUses() == 0) && (!stmt->isSideEffecting()))) {
+        if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
+            const auto sideEffecting = stmt->isSideEffecting();
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-                written.clear();
-                deadCodeElimination(cast<Branch>(stmt)->getBody());
-            } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-                // An Assign statement is locally dead whenever its variable is not read
-                // before being reassigned a value.
-                PabloAST * var = cast<Assign>(stmt)->getVariable();
-                if (LLVM_UNLIKELY(!written.insert(var).second)) {
-                    stmt->eraseFromParent();
+                auto escaped = cast<Branch>(stmt)->getEscaped();
+                LiveVarSet nested(liveSet);
+                if (LLVM_UNLIKELY(isa<While>(stmt))) {
+                    // gather any Vars whose incoming value is read within the loop
+                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, true);
+                    // and make sure the Cond is within our set of nested vars
+                    nested.put(cast<Var>(cast<While>(stmt)->getCondition()));
                 }
-            } else {
+                for (const Var * var : escaped) {
+                    if (LLVM_LIKELY(liveSet.contains(var))) {
+                        nested.put(var);
+                    }
+                }
+                // If none of the escaped vars from this branch are read, delete it.
+                if (LLVM_LIKELY(!nested.empty() || sideEffecting)) {
+                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, false);
+                    // the condition of a while loop may not have had any uses outside
+                    // of its reassignment for the next loop iteration test. All other
+                    // vars require at least one use of the incoming value within the
+                    // branch body itself.
+                    if (LLVM_UNLIKELY(isa<While>(stmt))) {
+                        liveSet.put(cast<Var>(cast<While>(stmt)->getCondition()));
+                    }
+                    liveSet.insert(nested.begin(), nested.end());
+                    continue;
+                }
+            } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+                Var * const var = cast<Assign>(stmt)->getVariable();
+                if (LLVM_LIKELY(liveSet.contains(var))) {
+                    PabloAST * const value = cast<Assign>(stmt)->getValue();
+                    if (isa<Var>(value)) {
+                        liveSet.put(cast<Var>(value));
+                    }
+                    if (liveSet.remove(var)) {
+                        continue;
+                    }
+                }
+            }
+            if (LLVM_LIKELY(!scanOnly && !sideEffecting)) {
                 stmt->eraseFromParent();
+            }
+        } else {
+            const auto n = stmt->getNumOperands();
+            for (unsigned i = 0; i < n; ++i) {
+                PabloAST * const op = stmt->getOperand(i);
+                if (isa<Var>(op)) {
+                    liveSet.put(cast<Var>(op));
+                }
             }
         }
     }
 }
 
-std::vector<const PabloAST *>       mNonZero;
-std::vector<const PabloBlock *>     mInScope;
+private:
+
+const bool                          UseTernaryOptimizations;
+SmallVector<const PabloAST *, 64>   mNonZero;
 
 };
 

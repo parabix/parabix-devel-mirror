@@ -1,0 +1,77 @@
+#
+# Copyright (c) 2019 International Characters.
+# This software is licensed to the public under the Open Software License 3.0.
+# icgrep is a trademark of International Characters.
+#
+
+#
+# A port of wc.cpp to Pablo
+#
+
+type BasisBits = <i1>[8]
+
+kernel LineCount :: [BasisBits bb] -> [i64 lc] {
+    or = bb[0] | bb[2] | bb[4] | bb[5] | bb[6] | bb[7]
+    and = bb[1] & bb[3]
+    lf = ~or & and
+
+    lc = Count(lf)
+}
+
+kernel WordCount :: [BasisBits bb] -> [i64 wc] {
+    not = ~bb[4]
+    not_1 = ~bb[5]
+    not_2 = ~bb[6]
+    not_3 = ~bb[7]
+    or = bb[4] | bb[5]
+    not_4 = ~or
+    or_1 = bb[6] | bb[7]
+    not_5 = ~or_1
+    or_2 = or | or_1
+    not_6 = ~or_2
+    and = bb[3] & not_6
+    or_3 = bb[0] | bb[1]
+    not_7 = ~bb[1]
+    sel = Sel(bb[2], not_7, or_3)
+    and_1 = and & sel
+    not_8 = ~bb[0]
+    not_9 = ~bb[2]
+    not_10 = ~bb[3]
+    not_11 = ~or_3
+    or_4 = bb[2] | bb[3]
+    not_12 = ~or_4
+    and_2 = bb[5] & not
+    or_5 = or_3 | or_4
+    not_13 = ~or_5
+    and_3 = not_5 & and_2
+    and_4 = not_13 & and_3
+    or_6 = and_1 | and_4
+    ws = InFile(or_6)
+
+    wordChar = ~ws
+    wsFollowOrStart = ~(Advance(wordChar, 1))
+    wordStart = InFile(wordChar & wsFollowOrStart)
+    wc = Count(wordStart)
+}
+
+kernel CharCount :: [BasisBits bb] -> [i64 cc] {
+    not = ~bb[7]
+    or = bb[4] | bb[5]
+    or_1 = bb[2] | bb[3]
+    or_2 = bb[0] | bb[1]
+    and = bb[6] & bb[7]
+    or_3 = bb[1] | or_1
+    or_4 = bb[4] | or_3
+    and_1 = bb[2] & or_2
+    or_5 = bb[3] | and_1
+    and_2 = bb[4] & or_5
+    not_1 = ~and_2
+    sel = Sel(bb[5], not_1, or_4)
+    and_3 = and & sel
+    not_2 = ~and_3
+    and_4 = bb[7] & not_2
+    not_3 = ~and_4
+    u8 = InFile(not_3)
+
+    cc = Count(u8)
+}

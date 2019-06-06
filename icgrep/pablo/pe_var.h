@@ -13,25 +13,34 @@
 namespace pablo {
 
 class Var : public NamedPabloAST {
+    friend class Extract;
     friend class PabloBlock;
     friend class PabloAST;
     friend class PabloKernel;
     friend class Statement;
 public:
 
-    enum Attribute {
+    enum Attribute : unsigned {
         None = 0x00
         , ReadOnly = 0x01
         , ReadNone = 0x02
         , Scalar = 0x04
         , KernelParameter = 0x80
         // Composite attributes
-        , KernelInputParameter = ReadOnly | KernelParameter
-        , KernelOutputParameter = ReadNone | KernelParameter
+        , KernelInputStream = ReadOnly | KernelParameter
+        , KernelInputScalar = KernelInputStream | Scalar
+        , KernelOutputStream = ReadNone | KernelParameter
+        , KernelOutputScalar = KernelOutputStream | Scalar
     };
 
     static inline bool classof(const PabloAST * e) {
-        return e->getClassTypeId() == ClassTypeId::Var;
+        switch (e->getClassTypeId()) {
+            case ClassTypeId::Var:
+            case ClassTypeId::Extract:
+                return true;
+            default:
+                return false;
+        }
     }
     static inline bool classof(const void *) {
         return false;
@@ -39,61 +48,46 @@ public:
     bool isReadOnly() const {
         return (mAttribute & Attribute::ReadOnly) != 0;
     }
-    void setReadOnly(const bool value = true) {
-        if (value) {
-            mAttribute |= Attribute::ReadOnly;
-        } else {
-            mAttribute &= ~(Attribute::ReadOnly);
-        }
-    }
     bool isReadNone() const {
         return (mAttribute & Attribute::ReadNone) != 0;
     }
-    void setReadNone(const bool value = true) {
-        if (value) {
-            mAttribute |= Attribute::ReadNone;
-        } else {
-            mAttribute &= ~(Attribute::ReadNone);
-        }
-    }
+
     bool isKernelParameter() const {
         return (mAttribute & Attribute::KernelParameter) != 0;
     }
-    void setKernelParameter(const bool value = true) {
-        if (value) {
-            mAttribute |= Attribute::KernelParameter;
-        } else {
-            mAttribute &= ~(Attribute::KernelParameter);
-        }
-    }
+
     bool isScalar() const {
         return (mAttribute & Attribute::Scalar) != 0;
     }
-    void setScalar(const bool value = true) {
-        if (value) {
-            mAttribute |= Attribute::Scalar;
-        } else {
-            mAttribute &= ~(Attribute::Scalar);
-        }
-    }
 
-    const String & getName() const final {
+    const String & getName() const override {
         assert (mName);
         return *mName;
     }
 
 protected:
-    Var(const String * name, llvm::Type * const type, Allocator & allocator, const Attribute attr = Attribute::None)
-    : NamedPabloAST(ClassTypeId::Var, type, name, allocator)
+    Var(llvm::Type * const type, const String * name, Allocator & allocator, const Attribute attr = Attribute::None)
+    : Var(ClassTypeId::Var, type, name, allocator, attr) {
+
+    }
+
+    explicit Var(const ClassTypeId typeId, llvm::Type * const type, const String * name, Allocator & allocator, const Attribute attr)
+    : NamedPabloAST(typeId, type, name, allocator)
     , mAttribute(attr) {
 
     }
+
+    Attribute getAttribute() const {
+        return mAttribute;
+    }
+
 private:
-    unsigned mAttribute;
+    const Attribute mAttribute;
 };
 
-class Extract : public PabloAST {
+class Extract final : public Var {
     friend class PabloBlock;
+    friend class PabloKernel;
 public:
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Extract;
@@ -101,17 +95,19 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    virtual ~Extract(){
-    }
     inline Var * getArray() const {
         return mArray;
     }
     inline PabloAST * getIndex() const {
         return mIndex;
     }
+    const String & getName() const final {
+        llvm_unreachable("Extract::getName() not supported");
+    }
+
 protected:
-    Extract(Var * array, PabloAST * const index, llvm::Type * type, Allocator & allocator)
-    : PabloAST(ClassTypeId::Extract, type, allocator)
+    Extract(llvm::Type * type, Var * array, PabloAST * const index, Allocator & allocator)
+    : Var(ClassTypeId::Extract, type, nullptr, allocator, array->getAttribute())
     , mArray(array)
     , mIndex(index) {
 

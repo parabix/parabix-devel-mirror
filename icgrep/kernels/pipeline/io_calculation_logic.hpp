@@ -466,14 +466,14 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                 calculated = b->CreateSelect(isClosed(b, i), z, calculated);
             }
             if (LLVM_UNLIKELY(mCheckAssertions)) {
-                Value * correctItemCount = b->CreateICmpEQ(calculated, accessibleItems[i]);
+                Value * correctItemCount = b->CreateICmpULE(calculated, accessibleItems[i]);
                 if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
                     correctItemCount = b->CreateOr(correctItemCount, mIsInputZeroExtended[i]);
                 }
                 b->CreateAssert(correctItemCount,
                                 input.getName() +
-                                ": expected final fixed rate item count (%d) "
-                                "does not match accessible item count (%d)",
+                                ": final calculated rate item count (%d) "
+                                "exceeds accessible item count (%d)",
                                 calculated, accessibleItems[i]);
             }
             accessible = calculated;

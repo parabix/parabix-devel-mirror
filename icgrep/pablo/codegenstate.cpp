@@ -9,6 +9,7 @@
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
 #include <pablo/branch.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_infile.h>
@@ -94,22 +95,9 @@ Lookahead * PabloBlock::createLookahead(PabloAST * expr, Integer * shiftAmount, 
     return insertAtInsertionPoint(new (mAllocator) Lookahead(expr, shiftAmount, name, mAllocator));
 }
 
-Extract * PabloBlock::createExtract(Var * array, Integer * index) {
+Extract * PabloBlock::createExtract(Var * const array, Integer * const index) {
     assert (array && index);
-    Type * type = array->getType(); assert (type);
-    if (LLVM_LIKELY(isa<ArrayType>(type))) {
-        type = cast<ArrayType>(type)->getArrayElementType();
-    } else {
-        std::string tmp;
-        raw_string_ostream out(tmp);
-        out << "cannot extract element from ";
-        array->print(out);
-        out << ": ";
-        type->print(out);
-        out << " is not an array type";
-        throw std::runtime_error(out.str());
-    }
-    return new (mAllocator) Extract(array, index, type, mAllocator);
+    return mParent->makeExtract(array, index);
 }
 
 And * PabloBlock::createAnd(PabloAST * expr1, PabloAST * expr2, const String * const name) {
@@ -159,14 +147,8 @@ Equals * PabloBlock::createEquals(PabloAST * expr1, PabloAST * expr2) {
     return new (mAllocator) Equals(ty, expr1, expr2, mAllocator);
 }
 
-Assign * PabloBlock::createAssign(PabloAST * const var, PabloAST * const value) {
-    Var * test = nullptr;
-    if (isa<Extract>(var)) {
-        test = cast<Extract>(var)->getArray();
-    } else if (isa<Var>(var)) {
-        test = cast<Var>(var);
-    }
-    if (LLVM_UNLIKELY(test == nullptr || test->isReadOnly())) {
+Assign * PabloBlock::createAssign(Var * const var, PabloAST * const value) {
+    if (LLVM_UNLIKELY(var->isReadOnly())) {
         std::string tmp;
         raw_string_ostream out(tmp);
         out << "cannot assign ";
@@ -175,11 +157,7 @@ Assign * PabloBlock::createAssign(PabloAST * const var, PabloAST * const value) 
         var->print(out);
         out << ": ";
         var->print(out);
-        if (test == nullptr) {
-            out << " must be an Extract expression or Var declaration";
-        } else {
-            out << " is read only";
-        }
+        out << " is read only";
         report_fatal_error(out.str());
     }
     return insertAtInsertionPoint(new (mAllocator) Assign(var, value, mAllocator));
@@ -339,6 +317,12 @@ Ternary * PabloBlock::createTernary(Integer * mask, PabloAST * a, PabloAST * b, 
     CHECK_SAME_TYPE(a, b);
     CHECK_SAME_TYPE(b, c);
     return insertAtInsertionPoint(new (mAllocator) Ternary(mask, a, b, c, name, mAllocator));
+}
+
+
+
+IntrinsicCall * PabloBlock::createIntrinsicCall(Intrinsic intrinsic, llvm::Type * type, llvm::ArrayRef<PabloAST *> argv, const String * name) {
+    return insertAtInsertionPoint(new (mAllocator) IntrinsicCall(intrinsic, type, argv, name, mAllocator));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

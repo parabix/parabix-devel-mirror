@@ -8,6 +8,7 @@
 #include <pablo/codegenstate.h>
 #include <pablo/pe_var.h>
 #include <pablo/boolean.h>
+#include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
@@ -42,8 +43,6 @@ bool equals(const PabloAST * const expr1, const PabloAST * const expr2) noexcept
         if (LLVM_LIKELY(expr1->getType() == expr2->getType())) {
             if ((isa<Zeroes>(expr1)) || (isa<Ones>(expr1))) {
                 return true;
-            } else if (isa<Var>(expr1)) {
-                return (cast<Var>(expr1)->getName() == cast<Var>(expr2)->getName());
             } else if (isa<Not>(expr1)) {
                 return equals(cast<Not>(expr1)->getOperand(0), cast<Not>(expr2)->getOperand(0));
             } else if (isa<InFile>(expr1)) {
@@ -182,6 +181,11 @@ const String & Statement::getName() const {
             MAKE_PREFIX(PackH, "packh");
             MAKE_PREFIX(PackL, "packl");
             MAKE_PREFIX(Ternary, "ternary");
+
+            case ClassTypeId::IntrinsicCall:
+                prefix = cast<IntrinsicCall>(this)->getIntrinsicName().lower().c_str();
+                length = __length(prefix);
+                break;
             default: llvm_unreachable("invalid statement type");
         }
         #undef MAKE_PREFIX
@@ -194,11 +198,14 @@ const String & Statement::getName() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief replaceUsesOfWith
  ** ------------------------------------------------------------------------------------------------------------- */
-void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to) {
+void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to, const bool recursive) {
     if (LLVM_LIKELY(from != to)) {
         for (unsigned i = 0; i != getNumOperands(); ++i) {
-           if (getOperand(i) == from) {
+           PabloAST * const op = getOperand(i);
+           if (op == from) {
                setOperand(i, to);
+           } else if (LLVM_UNLIKELY(recursive && isa<Statement>(op))) {
+               cast<Statement>(op)->replaceUsesOfWith(from, to, true);
            }
         }
     }
@@ -262,6 +269,7 @@ void Statement::insertAfter(Statement * const statement) {
     if (LLVM_UNLIKELY(statement == this)) {
         return;
     } else if (LLVM_UNLIKELY(statement == nullptr)) {
+        assert (false);
         llvm::report_fatal_error("cannot insert after null statement!");
     } else if (LLVM_UNLIKELY(statement->mParent == nullptr)) {
         llvm::report_fatal_error("statement is not contained in a pablo block!");

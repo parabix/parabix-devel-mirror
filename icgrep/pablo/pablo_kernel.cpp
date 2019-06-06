@@ -60,10 +60,50 @@ Var * PabloKernel::getOutputScalarVar(const std::string & name) {
     report_fatal_error("Kernel does not contain scalar " + name);
 }
 
-Var * PabloKernel::makeVariable(const String * name, Type * const type) {
-    Var * const var = new (mAllocator) Var(name, type, mAllocator);
+Var * PabloKernel::makeVariable(const String * const name, Type * const type) {
+    for (Var * const var : mVariables) {
+        if (var->getClassTypeId() == ClassTypeId::Var) {
+            if (LLVM_UNLIKELY(&var->getName() == name)) {
+                return var;
+            }
+        }
+    }
+    Var * const var = new (mAllocator) Var(type, name, mAllocator);
     mVariables.push_back(var);
     return var;
+}
+
+Extract * PabloKernel::makeExtract(Var * const array, PabloAST * const index) {
+    for (Var * const var : mVariables) {
+        if (var->getClassTypeId() == ClassTypeId::Extract) {
+            Extract * const ext = cast<Extract>(var);
+            if (ext->getArray() == array && ext->getIndex() == index) {
+                return ext;
+            }
+        }
+    }
+    Type * type = array->getType(); assert (type);
+    if (LLVM_LIKELY(isa<ArrayType>(type))) {
+        type = cast<ArrayType>(type)->getArrayElementType();
+    } else {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        out << "cannot extract element from ";
+        array->print(out);
+        out << ": ";
+        type->print(out);
+        out << " is not an array type";
+        throw std::runtime_error(out.str());
+    }
+    Extract * const ext = new (mAllocator) Extract(type, array, index, mAllocator);
+    for (auto const & user : array->users()) {
+        if (isa<PabloKernel>(user)) {
+            ext->addUser(this);
+            break;
+        }
+    }
+    mVariables.push_back(ext);
+    return ext;
 }
 
 Zeroes * PabloKernel::getNullValue(Type * type) {
@@ -101,24 +141,23 @@ void PabloKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuil
     mEntryScope = new (mAllocator) PabloBlock(this, mAllocator);
     mContext = &b->getContext();
     for (const Binding & ss : mInputStreamSets) {
-        Var * param = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelInputParameter);
+        Var * param = new (mAllocator) Var(ss.getType(), makeName(ss.getName()), mAllocator, Var::KernelInputStream);
         param->addUser(this);
         mInputs.push_back(param);
         mVariables.push_back(param);
     }
     for (const Binding & ss : mOutputStreamSets) {
-        Var * result = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelOutputParameter);
+        Var * result = new (mAllocator) Var(ss.getType(), makeName(ss.getName()), mAllocator, Var::KernelOutputStream);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
     }
     for (const Binding & ss : mOutputScalars) {
-        Var * result = new (mAllocator) Var(makeName(ss.getName()), ss.getType(), mAllocator, Var::KernelOutputParameter);
+        Var * result = new (mAllocator) Var(ss.getType(), makeName(ss.getName()), mAllocator, Var::KernelOutputScalar);
         result->addUser(this);
         mOutputs.push_back(result);
         mVariables.push_back(result);
         mScalarOutputVars.push_back(result);
-        result->setScalar();
     }
     generatePabloMethod();
     pablo_function_passes(this);

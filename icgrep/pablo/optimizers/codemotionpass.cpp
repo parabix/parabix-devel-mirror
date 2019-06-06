@@ -9,9 +9,6 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
 
-#include <llvm/Support/raw_ostream.h>
-#include <pablo/printer_pablos.h>
-
 using namespace llvm;
 
 namespace pablo {
@@ -19,23 +16,24 @@ namespace pablo {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ScopeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-template <typename T>
-struct SetQueue : public std::vector<T> {
+template <typename T, unsigned n>
+struct SetQueue : public SmallVector<T, n> {
+    using Base = SmallVector<T, n>;
     inline void insert(T const item) {
-        const auto i = std::lower_bound(std::vector<T>::begin(), std::vector<T>::end(), item);
-        if (i == std::vector<T>::end() || *i != item) {
-            std::vector<T>::insert(i, item);
+        const auto i = std::lower_bound(Base::begin(), Base::end(), item);
+        if (i == Base::end() || *i != item) {
+            Base::insert(i, item);
         }
     }
     inline bool count(T const item) const {
-        const auto i = std::lower_bound(std::vector<T>::begin(), std::vector<T>::end(), item);
-        return (i != std::vector<T>::end() && *i == item);
+        const auto i = std::lower_bound(Base::begin(), Base::end(), item);
+        return (i != Base::end() && *i == item);
     }
 };
 
-using ScopeSet = SetQueue<PabloBlock *>;
+using ScopeSet = SetQueue<PabloBlock *, 32>;
 
-using UserSet = SetQueue<Statement *>;
+using UserSet = SetQueue<Statement *, 256>;
 
 using LoopVariants = boost::container::flat_set<const PabloAST *>;
 
@@ -123,7 +121,11 @@ struct CodeMotionPassContainer {
                 getScopesOfAllUsers(def);
             }
         } else {
-            getScopesOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt);
+            PabloAST * expr = stmt;
+            if (isa<Assign>(stmt)) {
+                expr = cast<Assign>(stmt)->getVariable();
+            }
+            getScopesOfAllUsers(expr);
         }
         if (LLVM_UNLIKELY(mScopes.empty())) {
             return;
@@ -141,7 +143,13 @@ struct CodeMotionPassContainer {
                     getInScopeDominatorsOfAllUsers(def, block);
                 }
             } else {
-                getInScopeDominatorsOfAllUsers(isa<Assign>(stmt) ? cast<Assign>(stmt)->getVariable() : stmt, block);
+
+                PabloAST * expr = stmt;
+                if (isa<Assign>(stmt)) {
+                    expr = cast<Assign>(stmt)->getVariable();
+                }
+
+                getInScopeDominatorsOfAllUsers(expr, block);
             }
             Branch * branch = nullptr;
             Statement * temp = stmt;
@@ -189,17 +197,20 @@ struct CodeMotionPassContainer {
             mTainted.insert(var);
         }
 
-        for (const Statement * stmt : *loop->getBody()) {
+        PabloBlock * const nestedBody = loop->getBody();
+        for (const Statement * stmt : *nestedBody) {
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 // Trust that any escaped values of an inner branch is a variant.
                 for (const Var * var : cast<Branch>(stmt)->getEscaped()) {
-                    mVariants.insert(var);
+                    mTainted.insert(var);
                 }
             } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
                 const Assign * const a = cast<Assign>(stmt);
                 if (LLVM_LIKELY(mTainted.count(a->getValue()))) {
-                    mVariants.insert(a->getVariable());
-               }
+                    const Var * const var = a->getVariable();
+                    mVariants.insert(var);
+                    mTainted.insert(var);
+                }
             } else {
                 for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
                     const PabloAST * const op = stmt->getOperand(i);
@@ -211,39 +222,37 @@ struct CodeMotionPassContainer {
             }
         }
 
-        assert ("A loop without any variants is an infinite loop" && !mVariants.empty());
-
         mVariants.reserve(mTainted.size());
         mTainted.clear();
 
         // Iterate over the loop again but this time move any invariants out of the loop.
-        // An invariant is any statement whose operands are all non-variants.
+        // An invariant is any statement whose operands are also invariant.
 
-        Statement * outerNode = loop->getPrevNode();
-        Statement * stmt = loop->getBody()->front();
+        Statement * ip = loop->getPrevNode();
+        Statement * stmt = nestedBody->front();
         while (stmt) {
-            if (isa<Branch>(stmt)) {
-                stmt = stmt->getNextNode();
+            Statement * const next = stmt->getNextNode();
+            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+                stmt = next;
             } else {
                 bool invariant = true;
-                for (unsigned i = 0; i != stmt->getNumOperands(); ++i) {
+                const auto n = stmt->getNumOperands();
+                for (unsigned i = 0; i != n; ++i) {
                     const PabloAST * const op = stmt->getOperand(i);
                     if (mVariants.count(op)) {
                         invariant = false;
                         break;
                     }
                 }
-                Statement * const next = stmt->getNextNode();
                 if (LLVM_UNLIKELY(invariant)) {
-                    stmt->insertAfter(outerNode);
-                    outerNode = stmt;
+                    stmt->insertAfter(ip);
+                    ip = stmt;
                 } else {
                     mVariants.insert(stmt);
                 }
                 stmt = next;
             }
         }
-
         mVariants.clear();
     }
 
@@ -252,13 +261,13 @@ struct CodeMotionPassContainer {
      ** ------------------------------------------------------------------------------------------------------------- */
     void doCodeMovement(PabloBlock * const block) {
 
-        std::vector<Branch *> branches;
+        SmallVector<Branch *, 8> branches;
 
         Statement * stmt = block->back(); // note: reverse AST traversal
         while (stmt) {
             Statement * const prevNode = stmt->getPrevNode();
             sinkIfAcceptableTarget(stmt, block);
-            if (isa<Branch>(stmt)) {
+            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 branches.push_back(cast<Branch>(stmt));
             }
             stmt = prevNode;

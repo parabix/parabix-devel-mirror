@@ -890,7 +890,7 @@ std::pair<llvm::Value *, llvm::Value *> IDISA_Builder::bitblock_subtract_with_bo
     b1 = simd_srli(mBitBlockWidth, b1, mBitBlockWidth - 1);
     Value * difference = simd_sub(mBitBlockWidth, partial, b1);
     Value * borrowOut = simd_or(gen, simd_and(prop, difference));
-    return std::make_pair(borrowOut, difference);
+    return std::make_pair(bitCast(borrowOut), bitCast(difference));
 }
 
 

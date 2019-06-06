@@ -106,7 +106,7 @@ PabloAST * Parabix_CC_Compiler::compileCC(const std::string & canonicalName, con
     }
     return var;
 }
-    
+
 template<typename PabloBlockOrBuilder>
 PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder & pb) {
     if (cc->empty()) {
@@ -147,7 +147,7 @@ PabloAST * Parabix_CC_Compiler::charset_expr(const CC * cc, PabloBlockOrBuilder 
         PabloAST * temp = char_or_range_expr(lo_codepoint(i), hi_codepoint(i), pb);
         expr = (expr == nullptr) ? temp : pb.createOr(expr, temp);
     }
-    return pb.createInFile(expr);
+    return pb.createInFile(expr, "expr");
 }
 
 template<typename PabloBlockOrBuilder>
@@ -252,7 +252,7 @@ PabloAST * Parabix_CC_Compiler::createUCDSequence(const unsigned byte_no, const 
     }
     return builder.createOr(target, var);
 }
-    
+
 PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream, PabloBuilder & pb) {
     const Alphabet * a = cc->getAlphabet();
     if (!isa<CodeUnitAlphabet>(a)) {
@@ -299,9 +299,9 @@ PabloAST * compileCCfromCodeUnitStream(const CC * cc, PabloAST * codeUnitStream,
         }
         ccStrm = pb.createAnd(ccStrm, pb.createNot(toExclude));
     }
-    return pb.createInFile(ccStrm);
+    return pb.createInFile(ccStrm, "ccStrm");
 }
-    
+
 Direct_CC_Compiler::Direct_CC_Compiler(pablo::PabloBlock * scope, pablo::PabloAST * codeUnitStream)
 : CC_Compiler(scope)
 , mCodeUnitStream(codeUnitStream) {
@@ -347,7 +347,7 @@ pablo::PabloAST * Parabix_Ternary_CC_Compiler::charset_expr(const re::CC *cc, Pa
     std::vector<interval_t> intervals = intervals_in_union(octets_intervals);
     PabloAST *expr1 = make_octets_expr(octets, pb);
     PabloAST *expr2 = make_intervals_expr(intervals, pb);
-    return pb.createInFile(pb.createOr(expr1, expr2));
+    return pb.createInFile(pb.createOr(expr1, expr2), "or_e1_e2");
 }
 
 template<typename PabloBlockOrBuilder>

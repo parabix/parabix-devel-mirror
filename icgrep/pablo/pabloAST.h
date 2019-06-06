@@ -99,6 +99,8 @@ public:
         , Repeat
         , PackH
         , PackL
+        // Intrinsics
+        , IntrinsicCall
     };
 
     inline ClassTypeId getClassTypeId() const noexcept {
@@ -143,6 +145,10 @@ public:
         return mUsers.size();
     }
 
+    void setSideEffecting(const bool value = true) {
+        mSideEffecting = value;
+    }
+
     void * operator new (std::size_t size, Allocator & allocator) noexcept {
         return allocator.allocate<uint8_t>(size);
     }
@@ -154,6 +160,7 @@ public:
     void print(llvm::raw_ostream & O) const;
 
 protected:
+
     PabloAST(const ClassTypeId id, llvm::Type * const type, Allocator & allocator) noexcept
     : mClassTypeId(id)
     , mType(type)
@@ -175,7 +182,6 @@ protected:
         }
         #endif
     }
-    void setSideEffecting() {mSideEffecting = true;}
 
     bool addUser(PabloAST * const user) noexcept;
 
@@ -239,7 +245,7 @@ public:
         return false;
     }
 
-    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to);
+    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to, const bool recursive = false);
 
     inline PabloAST * getOperand(const unsigned index) const noexcept {
         assert (index < getNumOperands());
@@ -275,6 +281,22 @@ public:
 protected:
 
     explicit Statement(const ClassTypeId id, llvm::Type * const type, std::initializer_list<PabloAST *> operands, const String * const name, Allocator & allocator)
+    : NamedPabloAST(id, type, name, allocator)
+    , mOperands(operands.size())
+    , mOperand(allocator.allocate(mOperands))
+    , mNext(nullptr)
+    , mPrev(nullptr)
+    , mParent(nullptr) {
+        unsigned i = 0;
+        for (PabloAST * const value : operands) {
+            assert (value);
+            mOperand[i] = value;
+            value->addUser(this);
+            ++i;
+        }
+    }
+
+    explicit Statement(const ClassTypeId id, llvm::Type * const type, std::vector<PabloAST *> operands, const String * const name, Allocator & allocator)
     : NamedPabloAST(id, type, name, allocator)
     , mOperands(operands.size())
     , mOperand(allocator.allocate(mOperands))
