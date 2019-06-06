@@ -138,7 +138,7 @@ Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Va
     if (LLVM_UNLIKELY(itemWidth < 8)) {
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             const Rational itemsPerByte{8, itemWidth};
-            b->CreateAssertZero(b->CreateURem2(absolutePosition, itemsPerByte),
+            b->CreateAssertZero(b->CreateURemRate(absolutePosition, itemsPerByte),
                                 "absolutePosition must be byte aligned");
         }
     }

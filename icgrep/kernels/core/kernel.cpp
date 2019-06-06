@@ -669,7 +669,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             assert (port.Type == PortType::Input && port.Number < i);
             assert (mProcessedInputItemPtr[port.Number]);
             Value * const ref = b->CreateLoad(mProcessedInputItemPtr[port.Number]);
-            processed = b->CreateMul2(ref, rate.getRate());
+            processed = b->CreateMulRate(ref, rate.getRate());
         }
         assert (processed);
         assert (processed->getType() == sizeTy);
@@ -683,7 +683,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
         if (LLVM_UNLIKELY(requiresItemCount(input))) {
             accessible = nextArg();
         } else {
-            accessible = b->CreateCeilUMul2(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+            accessible = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
         assert (accessible->getType() == sizeTy);
         mAccessibleInputItems[i] = accessible;
@@ -750,7 +750,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             assert (port.Type == PortType::Input || (port.Type == PortType::Output && port.Number < i));
             const auto & items = (port.Type == PortType::Input) ? mProcessedInputItemPtr : mProducedOutputItemPtr;
             Value * const ref = b->CreateLoad(items[port.Number]);
-            produced = b->CreateMul2(ref, rate.getRate());
+            produced = b->CreateMulRate(ref, rate.getRate());
         }
         assert (produced);
         assert (produced->getType() == sizeTy);
@@ -769,7 +769,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
             if (requiresItemCount(output)) {
                 writable = nextArg();
             } else {
-                writable = b->CreateCeilUMul2(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+                writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
             }
             assert (writable->getType() == sizeTy);
             mWritableOutputItems[i] = writable;

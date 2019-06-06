@@ -396,11 +396,12 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
                 processed = mAlreadyProcessedPhi[i];
             }
 
+            const Binding & input = rt.Binding;
+            #ifndef NDEBUG
             const auto buffer = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[buffer];
-            const Binding & input = rt.Binding;
             assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
-
+            #endif
             args.push_back(mInputEpochPhi[i]);
 
             mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
