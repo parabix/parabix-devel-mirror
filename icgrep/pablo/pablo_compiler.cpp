@@ -43,6 +43,7 @@
 #include <boost/container/flat_set.hpp>
 
 #include <pablo/printer_pablos.h>
+#include <tuple>
 
 using namespace llvm;
 
@@ -51,6 +52,9 @@ namespace pablo {
 using TypeId = PabloAST::ClassTypeId;
 
 using Vars = boost::container::flat_set<const Var *>;
+
+template <typename T>
+using Vec = SmallVector<T, 64>;
 
 inline static unsigned getAlignment(const Type * const type) {
     return type->getPrimitiveSizeInBits() / 8;
@@ -193,6 +197,7 @@ Vars getRootVars(const Branch * const branch) {
 }
 
 void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, const If * const ifStatement) {
+
     //
     //  The If-ElseZero stmt:
     //  if <predicate:expr> then <body:stmt>* elsezero <defined:var>* endif
@@ -211,12 +216,14 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
     //  body.
     //
 
+    using IncomingVec = Vec<std::pair<const Var *, Value *>>;
+
     BasicBlock * const ifEntryBlock = b->GetInsertBlock();
     ++mBranchCount;
     BasicBlock * const ifBodyBlock = b->CreateBasicBlock("if.body_" + std::to_string(mBranchCount));
     BasicBlock * const ifEndBlock = b->CreateBasicBlock("if.end_" + std::to_string(mBranchCount));
 
-    std::vector<std::pair<const Var *, Value *>> incoming;
+    IncomingVec incoming;
 
     const auto escaped = getRootVars(ifStatement);
 
@@ -317,8 +324,9 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
 void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & b, const While * const whileStatement) {
 
     const PabloBlock * const whileBody = whileStatement->getBody();
+    using IncomingVec = Vec<std::tuple<const Var *, PHINode *, Value *>>;
 
-    BasicBlock * whileEntryBlock = b->GetInsertBlock();
+    BasicBlock * const whileEntryBlock = b->GetInsertBlock();
 
     const auto escaped = getRootVars(whileStatement);
 
@@ -341,7 +349,12 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     BasicBlock * whileEndBlock = b->CreateBasicBlock("while.end_" + std::to_string(mBranchCount));
     ++mBranchCount;
 
-    b->CreateBr(whileBodyBlock);
+    const PabloAST * const cond = whileStatement->getCondition();
+    Value * outerCondition = compileExpression(b, cond);
+    if (LLVM_LIKELY(outerCondition->getType() == b->getBitBlockType())) {
+        outerCondition = b->bitblock_any(mCarryManager->generateSummaryTest(b, outerCondition));
+    }
+    b->CreateCondBr(outerCondition, whileBodyBlock, whileEndBlock);
 
     b->SetInsertPoint(whileBodyBlock);
 
@@ -354,7 +367,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     // (4) The loop bound, if any.
 #endif
 
-    std::vector<std::pair<const Var *, PHINode *>> variants;
+    IncomingVec variants;
 
     // for any Next nodes in the loop body, initialize to (a) pre-loop value.
     for (const auto var : escaped) {
@@ -377,7 +390,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
             phi->addIncoming(entryValue, whileEntryBlock);
             f->second = phi;
             assert(mMarker[var] == phi);
-            variants.emplace_back(var, phi);
+            variants.emplace_back(var, phi, entryValue);
         }
     }
 #ifdef ENABLE_BOUNDED_WHILE
@@ -386,6 +399,11 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
         bound_phi->addIncoming(b->getSize(whileStatement->getBound()), whileEntryBlock);
     }
 #endif
+
+//    const auto f = mMarker.find(cond);
+//    if (LLVM_LIKELY(f != mMarker.end())) {
+//        mMarker.erase(f);
+//    }
 
     mCarryManager->enterLoopBody(b, whileEntryBlock);
 
@@ -409,9 +427,9 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     BasicBlock * const whileExitBlock = b->GetInsertBlock();
 
     // and for any variant nodes in the loop body
-    for (const auto variant : variants) {
-        const PabloAST * var; PHINode * incomingPhi;
-        std::tie(var, incomingPhi) = variant;
+    for (const auto & variant : variants) {
+        const Var * var; PHINode * incomingPhi;
+        std::tie(var, incomingPhi, std::ignore) = variant;
         const auto f = mMarker.find(var);
         if (LLVM_UNLIKELY(f == mMarker.end())) {
             std::string tmp;
@@ -442,19 +460,27 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     }
 
     // Terminate the while loop body with a conditional branch back.
-    Value * condition = compileExpression(b, whileStatement->getCondition());
-    if (condition->getType() == b->getBitBlockType()) {
-        condition = b->bitblock_any(mCarryManager->generateSummaryTest(b, condition));
+    Value * innerCondition = compileExpression(b, cond);
+    if (LLVM_LIKELY(innerCondition->getType() == b->getBitBlockType())) {
+        innerCondition = b->bitblock_any(innerCondition);
     }
-
-    b->CreateCondBr(condition, whileBodyBlock, whileEndBlock);
+    b->CreateCondBr(innerCondition, whileBodyBlock, whileEndBlock);
 
     whileEndBlock->moveAfter(whileExitBlock);
 
     b->SetInsertPoint(whileEndBlock);
-
+    // phi out any escaped variant
+    for (const auto & variant : variants) {
+        const Var * var; PHINode * outgoingValue; Value * incomingValue;
+        std::tie(var, outgoingValue, incomingValue) = variant;
+        PHINode * const escapedValue = b->CreatePHI(outgoingValue->getType(), 2);
+        escapedValue->addIncoming(incomingValue, whileEntryBlock);
+        escapedValue->addIncoming(outgoingValue, whileExitBlock);
+        auto f = mMarker.find(var);
+        assert (f != mMarker.end());
+        f->second = escapedValue;
+    }
     mCarryManager->leaveLoopScope(b, whileEntryBlock, whileExitBlock);
-
     addBranchCounter(b);
 }
 

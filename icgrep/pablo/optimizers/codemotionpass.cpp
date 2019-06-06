@@ -16,7 +16,7 @@ namespace pablo {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ScopeSet
  ** ------------------------------------------------------------------------------------------------------------- */
-template <typename T, unsigned n = 1024>
+template <typename T, unsigned n>
 struct SetQueue : public SmallVector<T, n> {
     using Base = SmallVector<T, n>;
     inline void insert(T const item) {
@@ -31,9 +31,9 @@ struct SetQueue : public SmallVector<T, n> {
     }
 };
 
-using ScopeSet = SetQueue<PabloBlock *>;
+using ScopeSet = SetQueue<PabloBlock *, 32>;
 
-using UserSet = SetQueue<Statement *>;
+using UserSet = SetQueue<Statement *, 256>;
 
 using LoopVariants = boost::container::flat_set<const PabloAST *>;
 
@@ -249,7 +249,6 @@ struct CodeMotionPassContainer {
                     ip = stmt;
                 } else {
                     mVariants.insert(stmt);
-
                 }
                 stmt = next;
             }
@@ -268,7 +267,7 @@ struct CodeMotionPassContainer {
         while (stmt) {
             Statement * const prevNode = stmt->getPrevNode();
             sinkIfAcceptableTarget(stmt, block);
-            if (isa<Branch>(stmt)) {
+            if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
                 branches.push_back(cast<Branch>(stmt));
             }
             stmt = prevNode;

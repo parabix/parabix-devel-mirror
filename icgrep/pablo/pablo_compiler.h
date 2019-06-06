@@ -70,11 +70,11 @@ private:
 
 private:
 
-    PabloKernel * const             mKernel;
+    PabloKernel * const                 mKernel;
     std::unique_ptr<CarryManager> const mCarryManager;
-    TranslationMap                  mMarker;
-    unsigned                        mBranchCount;
-    std::vector<llvm::BasicBlock *> mBasicBlock;
+    TranslationMap                      mMarker;
+    unsigned                            mBranchCount;
+    std::vector<llvm::BasicBlock *>     mBasicBlock;
 };
 
 }

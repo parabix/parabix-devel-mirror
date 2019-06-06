@@ -15,10 +15,10 @@ class CompressedCarryManager final : public CarryManager {
 public:
     CompressedCarryManager() noexcept;
 protected:
-    llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & b, 
-                               const PabloBlock * const scope, 
-                               const unsigned ifDepth = 0, 
-                               const unsigned whileDepth = 0, 
+    llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & b,
+                               const PabloBlock * const scope,
+                               const unsigned ifDepth = 0,
+                               const unsigned whileDepth = 0,
                                const bool isNestedWithinNonCarryCollapsingLoop = false) override;
 
     llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & b) override;
@@ -27,7 +27,7 @@ protected:
 
     void addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const value) override;
 
-    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::ConstantInt *index) const override;
+    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const override;
 };
 
 }

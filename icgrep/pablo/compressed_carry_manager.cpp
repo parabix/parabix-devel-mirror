@@ -78,7 +78,7 @@ void CompressedCarryManager::addToCarryOutSummary(const std::unique_ptr<kernel::
     mCarrySummaryStack.back() = b->CreateOr(carryOut, mCarrySummaryStack.back());
 }
 
-Value * CompressedCarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & b, ConstantInt * index) const {
+Value * CompressedCarryManager::readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & b) const {
     assert (mCarryInfo->hasSummary());
     unsigned count = 2;
     if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
@@ -93,7 +93,6 @@ Value * CompressedCarryManager::readCarryInSummary(const std::unique_ptr<kernel:
     const unsigned length = count + 1;
     SmallVector<Value *, 16> indicies(length);
     std::fill(indicies.begin(), indicies.end(), b->getInt32(0));
-    indicies[count - 1] = index;
     if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
     }

@@ -8,8 +8,9 @@
 #define CARRY_MANAGER_H
 
 #include <pablo/carry_data.h>
+#include <llvm/ADT/SmallVector.h>
 #include <memory>
-#include <vector>
+
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class BasicBlock; }
 namespace llvm { class ConstantInt; }
@@ -42,80 +43,90 @@ class CarryManager {
 
     enum { LONG_ADVANCE_BASE = 64 };
 
+    template <typename T>
+    using Vec = llvm::SmallVector<T, 64>;
+
+    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+
 public:
 
     CarryManager() noexcept;
 
     virtual ~CarryManager() = default;
 
-    virtual void initializeCarryData(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, PabloKernel * const kernel);
+    virtual void initializeCarryData(BuilderRef b, PabloKernel * const kernel);
 
-    virtual void releaseCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb);
+    virtual void releaseCarryData(BuilderRef idb);
 
-    virtual void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual void initializeCodeGen(BuilderRef b);
 
-    virtual void finalizeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual void finalizeCodeGen(BuilderRef b);
 
     /* Entering and leaving loops. */
 
-    virtual void enterLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope);
+    virtual void enterLoopScope(BuilderRef b, const PabloBlock * const scope);
 
-    virtual void enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock);
+    virtual void enterLoopBody(BuilderRef b, llvm::BasicBlock * const entryBlock);
 
-    virtual void leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock);
+    virtual void leaveLoopBody(BuilderRef b, llvm::BasicBlock * const exitBlock);
 
-    virtual void leaveLoopScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    virtual void leaveLoopScope(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Entering and leaving ifs. */
 
-    virtual void enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope);
+    virtual void enterIfScope(BuilderRef b, const PabloBlock * const scope);
 
-    virtual void enterIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock);
+    virtual void enterIfBody(BuilderRef b, llvm::BasicBlock * const entryBlock);
 
-    virtual void leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock);
+    virtual void leaveIfBody(BuilderRef b, llvm::BasicBlock * const exitBlock);
 
-    virtual void leaveIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    virtual void leaveIfScope(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
 
     /* Methods for processing individual carry-generating operations. */
 
-    virtual llvm::Value * addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
+    virtual llvm::Value * addCarryInCarryOut(BuilderRef b, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
 
-    virtual llvm::Value * subBorrowInBorrowOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
+    virtual llvm::Value * subBorrowInBorrowOut(BuilderRef b, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2);
 
-    virtual llvm::Value * advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Advance * advance, llvm::Value * const strm);
+    virtual llvm::Value * advanceCarryInCarryOut(BuilderRef b, const Advance * advance, llvm::Value * const strm);
 
-    virtual llvm::Value * indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * advance, llvm::Value * const strm, llvm::Value * const index_strm);
+    virtual llvm::Value * indexedAdvanceCarryInCarryOut(BuilderRef b, const IndexedAdvance * advance, llvm::Value * const strm, llvm::Value * const index_strm);
 
     /* Methods for getting and setting carry summary values for If statements */
 
-    virtual llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition);
+    virtual llvm::Value * generateSummaryTest(BuilderRef b, llvm::Value * condition);
 
     /* Clear carry state for conditional regions */
 
-    virtual void clearCarryData(const std::unique_ptr<kernel::KernelBuilder> & idb);
+    virtual void clearCarryData(BuilderRef idb);
 
 protected:
 
     static unsigned getScopeCount(const PabloBlock * const scope, unsigned index = 0);
 
-    virtual llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
+    virtual llvm::StructType * analyse(BuilderRef b, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
 
     // Implementation of analyse with provided carry/summary types
-    virtual llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth, const unsigned whileDepth, const bool isNestedWithinNonCarryCollapsingLoop, llvm::Type * carryTy, llvm::Type * summaryTy);
+    virtual llvm::StructType * analyse(BuilderRef b, const PabloBlock * const scope, const unsigned ifDepth, const unsigned whileDepth, const bool isNestedWithinNonCarryCollapsingLoop, llvm::Type * carryTy, llvm::Type * summaryTy);
 
     /* Entering and leaving scopes. */
-    virtual void enterScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope);
-    virtual void leaveScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
+    virtual void enterScope(BuilderRef b);
+    virtual void leaveScope();
 
     /* Methods for processing individual carry-generating operations. */
-    virtual llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & iBuilder);
-    virtual void setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const carryOut);
-    virtual llvm::Value * longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value, const unsigned shiftAmount);
-    virtual llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::ConstantInt *index) const;
-    virtual void writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const summary, llvm::ConstantInt * index) const;
+    virtual llvm::Value * getNextCarryIn(BuilderRef b);
+    virtual void setNextCarryOut(BuilderRef b, llvm::Value * const carryOut);
+    virtual llvm::Value * longAdvanceCarryInCarryOut(BuilderRef b, llvm::Value * const value, const unsigned shiftAmount);
+    virtual llvm::Value * readCarryInSummary(BuilderRef b) const;
+    virtual void writeCarryOutSummary(BuilderRef b, llvm::Value * const summary) const;
 
     /* Summary handling routines */
-    virtual void addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value);
+    virtual void addToCarryOutSummary(BuilderRef b, llvm::Value * const value);
+
+    void phiCurrentCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    void phiOuterCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    void writeCurrentCarryOutSummary(BuilderRef b);
+    void combineCarryOutSummary(BuilderRef b, const unsigned offset);
 
 protected:
 
@@ -124,7 +135,6 @@ protected:
     llvm::Value *                                   mCurrentFrame;
     unsigned                                        mCurrentFrameIndex;
 
-    const PabloBlock *                              mCurrentScope;
     const CarryData *                               mCarryInfo;
 
     llvm::Value *                                   mNextSummaryTest;
@@ -137,19 +147,20 @@ protected:
     bool                                            mHasNonCarryCollapsingLoops;
     bool                                            mHasLoop;
     unsigned                                        mLoopDepth;
+    llvm::PHINode *                                 mNestedLoopCarryInMaskPhi;
     llvm::Value *                                   mLoopSelector;
     llvm::Value *                                   mNextLoopSelector;
     llvm::Value *                                   mCarryPackPtr;
-    std::vector<llvm::PHINode *>                    mLoopIndicies;
+    Vec<llvm::PHINode *>                            mLoopIndicies;
 
-    std::vector<CarryData>                          mCarryMetadata;
+    Vec<CarryData>                                  mCarryMetadata;
 
-    std::vector<std::pair<llvm::Value *, unsigned>> mCarryFrameStack;
+    Vec<std::pair<llvm::Value *, unsigned>>         mCarryFrameStack;
 
     unsigned                                        mCarryScopes;
-    std::vector<unsigned>                           mCarryScopeIndex;
+    Vec<unsigned>                                   mCarryScopeIndex;
 
-    std::vector<llvm::Value *>                      mCarrySummaryStack;
+    Vec<llvm::Value *>                              mCarrySummaryStack;
 };
 
 }
