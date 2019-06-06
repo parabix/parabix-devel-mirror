@@ -40,6 +40,10 @@ enum class TokenType {
     TILDE,          // ~
     CARET,          // ^
 
+    /* === Combinded Symbols === */
+    AND_ASSIGN,     // &=
+    OR_ASSIGN,      // |=
+
     /* === Braces === */
     L_PAREN,        // (
     R_PAREN,        // )
@@ -66,7 +70,11 @@ class Token {
 public:
 
     static Token * Create(TokenType type, std::string const & text, size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source, uint64_t value = 0) {
-        return new Token(type, text, source, lineNum, colNum, value);
+        return new Token(type, text, std::weak_ptr<SourceFile>(source), lineNum, colNum, value);
+    }
+
+    static Token * Create(TokenType type, std::string const & text, size_t lineNum, size_t colNum, std::weak_ptr<SourceFile> source, uint64_t value = 0) {
+        return new Token(type, text, std::move(source), lineNum, colNum, value);
     }
 
     static Token * CreateEOF(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
@@ -138,6 +146,14 @@ public:
         return Create(TokenType::CARET, "^", lineNum, colNum, source);
     }
 
+    static Token * CreateAndAssign(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::AND_ASSIGN, "&=", lineNum, colNum, source);
+    }
+
+    static Token * CreateOrAssign(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::OR_ASSIGN, "|=", lineNum, colNum, source);
+    }
+
     static Token * CreateLParen(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::L_PAREN, "(", lineNum, colNum, source);
     }
@@ -185,13 +201,13 @@ public:
 
     TokenType getType() const { return mType; }
     std::string getText() const { return mText; }
-    std::shared_ptr<SourceFile> const & getSourceRef() const { return mSourceRef; }
+    std::weak_ptr<SourceFile> const & getSourceRef() const { return mSourceRef; }
     size_t getLineNum() const { return mLineNum; }
     size_t getColNum() const { return mColNum; }
     uint64_t getValue() const { return mValue; }
 private:
 
-    Token(TokenType type, llvm::StringRef text, std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value);
+    Token(TokenType type, llvm::StringRef text, std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, uint64_t value);
 
     void * operator new (size_t size) {
         return mAllocator.allocate<uint8_t>(size);
@@ -199,7 +215,7 @@ private:
 
     const TokenType             mType;
     llvm::StringRef             mText;
-    std::shared_ptr<SourceFile> mSourceRef;
+    std::weak_ptr<SourceFile>   mSourceRef;
     size_t                      mLineNum;
     size_t                      mColNum;
     uint64_t                    mValue;

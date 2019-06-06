@@ -32,7 +32,7 @@ struct Error {
     Error(Error const & other);
     Error(ErrorType type,
           std::string const & text,
-          std::shared_ptr<SourceFile> source,
+          std::weak_ptr<SourceFile> source,
           size_t lineNum,
           size_t colNum,
           std::string const & hint,
@@ -40,7 +40,7 @@ struct Error {
 
     ErrorType                   type;
     std::string                 text;
-    std::shared_ptr<SourceFile> source;
+    std::weak_ptr<SourceFile>   source;
     size_t                      lineNum;
     size_t                      colNum;
     std::string                 hint;
@@ -110,7 +110,7 @@ public:
      * @param source The source file in which the error occurred.
      * @param text A description of the error.
      */
-    void logTextError(std::shared_ptr<SourceFile> source, std::string const & text);
+    void logTextError(std::weak_ptr<SourceFile> source, std::string const & text);
 
     /**
      * Logs an error at a specified position in a source file.
@@ -121,7 +121,7 @@ public:
      * @param text A description of the error.
      * @param hint An optional hint about resolving the error.
      */
-    void logError(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
+    void logError(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
 
     /**
      * Logs a warning at a specified position in a source file.
@@ -132,7 +132,7 @@ public:
      * @param text A description of the error.
      * @param hint An optional hint about resolving the error.
      */
-    void logWarning(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
+    void logWarning(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
 
     /**
      * Logs a warning at a specified position in a source file.
@@ -143,7 +143,7 @@ public:
      * @param text A description of the error.
      * @param hint An optional hint about resolving the error.
      */
-    void logFatalError(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
+    void logFatalError(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
 
     /**
      * Logs a note at a specified position in a source file.
@@ -154,7 +154,7 @@ public:
      * @param text The textual body of the note.
      * @param hint An optional textual hint.
      */
-    void logNote(std::shared_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
+    void logNote(std::weak_ptr<SourceFile> source, size_t lineNum, size_t colNum, std::string const & text, std::string const & hint = "");
 
     /**
      * Logs an error at a specified token. Source file and positional

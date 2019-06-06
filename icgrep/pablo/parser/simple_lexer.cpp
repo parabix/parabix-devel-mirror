@@ -102,15 +102,28 @@ Token * SimpleLexer::extractSymbol() {
     const size_t col = mCurrentColNum;
     const char c = mCurrentLine[mCurrentColNum];
     Token * token = nullptr;
+    #define NEXT_IS(C) \
+        mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == C
+
     switch (c) {
     case '&':
-        token = Token::CreateAnd(mCurrentLineNum, col, mCurrentSource);
+        if (NEXT_IS('=')) {
+            token = Token::CreateAndAssign(mCurrentLineNum, col, mCurrentSource);
+            mCurrentColNum++;
+        } else {
+            token = Token::CreateAnd(mCurrentLineNum, col, mCurrentSource);
+        }
         break;
     case '=':
         token = Token::CreateAssign(mCurrentLineNum, col, mCurrentSource);
         break;
     case '|':
-        token = Token::CreateBar(mCurrentLineNum, col, mCurrentSource);
+        if (NEXT_IS('=')) {
+            token = Token::CreateOrAssign(mCurrentLineNum, col, mCurrentSource);
+            mCurrentColNum++;
+        } else {
+            token = Token::CreateBar(mCurrentLineNum, col, mCurrentSource);
+        }
         break;
     case ',':
         token = Token::CreateComma(mCurrentLineNum, col, mCurrentSource);
@@ -149,7 +162,7 @@ Token * SimpleLexer::extractSymbol() {
         token = Token::CreateRAngle(mCurrentLineNum, col, mCurrentSource);
         break;
     case ':':
-        if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == ':') {
+        if (NEXT_IS(':')) {
             token = Token::CreateSig(mCurrentLineNum, col, mCurrentSource);
         } else {
             mErrorManager->logError(mCurrentSource, mCurrentLineNum, mCurrentColNum + 1 /*to 1-indexed*/, errtxt_IllegalSymbol(c), "::");
@@ -157,7 +170,7 @@ Token * SimpleLexer::extractSymbol() {
         mCurrentColNum++;
         break;
     case '-':
-        if (mCurrentColNum + 1 < mCurrentLine.length() && mCurrentLine[mCurrentColNum + 1] == '>') {
+        if (NEXT_IS('>')) {
             token = Token::CreateArrow(mCurrentLineNum, col, mCurrentSource);
         } else {
             mErrorManager->logError(mCurrentSource, mCurrentLineNum, mCurrentColNum + 1 /*to 1-indexed*/, errtxt_IllegalSymbol(c), "->");
@@ -170,6 +183,7 @@ Token * SimpleLexer::extractSymbol() {
     }
     mCurrentColNum++;
     return token;
+    #undef NEXT_IS
 }
 
 

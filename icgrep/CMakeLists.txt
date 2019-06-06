@@ -109,9 +109,7 @@ SET(PABLO_SRC ${PABLO_SRC} pablo/passes/flattenif.cpp)
 IF(ENABLE_MULTIPLEXING)
 SET(PABLO_SRC ${PABLO_SRC} pablo/optimizers/pablo_automultiplexing.cpp)
 ENDIF()
-SET(PABLO_PARSER_SRC pablo/parser/pablo_parser.cpp)
-SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/error.cpp pablo/parser/token.cpp pablo/pablo_source_kernel.cpp pablo/parser/kernel_signature.cpp pablo/parser/symbol_table.cpp pablo/parser/pablo_type.cpp)
-SET(PABLO_PARSER_SRC ${PABLO_PARSER_SRC} pablo/parser/simple_lexer.cpp pablo/parser/source_file.cpp pablo/parser/rd_parser.cpp)
+SET(PABLO_PARSER_SRC pablo/parser/pablo_parser.cpp pablo/parser/error.cpp pablo/parser/token.cpp pablo/pablo_source_kernel.cpp pablo/parser/kernel_signature.cpp pablo/parser/symbol_table.cpp pablo/parser/pablo_type.cpp pablo/parser/simple_lexer.cpp pablo/parser/source_file.cpp pablo/parser/rd_parser.cpp)
 
 SET (RE_PARSERS_SRC re/parsers/PCRE_parser.cpp re/parsers/ERE_parser.cpp re/parsers/BRE_parser.cpp re/parsers/Prosite_parser.cpp re/parsers/fixed_string_parser.cpp re/parsers/GLOB_parser.cpp re/parsers/parser.cpp)
 
@@ -132,7 +130,7 @@ add_library(LZ4_Lib lz4/lz4_frame_decoder.cpp kernels/pdep_kernel.cpp lz4/lz4_de
 add_custom_target(RecompileObjectCache ALL touch ${CMAKE_CURRENT_SOURCE_DIR}/${OBJECT_CACHE_SRC})
 add_dependencies(CodeGen RecompileObjectCache)
 
-# instal pablo source files
+# install pablo source files
 add_custom_target(InstallPabloLangSource ALL cp ${CMAKE_CURRENT_SOURCE_DIR}/pablo-src/** $ENV{HOME}/.cache/parabix)
 add_dependencies(PabloParser InstallPabloLangSource)
 
@@ -147,8 +145,6 @@ target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
 target_link_libraries (GrepEngine RegExpCompiler CodeGen)
 target_link_libraries (FileSelect GrepEngine)
 
-# pablo parser test exectuable, remove when done
-add_executable(pablo pablo.cpp)
 #add_executable(jitdemo2 jitdemo2.cpp)
 add_executable(icgrep icgrep.cpp grep_interface.cpp)
 add_executable(u8u16 u8u16.cpp kernels/zeroextend.cpp)
@@ -167,8 +163,6 @@ add_executable(lz4_grep grep_interface.cpp lz4_grep.cpp lz4/grep/lz4_grep_base_g
 add_executable(idisa_test idisa_test.cpp)
 add_executable(cachejanitord ${OBJECT_CACHE_DAEMON_SRC})
 
-# pablo parser test exectuable, remove when done
-target_link_libraries (pablo PabloParser ${REQ_LLVM_LIBRARIES})
 #target_link_libraries (jitdemo2 ${REQ_LLVM_LIBRARIES})
 target_link_libraries (icgrep GrepEngine UCDlib PabloADT RegExpCompiler CCADT CodeGen FileSelect ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})
 target_link_libraries (u8u16 PabloADT CCADT CodeGen ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES} ${CUDA_LIB})

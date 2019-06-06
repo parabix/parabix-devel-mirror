@@ -452,22 +452,44 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
         index = state.nextToken();
         TOKEN_CHECK_FATAL(index, TokenType::INT_LITERAL, "expected integer literal");
         TOKEN_CHECK_FATAL(state.nextToken(), TokenType::R_SBRACE, "expected ']'");
-        name += "[" + index->getText() + "]";
     } else if (state.peekToken()->getType() == TokenType::DOT) {
         state.nextToken(); // consume '.'
         index = state.nextToken();
         TOKEN_CHECK_FATAL(index, TokenType::IDENTIFIER, "expected name");
-        name += "." + index->getText();
     }
 
-    TOKEN_CHECK_FATAL(state.nextToken(), TokenType::ASSIGN, "expected '='");
-    PabloAST * const expr = parseExpression(state);
+    if (index != nullptr) {
+        name += "_at_" + index->getText();
+    }
+
+    Token * const op = state.nextToken();
+    TokenType const opTy = op->getType();
+    if (opTy != TokenType::ASSIGN && opTy != TokenType::OR_ASSIGN && opTy != TokenType::AND_ASSIGN) {
+        mErrorManager->logFatalError(op, errtxt_UnexpectedToken(op), "expected: '=', '&=', or '|='");
+        return nullptr;
+    }
+
+    PabloAST * expr = parseExpression(state);
     if (expr == nullptr) {
         return nullptr;
     }
-    if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
-        s->setName(state.pb->makeName(name));
+
+    if (opTy != TokenType::ASSIGN) {
+        PabloAST * var = index == nullptr 
+                       ? state.symbolTable->lookup(assignee) 
+                       : state.symbolTable->indexedLookup(assignee, index);
+
+        if (opTy == TokenType::AND_ASSIGN) {
+            expr = state.pb->createAnd(var, expr);
+        } else if (opTy == TokenType::OR_ASSIGN) {
+            expr = state.pb->createOr(var, expr);
+        }
     }
+
+    if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
+        s->setName(state.pb->makeName("_" + name));
+    }
+    
     if (index == nullptr) {
         return state.symbolTable->assign(assignee, expr);
     } else {
@@ -685,15 +707,30 @@ static inline void lazyInitializeFunctionGenMap() {
     }
 
     FUNC_GEN_DEF("Advance", {
-        ASSERT_ARG_NUM(2);
-        ASSERT_ARG_TYPE_INT(1);
-        return pb->createAdvance(args[0], llvm::cast<Integer>(args[1]));
+        if (args.size() < 1 || args.size() > 2) {
+            em->logFatalError(funcToken, "invalid number of arguments for 'Advance', expected 1 or 2");
+            return nullptr;
+        }
+
+        if (args.size() == 2) {
+            ASSERT_ARG_TYPE_INT(1);
+            return pb->createAdvance(args[0], llvm::cast<Integer>(args[1]));
+        } else {
+            return pb->createAdvance(args[0], 1);
+        }
     });
 
     FUNC_GEN_DEF("IndexedAdvance", {
-        ASSERT_ARG_NUM(3);
-        ASSERT_ARG_TYPE_INT(1);
-        return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[2]));
+        if (args.size() < 2 || args.size() > 3) {
+            em->logFatalError(funcToken, "invalid number of arguments for 'IndexedAdvance', expected 2, or 3");
+        }
+
+        if (args.size() == 3) {
+            ASSERT_ARG_TYPE_INT(2);
+            return pb->createIndexedAdvance(args[0], args[1], llvm::cast<Integer>(args[2]));
+        } else {
+            return pb->createIndexedAdvance(args[0], args[1], 1);
+        }
     });
 
     FUNC_GEN_DEF("Lookahead", {

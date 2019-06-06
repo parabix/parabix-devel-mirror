@@ -6,44 +6,6 @@
 
 type BasisBits = <i1>[8]
 
-
-#
-# Masks off basis bits according to a given mask stream.
-#
-kernel MaskedBasisBits :: [BasisBits basisBits, <i1>[1] mask] -> [BasisBits maskedBasisBits] {
-    or = basisBits[0] | basisBits[2] | basisBits[4] | basisBits[5] | basisBits[6] | basisBits[7]
-    and = basisBits[1] & basisBits[3]
-    lf = ~or & and
-    m = mask[0] | lf
-
-    maskedBasisBits[0] = basisBits[0] & m
-    maskedBasisBits[1] = basisBits[1] & m
-    maskedBasisBits[2] = basisBits[2] & m
-    maskedBasisBits[3] = basisBits[3] & m
-    maskedBasisBits[4] = basisBits[4] & m
-    maskedBasisBits[5] = basisBits[5] & m
-    maskedBasisBits[6] = basisBits[6] & m
-    maskedBasisBits[7] = basisBits[7] & m
-}
-
-#
-# Converts masked basis bits into a printable format.
-# Replaces 0x00 bytes with '.' (i.e., 0x2E).
-#
-kernel PrintableMaskedBasisBits :: [BasisBits basisBits] -> [BasisBits printableBasisBits] {
-    x = ~(basisBits[0] | basisBits[1] | basisBits[2] | basisBits[3] | basisBits[4] | basisBits[5] | basisBits[6] | basisBits[7])
-
-    printableBasisBits[0] = basisBits[0] | <0>
-    printableBasisBits[1] = basisBits[1] |  x
-    printableBasisBits[2] = basisBits[2] |  x
-    printableBasisBits[3] = basisBits[3] |  x
-    printableBasisBits[4] = basisBits[4] | <0>
-    printableBasisBits[5] = basisBits[5] |  x
-    printableBasisBits[6] = basisBits[6] | <0>
-    printableBasisBits[7] = basisBits[7] | <0>
-}
-
-
 type U8 = <i1>[1] {
     suffix
 }
@@ -132,64 +94,20 @@ type Check_streams = <i1>[6] {
     att_refs
 }
 
-type DTD_Callouts = <i1>[17] {
-    root_name_start,
-    root_name_follow,
-    pubid_start,
-    pubid_end,
-    sysid_start,
-    sysid_end,
-    PERef_starts,
-    PERef_ends,
-    PI_starts,
-    PI_name_follows,
-    PI_ends,
-    notation_name_start,
-    notation_name_follow,
-    notation_pubid_start,
-    notation_pubid_end,
-    notation_sysid_start,
-    notation_sysid_end
-}
-
-
-type LexError = <i1>[2] {
-    IllegalChar,
-    UTF8_Error
-}
-
-type CT_CD_PI_Error = <i1>[3] {
-    PI_Error,
-    CT_Error,
-    CT_CD_PI_Error
-}
-
-type TagError = <i1>[1] {
-    Tag_Error
-}
-
-type Error = <i1>[6] {
+type Error = <i1>[9] {
     IllegalChar,
     UTF8_Error,
     PI_Error,
     CT_Error,
     CT_CD_PI_Error,
-    Tag_Error
+    Tag_Error,
+    Ref_Error,
+    Name_Error,
+    CheckStreams_Error
 }
 
 
-kernel ErrorCombiner :: [LexError lexErr, CT_CD_PI_Error ccpErr, TagError tagErr] -> [Error err] {
-    err.IllegalChar = lexErr.IllegalChar
-    err.UTF8_Error = lexErr.UTF8_Error
-    err.PI_Error = ccpErr.PI_Error
-    err.CT_Error = ccpErr.CT_Error
-    err.CT_CD_PI_Error = ccpErr.CT_CD_PI_Error
-    err.Tag_Error = tagErr.Tag_Error
-}
-
-
-
-kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, LexError err] {
+kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, Error err] {
     temp1 = basis_bits[7] | basis_bits[6]
     temp2 = basis_bits[5] & ~basis_bits[4]
     temp3 = temp2 & ~temp1
@@ -285,12 +203,13 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, L
     err.IllegalChar = x00_x1F & ~lex.WS
 
     ### Validate_utf8(basis_bits, u8):
-    unibyte = ~basis_bits[7]
-    suffix = <0>
-    u8_error = <0>
-    u8_FFFE_FFFF = <0>
-    u8anyscope = <0> #local
     if basis_bits[7] {
+        suffix = <0>
+        u8_error = <0>
+        u8_FFFE_FFFF = <0>
+        u8anyscope = <0> #local
+        unibyte = ~basis_bits[7]
+
         prefix = basis_bits[7] & basis_bits[6]
         prefix2 = prefix & ~basis_bits[5]
         prefix3 = prefix & temp2
@@ -358,7 +277,7 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, L
 
 kernel Parse_CtCDPI
 :: [Lex lex]
--> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, CT_CD_PI_Error err]
+-> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, Error err]
 {
     ctCDPI_Callouts.Ct_starts = <0>
     ctCDPI_Callouts.Ct_ends = <0>
@@ -449,7 +368,7 @@ kernel Parse_CtCDPI
         CtCDPI_Cursor = InFile(ScanTo(CtCDPI_Cursor, CtCDPI_opener))
     }
 
-    # check_streams.misc_mask = (lex.WS | lex.LAngle | InclusiveSpan(ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts, ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends) | CtCDPI_starts) & EOF_mask
+    check_streams.misc_mask = InFile(lex.WS | lex.LAngle | InclusiveSpan(ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts, ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends) | CtCDPI_starts)
 
     # Identify the remaining significant markers for XML processing.
     marker.LAngle_scope = LAngle_scope & ~ctCDPI_mask
@@ -458,7 +377,7 @@ kernel Parse_CtCDPI
 }
 
 
-kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagError err, <i1>[1] print] {
+kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Error err, <i1>[1] print] {
 
     EqExpected = <0>
     AttListEnd = <0>
@@ -553,4 +472,64 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, TagE
     # Attribute value spans
     tag_Callouts.AttVal_spans =  SpanUpTo(tag_Callouts.AttVal_starts, tag_Callouts.AttVal_ends)
     print[0] = tag_Callouts.AttVal_spans
+}
+
+
+kernel ParseRef :: [Lex lex, Marker marker] -> [Ref_Callouts ref_Callouts, Error err] {
+    # All remaining "&" must be reference start characters; parse them.
+    # err.Ref_Error = <0>
+    if marker.Ref_opener {
+        Ref_scope = Advance(marker.Ref_opener, 1)
+        NumRef2 = Ref_scope & lex.Hash
+        ref_Callouts.GenRef_starts = Ref_scope &~ lex.Hash
+        NumRef3 = Advance(NumRef2, 1)
+        HexRef3 = NumRef3 & lex.x
+        ref_Callouts.DecRef_starts = NumRef3 &~ lex.x
+        ref_Callouts.HexRef_starts = Advance(HexRef3, 1) 
+        ref_Callouts.GenRef_ends = ScanThru(ref_Callouts.GenRef_starts, lex.NameScan)
+        ref_Callouts.DecRef_ends = ScanThru(ref_Callouts.DecRef_starts, lex.Digit)
+        ref_Callouts.HexRef_ends = ScanThru(ref_Callouts.HexRef_starts, lex.Hex)
+
+        # Error checks
+        # At least one digit required for DecRef, one hex digit for HexRef.
+        err.Ref_Error |= ref_Callouts.DecRef_starts & ~lex.Digit
+        err.Ref_Error |= ref_Callouts.HexRef_starts & ~lex.Hex
+        # Semicolon terminator required (also covers unterminated at EOF).
+        ref_ends = ref_Callouts.GenRef_ends | ref_Callouts.DecRef_ends | ref_Callouts.HexRef_ends
+        err.Ref_Error |= ref_ends & ~lex.Semicolon
+    }
+}
+
+
+kernel ValidateXmlNames 
+:: [CtCDPI_Callouts ctCDPI_Callouts, Ref_Callouts ref_Callouts, Tag_Callouts tag_Callouts, Lex lex, U8 u8]
+-> [Check_streams check_streams, Error err] 
+{
+    PI_names = SpanUpTo(ctCDPI_Callouts.PI_name_starts, ctCDPI_Callouts.PI_name_ends)
+    GenRefs = SpanUpTo(ref_Callouts.GenRef_starts, ref_Callouts.GenRef_ends)
+    ElemNames = SpanUpTo(tag_Callouts.ElemName_starts, tag_Callouts.ElemName_ends)
+    AttNames = SpanUpTo(tag_Callouts.AttName_starts, tag_Callouts.AttName_ends)
+    qname_stream =  ElemNames | AttNames
+    ncname_stream = PI_names | GenRefs
+    name_stream = qname_stream | ncname_stream
+    name_start = name_stream & ~Advance(name_stream)
+    name_cursor = name_stream & ~Advance(name_stream)
+    void_prefix_err = name_cursor & lex.Colon
+    namespace_sep = ScanThru(name_cursor, lex.NameScan & ~lex.Colon) & lex.Colon
+    local_part_start = Advance(namespace_sep)
+    local_part_err = local_part_start & ~lex.NameScan
+    colon2_err = ScanThru(local_part_start, lex.NameScan & ~lex.Colon) & lex.Colon
+    ncname_err = ncname_stream & lex.Colon
+    err.Name_Error = void_prefix_err | local_part_err | colon2_err | ncname_err
+
+    check_streams.non_ascii_name_starts = name_start & ~lex.ASCII_name_start
+    check_streams.non_ascii_names = (name_stream & ~name_start) & ~lex.ASCII_name_char & ~u8.suffix
+}
+
+
+kernel DoCheckStreams :: [Marker marker, Tag_Callouts tag_Callouts] -> [Check_streams check_streams, Error err] {
+    err.CheckStreams_Error = marker.CD_closer & ~tag_Callouts.AttVal_spans
+    check_streams.tag_marks = tag_Callouts.EmptyTag_marks
+    check_streams.name_follows = tag_Callouts.ElemName_ends
+    check_streams.att_refs = tag_Callouts.AttVal_spans & marker.Ref_opener
 }
