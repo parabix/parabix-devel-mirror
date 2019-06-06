@@ -703,12 +703,11 @@ InternalSearchEngine::InternalSearchEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mCaseInsensitive(false),
     mGrepDriver(driver),
-    mMainMethod(nullptr) {}
+    mMainMethod(nullptr),
+    mNumOfThreads(1) {}
 
 void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     auto & idb = mGrepDriver.getBuilder();
-    mSaveSegmentPipelineParallel = codegen::SegmentPipelineParallel;
-    codegen::SegmentPipelineParallel = false;
 
     re::CC * breakCC = nullptr;
     if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
@@ -726,6 +725,7 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
                                        Binding{idb->getSizeTy(), "length"},
                                        Binding{idb->getIntAddrTy(), "accumulator"}});
+    E->setNumOfThreads(mNumOfThreads);
 
     Scalar * const buffer = E->getInputScalar(0);
     Scalar * const length = E->getInputScalar(1);
@@ -768,7 +768,6 @@ void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLengt
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length, MatchAccumulator *);
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
     f(search_buffer, bufferLength, &accum);
-    codegen::SegmentPipelineParallel = mSaveSegmentPipelineParallel;
 }
 
 GrepEngine::~GrepEngine() { }

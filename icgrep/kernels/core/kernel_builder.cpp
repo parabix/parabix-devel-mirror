@@ -234,9 +234,9 @@ void KernelBuilder::setCapacity(const std::string & name, Value * capacity) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateUDiv2
+ * @brief CreateUDivRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateUDiv2(Value * const number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateUDivRate(Value * const number, const Rational divisor, const Twine & Name) {
     if (divisor.numerator() == 1 && divisor.denominator() == 1) {
         return number;
     }
@@ -250,9 +250,9 @@ Value * KernelBuilder::CreateUDiv2(Value * const number, const Rational divisor,
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateCeilUDiv2
+ * @brief CreateCeilUDivRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateCeilUDiv2(Value * number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateCeilUDivRate(Value * number, const Rational divisor, const Twine & Name) {
     if (LLVM_UNLIKELY(divisor.numerator() == 1 && divisor.denominator() == 1)) {
         return number;
     }
@@ -265,9 +265,9 @@ Value * KernelBuilder::CreateCeilUDiv2(Value * number, const Rational divisor, c
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateMul2
+ * @brief CreateMulRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateMul2(Value * const number, const Rational factor, const Twine & Name) {
+Value * KernelBuilder::CreateMulRate(Value * const number, const Rational factor, const Twine & Name) {
     if (LLVM_UNLIKELY(factor.numerator() == 1 && factor.denominator() == 1)) {
         return number;
     }
@@ -281,11 +281,11 @@ Value * KernelBuilder::CreateMul2(Value * const number, const Rational factor, c
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateCeilUMul2
+ * @brief CreateCeilUMulRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateCeilUMul2(Value * const number, const Rational factor, const Twine & Name) {
+Value * KernelBuilder::CreateCeilUMulRate(Value * const number, const Rational factor, const Twine & Name) {
     if (LLVM_LIKELY(factor.denominator() == 1)) {
-        return CreateMul2(number, factor, Name);
+        return CreateMulRate(number, factor, Name);
     }
     Constant * const n = ConstantInt::get(number->getType(), factor.numerator());
     Constant * const d = ConstantInt::get(number->getType(), factor.denominator());
@@ -293,25 +293,20 @@ Value * KernelBuilder::CreateCeilUMul2(Value * const number, const Rational fact
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateURem2
+ * @brief CreateURemRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateURem2(Value * const number, const Rational factor, const Twine & Name) {
+Value * KernelBuilder::CreateURemRate(Value * const number, const Rational factor, const Twine & Name) {
     Constant * const n = ConstantInt::get(number->getType(), factor.numerator());
     if (LLVM_LIKELY(factor.denominator() == 1)) {
         return CreateURem(number, n, Name);
     }
-    // x % (n/d) = x - x⌊xd/n⌋ = (xd - xd⌊xd/n⌋)/d
-    Constant * const d = ConstantInt::get(number->getType(), factor.denominator());
-    Value * const xd = CreateMul(number, d);
-    Value * const y = CreateUDiv(xd, n);
-    Value * const z = CreateSub(xd, CreateMul(xd, y));
-    return CreateUDiv(z, d);
+    return CreateSub(number, CreateMulRate(CreateUDivRate(number, factor), factor), Name);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateRoundDown2
+ * @brief CreateRoundDownRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateRoundDown2(Value * const number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateRoundDownRate(Value * const number, const Rational divisor, const Twine & Name) {
     Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
     if (divisor.denominator() == 1) {
         return CBuilder::CreateRoundDown(number, n, Name);
@@ -321,9 +316,9 @@ Value * KernelBuilder::CreateRoundDown2(Value * const number, const Rational div
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief CreateRoundUp2
+ * @brief CreateRoundUpRate
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * KernelBuilder::CreateRoundUp2(Value * const number, const Rational divisor, const Twine & Name) {
+Value * KernelBuilder::CreateRoundUpRate(Value * const number, const Rational divisor, const Twine & Name) {
     Constant * const n = ConstantInt::get(number->getType(), divisor.numerator());
     if (divisor.denominator() == 1) {
         return CBuilder::CreateRoundUp(number, n, Name);

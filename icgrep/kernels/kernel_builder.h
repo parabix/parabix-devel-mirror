@@ -134,19 +134,19 @@ public:
         mKernel = kernel;
     }
 
-    llvm::Value * CreateUDiv2(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
+    llvm::Value * CreateUDivRate(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateCeilUDiv2(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
+    llvm::Value * CreateCeilUDivRate(llvm::Value * const number, const Rational divisor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateMul2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateMulRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateCeilUMul2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateCeilUMulRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateURem2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateURemRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateRoundDown2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateRoundDownRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
-    llvm::Value * CreateRoundUp2(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
+    llvm::Value * CreateRoundUpRate(llvm::Value * const number, const Rational factor, const llvm::Twine & Name = "");
 
     unsigned getStride() const {
         return mStride;

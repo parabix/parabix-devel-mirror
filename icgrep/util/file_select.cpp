@@ -50,25 +50,20 @@ static cl::alias DereferenceRecursiveAlias("dereference-recursive", cl::desc("Al
 bool MmapFlag;
 static cl::opt<bool, true> MmapOption("mmap", cl::location(MmapFlag),  cl::init(1), cl::desc("Use mmap for file input (default)."), cl::cat(Input_Options));
 
-std::string ExcludeFlag;
-static cl::opt<std::string, true> ExcludeOption("exclude", cl::location(ExcludeFlag), cl::desc("Exclude files matching the given filename GLOB pattern."), cl::cat(Input_Options));
+static cl::list<std::string> ExcludeFiles("exclude", cl::ZeroOrMore,
+                                          cl::desc("Exclude files matching the given filename GLOB pattern."), cl::cat(Input_Options));
 
-std::string ExcludeFromFlag;
-static cl::opt<std::string, true> ExcludeFromOption("exclude-from", cl::location(ExcludeFromFlag), cl::desc("Exclude files matching filename GLOB patterns from the given file."), cl::cat(Input_Options));
+static cl::opt<std::string> ExcludeFromFlag("exclude-from", cl::desc("Exclude files matching filename GLOB patterns from the given file."), cl::cat(Input_Options));
 
-std::string ExcludeDirFlag;
-    static cl::opt<std::string, true> ExcludeDirOption("exclude-dir", cl::location(ExcludeDirFlag), cl::desc("Exclude directories matching the given pattern."),
-                                                       cl::init(".svn"), cl::cat(Input_Options));
+static cl::list<std::string> ExcludeDirectories("exclude-dir", cl::desc("Exclude directories matching the given pattern."), cl::ZeroOrMore, cl::cat(Input_Options));
     
 static cl::opt<std::string> ExcludePerDirectory("exclude-per-directory",
                                                 cl::desc(".gitignore (default) or other file specifying files to exclude."),
                                                 cl::init(".gitignore"), cl::cat(Input_Options));
     
-std::string IncludeDirFlag;
-static cl::opt<std::string, true> IncludeDirOption("include-dir", cl::location(IncludeDirFlag), cl::desc("Include directories matching the given pattern."), cl::cat(Input_Options));
+static cl::list<std::string> IncludeDirectories("include-dir", cl::desc("Include directories matching the given pattern."), cl::ZeroOrMore, cl::cat(Input_Options));
 
-std::string IncludeFlag;
-static cl::opt<std::string, true> IncludeOption("include", cl::location(IncludeFlag), cl::desc("Include only files matching the given filename GLOB pattern."), cl::cat(Input_Options));
+static cl::list<std::string> IncludeFiles("include", cl::ZeroOrMore, cl::desc("Include only files matching the given filename GLOB pattern(s)."), cl::cat(Input_Options));
 
 DevDirAction DevicesFlag;
 static cl::opt<DevDirAction, true> DevicesOption("D", cl::desc("Processing mode for devices:"),
@@ -95,32 +90,54 @@ re::RE * anchorToFullFileName(re::RE * glob) {
 bool UseStdIn;
 
 re::RE * getDirectoryPattern() {
+    std::vector<re::RE *> includedPatterns;
     re::RE * dirRE = nullptr;
-    if (IncludeDirFlag != "") {
-        auto dir = re::RE_Parser::parse(IncludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        dirRE = anchorToFullFileName(dir);
+    if (IncludeDirectories.empty()) {
+        dirRE = re::makeEnd();  // matches every line.
     } else {
-        dirRE = re::makeEnd();
+        auto it = IncludeDirectories.begin();
+        while (it != IncludeDirectories.end()) {
+            includedPatterns.push_back(re::RE_Parser::parse(*it, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB));
+            ++it;
+        }
+        dirRE = anchorToFullFileName(re::makeAlt(includedPatterns.begin(), includedPatterns.end()));
     }
-    if (ExcludeDirFlag == "") {
+    if (ExcludeDirectories.empty()) {
         return dirRE;
+    } else {
+        std::vector<re::RE *> excludedPatterns;
+        auto it = ExcludeDirectories.begin();
+        while (it != ExcludeDirectories.end()) {
+            re::RE * glob = re::RE_Parser::parse(*it, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+            excludedPatterns.push_back(glob);
+            ++it;
+        }
+        re::RE * excl = anchorToFullFileName(re::makeAlt(excludedPatterns.begin(), excludedPatterns.end()));
+        return re::makeSeq({dirRE, re::makeNegativeLookBehindAssertion(anchorToFullFileName(excl))});
     }
-    re::RE * excl = re::RE_Parser::parse(ExcludeDirFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-    return re::makeSeq({dirRE, re::makeNegativeLookBehindAssertion(anchorToFullFileName(excl))});
 }
     
 re::RE * getFilePattern() {
+    std::vector<re::RE *> includedPatterns;
     re::RE * fileRE = nullptr;
-    if (IncludeFlag != "") {
-        re::RE * includeSpec = re::RE_Parser::parse(IncludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        fileRE = anchorToFullFileName(includeSpec);
-    } else {
+    if (IncludeFiles.empty()) {
         fileRE = re::makeEnd();  // matches every line.
+    } else {
+        auto it = IncludeFiles.begin();
+        while (it != IncludeFiles.end()) {
+            includedPatterns.push_back(re::RE_Parser::parse(*it, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB));
+            ++it;
+        }
+        fileRE = anchorToFullFileName(re::makeAlt(includedPatterns.begin(), includedPatterns.end()));
     }
-    std::vector<re::RE *> excluded_patterns;
-    if (ExcludeFlag != "") {
-        re::RE * glob = re::RE_Parser::parse(ExcludeFlag, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-        excluded_patterns.push_back(glob);
+    std::vector<re::RE *> excludedPatterns;
+    if (!ExcludeFiles.empty()) {
+        auto it = ExcludeFiles.begin();
+        while (it != ExcludeFiles.end()) {
+            re::RE * glob = re::RE_Parser::parse(*it, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
+            excludedPatterns.push_back(glob);
+            ++it;
+        }
     }
     if (ExcludeFromFlag != "") {
         std::ifstream globFile(ExcludeFromFlag.c_str());
@@ -128,16 +145,16 @@ re::RE * getFilePattern() {
         if (globFile.is_open()) {
             while (std::getline(globFile, r)) {
                 re::RE * glob = re::RE_Parser::parse(r, re::DEFAULT_MODE, re::RE_Syntax::FileGLOB);
-                excluded_patterns.push_back(glob);
+                excludedPatterns.push_back(glob);
             }
             globFile.close();
         }
     }
-    if (excluded_patterns.empty()) return fileRE;
-    re::RE * exclRE = anchorToFullFileName(re::makeAlt(excluded_patterns.begin(), excluded_patterns.end()));
+    if (excludedPatterns.empty()) return fileRE;
+    re::RE * exclRE = anchorToFullFileName(re::makeAlt(excludedPatterns.begin(), excludedPatterns.end()));
     return re::makeSeq({fileRE, re::makeNegativeLookBehindAssertion(exclRE)});
 }
-    
+
 namespace fs = boost::filesystem;
 
 //
@@ -371,7 +388,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
 
     // In non-recursive greps with no include/exclude processing, we simply assemble the
     // paths.
-    if ((DirectoriesFlag != Recurse) && (ExcludeFlag.empty()) && (IncludeFlag.empty()) && (ExcludeFromFlag.empty())) {
+    if ((DirectoriesFlag != Recurse) && (ExcludeFiles.empty()) && (IncludeFiles.empty()) && (ExcludeFromFlag.empty())) {
         for (const std::string & f : inputFiles) {
             if (f == "-") {  // stdin, will always be searched.
                 argv::UseStdIn = true;

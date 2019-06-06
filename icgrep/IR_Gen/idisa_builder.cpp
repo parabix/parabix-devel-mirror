@@ -853,17 +853,32 @@ Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * a, Value * select_mask
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {
-    Type * iBitBlock = getIntNTy(getVectorBitWidth(a));
-    return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::getNullValue(iBitBlock));
+    if (a->getType()->isIntegerTy()) {
+        return CreateICmpNE(a, ConstantInt::getNullValue(a->getType()));
+    } else {
+        Type * iBitBlock = getIntNTy(getVectorBitWidth(a));
+        return CreateICmpNE(CreateBitCast(a, iBitBlock),  ConstantInt::getNullValue(iBitBlock));
+    }
 }
 
 // full add producing {carryout, sum}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_add_with_carry(Value * a, Value * b, Value * carryin) {
+    Type * const carryTy = carryin->getType();
+    if (carryTy != mBitBlockType) {
+        carryin = CreateBitCast(CreateZExt(carryin, getIntNTy(mBitBlockWidth)), mBitBlockType);
+    }
     Value * carrygen = simd_and(a, b);
     Value * carryprop = simd_or(a, b);
     Value * sum = simd_add(mBitBlockWidth, simd_add(mBitBlockWidth, a, b), carryin);
     Value * carryout = CreateBitCast(simd_or(carrygen, simd_and(carryprop, CreateNot(sum))), getIntNTy(mBitBlockWidth));
-    return std::pair<Value *, Value *>(bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1)), bitCast(sum));
+    carryout = bitCast(simd_srli(mBitBlockWidth, carryout, mBitBlockWidth - 1));
+    if (carryout->getType() != carryTy) {
+        if (carryout->getType() == mBitBlockType) {
+            carryout = CreateBitCast(carryout, getIntNTy(mBitBlockWidth));
+        }
+        carryout = CreateZExtOrTrunc(carryout, carryTy);
+    }
+    return std::pair<Value *, Value *>(carryout, bitCast(sum));
 }
 
 // full subtract producing {borrowOut, difference}
@@ -881,10 +896,19 @@ std::pair<llvm::Value *, llvm::Value *> IDISA_Builder::bitblock_subtract_with_bo
 
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
-    Value * shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
+    Type * const shiftTy = shiftin->getType();
+    Value * shiftin_bitblock;
+    if (shiftTy == mBitBlockType) {
+        shiftin_bitblock = CreateBitCast(shiftin, getIntNTy(mBitBlockWidth));
+    } else {
+        shiftin_bitblock = CreateZExt(shiftin, getIntNTy(mBitBlockWidth));
+    }
     Value * a_bitblock = CreateBitCast(a, getIntNTy(mBitBlockWidth));
     Value * shifted = bitCast(CreateOr(CreateShl(a_bitblock, shift), shiftin_bitblock));
     Value * shiftout = bitCast(CreateLShr(a_bitblock, mBitBlockWidth - shift));
+    if (shiftTy != mBitBlockType) {
+        shiftout = CreateTrunc(CreateBitCast(shiftout, getIntNTy(mBitBlockWidth)), shiftTy);
+    }
     return std::pair<Value *, Value *>(shiftout, shifted);
 }
 

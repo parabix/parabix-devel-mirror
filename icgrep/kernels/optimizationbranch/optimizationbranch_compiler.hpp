@@ -1,4 +1,4 @@
-﻿#ifndef OPTIMIZATIONBRANCH_COMPILER_HPP
+#ifndef OPTIMIZATIONBRANCH_COMPILER_HPP
 #define OPTIMIZATIONBRANCH_COMPILER_HPP
 
 #include <kernels/optimizationbranch.h>
@@ -999,7 +999,7 @@ inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRe
             const ProcessingRate & rate = input.getRate();
             if (rate.isFixed() && (noPrincipalStream || input.hasAttribute(AttrId::Principal))) {
                 Value * const scaledInverseOfAccessibleInput =
-                    b->CreateMul2(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
+                    b->CreateMulRate(mAccessibleInputItems[path.Index], rateLCM / rate.getRate());
                 minScaledInverseOfAccessibleInput =
                     b->CreateUMin(minScaledInverseOfAccessibleInput, scaledInverseOfAccessibleInput);
             }
@@ -1014,7 +1014,7 @@ inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRe
             const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
             const ProcessingRate & rate = output.getRate();
             if (rate.isFixed()) {
-                pendingOutputItems[path.Index] = b->CreateCeilUDiv2(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
+                pendingOutputItems[path.Index] = b->CreateCeilUDivRate(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = kernel->getName() + ":" + output.getName();
                 b->CallPrintInt(prefix + "_writable'", pendingOutputItems[path.Index]);

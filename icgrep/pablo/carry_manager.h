@@ -106,9 +106,6 @@ protected:
 
     virtual llvm::StructType * analyse(BuilderRef b, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false);
 
-    // Implementation of analyse with provided carry/summary types
-    virtual llvm::StructType * analyse(BuilderRef b, const PabloBlock * const scope, const unsigned ifDepth, const unsigned whileDepth, const bool isNestedWithinNonCarryCollapsingLoop, llvm::Type * carryTy, llvm::Type * summaryTy);
-
     /* Entering and leaving scopes. */
     virtual void enterScope(BuilderRef b);
     virtual void leaveScope();

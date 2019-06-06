@@ -55,6 +55,7 @@ public:
     llvm::Value * hsimd_packh_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * hsimd_packl_in_lanes(unsigned lanes, unsigned fw, llvm::Value * a, llvm::Value * b) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
+    std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_indexed_advance(llvm::Value * a, llvm::Value * index_strm, llvm::Value * shiftin, unsigned shift) override;
     llvm::Value * hsimd_signmask(unsigned fw, llvm::Value * a) override;
     llvm::Value * mvmd_srl(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe = false) override;
@@ -97,6 +98,7 @@ public:
     llvm::Value * mvmd_sll(unsigned fw, llvm::Value * a, llvm::Value * shift, const bool safe) override;
     llvm::Value * simd_if(unsigned fw, llvm::Value * cond, llvm::Value * a, llvm::Value * b) override;
     llvm::Value * simd_ternary(unsigned char mask, llvm::Value * a, llvm::Value * b, llvm::Value * c) override;
+    std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
 
     ~IDISA_AVX512F_Builder() {
     }

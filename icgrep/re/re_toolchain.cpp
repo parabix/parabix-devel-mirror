@@ -62,9 +62,7 @@ static cl::bits<RE_PrintFlags>
 static cl::bits<RE_AlgorithmFlags>
     AlgorithmOptions(cl::values(clEnumVal(DisableLog2BoundedRepetition, "disable log2 optimizations for bounded repetition of bytes"),
                               clEnumVal(DisableIfHierarchy, "disable nested if hierarchy for generated Unicode classes (not recommended)"),
-                              clEnumVal(DisableMatchStar, "disable MatchStar optimization"),
-                              clEnumVal(DisableUnicodeMatchStar, "disable Unicode MatchStar optimization"),
-                              clEnumVal(DisableUnicodeLineBreak, "disable Unicode line breaks - use LF only")
+                              clEnumVal(DisableMatchStar, "disable MatchStar optimization")
                               CL_ENUM_VAL_SENTINEL), cl::cat(RegexOptions));
 
 
@@ -78,11 +76,28 @@ bool LLVM_READONLY AlgorithmOptionIsSet(RE_AlgorithmFlags flag) {
     return AlgorithmOptions.isSet(flag);
 }
 
+const int DefaultIfInsertionGap = 3;
 int IfInsertionGap;
 static cl::opt<int, true>
-    IfInsertionGapOption("if-insertion-gap",  cl::location(IfInsertionGap), cl::init(3),
+    IfInsertionGapOption("if-insertion-gap",  cl::location(IfInsertionGap), cl::init(DefaultIfInsertionGap),
                          cl::desc("minimum number of nonempty elements between inserted if short-circuit tests"),
                          cl::cat(RegexOptions));
+
+std::string AnnotateWithREflags(std::string name) {
+    if (re::AlgorithmOptionIsSet(re::DisableMatchStar)) {
+        name += "-MatchStar";
+    }
+    if (re::AlgorithmOptionIsSet(re::DisableLog2BoundedRepetition)) {
+        name += "-log2rep";
+    }
+    if (re::AlgorithmOptionIsSet(re::DisableIfHierarchy)) {
+        name += "-UCDifHierarchy";
+    }
+    if (IfInsertionGap != DefaultIfInsertionGap) {
+        name += "+ifGap="+std::to_string(IfInsertionGap);
+    }
+    return name;
+}
 
 RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     if (PrintOptions.isSet(ShowAllREs) || PrintOptions.isSet(ShowREs)) {

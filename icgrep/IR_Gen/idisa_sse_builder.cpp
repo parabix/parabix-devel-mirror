@@ -91,6 +91,9 @@ Value * IDISA_SSE_Builder::hsimd_signmask(const unsigned fw, Value * a) {
 #define SHIFT_FIELDWIDTH 64
 //#define LEAVE_CARRY_UNNORMALIZED
 
+#define CAST_SHIFT_OUT(shiftout) \
+    shiftTy == mBitBlockType ? bitCast(shiftout) : CreateTrunc(CreateBitCast(shiftout, getIntNTy(mBitBlockWidth)), shiftTy)
+
 // full shift producing {shiftout, shifted}
 std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Value * shiftin, unsigned shift) {
     Value * shifted = nullptr;
@@ -110,7 +113,7 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
     if (LLVM_UNLIKELY((shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
         shifted = bitCast(simd_or(mvmd_slli(8, a, shift / 8), si));
         shiftout = bitCast(mvmd_srli(8, a, (mBitBlockWidth - shift) / 8));
-        return std::pair<Value *, Value *>(shiftout, shifted);
+        return std::pair<Value *, Value *>(CAST_SHIFT_OUT(shiftout), shifted);
     }
     Value * shiftback = simd_srli(SHIFT_FIELDWIDTH, a, SHIFT_FIELDWIDTH - (shift % SHIFT_FIELDWIDTH));
     Value * shiftfwd = simd_slli(SHIFT_FIELDWIDTH, a, shift % SHIFT_FIELDWIDTH);
@@ -140,12 +143,9 @@ std::pair<Value *, Value *> IDISA_SSE2_Builder::bitblock_advance(Value * a, Valu
         throw std::runtime_error("Unsupported shift.");
     }
 #endif
-    if (shiftTy != mBitBlockType) {
-        shiftout = CreateBitCast(shiftout, shiftTy);
-    }
     //CallPrintRegister("shifted", shifted);
     //CallPrintRegister("shiftout", shiftout);
-    return std::pair<Value *, Value *>(shiftout, shifted);
+    return std::pair<Value *, Value *>(CAST_SHIFT_OUT(shiftout), shifted);
 }
     
 Value * IDISA_SSE2_Builder::mvmd_shuffle(unsigned fw, Value * a, Value * index_vector) {

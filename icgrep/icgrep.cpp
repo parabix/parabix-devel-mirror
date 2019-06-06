@@ -76,7 +76,6 @@ std::vector<re::RE *> readExpressions() {
     // If there are multiple REs, combine them into groups.
     // A separate kernel will be created for each group.
     if (REs.size() > 1) {
-        codegen::SegmentPipelineParallel = true;
         if (REsPerGroup == 0) {
             // If no grouping factor is specified, we use a default formula.
             REsPerGroup = (REs.size() + codegen::ThreadNum) / (codegen::ThreadNum + 1);

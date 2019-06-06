@@ -1,4 +1,4 @@
-﻿#ifndef IO_CALCULATION_LOGIC_HPP
+#ifndef IO_CALCULATION_LOGIC_HPP
 #define IO_CALCULATION_LOGIC_HPP
 
 #include "pipeline_compiler.hpp"
@@ -401,7 +401,7 @@ Value * PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *>
     Value * fixedRateFactor = nullptr;
     if (mFixedRateFactorPhi) {
         const RateValue stride(mKernel->getStride());
-        fixedRateFactor  = b->CreateMul2(mNumOfLinearStrides, stride * mFixedRateLCM);
+        fixedRateFactor  = b->CreateMulRate(mNumOfLinearStrides, stride * mFixedRateLCM);
     }
     const auto numOfInputs = accessibleItems.size();
     for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -438,7 +438,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed()) {
             Value * const fixedRateFactor =
-                b->CreateMul2(accessibleItems[i], mFixedRateLCM / rate.getRate());
+                b->CreateMulRate(accessibleItems[i], mFixedRateLCM / rate.getRate());
             minFixedRateFactor =
                 b->CreateUMin(minFixedRateFactor, fixedRateFactor);
         }
@@ -451,7 +451,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         Value * accessible = accessibleItems[i];
         if (rate.isFixed() && minFixedRateFactor) {
             const auto factor = rate.getRate() / mFixedRateLCM;
-            Value * calculated = b->CreateCeilUMul2(minFixedRateFactor, factor);
+            Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
             const auto buffer = getInputBufferVertex(i);
             const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
             // ... but ensure that it reflects whether it was produced with an Add(k) rate.
@@ -462,7 +462,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                 Constant * const g = b->getSize(k.numerator());
                 Value * const y = b->CreateAdd(xh, g);
                 const auto r = factor / RateValue{k.denominator()};
-                Value * const z = b->CreateCeilUMul2(y, r);
+                Value * const z = b->CreateCeilUMulRate(y, r);
                 calculated = b->CreateSelect(isClosed(b, i), z, calculated);
             }
             if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -489,7 +489,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         if (rate.isPartialSum()) {
             writable = mFirstOutputStrideLength[i];
         } else if (rate.isFixed() && minFixedRateFactor) {
-            Value * const calculated = b->CreateCeilUMul2(minFixedRateFactor, rate.getRate() / mFixedRateLCM);
+            Value * const calculated = b->CreateCeilUMulRate(minFixedRateFactor, rate.getRate() / mFixedRateLCM);
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
                                 output.getName() +
@@ -739,7 +739,7 @@ Value * PipelineCompiler::getFirstStrideLength(BuilderRef b, const StreamPort po
         return b->CreateSelect(mExecutedAtLeastOncePhi, subsequentBound, firstBound);
     } else if (rate.isRelative()) {
         Value * const baseRate = getFirstStrideLength(b, getReference(port));
-        return b->CreateMul2(baseRate, rate.getRate());
+        return b->CreateMulRate(baseRate, rate.getRate());
     }
     llvm_unreachable("unexpected rate type");
 }
@@ -751,7 +751,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const StreamPo
     const Binding & binding = getBinding(port);
     const ProcessingRate & rate = binding.getRate();
     if (rate.isFixed() || rate.isBounded()) {
-        return b->CreateMul2(mNumOfLinearStrides, rate.getUpperBound() * mKernel->getStride());
+        return b->CreateMulRate(mNumOfLinearStrides, rate.getUpperBound() * mKernel->getStride());
     } else if (rate.isGreedy()) {
         assert (port.Type == PortType::Input);
         return mAccessibleInputItems[port.Number];
@@ -759,7 +759,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const StreamPo
         return getPartialSumItemCount(b, port, mNumOfLinearStrides);
     } else if (rate.isRelative()) {
         Value * const baseCount = calculateNumOfLinearItems(b, getReference(port));
-        return b->CreateMul2(baseCount, rate.getRate());
+        return b->CreateMulRate(baseCount, rate.getRate());
     }
     llvm_unreachable("unexpected rate type");
 }

@@ -533,7 +533,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
         // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
         PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
         return makeMarker(InitialPostPositionUnit, unbounded);
-    } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar) && !AlgorithmOptionIsSet(DisableUnicodeMatchStar))) {
+    } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
         PabloAST * mask = markerVar(compile(repeated, pb));
         mask = pb.createOr(mask, u8NonFinal(pb));
         PabloAST * unbounded = pb.createMatchStar(base, mask);

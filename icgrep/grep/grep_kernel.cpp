@@ -374,7 +374,7 @@ std::string GrepKernelOptions::getSignature() {
 }
 
 ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::unique_ptr<GrepKernelOptions> options)
-: PabloKernel(b, "ic" + getStringHash(options->getSignature()),
+: PabloKernel(b, AnnotateWithREflags("ic") + getStringHash(options->getSignature()),
 options->streamSetInputBindings(),
 options->streamSetOutputBindings(),
 options->scalarInputBindings(),
@@ -460,7 +460,7 @@ ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
 
 ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, StreamSet * const Source, StreamSet * const matches, const Externals externals)
 : ByteBitGrepSignature(prefixRE, suffixRE)
-, PabloKernel(b, "bBc" + getStringHash(mSignature),
+, PabloKernel(b, AnnotateWithREflags("bBc") + getStringHash(mSignature),
 // inputs
 makeInputBindings(Source, externals),
 // output
