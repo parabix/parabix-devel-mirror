@@ -84,7 +84,7 @@ struct FixedArgMap {
     using TypeId = PabloAST::ClassTypeId;
     using Key = std::tuple<TypeId, Args...>;
     using Allocator = SlabAllocator<uint8_t>;
-    using MapAllocator = ProxyAllocator<std::pair<Key, PabloAST *>>;
+    using MapAllocator = ProxyAllocator<typename std::map<Key, PabloAST *, std::less<Key>>::value_type>;
     using Map = std::map<Key, PabloAST *, std::less<Key>, MapAllocator>;
 
     explicit FixedArgMap(Allocator & allocator, const Type * predecessor = nullptr) noexcept
