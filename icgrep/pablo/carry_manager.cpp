@@ -1049,7 +1049,7 @@ static bool hasNonEmptyCarryStruct(const Type * const frameTy) {
  * @brief analyse
  ** ------------------------------------------------------------------------------------------------------------- */
 StructType * CarryManager::analyse(BuilderRef b, const PabloBlock * const scope,
-                                   const unsigned ifDepth, const unsigned loopDepth, const bool isNestedWithinNonCarryCollapsingLoop) {
+                                   const unsigned ifDepth, const unsigned loopDepth, const bool inNonCarryCollapsingLoop) {
     assert ("scope cannot be null!" && scope);
     assert ("entry scope (and only the entry scope) must be in scope 0"
             && (mCarryScopes == 0 ? (scope == mKernel->getEntryScope()) : (scope != mKernel->getEntryScope())));
@@ -1107,22 +1107,19 @@ StructType * CarryManager::analyse(BuilderRef b, const PabloBlock * const scope,
         carryState = StructType::get(b->getContext());
     } else {
         // do we have a summary or a sequence of nested empty structs?
-        if (hasNonEmptyCarryStruct(state)) {
-            if (dyn_cast_or_null<If>(scope->getBranch()) || nonCarryCollapsingMode || isNestedWithinNonCarryCollapsingLoop) {
-                if (LLVM_LIKELY(state.size() > 1)) {
-                    summaryType = CarryData::ExplicitSummary;
-                    // NOTE: summaries are stored differently depending whether we're entering an If or While branch. With an If branch, they
-                    // preceed the carry state data and with a While loop they succeed it. This is to help cache prefectching performance.
-                    state.insert(isa<If>(scope->getBranch()) ? state.begin() : state.end(), carryPackType);
-                } else {
-                    summaryType = CarryData::ImplicitSummary;
-                    if (hasNonEmptyCarryStruct(state[0])) {
-                        summaryType = CarryData::BorrowedSummary;
-                    }
+        if (LLVM_LIKELY(ifDepth > 0 || loopDepth > 0)) {
+            if (LLVM_LIKELY(state.size() > 1)) {
+                summaryType = CarryData::ExplicitSummary;
+                state.insert(state.begin(), carryPackType);
+            } else {
+                summaryType = CarryData::ImplicitSummary;
+                if (hasNonEmptyCarryStruct(state[0])) {
+                    summaryType = CarryData::BorrowedSummary;
                 }
             }
         }
         carryState = StructType::get(b->getContext(), state);
+
 
         // If we're in a loop and cannot use collapsing carry mode, convert the carry state struct into a capacity,
         // carry state pointer, and summary pointer struct.

@@ -48,15 +48,15 @@ protected:
     llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false) override;
 
     /* Entering and leaving scopes. */
-    void leaveScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void leaveScope() override;
 
     /* Methods for processing individual carry-generating operations. */
     llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
 
     void setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const carryOut) override;
     // llvm::Value * longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value, const unsigned shiftAmount) override;
-    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::ConstantInt *index) const override;
-    void writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const summary, llvm::ConstantInt * index) const override;
+    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const override;
+    void writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const summary) const override;
 
     /* Summary handling routines */
     void addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value) override;
