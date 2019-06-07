@@ -45,7 +45,7 @@ public:
         return false;
     }
 private:
-    void generatePabloMethod();
+    void generatePabloMethod() override;
 
     std::shared_ptr<parse::PabloParser>     mParser;
     std::shared_ptr<parse::SourceFile>      mSource;
