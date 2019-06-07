@@ -72,6 +72,7 @@ public:
     void showFileNames() {mShowFileNames = true;}
     void setStdinLabel(std::string lbl) {mStdinLabel = lbl;}
     void showLineNumbers() {mShowLineNumbers = true;}
+    void setContextLines(unsigned before, unsigned after) {mBeforeContext = before; mAfterContext = after;}
     void setInitialTab() {mInitialTab = true;}
 
     void setMaxCount(int m) {mMaxCount = m;}
@@ -119,6 +120,8 @@ protected:
     bool mShowFileNames;
     std::string mStdinLabel;
     bool mShowLineNumbers;
+    unsigned mBeforeContext;
+    unsigned mAfterContext;
     bool mInitialTab;
     bool mCaseInsensitive;
     bool mInvertMatches;
@@ -152,11 +155,13 @@ protected:
 class EmitMatch : public MatchAccumulator {
     friend class EmitMatchesEngine;
 public:
-    EmitMatch(std::string linePrefix, bool showLineNumbers, bool initialTab, std::ostringstream & strm)
+    EmitMatch(std::string linePrefix, bool showLineNumbers, bool showContext, bool initialTab, std::ostringstream & strm)
         : mLinePrefix(linePrefix),
         mShowLineNumbers(showLineNumbers),
+        mContextGroups(showContext),
         mInitialTab(initialTab),
         mLineCount(0),
+        mLineNum(0),
         mTerminated(true),
         mResultStr(strm) {}
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
@@ -164,8 +169,10 @@ public:
 protected:
     std::string mLinePrefix;
     bool mShowLineNumbers;
+    bool mContextGroups;
     bool mInitialTab;
     size_t mLineCount;
+    size_t mLineNum;
     bool mTerminated;
     std::ostringstream & mResultStr;
 };

@@ -77,9 +77,8 @@ extern bool InitialTabFlag; // -T
 extern bool OnlyMatchingFlag; // -o
 extern std::string LabelFlag; // -label
 extern bool LineBufferedFlag; // -line-buffered
-extern int AfterContextFlag; // -A
-extern int BeforeContextFlag; // -B
-extern int ContextFlag; // -C
+extern int AfterContext; // -A or -C
+extern int BeforeContext; // -B or -C
 extern int MaxCountFlag; // -m  (overridden and set to 1 with -q, -l, -L modes)
     
 

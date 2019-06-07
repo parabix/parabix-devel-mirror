@@ -163,17 +163,16 @@ std::string LabelFlag;
 bool LineBufferedFlag;
 static cl::opt<bool, true> LineBufferedOption("line-buffered", cl::location(LineBufferedFlag), cl::desc("Buffer lines to output."), cl::cat(Output_Options));
 
-int AfterContextFlag;
-static cl::opt<int, true> AfterContextOption("A", cl::location(AfterContextFlag), cl::desc("Print <num> lines of context after each matching line."), cl::cat(Output_Options), cl::Grouping);
+int AfterContext;
+    static cl::opt<int, true> AfterContextOption("A", cl::location(AfterContext), cl::desc("Print <num> lines of context after each matching line."), cl::cat(Output_Options), cl::Prefix, cl::init(0));
 static cl::alias AfterContextAlias("after-context", cl::desc("Alias for -A"), cl::aliasopt(AfterContextOption));
 
-int BeforeContextFlag;
-static cl::opt<int, true> BeforeContextOption("B", cl::location(BeforeContextFlag), cl::desc("Print <num>lines of context before each matching line."), cl::cat(Output_Options), cl::Grouping);
+int BeforeContext;
+static cl::opt<int, true> BeforeContextOption("B", cl::location(BeforeContext), cl::desc("Print <num>lines of context before each matching line."), cl::cat(Output_Options), cl::Prefix, cl::init(0));
 static cl::alias BeforeContextAlias("before-context", cl::desc("Alias for -B"), cl::aliasopt(BeforeContextOption));
 
-int ContextFlag;
-static cl::opt<int, true> ContextOption("C", cl::location(ContextFlag), cl::desc("Print <num> lines of context before and after each matching line."), cl::cat(Output_Options), cl::Grouping);
-static cl::alias ContextAlias("context", cl::desc("Alias for -C"), cl::aliasopt(ContextOption));
+static cl::opt<int> Context("C", cl::desc("Print <num> lines of context before and after each matching line."), cl::cat(Output_Options), cl::Prefix, cl::init(0));
+static cl::alias ContextAlias("context", cl::desc("Alias for -C"), cl::aliasopt(Context));
 
 int MaxCountFlag;
 static cl::opt<int, true> MaxCountOption("m", cl::location(MaxCountFlag),
@@ -246,14 +245,9 @@ void InitializeCommandLineInterface(int argc, char *argv[]) {
     if (LineBufferedFlag) {
         llvm::report_fatal_error("Sorry, -line-buffered is not yet supported.\n");
     }
-    if (AfterContextFlag) {
-        llvm::report_fatal_error("Sorry, -A is not yet supported.\n");
-    }
-    if (BeforeContextFlag) {
-        llvm::report_fatal_error("Sorry, -B is not yet supported.\n");
-    }
-    if (ContextFlag) {
-        llvm::report_fatal_error("Sorry, -C is not yet supported.\n");
+    if (Context != 0) {
+        if (AfterContext == 0) AfterContext = Context;
+        if (BeforeContext == 0) BeforeContext = Context;
     }
     if (ColorFlag!=neverColor) {
         llvm::report_fatal_error("Sorry, -color is not yet supported.\n");

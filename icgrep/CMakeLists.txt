@@ -147,7 +147,7 @@ target_link_libraries (GrepEngine RegExpCompiler CodeGen)
 target_link_libraries (FileSelect GrepEngine)
 
 #add_executable(jitdemo2 jitdemo2.cpp)
-add_executable(icgrep icgrep.cpp grep_interface.cpp)
+add_executable(icgrep icgrep.cpp grep_interface.cpp kernels/pdep_kernel.cpp)
 add_executable(u8u16 u8u16.cpp kernels/zeroextend.cpp)
 add_executable(x8u16 x8u16.cpp)
 add_executable(gb18030 gb18030.cpp kernels/pdep_kernel.cpp cc/encodings/GB_18030_data.cpp cc/encodings/utf8gen.cpp)

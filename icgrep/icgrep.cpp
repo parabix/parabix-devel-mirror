@@ -157,6 +157,7 @@ int main(int argc, char *argv[]) {
     } else {
         grep->setRecordBreak(grep::GrepRecordBreakKind::LF);
     }
+    grep->setContextLines(argv::BeforeContext, argv::AfterContext);
 
     grep->setStdinLabel(argv::LabelFlag);
     if (argv::UseStdIn) grep->setGrepStdIn();

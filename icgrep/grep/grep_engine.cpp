@@ -7,6 +7,7 @@
 #include "grep_engine.h"
 #include <llvm/IR/Module.h>
 #include <boost/filesystem.hpp>
+#include <IR_Gen/idisa_target.h>
 #include <UCD/resolve_properties.h>
 #include <kernels/callback.h>
 #include <kernels/charclasses.h>
@@ -22,6 +23,9 @@
 #include <kernels/core/streamset.h>
 #include <kernels/until_n.h>
 #include <kernels/kernel_builder.h>
+#include <kernels/deletion.h>
+#include <kernels/pdep_kernel.h>
+
 #include <pablo/pablo_kernel.h>
 #include <cc/alphabet.h>
 #include <re/re_cc.h>
@@ -109,6 +113,8 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mShowFileNames(false),
     mStdinLabel("(stdin)"),
     mShowLineNumbers(false),
+    mBeforeContext(0),
+    mAfterContext(0),
     mInitialTab(false),
     mCaseInsensitive(false),
     mInvertMatches(false),
@@ -428,6 +434,9 @@ void GrepEngine::grepCodeGen() {
 //  input.  However, if the final line is not terminated, a new line is appended.
 //
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
+    if ((mLineCount > 0) && mContextGroups && (lineNum > mLineNum + 1)) {
+        mResultStr << "--\n";
+    }
     mResultStr << mLinePrefix;
     if (mShowLineNumbers) {
         // Internally line numbers are counted from 0.  For display, adjust
@@ -443,6 +452,7 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
     const auto bytes = line_end - line_start + 1;
     mResultStr.write(line_start, bytes);
     mLineCount++;
+    mLineNum = lineNum;
     unsigned last_byte = *line_end;
     mTerminated = (last_byte >= 0x0A) && (last_byte <= 0x0D);
     if (LLVM_UNLIKELY(!mTerminated)) {
@@ -460,6 +470,23 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 
 void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) mResultStr << "\n";
+}
+
+void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
+    StreamSet * const expanded = P->CreateStreamSet(count);
+    P->CreateKernelCall<StreamExpandKernel>(base, inputs, mask, expanded);
+    if (AVX2_available() && BMI2_available()) {
+        P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
+    } else {
+        P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);
+    }
+}
+
+void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
+    unsigned fw = 64;  // Best for PEXT extraction.
+    StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
+    P->CreateKernelCall<FieldCompressKernel>(fw, inputBase, inputSet, mask, compressed);
+    P->CreateKernelCall<StreamCompressKernel>(compressed, mask, outputs, fw);
 }
 
 void EmitMatchesEngine::grepCodeGen() {
@@ -483,6 +510,17 @@ void EmitMatchesEngine::grepCodeGen() {
     StreamSet * LineBreakStream;
     StreamSet * Matches;
     std::tie(LineBreakStream, Matches) = grepPipeline(E, ByteStream);
+
+    if ((mAfterContext != 0) || (mBeforeContext != 0)) {
+        Scalar * ZERO = E->CreateConstant(idb->getSize(0));
+        StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
+        extract(E, Matches, ZERO, LineBreakStream, MatchesByLine);
+        StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
+        E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
+        StreamSet * SelectedLines = E->CreateStreamSet(1, 1);
+        deposit(E, ZERO, 1, LineBreakStream, ContextByLine, SelectedLines);
+        Matches = SelectedLines;
+    }
 
     if (MatchCoordinateBlocks > 0) {
         StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
@@ -569,7 +607,7 @@ uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstr
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
     int32_t fileDescriptor = openFile(fileName, strm);
     if (fileDescriptor == -1) return 0;
-    EmitMatch accum(linePrefix(fileName), mShowLineNumbers, mInitialTab, strm);
+    EmitMatch accum(linePrefix(fileName), mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, strm);
     f(useMMap, fileDescriptor, &accum, mMaxCount);
     close(fileDescriptor);
     if (accum.binaryFileSignalled()) {
