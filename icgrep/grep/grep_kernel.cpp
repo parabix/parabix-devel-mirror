@@ -682,3 +682,33 @@ AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b, Strea
 {}, {}) {
     addAttribute(CanTerminateEarly());
 }
+
+ContextSpan::ContextSpan(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after)
+: PabloKernel(b, "ContextSpan-" + std::to_string(before) + "+" + std::to_string(after),
+              // input
+{Binding{"markerStream", markerStream, FixedRate(1), LookAhead(before)}},
+              // output
+{Binding{"contextStream", contextStream}}),
+mBeforeContext(before), mAfterContext(after) {
+}
+
+void ContextSpan::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    Var * markerStream = pb.createExtract(getInputStreamVar("markerStream"), pb.getInteger(0));
+    PabloAST * contextStart = pb.createLookahead(markerStream, pb.getInteger(mBeforeContext));
+    unsigned lgth = mBeforeContext + 1 + mAfterContext;
+    PabloAST * consecutive = contextStart;
+    unsigned consecutiveCount = 1;
+    for (unsigned i = 1; i <= lgth/2; i *= 2) {
+        consecutiveCount += i;
+        consecutive = pb.createOr(consecutive,
+                                  pb.createAdvance(consecutive, i),
+                                  "consecutive" + std::to_string(consecutiveCount));
+    }
+    if (consecutiveCount < lgth) {
+        consecutive = pb.createOr(consecutive,
+                                  pb.createAdvance(consecutive, lgth - consecutiveCount),
+                                  "consecutive" + std::to_string(lgth));
+    }
+    pb.createAssign(pb.createExtract(getOutputStreamVar("contextStream"), pb.getInteger(0)), pb.createInFile(consecutive));
+}

@@ -163,5 +163,24 @@ private:
 
 };
 
+/* Given a marker position P, a before-context B and and after-context A, a
+   context span is a set of consecutive 1 bits from positions P-B to P+A.
+
+   This kernel computes a coalesced context span stream for all markers in
+   a given marker stream.   Coalesced spans occur when markers are separated
+   by A + B positions or fewer. */
+
+class ContextSpan final : public pablo::PabloKernel {
+public:
+    ContextSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+private:
+    const unsigned          mBeforeContext;
+    const unsigned          mAfterContext;
+};
+
 }
 #endif
