@@ -9,6 +9,7 @@
 
 #include <pablo/pabloAST.h>
 #include <pablo/pe_string.h>
+#include <llvm/Support/ErrorHandling.h>
 
 namespace pablo {
 
@@ -120,5 +121,3 @@ private:
 }
 
 #endif // PE_VAR_H
-
-
