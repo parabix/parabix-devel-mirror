@@ -366,7 +366,7 @@ std::pair<StreamSet *, StreamSet *> LZ4GrepBaseGenerator::grep(RE * re, StreamSe
 void LZ4GrepBaseGenerator::invokeScanMatchGrep(char* fileBuffer, size_t blockStart, size_t blockEnd, bool hasBlockChecksum) {
     auto main = getScanMatchGrepMainFunction();
     std::ostringstream s;
-    EmitMatch accum("", false, false, s);
+    EmitMatch accum("", false, false, false, s);
 
     main(fileBuffer, blockStart, blockEnd, hasBlockChecksum, reinterpret_cast<intptr_t>(&accum));
     llvm::outs() << s.str();
