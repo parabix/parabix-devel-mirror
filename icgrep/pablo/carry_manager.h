@@ -120,10 +120,10 @@ protected:
     /* Summary handling routines */
     virtual void addToCarryOutSummary(BuilderRef b, llvm::Value * const value);
 
-    void phiCurrentCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
-    void phiOuterCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
-    void writeCurrentCarryOutSummary(BuilderRef b);
-    void combineCarryOutSummary(BuilderRef b, const unsigned offset);
+    virtual void phiCurrentCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    virtual void phiOuterCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock);
+    virtual void writeCurrentCarryOutSummary(BuilderRef b);
+    virtual void combineCarryOutSummary(BuilderRef b, const unsigned offset);
 
 protected:
 

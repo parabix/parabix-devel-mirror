@@ -904,7 +904,7 @@ std::pair<Value *, Value *> IDISA_Builder::bitblock_subtract_with_propagate(Valu
     if (propagateIn->getType() == mBitBlockType) {
         propagateOut = bitCast(propagateOut);
     } else {
-        propagateOut = CreateTrunc(propagateOut, propagateIn->getType());
+        propagateOut = CreateTrunc(CreateBitCast(propagateOut, getIntNTy(mBitBlockWidth)), propagateIn->getType());
     }
     return std::make_pair(propagateOut, bitCast(partial));
 }

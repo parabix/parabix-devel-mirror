@@ -12,60 +12,68 @@
 namespace pablo {
 
 class CompressedCarryManager final : public CarryManager {
+
+    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+
 public:
     CompressedCarryManager() noexcept;
 
-    void initializeCodeGen(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void initializeCodeGen(BuilderRef b) override;
 
     /* Entering and leaving loops. */
 
-    void enterLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const entryBlock) override;
+    void enterLoopBody(BuilderRef b, llvm::BasicBlock * const entryBlock) override;
 
-    void leaveLoopBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock) override;
+    void leaveLoopBody(BuilderRef b, llvm::BasicBlock * const exitBlock) override;
 
     /* Entering and leaving ifs. */
 
-    void enterIfScope(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope) override;
-
-    void leaveIfBody(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::BasicBlock * const exitBlock) override;
+    void enterIfScope(BuilderRef b, const PabloBlock * const scope) override;
 
     /* Methods for processing individual carry-generating operations. */
 
-    llvm::Value * addCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2) override;
+    llvm::Value * addCarryInCarryOut(BuilderRef b, const Statement * operation, llvm::Value * const e1, llvm::Value * const e2) override;
 
-    llvm::Value * advanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const Advance * advance, llvm::Value * const strm) override;
+    llvm::Value * advanceCarryInCarryOut(BuilderRef b, const Advance * advance, llvm::Value * const strm) override;
 
-    llvm::Value * indexedAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const IndexedAdvance * advance, llvm::Value * const strm, llvm::Value * const index_strm) override;
+    llvm::Value * indexedAdvanceCarryInCarryOut(BuilderRef b, const IndexedAdvance * advance, llvm::Value * const strm, llvm::Value * const index_strm) override;
 
     /* Methods for getting and setting carry summary values for If statements */
 
-    llvm::Value * generateSummaryTest(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * condition) override;
+    llvm::Value * generateSummaryTest(BuilderRef b, llvm::Value * condition) override;
 
     /* Clear carry state for conditional regions */
 
 protected:
 
-    llvm::StructType * analyse(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false) override;
+    llvm::StructType * analyse(BuilderRef b, const PabloBlock * const scope, const unsigned ifDepth = 0, const unsigned whileDepth = 0, const bool isNestedWithinNonCarryCollapsingLoop = false) override;
 
     /* Entering and leaving scopes. */
     void leaveScope() override;
 
     /* Methods for processing individual carry-generating operations. */
-    llvm::Value * getNextCarryIn(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    llvm::Value * getNextCarryIn(BuilderRef b) override;
 
-    void setNextCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const carryOut) override;
-    // llvm::Value * longAdvanceCarryInCarryOut(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value, const unsigned shiftAmount) override;
-    llvm::Value * readCarryInSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const override;
-    void writeCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const summary) const override;
+    void setNextCarryOut(BuilderRef b, llvm::Value * const carryOut) override;
+    // llvm::Value * longAdvanceCarryInCarryOut(BuilderRef b, llvm::Value * const value, const unsigned shiftAmount) override;
+    llvm::Value * readCarryInSummary(BuilderRef b) const override;
+    void writeCarryOutSummary(BuilderRef b, llvm::Value * const summary) const override;
 
     /* Summary handling routines */
-    void addToCarryOutSummary(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const value) override;
+    void addToCarryOutSummary(BuilderRef b, llvm::Value * const value) override;
+
+    void phiCurrentCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock) override;
+    void phiOuterCarryOutSummary(BuilderRef b, llvm::BasicBlock * const entryBlock, llvm::BasicBlock * const exitBlock) override;
+    void combineCarryOutSummary(BuilderRef b, const unsigned offset) override;
 
 private:
 
     llvm::Type * mBaseSummaryType = nullptr;
 
-    llvm::Value * convertFrameToImplicitSummary(const std::unique_ptr<kernel::KernelBuilder> & b) const;
+    llvm::Value * convertFrameToImplicitSummary(BuilderRef b) const;
+    llvm::Value * convertFrameToImplicitSummaryPtr(BuilderRef b) const;
+    llvm::Value * loadImplicitSummaryFromPtr(BuilderRef b, llvm::Value * ptr) const;
+    llvm::Type * getSummaryTypeFromCurrentFrame() const;
 
 };
 
