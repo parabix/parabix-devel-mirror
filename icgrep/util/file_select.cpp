@@ -79,6 +79,8 @@ static cl::opt<DevDirAction, true> DirectoriesOption("d", cl::desc("Processing m
                                                                 clEnumValN(Recurse, "recurse", "Recursive process directories, equivalent to -r.")
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(DirectoriesFlag), cl::init(Read));
 static cl::alias DirectoriesAlias("directories", cl::desc("Alias for -d"), cl::aliasopt(DirectoriesOption));
+    
+static cl::opt<bool> TraceFileSelect("TraceFileSelect", cl::desc("Trace file selection"), cl::cat(Input_Options));
 
 // Command line arguments to specify file and directory includes/excludes
 // use GLOB syntax, matching any full pathname suffix after a "/", or
@@ -157,6 +159,13 @@ re::RE * getFilePattern() {
 
 namespace fs = boost::filesystem;
 
+void selectPath(std::vector<fs::path> & collectedPaths, fs::path p) {
+    collectedPaths.push_back(p);
+    if (TraceFileSelect) {
+        llvm::errs() << "Selecting: " << p.string() << "\n";
+    }
+}
+
 //
 //  Directory List: a set of directory paths that have been
 //  examined to identify candidate files for searching, together
@@ -207,16 +216,16 @@ void FileSelectAccumulator::addDirectory(fs::path dirPath, unsigned cumulativeEn
 void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_start, char * name_end) {
     fs::path p(std::string(name_start, name_end - name_start));
     if (fileIdx < mFullPathEntries) {
-        mCollectedPaths.push_back(p);
+        selectPath(mCollectedPaths, p);
    } else {
         assert(mDirectoryIndex < mDirectoryList.size());
         while (fileIdx >= mCumulativeEntryCount[mDirectoryIndex]) {
             mDirectoryIndex++;
         }
-        mCollectedPaths.emplace_back(mDirectoryList[mDirectoryIndex]/std::string(name_start, name_end - name_start));
+        selectPath(mCollectedPaths, mDirectoryList[mDirectoryIndex]/std::string(name_start, name_end - name_start));
     }
 }
-    
+
 //
 // Parsing files using .gitignore conventions.
 // Given REs that select directories and files to be processed, override
@@ -228,6 +237,9 @@ std::pair<re::RE *, re::RE *> parseIgnoreFile(fs::path dirpath, std::string igno
     re::RE * updatedFileRE = fileSelectRE;
     std::ifstream ignoreFile(ignoreFilePath.string());
     if (ignoreFile.is_open()) {
+        if (TraceFileSelect) {
+            llvm::errs() << "Parsing exclude file: " << ignoreFilePath.string() << "\n";
+        }
         std::string line;
         while (std::getline(ignoreFile, line)) {
             bool is_directory_only_pattern = false;
@@ -400,17 +412,19 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
             if (errc) {
                 // If there was an error, we leave the file in the fileCandidates
                 // list for later error processing.
-                if (!NoMessagesFlag) collectedPaths.push_back(p);
+                if (!NoMessagesFlag) {
+                    selectPath(collectedPaths, p);
+                }
             } else if (fs::is_directory(s)) {
                 if (DirectoriesFlag == Read) {
-                    collectedPaths.push_back(p);
+                    selectPath(collectedPaths, p);
                 }
             } else if (fs::is_regular_file(s)) {
-                collectedPaths.push_back(p);
+                selectPath(collectedPaths, p);
             } else {
                 // Devices and unknown file types
                 if (DevicesFlag == Read) {
-                    collectedPaths.push_back(p);
+                    selectPath(collectedPaths, p);
                 }
             }
         }
@@ -484,10 +498,6 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         directoryAccum.setFullPathEntries(dirCandidates.getCandidateCount());
         directorySelectEngine.doGrep(dirCandidates.data(), dirCandidates.size(), directoryAccum);
         
-        // Now check for a .gitignore or other exclude file for recursive processing.
-        if (!ExcludePerDirectory.empty()) {
-            std::tie(directoryRE, fileSelectRE) = parseIgnoreFile(fs::current_path(), ExcludePerDirectory, directoryRE, fileSelectRE);
-        }
         // Select files from subdirectories using the recursive process.
         for (const auto & dirpath : selectedDirectories) {
             recursiveFileSelect(dirpath,
