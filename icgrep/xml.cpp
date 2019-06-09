@@ -12,8 +12,10 @@
 #include <kernels/source_kernel.h>
 #include <kernels/error_monitor_kernel.h>
 #include <kernels/p2s_kernel.h>
+#include <kernels/scan_kernel.h>
 #include <kernels/stdout_kernel.h>
 #include <kernels/streams_merge.h>
+#include <kernels/streamset_collapse.h>
 #include <kernels/core/streamset.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
@@ -46,6 +48,10 @@ static cl::opt<std::string, true> inputFileOption(cl::Positional, cl::location(i
 
 extern "C" void printErrorCode(uint64_t errCode) {
     std::cout << "Exit with error code: " << errCode << "\n";
+}
+
+extern "C" void xmlErrorCallback(const char * ptr, uint64_t pos) {
+    std::cout << "error: stream position = " << pos << ", at char: '" << *ptr << "'\n";
 }
 
 
@@ -169,11 +175,17 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
-    StreamSet * const Error = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
+    StreamSet * const ErrorSet = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<StreamsMerge>(
         std::vector<StreamSet *>{LexError, CT_CD_PI_Error, TagError, RefError, NameError, CheckStreamsError}, 
-        Error
+        ErrorSet
     );
+
+    StreamSet * const Errors = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<CollapseStreamSet>(ErrorSet, Errors);
+
+    Kernel * const scanKernel = P->CreateKernelCall<ScanKernel>(Errors, ByteStream, "xmlErrorCallback");
+    pxDriver.LinkFunction(scanKernel, "xmlErrorCallback", xmlErrorCallback);
 
     StreamSet * const CheckStreams = P->CreateStreamSet(6, 1);
     P->CreateKernelCall<StreamsMerge>(
@@ -188,7 +200,8 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         "MaskBasisBits",
         Bindings {
             Binding {"basisBits", BasisBits},
-            Binding {"mask", PrintStream}
+            // Binding {"mask", PrintStream}
+            Binding {"mask", Errors}
         },
         Bindings {
             Binding {"masked", MaskedBasisBits}
@@ -199,7 +212,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     P->CreateKernelCall<P2SKernel>(MaskedBasisBits, ErrorBytes);
     P->CreateKernelCall<StdOutKernel>(ErrorBytes);
 
-    Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(Error, ErrorMonitorKernel::IOStreamBindings{});
+    Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(ErrorSet, ErrorMonitorKernel::IOStreamBindings{});
     Scalar * const errCode = emk->getOutputScalar("errorCode");
     P->CreateCall("printErrorCode", printErrorCode, {errCode});
 
