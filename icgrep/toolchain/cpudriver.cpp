@@ -32,29 +32,8 @@
 #include <kernels/pipeline_builder.h>
 #include <llvm/IR/Verifier.h>
 #include "llvm/IR/Mangler.h"
-#ifndef ORCJIT
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
 #include <llvm/ExecutionEngine/MCJIT.h>
-#endif
-#endif
-#ifdef ORCJIT
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
-#include <llvm/ExecutionEngine/Orc/JITSymbol.h>
-#else
-#include <llvm/ExecutionEngine/JITSymbol.h>
-#endif
-#include <llvm/ExecutionEngine/RuntimeDyld.h>
-#include <llvm/ExecutionEngine/SectionMemoryManager.h>
-#include <llvm/ExecutionEngine/Orc/CompileUtils.h>
-#include <llvm/ExecutionEngine/Orc/IRCompileLayer.h>
-#include <llvm/ExecutionEngine/Orc/IRTransformLayer.h>
-#include <llvm/ExecutionEngine/Orc/LambdaResolver.h>
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-#include <llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h>
-#else
-#include <llvm/ExecutionEngine/Orc/RTDyldObjectLinkingLayer.h>
-#endif
-#include <llvm/ExecutionEngine/Orc/GlobalMappingLayer.h>
 #endif
 #include <llvm/ADT/Statistic.h>
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(8, 0, 0)
@@ -74,9 +53,7 @@ using namespace kernel;
 CPUDriver::CPUDriver(std::string && moduleName)
 : BaseDriver(std::move(moduleName))
 , mTarget(nullptr)
-#ifndef ORCJIT
 , mEngine(nullptr)
-#endif
 , mUnoptimizedIROutputStream{}
 , mIROutputStream{}
 , mASMOutputStream{}
@@ -86,53 +63,39 @@ CPUDriver::CPUDriver(std::string && moduleName)
     InitializeNativeTargetAsmPrinter();
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
 
-    #ifdef ORCJIT
-    EngineBuilder builder;
-    #else
     std::string errMessage;
     EngineBuilder builder{std::unique_ptr<Module>(mMainModule)};
     builder.setErrorStr(&errMessage);
-    builder.setUseOrcMCJITReplacement(true);
     builder.setVerifyModules(false);
     builder.setEngineKind(EngineKind::JIT);
-    #endif
     builder.setTargetOptions(codegen::target_Options);
     builder.setOptLevel(codegen::OptLevel);
 
     StringMap<bool> HostCPUFeatures;
+    /*
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {
         std::vector<std::string> attrs;
         for (auto &flag : HostCPUFeatures) {
             if (flag.second) {
                 attrs.push_back("+" + flag.first().str());
+                llvm::errs() << flag.first().str() << "\n";
             }
         }
         builder.setMAttrs(attrs);
     }
+     */
 
     mTarget = builder.selectTarget();
     if (mTarget == nullptr) {
         throw std::runtime_error("Could not selectTarget");
     }
-    #ifdef ORCJIT
-    mCompileLayer = make_unique<CompileLayerT>(mObjectLayer, orc::SimpleCompiler(*mTarget));
-    #else
     mEngine = builder.create();
     if (mEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-    #endif
     auto cache = ParabixObjectCache::getInstance();
     if (cache) {
-        #ifdef ORCJIT
-        #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-        mCompileLayer->setObjectCache(cache);
-        #else
-        mCompileLayer->getCompiler().setObjectCache(cache);
-        #endif
-        #else
         mEngine->setObjectCache(cache);
-        #endif
     }
     auto triple = mTarget->getTargetTriple().getTriple();
     const DataLayout DL(mTarget->createDataLayout());
@@ -273,37 +236,7 @@ void CPUDriver::generateUncachedKernels() {
 
 void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
 
-    #ifdef ORCJIT
-    auto Resolver = llvm::orc::createLambdaResolver(
-        [&](const std::string &Name) {
-            auto Sym = mCompileLayer->findSymbol(Name, false);
-            if (!Sym) Sym = mCompileLayer->findSymbol(getMangledName(Name), false);
-            #if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
-            if (Sym) return Sym.toRuntimeDyldSymbol();
-            return RuntimeDyld::SymbolInfo(nullptr);
-            #else
-            if (Sym) return Sym;
-            return JITSymbol(nullptr);
-            #endif
-        },
-        [&](const std::string &Name) {
-            auto SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(Name);
-            if (!SymAddr) SymAddr = RTDyldMemoryManager::getSymbolAddressInProcess(getMangledName(Name));
-            #if LLVM_VERSION_INTEGER <= LLVM_VERSION_CODE(3, 9, 1)
-            if (SymAddr) return RuntimeDyld::SymbolInfo(SymAddr, JITSymbolFlags::Exported);
-            return RuntimeDyld::SymbolInfo(nullptr);
-            #else
-            if (SymAddr) return JITSymbol(SymAddr, JITSymbolFlags::Exported);
-            return JITSymbol(nullptr);
-            #endif
-        });
-    #endif
-
-    #ifdef ORCJIT
-    using ModuleSet = std::vector<std::unique_ptr<Module>>;
-    #else
     using ModuleSet = std::vector<Module *>;
-    #endif
 
     // write/declare the "main" method
     ModuleSet O1;
@@ -326,7 +259,6 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     Function * const main = pipeline->addOrDeclareMainFunction(iBuilder, method);
     mCachedKernel.clear();
 
-    #ifndef ORCJIT
     if (!O1.empty()) {
         mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
         for (const auto & m : O1) {
@@ -341,29 +273,13 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         }
         mEngine->finalizeObject();
     }
-    #endif
-
     // compile any uncompiled kernel/method
-    #ifndef ORCJIT
     // write/declare the "main" method
     mEngine->addModule(std::unique_ptr<Module>(mainModule));
     mEngine->finalizeObject();
-    #else
-    moduleSet.push_back(std::unique_ptr<Module>(mMainModule));
-    mCompileLayer->addModuleSet(std::move(moduleSet), make_unique<SectionMemoryManager>(), std::move(Resolver));
-    #endif
-
-
-
     // return the compiled main method
-    #ifndef ORCJIT
     iBuilder->setModule(mMainModule);
     return mEngine->getPointerToFunction(main);
-    #else
-    auto MainSym = mCompileLayer->findSymbol(getMangledName(main->getName()), false);
-    assert (MainSym && "Main not found");
-    return (void *)MainSym.getAddress();
-    #endif
 }
 
 bool CPUDriver::hasExternalFunction(llvm::StringRef functionName) const {
@@ -442,4 +358,3 @@ bool TracePass::runOnModule(Module & M) {
 ModulePass * CPUDriver::createTracePass(kernel::KernelBuilder * kb, StringRef to_trace) {
     return new TracePass(iBuilder.get(), to_trace);
 }
-

@@ -6,6 +6,7 @@
 #include "scan_kernel.h"
 
 #include <kernels/kernel_builder.h>
+#include <llvm/IR/Module.h>
 
 #define MASK_SIZE 64
 #define STRIDE_WIDTH 32
