@@ -331,6 +331,9 @@ Bindings GrepKernelOptions::streamSetInputBindings() {
     } else {
         inputs.emplace_back("basis", mSource, FixedRate());
     }
+    if (mCombiningType != GrepCombiningType::None) {
+        inputs.emplace_back("toCombine", mCombiningStream);
+    }
     for (const auto & a : mExternals) {
         inputs.emplace_back(a);
     }
@@ -364,6 +367,11 @@ std::string GrepKernelOptions::getSignature() {
         }
         for (const auto & a: mAlphabets) {
             mSignature += "_" + a.first->getName();
+        }
+        if (mCombiningType == GrepCombiningType::Exclude) {
+            mSignature += "&~";
+        } else if (mCombiningType == GrepCombiningType::Include) {
+            mSignature += "|=";
         }
         if (mPrefixRE) {
             mSignature += ":" + Printer_RE::PrintRE(mPrefixRE);
@@ -406,9 +414,9 @@ void ICGrepKernel::generatePabloMethod() {
         auto mpx_basis = getInputStreamSet(alpha->getName() + "_basis");
         re_compiler.addAlphabet(alpha, mpx_basis);
     }
+    Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     if (mOptions->mPrefixRE) {
         PabloAST * const prefixMatches = re_compiler.compile(mOptions->mPrefixRE);
-        Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
         PabloBlock * scope1 = getEntryScope()->createScope();
         pb.createIf(prefixMatches, scope1);
 
@@ -432,12 +440,19 @@ void ICGrepKernel::generatePabloMethod() {
         cc::Parabix_CC_Compiler_Builder ccc(scope1, basis);
         RE_Compiler re_compiler(scope1, ccc, *(mOptions->mIndexingAlphabet));
         scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
-        Var * const output = getOutputStreamVar("matches");
-        pb.createAssign(pb.createExtract(output, pb.getInteger(0)), final_matches);
     } else {
-        PabloAST * const matches = re_compiler.compile(mOptions->mRE);
-        Var * const output = getOutputStreamVar("matches");
-        pb.createAssign(pb.createExtract(output, pb.getInteger(0)), matches);
+        pb.createAssign(final_matches, re_compiler.compile(mOptions->mRE));
+    }
+    Var * const output = getOutputStreamVar("matches");
+    if (mOptions->mCombiningType == GrepCombiningType::None) {
+        pb.createAssign(pb.createExtract(output, pb.getInteger(0)),final_matches);
+    } else {
+        PabloAST * toCombine = pb.createExtract(getInputStreamVar("toCombine"), pb.getInteger(0));
+        if (mOptions->mCombiningType == GrepCombiningType::Exclude) {
+            pb.createAssign(pb.createExtract(output, pb.getInteger(0)), pb.createAnd(toCombine, pb.createNot(final_matches)));
+        } else {
+            pb.createAssign(pb.createExtract(output, pb.getInteger(0)), pb.createOr(toCombine, final_matches));
+        }
     }
 }
 

@@ -50,16 +50,18 @@ protected:
     void generatePabloMethod() override;
 };
 
-
+enum class GrepCombiningType {None, Exclude, Include};
 class GrepKernelOptions {
     friend class ICGrepKernel;
 public:
     using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
     GrepKernelOptions() :
         mIndexingAlphabet(&cc::Byte),
+        mCombiningType(GrepCombiningType::None),
         mPrefixRE(nullptr) {}
     void setIndexingAlphabet(const cc::Alphabet * a);
     void setSource(StreamSet * s);
+    void setCombiningStream(GrepCombiningType t, StreamSet * toCombine);
     void setResults(StreamSet * r);
 
     void addExternal(std::string name, StreamSet * strm) {
@@ -86,6 +88,8 @@ protected:
 private:
     const cc::Alphabet * mIndexingAlphabet;
     StreamSet * mSource;
+    GrepCombiningType mCombiningType;
+    StreamSet * mCombiningStream;
     StreamSet * mResults;
     Bindings mExternals;
     Alphabets mAlphabets;
