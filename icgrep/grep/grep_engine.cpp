@@ -306,7 +306,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
 
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
-        MatchResultsBufs[0] = MatchResults;
+        MatchResultsBufs[i] = MatchResults;
         std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
         options->setIndexingAlphabet(&cc::UTF8);
         options->setSource(SourceStream);
