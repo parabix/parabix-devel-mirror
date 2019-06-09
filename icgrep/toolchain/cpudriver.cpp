@@ -77,7 +77,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
         for (auto &flag : HostCPUFeatures) {
             if (flag.second) {
                 attrs.push_back("+" + flag.first().str());
-                llvm::errs() << flag.first().str() << "\n";
+                //llvm::errs() << flag.first().str() << "\n";
             }
         }
         builder.setMAttrs(attrs);
