@@ -72,7 +72,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
     builder.setOptLevel(codegen::OptLevel);
 
     StringMap<bool> HostCPUFeatures;
-    /*
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {
         std::vector<std::string> attrs;
         for (auto &flag : HostCPUFeatures) {
@@ -83,7 +82,6 @@ CPUDriver::CPUDriver(std::string && moduleName)
         }
         builder.setMAttrs(attrs);
     }
-     */
 
     mTarget = builder.selectTarget();
     if (mTarget == nullptr) {

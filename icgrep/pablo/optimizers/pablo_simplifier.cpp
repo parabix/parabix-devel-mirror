@@ -21,6 +21,7 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
 #include <llvm/Support/raw_ostream.h>
+#include <array>
 #include <queue>
 #include <pablo/printer_pablos.h>
 
