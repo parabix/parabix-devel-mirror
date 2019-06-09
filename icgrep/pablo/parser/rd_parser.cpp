@@ -459,7 +459,7 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
     }
 
     if (index != nullptr) {
-        name += "_at_" + index->getText();
+        name += "_" + index->getText();
     }
 
     Token * const op = state.nextToken();
@@ -487,7 +487,7 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
     }
 
     if (Statement * s = llvm::dyn_cast<Statement>(expr)) {
-        s->setName(state.pb->makeName("_" + name));
+        s->setName(state.pb->makeName(name));
     }
     
     if (index == nullptr) {
