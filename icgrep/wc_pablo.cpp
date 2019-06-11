@@ -186,7 +186,8 @@ int main(int argc, char *argv[]) {
         argv::DirectoriesFlag = argv::Recurse;
     }
 
-    allFiles = argv::getFullFileList(inputFiles);
+    CPUDriver pxDriver("wc-pablo");
+    allFiles = argv::getFullFileList(pxDriver, inputFiles);
 
     const auto fileCount = allFiles.size();
     if (wcOptions.size() == 0) {
@@ -212,7 +213,6 @@ int main(int argc, char *argv[]) {
     if (CountChars) wc_modes += "m";
     if (CountBytes) wc_modes += "c";
 
-    CPUDriver pxDriver("wc-pablo");
     auto em = ErrorManager::Create();
     auto lexer = SimpleLexer::Create(em);
     auto parser = RecursiveParser::Create(std::move(lexer), em);

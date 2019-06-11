@@ -112,19 +112,18 @@ namespace fs = boost::filesystem;
 
 int main(int argc, char *argv[]) {
     llvm_shutdown_obj shutdown;
-
     argv::InitializeCommandLineInterface(argc, argv);
+    CPUDriver driver("icgrep");
 
     auto REs = readExpressions();
 
-    const auto allFiles = argv::getFullFileList(inputFiles);
+    const auto allFiles = argv::getFullFileList(driver, inputFiles);
     if (inputFiles.empty()) {
         argv::UseStdIn = true;
     } else if ((allFiles.size() > 1) && !argv::NoFilenameFlag) {
         argv::WithFilenameFlag = true;
     }
 
-    CPUDriver driver("icgrep");
     std::unique_ptr<grep::GrepEngine> grep;
     switch (argv::Mode) {
         case argv::NormalMode:

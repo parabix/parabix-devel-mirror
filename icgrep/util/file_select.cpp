@@ -297,7 +297,7 @@ std::pair<re::RE *, re::RE *> parseIgnoreFile(fs::path dirpath, std::string igno
     return std::make_pair(updatedDirRE, updatedFileRE);
 }
 
-void recursiveFileSelect(fs::path dirpath,
+void recursiveFileSelect(CPUDriver & driver, fs::path dirpath,
                          grep::InternalSearchEngine & inheritedDirectoryEngine, re::RE * directoryRE,
                          grep::InternalSearchEngine & inheritedFileEngine, re::RE * fileRE,
                          std::vector<fs::path> & collectedPaths) {
@@ -360,7 +360,6 @@ void recursiveFileSelect(fs::path dirpath,
         // choose files and directories for processing.
         // Apply the file selection RE to choose files for processing, adding
         // them to the global list of selected files.
-        CPUDriver driver("driver");
         grep::InternalSearchEngine fileSelectEngine(driver);
         fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
         fileSelectEngine.grepCodeGen(updatedFileRE);
@@ -372,7 +371,7 @@ void recursiveFileSelect(fs::path dirpath,
         directorySelectEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
         // Work through the subdirectories, invoking the recursive processing for each.
         for (const auto & subdir : selectedDirectories) {
-            recursiveFileSelect(subdir,
+            recursiveFileSelect(driver, subdir,
                                 directorySelectEngine, updatedDirRE,
                                 fileSelectEngine, updatedFileRE,
                                 collectedPaths);
@@ -381,7 +380,7 @@ void recursiveFileSelect(fs::path dirpath,
         inheritedFileEngine.doGrep(fileCandidates.data(), fileCandidates.size(), fileAccum);
         inheritedDirectoryEngine.doGrep(subdirCandidates.data(), subdirCandidates.size(), directoryAccum);
         for (const auto & subdir : selectedDirectories) {
-            recursiveFileSelect(subdir,
+            recursiveFileSelect(driver, subdir,
                                 inheritedDirectoryEngine, directoryRE,
                                 inheritedFileEngine, fileRE,
                                 collectedPaths);
@@ -389,7 +388,7 @@ void recursiveFileSelect(fs::path dirpath,
     }
 }
 
-std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
+std::vector<fs::path> getFullFileList(CPUDriver & driver, cl::list<std::string> & inputFiles) {
     // The vector to accumulate the full list of collected files to be searched.
     std::vector<fs::path> collectedPaths;
 
@@ -472,7 +471,6 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
     // Apply the file selection RE to choose files for processing, adding
     // them to the global list of selected files.
     re::RE * fileSelectRE = getFilePattern();
-    CPUDriver driver("driver");
     grep::InternalSearchEngine fileSelectEngine(driver);
     fileSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
     fileSelectEngine.grepCodeGen(fileSelectRE);
@@ -488,7 +486,6 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         std::vector<fs::path> selectedDirectories;
         FileSelectAccumulator directoryAccum(selectedDirectories);
         re::RE * directoryRE = getDirectoryPattern();
-        CPUDriver driver("driver");
         grep::InternalSearchEngine directorySelectEngine(driver);
         directorySelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
         directorySelectEngine.grepCodeGen(directoryRE);
@@ -500,7 +497,7 @@ std::vector<fs::path> getFullFileList(cl::list<std::string> & inputFiles) {
         
         // Select files from subdirectories using the recursive process.
         for (const auto & dirpath : selectedDirectories) {
-            recursiveFileSelect(dirpath,
+            recursiveFileSelect(driver, dirpath,
                                 directorySelectEngine, directoryRE,
                                 fileSelectEngine, fileSelectRE,
                                 collectedPaths);

@@ -14,8 +14,8 @@
 #include <vector>
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
+#include <toolchain/cpudriver.h>
 
-class BaseDriver;
 namespace re { class RE; }
 
 namespace argv {
@@ -34,6 +34,6 @@ extern bool MmapFlag; // -mmap
 
 extern bool UseStdIn;
     
-std::vector<boost::filesystem::path> getFullFileList(llvm::cl::list<std::string> & inputFiles);
+std::vector<boost::filesystem::path> getFullFileList(CPUDriver & driver, llvm::cl::list<std::string> & inputFiles);
 }
 #endif

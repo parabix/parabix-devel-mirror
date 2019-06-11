@@ -212,8 +212,9 @@ int main(int argc, char *argv[]) {
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
     }
+    CPUDriver pxDriver("wc");
 
-    allFiles = argv::getFullFileList(inputFiles);
+    allFiles = argv::getFullFileList(pxDriver, inputFiles);
 
     const auto fileCount = allFiles.size();
     if (wcOptions.size() == 0) {
@@ -239,7 +240,6 @@ int main(int argc, char *argv[]) {
     if (CountChars) wc_modes += "m";
     if (CountBytes) wc_modes += "c";
 
-    CPUDriver pxDriver("wc");
     auto wordCountFunctionPtr = wcPipelineGen(pxDriver);
 
     lineCount.resize(fileCount);
