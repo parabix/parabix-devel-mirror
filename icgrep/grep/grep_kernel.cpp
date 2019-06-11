@@ -318,6 +318,10 @@ void GrepKernelOptions::setIndexingAlphabet(const cc::Alphabet * a) {mIndexingAl
 void GrepKernelOptions::setRE(RE * e) {mRE = e;}
 void GrepKernelOptions::setPrefixRE(RE * e) {mPrefixRE = e;}
 void GrepKernelOptions::setSource(StreamSet * s) {mSource = s;}
+void GrepKernelOptions::setCombiningStream(GrepCombiningType t, StreamSet * toCombine){
+    mCombiningType = t;
+    mCombiningStream = toCombine;
+}
 void GrepKernelOptions::setResults(StreamSet * r) {mResults = r;}
 
 void GrepKernelOptions::addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis) {
