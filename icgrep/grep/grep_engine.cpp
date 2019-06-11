@@ -130,6 +130,8 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mMoveMatchesToEOL(true),
     mEngineThread(pthread_self()) {}
 
+GrepEngine::~GrepEngine() { }
+
 QuietModeEngine::QuietModeEngine(BaseDriver &driver) : GrepEngine(driver) {
     mEngineKind = EngineKind::QuietMode;
     mMaxCount = 1;
@@ -802,19 +804,109 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     mMainMethod = E->compile();
 }
 
+InternalSearchEngine::InternalSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine)
+    : InternalSearchEngine(engine->mGrepDriver) {}
+
+InternalSearchEngine::~InternalSearchEngine() { }
+
+
 void InternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum) {
     typedef void (*GrepFunctionType)(const char * buffer, const size_t length, MatchAccumulator *);
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
     f(search_buffer, bufferLength, &accum);
 }
 
-GrepEngine::~GrepEngine() { }
+InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
+    mGrepRecordBreak(GrepRecordBreakKind::LF),
+    mCaseInsensitive(false),
+    mGrepDriver(driver),
+    mMainMethod(nullptr),
+    mNumOfThreads(1) {}
 
-InternalSearchEngine::InternalSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine)
-: InternalSearchEngine(engine->mGrepDriver) {
+void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<PatternKind, re::RE *>> signedREs) {
+    auto & idb = mGrepDriver.getBuilder();
+
+    re::CC * breakCC = nullptr;
+    if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
+        breakCC = re::makeByte(0x0);
+    } else {// if (mGrepRecordBreak == GrepRecordBreakKind::LF)
+        breakCC = re::makeByte(0x0A);
+    }
+
+    for (unsigned i = 0; i < signedREs.size(); i++) {
+        re::RE * r = resolveCaseInsensitiveMode(signedREs[i].second, mCaseInsensitive);
+        r = regular_expression_passes(r);
+        r = re::exclude_CC(r, breakCC);
+        r = resolveAnchors(r, breakCC);
+        signedREs[i].second = toUTF8(r);
+    }
+
+    auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
+        Binding{idb->getSizeTy(), "length"},
+        Binding{idb->getIntAddrTy(), "accumulator"}});
+    E->setNumOfThreads(mNumOfThreads);
+
+    Scalar * const buffer = E->getInputScalar(0);
+    Scalar * const length = E->getInputScalar(1);
+    Scalar * const callbackObject = E->getInputScalar(2);
+    StreamSet * ByteStream = E->CreateStreamSet(1, 8);
+    E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
+
+    StreamSet * RecordBreakStream = E->CreateStreamSet();
+    const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
+
+    StreamSet * BasisBits = E->CreateStreamSet(8);
+    E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+    E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
+
+    StreamSet * resultsSoFar = RecordBreakStream;
+    bool initialInclude = signedREs[0].first == PatternKind::Include;
+    if (initialInclude) {
+        StreamSet * MatchResults = E->CreateStreamSet();
+        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+        options->setRE(signedREs[0].second);
+        options->setSource(BasisBits);
+        options->setResults(MatchResults);
+        E->CreateKernelCall<ICGrepKernel>(std::move(options));
+        resultsSoFar = MatchResults;
+    }
+    for (unsigned i = static_cast<unsigned>(initialInclude); i < signedREs.size(); i++) {
+        StreamSet * MatchResults = E->CreateStreamSet();
+        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+        options->setRE(signedREs[i].second);
+        options->setSource(BasisBits);
+        options->setResults(MatchResults);
+        bool isExclude = signedREs[i].first == PatternKind::Exclude;
+        options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
+        E->CreateKernelCall<ICGrepKernel>(std::move(options));
+        resultsSoFar = MatchResults;
+    }
+    if (MatchCoordinateBlocks > 0) {
+        StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
+        E->CreateKernelCall<MatchCoordinatesKernel>(resultsSoFar, RecordBreakStream, MatchCoords, MatchCoordinateBlocks);
+        Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, callbackObject);
+        mGrepDriver.LinkFunction(matchK, "accumulate_match_wrapper", accumulate_match_wrapper);
+        mGrepDriver.LinkFunction(matchK, "finalize_match_wrapper", finalize_match_wrapper);
+    } else {
+        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(resultsSoFar, RecordBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
+        mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
+        mGrepDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", finalize_match_wrapper);
+    }
+
+    mMainMethod = E->compile();
+}
+
+void InternalMultiSearchEngine::doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum) {
+    typedef void (*GrepFunctionType)(const char * buffer, const size_t length, MatchAccumulator *);
+    auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
+    f(search_buffer, bufferLength, &accum);
+}
+
+InternalMultiSearchEngine::InternalMultiSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine)
+: InternalMultiSearchEngine(engine->mGrepDriver) {
 
 }
 
-InternalSearchEngine::~InternalSearchEngine() { }
+InternalMultiSearchEngine::~InternalMultiSearchEngine() { }
 
 }

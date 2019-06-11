@@ -24,13 +24,14 @@ class BaseDriver;
 
 
 namespace grep {
-    
-    
+
+
 extern unsigned ByteCClimit;
 
 enum class GrepRecordBreakKind {Null, LF, Unicode};
 
 class InternalSearchEngine;
+class InternalMultiSearchEngine;
 
 enum GrepSignal : unsigned {BinaryFile};
 
@@ -59,6 +60,7 @@ extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
 class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};
     friend class InternalSearchEngine;
+    friend class InternalMultiSearchEngine;
 public:
 
     enum class EngineKind {QuietMode, MatchOnly, CountOnly, EmitMatches};
@@ -219,6 +221,30 @@ public:
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
     void grepCodeGen(re::RE * matchingRE);
+
+    void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
+
+private:
+    GrepRecordBreakKind mGrepRecordBreak;
+    bool mCaseInsensitive;
+    BaseDriver & mGrepDriver;
+    void * mMainMethod;
+    unsigned mNumOfThreads;
+};
+
+enum class PatternKind {Include, Exclude};
+class InternalMultiSearchEngine {
+public:
+    InternalMultiSearchEngine(BaseDriver & driver);
+
+    InternalMultiSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine);
+
+    ~InternalMultiSearchEngine();
+
+    void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
+    void setCaseInsensitive()  {mCaseInsensitive = true;}
+
+    void grepCodeGen(std::vector<std::pair<PatternKind, re::RE *>> REs);
 
     void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
 
