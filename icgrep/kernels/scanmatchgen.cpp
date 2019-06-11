@@ -584,7 +584,8 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");
     BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
-    BasicBlock * const exit = b->CreateBasicBlock("exit");
+    BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
+    BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
 
     Value * accumulator = b->getScalarField("accumulator_address");
     Value * const avail = b->getAvailableItemCount("InputStream");
@@ -593,7 +594,7 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
 
     Constant * const sz_ONE = b->getSize(1);
 
-    b->CreateCondBr(b->CreateICmpNE(matchesProcessed, matchesAvail), processMatchCoordinates, exit);
+    b->CreateCondBr(b->CreateICmpNE(matchesProcessed, matchesAvail), processMatchCoordinates, coordinatesDone);
 
     b->SetInsertPoint(processMatchCoordinates);
     PHINode * phiMatchNum = b->CreatePHI(b->getSizeTy(), 2, "matchNum");
@@ -623,9 +624,17 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
 
     b->SetInsertPoint(coordinatesDone);
     //b->setProcessedItemCount("InputStream", matchRecordEnd);
-    b->CreateBr(exit);
+    b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
+    
+    b->SetInsertPoint(callFinalizeScan);
+    b->setProcessedItemCount("InputStream", avail);
+    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
+    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    b->CreateBr(scanReturn);
+    
+    b->SetInsertPoint(scanReturn);
 
-    b->SetInsertPoint(exit);
 }
 
 }
