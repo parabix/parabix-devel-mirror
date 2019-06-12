@@ -78,6 +78,9 @@ void UnixLinesKernelBuilder::generatePabloMethod() {
     } else {
         ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
+    if (mAbortOnNull) {
+        pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
+    }
     PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
     PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LF), 1), "unterminatedLineAtEOF");
     pb.createAssign(pb.createExtract(getOutput(0), 0), pb.createOr(LF, unterminatedLineAtEOF, "EOL"));
