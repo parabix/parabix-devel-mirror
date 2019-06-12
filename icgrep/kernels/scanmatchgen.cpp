@@ -45,6 +45,7 @@ struct ScanWordParameters {
     }
 };
 
+
 void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
     const bool mLineNumbering = true;
     // Determine the parameters for two-level scanning.
@@ -119,11 +120,6 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, strideBlockIndex);
     Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
-    // TODO: Find something better than the following hack deals with the case that matchResult
-    // has reported a match at one past EOF, while there is no linebreak bit at that position.
-    breakBitBlock = b->simd_or(breakBitBlock, matchBitBlock);
-    //b->CallPrintRegister("matchBitBlock", matchBitBlock);
-    //b->CallPrintRegister("breakBitBlock", breakBitBlock);
     Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
     Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
     if (mLineNumbering) {
@@ -226,8 +222,6 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
     // to access past EOF.
     Value * const bufLimit = b->CreateSub(avail, sz_ONE);
-    //b->CallPrintInt("bufLimit", bufLimit);
-    //b->CallPrintInt("matchEndPos", matchRecordEnd);
     matchEndPos = b->CreateUMin(matchEndPos, bufLimit);
 
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
@@ -288,7 +282,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks)
     : MultiBlockKernel(b, "scanMatch" + std::to_string(strideBlocks),
 // inputs
-{Binding{"matchResult", Matches }
+{Binding{"matchResult", Matches}
 ,Binding{"lineBreak", LineBreakStream}
 ,Binding{"InputStream", ByteStream, FixedRate(), { Deferred() }}},
 // outputs
@@ -310,7 +304,7 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
                                                StreamSet * const Coordinates, unsigned strideBlocks)
 : MultiBlockKernel(b, "matchCoordinates" + std::to_string(Coordinates->getNumElements()),
 // inputs
-{Binding{"matchResult", Matches}, Binding{"lineBreak", LineBreakStream}},
+{Binding{"matchResult", Matches}, Binding{"lineBreak", LineBreakStream, FixedRate(1), ZeroExtended()}},
 // outputs
 {Binding{"Coordinates", Coordinates, PopcountOf("matchResult")}},
 // input scalars
@@ -397,11 +391,6 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, strideBlockIndex);
     Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
-// TODO: Find something better than the following hack deals with the case that matchResult
-// has reported a match at one past EOF, while there is no linebreak bit at that position.
-    breakBitBlock = b->simd_or(breakBitBlock, matchBitBlock);
-    //b->CallPrintRegister("matchBitBlock", matchBitBlock);
-    //b->CallPrintRegister("breakBitBlock", breakBitBlock);
     Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
     Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
     if (mLineNumbering) {
@@ -493,13 +482,8 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
 
     Value * const matchStartPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_STARTS), matchNumPhi);
-//    b->CallPrintInt("matchStart", matchStart);
-//    b->CallPrintInt("matchStartPtr.LINE_STARTS", matchStartPtr);
     b->CreateStore(matchStart, matchStartPtr);
-
     Value * const lineEndsPtr = b->getRawOutputPointer("Coordinates", b->getInt32(LINE_ENDS), matchNumPhi);
-//    b->CallPrintInt("matchEndPos", matchEndPos);
-//    b->CallPrintInt("matchStartPtr.LINE_ENDS", lineEndsPtr);
     b->CreateStore(matchEndPos, lineEndsPtr);
 
     if (mLineNumbering) {
@@ -513,7 +497,6 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
         lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, sz_ZERO);
         Value * lineNum = b->CreateAdd(pendingLineNum, lineCountInStride);
         b->CreateStore(lineNum, b->getRawOutputPointer("Coordinates", b->getInt32(LINE_NUMBERS), matchNumPhi));
-        //b->CallPrintInt("  lineNum", lineNum);
     }
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.

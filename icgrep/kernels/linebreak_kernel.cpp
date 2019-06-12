@@ -24,14 +24,14 @@ using namespace re;
 using namespace llvm;
 using namespace IDISA;
 
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream)
-: PabloKernel(b, "lf" + std::to_string(BasisBits->getNumElements()) + "x" + std::to_string(BasisBits->getFieldWidth()),
-// input
-{Binding{"basis", BasisBits}},
-// output
+LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream)
+: PabloKernel(b, "lf" + std::to_string(Basis->getNumElements()) + "x" + std::to_string(Basis->getFieldWidth()),
+              // input
+{Binding{"basis", Basis}},
+              // output
 {Binding{"lf", LineFeedStream}}),
-    mNumOfStreams(BasisBits->getNumElements()),
-    mStreamFieldWidth(BasisBits->getFieldWidth())
+mNumOfStreams(Basis->getNumElements()),
+mStreamFieldWidth(Basis->getFieldWidth())
 {
 }
 
@@ -47,15 +47,50 @@ void LineFeedKernelBuilder::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
 }
 
+Bindings UnixLinesKernelBuilder::makeInputScalarBindings(Scalar * signalNullObject) {
+    if (signalNullObject) {
+        return {Binding{"handler_address", signalNullObject}};
+    } else {
+        return {};
+    }
+}
+
+UnixLinesKernelBuilder::UnixLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * Basis, StreamSet * LineEnds, Scalar * signalNullObject)
+: PabloKernel(b, "UnixLines" + std::to_string(Basis->getNumElements()) + "x" + std::to_string(Basis->getFieldWidth()) + (signalNullObject ? "_abort_on_null" : ""),
+              // input
+{Binding{"basis", Basis}},
+              // output
+{Binding{"UnixLineEnds", LineEnds, FixedRate(1), Add1()}},
+makeInputScalarBindings(signalNullObject), {}),
+mNumOfStreams(Basis->getNumElements()),
+mStreamFieldWidth(Basis->getFieldWidth()), mAbortOnNull(signalNullObject != nullptr)
+{
+    if (mAbortOnNull) {
+        addAttribute(CanTerminateEarly());
+    }
+}
+
+void UnixLinesKernelBuilder::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::unique_ptr<CC_Compiler> ccc;
+    if (mNumOfStreams == 1) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+    }
+    PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LF), 1), "unterminatedLineAtEOF");
+    pb.createAssign(pb.createExtract(getOutput(0), 0), pb.createOr(LF, unterminatedLineAtEOF, "EOL"));
+}
+
 LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned basisBitsCount)
 : PabloKernel(b, "lb" + std::to_string(basisBitsCount),
 // inputs
 {Binding{b->getStreamSetTy(basisBitsCount), "basis", FixedRate(), Principal()}
 ,Binding{b->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
 // outputs
-{Binding{b->getStreamSetTy(1), "linebreak", FixedRate()}
-,Binding{b->getStreamSetTy(1), "cr+lf"}}) {
-
+{Binding{b->getStreamSetTy(1), "linebreak", FixedRate(1), Add1()}
+,Binding{b->getStreamSetTy(1), "cr+lf", FixedRate(1), Add1()}}) {
 }
 
 void LineBreakKernelBuilder::generatePabloMethod() {

@@ -286,7 +286,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     else if (!internalS2P) {
         P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-            P->CreateKernelCall<LineFeedKernelBuilder>(SourceStream, LineBreakStream);
+            P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream);
         } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
             P->CreateKernelCall<CharacterClassKernelBuilder>( "Null", std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream);
         }
@@ -351,9 +351,12 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                 options->setPrefixRE(prefixRE);
                 options->setRE(suffixRE);
             }
-            const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
-            Kernel * LB_nullK = P->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream, callbackObject);
-            mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
+            if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
+                Kernel * LB_nullK = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream, callbackObject);
+                mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
+            } else {
+                P->CreateKernelCall<CharacterClassKernelBuilder>("Null", std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream);
+            }
         } else {
             options->addExternal("UTF8_index", U8index);
             if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {

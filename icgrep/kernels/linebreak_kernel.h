@@ -15,7 +15,7 @@ namespace kernel {
 
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * BasisBits, StreamSet * LineFeedStream);
+    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -24,6 +24,18 @@ protected:
     unsigned mStreamFieldWidth;
 };
 
+class UnixLinesKernelBuilder final : public pablo::PabloKernel {
+public:
+    UnixLinesKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * Basis, StreamSet * UnixLineEnds, Scalar * signalNullObject = nullptr);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    Bindings makeInputScalarBindings(Scalar * signalNullObject);
+    unsigned mNumOfStreams;
+    unsigned mStreamFieldWidth;
+    bool mAbortOnNull;
+};
 
 class LineBreakKernelBuilder final : public pablo::PabloKernel {
 public:

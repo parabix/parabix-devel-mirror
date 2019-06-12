@@ -41,7 +41,7 @@ UnicodeLineBreakKernel::UnicodeLineBreakKernel(const std::unique_ptr<kernel::Ker
 : PabloKernel(kb,
               "UTF8_LB",
               {Binding{kb->getStreamSetTy(8), "basis"}, Binding{kb->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
-              {Binding{kb->getStreamSetTy(1, 1), "UTF8_LB", FixedRate()}}) {
+              {Binding{kb->getStreamSetTy(1, 1), "UTF8_LB", FixedRate(1), Add1()}}) {
 }
 
 void UnicodeLineBreakKernel::generatePabloMethod() {
@@ -63,8 +63,10 @@ void UnicodeLineBreakKernel::generatePabloMethod() {
     PabloAST * const lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
     crb.createAssign(CR_before_LF, crb.createAnd(CR, lookaheadLF));
     breakStream = pb.createXor(breakStream, CR_before_LF);  // Remove CR_before_LF from breakStream
+    PabloAST * notLB = pb.createNot(breakStream);
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(notLB, 1), "unterminatedLineAtEOF");
     Var * const UTF8_LB = getOutputStreamVar("UTF8_LB");
-    pb.createAssign(pb.createExtract(UTF8_LB, pb.getInteger(0)), breakStream);
+    pb.createAssign(pb.createExtract(UTF8_LB, pb.getInteger(0)), pb.createOr(breakStream, unterminatedLineAtEOF));
 }
 
 void UTF8_index::generatePabloMethod() {
@@ -264,7 +266,10 @@ void RequiredStreams_UTF8::generatePabloMethod() {
     Var * const u8index = getOutputStreamVar("u8index");
     PabloAST * u8final = pb.createNot(nonFinal);
     pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u8final);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), LineBreak);
+    PabloAST * notLB = pb.createNot(LineBreak);
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(notLB, 1), "unterminatedLineAtEOF");
+    PabloAST * lineTerminator = pb.createOr(LineBreak, unterminatedLineAtEOF);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("UnicodeLB"), pb.getInteger(0)), lineTerminator);
 }
 
 RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * LineFeedStream, StreamSet * RequiredStreams, StreamSet * UnicodeLB)
@@ -274,7 +279,7 @@ RequiredStreams_UTF8::RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelB
  Binding{"lf", LineFeedStream, FixedRate(), { LookAhead(1) }}},
 // output
 {Binding{"u8index", RequiredStreams, FixedRate(), Add1()},
- Binding{"UnicodeLB", UnicodeLB, FixedRate()}}) {
+ Binding{"UnicodeLB", UnicodeLB, FixedRate(), Add1()}}) {
 
 }
 
@@ -550,7 +555,7 @@ MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuil
 {Binding{"matchResults", OriginalMatches}
 ,Binding{"lineBreaks", LineBreakStream, FixedRate()}},
 // output
-{Binding{"matchedLines", Matches, FixedRate(), Add1()}}) {
+{Binding{"matchedLines", Matches}}) {
 
 }
 
