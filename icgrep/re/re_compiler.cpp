@@ -583,7 +583,8 @@ inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuild
 
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
     PabloAST * const nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-    PabloAST * const atEOL = pb.createAnd(mLineBreak, nextPos, "eol");
+    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(mLineBreak), 1), "unterminatedLineAtEOF");
+    PabloAST * const atEOL = pb.createAnd(pb.createOr(mLineBreak, unterminatedLineAtEOF), nextPos, "eol");
     return makeMarker(FinalPostPositionUnit, atEOL);
 }
 

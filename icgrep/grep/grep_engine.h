@@ -14,6 +14,7 @@
 #include <sstream>
 #include <atomic>
 #include <boost/filesystem.hpp>
+#include <re/parsers/GLOB_parser.h>
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -244,7 +245,7 @@ public:
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
-    void grepCodeGen(std::vector<std::pair<PatternKind, re::RE *>> REs);
+    void grepCodeGen(std::vector<std::pair<re::PatternKind, re::RE *>> REs);
 
     void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
 

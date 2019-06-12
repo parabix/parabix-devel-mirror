@@ -823,7 +823,7 @@ InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
     mMainMethod(nullptr),
     mNumOfThreads(1) {}
 
-void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<PatternKind, re::RE *>> signedREs) {
+void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKind, re::RE *>> signedREs) {
     auto & idb = mGrepDriver.getBuilder();
 
     re::CC * breakCC = nullptr;
@@ -860,7 +860,7 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<PatternKind, r
     E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
     StreamSet * resultsSoFar = RecordBreakStream;
-    bool initialInclude = signedREs[0].first == PatternKind::Include;
+    bool initialInclude = signedREs[0].first == re::PatternKind::Include;
     if (initialInclude) {
         StreamSet * MatchResults = E->CreateStreamSet();
         std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
@@ -876,7 +876,7 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<PatternKind, r
         options->setRE(signedREs[i].second);
         options->setSource(BasisBits);
         options->setResults(MatchResults);
-        bool isExclude = signedREs[i].first == PatternKind::Exclude;
+        bool isExclude = signedREs[i].first == re::PatternKind::Exclude;
         options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
         E->CreateKernelCall<ICGrepKernel>(std::move(options));
         resultsSoFar = MatchResults;

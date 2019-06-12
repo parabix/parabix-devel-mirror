@@ -11,7 +11,10 @@
 #include <re/re_seq.h>
 #include <re/re_diff.h>
 #include <re/re_rep.h>
+#include <re/re_start.h>
+#include <re/re_end.h>
 #include <re/re_utility.h>
+#include <fstream>
 
 namespace re {
 
@@ -185,6 +188,82 @@ RE * FileGLOB_Parser::range_extend(RE * char_expr1) {
         char_expr2 = makeCC(parse_literal_codepoint());
     }
     return makeRange(char_expr1, char_expr2);
+}
+
+// Parsing a file using .gitignore conventions, returning a vector of REs.
+//
+// Lines beginning "!" are ignore overrides, these are returned as negative lookbehind assertions.
+// Lines beginning "/" are anchored to the given directory path.
+// Lines ending "/" match directories only (directory entries in the search buffer
+//    must include a trailing slash.)
+//
+namespace fs = boost::filesystem;
+
+std::vector<std::pair<PatternKind, RE *>> parseGitIgnoreFile(fs::path dirpath, std::string ignoreFileName, std::vector<std::pair<PatternKind, RE *>> REs) {
+    std::vector<std::pair<PatternKind, RE *>> ignoreREs = REs;
+    fs::path ignoreFilePath = dirpath/ignoreFileName;
+    std::ifstream ignoreFile(ignoreFilePath.string());
+    if (ignoreFile.is_open()) {
+        std::string line;
+        while (std::getline(ignoreFile, line)) {
+            bool is_local_pattern = false;
+            bool is_directory_only_pattern = false;
+            bool is_include_override = false;
+            if (line.empty() || (line[0] == '#')) continue;  // skip empty and comment lines.
+            unsigned line_start = 0;
+            unsigned line_end = line.size() - 1;
+            while ((line[line_end] == ' ') && (line_end > 0)) {
+                line_end--;
+            }
+            if (line_end == 0) continue;  // skip blank lines.
+            if (line[line_end] == '\\') {
+                // Escape character found, but is it an escaped escape (\\)?
+                // Determine whether we have an odd or even number of escapes.
+                unsigned escape_pos = line_end;
+                while ((escape_pos > 0) && (line[escape_pos-1] == '\\')) {
+                    escape_pos--;
+                }
+                if (((line_end - escape_pos) & 1) == 1) {
+                    // Odd number of escapes - the final space is escaped, not trimmed.
+                    line_end++;
+                }
+            }
+            if (line[line_end] == '/') {
+                is_directory_only_pattern = true;
+            }
+            if (line[0] == '!') { // negated ignore is an overriding include.
+                is_include_override = true;
+                line_start++;
+            }
+            // Convert any local patterns to full path patterns.
+            if (line[0] == '/') {
+                is_local_pattern = true;
+                line_start++;
+            }
+            if ((line_start != 0) || (line_end != line.size() - 1)) {
+                line = line.substr(line_start, line_end - line_start + 1);
+            }
+            RE * lineRE = RE_Parser::parse(line, DEFAULT_MODE, RE_Syntax::GitGLOB);
+            if (is_local_pattern) {
+                // The full path must be matched.
+                lineRE = makeSeq({makeStart(), lineRE});
+            }
+            else {
+                // Ensure that the pattern matches a full path component.
+                lineRE = makeSeq({makeAlt({makeStart(), makeCC('/')}), lineRE});
+            }
+            if (is_directory_only_pattern) {
+                // The full path must be matched including the trailing slash.
+                lineRE = makeSeq({lineRE, makeEnd()});
+            } else {
+                // Match both files and directories
+                lineRE = makeSeq({lineRE, makeRep(makeCC('/'), 0, 1), makeEnd()});
+            }
+            ignoreREs.push_back(std::make_pair(is_include_override ? PatternKind::Include : PatternKind::Exclude, lineRE));
+        }
+        ignoreFile.close();
+    }
+    return ignoreREs;
 }
 
 }

@@ -9,6 +9,8 @@
 
 #include <re/parsers/parser.h>
 #include <re/parsers/ERE_parser.h>
+#include <vector>
+#include <boost/filesystem.hpp>
 
 //  GLOB parsing for Filename expansion in accord with Posix rules
 //  IEEE-1003.1 XCU section  2.13 Pattern Matching Notation
@@ -32,6 +34,12 @@ namespace re {
         GLOB_kind mGLOB_kind;
         bool mPathComponentStartContext;
     };
-}
 
+
+enum class PatternKind {Include, Exclude};
+std::vector<std::pair<PatternKind, RE *>> parseGitIgnoreFile(boost::filesystem::path dirpath,
+                                                             std::string ignoreFileName,
+                                                             std::vector<std::pair<PatternKind, RE *>> REs);
+
+}
 #endif
