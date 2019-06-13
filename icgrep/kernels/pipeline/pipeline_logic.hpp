@@ -94,10 +94,11 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         mPipelineKernel->addThreadLocalScalar(localStateType, PIPELINE_THREAD_LOCAL_STATE);
         mHasThreadLocalPipelineState = true;
     }
-    addTerminationProperties(b);
+
     addConsumerKernelProperties(b, PipelineInput);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
+        addTerminationProperties(b, i);
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
         addCycleCounterProperties(b, i);
@@ -264,7 +265,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         b->CreateUnlikelyCondBr(terminatedOnInit, kernelTerminated, kernelExit);
 
         b->SetInsertPoint(kernelTerminated);
-        setTerminated(b);
+        setTerminated(b, getTerminationSignal(b, TerminationSignal::Aborted));
         b->CreateBr(kernelExit);
 
         b->SetInsertPoint(kernelExit);

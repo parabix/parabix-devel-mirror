@@ -39,7 +39,6 @@ void PipelineCompiler::start(BuilderRef b) {
         Value * const segNoPtr = b->getScalarFieldPtr(CURRENT_LOGICAL_SEGMENT_NUMBER);
         mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
     }
-    loadTerminationSignals(b);
     mHalted = b->getFalse();
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(mPipelineKernel->getName() + " +++ pipeline start +++", mSegNo);
@@ -133,6 +132,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelAbnormalTermination);
     loadItemCountsOfCountableRateStreams(b);
+    signalAbnormalTermination(b);
     b->CreateBr(mKernelTerminated);
 
     /// -------------------------------------------------------------------------------------
@@ -141,7 +141,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelTerminated);
     clearUnwrittenOutputData(b);
-    setTerminated(b);
+    setTerminated(b, mTerminatedSignalPhi);
     updatePhisAfterTermination(b);
     b->CreateBr(mKernelLoopExit);
 
@@ -237,11 +237,11 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
             mUpdatedProducedPhi[i]->addIncoming(mProducedItemCount[i], ioBoundsCheck);
         }
 
+        mTerminatedSignalPhi->addIncoming(getTerminationSignal(b, TerminationSignal::Terminated), entryBlock);
+
         mAlreadyProgressedPhi->addIncoming(b->getTrue(), ioBoundsCheck);
         mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
         mExecutedAtLeastOncePhi->addIncoming(b->getTrue(), ioBoundsCheck);
-
-        // This needs to test mLastPartialSegment.
         b->CreateUnlikelyCondBr(isFinal, mKernelTerminated, ioBoundsCheck);
 
         b->SetInsertPoint(ioBoundsCheck);
@@ -250,8 +250,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
         const BufferNode & bn = mBufferGraph[mKernelIndex];
         Constant * const maxStrides = b->getSize(ceiling(bn.Upper));
         Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
-
-        mTerminatedPhi->addIncoming(mTerminatedInitially, ioBoundsCheck);
+        mTerminatedPhi->addIncoming(getTerminationSignal(b, TerminationSignal::None), ioBoundsCheck);
         mHasProgressedPhi->addIncoming(b->getTrue(), ioBoundsCheck);
         mHaltingPhi->addIncoming(mHalted, ioBoundsCheck);
         mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
@@ -272,7 +271,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
                 mUpdatedProducedDeferredPhi[i]->addIncoming(mProducedDeferredItemCount[i], entryBlock);
             }
         }
-        mTerminatedPhi->addIncoming(mTerminatedInitially, entryBlock);
+        mTerminatedPhi->addIncoming(getTerminationSignal(b, TerminationSignal::None), entryBlock);
         mHasProgressedPhi->addIncoming(b->getTrue(), entryBlock);
         mHaltingPhi->addIncoming(mHalted, entryBlock);
         mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, entryBlock);
@@ -295,8 +294,6 @@ void PipelineCompiler::end(BuilderRef b) {
     // sink).
 
     b->setKernel(mPipelineKernel);
-
-    storeTerminationSignals(b);
     Value * const terminated = pipelineTerminated(b);
     Value * const done = b->CreateOr(mHalted, terminated);
     Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
@@ -490,8 +487,9 @@ inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelTerminated);
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     Type * const sizeTy = b->getSizeTy();
+    mTerminatedSignalPhi = b->CreatePHI(sizeTy, 2);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
         mFinalProcessedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_finalProcessed");
@@ -566,7 +564,7 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    mTerminatedPhi->addIncoming(getTerminationSignal(b, mKernelIndex), exitBlock);
+    mTerminatedPhi->addIncoming(mTerminatedSignalPhi, exitBlock);
     mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
     mHaltingPhi->addIncoming(mHalted, exitBlock);
     mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);

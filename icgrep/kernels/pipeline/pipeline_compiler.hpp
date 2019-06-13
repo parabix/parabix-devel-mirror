@@ -321,11 +321,11 @@ struct ConsumerEdge {
 
 using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, ConsumerEdge>;
 
-template <typename Value>
-using StreamSetBufferMap = flat_map<const StreamSetBuffer *, Value>;
-
-template <typename Value>
-using KernelMap = flat_map<const Kernel *, Value>;
+enum TerminationSignal : unsigned {
+    None = 0
+    , Terminated = 1
+    , Aborted = 2
+};
 
 using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
 
@@ -480,7 +480,7 @@ protected:
     Value * readTerminationSignalFromLocalState(BuilderRef b, Value * const localState) const;
     inline Value * isProcessThread(BuilderRef b, Value * const threadState) const;
 
-    void addTerminationProperties(BuilderRef b);
+    void addTerminationProperties(BuilderRef b, const unsigned kernel);
 
 // inter-kernel functions
 
@@ -571,16 +571,15 @@ protected:
 
 // termination functions
 
-    Value * hasKernelTerminated(BuilderRef b, const unsigned kernel) const;
-    LLVM_READNONE Constant * getTerminationSignal(BuilderRef b, const unsigned kernel) const;
+    Value * hasKernelTerminated(BuilderRef b, const unsigned kernel, const bool normally = false) const;
     Value * isClosed(BuilderRef b, const unsigned inputPort);
+    Value * isClosedNormally(BuilderRef b, const unsigned inputPort);
     Value * initiallyTerminated(BuilderRef b);
-    void setTerminated(BuilderRef b) const;
+    void setTerminated(BuilderRef b, Value * const signal);
     Value * pipelineTerminated(BuilderRef b) const;
+    void signalAbnormalTermination(BuilderRef b);
     void updateTerminationSignal(Value * const signal);
-
-    void loadTerminationSignals(BuilderRef b);
-    void storeTerminationSignals(BuilderRef b);
+    LLVM_READNONE static Constant * getTerminationSignal(BuilderRef b, const TerminationSignal type);
 
 // consumer recording
 
@@ -809,6 +808,7 @@ protected:
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
+    PHINode *                                   mTerminatedSignalPhi = nullptr;
     PHINode *                                   mTerminatedPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;

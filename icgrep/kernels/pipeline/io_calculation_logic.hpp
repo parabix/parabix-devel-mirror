@@ -463,7 +463,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                 Value * const y = b->CreateAdd(xh, g);
                 const auto r = factor / RateValue{k.denominator()};
                 Value * const z = b->CreateCeilUMulRate(y, r);
-                calculated = b->CreateSelect(isClosed(b, i), z, calculated);
+                calculated = b->CreateSelect(isClosedNormally(b, i), z, calculated);
             }
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 Value * correctItemCount = b->CreateICmpULE(calculated, accessibleItems[i]);
