@@ -43,9 +43,10 @@ Value * ScanKernelBase::computeStrideBlockOffset(BuilderRef b, Value * strideNo)
     return b->CreateMul(strideNo, sz_NUM_BLOCKS_PER_STRIDE);
 }
 
-Value * ScanKernelBase::loadScanStreamBitBlock(BuilderRef b, Value * strideNo, Value * blockNo) {
+Value * ScanKernelBase::loadScanStreamBitBlock(BuilderRef b, Value * strideNo, Value * blockNo, llvm::Value * streamIndex) {
+    Value * const sidx = streamIndex == nullptr ? b->getSize(0) : streamIndex;
     Value * idx = b->CreateAdd(blockNo, computeStrideBlockOffset(b, strideNo));
-    return b->loadInputStreamBlock(mScanStreamSetName, b->getSize(0), idx);
+    return b->loadInputStreamBlock(mScanStreamSetName, sidx, idx);
 }
 
 Value * ScanKernelBase::orBlockIntoMask(BuilderRef b, ScanWordContext const & sw, Value * maskAccum, Value * block, Value * blockNo) {
@@ -53,6 +54,14 @@ Value * ScanKernelBase::orBlockIntoMask(BuilderRef b, ScanWordContext const & sw
     Value * const signMask = b->CreateZExt(b->hsimd_signmask(sw.fieldWidth, any), sw.StrideMaskTy);
     Value * const shiftedSignMask = b->CreateShl(signMask, b->CreateZExtOrTrunc(b->CreateMul(blockNo, sw.WORDS_PER_BLOCK), sw.StrideMaskTy));
     return b->CreateOr(maskAccum, shiftedSignMask);
+}
+
+Value * ScanKernelBase::loadScanWord(BuilderRef b, ScanWordContext const & sw, Value * wordOffset, Value * strideNo, llvm::Value * streamIndex) {
+    Value * const index = streamIndex == nullptr ? b->getSize(0) : streamIndex;
+    Value * const strideOffset = b->CreateMul(strideNo, sz_NUM_BLOCKS_PER_STRIDE);
+    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr(mScanStreamSetName, index, strideOffset), sw.PointerTy);
+    Value * const wordPtr = b->CreateGEP(stridePtr, wordOffset);
+    return b->CreateLoad(wordPtr);
 }
 
 ScanKernelBase::ScanKernelBase(BuilderRef b, unsigned strideWidth, StringRef scanStreamSetName)
@@ -115,10 +124,7 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     PHINode * const processingMask = b->CreatePHI(sw.StrideMaskTy, 2, "processingMask");
     processingMask->addIncoming(strideMask, maskReady);
     Value * const wordOffset = b->CreateCountForwardZeroes(processingMask, true);
-    Value * const strideOffset = b->CreateMul(strideNo, sz_NUM_BLOCKS_PER_STRIDE);
-    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr(mScanStreamSetName, sz_ZERO, strideOffset), sw.PointerTy);
-    Value * const wordPtr = b->CreateGEP(stridePtr, wordOffset);
-    Value * const word = b->CreateLoad(wordPtr, "scanWord");
+    Value * const word = loadScanWord(b, sw, wordOffset, strideNo);
     b->CreateBr(processWord);
 
     b->SetInsertPoint(processWord);
@@ -129,11 +135,9 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
         b->CreateAssert(b->CreateICmpNE(processingWord, ZERO_WORD), "ScanKernel::processWord: processing word cannot be zero!");
     }
     Value * const bitIndex_InWord = b->CreateZExt(b->CreateCountForwardZeroes(processingWord, true), sizeTy);
-    // b->CallPrintInt("bit index", bitIndex_InWord);
     Value * const wordIndex_InStride = b->CreateMul(wordOffset, sw.WIDTH);
     Value * const strideIndex = computeStridePosition(b, strideNo);
     Value * const callbackIndex = b->CreateAdd(strideIndex, b->CreateAdd(wordIndex_InStride, bitIndex_InWord), "callbackIndex");
-    // b->CallPrintInt("callback index", callbackIndex);
     Value * const sourcePtr = b->getRawInputPointer("source", callbackIndex);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
     b->CreateCall(callback, {sourcePtr, callbackIndex});

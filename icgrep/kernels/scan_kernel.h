@@ -47,9 +47,11 @@ protected:
 
     llvm::Value * computeStrideBlockOffset(BuilderRef b, llvm::Value * strideNo) const;
 
-    llvm::Value * loadScanStreamBitBlock(BuilderRef b ,llvm::Value * strideNo, llvm::Value * blockNo);
+    llvm::Value * loadScanStreamBitBlock(BuilderRef b ,llvm::Value * strideNo, llvm::Value * blockNo, llvm::Value * streamIndex = nullptr);
 
     llvm::Value * orBlockIntoMask(BuilderRef b, ScanWordContext const & sw, llvm::Value * maskAccum, llvm::Value * block, llvm::Value * blockNo);
+
+    llvm::Value * loadScanWord(BuilderRef b, ScanWordContext const & sw, llvm::Value * wordOffset, llvm::Value * strideNo, llvm::Value * streamIndex = nullptr);
 
 protected:
     unsigned        mStrideWidth;
