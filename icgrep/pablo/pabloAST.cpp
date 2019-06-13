@@ -319,17 +319,18 @@ Statement * Statement::removeFromParent() noexcept {
  * @brief eraseFromParent
  ** ------------------------------------------------------------------------------------------------------------- */
 Statement * Statement::eraseFromParent(const bool recursively) noexcept {
-
-    if (LLVM_UNLIKELY(getParent() == nullptr)) {
+    PabloBlock * const scope = getParent();
+    if (LLVM_UNLIKELY(scope == nullptr)) {
         return nullptr;
     }
-
     if (LLVM_UNLIKELY(isa<Branch>(this))) {
         cast<Branch>(this)->getBody()->eraseFromParent(recursively);
-    } else if (LLVM_LIKELY(!isa<Assign>(this))) {
-        replaceAllUsesWith(getParent()->createZeroes(getType()));
+    } else if (LLVM_UNLIKELY(!mUsers.empty())) {
+        assert (!isa<Assign>(this));
+        // We cannot leave an erased statement in the AST.
+        // Remove it by replacing all users with 0.
+        replaceAllUsesWith(scope->createZeroes(getType()));
     }
-
     Statement * const next = removeFromParent();
     for (unsigned i = 0; i != mOperands; ++i) {
         PabloAST * const op = mOperand[i]; assert (op);
@@ -341,7 +342,6 @@ Statement * Statement::eraseFromParent(const bool recursively) noexcept {
         }
         mOperand[i] = nullptr;
     }
-
     return next;
 }
 
@@ -360,7 +360,7 @@ Statement * Statement::replaceWith(PabloAST * const expr, const bool rename, con
         }
     }
     replaceAllUsesWith(expr);
-    return eraseFromParent(recursively);
+    return Statement::eraseFromParent(recursively);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

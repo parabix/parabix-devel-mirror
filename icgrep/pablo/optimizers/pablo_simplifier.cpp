@@ -18,11 +18,9 @@
 #include <pablo/analysis/pabloverifier.hpp>
 #endif
 #include <boost/container/flat_set.hpp>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/DerivedTypes.h>  // for get getSequentialElementType
+#include <llvm/IR/DerivedTypes.h>
 #include <llvm/Support/raw_ostream.h>
-#include <array>
-#include <queue>
+#include <util/slab_allocator.h>
 #include <pablo/printer_pablos.h>
 
 using namespace boost;
@@ -32,25 +30,34 @@ using namespace llvm;
 namespace pablo {
 
 using TypeId = PabloAST::ClassTypeId;
-
 using EscapedVars = Branch::EscapedVars;
+using Allocator = SlabAllocator<uint8_t>;
+using KeySet = SmallVector<const Var *, 64>;
+
+// #define EXPERIMENTAL
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief VariableTable
  ** ------------------------------------------------------------------------------------------------------------- */
 struct VariableTable {
 
-    VariableTable() noexcept
-    : mOuter(nullptr) {
+    using MapValueType = flat_map<const Var *, PabloAST *, std::less<const Var *>>::value_type;
+    using MapAllocator = ProxyAllocator<MapValueType>;
+    using Map = flat_map<const Var *, PabloAST *, std::less<const Var *>, MapAllocator>;
+
+    VariableTable(Allocator & allocator) noexcept
+    : mOuter(nullptr)
+    , mMap(MapAllocator{allocator}) {
 
     }
 
-    VariableTable(const VariableTable & outer) noexcept
-    : mOuter(&outer) {
+    VariableTable(VariableTable & outer) noexcept
+    : mOuter(&outer)
+    , mMap(MapAllocator{outer.mMap.get_allocator()}) {
 
     }
 
-    PabloAST * get(const PabloAST * const var) const noexcept {
+    PabloAST * get(const Var * const var) const noexcept {
         const auto f = mMap.find(var);
         if (f == mMap.end()) {
             return (mOuter) ? mOuter->get(var) : nullptr;
@@ -58,7 +65,7 @@ struct VariableTable {
         return f->second;
     }
 
-    void put(const PabloAST * const var, PabloAST * value) noexcept {
+    void put(const Var * const var, PabloAST * value) noexcept {
         const auto f = mMap.find(var);
         if (LLVM_LIKELY(f == mMap.end())) {
             mMap.emplace(var, value);
@@ -67,14 +74,87 @@ struct VariableTable {
         }
     }
 
+    KeySet keySet() const {
+        KeySet keySet;
+        const Map & M = mMap;
+        unsigned i = 0;
+        for (const auto & e : M) {
+            keySet[i++] = e.first;
+        }
+        if (mOuter) {
+            KeySet tmp1;
+            KeySet tmp2;
+            const VariableTable * current = mOuter;
+            for (;;) {
+                const Map & M = current->mMap;
+                tmp1.resize(M.size());
+                unsigned i = 0;
+                for (const auto & e : M) {
+                    tmp1[i++] = e.first;
+                }
+                tmp2.reserve(tmp1.size() + keySet.size());
+                std::set_union(keySet.begin(), keySet.end(), tmp1.begin(), tmp1.end(), std::back_inserter(tmp2));
+                keySet.swap(tmp2);
+                current = current->mOuter;
+                if (current == nullptr) {
+                    break;
+                }
+                tmp1.clear();
+                tmp2.clear();
+            }
+        }
+        return keySet;
+    }
+
     void clear() {
         mMap.clear();
     }
 
 private:
     const VariableTable * const mOuter;
-    flat_map<const PabloAST *, PabloAST *> mMap;
+    Map                         mMap;
 };
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief LiveVarSet
+ ** ------------------------------------------------------------------------------------------------------------- */
+struct LiveVarSet : public flat_set<const Var *> {
+
+    LiveVarSet() noexcept
+    : mOuter(nullptr) {
+
+    }
+
+    LiveVarSet(const LiveVarSet & outer) noexcept
+    : mOuter(&outer) {
+
+    }
+
+    bool contains(const Var * const var) const noexcept {
+        const auto f = find(var);
+        if (f == end()) {
+            return (mOuter) ? mOuter->contains(var) : false;
+        }
+        return true;
+    }
+
+    bool remove(const Var * const var) noexcept {
+        const auto f = find(var);
+        if (LLVM_LIKELY(f != end())) {
+            erase(f);
+            return true;
+        }
+        return false;
+    }
+
+    void put(const Var * const var) noexcept {
+        insert(var);
+    }
+
+private:
+    const LiveVarSet * const mOuter;
+};
+
 
 struct PassContainer {
 
@@ -90,9 +170,13 @@ PassContainer()
  * @brief run
  ** ------------------------------------------------------------------------------------------------------------- */
 void run(PabloKernel * const kernel) {
-    redundancyElimination(kernel);
+    for (;;) {
+        redundancyElimination(kernel);
+        if (LLVM_LIKELY(deadCodeElimination(kernel))) {
+            break;
+        }
+    }
     strengthReduction(kernel->getEntryScope());
-    deadCodeElimination(kernel);
 }
 
 protected:
@@ -104,15 +188,18 @@ protected:
  * as replacements. Let the DCE remove the unnecessary statements with the finalized Def-Use information.
  ** ------------------------------------------------------------------------------------------------------------- */
 void redundancyElimination(PabloKernel * const kernel) {
-    VariableTable variables;
+    ExpressionTable expressions;
+    VariableTable variables(expressions.get_allocator());
     const auto n = kernel->getNumOfInputs();
     for (unsigned i = 0; i < n; ++i) {
         Var * const input = kernel->getInput(i);
         variables.put(input, input);
     }
     PabloBlock * const entryScope = kernel->getEntryScope();
-    ExpressionTable expressions;
+    mSideEffecting.clear();
+    assert (mNonZero.empty());
     redundancyElimination(entryScope, expressions, variables);
+    assert (mNonZero.empty());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -145,7 +232,7 @@ bool redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
                 PabloAST * const op = stmt->getOperand(i);
                 // demote any uses of any Var whose value is in scope
                 if (LLVM_UNLIKELY(isa<Var>(op))) {
-                    PabloAST * const var = variables.get(op);
+                    PabloAST * const var = variables.get(cast<Var>(op));
                     if (LLVM_UNLIKELY(var != nullptr && var != op)) {
                         stmt->setOperand(i, var);
                     }
@@ -180,6 +267,7 @@ bool redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
 
             if (LLVM_UNLIKELY(stmt->isSideEffecting())) {
                 hasSideEffects = true;
+                mSideEffecting.insert(stmt);
             }
 
             // Attempt to extend our set of trivially non-zero statements.
@@ -215,7 +303,9 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 
     // Construct the nested variable table
     VariableTable nestedVariables(variables);
-    const auto escaped = br->getEscaped();
+    EscapedVars escaped = br->getEscaped();
+    std::sort(escaped.begin(), escaped.end());
+
     if (LLVM_UNLIKELY(isa<While>(br))) {
         for (Var * const var : escaped) {
             nestedVariables.put(var, var);
@@ -252,12 +342,11 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
     // Process the Branch body
     ExpressionTable nestedExpressions(&expressions);
 
+    bool hasSideEffects = false;
+
     auto processBranchBody = [&]() {
         mNonZero.push_back(cond); // mark the cond as non-zero prior to processing the inner scope.
-        const auto hasSideEffects = redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
-        if (LLVM_UNLIKELY(hasSideEffects)) {
-            br->setSideEffecting(true);
-        }
+        hasSideEffects = redundancyElimination(br->getBody(), nestedExpressions, nestedVariables);
         assert (mNonZero.back() == cond);
         mNonZero.pop_back();
     };
@@ -266,7 +355,7 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
 
     // If this block has a branch statement leading into it, we can verify whether an escaped value
     // was updated within this block and update the preceeding block's variable state appropriately.
-    if (phiEscapedVars(escaped, nestedVariables, variables)) {
+    if (phiEscapedVars(br, escaped, nestedVariables, variables)) {
         // If we modified the escaped vars, reevaluate the branch.
         nestedExpressions.clear();
         subsituteCondValue();
@@ -278,29 +367,31 @@ Statement * evaluateBranch(Branch * const br, ExpressionTable & expressions, Var
     if (LLVM_LIKELY(isa<If>(br)) && LLVM_UNLIKELY(isTrivial(br->getBody()))) {
         return flatten(br);
     }
-
+    if (LLVM_UNLIKELY(hasSideEffects)) {
+        mSideEffecting.insert(br);
+    }
     return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief phiEscapedVars
  ** ------------------------------------------------------------------------------------------------------------- */
-static bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
+static bool phiEscapedVars(Branch * const br, const EscapedVars & escaped, VariableTable & inner, VariableTable & outer) {
 
     const auto n = escaped.size();
 
     SmallVector<PabloAST *, 16> incoming(n);
     SmallVector<PabloAST *, 16> outgoing(n);
     SmallVector<PabloAST *, 16> initial(n);
-    SmallVector<PabloAST *, 16> result(n);
+    SmallVector<PabloAST *, 16> final(n);
     bool modified = false;
 
     for (unsigned i = 0; i < n; ++i) {
         Var * const var = escaped[i];
         incoming[i] = outer.get(var);
         outgoing[i] = inner.get(var);
-        initial[i] = escaped[i];
-        result[i] = escaped[i];
+        initial[i] = var;
+        final[i] = var;
     }
 
     // CASE 1:
@@ -308,15 +399,15 @@ static bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, V
     // Detect when Var a is assigned the same value within the branch as its original value
     // and replace a with the value.
 
-    //             a = x                     ...
+    //             a = x                     a = x
     //             branch a:        =>       branch x:
     //               a = x                      ...
-    //             y = a op z                y = x op z
+    //             y = a op z                y = *x* op z
 
     for (unsigned i = 0; i < n; ++i) {
         if (LLVM_UNLIKELY(incoming[i] == outgoing[i])) {
             initial[i] = incoming[i];
-            result[i] = incoming[i];
+            final[i] = incoming[i];
             modified = true;
         }
     }
@@ -336,16 +427,86 @@ static bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, V
     for (unsigned i = 0; i < n; ++i) {
         for (unsigned j = 0; j < i; ++j) {
             if (LLVM_UNLIKELY((outgoing[i] == outgoing[j]) && (incoming[i] == incoming[j]))) {
-                initial[i] = initial[j];
-                result[i] = result[j];
+                initial[i] = escaped[j];
+                final[i] = outgoing[j];
                 modified = true;
                 break;
             }
         }
     }
 
+    #ifdef EXPERIMENTAL
+    // CASE 3:
+
+    // TODO: there is one final simplification to vars that is within the scope of this pass
+    // but is non-trivial to reason out here. If we have:
+
+    //             a = x                            a = x
+    //             branch a:                        branch a:
+    //                b = y                            ...
+    //                ...                              b = a
+    //                ...                              a = y
+    //                branch b:                        branch *a*:
+    //                   ...                              ...
+    //                   f1 = op a, e1       =>            f1 = op *b*, e1
+    //                   f2 = op b, e2                     f2 = op *a*, e2
+    //                   ...                              ...
+    //                   a = r                            *b* = r
+    //                   b = z                            *a* = z
+    //                ...                              b = a
+    //                a = b                            ...
+
+    // We could reassign then "swap" a and b within branch c2. This accommodates the fact
+    // that "a" may be used -- or potentially reassigned --- within the c2 branch whilst
+    // ensuring uses of "a" refer to the original value of "a" (presuming no reassignments
+    // of "a" occur within branch c2).
+
+    // The problem here is we have not yet seen the final assignment of "a" to "b" and we
+    // must be certain that "b" is not reassigned some other value before it occurs and
+    // that there are no uses of "a" dominated by branch b "a" prior to the assignment.
+
+    const auto reassignments = identifyReassignments(br, escaped, outer);
+
+    if (LLVM_UNLIKELY(!reassignments.empty())) {
+        PabloBlock * const scope = br->getParent();
+        PabloBlock * const nested = br->getBody();
+
+        Statement * before = br->getPrevNode();
+        Statement * after = br->getPrevNode();
+
+        nested->setInsertPoint(nested->back());
+        for (Assign * const reassign : reassignments) {
+            Var * const b = cast<Var>(reassign->getValue());
+            const auto f = std::lower_bound(escaped.begin(), escaped.end(), b);
+            assert (f != escaped.end() && *f == b);
+            const auto i = std::distance(escaped.begin(), f);
+
+            scope->setInsertPoint(before);
+
+            Var * const a = reassign->getVariable();
+            scope->createAssign(b, a);
+            before = scope->createAssign(a, initial[i]);
+
+
+            nested->createAssign(a, final[i]);
+
+
+            scope->setInsertPoint(after);
+            after = scope->createAssign(b, a);
+
+            inner.put(b, a);
+            inner.put(a, b);
+
+            initial[i] = a;
+            final[i] = a;
+
+            modified = true;
+        }
+    }
+    #endif
+
     for (unsigned i = 0; i < n; ++i) {
-        outer.put(escaped[i], result[i]);
+        outer.put(escaped[i], final[i]);
     }
 
     if (modified) {
@@ -358,11 +519,100 @@ static bool phiEscapedVars(const EscapedVars & escaped, VariableTable & inner, V
     return modified;
 }
 
+#ifdef EXPERIMENTAL
+
+using Reassignments = SmallVector<Assign *, 4>;
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyReassignments
+ ** ------------------------------------------------------------------------------------------------------------- */
+static Reassignments identifyReassignments(Branch * const br, const EscapedVars & escaped, const VariableTable & outer) {
+    Reassignments reassignments;
+    for (const Var * var : getNonEscapedLiveVars(escaped, outer)) {
+        for (const PabloAST * const user : var->users()) {
+            if (isa<Assign>(user)) {
+                // is the assignment to a Var in the escaped list?
+                if (LLVM_UNLIKELY(isEscapedVar(cast<Assign>(user)->getValue(), escaped))) {
+                    // We may find several such assignments, potentially to the same Var since DCE may not have been
+                    // run yet on this program. However, we are only interested in the first such assignment that
+                    // post-dominates the branch and whether it happens to be an escaped Var. So once we determine
+                    // it is plausible that we have one, find the first post-dominating assignment to "var". If there
+                    // are no other uses of "var" prior to it, add it to our reassignment list.
+                    Assign * const assign = getSafePostDominatingAssignment(var, br);
+                    // Then add it to our list of reassignments if it happens to be one.
+                    if (LLVM_LIKELY(assign && (assign == user || isEscapedVar(assign->getValue(), escaped)))) {
+                        reassignments.emplace_back(assign);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    return reassignments;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isEscapedVar
+ ** ------------------------------------------------------------------------------------------------------------- */
+static bool isEscapedVar(const PabloAST * const expr, const EscapedVars & escaped) {
+    return isa<Var>(expr) && std::binary_search(escaped.begin(), escaped.end(), cast<Var>(expr));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getNonEscapedLiveVars
+ ** ------------------------------------------------------------------------------------------------------------- */
+static KeySet getNonEscapedLiveVars(const EscapedVars & escaped, const VariableTable & outer) {
+    const auto full = outer.keySet();
+    KeySet potential;
+    assert (std::is_sorted(escaped.begin(), escaped.end());
+    std::set_difference(full.begin(), full.end(), escaped.begin(), escaped.end(), std::back_inserter(potential));
+    return potential;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getSafePostDominatingAssignment
+ ** ------------------------------------------------------------------------------------------------------------- */
+static Assign * getSafePostDominatingAssignment(const Var * const var, Statement * prior) {
+    assert (prior);
+    for (;;) {
+        Statement * const stmt = prior->getNextNode();
+        if (LLVM_UNLIKELY(stmt == nullptr)) {
+            prior = prior->getParent()->getBranch();
+            if (LLVM_UNLIKELY(prior == nullptr)) {
+                return nullptr;
+            }
+        } else {
+            if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+                if (cast<Assign>(stmt)->getVariable() == var) {
+                    return cast<Assign>(stmt);
+                }
+                if (cast<Assign>(stmt)->getValue() == var) {
+                    return nullptr;
+                }
+            } else if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
+
+
+
+            } else {
+                const auto n = stmt->getNumOfOperands();
+                for (unsigned i = 0; i != n; ++i) {
+                    if (LLVM_UNLIKELY(var == stmt->getOperand(i))) {
+                        return nullptr;
+                    }
+                }
+            }
+            prior = stmt;
+        }
+    }
+}
+
+#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isRedundantAssign
  ** ------------------------------------------------------------------------------------------------------------- */
 static bool isRedundantAssign(Assign * const assign, VariableTable & variables) {
-    PabloAST * const var = assign->getVariable();
+    Var * const var = assign->getVariable();
     PabloAST * const prior = variables.get(var);
     PabloAST * value = assign->getValue();
     while (LLVM_UNLIKELY(isa<Var>(value))) {
@@ -855,48 +1105,6 @@ void strengthReduction(PabloBlock * const block) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief LiveVarSet
- ** ------------------------------------------------------------------------------------------------------------- */
-struct LiveVarSet : public flat_set<const Var *> {
-
-    using ExtVec = SmallVector<const PabloAST *, 4>;
-
-    LiveVarSet() noexcept
-    : mOuter(nullptr) {
-
-    }
-
-    LiveVarSet(const LiveVarSet & outer) noexcept
-    : mOuter(&outer) {
-
-    }
-
-    bool contains(const Var * const var) const noexcept {
-        const auto f = find(var);
-        if (f == end()) {
-            return (mOuter) ? mOuter->contains(var) : false;
-        }
-        return true;
-    }
-
-    bool remove(const Var * const var) noexcept {
-        const auto f = find(var);
-        if (LLVM_LIKELY(f != end())) {
-            erase(f);
-            return true;
-        }
-        return false;
-    }
-
-    void put(const Var * const var) noexcept {
-        insert(var);
-    }
-
-private:
-    const LiveVarSet * const mOuter;
-};
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isOutputExtract
  ** ------------------------------------------------------------------------------------------------------------- */
 static bool isOutputExtract(const Var * var, const LiveVarSet & set) {
@@ -910,9 +1118,17 @@ static bool isOutputExtract(const Var * var, const LiveVarSet & set) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isSideEffecting
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool isSideEffecting(const Statement * const stmt) const {
+    const auto f = mSideEffecting.find(stmt);
+    return f != mSideEffecting.end();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void deadCodeElimination(PabloKernel * const kernel) {
+bool deadCodeElimination(PabloKernel * const kernel) {
     LiveVarSet variables;
     const auto n = kernel->getNumOfOutputs();
     for (unsigned i = 0; i < n; ++i) {
@@ -926,75 +1142,102 @@ void deadCodeElimination(PabloKernel * const kernel) {
             variables.put(var);
         }
     }
-    deadCodeElimination(kernel->getEntryScope(), variables, false);
+    return !deadCodeElimination(kernel->getEntryScope(), variables, false);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief deadCodeElimination
  ** ------------------------------------------------------------------------------------------------------------- */
-void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const bool scanOnly) {
+bool deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const bool inspect) {
+    bool flattened = false;
     for (Statement * stmt = block->back(), * prior; stmt; stmt = prior) {
         prior = stmt->getPrevNode();
         if (LLVM_UNLIKELY(stmt->getNumUses() == 0)) {
-            const auto sideEffecting = stmt->isSideEffecting();
+            const auto sideEffecting = isSideEffecting(stmt);
             if (LLVM_UNLIKELY(isa<Branch>(stmt))) {
-                auto escaped = cast<Branch>(stmt)->getEscaped();
+                Branch * const br = cast<Branch>(stmt);
+                auto escaped = br->getEscaped();
                 LiveVarSet nested(liveSet);
-                if (LLVM_UNLIKELY(isa<While>(stmt))) {
-                    // gather any Vars whose incoming value is read within the loop
-                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, true);
-                    // and make sure the Cond is within our set of nested vars
-                    nested.put(cast<Var>(cast<While>(stmt)->getCondition()));
-                }
+                // Collect all of the live vars in the branch's escaped var list
                 for (const Var * var : escaped) {
                     if (LLVM_LIKELY(liveSet.contains(var))) {
                         nested.put(var);
                     }
                 }
+
                 // If none of the escaped vars from this branch are read, delete it.
                 if (LLVM_LIKELY(!nested.empty() || sideEffecting)) {
-                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, scanOnly);
-                    // the condition of a while loop may not have had any uses outside
-                    // of its reassignment for the next loop iteration test. All other
-                    // vars require at least one use of the incoming value within the
-                    // branch body itself.
-                    if (LLVM_UNLIKELY(isa<While>(stmt))) {
-                        liveSet.put(cast<Var>(cast<While>(stmt)->getCondition()));
+                    if (LLVM_UNLIKELY(isa<While>(br))) {
+                        // The condition of a while loop may not have had any uses outside
+                        // of its reassignment for the next loop iteration test.
+                        PabloAST * const cond = br->getCondition();
+                        liveSet.put(cast<Var>(cond));
+                        nested.put(cast<Var>(cond));
+                        // Since while loops may have internal assignments that are required
+                        // purely to support the production of a "live" var, we scan through
+                        // the branch body once to collect all of the vars whose incoming
+                        // value is read within the loop ...
+                        LiveVarSet internal(nested);
+                        deadCodeElimination(br->getBody(), internal, true);
+                        // ... and add those to our set of live vars in the nested branch so
+                        // that we do not erroneously delete them if we observe an assignment
+                        nested.insert(internal.begin(), internal.end());
                     }
-                    liveSet.insert(nested.begin(), nested.end());
-                    continue;
-                }
-            } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
-                Var * const var = cast<Assign>(stmt)->getVariable();
-                if (LLVM_LIKELY(liveSet.contains(var))) {
-                    PabloAST * const value = cast<Assign>(stmt)->getValue();
-                    if (isa<Var>(value)) {
-                        liveSet.put(cast<Var>(value));
-                    }
-                    if (liveSet.remove(var)) {
+                    flattened |= deadCodeElimination(br->getBody(), nested, inspect);
+                    // Although unlikely, it is possible that after DCE, a branch that did not
+                    // appear to be trivial during the redundancy elimination (RE) phase is now
+                    // trivial. However, this means we ought to re-run the RE pass to correctly
+                    // replace any uses of the escaped Vars with their (likely) concrete value
+                    // and propagate the impact of that change to the remaining program.
+                    // While the impact is likely to be local to this scope, it is possible
+                    // that it directly affects a Var that escapes this scope, which means we
+                    // should not limit re-running RE on this scope alone. Given the rarity
+                    // of finding a trivial scope, it's easier just to finish the DCE pass
+                    // then repeat the whole process until a "flattening fixpoint" is found.
+                    if (LLVM_LIKELY(!inspect && isa<If>(br)) && LLVM_UNLIKELY(isTrivial(br->getBody()))) {
+                        prior = br->getBody()->back();
+                        flatten(br);
+                        flattened = true;
+                        assert (prior->getParent() == block);
+                    } else {
+                        liveSet.insert(nested.begin(), nested.end());
                         continue;
                     }
                 }
+            } else if (LLVM_UNLIKELY(isa<Assign>(stmt))) {
+                Var * const var = cast<Assign>(stmt)->getVariable();
+                // Since we are reading the AST in reverse, an assignment to a var marks the
+                // "end" of a local var's life.
+                if (LLVM_LIKELY(liveSet.remove(var))) {
+                    PabloAST * const value = cast<Assign>(stmt)->getValue();
+                    if (LLVM_UNLIKELY(isa<Var>(value))) {
+                        liveSet.put(cast<Var>(value));
+                    }
+                    continue;
+                }
             }
-            if (LLVM_LIKELY(!scanOnly && !sideEffecting)) {
+            if (LLVM_LIKELY(!inspect && !sideEffecting)) {
                 stmt->eraseFromParent();
             }
         } else {
+            assert (!isa<Branch>(stmt) && !isa<Assign>(stmt));
             const auto n = stmt->getNumOperands();
             for (unsigned i = 0; i < n; ++i) {
                 PabloAST * const op = stmt->getOperand(i);
-                if (isa<Var>(op)) {
+                if (LLVM_UNLIKELY(isa<Var>(op))) {
                     liveSet.put(cast<Var>(op));
                 }
             }
         }
     }
+    return flattened;
 }
 
 private:
 
 const bool                          UseTernaryOptimizations;
 SmallVector<const PabloAST *, 64>   mNonZero;
+flat_set<const Statement *>         mSideEffecting;
 
 };
 

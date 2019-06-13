@@ -15,7 +15,7 @@ inline bool operator < (const llvm::ArrayRef<T> & A, const llvm::ArrayRef<T> & B
     return std::lexicographical_compare(A.begin(), A.end(), B.begin(), B.end());
 }
 
-namespace { // byval
+namespace {
 
 template <typename T>
 inline void __byval(llvm::ArrayRef<T> & t, ProxyAllocator<uint8_t> & alloc) noexcept {
@@ -75,101 +75,101 @@ struct __contains_var_impl<0, Tuple> {
 
 } // end of anonymous namespace
 
-template<typename... Args>
-struct FixedArgMap {
-    enum {N = sizeof...(Args)};
-    friend struct ExpressionTable;
+class ExpressionTable {
 
-    using Type = FixedArgMap<Args...>;
-    using TypeId = PabloAST::ClassTypeId;
-    using Key = std::tuple<TypeId, Args...>;
-    using Allocator = SlabAllocator<uint8_t>;
-    using MapAllocator = ProxyAllocator<typename std::map<Key, PabloAST *, std::less<Key>>::value_type>;
-    using Map = std::map<Key, PabloAST *, std::less<Key>, MapAllocator>;
+    template<typename... Args>
+    struct FixedArgMap {
+        enum {N = sizeof...(Args)};
+        friend struct ExpressionTable;
 
-    explicit FixedArgMap(Allocator & allocator, const Type * predecessor = nullptr) noexcept
-    : mPredecessor(predecessor)
-    , mMap(MapAllocator{allocator}) {
+        using Type = FixedArgMap<Args...>;
+        using TypeId = PabloAST::ClassTypeId;
+        using Key = std::tuple<TypeId, Args...>;
+        using Allocator = SlabAllocator<uint8_t>;
+        using MapAllocator = ProxyAllocator<typename std::map<Key, PabloAST *, std::less<Key>>::value_type>;
+        using Map = std::map<Key, PabloAST *, std::less<Key>, MapAllocator>;
 
-    }
+        explicit FixedArgMap(Allocator & allocator, const Type * predecessor = nullptr) noexcept
+        : mPredecessor(predecessor)
+        , mMap(MapAllocator{allocator}) {
 
-    explicit FixedArgMap(Type && other, Allocator & allocator) noexcept
-    : mPredecessor(other.mPredecessor)
-    , mMap(MapAllocator{allocator}) {
-        // This is called due to RVO when returning a new nested builder.
-        // If the map is not empty, it's an error.
-        assert (other.mMap.empty());
-    }
-
-    FixedArgMap & operator=(Type && other) noexcept = delete;
-
-    template <class Functor, typename... Params>
-    PabloAST * findOrCall(Functor && functor, const TypeId typeId, Args... args, Params... params) noexcept {
-        Key key = std::make_tuple(typeId, args...);
-        PabloAST * const f = find(key);
-        if (f) {
-            return f;
         }
-        PabloAST * const object = functor(std::forward<Args>(args)..., std::forward<Params>(params)...);
-        insert(std::move(key), object);
-        return object;
-    }
 
-    std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const TypeId typeId, Args... args) noexcept {
-        Key key = std::make_tuple(typeId, args...);
-        PabloAST * const entry = find(key);
-        if (entry) {
-            return std::make_pair(entry, false);
+        explicit FixedArgMap(Type && other, Allocator & allocator) noexcept
+        : mPredecessor(other.mPredecessor)
+        , mMap(MapAllocator{allocator}) {
+            // This is called due to RVO when returning a new nested builder.
+            // If the map is not empty, it's an error.
+            assert (other.mMap.empty());
         }
-        insert(std::move(key), object);
-        return std::make_pair(object, true);
-    }
 
-    void clear() {
-        mMap.clear();
-    }
+        FixedArgMap & operator=(Type && other) noexcept = delete;
 
-private:
-
-    void insert(Key && key, PabloAST * const object) noexcept {
-        ProxyAllocator<uint8_t> alloc{mMap.get_allocator()};
-        __make_byval_impl<std::tuple_size<Key>::value - 1, Key>::doit(key, alloc);
-        mMap.insert(std::make_pair(std::move(key), object));
-    }
-
-    PabloAST * find(const Key & key) const noexcept {
-        // check this map to see if we have it
-        auto itr = mMap.find(key);
-        if (itr != mMap.end()) {
-            return itr->second;
-        } else if (LLVM_LIKELY(allow_recursion(key))) {
-            // check any previous maps to see if it exists
-            auto * pred = mPredecessor;
-            while (pred) {
-                itr = pred->mMap.find(key);
-                if (itr == pred->mMap.end()) {
-                    pred = pred->mPredecessor;
-                    continue;
-                }
-                return itr->second;
+        template <class Functor, typename... Params>
+        PabloAST * findOrCall(Functor && functor, const TypeId typeId, Args... args, Params... params) noexcept {
+            Key key = std::make_tuple(typeId, args...);
+            PabloAST * const f = find(key);
+            if (f) {
+                return f;
             }
+            PabloAST * const object = functor(std::forward<Args>(args)..., std::forward<Params>(params)...);
+            insert(std::move(key), object);
+            return object;
         }
-        return nullptr;
-    }
 
-    // TODO: if this map was aware of its "loop depth" (instead of just knowing whether
-    // it has any outer scope) we could still safely reuse some Vars so long as we do not
-    // go outside of the current loop nest
-    static bool allow_recursion(const Key & key) noexcept {
-        return !__contains_var_impl<std::tuple_size<Key>::value - 1, Key>::doit(key);
-    }
+        std::pair<PabloAST *, bool> findOrAdd(PabloAST * object, const TypeId typeId, Args... args) noexcept {
+            Key key = std::make_tuple(typeId, args...);
+            PabloAST * const entry = find(key);
+            if (entry) {
+                return std::make_pair(entry, false);
+            }
+            insert(std::move(key), object);
+            return std::make_pair(object, true);
+        }
 
-private:
-    const Type * const mPredecessor;
-    Map                mMap;
-};
+        void clear() {
+            mMap.clear();
+        }
 
-struct ExpressionTable {
+    private:
+
+        void insert(Key && key, PabloAST * const object) noexcept {
+            ProxyAllocator<uint8_t> alloc{mMap.get_allocator()};
+            __make_byval_impl<std::tuple_size<Key>::value - 1, Key>::doit(key, alloc);
+            mMap.insert(std::make_pair(std::move(key), object));
+        }
+
+        PabloAST * find(const Key & key) const noexcept {
+            // check this map to see if we have it
+            auto itr = mMap.find(key);
+            if (itr != mMap.end()) {
+                return itr->second;
+            } else if (LLVM_LIKELY(allow_recursion(key))) {
+                // check any previous maps to see if it exists
+                auto * pred = mPredecessor;
+                while (pred) {
+                    itr = pred->mMap.find(key);
+                    if (itr == pred->mMap.end()) {
+                        pred = pred->mPredecessor;
+                        continue;
+                    }
+                    return itr->second;
+                }
+            }
+            return nullptr;
+        }
+
+        // TODO: if this map was aware of its "loop depth" (instead of just knowing whether
+        // it has any outer scope) we could still safely reuse some Vars so long as we do not
+        // go outside of the current loop nest
+        static bool allow_recursion(const Key & key) noexcept {
+            return !__contains_var_impl<std::tuple_size<Key>::value - 1, Key>::doit(key);
+        }
+
+    private:
+        const Type * const mPredecessor;
+        Map                mMap;
+    };
 
     using Allocator = SlabAllocator<uint8_t>;
     using UnaryT = FixedArgMap<PabloAST *>;
@@ -179,7 +179,9 @@ struct ExpressionTable {
     using IntrinsicT = FixedArgMap<Intrinsic, llvm::ArrayRef<PabloAST *>>;
     using TypeId = PabloAST::ClassTypeId;
 
-    #define INIT(Type) m##Type(mAllocator, predecessor ? &(predecessor->m##Type) : nullptr)
+public:
+
+    #define INIT(Type) m##Type(get_allocator(), predecessor ? &(predecessor->m##Type) : nullptr)
     explicit ExpressionTable(ExpressionTable * predecessor = nullptr) noexcept
     : INIT(Unary)
     , INIT(Binary)
@@ -192,7 +194,7 @@ struct ExpressionTable {
 
     ExpressionTable(ExpressionTable & other) = delete;
 
-    #define MOVE(Type) m##Type(std::move(other.m##Type), mAllocator)
+    #define MOVE(Type) m##Type(std::move(other.m##Type), get_allocator())
     ExpressionTable(ExpressionTable && other)
     : MOVE(Unary)
     , MOVE(Binary)
@@ -290,6 +292,10 @@ struct ExpressionTable {
          mIntrinsic.clear();
          mAllocator.Reset();
      }
+
+    Allocator & get_allocator() {
+        return mAllocator;
+    }
 
 private:
 
