@@ -205,7 +205,7 @@ RecursiveParser::SourceData * RecursiveParser::generateSourceDate(std::shared_pt
         }
 
         if (keyword->getType() == TokenType::KERNEL && identifier->getType() == TokenType::IDENTIFIER) {
-            auto rt = kernelLocations.try_emplace(identifier->getText(), i);
+            auto rt = kernelLocations.insert({identifier->getText(), i});
             if (!rt.second) {
                 size_t prev = kernelLocations.lookup(identifier->getText());
                 Token * p = tokenList[prev];
