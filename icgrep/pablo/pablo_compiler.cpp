@@ -324,7 +324,7 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
 void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & b, const While * const whileStatement) {
 
     const PabloBlock * const whileBody = whileStatement->getBody();
-    using IncomingVec = Vec<std::tuple<const Var *, PHINode *, Value *>>;
+    using IncomingVec = Vec<std::tuple<const Var *, Value *, Value *>>;
 
     BasicBlock * const whileEntryBlock = b->GetInsertBlock();
 
@@ -427,8 +427,8 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     BasicBlock * const whileExitBlock = b->GetInsertBlock();
 
     // and for any variant nodes in the loop body
-    for (const auto & variant : variants) {
-        const Var * var; PHINode * incomingPhi;
+    for (auto & variant : variants) {
+        const Var * var; Value * incomingPhi;
         std::tie(var, incomingPhi, std::ignore) = variant;
         const auto f = mMarker.find(var);
         if (LLVM_UNLIKELY(f == mMarker.end())) {
@@ -456,7 +456,9 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
             report_fatal_error(out.str());
         }
 
-        incomingPhi->addIncoming(outgoingValue, whileExitBlock);
+        // update the final outgoing value for the loop
+        std::get<1>(variant) = outgoingValue;
+        cast<PHINode>(incomingPhi)->addIncoming(outgoingValue, whileExitBlock);
     }
 
     // Terminate the while loop body with a conditional branch back.
@@ -471,7 +473,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     b->SetInsertPoint(whileEndBlock);
     // phi out any escaped variant
     for (const auto & variant : variants) {
-        const Var * var; PHINode * outgoingValue; Value * incomingValue;
+        const Var * var; Value * outgoingValue; Value * incomingValue;
         std::tie(var, outgoingValue, incomingValue) = variant;
         PHINode * const escapedValue = b->CreatePHI(outgoingValue->getType(), 2);
         escapedValue->addIncoming(incomingValue, whileEntryBlock);

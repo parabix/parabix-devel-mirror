@@ -953,7 +953,7 @@ void deadCodeElimination(PabloBlock * const block, LiveVarSet & liveSet, const b
                 }
                 // If none of the escaped vars from this branch are read, delete it.
                 if (LLVM_LIKELY(!nested.empty() || sideEffecting)) {
-                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, false);
+                    deadCodeElimination(cast<Branch>(stmt)->getBody(), nested, scanOnly);
                     // the condition of a while loop may not have had any uses outside
                     // of its reassignment for the next loop iteration test. All other
                     // vars require at least one use of the incoming value within the
