@@ -80,7 +80,7 @@ class ExpressionTable {
     template<typename... Args>
     struct FixedArgMap {
         enum {N = sizeof...(Args)};
-        friend struct ExpressionTable;
+        friend class ExpressionTable;
 
         using Type = FixedArgMap<Args...>;
         using TypeId = PabloAST::ClassTypeId;
