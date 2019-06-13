@@ -66,6 +66,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     BasicBlock * const strideMasksReady = b->CreateBasicBlock("strideMasksReady");
     BasicBlock * const updateLineInfo = b->CreateBasicBlock("updateLineInfo");
     BasicBlock * const strideMatchLoop = b->CreateBasicBlock("strideMatchLoop");
+    BasicBlock * const dispatch = b->CreateBasicBlock("dispatch");
     BasicBlock * const matchesDone = b->CreateBasicBlock("matchesDone");
     BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
     BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
@@ -223,7 +224,11 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     // to access past EOF.
     Value * const bufLimit = b->CreateSub(avail, sz_ONE);
     matchEndPos = b->CreateUMin(matchEndPos, bufLimit);
+    // matchStart should never be past EOF, but in case it is....
+    //b->CreateAssert(b->CreateICmpULT(matchStart, avail), "match position past EOF");
+    b->CreateCondBr(b->CreateICmpULT(matchStart, avail), dispatch, callFinalizeScan);
 
+    b->SetInsertPoint(dispatch);
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
     Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchEndPos);
@@ -234,10 +239,11 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.
-    Value * dropMatch = b->CreateResetLowestBit(theMatchWord);
+    Value * dropMatch = b->CreateResetLowestBit(theMatchWord, "dropMatch");
     Value * thisWordDone = b->CreateICmpEQ(dropMatch, sz_ZERO);
     // There may be more matches in the match mask.
-    Value * nextMatchMask = b->CreateSelect(thisWordDone, b->CreateResetLowestBit(matchMaskPhi), matchMaskPhi);
+    Value * resetMatchMask = b->CreateResetLowestBit(matchMaskPhi, "nextMatchMask");
+    Value * nextMatchMask = b->CreateSelect(thisWordDone, resetMatchMask, matchMaskPhi);
     BasicBlock * currentBB = b->GetInsertBlock();
     matchMaskPhi->addIncoming(nextMatchMask, currentBB);
     matchWordPhi->addIncoming(dropMatch, currentBB);
@@ -566,6 +572,7 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     Module * const m = b->getModule();
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");
+    BasicBlock * const dispatch = b->CreateBasicBlock("dispatch");
     BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
     BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
     BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
@@ -593,7 +600,11 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     // to access past EOF.
     Value * const bufLimit = b->CreateSub(avail, sz_ONE);
     matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
+    // matchStart should never be past EOF, but in case it is....
+    //b->CreateAssert(b->CreateICmpULT(matchRecordStart, avail), "match position past EOF");
+    b->CreateCondBr(b->CreateICmpULT(matchRecordStart, avail), dispatch, callFinalizeScan);
 
+    b->SetInsertPoint(dispatch);
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
     Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
