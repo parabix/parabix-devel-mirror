@@ -4,128 +4,169 @@
  */
 
 #include "scan_kernel.h"
-
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
-
-#define MASK_SIZE 64
-#define STRIDE_WIDTH 32
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
+#define SCAN_STRIDE_BLOCK_COUNT 4
+
+#define IS_POW_2(i) ((i > 0) && ((i & (i - 1)) == 0))
+
 namespace kernel {
 
-void ScanKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+const size_t ScanKernelBase::ScanWordContext::maxStrideWidth = 4096; // gives scan word width of 64-bits;
+
+ScanKernelBase::ScanWordContext::ScanWordContext(BuilderRef b, size_t strideWidth) 
+: width(std::max(minScanWordWidth, strideWidth / strideMaskWidth))
+, wordsPerBlock(b->getBitBlockWidth() / width)
+, wordsPerStride(strideMaskWidth)
+, fieldWidth(width)
+, Ty(b->getIntNTy(width))
+, PointerTy(Ty->getPointerTo())
+, StrideMaskTy(b->getIntNTy(strideMaskWidth))
+, WIDTH(b->getSize(width))
+, WORDS_PER_BLOCK(b->getSize(wordsPerBlock))
+, WORDS_PER_STRIDE(b->getSize(wordsPerStride))
+{
+    assert (IS_POW_2(strideWidth) && strideWidth >= b->getBitBlockWidth() && strideWidth < maxStrideWidth);
+}
+
+void ScanKernelBase::initializeBase(BuilderRef b) {
+    mInitialPos = b->getProcessedItemCount(mScanStreamSetName);
+}
+
+Value * ScanKernelBase::computeStridePosition(BuilderRef b, Value * strideNumber) const {
+    return b->CreateAdd(mInitialPos, b->CreateMul(strideNumber, sz_STRIDE_WIDTH));
+}
+
+Value * ScanKernelBase::computeStrideBlockOffset(BuilderRef b, Value * strideNo) const {
+    return b->CreateMul(strideNo, sz_NUM_BLOCKS_PER_STRIDE);
+}
+
+Value * ScanKernelBase::loadScanStreamBitBlock(BuilderRef b, Value * strideNo, Value * blockNo) {
+    Value * idx = b->CreateAdd(blockNo, computeStrideBlockOffset(b, strideNo));
+    return b->loadInputStreamBlock(mScanStreamSetName, b->getSize(0), idx);
+}
+
+Value * ScanKernelBase::orBlockIntoMask(BuilderRef b, ScanWordContext const & sw, Value * maskAccum, Value * block, Value * blockNo) {
+    Value * const any = b->simd_any(sw.fieldWidth, block);
+    Value * const signMask = b->CreateZExt(b->hsimd_signmask(sw.fieldWidth, any), sw.StrideMaskTy);
+    Value * const shiftedSignMask = b->CreateShl(signMask, b->CreateZExtOrTrunc(b->CreateMul(blockNo, sw.WORDS_PER_BLOCK), sw.StrideMaskTy));
+    return b->CreateOr(maskAccum, shiftedSignMask);
+}
+
+ScanKernelBase::ScanKernelBase(BuilderRef b, size_t strideWidth, StringRef scanStreamSetName)
+: mScanStreamSetName(scanStreamSetName)
+, mInitialPos(nullptr)
+, sz_STRIDE_WIDTH(b->getSize(strideWidth))
+, sz_NUM_BLOCKS_PER_STRIDE(b->getSize(strideWidth / b->getBitBlockWidth()))
+{}
+
+void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+    ScanWordContext sw(b, mStride);
     Module * const module = b->getModule();
 
-    const unsigned blockWidth = b->getBitBlockWidth();
-    const unsigned numStridesPerBlock = blockWidth / STRIDE_WIDTH;
-    const unsigned numBlocksPerMask = MASK_SIZE / numStridesPerBlock;
-    Constant * const sz_NUM_BLOCKS_PER_MASK = b->getSize(numBlocksPerMask);
-    Constant * const sz_STRIDE_WIDTH = b->getSize(STRIDE_WIDTH);
-    Constant * const sz_BLOCK_WIDTH = b->getSize(blockWidth);
-
     Type * const sizeTy = b->getSizeTy();
-    Constant * const sz_ZERO = b->getSize(0);
-    Constant * const sz_ONE = b->getSize(1);
+    Value * const sz_ZERO = b->getSize(0);
+    Value * const sz_ONE = b->getSize(1);
 
-    Type * const maskTy = b->getIntNTy(MASK_SIZE);
-    Constant * const m_ZERO = b->getIntN(MASK_SIZE, 0);
-
-    Type * const strideTy = b->getIntNTy(STRIDE_WIDTH);
-    Constant * const s_ZERO = b->getIntN(STRIDE_WIDTH, 0);
+    Value * const ZERO_MASK = Constant::getNullValue(sw.StrideMaskTy);
+    Value * const ZERO_WORD = Constant::getNullValue(sw.Ty);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
+    BasicBlock * const strideInit = b->CreateBasicBlock("strideInit");
     BasicBlock * const buildMask = b->CreateBasicBlock("buildMask");
-    BasicBlock * const moreMask = b->CreateBasicBlock("moreMask");
-    BasicBlock * const partialMask = b->CreateBasicBlock("partialMask");
     BasicBlock * const maskReady = b->CreateBasicBlock("maskReady");
     BasicBlock * const processMask = b->CreateBasicBlock("processMask");
-    BasicBlock * const processStride = b->CreateBasicBlock("processStride");
-    BasicBlock * const strideDone = b->CreateBasicBlock("strideDone");
+    BasicBlock * const processWord = b->CreateBasicBlock("processWord");
+    BasicBlock * const wordDone = b->CreateBasicBlock("wordDone");
     BasicBlock * const maskDone = b->CreateBasicBlock("maskDone");
     BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
+    
+    initializeBase(b);
+    b->CreateBr(strideInit);
+
+    b->SetInsertPoint(strideInit);
+    PHINode * const strideNo = b->CreatePHI(sizeTy, 2, "strideNo");
+    strideNo->addIncoming(sz_ZERO, entryBlock);
+    Value * const nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
     b->CreateBr(buildMask);
 
     b->SetInsertPoint(buildMask);
-    PHINode * const blockNo = b->CreatePHI(sizeTy, 3, "blockNo");
-    blockNo->addIncoming(sz_ZERO, entryBlock);
-    PHINode * const maskNo = b->CreatePHI(sizeTy, 3, "maskNo");
-    maskNo->addIncoming(sz_ZERO, entryBlock);
-    PHINode * const streamOffset = b->CreatePHI(sizeTy, 3, "streamOffset");
-    streamOffset->addIncoming(sz_ZERO, entryBlock);
-    PHINode * const mask = b->CreatePHI(maskTy, 3, "mask");
-    mask->addIncoming(m_ZERO, entryBlock);
+    PHINode * const strideMaskAccum = b->CreatePHI(sw.StrideMaskTy, 2, "strideMaskAccum");
+    strideMaskAccum->addIncoming(ZERO_MASK, strideInit);
+    PHINode * const blockNo = b->CreatePHI(sizeTy, 2, "blockNo");
+    blockNo->addIncoming(sz_ZERO, strideInit);
+    Value * const block = loadScanStreamBitBlock(b, strideNo, blockNo);
+    Value * const strideMask = orBlockIntoMask(b, sw, strideMaskAccum, block, blockNo);
+    strideMaskAccum->addIncoming(strideMask, buildMask);
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
-    blockNo->addIncoming(nextBlockNo, moreMask);
-    Value * const nextMaskNo = b->CreateAdd(maskNo, sz_ONE);
-    Value * const nextStreamOffset = b->CreateAdd(streamOffset, sz_ONE);
-    Value * const block = b->loadInputStreamBlock("scan", streamOffset);
-    Value * const any = b->simd_any(STRIDE_WIDTH, block);
-    Value * const blockMask = b->CreateZExt(b->hsimd_signmask(STRIDE_WIDTH, any), maskTy);
-    Value * const combinedMask = b->CreateOr(mask, b->CreateShl(blockMask, b->CreateZExtOrTrunc(b->CreateMul(blockNo, sz_NUM_BLOCKS_PER_MASK), maskTy)));
-    b->CreateCondBr(b->CreateICmpEQ(nextStreamOffset, numOfStrides), partialMask, moreMask);
-
-    b->SetInsertPoint(moreMask);
-    maskNo->addIncoming(maskNo, moreMask);
-    streamOffset->addIncoming(nextStreamOffset, moreMask);
-    mask->addIncoming(combinedMask, moreMask);
-    b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_NUM_BLOCKS_PER_MASK), buildMask, maskReady);
-
-    b->SetInsertPoint(partialMask);
-    b->CreateZExt(combinedMask, maskTy);
-    b->CreateBr(maskReady);
-
+    blockNo->addIncoming(nextBlockNo, buildMask);
+    b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_NUM_BLOCKS_PER_STRIDE), buildMask, maskReady);
 
     b->SetInsertPoint(maskReady);
-    b->CreateLikelyCondBr(b->CreateICmpEQ(combinedMask, m_ZERO), maskDone, processMask);
+    // Mask for this stride has been computed and is ready for processing.
+    // If the mask is empty there there is nothing to be done for this stride.
+    b->CreateCondBr(b->CreateICmpEQ(strideMask, ZERO_MASK), maskDone, processMask);
 
     b->SetInsertPoint(processMask);
-    PHINode * const maskPhi = b->CreatePHI(maskTy, 2, "maskPhi");
-    maskPhi->addIncoming(combinedMask, maskReady);
-    Value * const strideNo_InMask = b->CreateCountForwardZeroes(maskPhi, true);
-    Value * const blockNo_InMask = b->CreateUDiv(strideNo_InMask, sz_NUM_BLOCKS_PER_MASK);
-    Value * const strideNo_InBlock = b->CreateURem(strideNo_InMask, sz_NUM_BLOCKS_PER_MASK);
-    Value * const blockNo_InStream = b->CreateAdd(b->CreateMul(maskNo, sz_NUM_BLOCKS_PER_MASK), blockNo_InMask);
-    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr("scan", blockNo_InStream), strideTy->getPointerTo());
-    Value * const stride = b->CreateLoad(b->CreateGEP(stridePtr, strideNo_InBlock));
-    Value * const processedMask = b->CreateResetLowestBit(maskPhi);
-    b->CreateBr(processStride);
+    // There is at least one 1 bit in the mask.
+    PHINode * const processingMask = b->CreatePHI(sw.StrideMaskTy, 2, "processingMask");
+    processingMask->addIncoming(strideMask, maskReady);
+    Value * const wordOffset = b->CreateCountForwardZeroes(processingMask, true);
+    Value * const strideOffset = b->CreateMul(strideNo, sz_NUM_BLOCKS_PER_STRIDE);
+    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr(mScanStreamSetName, sz_ZERO, strideOffset), sw.PointerTy);
+    Value * const wordPtr = b->CreateGEP(stridePtr, wordOffset);
+    Value * const word = b->CreateLoad(wordPtr, "scanWord");
+    b->CreateBr(processWord);
 
-    b->SetInsertPoint(processStride);
-    PHINode * const stridePhi = b->CreatePHI(strideTy, 2, "stridePhi");
-    stridePhi->addIncoming(stride, processMask);
-    Value * const bitPos_InStride = b->CreateZExt(b->CreateCountForwardZeroes(stridePhi, true), sizeTy);
-    Value * const bitPos_InBlock = b->CreateAdd(b->CreateMul(strideNo_InBlock, sz_STRIDE_WIDTH), bitPos_InStride);
-    Value * const bitPos_InStream = b->CreateAdd(b->CreateMul(blockNo_InStream, sz_BLOCK_WIDTH), bitPos_InBlock);
-    Value * const sourceStreamBlockPtr = b->CreatePointerCast(b->getInputStreamBlockPtr("source", blockNo_InStream), b->getInt8PtrTy());
-    Value * const charPtr = b->CreateGEP(sourceStreamBlockPtr, bitPos_InBlock);
+    b->SetInsertPoint(processWord);
+    // Scan through the word and trigger a callback at the location of each bit.
+    PHINode * const processingWord = b->CreatePHI(sw.Ty, 2, "processingWord");
+    processingWord->addIncoming(word, processMask);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(b->CreateICmpNE(processingWord, ZERO_WORD), "ScanKernel::processWord: processing word cannot be zero!");
+    }
+    Value * const bitIndex_InWord = b->CreateZExt(b->CreateCountForwardZeroes(processingWord, true), sizeTy);
+    // b->CallPrintInt("bit index", bitIndex_InWord);
+    Value * const wordIndex_InStride = b->CreateMul(wordOffset, sw.WIDTH);
+    Value * const strideIndex = computeStridePosition(b, strideNo);
+    Value * const callbackIndex = b->CreateAdd(strideIndex, b->CreateAdd(wordIndex_InStride, bitIndex_InWord), "callbackIndex");
+    // b->CallPrintInt("callback index", callbackIndex);
+    Value * const sourcePtr = b->getRawInputPointer("source", callbackIndex);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
-    b->CreateCall(callback, {charPtr, bitPos_InStream});
-    Value * const processedStride = b->CreateResetLowestBit(stridePhi);
-    stridePhi->addIncoming(processedStride, processStride);
-    b->CreateUnlikelyCondBr(b->CreateICmpNE(processedStride, s_ZERO), processStride, strideDone);
+    b->CreateCall(callback, {sourcePtr, callbackIndex});
+    Value * const processedWord = b->CreateResetLowestBit(processingWord);
+    processingWord->addIncoming(processedWord, processWord);
+    // Loop back if the scan word has another 1 bit in it.
+    b->CreateCondBr(b->CreateICmpNE(processedWord, ZERO_WORD), processWord, wordDone);
 
-    b->SetInsertPoint(strideDone);
-    maskPhi->addIncoming(processedMask, strideDone);
-    b->CreateCondBr(b->CreateICmpNE(processedMask, m_ZERO), processMask, maskDone);
+    b->SetInsertPoint(wordDone);
+    // Finished processing the scan word. If there are more bits still in the 
+    // mask loop back and process those as well.
+    Value * const processedMask = b->CreateResetLowestBit(processingMask);
+    processingMask->addIncoming(processedMask, wordDone);
+    b->CreateCondBr(b->CreateICmpNE(processedMask, ZERO_MASK), processMask, maskDone);
 
     b->SetInsertPoint(maskDone);
-    maskNo->addIncoming(nextMaskNo, maskDone);
-    blockNo->addIncoming(sz_ZERO, maskDone);
-    streamOffset->addIncoming(nextStreamOffset, maskDone);
-    mask->addIncoming(m_ZERO, maskDone);
-    b->CreateLikelyCondBr(b->CreateICmpNE(nextStreamOffset, numOfStrides), buildMask, exitBlock);
+    // Finished processing the mask and, as a result, this stride. If there are
+    // still more strides avaliable, loop back and process those.
+    strideNo->addIncoming(nextStrideNo, maskDone);
+    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), strideInit, exitBlock);
 
     b->SetInsertPoint(exitBlock);
 }
 
-ScanKernel::ScanKernel(const std::unique_ptr<KernelBuilder> & iBuilder, StreamSet * scanStream, StreamSet * sourceStream, StringRef callbackName)
-: MultiBlockKernel(iBuilder, "ScanKernel_" + std::string(callbackName), {{"scan", scanStream}, {"source", sourceStream}}, {}, {}, {}, {})
+ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, StringRef callbackName)
+: MultiBlockKernel(b, "ScanKernel_" + std::string(callbackName), {{"scan", scanStream}, {"source", sourceStream}}, {}, {}, {}, {})
+, ScanKernelBase(b, std::min(SCAN_STRIDE_BLOCK_COUNT * (size_t) b->getBitBlockWidth(), ScanWordContext::maxStrideWidth), "scan")
 , mCallbackName(callbackName)
 {
-    assert (scanStream->getNumElements() == 1 && sourceStream->getNumElements() == 1);
+    assert (scanStream->getNumElements() == 1 && sourceStream->getNumElements() == 1 && sourceStream->getFieldWidth() == 8);
     addAttribute(SideEffecting());
+    setStride(std::min(SCAN_STRIDE_BLOCK_COUNT * b->getBitBlockWidth(), (uint32_t) ScanWordContext::maxStrideWidth));
 }
 
 }

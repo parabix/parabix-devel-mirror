@@ -62,19 +62,20 @@ Value * IDISA_SSE2_Builder::hsimd_signmask(unsigned fw, Value * a) {
 }
 
 Value * IDISA_SSE_Builder::hsimd_signmask(const unsigned fw, Value * a) {
-    const unsigned SSE_blocks = getVectorBitWidth(a)/SSE_width;
-    if (SSE_blocks > 1) {
-        Value * a_lo = CreateHalfVectorLow(a);
-        Value * a_hi = CreateHalfVectorHigh(a);
-        if ((fw == 8 * SSE_blocks) || (fw >= 32 * SSE_blocks)) {
-            return hsimd_signmask(fw/2, hsimd_packh(fw, a_hi, a_lo));
-        }
-        unsigned maskWidth = getVectorBitWidth(a)/fw;
-        Type * maskTy = getIntNTy(maskWidth);
-        Value * mask_lo = CreateZExtOrTrunc(hsimd_signmask(fw, a_lo), maskTy);
-        Value * mask_hi = CreateZExtOrTrunc(hsimd_signmask(fw, a_hi), maskTy);
-        return CreateOr(CreateShl(mask_hi, maskWidth/2), mask_lo);
-    }
+    // Produces wrong result on AVX2 with fw = 16
+    // const unsigned SSE_blocks = getVectorBitWidth(a)/SSE_width;
+    // if (SSE_blocks > 1) {
+    //     Value * a_lo = CreateHalfVectorLow(a);
+    //     Value * a_hi = CreateHalfVectorHigh(a);
+    //     if ((fw == 8 * SSE_blocks) || (fw >= 32 * SSE_blocks)) {
+    //         return IDISA_SSE_Builder::hsimd_signmask(fw/2, IDISA_SSE_Builder::hsimd_packh(fw, a_hi, a_lo));
+    //     }
+    //     unsigned maskWidth = getVectorBitWidth(a)/fw;
+    //     Type * maskTy = getIntNTy(maskWidth);
+    //     Value * mask_lo = CreateZExtOrTrunc(hsimd_signmask(fw, a_lo), maskTy);
+    //     Value * mask_hi = CreateZExtOrTrunc(hsimd_signmask(fw, a_hi), maskTy);
+    //     return CreateOr(CreateShl(mask_hi, maskWidth/2), mask_lo);
+    // }
     // SSE special cases using Intrinsic::x86_sse_movmsk_ps (fw=32 only)
     if (fw == 32) {
         Value * signmask_f32func = Intrinsic::getDeclaration(getModule(), Intrinsic::x86_sse_movmsk_ps);
