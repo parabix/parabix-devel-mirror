@@ -98,6 +98,8 @@ static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::locat
 static cl::opt<unsigned, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
                                           cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 
+static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),
+                                          cl::desc("Number of blocks per stride for scanning kernels"), cl::value_desc("positive initeger"));
 
 static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
                                  cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
@@ -124,6 +126,8 @@ unsigned SegmentSize;
 unsigned BufferSegments;
 
 unsigned ThreadNum;
+
+unsigned ScanBlocks;
 
 bool EnableObjectCache;
 bool TraceObjectCache;

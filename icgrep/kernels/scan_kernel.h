@@ -18,15 +18,15 @@ public:
 protected:
 
     struct ScanWordContext {
-        static const size_t maxStrideWidth /* = 4096; for width of 64-bits */;
+        static const unsigned maxStrideWidth /* = 4096; for width of 64-bits */;
 
-        const size_t strideMaskWidth = 64;
-        const size_t minScanWordWidth = 8;
+        const unsigned strideMaskWidth = 64;
+        const unsigned minScanWordWidth = 8;
 
-        const size_t width;
-        const size_t wordsPerBlock;
-        const size_t wordsPerStride;
-        const size_t fieldWidth;
+        const unsigned width;
+        const unsigned wordsPerBlock;
+        const unsigned wordsPerStride;
+        const unsigned fieldWidth;
 
         llvm::Type * const Ty;
         llvm::Type * const PointerTy;
@@ -36,10 +36,10 @@ protected:
         llvm::Constant * const WORDS_PER_BLOCK;
         llvm::Constant * const WORDS_PER_STRIDE;
 
-        ScanWordContext(BuilderRef b, size_t strideWidth);
+        ScanWordContext(BuilderRef b, unsigned strideWidth);
     };
 
-    ScanKernelBase(BuilderRef b, size_t strideWidth, llvm::StringRef scanStreamSetName);
+    ScanKernelBase(BuilderRef b, unsigned strideWidth, llvm::StringRef scanStreamSetName);
 
     void initializeBase(BuilderRef b);
 
@@ -52,6 +52,7 @@ protected:
     llvm::Value * orBlockIntoMask(BuilderRef b, ScanWordContext const & sw, llvm::Value * maskAccum, llvm::Value * block, llvm::Value * blockNo);
 
 protected:
+    unsigned        mStrideWidth;
     llvm::StringRef mScanStreamSetName;
     llvm::Value *   mInitialPos;
 
@@ -64,7 +65,7 @@ protected:
 // where `ptr` is a pointer to the chacater at the callback position in the 
 // source stream and `pos` is the callback position 
 
-class ScanKernel : public MultiBlockKernel, protected ScanKernelBase {
+class ScanKernel : protected ScanKernelBase, public MultiBlockKernel {
 public:
 
     enum class OptimizeMode { Sparse, Dense };

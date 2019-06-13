@@ -4,21 +4,19 @@
  */
 
 #include "scan_kernel.h"
+#include <toolchain/toolchain.h>
 #include <kernels/kernel_builder.h>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
-
-#define SCAN_STRIDE_BLOCK_COUNT 4
 
 #define IS_POW_2(i) ((i > 0) && ((i & (i - 1)) == 0))
 
 namespace kernel {
 
-const size_t ScanKernelBase::ScanWordContext::maxStrideWidth = 4096; // gives scan word width of 64-bits;
+const unsigned ScanKernelBase::ScanWordContext::maxStrideWidth = 4096; // gives scan word width of 64-bits;
 
-ScanKernelBase::ScanWordContext::ScanWordContext(BuilderRef b, size_t strideWidth) 
+ScanKernelBase::ScanWordContext::ScanWordContext(BuilderRef b, unsigned strideWidth) 
 : width(std::max(minScanWordWidth, strideWidth / strideMaskWidth))
 , wordsPerBlock(b->getBitBlockWidth() / width)
 , wordsPerStride(strideMaskWidth)
@@ -30,7 +28,7 @@ ScanKernelBase::ScanWordContext::ScanWordContext(BuilderRef b, size_t strideWidt
 , WORDS_PER_BLOCK(b->getSize(wordsPerBlock))
 , WORDS_PER_STRIDE(b->getSize(wordsPerStride))
 {
-    assert (IS_POW_2(strideWidth) && strideWidth >= b->getBitBlockWidth() && strideWidth < maxStrideWidth);
+    assert (IS_POW_2(strideWidth) && strideWidth >= b->getBitBlockWidth() && strideWidth <= maxStrideWidth);
 }
 
 void ScanKernelBase::initializeBase(BuilderRef b) {
@@ -57,8 +55,9 @@ Value * ScanKernelBase::orBlockIntoMask(BuilderRef b, ScanWordContext const & sw
     return b->CreateOr(maskAccum, shiftedSignMask);
 }
 
-ScanKernelBase::ScanKernelBase(BuilderRef b, size_t strideWidth, StringRef scanStreamSetName)
-: mScanStreamSetName(scanStreamSetName)
+ScanKernelBase::ScanKernelBase(BuilderRef b, unsigned strideWidth, StringRef scanStreamSetName)
+: mStrideWidth(strideWidth)
+, mScanStreamSetName(scanStreamSetName)
 , mInitialPos(nullptr)
 , sz_STRIDE_WIDTH(b->getSize(strideWidth))
 , sz_NUM_BLOCKS_PER_STRIDE(b->getSize(strideWidth / b->getBitBlockWidth()))
@@ -172,15 +171,26 @@ void ScanKernel::createOptimizedContinueProcessingBr(BuilderRef b, Value * value
     }
 }
 
+static inline std::string ScanKernel_GenName(unsigned strideWidth, std::string const & callbackName) {
+    return "ScanKernel_sw" + std::to_string(strideWidth) + "_" + callbackName;
+}
+
 ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, StringRef callbackName, OptimizeMode optimizeMode)
-: MultiBlockKernel(b, "ScanKernel_" + std::string(callbackName), {{"scan", scanStream}, {"source", sourceStream}}, {}, {}, {}, {})
-, ScanKernelBase(b, std::min(SCAN_STRIDE_BLOCK_COUNT * (size_t) b->getBitBlockWidth(), ScanWordContext::maxStrideWidth), "scan")
+: ScanKernelBase(b, std::min(codegen::ScanBlocks * b->getBitBlockWidth(), ScanWordContext::maxStrideWidth), "scan")
+, MultiBlockKernel(b, ScanKernel_GenName(ScanKernelBase::mStrideWidth, callbackName), 
+    {{"scan", scanStream}, {"source", sourceStream}}, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mOptimizeMode(optimizeMode)
 {
     assert (scanStream->getNumElements() == 1 && sourceStream->getNumElements() == 1 && sourceStream->getFieldWidth() == 8);
+    if (!IS_POW_2(codegen::ScanBlocks)) {
+        report_fatal_error("scan-blocks must be a power of 2");
+    }
+    if ((codegen::ScanBlocks * b->getBitBlockWidth()) > ScanWordContext::maxStrideWidth) {
+        report_fatal_error("scan-blocks exceeds maximum allowed size of " + std::to_string(ScanWordContext::maxStrideWidth / b->getBitBlockWidth()));
+    }
     addAttribute(SideEffecting());
-    setStride(std::min(SCAN_STRIDE_BLOCK_COUNT * b->getBitBlockWidth(), (uint32_t) ScanWordContext::maxStrideWidth));
+    setStride(mStrideWidth);
 }
 
 }

@@ -66,6 +66,7 @@ extern unsigned BlockSize;  // set from command line
 extern unsigned SegmentSize; // set from command line
 extern unsigned BufferSegments;
 extern unsigned ThreadNum;
+extern unsigned ScanBlocks;
 extern bool EnableObjectCache;
 extern bool TraceObjectCache;
 extern bool NVPTX;
