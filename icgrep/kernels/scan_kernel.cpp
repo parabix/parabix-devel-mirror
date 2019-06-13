@@ -109,7 +109,7 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     b->SetInsertPoint(maskReady);
     // Mask for this stride has been computed and is ready for processing.
     // If the mask is empty there there is nothing to be done for this stride.
-    b->CreateCondBr(b->CreateICmpEQ(strideMask, ZERO_MASK), maskDone, processMask);
+    createOptimizedContinueProcessingBr(b, strideMask, processMask, maskDone);
 
     b->SetInsertPoint(processMask);
     // There is at least one 1 bit in the mask.
@@ -141,14 +141,14 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     Value * const processedWord = b->CreateResetLowestBit(processingWord);
     processingWord->addIncoming(processedWord, processWord);
     // Loop back if the scan word has another 1 bit in it.
-    b->CreateCondBr(b->CreateICmpNE(processedWord, ZERO_WORD), processWord, wordDone);
+    createOptimizedContinueProcessingBr(b, processedWord, processWord, wordDone);
 
     b->SetInsertPoint(wordDone);
     // Finished processing the scan word. If there are more bits still in the 
     // mask loop back and process those as well.
     Value * const processedMask = b->CreateResetLowestBit(processingMask);
     processingMask->addIncoming(processedMask, wordDone);
-    b->CreateCondBr(b->CreateICmpNE(processedMask, ZERO_MASK), processMask, maskDone);
+    createOptimizedContinueProcessingBr(b, processedMask, processMask, maskDone);
 
     b->SetInsertPoint(maskDone);
     // Finished processing the mask and, as a result, this stride. If there are
@@ -159,10 +159,24 @@ void ScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     b->SetInsertPoint(exitBlock);
 }
 
-ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, StringRef callbackName)
+void ScanKernel::createOptimizedContinueProcessingBr(BuilderRef b, Value * value, BasicBlock * trueBlock, BasicBlock * falseBlock) {
+    switch (mOptimizeMode) {
+    case OptimizeMode::Sparse:
+        b->CreateUnlikelyCondBr(b->CreateICmpNE(value, Constant::getNullValue(value->getType())), trueBlock, falseBlock);
+        break;
+    case OptimizeMode::Dense:
+        b->CreateLikelyCondBr(b->CreateICmpNE(value, Constant::getNullValue(value->getType())), trueBlock, falseBlock);
+        break;
+    default:
+        llvm_unreachable("Invalid ScanKernel::OptimizeMode");
+    }
+}
+
+ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, StringRef callbackName, OptimizeMode optimizeMode)
 : MultiBlockKernel(b, "ScanKernel_" + std::string(callbackName), {{"scan", scanStream}, {"source", sourceStream}}, {}, {}, {}, {})
 , ScanKernelBase(b, std::min(SCAN_STRIDE_BLOCK_COUNT * (size_t) b->getBitBlockWidth(), ScanWordContext::maxStrideWidth), "scan")
 , mCallbackName(callbackName)
+, mOptimizeMode(optimizeMode)
 {
     assert (scanStream->getNumElements() == 1 && sourceStream->getNumElements() == 1 && sourceStream->getFieldWidth() == 8);
     addAttribute(SideEffecting());

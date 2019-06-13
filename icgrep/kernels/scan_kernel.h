@@ -67,12 +67,17 @@ protected:
 class ScanKernel : public MultiBlockKernel, protected ScanKernelBase {
 public:
 
-    ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, llvm::StringRef callbackName);
+    enum class OptimizeMode { Sparse, Dense };
+
+    ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, llvm::StringRef callbackName, OptimizeMode optimizeModes = OptimizeMode::Sparse);
 
 protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 
+    void createOptimizedContinueProcessingBr(BuilderRef b, llvm::Value * value, llvm::BasicBlock * trueBlock, llvm::BasicBlock * falseBlock);
+
     llvm::StringRef mCallbackName;
+    OptimizeMode    mOptimizeMode;
 };
 
 }
