@@ -315,21 +315,21 @@ public:
     llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
 
     // Useful bit manipulation operations
-    llvm::Value * CreateResetLowestBit(llvm::Value * bits);
+    llvm::Value * CreateResetLowestBit(llvm::Value * bits, const llvm::Twine &Name = "");
 
-    llvm::Value * CreateIsolateLowestBit(llvm::Value * bits);
+    llvm::Value * CreateIsolateLowestBit(llvm::Value * bits, const llvm::Twine &Name = "");
 
-    llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits);
+    llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits, const llvm::Twine &Name = "");
 
-    llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits);
+    llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits, const llvm::Twine &Name = "");
     
-    virtual llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos);
+    virtual llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos, const llvm::Twine &Name = "");
     
-    virtual llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length);
+    virtual llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length, const llvm::Twine &Name = "");
 
-    llvm::Value * CreateCeilLog2(llvm::Value * value);
+    llvm::Value * CreateCeilLog2(llvm::Value * value, const llvm::Twine &Name = "");
 
-    llvm::Value * CreateLog2(llvm::Value * value);
+    llvm::Value * CreateLog2(llvm::Value * value, const llvm::Twine &Name = "");
 
     llvm::Value * CreateReadCycleCounter();
 

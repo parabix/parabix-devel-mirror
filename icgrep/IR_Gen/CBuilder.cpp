@@ -1174,44 +1174,44 @@ Value * CBuilder::CreateCountReverseZeroes(Value * value, const bool guaranteedN
     return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)});
 }
 
-Value * CBuilder::CreateResetLowestBit(Value * bits) {
-    return CreateAnd(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)));
+Value * CBuilder::CreateResetLowestBit(Value * bits, const Twine & Name) {
+    return CreateAnd(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)), Name);
 }
 
-Value * CBuilder::CreateIsolateLowestBit(Value * bits) {
-    return CreateAnd(bits, CreateNeg(bits));
+Value * CBuilder::CreateIsolateLowestBit(Value * bits, const Twine & Name) {
+    return CreateAnd(bits, CreateNeg(bits), Name);
 }
 
-Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits) {
-    return CreateXor(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)));
+Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits, const Twine & Name) {
+    return CreateXor(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)), Name);
 }
 
-Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits) {
-    return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits));
+Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits, const Twine & Name) {
+    return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits), Name);
 }
 
-Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos) {
+Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos, const Twine & Name) {
     Type * Ty = bits->getType();
     Constant * one = Constant::getIntegerValue(Ty, APInt(Ty->getScalarSizeInBits(), 1));
     Value * mask = CreateSub(CreateShl(one, pos), one);
-    return CreateAnd(bits, mask);
+    return CreateAnd(bits, mask, Name);
 }
 
-Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length) {
+Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length, const Twine & Name) {
     Constant * One = ConstantInt::get(bits->getType(), 1);
-    return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One));
+    return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One), Name);
 }
 
-Value * CBuilder::CreateCeilLog2(Value * value) {
+Value * CBuilder::CreateCeilLog2(Value * value, const Twine & Name) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     Value * m = CreateCountReverseZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
-    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m);
+    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m, Name);
 }
 
-Value * CBuilder::CreateLog2(Value * value) {
+Value * CBuilder::CreateLog2(Value * value, const Twine & Name) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     Value * m = CreateCountReverseZeroes(value);
-    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m);
+    return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m, Name);
 }
 
 Constant * CBuilder::GetString(StringRef Str) {
