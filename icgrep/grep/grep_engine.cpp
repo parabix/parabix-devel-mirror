@@ -84,6 +84,8 @@ const unsigned DefaultByteCClimit = 6;
 unsigned ByteCClimit;
 static cl::opt<unsigned, true> ByteCClimitOption("byte-CC-limit", cl::location(ByteCClimit), cl::desc("Max number of CCs for byte CC pipeline."), cl::init(DefaultByteCClimit));
 
+static cl::opt<bool> TraceFiles("TraceFiles", cl::desc("Report files as they are opened."), cl::init(false));
+
 const auto ENCODING_BITS = 8;
 
 void GrepCallBackObject::handle_signal(unsigned s) {
@@ -651,6 +653,9 @@ int32_t GrepEngine::openFile(const std::string & fileName, std::ostringstream & 
             }
             close(fileDescriptor);
             return -1;
+        }
+        if (TraceFiles) {
+            llvm::errs() << "Opened " << fileName << ".\n";
         }
         return fileDescriptor;
     }
