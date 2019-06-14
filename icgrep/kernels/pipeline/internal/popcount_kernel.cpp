@@ -218,7 +218,7 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor)}}
 // output stream
-,{Binding{OUTPUT_STREAM, output, FixedRate()}}
+,{Binding{OUTPUT_STREAM, output, FixedRate(), Add1()}}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
@@ -237,8 +237,8 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor)}}
 // output stream
-,{Binding{POSITIVE_STREAM, positive, FixedRate()}
- ,Binding{NEGATIVE_STREAM, negative, FixedRate()}}
+,{Binding{POSITIVE_STREAM, positive, FixedRate(), Add1()}
+ ,Binding{NEGATIVE_STREAM, negative, FixedRate(), Add1()}}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar

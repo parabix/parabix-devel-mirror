@@ -676,8 +676,9 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             }
         }
 
-        const auto numOfBlocks = ceiling((strideLength * itemWidth) / blockWidth);
-        const auto numOfLookaheadBlocks = ceiling((maximumLookahead * itemWidth) / blockWidth);
+        const RateValue itemWidthFactor{itemWidth, blockWidth};
+        const auto numOfBlocks = ceiling(strideLength * itemWidthFactor);
+        const auto numOfLookaheadBlocks = ceiling(RateValue{maximumLookahead} * itemWidthFactor);
         const auto blocksToZero = numOfBlocks + numOfLookaheadBlocks;
 
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
@@ -686,6 +687,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
         Value * packIndex = nullptr;
         Value * maskOffset = b->CreateAnd(produced, BLOCK_MASK);
+
         if (itemWidth > 1) {
             Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
             packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);

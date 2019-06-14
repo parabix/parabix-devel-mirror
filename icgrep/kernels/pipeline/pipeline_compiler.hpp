@@ -23,9 +23,9 @@
 #include <algorithm>
 #include <queue>
 
-//#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
-//#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 // #define DISABLE_ZERO_EXTEND
 
@@ -383,7 +383,7 @@ struct PipelineGraphBundle {
     }
 };
 
-using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, RateValue>;
+using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, RateValue, RateValue>;
 
 enum CycleCounter {
   INITIAL
@@ -1001,20 +1001,6 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 , mInternalKernels(std::move(P.InternalKernels))
 , mInternalBindings(std::move(P.InternalBindings)) {
 
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief upperBound
- ** ------------------------------------------------------------------------------------------------------------- */
-inline LLVM_READNONE RateValue upperBound(not_null<const Kernel *> kernel, const Binding & binding) {
-    report_fatal_error("deprecated");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief lowerBound
- ** ------------------------------------------------------------------------------------------------------------- */
-inline LLVM_READNONE RateValue lowerBound(not_null<const Kernel *> kernel, const Binding & binding) {
-    report_fatal_error("deprecated");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

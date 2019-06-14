@@ -489,7 +489,8 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         if (rate.isPartialSum()) {
             writable = mFirstOutputStrideLength[i];
         } else if (rate.isFixed() && minFixedRateFactor) {
-            Value * const calculated = b->CreateCeilUMulRate(minFixedRateFactor, rate.getRate() / mFixedRateLCM);
+            const auto factor = rate.getRate() / mFixedRateLCM;
+            Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
                                 output.getName() +

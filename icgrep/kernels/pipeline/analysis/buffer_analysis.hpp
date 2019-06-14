@@ -227,20 +227,16 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             round_up(copyBackSpace);
             overflowSpace = std::max(overflowSpace, copyBackSpace);
-
             round_up(lookAheadSpace);
             overflowSpace = std::max(overflowSpace, lookAheadSpace);
-
             round_up(overflowSpace);
-            round_up(underflowSpace);
-
-            const auto minRequiredSpace = std::max(underflowSpace, overflowSpace);
-            requiredSpace = std::max(requiredSpace, minRequiredSpace * RateValue{2, blockWidth});
-            round_up(requiredSpace);
-
             const auto overflowSize = ceiling(overflowSpace);
+            round_up(underflowSpace);
             const auto underflowSize = ceiling(underflowSpace);
-            const auto bufferSize = ceiling(requiredSpace) * numOfSegments;
+            const auto minRequiredSize = std::max(underflowSize, overflowSize) * 2;
+            round_up(requiredSpace);
+            const auto requiredSize = std::max(ceiling(requiredSpace), minRequiredSize);
+            const auto bufferSize = requiredSize * numOfSegments;
 
             bn.LookBehind = underflowSize;
             bn.CopyBack = ceiling(copyBackSpace);
