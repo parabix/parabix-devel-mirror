@@ -50,6 +50,8 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
 
+        // TODO: if this streamset has 0 streams, it exists only to have a produced/processed count. Ignore it.
+
         inputBaseAddress[i] = mInputEpoch[i];
 
         assert (inputBaseAddress[i]);
@@ -86,7 +88,10 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             b->CallPrintInt(prefix + " truncating item count to ", accessibleItems[i]);
             #endif
 
-            // TODO: if this streamset has 0 streams, it exists only to have a produced/processed count.
+            // TODO: if we can prove that this will be the last kernel invocation that will ever touch this stream)
+            // and is not an input to the pipeline (which we cannot prove will have space after the last item), we
+            // can avoid copying the buffer and instead just mask out the surpressed items.
+
             Value * const numOfStreams = buffer->getStreamSetCount(b);
             Value * const strideBytes = b->CreateMul(b->getSize(strideWidth * itemWidth / 8), numOfStreams);
             Value * initial = nullptr;
@@ -102,7 +107,16 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 segmentBytes = b->CreateMul(b->CreateAdd(stridesToCopy, ONE), strideBytes);
             }
 
+            const auto ip = b->saveIP();
+            b->SetInsertPoint(mPipelineEntryBranch);
+            PointerType * const int8PtrTy = b->getInt8PtrTy();
+            AllocaInst * const bufferStorage = b->CreateAlloca(int8PtrTy, nullptr, "TruncatedInputBuffer");
+            b->CreateStore(ConstantPointerNull::get(int8PtrTy), bufferStorage);
+            b->restoreIP(ip);
+            mTruncatedInputBuffer.push_back(bufferStorage);
+
             Value * maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
+            b->CreateStore(maskedBuffer, bufferStorage);
 
             ExternalBuffer tmp(b, input.getType(), true, 0);
             maskedBuffer = b->CreatePointerCast(maskedBuffer, tmp.getPointerType(), "maskedBuffer");
@@ -985,7 +999,6 @@ void PipelineCompiler::phiOutItemCounts(BuilderRef b,
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::resetMemoizedFields() {
     const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
-    reset(mIsInputClosed, numOfInputs);
     reset(mIsInputZeroExtended, numOfInputs);
     reset(mInitiallyProcessedItemCount, numOfInputs);
     reset(mInitiallyProcessedDeferredItemCount, numOfInputs);

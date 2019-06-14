@@ -130,6 +130,10 @@ void PipelineCompiler::signalAbnormalTermination(BuilderRef b) {
         signal = TerminationSignal::Aborted;
     }
     Constant * const aborted = getTerminationSignal(b, signal);
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeKernelName(mKernelIndex);
+    b->CallPrintInt("* " + prefix + ".explicitlyTerminated", aborted);
+    #endif
     mTerminatedSignalPhi->addIncoming(aborted, b->GetInsertBlock());
 }
 
@@ -148,7 +152,7 @@ Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned inputPort) {
 Value * PipelineCompiler::isClosedNormally(BuilderRef b, const unsigned inputPort) {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
-    const Kernel * const kernel = getKernel(mKernelIndex);
+    const Kernel * const kernel = getKernel(producer);
     return hasKernelTerminated(b, producer, kernel->hasAttribute(AttrId::CanTerminateEarly));
 }
 

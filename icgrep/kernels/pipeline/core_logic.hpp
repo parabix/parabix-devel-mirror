@@ -321,7 +321,10 @@ void PipelineCompiler::end(BuilderRef b) {
     if (mPipelineTerminated) {
         b->CreateStore(terminated, mPipelineTerminated);
     }
-
+    // free any truncated input buffers
+    for (Value * const bufferPtr : mTruncatedInputBuffer) {
+        b->CreateFree(b->CreateLoad(bufferPtr));
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

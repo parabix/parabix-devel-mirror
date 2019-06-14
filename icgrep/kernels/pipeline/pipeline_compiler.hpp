@@ -23,9 +23,9 @@
 #include <algorithm>
 #include <queue>
 
-// #define PRINT_DEBUG_MESSAGES
+//#define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+//#define PRINT_BUFFER_GRAPH
 
 // #define DISABLE_ZERO_EXTEND
 
@@ -795,8 +795,10 @@ protected:
     BasicBlock *                                mRethrowException = nullptr;
 
     Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
+    Vec<Value *, 16>                            mTruncatedInputBuffer;
     Vec<Value *, 64>                            mLocallyAvailableItems;
     Vec<Value *, 16>                            mTerminationSignals;
+
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
@@ -822,7 +824,6 @@ protected:
     Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
 
-    Vec<Value *>                                mIsInputClosed;
     Vec<Value *>                                mIsInputZeroExtended;
     PHINode *                                   mZeroExtendBufferPhi = nullptr;
 
