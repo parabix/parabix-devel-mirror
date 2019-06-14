@@ -377,7 +377,7 @@ kernel Parse_CtCDPI
 }
 
 
-kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Error err, <i1>[1] print] {
+kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Error err] {
 
     EqExpected = <0>
     AttListEnd = <0>
@@ -471,7 +471,6 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Erro
         
     # Attribute value spans
     tag_Callouts.AttVal_spans =  SpanUpTo(tag_Callouts.AttVal_starts, tag_Callouts.AttVal_ends)
-    print[0] = tag_Callouts.AttVal_spans
 }
 
 

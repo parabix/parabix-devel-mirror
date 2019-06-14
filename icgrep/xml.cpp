@@ -14,6 +14,7 @@
 #include <kernels/p2s_kernel.h>
 #include <kernels/scan_kernel.h>
 #include <kernels/stdout_kernel.h>
+#include <kernels/stream_select.h>
 #include <kernels/streams_merge.h>
 #include <kernels/streamset_collapse.h>
 #include <kernels/core/streamset.h>
@@ -36,6 +37,7 @@ namespace fs = boost::filesystem;
 
 using namespace llvm;
 using namespace kernel;
+using namespace kernel::selops;
 using namespace pablo;
 using namespace pablo::parse;
 
@@ -108,7 +110,6 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     StreamSet * const TagError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     StreamSet * const TagCallouts = P->CreateStreamSet(9, 1);
-    StreamSet * const PrintStream = P->CreateStreamSet(1, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -119,8 +120,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         },
         Bindings { // Output Stream Bindings
             Binding {"tag_Callouts", TagCallouts},
-            Binding {"err", TagError},
-            Binding {"print", PrintStream}
+            Binding {"err", TagError}
         }
     );
 
@@ -193,6 +193,9 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         CheckStreams
     );
 
+    StreamSet * const PrintStream = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<StreamSelect>(PrintStream, Select(/*from:*/ TagCallouts, {6}));
+
     StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
@@ -200,17 +203,16 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         "MaskBasisBits",
         Bindings {
             Binding {"basisBits", BasisBits},
-            // Binding {"mask", PrintStream}
-            Binding {"mask", Errors}
+            Binding {"mask", PrintStream}
         },
         Bindings {
             Binding {"masked", MaskedBasisBits}
         }
     );
 
-    StreamSet * const ErrorBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(MaskedBasisBits, ErrorBytes);
-    P->CreateKernelCall<StdOutKernel>(ErrorBytes);
+    StreamSet * const PrintBytes = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<P2SKernel>(MaskedBasisBits, PrintBytes);
+    P->CreateKernelCall<StdOutKernel>(PrintBytes);
 
     Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(ErrorSet, ErrorMonitorKernel::IOStreamBindings{});
     Scalar * const errCode = emk->getOutputScalar("errorCode");
