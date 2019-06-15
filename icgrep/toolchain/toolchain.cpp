@@ -82,6 +82,8 @@ static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir", cl::init(""
 static cl::opt<unsigned, true> CacheLimitOption("cache-days-limit", cl::location(CacheDaysLimit), cl::init(15),
                                           cl::desc("number of days a cache entry may be unused before auto deletion may be applied"), cl::cat(CodeGenOptions));
 
+static cl::opt<int, true> FreeCallBisectOption("free-bisect-value", cl::location(FreeCallBisectLimit), cl::init(-1),
+                                                    cl::desc("The number of free calls to allow in bisecting"), cl::cat(CodeGenOptions));
 
 static cl::opt<unsigned, true> BlockSizeOption("BlockSize", cl::location(BlockSize), cl::init(0),
                                           cl::desc("specify a block size (defaults to widest SIMD register width in bits)."), cl::cat(CodeGenOptions));
@@ -133,6 +135,8 @@ bool EnableObjectCache;
 bool TraceObjectCache;
 
 unsigned CacheDaysLimit;
+
+int FreeCallBisectLimit;
 
 bool NVPTX = [](const bool nvptx) {
     #ifndef CUDA_ENABLED

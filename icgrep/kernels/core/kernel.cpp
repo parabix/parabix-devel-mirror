@@ -1815,6 +1815,9 @@ inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::DisableIndirectBranch))) {
         name += "-Ibranch";
     }
+    if (LLVM_UNLIKELY(codegen::FreeCallBisectLimit >= 0)) {
+        name += "+FreeLimit";
+    }
 //    name += "_O" + std::to_string((int)codegen::OptLevel);
     return std::move(name);
 }
