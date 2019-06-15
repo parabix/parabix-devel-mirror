@@ -52,8 +52,12 @@ extern "C" void printErrorCode(uint64_t errCode) {
     std::cout << "Exit with error code: " << errCode << "\n";
 }
 
-extern "C" void xmlErrorCallback(const char * ptr, uint64_t pos) {
+extern "C" void xmlErrorCallback(const char * ptr, size_t pos) {
     std::cout << "error: stream position = " << pos << ", at char: '" << *ptr << "'\n";
+}
+
+extern "C" void xmlTagCallback(const char * ptr, size_t pos, size_t idx) {
+    std::cout << "tag callback: stream index = " << idx << ", stream position = " << pos << ", at char: '" << *ptr << "'\n";
 }
 
 
@@ -186,6 +190,9 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     Kernel * const scanKernel = P->CreateKernelCall<ScanKernel>(Errors, ByteStream, "xmlErrorCallback");
     pxDriver.LinkFunction(scanKernel, "xmlErrorCallback", xmlErrorCallback);
+
+    Kernel * const mssk = P->CreateKernelCall<MultiStreamScanKernel>(TagCallouts, ByteStream, "xmlTagCallback");
+    pxDriver.LinkFunction(mssk, "xmlTagCallback", xmlTagCallback);
 
     StreamSet * const CheckStreams = P->CreateStreamSet(6, 1);
     P->CreateKernelCall<StreamsMerge>(
