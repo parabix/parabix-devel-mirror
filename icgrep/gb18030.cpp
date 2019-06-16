@@ -560,13 +560,6 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     }
 }
 
-void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
-    unsigned fw = 64;  // Best for PEXT extraction.
-    StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
-    P->CreateKernelCall<FieldCompressKernel>(fw, inputBase, inputSet, mask, compressed);
-    P->CreateKernelCall<StreamCompressKernel>(compressed, mask, outputs, fw);
-}
-
 typedef void (*gb18030FunctionType)(uint32_t fd, const char *);
 
 gb18030FunctionType generatePipeline(CPUDriver & pxDriver, unsigned encodingBits, cc::ByteNumbering byteNumbering) {
@@ -629,13 +622,11 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver, unsigned encodingBits
     StreamSet * const byte2 = P->CreateStreamSet(8);
     StreamSet * const nybble2 = P->CreateStreamSet(4);
 
-    Scalar * ZERO = P->CreateConstant(b->getSize(0));
-
-    extract(P, GB_prefix4, ZERO, GB_mask1, GB_4byte);
-    extract(P, BasisBits, ZERO, GB_mask1, byte1);
-    extract(P, BasisBits, ZERO, GB_mask2, nybble1);
-    extract(P, BasisBits, ZERO, GB_mask3, byte2);
-    extract(P, BasisBits, ZERO, GB_mask4, nybble2);
+    FilterByMask(P, GB_mask1, GB_prefix4, GB_4byte);
+    FilterByMask(P, GB_mask1, BasisBits, byte1);
+    FilterByMask(P, GB_mask2, BasisBits, nybble1);
+    FilterByMask(P, GB_mask3, BasisBits, byte2);
+    FilterByMask(P, GB_mask4, BasisBits, nybble2);
 
     StreamSet * const GB_2byte = P->CreateStreamSet(1); // markers for 2-byte sequences
     StreamSet * const gb15index = P->CreateStreamSet(15);

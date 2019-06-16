@@ -479,13 +479,6 @@ void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) mResultStr << "\n";
 }
 
-void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
-    unsigned fw = 64;  // Best for PEXT extraction.
-    StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
-    P->CreateKernelCall<FieldCompressKernel>(fw, inputBase, inputSet, mask, compressed);
-    P->CreateKernelCall<StreamCompressKernel>(compressed, mask, outputs, fw);
-}
-
 void EmitMatchesEngine::grepCodeGen() {
     auto & idb = mGrepDriver.getBuilder();
 
@@ -509,9 +502,8 @@ void EmitMatchesEngine::grepCodeGen() {
     std::tie(LineBreakStream, Matches) = grepPipeline(E, ByteStream);
 
     if ((mAfterContext != 0) || (mBeforeContext != 0)) {
-        Scalar * ZERO = E->CreateConstant(idb->getSize(0));
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
-        extract(E, Matches, ZERO, LineBreakStream, MatchesByLine);
+        FilterByMask(E, LineBreakStream, Matches, MatchesByLine);
         StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
         StreamSet * SelectedLines = E->CreateStreamSet(1, 1);

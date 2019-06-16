@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #ifndef DELETION_H
@@ -12,6 +12,27 @@
 namespace IDISA { class IDISA_Builder; }
 
 namespace kernel {
+
+/*  FilterByMask - extract selected bits of input streams according to a mask.
+
+    One output bit is produced for every 1 bit in the mask stream.
+
+    Input stream:    abcdefghjklmnpqra
+    Mask stream:     ...1.1...111..1..     . represents 0
+    Output stream:   dfjklmq
+
+    The output stream is produced at the Popcount rate of the mask stream.
+
+    The number of streams to process is governed by the size of the output stream set.
+    The input streams to process are selected sequentially from the stream set,
+    starting from the position indicated by the streamOffset value.
+
+*/
+    
+void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
+                  StreamSet * mask, StreamSet * inputs, StreamSet * outputs,
+                  unsigned streamOffset = 0,
+                  unsigned extractionFieldWidth = 64);
 
 //
 // Parallel Prefix Deletion Kernel
@@ -36,12 +57,12 @@ private:
     const unsigned mStreamCount;
 };
 
-// Compress within fields of size fw.
+// Compress within fields of size fieldWidth.
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
-    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fieldWidth,
-                        Scalar * inputBase,
-                        StreamSet * inputStreamSet, StreamSet * extractionMask, StreamSet * outputStreamSet);
+    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                        StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
+                        Scalar * inputBase, unsigned fieldWidth = 64);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

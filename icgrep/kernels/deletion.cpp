@@ -7,6 +7,7 @@
 #include <toolchain/driver.h>
 #include <toolchain/cpudriver.h>
 #include <kernels/kernel_builder.h>
+#include <kernels/pipeline_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <IR_Gen/idisa_target.h>
 #include <llvm/IR/Intrinsics.h>
@@ -18,6 +19,16 @@ inline size_t ceil_udiv(const size_t n, const size_t m) {
 }
 
 namespace kernel {
+
+void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
+                  StreamSet * mask, StreamSet * inputs, StreamSet * outputs,
+                  unsigned streamOffset,
+                  unsigned extractionFieldWidth) {
+    Scalar * base = P->CreateConstant(P->getDriver().getBuilder()->getSize(streamOffset));
+    StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
+    P->CreateKernelCall<FieldCompressKernel>(mask, inputs, compressed, base, extractionFieldWidth);
+    P->CreateKernelCall<StreamCompressKernel>(mask, compressed, outputs, extractionFieldWidth);
+}
 
 inline std::vector<Value *> parallel_prefix_deletion_masks(const std::unique_ptr<KernelBuilder> & kb, const unsigned fw, Value * del_mask) {
     Value * m = kb->simd_not(del_mask);
@@ -144,15 +155,15 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     kb->SetInsertPoint(done);
 }
 
-FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fieldWidth
-                                         , Scalar * inputBase, StreamSet * inputStreamSet, StreamSet * extractionMask
-                                         , StreamSet * outputStreamSet)
+FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                         StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
+                                         Scalar * inputBase, unsigned fieldWidth)
 : MultiBlockKernel(b, "fieldCompress" + std::to_string(fieldWidth) + "_" +
                    std::to_string(inputStreamSet->getNumElements()) +
                    ":" + std::to_string(outputStreamSet->getNumElements()) ,
 // input streams
-{Binding{"inputStreamSet", inputStreamSet},
-Binding{"extractionMask", extractionMask}},
+{Binding{"extractionMask", extractionMask},
+Binding{"inputStreamSet", inputStreamSet}},
 // output stream
 {Binding{"outputStreamSet", outputStreamSet}},
 // input scalar

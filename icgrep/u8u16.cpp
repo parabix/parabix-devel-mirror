@@ -302,7 +302,7 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver, cc::ByteNumbering byteN
     } else {
         const auto fieldWidth = b->getBitBlockWidth() / 16;
         Scalar * inputBase = P->CreateConstant(b->getSize(0));
-        P->CreateKernelCall<FieldCompressKernel>(fieldWidth, inputBase, u8bits, selectors, u16bits);
+        P->CreateKernelCall<FieldCompressKernel>(selectors, u8bits, u16bits, inputBase, fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
     }
 
@@ -344,7 +344,7 @@ void makeNonAsciiBranch(const std::unique_ptr<KernelBuilder> & b,
     } else {
         const auto fieldWidth = b->getBitBlockWidth() / 16;
         Scalar * inputBase = P->CreateConstant(b->getSize(0));
-        P->CreateKernelCall<FieldCompressKernel>(fieldWidth, inputBase, u8bits, selectors, u16bits);
+        P->CreateKernelCall<FieldCompressKernel>(selectors, u8bits, u16bits, inputBase, fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
     }
 }
