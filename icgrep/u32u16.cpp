@@ -46,17 +46,6 @@ static cl::OptionCategory u32u16Options("u32u16 Options", "Transcoding control o
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u32u16Options));
 static cl::opt<std::string> OutputEncoding("encoding", cl::desc("Output encoding (default: UTF-16)"), cl::init("UTF-16"), cl::cat(u32u16Options));
 
-
-void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
-    StreamSet * const expanded = P->CreateStreamSet(count);
-    P->CreateKernelCall<StreamExpandKernel>(base, inputs, mask, expanded);
-    if (AVX2_available() && BMI2_available()) {
-        P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
-    } else {
-        P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);
-    }
-}
-
 typedef void (*u32u16FunctionType)(uint32_t fd);
 
 u32u16FunctionType u32u16_gen (CPUDriver & driver, cc::ByteNumbering byteNumbering) {
@@ -98,9 +87,9 @@ u32u16FunctionType u32u16_gen (CPUDriver & driver, cc::ByteNumbering byteNumberi
     P->CreateKernelCall<StreamCompressKernel>(u16fieldMask, extractionMask, u16final);
     P->CreateKernelCall<UTF16_InitialMask>(u16final, u16initial);
 
-    deposit(P, P->CreateConstant(b->getSize(0)), 4, u16initial, u16_SMP_basis, SMP4_0);
-    deposit(P, P->CreateConstant(b->getSize(10)), 6, u16initial, u32basis, deposit15_10);
-    deposit(P, P->CreateConstant(b->getSize(0)), 10, u16final, u32basis, deposit9_0);
+    SpreadByMask(P, u16initial, u16_SMP_basis, SMP4_0);
+    SpreadByMask(P, u16initial, u32basis, deposit15_10, /* inputOffset = */ 10);
+    SpreadByMask(P, u16final, u32basis, deposit9_0);
 
     P->CreateKernelCall<UTF16assembly>(SMP4_0, deposit15_10, deposit9_0, u16final,
                                       u16basis);

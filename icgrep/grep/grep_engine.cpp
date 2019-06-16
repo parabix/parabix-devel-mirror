@@ -479,16 +479,6 @@ void EmitMatch::finalize_match(char * buffer_end) {
     if (!mTerminated) mResultStr << "\n";
 }
 
-void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
-    StreamSet * const expanded = P->CreateStreamSet(count);
-    P->CreateKernelCall<StreamExpandKernel>(base, inputs, mask, expanded);
-    if (AVX2_available() && BMI2_available()) {
-        P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
-    } else {
-        P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);
-    }
-}
-
 void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
     unsigned fw = 64;  // Best for PEXT extraction.
     StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
@@ -525,7 +515,7 @@ void EmitMatchesEngine::grepCodeGen() {
         StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
         StreamSet * SelectedLines = E->CreateStreamSet(1, 1);
-        deposit(E, ZERO, 1, LineBreakStream, ContextByLine, SelectedLines);
+        SpreadByMask(E, LineBreakStream, ContextByLine, SelectedLines);
         Matches = SelectedLines;
     }
 

@@ -560,16 +560,6 @@ void GB_18030_FourByteLogic::generatePabloMethod() {
     }
 }
 
-void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
-    StreamSet * const expanded = P->CreateStreamSet(count);
-    P->CreateKernelCall<StreamExpandKernel>(base, inputs, mask, expanded);
-    if (AVX2_available() && BMI2_available()) {
-        P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
-    } else {
-        P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);
-    }
-}
-
 void extract(const std::unique_ptr<ProgramBuilder> & P, StreamSet * inputSet, Scalar * inputBase, StreamSet * mask, StreamSet * outputs) {
     unsigned fw = 64;  // Best for PEXT extraction.
     StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
@@ -702,10 +692,10 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver, unsigned encodingBits
 
         P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
 
-        deposit(P, P->CreateConstant(b->getSize(18)), 3, u8initial, utfBasis, deposit18_20);
-        deposit(P, P->CreateConstant(b->getSize(12)), 6, u8mask12_17, utfBasis, deposit12_17);
-        deposit(P, P->CreateConstant(b->getSize(6)), 6, u8mask6_11, utfBasis, deposit6_11);
-        deposit(P, P->CreateConstant(b->getSize(0)), 6, u8final, utfBasis, deposit0_5);
+        SpreadByMask(P, u8initial, utfBasis, deposit18_20, /* inputOffset = */ 18);
+        SpreadByMask(P, u8mask12_17, utfBasis, deposit12_17, /* inputOffset = */ 12);
+        SpreadByMask(P, u8mask6_11, utfBasis, deposit6_11, /* inputOffset = */ 6);
+        SpreadByMask(P, u8final, utfBasis, deposit0_5, /* inputOffset = */ 0);
 
         P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
                                         u8initial, u8final, u8mask6_11, u8mask12_17,
