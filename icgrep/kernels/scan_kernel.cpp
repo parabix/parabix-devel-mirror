@@ -61,8 +61,10 @@ Value * ScanKernelBase::orBlockIntoMask(BuilderRef b, ScanWordContext const & sw
 Value * ScanKernelBase::loadScanWord(BuilderRef b, ScanWordContext const & sw, Value * wordOffset, Value * strideNo, llvm::Value * streamIndex) {
     Value * const index = streamIndex == nullptr ? b->getSize(0) : streamIndex;
     Value * const strideOffset = b->CreateMul(strideNo, sz_NUM_BLOCKS_PER_STRIDE);
-    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr(mScanStreamSetName, index, strideOffset), sw.PointerTy);
-    Value * const wordPtr = b->CreateGEP(stridePtr, wordOffset);
+    Value * const blockNo = b->CreateUDiv(wordOffset, sw.WORDS_PER_BLOCK);
+    Value * const blockOffset = b->CreateURem(wordOffset, sw.WORDS_PER_BLOCK);
+    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr(mScanStreamSetName, index, b->CreateAdd(strideOffset, blockNo)), sw.PointerTy);
+    Value * const wordPtr = b->CreateGEP(stridePtr, blockOffset);
     return b->CreateLoad(wordPtr);
 }
 
@@ -352,6 +354,13 @@ void MultiStreamScanKernel::generateMultiBlockLogic(BuilderRef b, Value * const 
         loadedWordVec = b->CreateInsertElement(loadedWordVec, val, i);
     }
     Value * const wordVec = b->CreateSelect(lowBitVec, loadedWordVec, nullWordVector);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Value * wordVecAccum = b->CreateExtractElement(wordVec, (uint64_t) 0);
+        for (uint32_t i = 1; i < numInputStreams; ++i) {
+            wordVecAccum = b->CreateOr(wordVecAccum, b->CreateExtractElement(wordVec, i));
+        }
+        b->CreateAssert(b->CreateICmpNE(wordVecAccum, Constant::getNullValue(wordVecAccum->getType())), "Failed to load scan word!");
+    }
     b->CreateBr(parallelProcessWords);
 
     // Use the same algorithm to process scan words in parallel.
