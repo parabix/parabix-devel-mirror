@@ -44,7 +44,7 @@ static std::string to_string(__selop<StreamSet *> const & selop) {
     return s;
 }
 
-__selop<StreamSet *> __selop_init(__op op, StreamSet * from, std::initializer_list<uint32_t> indices) {
+__selop<StreamSet *> __selop_init(__op op, StreamSet * from, std::vector<uint32_t> indices) {
     StreamSet * ss = from;
     typename __selop<StreamSet *>::__param_bindings bindings{};
     std::vector<uint32_t> idxVec{};
@@ -57,7 +57,7 @@ __selop<StreamSet *> __selop_init(__op op, StreamSet * from, std::initializer_li
     return __selop<StreamSet *>{op, std::move(bindings)};
 }
 
-__selop<StreamSet *> __selop_init(__op op, std::initializer_list<std::pair<StreamSet *, std::initializer_list<uint32_t>>> bindings) {
+__selop<StreamSet *> __selop_init(__op op, std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> bindings) {
     typename __selop<StreamSet *>::__param_bindings b{};
     b.reserve(bindings.size());
     for (auto pair : bindings) {
@@ -73,29 +73,29 @@ __selop<StreamSet *> __selop_init(__op op, std::initializer_list<std::pair<Strea
     return __selop<StreamSet *>{op, std::move(b)};
 }
 
-__selop<StreamSet *> Select(StreamSet * from, std::initializer_list<uint32_t> indices) {
+__selop<StreamSet *> Select(StreamSet * from, std::vector<uint32_t> indices) {
     return __selop_init(__op::__select, from, std::move(indices));
 }
 
-__selop<StreamSet *> Select(std::initializer_list<std::pair<StreamSet *, std::initializer_list<uint32_t>>> bindings) {
+__selop<StreamSet *> Select(std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> bindings) {
     return __selop_init(__op::__select, std::move(bindings));
 }
 
 
-__selop<StreamSet *> Merge(StreamSet * from, std::initializer_list<uint32_t> indices) {
+__selop<StreamSet *> Merge(StreamSet * from, std::vector<uint32_t> indices) {
     return __selop_init(__op::__merge, from, std::move(indices));
 }
 
-__selop<StreamSet *> Merge(std::initializer_list<std::pair<StreamSet *, std::initializer_list<uint32_t>>> bindings) {
+__selop<StreamSet *> Merge(std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> bindings) {
     return __selop_init(__op::__merge, std::move(bindings));
 }
 
 
-__selop<StreamSet *> Intersect(StreamSet * from, std::initializer_list<uint32_t> indices) {
+__selop<StreamSet *> Intersect(StreamSet * from, std::vector<uint32_t> indices) {
     return __selop_init(__op::__intersect, from, std::move(indices));
 }
 
-__selop<StreamSet *> Intersect(std::initializer_list<std::pair<StreamSet *, std::initializer_list<uint32_t>>> bindings) {
+__selop<StreamSet *> Intersect(std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> bindings) {
     return __selop_init(__op::__intersect, std::move(bindings));
 }
 
@@ -105,7 +105,7 @@ static inline std::string genSignature(selops::__selop<StreamSet *> const & oper
     return "_" + selops::to_string(operation);
 }
 
-static std::string genSignature(std::initializer_list<selops::__selop<StreamSet *>> const & operations) {
+static std::string genSignature(std::vector<selops::__selop<StreamSet *>> const & operations) {
     std::string s = "";
     for (auto const & op : operations) {
         s += "_";
@@ -160,7 +160,7 @@ mapOperationsToStreamNames(selops::__selop<StreamSet *> const & operation) {
 
 // returns { mappedOperations, kernelBindings }
 static std::pair<std::vector<selops::__selop<std::string>>, std::unordered_map<StreamSet *, std::string>>
-mapOperationsToStreamNames(std::initializer_list<selops::__selop<StreamSet *>> const & operations) {
+mapOperationsToStreamNames(std::vector<selops::__selop<StreamSet *>> const & operations) {
     std::vector<selops::__selop<std::string>> mapped{};
     mapped.reserve(operations.size());
     uint32_t idx = 0;
@@ -256,5 +256,63 @@ void StreamSelect::generateDoBlockMethod(BuilderRef b) {
         }
     }
 }
+
+
+namespace streamops {
+
+using ProgramBuilderRef = const std::unique_ptr<ProgramBuilder> &;
+
+std::vector<uint32_t> Range(uint32_t lb, uint32_t ub) {
+    assert (lb < ub);
+    std::vector<uint32_t> range{};
+    range.reserve(ub - lb);
+    for (; lb < ub; ++lb) {
+        range.push_back(lb);
+    }
+    return range;
+}
+
+static StreamSet * runOperation(ProgramBuilderRef P, selops::__selop<StreamSet *> op) {
+    uint32_t n = resultStreamCount(op);
+    StreamSet * const output = P->CreateStreamSet(n);
+    P->CreateKernelCall<StreamSelect>(output, op);
+    return output;
+}
+
+StreamSet * Select(const std::unique_ptr<ProgramBuilder> & P, StreamSet * from, uint32_t index) {
+    return Select(P, from, std::vector<uint32_t>{index});
+}
+
+StreamSet * Select(ProgramBuilderRef P, StreamSet * from, std::vector<uint32_t> indices) {
+    selops::__selop<StreamSet *> op = selops::Select(from, std::move(indices));
+    return runOperation(P, std::move(op));
+}
+
+StreamSet * Select(const std::unique_ptr<ProgramBuilder> & P, std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> selections) {
+    selops::__selop<StreamSet *> op = selops::Select(selections);
+    return runOperation(P, std::move(op));
+}
+
+StreamSet * Merge(ProgramBuilderRef P, StreamSet * from, std::vector<uint32_t> indices) {
+    selops::__selop<StreamSet *> op = selops::Merge(from, std::move(indices));
+    return runOperation(P, std::move(op));
+}
+
+StreamSet * Merge(const std::unique_ptr<ProgramBuilder> & P, std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> selections) {
+    selops::__selop<StreamSet *> op = selops::Merge(selections);
+    return runOperation(P, std::move(op));
+}
+
+StreamSet * Intersect(ProgramBuilderRef P, StreamSet * from, std::vector<uint32_t> indices) {
+    selops::__selop<StreamSet *> op = selops::Intersect(from, std::move(indices));
+    return runOperation(P, std::move(op));
+}
+
+StreamSet * Intersect(const std::unique_ptr<ProgramBuilder> & P, std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> selections) {
+    selops::__selop<StreamSet *> op = selops::Intersect(selections);
+    return runOperation(P, std::move(op));
+}
+
+} // namespace streamops
 
 } // namespace kernel
