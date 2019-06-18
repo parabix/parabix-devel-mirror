@@ -37,9 +37,8 @@ mShiftAmount(shiftAmount)
 void ShiftBack::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> sourceStreams = getInputStreamSet("inputs");
-
     for (unsigned i = 0; i < sourceStreams.size(); i++) {
-        pb.createAssign(pb.createExtract(getOutput(0), i), pb.createLookahead(sourceStreams[i], mShiftAmount));
+        pb.createAssign(pb.createExtract(getOutput(0), i), pb.createLookahead(sourceStreams[i], mShiftAmount, "shiftback_" + std::to_string(i)));
     }
 }
 }

@@ -73,13 +73,33 @@ void WordMarkKernelBuilder::generatePabloMethod() {
     PabloAST * nonWord = pb.createNot(wordChar);
     PabloAST * U8index = getInputStreamSet("U8index")[0];
     PabloAST * U8nonfinal = pb.createNot(U8index);
-    PabloAST * wordNext = pb.createScanThru(pb.createAdvance(wordChar, 1), U8nonfinal);
-    PabloAST * wordFollow = pb.createAnd(wordNext, nonWord);
-    PabloAST * wordStart = pb.createAnd(pb.createScanThru(pb.createAdvance(nonWord, 1), U8nonfinal), wordChar);
+    PabloAST * wordNext = pb.createScanThru(pb.createAdvance(wordChar, 1), U8nonfinal, "wordNext");
+    PabloAST * wordFollow = pb.createAnd(wordNext, nonWord, "wordFollow");
+    PabloAST * wordStart = pb.createAnd(pb.createScanThru(pb.createNot(pb.createAdvance(wordChar, 1)), U8nonfinal), wordChar, "wordStart");
     PabloAST * wordBoundary = pb.createOr(wordStart, wordFollow);
     Var * const WordMarks = getOutputStreamVar("WordMarks");
     pb.createAssign(pb.createExtract(WordMarks, pb.getInteger(0)), wordFollow);
     pb.createAssign(pb.createExtract(WordMarks, pb.getInteger(1)), wordBoundary);
+}
+
+
+class Splitter : public PabloKernel {
+public:
+    Splitter(const std::unique_ptr<KernelBuilder> & kb, StreamSet * inputs, StreamSet * output1, StreamSet * output2);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+Splitter::Splitter(const std::unique_ptr<KernelBuilder> & kb, StreamSet * inputs, StreamSet * output1, StreamSet * output2)
+: PabloKernel(kb, "splitter", {Binding{"inputs", inputs}}, {Binding{"output1", output1}, Binding{"output2", output2}}) { }
+
+void Splitter::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    std::vector<PabloAST *> inputs = getInputStreamSet("inputs");
+    pb.createAssign(pb.createExtract(getOutputStreamVar("output1"), pb.getInteger(0)), inputs[0]);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("output2"), pb.getInteger(0)), inputs[1]);
 }
 
 class WordAccumulator : public grep::MatchAccumulator {
@@ -94,8 +114,9 @@ private:
 
 void WordAccumulator::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
     const auto bytes = line_end - line_start + 1;
-    if (bytes != WordLen) return;
+    //if (bytes != WordLen) return;
     std::string new_word(line_start, bytes);
+    //llvm::errs() << "Found: " << new_word << "\n";
     mWordBag[new_word]++;
 }
 
@@ -127,26 +148,26 @@ ztf8FunctionType generatePipeline(CPUDriver & pxDriver) {
     StreamSet * WordMarks = P->CreateStreamSet(2);
     P->CreateKernelCall<WordMarkKernelBuilder>(BasisBits, U8index, WordMarks);
     
+    /*
     StreamSet * u32WordMarks = P->CreateStreamSet(2);
     FilterByMask(P, U8index, WordMarks, u32WordMarks);
+    */
+    StreamSet * u8WordMarks_back = P->CreateStreamSet(2);
+    P->CreateKernelCall<ShiftBack>(WordMarks, u8WordMarks_back);
     
-    StreamSet * u32WordMarks_back = P->CreateStreamSet(2);
-    P->CreateKernelCall<ShiftBack>(u32WordMarks, u32WordMarks_back);
-
+    /*
     StreamSet * u8WordMarks_back = P->CreateStreamSet(2);
     SpreadByMask(P, U8index, u32WordMarks_back, u8WordMarks_back);
     
     StreamSet * u8WordMarks_byte1 = P->CreateStreamSet(2);
     P->CreateKernelCall<ShiftForward>(u8WordMarks_back, u8WordMarks_byte1);
-
+     */
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
     
     StreamSet * u8WordEnds = P->CreateStreamSet(1);
     StreamSet * u8WordBoundaries = P->CreateStreamSet(1);
     
-    P->CreateKernelCall<StreamSelect>(u8WordEnds, kernel::streamops::Select(u8WordMarks_byte1, {0}));
-    P->CreateKernelCall<StreamSelect>(u8WordBoundaries, kernel::streamops::Select(u8WordMarks_byte1, {1}));
-
+    P->CreateKernelCall<Splitter>(u8WordMarks_back, u8WordEnds, u8WordBoundaries);
     Kernel * scanMatchK = P->CreateKernelCall<ScanMatchKernel>(u8WordEnds, u8WordBoundaries, ByteStream, callbackObject);
     pxDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", grep::accumulate_match_wrapper);
     pxDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", grep::finalize_match_wrapper);
