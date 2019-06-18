@@ -53,6 +53,16 @@ static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 
 using namespace llvm;
 
+
+static int accumulatedFreeCalls = 0;
+
+extern "C" void free_debug_wrapper(void * ptr) {
+    accumulatedFreeCalls++;
+    if (accumulatedFreeCalls <= codegen::FreeCallBisectLimit) {
+        free(ptr);
+    }
+}
+
 #ifdef HAS_ADDRESS_SANITIZER
 Value * checkHeapAddress(CBuilder * const b, Value * const Ptr, Value * const Size) {
     Module * const m = b->getModule();
@@ -505,13 +515,24 @@ void CBuilder::CreateFree(Value * const ptr) {
     assert (ptr->getType()->isPointerTy());
     Module * const m = getModule();
     Type * const voidPtrTy =  getVoidPtrTy();
-    Function * f = m->getFunction("free");
-    if (f == nullptr) {
-        FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
-        f = Function::Create(fty, Function::ExternalLinkage, "free", m);
-        f->setCallingConv(CallingConv::C);
+    if (codegen::FreeCallBisectLimit >= 0) {
+        Function * dispatcher = m->getFunction("free_debug_wrapper");
+        if (dispatcher == nullptr) {
+            FunctionType * ty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
+            dispatcher = Function::Create(ty, Function::ExternalLinkage, "free_debug_wrapper", m);
+            dispatcher->setCallingConv(CallingConv::C);
+            assert (dispatcher);
+            CreateCall(dispatcher, CreatePointerCast(ptr, voidPtrTy));
+        }
+    } else {
+        Function * f = m->getFunction("free");
+        if (f == nullptr) {
+            FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
+            f = Function::Create(fty, Function::ExternalLinkage, "free", m);
+            f->setCallingConv(CallingConv::C);
+        }
+        CreateCall(f, CreatePointerCast(ptr, voidPtrTy));
     }
-    CreateCall(f, CreatePointerCast(ptr, voidPtrTy));
 }
 
 Value * CBuilder::CreateAnonymousMMap(Value * size) {

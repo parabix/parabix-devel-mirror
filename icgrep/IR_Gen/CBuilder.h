@@ -29,6 +29,8 @@ inline bool is_power_2(const uint64_t n) {
     return ((n & (n - 1)) == 0) && n;
 }
 
+extern "C" void free_debug_wrapper(void * ptr);
+
 class CBuilder : public llvm::IRBuilder<> {
 public:
 

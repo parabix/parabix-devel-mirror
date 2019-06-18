@@ -19,6 +19,8 @@ public:
     using CallBindings = PipelineKernel::CallBindings;
     using NestedBuilders = std::vector<std::shared_ptr<PipelineBuilder>>;
 
+    BaseDriver & getDriver() { return mDriver;}
+
     template<typename KernelType, typename... Args>
     Kernel * CreateKernelCall(Args &&... args) {
         return initializeKernel(new KernelType(mDriver.getBuilder(), std::forward<Args>(args) ...));

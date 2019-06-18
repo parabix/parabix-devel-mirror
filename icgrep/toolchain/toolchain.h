@@ -60,6 +60,7 @@ extern std::string ShowASMOption;
 #endif
 extern const char * ObjectCacheDir;
 extern unsigned CacheDaysLimit;  // set from command line
+extern int FreeCallBisectLimit;  // set from command line
 extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
 const unsigned LaneWidth = 64;
 extern unsigned BlockSize;  // set from command line

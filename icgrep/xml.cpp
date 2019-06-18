@@ -34,10 +34,10 @@
 #include <sys/stat.h>
 
 namespace fs = boost::filesystem;
+namespace so = kernel::streamops;
 
 using namespace llvm;
 using namespace kernel;
-using namespace kernel::selops;
 using namespace pablo;
 using namespace pablo::parse;
 
@@ -200,9 +200,6 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         CheckStreams
     );
 
-    StreamSet * const PrintStream = P->CreateStreamSet(1, 1);
-    P->CreateKernelCall<StreamSelect>(PrintStream, Select(/*from:*/ TagCallouts, {6}));
-
     StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
@@ -210,7 +207,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         "MaskBasisBits",
         Bindings {
             Binding {"basisBits", BasisBits},
-            Binding {"mask", PrintStream}
+            Binding {"mask", so::Select(P, TagCallouts, 6)}
         },
         Bindings {
             Binding {"masked", MaskedBasisBits}

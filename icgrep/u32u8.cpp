@@ -44,16 +44,6 @@ using namespace codegen;
 static cl::OptionCategory u32u8Options("u32u8 Options", "Transcoding control options.");
 static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(u32u8Options));
 
-void deposit(const std::unique_ptr<ProgramBuilder> & P, Scalar * const base, const unsigned count, StreamSet * mask, StreamSet * inputs, StreamSet * outputs) {
-    StreamSet * const expanded = P->CreateStreamSet(count);
-    P->CreateKernelCall<StreamExpandKernel>(base, inputs, mask, expanded);
-    if (AVX2_available() && BMI2_available()) {
-        P->CreateKernelCall<PDEPFieldDepositKernel>(mask, expanded, outputs);
-    } else {
-        P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs);
-    }
-}
-
 typedef void (*u32u8FunctionType)(uint32_t fd);
 
 u32u8FunctionType u32u8_gen (CPUDriver & driver) {
@@ -96,10 +86,10 @@ u32u8FunctionType u32u8_gen (CPUDriver & driver) {
 
     P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
 
-    deposit(P, P->CreateConstant(b->getSize(18)), 3, u8initial, u32basis, deposit18_20);
-    deposit(P, P->CreateConstant(b->getSize(12)), 6, u8mask12_17, u32basis, deposit12_17);
-    deposit(P, P->CreateConstant(b->getSize(6)), 6, u8mask6_11, u32basis, deposit6_11);
-    deposit(P, P->CreateConstant(b->getSize(0)), 6, u8final, u32basis, deposit0_5);
+    SpreadByMask(P, u8initial, u32basis, deposit18_20, /* inputOffset = */ 18);
+    SpreadByMask(P, u8mask12_17, u32basis, deposit12_17, /* inputOffset = */ 12);
+    SpreadByMask(P, u8mask6_11, u32basis, deposit6_11, /* inputOffset = */ 6);
+    SpreadByMask(P, u8final, u32basis, deposit0_5, /* inputOffset = */ 0);
 
     P->CreateKernelCall<UTF8assembly>(deposit18_20, deposit12_17, deposit6_11, deposit0_5,
                                       u8initial, u8final, u8mask6_11, u8mask12_17,
