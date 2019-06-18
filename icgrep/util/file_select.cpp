@@ -32,6 +32,7 @@
 #include <re/printer_re.h>
 
 using namespace llvm;
+using error_code = boost::system::error_code;
 
 namespace argv {
 
@@ -59,11 +60,11 @@ static cl::list<std::string> ExcludeFiles("exclude", cl::ZeroOrMore,
 static cl::opt<std::string> ExcludeFromFlag("exclude-from", cl::desc("Exclude files matching filename GLOB patterns from the given file."), cl::cat(Input_Options));
 
 static cl::list<std::string> ExcludeDirectories("exclude-dir", cl::desc("Exclude directories matching the given pattern."), cl::ZeroOrMore, cl::cat(Input_Options));
-    
+
 static cl::opt<std::string> ExcludePerDirectory("exclude-per-directory",
                                                 cl::desc(".gitignore (default) or other file specifying files to exclude."),
                                                 cl::init(".gitignore"), cl::cat(Input_Options));
-    
+
 static cl::list<std::string> IncludeDirectories("include-dir", cl::desc("Include directories matching the given pattern."), cl::ZeroOrMore, cl::cat(Input_Options));
 
 static cl::list<std::string> IncludeFiles("include", cl::ZeroOrMore, cl::desc("Include only files matching the given filename GLOB pattern(s)."), cl::cat(Input_Options));
@@ -82,7 +83,7 @@ static cl::opt<DevDirAction, true> DirectoriesOption("d", cl::desc("Processing m
                                                                 clEnumValN(Recurse, "recurse", "Recursive process directories, equivalent to -r.")
                                                                 CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(DirectoriesFlag), cl::init(Read));
 static cl::alias DirectoriesAlias("directories", cl::desc("Alias for -d"), cl::aliasopt(DirectoriesOption));
-    
+
 static cl::opt<bool> TraceFileSelect("TraceFileSelect", cl::desc("Trace file selection"), cl::cat(Input_Options));
 
 static cl::opt<unsigned> GitREcoalescing("git-RE-coalescing", cl::desc("gitignore RE coalescing factor"), cl::init(10), cl::cat(Input_Options));
@@ -238,7 +239,10 @@ void recursiveFileSelect(CPUDriver & driver,
                          std::vector<fs::path> & collectedPaths) {
 
     // First update the search REs with any local .gitignore or other exclude file.
-    bool hasLocalIgnoreFile = !ExcludePerDirectory.empty() && fs::exists(dirpath/ExcludePerDirectory);
+    error_code ec;
+    bool hasLocalIgnoreFile = !ExcludePerDirectory.empty() && fs::exists(dirpath/ExcludePerDirectory, ec) && !ec;
+
+
     //llvm::errs() << "recursiveFileSelect: " << dirpath.string() << " hasLocalIgnore=" << hasLocalIgnoreFile << "\n";
     std::vector<std::pair<re::PatternKind, re::RE *>> updatedREs;
     if (hasLocalIgnoreFile) {
@@ -248,7 +252,7 @@ void recursiveFileSelect(CPUDriver & driver,
     // Gather files and subdirectories.
     grep::SearchableBuffer subdirCandidates;
     grep::SearchableBuffer fileCandidates;
-    
+
     boost::system::error_code errc;
     fs::directory_iterator di(dirpath, errc);
     if (errc) {

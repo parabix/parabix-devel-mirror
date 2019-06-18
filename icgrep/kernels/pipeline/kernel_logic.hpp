@@ -42,7 +42,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     const auto log2BlockWidth = floor_log2(blockWidth);
     Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(log2BlockWidth);
-    Constant * const LOG_2_BLOCK_BYTES = b->getSize(floor_log2(blockWidth / 8));
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
 
@@ -58,12 +57,27 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
         if (LLVM_LIKELY(rate.isFixed())) {
 
+            // create a stack entry for this buffer at the start of the pipeline
+            const auto ip = b->saveIP();
+            b->SetInsertPoint(mPipelineEntryBranch);
+            PointerType * const int8PtrTy = b->getInt8PtrTy();
+            AllocaInst * const bufferStorage = b->CreateAlloca(int8PtrTy, nullptr, "TruncatedInputBuffer");
+            b->CreateStore(ConstantPointerNull::get(int8PtrTy), bufferStorage);
+            b->restoreIP(ip);
+            mTruncatedInputBuffer.push_back(bufferStorage);
+
+
+
             const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
             const StreamSetBuffer * const buffer = getInputBuffer(i);
+            const auto itemWidth = getItemWidth(buffer->getBaseType());
+            Constant * const ITEM_WIDTH = b->getSize(itemWidth);
+
+            const auto blocksPerStride = ceiling(rate.getRate() * RateValue{mKernel->getStride(), blockWidth});
+            Constant * const BLOCKS_PER_STRIDE = b->getSize(blocksPerStride);
 
             BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_genMaskedInput", mKernelLoopCall);
             BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelLoopCall);
-            BasicBlock * const maskedInputExit = b->CreateBasicBlock(prefix + "_genMaskedInputExit", mKernelLoopCall);
             BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectedInput", mKernelLoopCall);
 
             Value * const tooMany = b->CreateICmpULT(accessibleItems[i], mAccessibleInputItems[i]);
@@ -75,10 +89,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             b->CreateUnlikelyCondBr(computeMask, maskedInput, selectedInput);
 
             b->SetInsertPoint(maskedInput);
-            const auto itemWidth = getItemWidth(buffer->getBaseType());
-            const auto strideWidthRV = rate.getRate() * mKernel->getStride();
-            assert (strideWidthRV.denominator() == 1);
-            const auto strideWidth = strideWidthRV.numerator();
 
             // if this is a deferred fixed rate stream, we cannot be sure how many
             // blocks will have to be provided to the kernel in order to mask out
@@ -92,52 +102,71 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             // and is not an input to the pipeline (which we cannot prove will have space after the last item), we
             // can avoid copying the buffer and instead just mask out the surpressed items.
 
-            Value * const numOfStreams = buffer->getStreamSetCount(b);
-            Value * const strideBytes = b->CreateMul(b->getSize(strideWidth * itemWidth / 8), numOfStreams);
-            Value * initial = nullptr;
-            Value * stridesToCopy = nullptr;
-
-            Value * segmentBytes = strideBytes;
-            if (input.isDeferred()) {
-                initial = mAlreadyProcessedDeferredPhi[i];
-                initial = b->CreateLShr(initial, LOG_2_BLOCK_WIDTH);
-                Value * end = mAlreadyProcessedPhi[i];
-                end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                stridesToCopy = b->CreateSub(end, initial);
-                segmentBytes = b->CreateMul(b->CreateAdd(stridesToCopy, ONE), strideBytes);
-            }
-
-            const auto ip = b->saveIP();
-            b->SetInsertPoint(mPipelineEntryBranch);
-            PointerType * const int8PtrTy = b->getInt8PtrTy();
-            AllocaInst * const bufferStorage = b->CreateAlloca(int8PtrTy, nullptr, "TruncatedInputBuffer");
-            b->CreateStore(ConstantPointerNull::get(int8PtrTy), bufferStorage);
-            b->restoreIP(ip);
-            mTruncatedInputBuffer.push_back(bufferStorage);
-
-            Value * maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
-            b->CreateStore(maskedBuffer, bufferStorage);
-
             ExternalBuffer tmp(b, input.getType(), true, 0);
-            maskedBuffer = b->CreatePointerCast(maskedBuffer, tmp.getPointerType(), "maskedBuffer");
-
-            if (stridesToCopy) {
-                Value * const bytesToCopy = b->CreateMul(stridesToCopy, strideBytes);
-                Value * inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, initial);
-                b->CreateMemCpy(maskedBuffer, inputPtr, bytesToCopy, blockWidth / 8);
-            }
 
             Value * const start = b->CreateLShr(mAlreadyProcessedPhi[i], LOG_2_BLOCK_WIDTH);
 
+            DataLayout DL(b->getModule());
+            Value * const startPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, start);
+            Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
+            Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
+
+            Value * const limit = b->CreateAdd(start, BLOCKS_PER_STRIDE);
+            Value * const limitPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, limit);
+            Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
+
+            Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
+            Value * segmentBytes = strideBytes;
+
+
+            Value * initial = start;
+            Value * initialPtr = startPtr;
+            Value * initialPtrInt = startPtrInt;
+
+            Value * end = start;
+            Value * fullBytesToCopy = nullptr;
+
+            if (blocksPerStride > 1 || input.isDeferred()) {
+
+                if (input.isDeferred()) {
+                    initial = b->CreateLShr(mAlreadyProcessedDeferredPhi[i], LOG_2_BLOCK_WIDTH);
+                    initialPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, initial);
+                    initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
+                }
+
+                Value * endPtrInt = startPtrInt;
+
+                if (blocksPerStride > 1) {
+                    end = b->CreateAdd(mAlreadyProcessedPhi[i], accessibleItems[i]);
+                    end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
+                    Value * const endPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, end);
+                    endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
+                }
+
+                fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
+                segmentBytes = b->CreateAdd(fullBytesToCopy, strideBytes);
+            }
+
+            Value * maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
+            b->CreateStore(maskedBuffer, bufferStorage);
+            PointerType * const bufferType = tmp.getPointerType();
+            maskedBuffer = b->CreatePointerCast(maskedBuffer, bufferType, "maskedBuffer");
+
+            if (fullBytesToCopy) {
+                b->CreateMemCpy(maskedBuffer, initialPtr, fullBytesToCopy, blockWidth / 8);
+            }
+
+            Value * maskedEpoch = tmp.getStreamBlockPtr(b, maskedBuffer, ZERO, b->CreateNeg(initial));
+            maskedEpoch = b->CreatePointerCast(maskedEpoch, bufferType);
             Value * packIndex = nullptr;
             Value * maskOffset = b->CreateAnd(accessibleItems[i], BLOCK_MASK);
             if (itemWidth > 1) {
-                Constant * const ITEM_WIDTH = b->getSize(itemWidth);
                 Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
                 packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
                 maskOffset = b->CreateAnd(position, BLOCK_MASK);
             }
             Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
+            Value * const numOfStreams = buffer->getStreamSetCount(b);
             BasicBlock * const loopEntryBlock = b->GetInsertBlock();
             b->CreateBr(maskedInputLoop);
 
@@ -148,37 +177,18 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             Value * inputPtr = nullptr;
             Value * outputPtr = nullptr;
 
-            Value * end = start;
-
-            if (strideWidth > blockWidth || itemWidth > 1) {
-
-                inputPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, start, ZERO);
-                outputPtr = tmp.getStreamPackPtr(b, maskedBuffer, streamIndex, ZERO, ZERO);
-
-                Value * blocksToCopy = nullptr;
-
-                if (strideWidth > blockWidth) {
-                    end = b->CreateAdd(mAlreadyProcessedPhi[i], mAccessibleInputItems[i]);
-                    end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                    blocksToCopy = b->CreateSub(end, start);
-                }
-                if (itemWidth > 1) {
-                    if (blocksToCopy) {
-                        blocksToCopy = b->CreateAdd(blocksToCopy, packIndex);
-                    } else {
-                        blocksToCopy = packIndex;
-                    }
-                }
-                Value * const bytesToCopy = b->CreateShl(blocksToCopy, LOG_2_BLOCK_BYTES);
-                b->CreateMemCpy(outputPtr, inputPtr, bytesToCopy, blockWidth / 8);
-            }
-
             if (itemWidth > 1) {
+                Value * const endPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, end, ZERO);
+                Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                 inputPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, end, packIndex);
-                outputPtr = tmp.getStreamPackPtr(b, maskedBuffer, streamIndex, ZERO, packIndex);
+                Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
+                Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
+                Value * const bufferPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, ZERO);
+                b->CreateMemCpy(bufferPtr, endPtr, bytesToCopy, blockWidth / 8);
+                outputPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, start, packIndex);
             } else {
                 inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], streamIndex, end);
-                outputPtr = tmp.getStreamBlockPtr(b, maskedBuffer, streamIndex, ZERO);
+                outputPtr = tmp.getStreamBlockPtr(b, maskedEpoch, streamIndex, end);
             }
 
             assert (inputPtr->getType() == outputPtr->getType());
@@ -186,22 +196,26 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             Value * const maskedVal = b->CreateAnd(val, mask);
 
             b->CreateBlockAlignedStore(maskedVal, outputPtr);
+
+            if (itemWidth > 1) {
+                Value * firstPackToClear = b->CreateAdd(packIndex, ONE);
+                Value * const clearPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, firstPackToClear);
+                Value * const clearPtrInt = b->CreatePtrToInt(clearPtr, intPtrTy);
+                Value * const clearEndPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, ITEM_WIDTH);
+                Value * const clearEndPtrInt = b->CreatePtrToInt(clearEndPtr, intPtrTy);
+                Value * const bytesToClear = b->CreateSub(clearEndPtrInt, clearPtrInt);
+                b->CreateMemZero(outputPtr, bytesToClear, blockWidth / 8);
+            }
+
             Value * const nextIndex = b->CreateAdd(streamIndex, ONE);
             Value * const notDone = b->CreateICmpNE(nextIndex, numOfStreams);
             streamIndex->addIncoming(nextIndex, maskedInputLoop);
-            b->CreateCondBr(notDone, maskedInputLoop, maskedInputExit);
-
-            b->SetInsertPoint(maskedInputExit);
-            PointerType * const bufferType = buffer->getPointerType();
-            Value * maskedEpoch = tmp.getStreamBlockPtr(b, maskedBuffer, ZERO, b->CreateNeg(start));
-            maskedEpoch = b->CreatePointerCast(maskedEpoch, bufferType);
-            BasicBlock * const loopExit = b->GetInsertBlock();
-            b->CreateBr(selectedInput);
+            b->CreateCondBr(notDone, maskedInputLoop, selectedInput);
 
             b->SetInsertPoint(selectedInput);
             PHINode * const finalEpoch = b->CreatePHI(bufferType, 2);
             finalEpoch->addIncoming(mInputEpoch[i], entryBlock);
-            finalEpoch->addIncoming(maskedEpoch, loopExit);
+            finalEpoch->addIncoming(maskedEpoch, maskedInputLoop);
 
             inputBaseAddress[i] = finalEpoch;
         }
