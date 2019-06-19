@@ -59,14 +59,14 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                 out << "<nil>";
                 break;
             case RelationshipNode::IsKernel:
-                out << "K:";
+                out << "Kernel:";
                 if (rn.Kernel) {
                     out << rn.Kernel->getName();
                 }
                 break;
             case RelationshipNode::IsBinding: {
                     const Binding & binding = rn.Binding;
-                    out << "B:";
+                    out << "Binding:";
                     using KindId = ProcessingRate::KindId;
                     const ProcessingRate & rate = binding.getRate();
                     switch (rate.getKind()) {
@@ -107,11 +107,20 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                 break;
             case RelationshipNode::IsCallee:
                 assert (&rn.Callee);
-                out << "C:" << rn.Callee.get().Name;
+                out << "Callee:" << rn.Callee.get().Name;
                 break;
             case RelationshipNode::IsRelationship:
                 assert (rn.Relationship);
-                out << "R:"; rn.Relationship->getType()->print(errs());
+                if (isa<StreamSet>(rn.Relationship)) {
+                    out << "StreamSet: ";
+                } else if (isa<ScalarConstant>(rn.Relationship)) {
+                    out << "Constant: ";
+                } else if (isa<Scalar>(rn.Relationship)) {
+                    out << "Scalar: ";
+                } else {
+                    out << "<Unknown Relationship>: ";
+                }
+                rn.Relationship->getType()->print(errs());
                 break;
         }
         out << "\"];\n";
@@ -522,6 +531,8 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
     // Pipeline optimizations
     combineDuplicateKernels(b, kernels, G);
     removeUnusedKernels(pipelineKernel, p_in, p_out, kernels, G);
+
+
     return G;
 }
 
@@ -1108,39 +1119,40 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 
     // To cut any non-required kernel from G, we cannot simply
     // remove every unvisited node as we still need to keep the
-    // unused outputs of a kernel in G. Instead we queue all
-    // unused kernels and sweep through the graph to eliminate
-    // their immediate descendents.
+    // unused outputs of a kernel in G. Instead we make two
+    // passes: (1) marks the outputs of all used kernels as
+    // live. (2) deletes every dead node.
+
     for (const auto v : make_iterator_range(vertices(G))) {
         const RelationshipNode & rn = G[v];
         if (rn.Type == RelationshipNode::IsKernel) {
-            if (LLVM_UNLIKELY(visited.count(v) == 0)) {
-                pending.push(v);
+            if (LLVM_LIKELY(visited.count(v) != 0)) {
+                for (const auto & e : make_iterator_range(out_edges(v, G))) {
+                    const auto b = target(e, G);
+                    const RelationshipNode & rb = G[b];
+                    assert (rb.Type == RelationshipNode::IsBinding || rb.Type == RelationshipNode::IsRelationship);
+                    visited.insert(b); // output binding/scalar
+                    if (LLVM_LIKELY(rb.Type == RelationshipNode::IsBinding)) {
+                        visited.insert(child(b, G)); // output stream
+                    }
+                }
             }
         }
     }
 
-    if (LLVM_LIKELY(pending.empty())) {
-        return;
+    for (const auto v : make_iterator_range(vertices(G))) {
+        if (LLVM_UNLIKELY(visited.count(v) == 0)) {
+            RelationshipNode & rn = G[v];
+            clear_vertex(v, G);
+            rn.Type = RelationshipNode::IsNil;
+            rn.Kernel = nullptr;
+        }
     }
 
-    for (;;) {
-        const auto v = pending.front(); pending.pop();
-        RelationshipNode & rn = G[v];
-        assert (rn.Type != RelationshipNode::IsNil);
-        assert (rn.Type != RelationshipNode::IsCallee);
-        assert (visited.count(v) == 0);
-        for (const auto & e : make_iterator_range(out_edges(v, G))) {
-            pending.push(target(e, G));
-        }
-        clear_vertex(v, G);
-        rn.Type = RelationshipNode::IsNil;
-        rn.Kernel = nullptr;
-        if (pending.empty()) {
-            break;
-        }
-    }
 }
+
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReferenceVertex
