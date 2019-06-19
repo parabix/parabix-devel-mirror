@@ -142,7 +142,7 @@ target_link_libraries (PabloADT CodeGen)
 target_link_libraries (CCADT PabloADT)
 target_link_libraries (PabloParser CCADT PabloADT ${Boost_LIBRARIES})
 target_link_libraries (RegExpADT PabloADT CCADT)
-target_link_libraries (UCDlib RegExpADT PabloADT CCADT) # GrepEngine RegExpCompiler
+target_link_libraries (UCDlib RegExpADT PabloADT CCADT RegExpCompiler) # GrepEngine RegExpCompiler
 target_link_libraries (RegExpCompiler UCDlib CCADT RegExpADT)
 target_link_libraries (GrepEngine RegExpCompiler CodeGen)
 target_link_libraries (FileSelect GrepEngine)

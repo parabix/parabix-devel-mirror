@@ -15,7 +15,7 @@ ShiftForward::ShiftForward(const std::unique_ptr<kernel::KernelBuilder> & b, Str
 : PabloKernel(b, "ShftFwd" + std::to_string(outputs->getNumElements()) + "x1_by" + std::to_string(shiftAmount),
 {Binding{"inputs", inputs}}, {Binding{"outputs", outputs}}),
 mShiftAmount(shiftAmount)
-{   assert(outputs->getNumElements() == inputs.getNumElements());
+{   assert(outputs->getNumElements() == inputs->getNumElements());
 }
 
 void ShiftForward::generatePabloMethod() {
@@ -31,7 +31,7 @@ ShiftBack::ShiftBack(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet
 : PabloKernel(b, "ShftBack" + std::to_string(outputs->getNumElements()) + "x1_by" + std::to_string(shiftAmount),
 {Binding{"inputs", inputs, FixedRate(1), LookAhead(shiftAmount)}}, {Binding{"outputs", outputs}}),
 mShiftAmount(shiftAmount)
-{   assert(outputs->getNumElements() == inputs.getNumElements());
+{   assert(outputs->getNumElements() == inputs->getNumElements());
 }
 
 void ShiftBack::generatePabloMethod() {
