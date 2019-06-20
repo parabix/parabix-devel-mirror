@@ -27,7 +27,7 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
     Scalar * base = P->CreateConstant(P->getDriver().getBuilder()->getSize(streamOffset));
     StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
     P->CreateKernelCall<FieldCompressKernel>(mask, inputs, compressed, base, extractionFieldWidth);
-    P->CreateKernelCall<StreamCompressKernel>(mask, compressed, outputs, extractionFieldWidth);
+    P->CreateKernelCall<StreamCompressKernel>(compressed, mask, outputs, extractionFieldWidth);
 }
 
 inline std::vector<Value *> parallel_prefix_deletion_masks(const std::unique_ptr<KernelBuilder> & kb, const unsigned fw, Value * del_mask) {
