@@ -97,11 +97,11 @@ protected:
 } // namespace kernel::generic
 
 /**
- * Converts a stream of callback positions to pointer, line # pairs based on a
+ * Converts a stream of callback positions to index, line # pairs based on a
  * given source stream.
  * 
  * The output streamset is indexed as follows:
- *  [0]: source pointers
+ *  [0]: source indicies
  *  [1]: line numbers
  * 
  * kernel ScanPositionGenerator 
@@ -126,15 +126,14 @@ private:
 };
 
 /**
- * Converts a linebreak stream into start and end pointers in a source stream.
+ * Converts a linebreak stream into start and end indices in a source stream.
  * 
- * kernel LineSpanGenerator :: [<i1>[1] lbs, <i8>[1] src] -> [<i64>[2] ptrs]
+ * kernel LineSpanGenerator :: [<i1>[1] lbs, <i8>[1] src] -> [<i64>[2] indices]
  */
 class LineSpanGenerator : public generic::SingleStreamScanKernelTemplate {
 public:
     LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, StreamSet * source, StreamSet * output);
 protected:
-    void initialize(BuilderRef b) override;
     void generateProcessingLogic(BuilderRef b, llvm::Value * absoluteIndex) override;
 };
 
@@ -148,7 +147,7 @@ protected:
 class LineBasedScanPositionReader : public MultiBlockKernel {
 public:
     using BuilderRef = const std::unique_ptr<KernelBuilder> &;
-    LineBasedScanPositionReader(BuilderRef b, StreamSet * scanPositions, StreamSet * lineSpans, llvm::StringRef callbackName);
+    LineBasedScanPositionReader(BuilderRef b, StreamSet * scanPositions, StreamSet * lineSpans, StreamSet * source, llvm::StringRef callbackName);
 protected:
     CACHEABLE
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;

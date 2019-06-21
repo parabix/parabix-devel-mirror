@@ -208,7 +208,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     StreamSet * const ScanPositions = P->CreateStreamSet(2, 64);
     P->CreateKernelCall<ScanPositionGenerator>(so::Select(P, TagCallouts, 2), LineBreaks, ByteStream, ScanPositions);
 
-    Kernel * const reader = P->CreateKernelCall<LineBasedScanPositionReader>(ScanPositions, LineSpans, "testLineCallback");
+    Kernel * const reader = P->CreateKernelCall<LineBasedScanPositionReader>(ScanPositions, LineSpans, ByteStream, "testLineCallback");
     pxDriver.LinkFunction(reader, "testLineCallback", testLineCallback);
 
     StreamSet * const ErrorSet = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);

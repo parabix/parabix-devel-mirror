@@ -176,9 +176,8 @@ void ScanPositionGenerator::maskBuildingIterationBody(BuilderRef b, Value * cons
 void ScanPositionGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex,  Value * const blockIndex, Value * const bitOffset) {
     Value * const producedItemCount = b->getProducedItemCount("output");
     b->setProducedItemCount("output", b->CreateAdd(producedItemCount, b->getSize(1)));
-    Value * const sourcePtr = b->getRawInputPointer("source", absoluteIndex);
-    Value * const sourcePtrVal = b->CreatePtrToInt(sourcePtr, b->getInt64Ty());
-    b->CreateStore(sourcePtrVal, b->getRawOutputPointer("output", b->getInt32(0), producedItemCount));
+    Value * const val = b->CreateZExtOrBitCast(absoluteIndex, b->getInt64Ty());
+    b->CreateStore(val, b->getRawOutputPointer("output", b->getInt32(0), producedItemCount));
     Value * const blockNo = b->CreateUDiv(mWordOffset, mSW.WORDS_PER_BLOCK);
     Value * const wordIndex = b->CreateURem(mWordOffset, mSW.WORDS_PER_BLOCK);
     Value * lineCount = b->CreateLoad(b->CreateGEP(mLineCountArrayBlockPtr, blockNo));
@@ -218,32 +217,23 @@ ScanPositionGenerator::ScanPositionGenerator(BuilderRef b, StreamSet * scan, Str
  * LineSpanGenerator
  * ----------------------------------------------------------------------------------------------------------------- */
 
-void LineSpanGenerator::initialize(BuilderRef b) {
-    Value * lineBegin = b->getScalarField("lineBegin");
-    lineBegin = b->CreateSelect(b->CreateICmpNE(lineBegin, Constant::getNullValue(lineBegin->getType())), lineBegin, b->getRawInputPointer("source", b->getSize(0)));
-    b->setScalarField("lineBegin", lineBegin);
-}
-
 void LineSpanGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex) {
     Value * const producedCount = b->getProducedItemCount("output");
-    Value * const beginPtr = b->getScalarField("lineBegin");
-    Value * const endPtr = b->getRawInputPointer("source", absoluteIndex);
-    Value * const beginVal = b->CreatePtrToInt(beginPtr, b->getInt64Ty());
-    Value * const endVal = b->CreatePtrToInt(endPtr, b->getInt64Ty());
+    Value * const beginIdx = b->getScalarField("lineBegin");
+    Value * const endIdx = b->CreateZExtOrBitCast(absoluteIndex, b->getInt64Ty());
     Value * const beginStorePtr = b->getRawOutputPointer("output", b->getInt32(0), producedCount);
     Value * const endStorePtr = b->getRawOutputPointer("output", b->getInt32(1), producedCount);
-    b->CreateStore(beginVal, beginStorePtr);
-    b->CreateStore(endVal, endStorePtr);
-    b->setScalarField("lineBegin", b->CreateGEP(endPtr, b->getInt32(1)));
-    Value * const incrementedProducedCount = b->CreateAdd(producedCount, b->getSize(1));
-    b->setProducedItemCount("output", incrementedProducedCount);
+    b->CreateStore(beginIdx, beginStorePtr);
+    b->CreateStore(endIdx, endStorePtr);
+    b->setScalarField("lineBegin", b->CreateAdd(endIdx, b->getInt64(1)));
+    b->setProducedItemCount("output", b->CreateAdd(producedCount, b->getSize(1)));
 }
 
 LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, StreamSet * source, StreamSet * output)
 : generic::SingleStreamScanKernelTemplate(b, "LineSpanGenerator", linebreakStream, source)
 {
     assert (linebreakStream->getNumElements() == 1 && linebreakStream->getFieldWidth() == 1);
-    addInternalScalar(b->getInt8PtrTy(), "lineBegin");
+    addInternalScalar(b->getInt64Ty(), "lineBegin");
     mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
 }
 
@@ -264,10 +254,12 @@ void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * 
     BasicBlock * const processScanPosition = b->CreateBasicBlock("processScanPosition");
     BasicBlock * const skipLineSpan = b->CreateBasicBlock("skipLineSpan");
     BasicBlock * const triggerCallback = b->CreateBasicBlock("triggerCallback");
+    BasicBlock * const finalizeBlock = b->CreateBasicBlock("finalizeBlock");
     BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
-    Value * const initialProcessedScanValue = b->getScalarField("processedScanItems");
-    Value * const initialProcessedLineValue = b->getScalarField("processedLineItems");
-    b->CreateBr(processScanPosition);
+    Value * const initialProcessedScanValue = b->getProcessedItemCount("scan");
+    Value * const initialProcessedLineValue = b->getProcessedItemCount("lines");
+    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(i64_ZERO, b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(1), initialProcessedScanValue))));
+    b->CreateCondBr(isInvalidFinalItem, exitBlock, processScanPosition);
 
     b->SetInsertPoint(processScanPosition);
     PHINode * const strideNo = b->CreatePHI(i64Ty, 3);
@@ -284,11 +276,11 @@ void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * 
 
     b->SetInsertPoint(triggerCallback);
     Value * const scanVal = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(0), scanIndex));
-    Value * const scanPtr = b->CreateIntToPtr(scanVal, b->getInt8PtrTy());
+    Value * const scanPtr = b->getRawInputPointer("source", scanVal);
     Value * const beginVal = b->CreateLoad(b->getRawInputPointer("lines", b->getInt32(0), lineIndex));
-    Value * const beginPtr = b->CreateIntToPtr(beginVal, b->getInt8PtrTy());
+    Value * const beginPtr = b->getRawInputPointer("source", beginVal);
     Value * const endVal = b->CreateLoad(b->getRawInputPointer("lines", b->getInt32(1), lineIndex));
-    Value * const endPtr = b->CreateIntToPtr(endVal, b->getInt8PtrTy());
+    Value * const endPtr = b->getRawInputPointer("source", endVal);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
     Value * const oneIndexedLineNumber = b->CreateAdd(lineNumber, i64_ONE);
     b->CreateCall(callback, {scanPtr, beginPtr, endPtr, oneIndexedLineNumber});
@@ -302,7 +294,7 @@ void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * 
     // If we have more strides to work with, loop back with the incremented
     // index and try again, if not, then we set processed item counts and stop
     // processing.
-    b->CreateCondBr(b->CreateICmpNE(tc_NextStrideNo, b->CreateZExtOrBitCast(numOfStrides, i64Ty)), processScanPosition, exitBlock);
+    b->CreateCondBr(b->CreateICmpNE(tc_NextStrideNo, b->CreateZExtOrBitCast(numOfStrides, i64Ty)), processScanPosition, finalizeBlock);
 
 
     b->SetInsertPoint(skipLineSpan);
@@ -315,29 +307,29 @@ void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * 
     // If we have more strides to work with, loop back with the incremented
     // index and try again, if not, then we set processed item counts and stop
     // processing.
-    b->CreateCondBr(b->CreateICmpNE(sl_NextStrideNo, b->CreateZExtOrBitCast(numOfStrides, i64Ty)), processScanPosition, exitBlock);
+    b->CreateCondBr(b->CreateICmpNE(sl_NextStrideNo, b->CreateZExtOrBitCast(numOfStrides, i64Ty)), processScanPosition, finalizeBlock);
 
-    b->SetInsertPoint(exitBlock);
+    b->SetInsertPoint(finalizeBlock);
     PHINode * finalScanIndex = b->CreatePHI(i64Ty, 2);
     finalScanIndex->addIncoming(scanIndex, skipLineSpan);
     finalScanIndex->addIncoming(nextScanIndex, triggerCallback);
     PHINode * finalLineIndex = b->CreatePHI(i64Ty, 2);
     finalLineIndex->addIncoming(lineIndex, triggerCallback);
     finalLineIndex->addIncoming(nextLineIndex, skipLineSpan);
-    b->setScalarField("processedScanItems", finalScanIndex);
-    b->setScalarField("processedLineItems", finalLineIndex);
     b->setProcessedItemCount("scan", finalScanIndex);
     b->setProcessedItemCount("lines", finalLineIndex);
+    b->CreateBr(exitBlock);
+
+    b->SetInsertPoint(exitBlock);
 }
 
-LineBasedScanPositionReader::LineBasedScanPositionReader(BuilderRef b, StreamSet * scanPositions, StreamSet * lineSpans, StringRef callbackName)
-: MultiBlockKernel(b, "LineBasedScanPositionReader_" + std::string(callbackName), {{"scan", scanPositions, BoundedRate(0, 1)}, {"lines", lineSpans, BoundedRate(0, 1)}}, {}, {}, {}, {})
+LineBasedScanPositionReader::LineBasedScanPositionReader(BuilderRef b, StreamSet * scanPositions, StreamSet * lineSpans, StreamSet * source, StringRef callbackName)
+: MultiBlockKernel(b, "LineBasedScanPositionReader_" + std::string(callbackName), 
+    {{"scan", scanPositions, BoundedRate(0, 1), Principal()}, {"lines", lineSpans, BoundedRate(0, 1)}, {"source", source}}, {}, {}, {}, {})
 , mCallbackName(callbackName)
 {
     assert (scanPositions->getNumElements() == 2 && scanPositions->getFieldWidth() == 64);
     assert (lineSpans->getNumElements() == 2 && lineSpans->getFieldWidth() == 64);
-    addInternalScalar(b->getInt64Ty(), "processedScanItems");
-    addInternalScalar(b->getInt64Ty(), "processedLineItems");
     addAttribute(SideEffecting());
     setStride(1);
 }
