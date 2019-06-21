@@ -11,8 +11,10 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/error_monitor_kernel.h>
+#include <kernels/linebreak_kernel.h>
 #include <kernels/p2s_kernel.h>
 #include <kernels/scan_kernel.h>
+#include <kernels/scanning.h>
 #include <kernels/stdout_kernel.h>
 #include <kernels/stream_select.h>
 #include <kernels/streams_merge.h>
@@ -30,6 +32,7 @@
 #include <bitset>
 #include <fcntl.h>
 #include <iostream>
+#include <iomanip>
 #include <string>
 #include <sys/stat.h>
 
@@ -53,11 +56,28 @@ extern "C" void printErrorCode(uint64_t errCode) {
 }
 
 extern "C" void xmlErrorCallback(const char * ptr, size_t pos) {
-    std::cout << "error: stream position = " << pos << ", at char: '" << *ptr << "'\n";
+    // std::cout << "error: stream position = " << pos << ", at char: '" << *ptr << "'\n";
 }
 
 extern "C" void xmlTagCallback(const char * ptr, size_t pos, size_t idx) {
-    std::cout << "tag callback: stream index = " << idx << ", stream position = " << pos << ", at char: '" << *ptr << "'\n";
+    // std::cout << "tag callback: stream index = " << idx << ", stream position = " << pos << ", at char: '" << *ptr << "'\n";
+}
+
+extern "C" void testLineCallback(const char * ptr, const char * begin, const char * end, uint64_t lineNo) {
+    std::cout << "Callback:\n";
+    ptrdiff_t pos = ptr - begin;
+    if (pos < 0 || ptr > end) {
+        std::cerr << "\u001b[31mERROR\u001b[0m: pointer is not within line span\n";
+        std::cerr << "ptr: " << (void *) ptr << ", begin: " << (void *) begin << ", end: " << (void *) end << "\n";
+        std::cerr << "line # " << lineNo << ", line: " << std::string(begin, end) << "\n";
+        std::cerr << "ptr char: \"" << std::string(ptr - 4, ptr) << "\u001b[31m" << *ptr << "\u001b[0m" << std::string(ptr + 1, ptr + 5) << "\"\n\n";
+        return;
+    }
+    std::string line(begin, end);
+    line = line.substr(0, (size_t) pos) + "\u001b[32m" + line[pos] + "\u001b[0m" + line.substr((size_t) pos + 1);
+    std::string cursor = std::string((size_t) pos, ' ') + "^";
+    std::cout << std::setw(4) << std::right << lineNo << " | " << line << "\n";
+    std::cout << "       " << "\u001b[32m" << cursor << "\u001b[0m" << "\n";
 }
 
 
@@ -179,6 +199,18 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
+    StreamSet * const LineBreaks = P->CreateStreamSet();
+    P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreaks);
+
+    StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
+    P->CreateKernelCall<LineSpanGenerator>(LineBreaks, ByteStream, LineSpans);
+
+    StreamSet * const ScanPositions = P->CreateStreamSet(2, 64);
+    P->CreateKernelCall<ScanPositionGenerator>(so::Select(P, TagCallouts, 2), LineBreaks, ByteStream, ScanPositions);
+
+    Kernel * const reader = P->CreateKernelCall<LineBasedScanPositionReader>(ScanPositions, LineSpans, "testLineCallback");
+    pxDriver.LinkFunction(reader, "testLineCallback", testLineCallback);
+
     StreamSet * const ErrorSet = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<StreamsMerge>(
         std::vector<StreamSet *>{LexError, CT_CD_PI_Error, TagError, RefError, NameError, CheckStreamsError}, 
@@ -200,23 +232,23 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         CheckStreams
     );
 
-    StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
-    P->CreateKernelCall<PabloSourceKernel>(
-        parser,
-        debugSource,
-        "MaskBasisBits",
-        Bindings {
-            Binding {"basisBits", BasisBits},
-            Binding {"mask", so::Select(P, TagCallouts, 6)}
-        },
-        Bindings {
-            Binding {"masked", MaskedBasisBits}
-        }
-    );
+    // StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
+    // P->CreateKernelCall<PabloSourceKernel>(
+    //     parser,
+    //     debugSource,
+    //     "MaskBasisBits",
+    //     Bindings {
+    //         Binding {"basisBits", BasisBits},
+    //         Binding {"mask", so::Select(P, TagCallouts, 0)}
+    //     },
+    //     Bindings {
+    //         Binding {"masked", MaskedBasisBits}
+    //     }
+    // );
 
-    StreamSet * const PrintBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(MaskedBasisBits, PrintBytes);
-    P->CreateKernelCall<StdOutKernel>(PrintBytes);
+    // StreamSet * const PrintBytes = P->CreateStreamSet(1, 8);
+    // P->CreateKernelCall<P2SKernel>(MaskedBasisBits, PrintBytes);
+    // P->CreateKernelCall<StdOutKernel>(PrintBytes);
 
     Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(ErrorSet, ErrorMonitorKernel::IOStreamBindings{});
     Scalar * const errCode = emk->getOutputScalar("errorCode");

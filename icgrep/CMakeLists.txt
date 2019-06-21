@@ -89,6 +89,7 @@ SET(KERNEL_SRC ${KERNEL_SRC} kernels/deletion.cpp kernels/swizzle.cpp kernels/he
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/stream_shift.cpp)
 
 SET(KERNEL_SRC ${KERNEL_SRC} kernels/error_monitor_kernel.cpp kernels/scan_kernel.cpp kernels/streamset_collapse.cpp kernels/stream_select.cpp)
+SET(KERNEL_SRC ${KERNEL_SRC} kernels/scanning.cpp)
 
 SET(IDISA_SRC IR_Gen/CBuilder.cpp IR_Gen/idisa_builder.cpp IR_Gen/idisa_avx_builder.cpp IR_Gen/idisa_i64_builder.cpp IR_Gen/idisa_sse_builder.cpp)
 SET(IDISA_SRC ${IDISA_SRC} IR_Gen/idisa_target.cpp)
