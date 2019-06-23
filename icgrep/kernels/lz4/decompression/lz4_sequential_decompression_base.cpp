@@ -92,7 +92,7 @@ void LZ4SequentialDecompressionKernel::generateDoSegmentMethod(const std::unique
     b->SetInsertPoint(processBlock);
 
     Value* isTerminal = b->CreateICmpUGE(blockEnd, b->getScalarField("fileSize"));
-    b->setTerminationSignal(isTerminal);
+    b->setTerminationSignal(b->CreateZExt(isTerminal, b->getSizeTy()));
 
 
     BasicBlock* actualProcessBlock = b->CreateBasicBlock("actualProcessBlock");

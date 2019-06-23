@@ -16,6 +16,12 @@ public:
 
     using Rational = boost::rational<unsigned>;
 
+    enum TerminationCode : unsigned {
+        None = 0
+        , Terminated = 1
+        , Fatal = 2
+    };
+
     // Get the value of a scalar field for the current instance.
     llvm::Value * getScalarFieldPtr(const llvm::StringRef fieldName);
 
@@ -44,7 +50,9 @@ public:
 
     llvm::Value * getTerminationSignal();
 
-    void setTerminationSignal() { setTerminationSignal(getTrue()); }
+    void setTerminationSignal() { setTerminationSignal(getSize(TerminationCode::Terminated)); }
+
+    void setFatalTerminationSignal() { setTerminationSignal(getSize(TerminationCode::Fatal)); }
 
     void setTerminationSignal(llvm::Value * const value);
 

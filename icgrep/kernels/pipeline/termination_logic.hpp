@@ -18,11 +18,9 @@ namespace kernel {
  * work has finished.
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() {
-    using Edge = TerminationGraph::edge_descriptor;
 
     TerminationGraph G(PipelineOutput + 1);
 
-    // 1) copy and summarize producer -> consumer relations from the buffer graph
     for (unsigned consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
         for (const auto & e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
             const auto buffer = source(e, mBufferGraph);
@@ -37,8 +35,6 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
     clear_out_edges(PipelineInput, G);
 
-    // 2) copy and summarize any input scalars to internal calls or output scalars of the pipeline
-    assert (FirstCall == PipelineOutput + 1);
     for (unsigned consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
         for (const auto & relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
             const auto r = source(relationship, mScalarGraph);
@@ -50,18 +46,52 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
         }
     }
 
-    // 3) remove any incoming edges to a kernel that must explicitly terminate;
+    auto any_termination = [](const Kernel * const kernel) {
+        for (const Attribute & attr : kernel->getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::CanTerminateEarly:
+                case AttrId::MustExplicitlyTerminate:
+                case AttrId::MayFatallyTerminate:
+                case AttrId::SideEffecting:
+                    return true;
+                default: break;
+            }
+        }
+        return false;
+    };
+
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::SideEffecting))) {
-            add_edge(i, PipelineOutput, G);
+        if (any_termination(getKernel(i))) {
+            add_edge(i, PipelineOutput, false, G);
         }
     }
 
     transitive_reduction_dag(G);
 
+    // we are only interested in the incoming edges of the pipeline output
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        remove_out_edge_if(i, [&](Edge e) { return target(e, G) != PipelineOutput; }, G);
+        clear_in_edges(i, G);
+    }
+
+    // hard terminations
+
+    auto hard_termination = [](const Kernel * const kernel) {
+        for (const Attribute & attr : kernel->getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::MayFatallyTerminate:
+                    return true;
+                default: break;
+            }
+        }
+        return false;
+    };
+
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        if (hard_termination(getKernel(i))) {
+            // incase we already have the edge in G, set the
+            // hard termination flag to true after "adding" it.
+            G[add_edge(i, PipelineOutput, true, G).first] = true;
+        }
     }
 
     mTerminationSignals.resize(LastKernel + 1, nullptr);
@@ -104,13 +134,42 @@ Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const unsigned kerne
     } else {
         Value * const terminated = mTerminationSignals[kernel];
         if (normally) {
-            Constant * terminatedButNotAborted = getTerminationSignal(b, TerminationSignal::Terminated);
-            return b->CreateICmpEQ(terminated, terminatedButNotAborted);
+            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+            return b->CreateICmpEQ(terminated, completed);
         } else {
-            Constant * notTerminated = getTerminationSignal(b, TerminationSignal::None);
-            return b->CreateICmpNE(terminated, notTerminated);
+            Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+            return b->CreateICmpNE(terminated, unterminated);
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief pipelineTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
+
+    Value * hard = b->getFalse();
+    Value * soft = b->getTrue();
+
+    Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+    Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
+    Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
+
+    // check whether every sink has terminated
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mTerminationGraph))) {
+        const auto kernel = source(e, mTerminationGraph);
+        Value * const signal = mTerminationSignals[kernel];
+        assert (signal->getType() == unterminated->getType());
+        // if this is a hard termination, such as a fatal error, any can terminate the pipeline.
+        // however, a kernel that can terminate with a fatal error, may not necessarily do so.
+        // otherwise its a soft termination and all must agree that the pipeline has terminated
+        if (mTerminationGraph[e]) {
+            hard = b->CreateOr(hard, b->CreateICmpEQ(signal, fatal));
+        }
+        soft = b->CreateAnd(soft, b->CreateICmpNE(signal, unterminated));
+    }
+
+    return b->CreateSelect(hard, fatal, b->CreateSelect(soft, aborted, unterminated));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -124,17 +183,7 @@ Constant * PipelineCompiler::getTerminationSignal(BuilderRef b, const Terminatio
  * @brief signalAbnormalTermination
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::signalAbnormalTermination(BuilderRef b) {
-    const Kernel * const kernel = getKernel(mKernelIndex);
-    TerminationSignal signal = TerminationSignal::Terminated;
-    if (kernel->hasAttribute(AttrId::CanTerminateEarly)) {
-        signal = TerminationSignal::Aborted;
-    }
-    Constant * const aborted = getTerminationSignal(b, signal);
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeKernelName(mKernelIndex);
-    b->CallPrintInt("* " + prefix + ".explicitlyTerminated", aborted);
-    #endif
-    mTerminatedSignalPhi->addIncoming(aborted, b->GetInsertBlock());
+    mTerminatedSignalPhi->addIncoming(mTerminatedExplicitly, b->GetInsertBlock());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -153,7 +202,16 @@ Value * PipelineCompiler::isClosedNormally(BuilderRef b, const unsigned inputPor
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     const Kernel * const kernel = getKernel(producer);
-    return hasKernelTerminated(b, producer, kernel->hasAttribute(AttrId::CanTerminateEarly));
+    bool normally = false;
+    for (const Attribute & attr : kernel->getAttributes()) {
+        switch (attr.getKind()) {
+            case AttrId::CanTerminateEarly:
+            case AttrId::MayFatallyTerminate:
+                normally = true;
+            default: continue;
+        }
+    }
+    return hasKernelTerminated(b, producer, normally);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

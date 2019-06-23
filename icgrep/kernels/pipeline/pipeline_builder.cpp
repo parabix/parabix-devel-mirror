@@ -138,15 +138,25 @@ void addKernelProperties(const std::vector<Kernel *> & kernels, Kernel * const o
     unsigned mustTerminate = 0;
     bool canTerminate = false;
     bool sideEffecting = false;
+    bool fatalTermination = false;
     unsigned stride = 0;
     for (const Kernel * kernel : kernels) {
-        if (kernel->hasAttribute(AttrId::MustExplicitlyTerminate)) {
-            mustTerminate++;
-        } else if (kernel->hasAttribute(AttrId::CanTerminateEarly)) {
-            canTerminate = true;
-        }
-        if (kernel->hasAttribute(AttrId::SideEffecting)) {
-            sideEffecting = true;
+        for (const Attribute & attr : kernel->getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::MustExplicitlyTerminate:
+                    mustTerminate++;
+                    break;
+                case AttrId::MayFatallyTerminate:
+                    fatalTermination = true;
+                    break;
+                case AttrId::CanTerminateEarly:
+                    canTerminate = true;
+                    break;
+                case AttrId::SideEffecting:
+                    sideEffecting = true;
+                    break;
+                default: continue;
+            }
         }
         assert (kernel->getStride());
         if (stride) {
@@ -155,9 +165,13 @@ void addKernelProperties(const std::vector<Kernel *> & kernels, Kernel * const o
             stride = kernel->getStride();
         }
     }
+
+    if (fatalTermination) {
+        output->addAttribute(MayFatallyTerminate());
+    }
     if (LLVM_UNLIKELY(mustTerminate == kernels.size())) {
         output->addAttribute(MustExplicitlyTerminate());
-    } else if (canTerminate || mustTerminate) {
+    } else if (canTerminate && !fatalTermination) {
         output->addAttribute(CanTerminateEarly());
     }
     if (sideEffecting) {

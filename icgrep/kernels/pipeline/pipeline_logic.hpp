@@ -216,6 +216,9 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 
+    // TODO: if we detect a fatal error at init, we should not execute
+    // the pipeline loop.
+
     std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -233,6 +236,8 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 
     constructBuffers(b);
     initializeBufferExpansionHistory(b);
+
+    Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
 
     ArgVec args;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -257,8 +262,9 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         if (LLVM_UNLIKELY(f == nullptr)) {
             report_fatal_error(mKernel->getName() + " does not have an initialize method");
         }
-        Value * const terminatedOnInit = b->CreateCall(f, args);
 
+        Value * const signal = b->CreateCall(f, args);
+        Value * const terminatedOnInit = b->CreateICmpNE(signal, unterminated);
         const auto prefix = makeKernelName(mKernelIndex);
         BasicBlock * const kernelTerminated = b->CreateBasicBlock(prefix + "_terminatedOnInit");
         BasicBlock * const kernelExit = b->CreateBasicBlock(prefix + "_exit");
@@ -328,8 +334,11 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     threadStructArg->setName("threadStruct");
 
     Value * const initialSharedState = mPipelineKernel->getHandle();
+    assert (initialSharedState);
     Value * const initialThreadLocal = mPipelineKernel->getThreadLocalHandle();
     Value * const initialTerminationSignalPtr = mPipelineKernel->getTerminationSignalPtr();
+    assert (initialThreadLocal || initialTerminationSignalPtr == nullptr);
+    assert (initialTerminationSignalPtr || mPipelineTerminated == nullptr);
     Value * const initialExternalSegNo = mPipelineKernel->getExternalSegNo();
 
     // -------------------------------------------------------------------------------------------------------------------------
@@ -374,24 +383,27 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     Value * const processState = allocateThreadState(b, Constant::getNullValue(b->getPThreadTy()));
     b->CreateCall(threadFunc, b->CreatePointerCast(processState, voidPtrTy));
 
-    Value * terminated = readTerminationSignalFromLocalState(b, initialThreadLocal);
-
-    // wait for all other threads to complete
-    AllocaInst * const status = b->CreateAlloca(voidPtrTy);
-    for (unsigned i = 0; i < threads; ++i) {
-        Value * threadId = b->CreateLoad(threadIdPtr[i]);
-        b->CreatePThreadJoinCall(threadId, status);
-        SmallVector<Value *, 2> args;
-        if (LLVM_LIKELY(mPipelineKernel->isStateful())) {
-            args.push_back(initialSharedState);
+    if (mPipelineKernel->hasThreadLocal()) {
+        Value * terminated = readTerminationSignalFromLocalState(b, initialThreadLocal);
+        // wait for all other threads to complete
+        AllocaInst * const status = b->CreateAlloca(voidPtrTy);
+        for (unsigned i = 0; i < threads; ++i) {
+            Value * threadId = b->CreateLoad(threadIdPtr[i]);
+            b->CreatePThreadJoinCall(threadId, status);
+            SmallVector<Value *, 2> args;
+            if (LLVM_LIKELY(mPipelineKernel->isStateful())) {
+                args.push_back(initialSharedState);
+            }
+            args.push_back(threadLocal[i]);
+            Value * const terminatedSignal = readTerminationSignalFromLocalState(b, threadLocal[i]);
+            terminated = b->CreateUMax(terminated, terminatedSignal);
+            mPipelineKernel->finalizeThreadLocalInstance(b, args);
+            destroyStateObject(b, threadState[i]);
         }
-        args.push_back(threadLocal[i]);
-        terminated = b->CreateOr(terminated, readTerminationSignalFromLocalState(b, threadLocal[i]));
-        mPipelineKernel->finalizeThreadLocalInstance(b, args);
-        destroyStateObject(b, threadState[i]);
+        if (LLVM_LIKELY(terminated && initialTerminationSignalPtr)) {
+            b->CreateStore(terminated, initialTerminationSignalPtr);
+        }
     }
-
-    b->CreateStore(terminated, initialTerminationSignalPtr);
 
     // store where we'll resume compiling the DoSegment method
     const auto resumePoint = b->saveIP();
@@ -565,8 +577,8 @@ inline StructType * PipelineCompiler::getThreadLocalStateType(BuilderRef b) {
     fields[POP_COUNT_STRUCT_INDEX] = emptyTy; // getPopCountThreadLocalStateType(b);
     fields[ZERO_EXTENDED_BUFFER_INDEX] = mHasZeroExtendedStream ? b->getVoidPtrTy() : emptyTy;
     fields[ZERO_EXTENDED_SPACE_INDEX] = mHasZeroExtendedStream ? b->getSizeTy() : emptyTy;
-    if (mPipelineKernel->getNumOfThreads() != 1 && mPipelineKernel->canSetTerminateSignal()) {
-        fields[TERMINATION_SIGNAL_INDEX] = b->getInt1Ty();
+    if (LLVM_LIKELY(mPipelineKernel->getNumOfThreads() > 1 && mPipelineKernel->canSetTerminateSignal())) {
+        fields[TERMINATION_SIGNAL_INDEX] = b->getSizeTy();
     } else {
         fields[TERMINATION_SIGNAL_INDEX] = emptyTy;
     }
@@ -667,9 +679,8 @@ Value * PipelineCompiler::readTerminationSignalFromLocalState(BuilderRef b, Valu
         indices[0] = b->getInt32(0);
         indices[1] = b->getInt32(TERMINATION_SIGNAL_INDEX);
         return b->CreateLoad(b->CreateGEP(localState, indices));
-    } else {
-        return b->getFalse();
     }
+    return nullptr;
 }
 
 }

@@ -117,14 +117,15 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     writeCopyBackLogic(b);
     // If the kernel explicitly terminates, it must set its processed/produced item counts.
     // Otherwise, the pipeline will update any countable rates, even upon termination.
-    b->CreateUnlikelyCondBr(mTerminatedExplicitly, mKernelAbnormalTermination, mKernelTerminationCheck);
+    Value * const aborted = b->CreateIsNotNull(mTerminatedExplicitly);
+    b->CreateUnlikelyCondBr(aborted, mKernelAbnormalTermination, mKernelTerminationCheck);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL NORMAL TERMINATION CHECK
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelTerminationCheck);
-    normalTerminationCheck(b, isFinal);
+    normalCompletionCheck(b, isFinal);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL ABNORMAL TERMINATION
@@ -201,14 +202,16 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief normalTerminationCheck
+ * @brief normalCompletionCheck
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const isFinal) {
+inline void PipelineCompiler::normalCompletionCheck(BuilderRef b, Value * const isFinal) {
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
 
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+
+    Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
 
     if (mBoundedKernel) {
 
@@ -237,7 +240,8 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
             mUpdatedProducedPhi[i]->addIncoming(mProducedItemCount[i], ioBoundsCheck);
         }
 
-        mTerminatedSignalPhi->addIncoming(getTerminationSignal(b, TerminationSignal::Terminated), entryBlock);
+        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+        mTerminatedSignalPhi->addIncoming(completed, entryBlock);
 
         mAlreadyProgressedPhi->addIncoming(b->getTrue(), ioBoundsCheck);
         mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
@@ -250,7 +254,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
         const BufferNode & bn = mBufferGraph[mKernelIndex];
         Constant * const maxStrides = b->getSize(ceiling(bn.Upper));
         Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
-        mTerminatedPhi->addIncoming(getTerminationSignal(b, TerminationSignal::None), ioBoundsCheck);
+        mTerminatedPhi->addIncoming(unterminated, ioBoundsCheck);
         mHasProgressedPhi->addIncoming(b->getTrue(), ioBoundsCheck);
         mHaltingPhi->addIncoming(mHalted, ioBoundsCheck);
         mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
@@ -271,7 +275,7 @@ inline void PipelineCompiler::normalTerminationCheck(BuilderRef b, Value * const
                 mUpdatedProducedDeferredPhi[i]->addIncoming(mProducedDeferredItemCount[i], entryBlock);
             }
         }
-        mTerminatedPhi->addIncoming(getTerminationSignal(b, TerminationSignal::None), entryBlock);
+        mTerminatedPhi->addIncoming(unterminated, entryBlock);
         mHasProgressedPhi->addIncoming(b->getTrue(), entryBlock);
         mHaltingPhi->addIncoming(mHalted, entryBlock);
         mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, entryBlock);
@@ -294,8 +298,8 @@ void PipelineCompiler::end(BuilderRef b) {
     // sink).
 
     b->setKernel(mPipelineKernel);
-    Value * const terminated = pipelineTerminated(b);
-    Value * const done = b->CreateOr(mHalted, terminated);
+    Value * const terminated = hasPipelineTerminated(b);
+    Value * const done = b->CreateOr(mHalted, b->CreateIsNotNull(terminated));
     Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt(mPipelineKernel->getName() + "+++ pipeline end +++", mSegNo);
@@ -326,20 +330,6 @@ void PipelineCompiler::end(BuilderRef b) {
         b->CreateFree(b->CreateLoad(bufferPtr));
     }
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief pipelineTerminated
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::pipelineTerminated(BuilderRef b) const {
-    Value * terminated = b->getTrue();
-    // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mTerminationGraph))) {
-        const auto kernel = source(e, mTerminationGraph);
-        terminated = b->CreateAnd(terminated, hasKernelTerminated(b, kernel));
-    }
-    return terminated;
-}
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readPipelineIOItemCounts

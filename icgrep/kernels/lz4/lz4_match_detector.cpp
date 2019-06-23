@@ -64,7 +64,7 @@ namespace kernel {
         b->CreateBr(exitBlock);
 
         b->SetInsertPoint(exitBlock);
-        b->setTerminationSignal(mIsFinal);
+        b->setTerminationSignal(b->CreateZExt(mIsFinal, b->getSizeTy()));
     }
 
     llvm::Value* LZ4MatchDetectorKernel::detectMatch(const std::unique_ptr<KernelBuilder> & b, llvm::Value* start, llvm::Value* end) {

@@ -506,9 +506,7 @@ protected:
         return mAvailableInputItems[index];
     }
 
-    LLVM_READNONE bool canSetTerminateSignal() const {
-        return hasAttribute(Attribute::KindId::CanTerminateEarly) || hasAttribute(Attribute::KindId::MustExplicitlyTerminate);
-    }
+    LLVM_READNONE bool canSetTerminateSignal() const;
 
     LLVM_READNONE llvm::Value * getTerminationSignalPtr() const {
         return mTerminationSignalPtr;

@@ -322,12 +322,13 @@ struct ConsumerEdge {
 using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, ConsumerEdge>;
 
 enum TerminationSignal : unsigned {
-    None = 0
-    , Terminated = 1
-    , Aborted = 2
+    None = KernelBuilder::TerminationCode::None
+    , Aborted = KernelBuilder::TerminationCode::Terminated
+    , Fatal = KernelBuilder::TerminationCode::Fatal
+    , Completed = Aborted | Fatal
 };
 
-using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, unsigned, unsigned>;
+using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, no_property, bool>;
 
 using RelationshipVertex = RelationshipGraph::vertex_descriptor;
 using RelationshipMap = RelMap<RelationshipVertex>;
@@ -518,7 +519,7 @@ protected:
 
     void exitRegionSpan(BuilderRef b);
 
-    void normalTerminationCheck(BuilderRef b, Value * const isFinal);
+    void normalCompletionCheck(BuilderRef b, Value * const isFinal);
 
     void writeCopyBackLogic(BuilderRef b);
     void writeLookAheadLogic(BuilderRef b);
@@ -576,7 +577,7 @@ protected:
     Value * isClosedNormally(BuilderRef b, const unsigned inputPort);
     Value * initiallyTerminated(BuilderRef b);
     void setTerminated(BuilderRef b, Value * const signal);
-    Value * pipelineTerminated(BuilderRef b) const;
+    Value * hasPipelineTerminated(BuilderRef b) const;
     void signalAbnormalTermination(BuilderRef b);
     void updateTerminationSignal(Value * const signal);
     LLVM_READNONE static Constant * getTerminationSignal(BuilderRef b, const TerminationSignal type);

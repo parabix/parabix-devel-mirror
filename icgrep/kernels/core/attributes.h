@@ -206,6 +206,11 @@ struct Attribute {
         // and will be called even when there is no new input data when the prior kernels
         // in the pipeline have also terminated.
 
+        MayFatallyTerminate,
+
+        // This kernel can report a fatal termination in which the pipeline will halt
+        // at the end of its iteration period.
+
         SideEffecting,
 
         // Mark this kernel as side-effecting, which will prevent the pipeline compiler
@@ -413,6 +418,10 @@ inline Attribute CanTerminateEarly() {
 
 inline Attribute MustExplicitlyTerminate() {
     return Attribute(Attribute::KindId::MustExplicitlyTerminate, 0);
+}
+
+inline Attribute MayFatallyTerminate() {
+    return Attribute(Attribute::KindId::MayFatallyTerminate, 0);
 }
 
 inline Attribute SideEffecting() {

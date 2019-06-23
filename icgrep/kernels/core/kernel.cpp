@@ -141,7 +141,7 @@ Function * Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder>
             params.push_back(binding.getType());
         }
 
-        FunctionType * const initType = FunctionType::get(b->getInt1Ty(), params, false);
+        FunctionType * const initType = FunctionType::get(b->getSizeTy(), params, false);
         initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, name, m);
         initFunc->setCallingConv(CallingConv::C);
 //        if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -202,8 +202,8 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
         }
     }
     // any kernel can set termination on initialization
-    mTerminationSignalPtr = b->CreateAlloca(b->getInt1Ty(), nullptr, "terminationSignal");
-    b->CreateStore(b->getFalse(), mTerminationSignalPtr);
+    mTerminationSignalPtr = b->CreateAlloca(b->getSizeTy(), nullptr, "terminationSignal");
+    b->CreateStore(b->getSize(KernelBuilder::TerminationCode::None), mTerminationSignalPtr);
     generateInitializeMethod(b);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect) && isStateful())) {
         b->CreateMProtect(mSharedHandle, CBuilder::Protect::READ);
@@ -378,6 +378,22 @@ RateValue getFixedRateLCM(const Kernel * const kernel) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief canSetTerminateSignal
+ ** ------------------------------------------------------------------------------------------------------------ */
+bool Kernel::canSetTerminateSignal() const {
+    for (const Attribute & attr : getAttributes()) {
+        switch (attr.getKind()) {
+            case AttrId::MayFatallyTerminate:
+            case AttrId::CanTerminateEarly:
+            case AttrId::MustExplicitlyTerminate:
+                return true;
+            default: continue;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------ */
 Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
@@ -387,7 +403,7 @@ Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> 
     Function * doSegment = m->getFunction(name);
     if (LLVM_LIKELY(doSegment == nullptr)) {
 
-        Type * const retTy = canSetTerminateSignal() ? b->getInt1Ty() : b->getVoidTy();
+        Type * const retTy = canSetTerminateSignal() ? b->getSizeTy() : b->getVoidTy();
         FunctionType * const doSegmentType = FunctionType::get(retTy, getDoSegmentFields(b), false);
         doSegment = Function::Create(doSegmentType, GlobalValue::ExternalLinkage, name, m);
         doSegment->setCallingConv(CallingConv::C);
@@ -782,8 +798,8 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     // initialize the termination signal if this kernel can set it
     mTerminationSignalPtr = nullptr;
     if (canTerminate) {
-        mTerminationSignalPtr = b->CreateAlloca(b->getInt1Ty(), nullptr, "terminationSignal");
-        b->CreateStore(b->getFalse(), mTerminationSignalPtr);
+        mTerminationSignalPtr = b->CreateAlloca(b->getSizeTy(), nullptr, "terminationSignal");
+        b->CreateStore(b->getSize(KernelBuilder::TerminationCode::None), mTerminationSignalPtr);
     }
 
 }
@@ -1284,7 +1300,7 @@ void Kernel::initializeThreadLocalInstance(const std::unique_ptr<KernelBuilder> 
 void Kernel::finalizeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<Value *> args) const {
     assert (args.size() == (isStateful() ? 2 : 1));
     b->setKernel(this);
-    Function * const init = getFinalizeThreadLocalFunction(b);
+    Function * const init = getFinalizeThreadLocalFunction(b); assert (init);
     b->CreateCall(init, args);
 }
 

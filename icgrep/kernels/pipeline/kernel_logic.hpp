@@ -522,7 +522,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
     if (LLVM_LIKELY(!canTerminate)) {
-        mTerminatedExplicitly = b->getFalse();
+        mTerminatedExplicitly = getTerminationSignal(b, TerminationSignal::None);
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {

@@ -103,7 +103,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::K
     foreachMonitoredStreamSet([&](std::string const &, std::string const & oName) {
         b->setProducedItemCount(oName, produced);
     });
-    b->setTerminationSignal();
+    b->setFatalTerminationSignal();
     b->CreateBr(exitBB);
 
     // Exit Basic Block
@@ -128,7 +128,7 @@ ErrorMonitorKernel::ErrorMonitorKernel(const std::unique_ptr<kernel::KernelBuild
 mName("ErrorMonitorKernel" + std::to_string(error->getNumElements())),
 mStreamNames()
 {
-    addAttribute(CanTerminateEarly());
+    addAttribute(MayFatallyTerminate());
     addAttribute(SideEffecting());
     for (auto binding : bindings) {
         auto names = generateNewStreamSetNames();

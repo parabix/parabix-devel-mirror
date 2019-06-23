@@ -161,7 +161,7 @@ void LZ4BlockDecoderKernel::generateDoSegmentMethod(const std::unique_ptr<Kernel
     b->setScalarField("pendingBlockEnd", phiBlockEnd);
     b->setScalarField("previousOffset", sOffset);
     b->setProcessedItemCount("byteStream", availableItemCount);
-    b->setTerminationSignal(mIsFinal);
+    b->setTerminationSignal(b->CreateZExt(mIsFinal, b->getSizeTy()));
 }
 
 void LZ4BlockDecoderKernel::appendOutput(const std::unique_ptr<KernelBuilder> & iBuilder, Value * const isCompressed, Value * const blockStart, Value * const blockEnd) {

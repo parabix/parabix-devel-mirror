@@ -71,7 +71,7 @@ Value * KernelBuilder::getConsumedItemCount(const StringRef name) const {
 Value * KernelBuilder::getTerminationSignal() {
     Value * const ptr = mKernel->getTerminationSignalPtr();
     if (ptr) {
-        return CreateLoad(ptr);
+        return CreateIsNotNull(CreateLoad(ptr));
     } else {
         return getFalse();
     }
@@ -82,7 +82,7 @@ Value * KernelBuilder::getTerminationSignal() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelBuilder::setTerminationSignal(Value * const value) {
     assert (value);
-    assert (value->getType() == getInt1Ty());
+    assert (value->getType() == getSizeTy());
     if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
         CallPrintInt(mKernel->getName() + ": setTerminationSignal", value);
     }
