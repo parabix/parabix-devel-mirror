@@ -188,8 +188,7 @@ mapOperationsToStreamNames(std::vector<selops::__selop<StreamSet *>> const & ope
 StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation) 
 : BlockOrientedKernel(b, "StreamSelect" + genSignature(operation), {}, {{"output", output}}, {}, {}, {})
 {
-    uint32_t outputStreamSetNumElements = resultStreamCount(operation);
-    assert (outputStreamSetNumElements == output->getNumElements());
+    assert (resultStreamCount(operation) == output->getNumElements());
     std::unordered_map<StreamSet *, std::string> inputBindings;
     std::tie(mOperations, inputBindings) = mapOperationsToStreamNames(operation);
     for (auto const & kv : inputBindings) {
@@ -200,8 +199,7 @@ StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation ope
 StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList operations)
 : BlockOrientedKernel(b, "StreamSelect" + genSignature(operations), {}, {{"output", output}}, {}, {}, {})
 {
-    uint32_t outputStreamSetNumElements = resultStreamCount(operations);
-    assert (outputStreamSetNumElements == output->getNumElements());
+    assert (resultStreamCount(operations) == output->getNumElements());
     std::unordered_map<StreamSet *, std::string> inputBindings;
     std::tie(mOperations, inputBindings) = mapOperationsToStreamNames(operations);
     for (auto const & kv : inputBindings) {
