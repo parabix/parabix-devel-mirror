@@ -564,7 +564,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), s->getSignalCode())});
             //Value * rel_position = b->createCountForwardZeroes(signal_strm);
             //Value * position = b->CreateAdd(b->getProcessedItemCount(), rel_position);
-            b->setTerminationSignal();
+            b->setFatalTerminationSignal();
             b->CreateBr(postSignal);
             b->SetInsertPoint(postSignal);
             value = signal_strm;

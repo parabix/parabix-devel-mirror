@@ -679,7 +679,7 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     // A null byte has been located; set the termination code and call the signal handler.
     b->SetInsertPoint(nullByteFound);
     Value * nullPosn = b->CreateSub(b->CreatePtrToInt(ptrToNull, intPtrTy), b->CreatePtrToInt(byteStreamBasePtr, intPtrTy));
-    b->setTerminationSignal();
+    b->setFatalTerminationSignal();
     Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
     Value * handler = b->getScalarField("handler_address");
     b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), static_cast<unsigned>(grep::GrepSignal::BinaryFile))});
@@ -705,6 +705,7 @@ AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b, Strea
 {Binding{"handler_address", callbackObject}},
 {}, {}) {
     addAttribute(CanTerminateEarly());
+    addAttribute(MayFatallyTerminate());
 }
 
 ContextSpan::ContextSpan(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after)

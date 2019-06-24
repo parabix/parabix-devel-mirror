@@ -33,6 +33,7 @@ makeInputScalarBindings(signalNullObject),
     }
     if (mAbortOnNull) {
         addAttribute(CanTerminateEarly());
+        addAttribute(MayFatallyTerminate());
     }
 }
 

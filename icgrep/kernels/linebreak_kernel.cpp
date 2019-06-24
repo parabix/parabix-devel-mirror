@@ -67,6 +67,7 @@ mStreamFieldWidth(Basis->getFieldWidth()), mAbortOnNull(signalNullObject != null
 {
     if (mAbortOnNull) {
         addAttribute(CanTerminateEarly());
+        addAttribute(MayFatallyTerminate());
     }
 }
 

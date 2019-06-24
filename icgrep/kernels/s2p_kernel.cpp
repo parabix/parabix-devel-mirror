@@ -163,7 +163,7 @@ void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & k
         Value * itemsBeforeNull = kb->CreateZExtOrTrunc(kb->CreateSub(firstNull, startOfStride), itemsToDo->getType());
         Value * producedCount = kb->CreateAdd(kb->getProducedItemCount("basisBits"), itemsBeforeNull);
         kb->setProducedItemCount("basisBits", producedCount);
-        kb->setTerminationSignal();
+        kb->setFatalTerminationSignal();
         Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
         Value * handler = kb->getScalarField("handler_address");
         kb->CreateCall(dispatcher, {handler, ConstantInt::get(kb->getInt32Ty(), NULL_SIGNAL)});
@@ -200,7 +200,10 @@ S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b,
 , mAbortOnNull(signalNullObject != nullptr)
 , mNumOfStreams(BasisBits->getNumElements()) {
     assert (codeUnitStream->getFieldWidth() == BasisBits->getNumElements());
-    if (mAbortOnNull) addAttribute(CanTerminateEarly());
+    if (mAbortOnNull) {
+        addAttribute(CanTerminateEarly());
+        addAttribute(MayFatallyTerminate());
+    }
 }
 
 inline std::string makeMultiS2PName(const StreamSets & outputStreams, const bool aligned) {
