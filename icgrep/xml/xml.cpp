@@ -11,14 +11,13 @@
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
 #include <kernels/error_monitor_kernel.h>
-#include <kernels/linebreak_kernel.h>
 #include <kernels/p2s_kernel.h>
-#include <kernels/scan_kernel.h>
 #include <kernels/scanning.h>
 #include <kernels/stdout_kernel.h>
 #include <kernels/stream_select.h>
 #include <kernels/streams_merge.h>
 #include <kernels/streamset_collapse.h>
+#include <kernels/linebreak_kernel.h>
 #include <kernels/core/streamset.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
@@ -29,7 +28,8 @@
 #include <pablo/parser/rd_parser.h>
 #include <toolchain/cpudriver.h>
 #include <toolchain/toolchain.h>
-#include <bitset>
+#include <xml/post_process.h>
+#include <xml/test_suite_error.h>
 #include <fcntl.h>
 #include <iostream>
 #include <iomanip>
@@ -50,40 +50,9 @@ static cl::OptionCategory xmlFlags("Command Flags", "xml options");
 std::string inputFile;
 static cl::opt<std::string, true> inputFileOption(cl::Positional, cl::location(inputFile), cl::desc("<input file>"), cl::Required, cl::cat(xmlFlags));
 
-
-extern "C" void printErrorCode(uint64_t errCode) {
-    std::cout << "Exit with error code: " << errCode << "\n";
-}
-
-extern "C" void xmlErrorCallback(const char * ptr, size_t pos) {
-    // std::cout << "error: stream position = " << pos << ", at char: '" << *ptr << "'\n";
-}
-
-extern "C" void xmlTagCallback(const char * ptr, size_t pos, size_t idx) {
-    // std::cout << "tag callback: stream index = " << idx << ", stream position = " << pos << ", at char: '" << *ptr << "'\n";
-}
-
-extern "C" void testLineCallback(const char * ptr, const char * begin, const char * end, uint64_t lineNo) {
-    std::cout << "Callback:\n";
-    ptrdiff_t pos = ptr - begin;
-    if (pos < 0 || ptr > end) {
-        std::cerr << "\u001b[31mERROR\u001b[0m: pointer is not within line span\n";
-        std::cerr << "ptr: " << (void *) ptr << ", begin: " << (void *) begin << ", end: " << (void *) end << "\n";
-        std::cerr << "line # " << lineNo << ", line: " << std::string(begin, end) << "\n";
-        std::cerr << "ptr char: \"" << std::string(ptr - 4, ptr) << "\u001b[31m" << *ptr << "\u001b[0m" << std::string(ptr + 1, ptr + 5) << "\"\n\n";
-        return;
-    }
-    std::string line(begin, end);
-    line = line.substr(0, (size_t) pos) + "\u001b[32m" + line[pos] + "\u001b[0m" + line.substr((size_t) pos + 1);
-    std::string cursor = std::string((size_t) pos, ' ') + "^";
-    std::cout << std::setw(4) << std::right << lineNo << " | " << line << "\n";
-    std::cout << "       " << "\u001b[32m" << cursor << "\u001b[0m" << "\n";
-}
-
-
 typedef void(*XMLProcessFunctionType)(uint32_t fd);
 
-XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<PabloParser> parser, std::shared_ptr<SourceFile> xmlPabloSrc, std::shared_ptr<SourceFile> debugSource) {
+XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<PabloParser> parser, std::shared_ptr<SourceFile> xmlPabloSrc) {
     const size_t ERROR_STREAM_COUNT = 9;
     auto & iBuilder = pxDriver.getBuilder();
     Type * const i32Ty = iBuilder->getInt32Ty();
@@ -199,60 +168,42 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
-    StreamSet * const LineBreaks = P->CreateStreamSet();
-    P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreaks);
-
-    StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
-    P->CreateKernelCall<LineSpanGenerator>(LineBreaks, ByteStream, LineSpans);
-
-    StreamSet * const ScanPositions = P->CreateStreamSet(2, 64);
-    P->CreateKernelCall<ScanPositionGenerator>(so::Select(P, TagCallouts, 2), LineBreaks, ByteStream, ScanPositions);
-
-    Kernel * const reader = P->CreateKernelCall<LineBasedScanPositionReader>(ScanPositions, LineSpans, ByteStream, "testLineCallback");
-    pxDriver.LinkFunction(reader, "testLineCallback", testLineCallback);
-
-    StreamSet * const ErrorSet = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
-    P->CreateKernelCall<StreamsMerge>(
-        std::vector<StreamSet *>{LexError, CT_CD_PI_Error, TagError, RefError, NameError, CheckStreamsError}, 
-        ErrorSet
-    );
-
-    StreamSet * const Errors = P->CreateStreamSet(1, 1);
-    P->CreateKernelCall<CollapseStreamSet>(ErrorSet, Errors);
-
-    Kernel * const scanKernel = P->CreateKernelCall<ScanKernel>(Errors, ByteStream, "xmlErrorCallback");
-    pxDriver.LinkFunction(scanKernel, "xmlErrorCallback", xmlErrorCallback);
-
-    Kernel * const mssk = P->CreateKernelCall<MultiStreamScanKernel>(TagCallouts, ByteStream, "xmlTagCallback");
-    pxDriver.LinkFunction(mssk, "xmlTagCallback", xmlTagCallback);
-
     StreamSet * const CheckStreams = P->CreateStreamSet(6, 1);
     P->CreateKernelCall<StreamsMerge>(
         std::vector<StreamSet *>{CT_CD_PI_CheckStreams, Name_CheckStreams, CS_CheckStreams},
         CheckStreams
     );
 
-    // StreamSet * const MaskedBasisBits = P->CreateStreamSet(8, 1);
-    // P->CreateKernelCall<PabloSourceKernel>(
-    //     parser,
-    //     debugSource,
-    //     "MaskBasisBits",
-    //     Bindings {
-    //         Binding {"basisBits", BasisBits},
-    //         Binding {"mask", so::Select(P, TagCallouts, 0)}
-    //     },
-    //     Bindings {
-    //         Binding {"masked", MaskedBasisBits}
-    //     }
-    // );
+    StreamSet * const Errors = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
+    P->CreateKernelCall<StreamsMerge>(
+        std::vector<StreamSet *>{LexError, CT_CD_PI_Error, TagError, RefError, NameError, CheckStreamsError}, 
+        Errors
+    );
 
-    // StreamSet * const PrintBytes = P->CreateStreamSet(1, 8);
-    // P->CreateKernelCall<P2SKernel>(MaskedBasisBits, PrintBytes);
-    // P->CreateKernelCall<StdOutKernel>(PrintBytes);
+    /* Post Process Scanning */
 
-    Kernel * const emk = P->CreateKernelCall<ErrorMonitorKernel>(ErrorSet, ErrorMonitorKernel::IOStreamBindings{});
-    Scalar * const errCode = emk->getOutputScalar("errorCode");
-    P->CreateCall("printErrorCode", printErrorCode, {errCode});
+#define POSTPROCESS_SCAN_KERNEL(SCAN_STREAM, CALLBACK) \
+{ \
+    StreamSet * const ScanPositions = P->CreateStreamSet(2, 64); \
+    P->CreateKernelCall<ScanPositionGenerator>(SCAN_STREAM, LineBreakStream, ByteStream, ScanPositions); \
+    Kernel * const k = P->CreateKernelCall<LineBasedScanPositionReader>(ScanPositions, LineSpans, ByteStream, #CALLBACK); \
+    pxDriver.LinkFunction(k, #CALLBACK, CALLBACK); \
+}
+
+    StreamSet * const LineBreakStream = P->CreateStreamSet();
+    P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreakStream);
+
+    StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
+    P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, ByteStream, LineSpans);
+
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 1), postproc_validateNameStart);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 2), postproc_validateName);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CtCDPI_Callouts, 4), postproc_validatePIName);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CtCDPI_Callouts, 2), postproc_validateCDATA);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 0), postproc_validateGenRef);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 2), postproc_validateDecRef);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 4), postproc_validateHexRef);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 5), postproc_validateAttRef);
 
     return reinterpret_cast<XMLProcessFunctionType>(P->compile());
 }
@@ -285,15 +236,12 @@ int main(int argc, char ** argv) {
     auto em = ErrorManager::Create();
     auto parser = RecursiveParser::Create(SimpleLexer::Create(em), em);
     auto xmlSource = SourceFile::Relative("xml.pablo");
-    auto debugSource = SourceFile::Relative("debug.pablo");
     if (xmlSource == nullptr) {
         std::cerr << "pablo-parser: error loading pablo source file: xml.pablo\n";
     }
-    if (debugSource == nullptr) {
-        std::cerr << "pablo-parser: error loading pablo source file: debug.pablo\n";
-    }
-    auto xmlProcessFuncPtr = xmlPipelineGen(pxDriver, parser, xmlSource, debugSource);
+    auto xmlProcessFuncPtr = xmlPipelineGen(pxDriver, parser, xmlSource);
 
     xmlProcessFuncPtr(fd);
+    ShowError();
     close(fd);
 }
