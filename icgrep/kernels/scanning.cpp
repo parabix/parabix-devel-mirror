@@ -4,6 +4,7 @@
  */
 
 #include "scanning.h"
+#include <llvm/IR/Module.h>
 
 #include <kernels/kernel_builder.h>
 
