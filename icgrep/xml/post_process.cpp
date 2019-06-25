@@ -167,3 +167,33 @@ void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, con
         ReportError(XmlTestSuiteError::ATTREF, ptr, lineBegin, lineEnd, lineNum);
     }
 }
+
+void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code) {
+    // Error streams are indexed as such:
+    //  type Error = <i1>[9] {
+    //      IllegalChar,
+    //      UTF8_Error,
+    //      PI_Error,
+    //      CT_Error,
+    //      CT_CD_PI_Error,
+    //      Tag_Error,
+    //      Ref_Error,
+    //      Name_Error,
+    //      CheckStreams_Error
+    //  }
+    // Indexing matches up with the order of enumeration values so we need not
+    // use a switch statement to pick error codes.
+    auto c = (int) XmlTestSuiteError::ILLEGAL_CHAR;
+    if (code == 0) {
+        // A little hack to get the number of error streams down to 8 so that
+        // the existing P2S kernel can be used.
+        ReportError(XmlTestSuiteError::CD_CLOSER, ptr, lineBegin, lineEnd, lineNum);
+    }
+    while (code != 0) {
+        if (code & 0x1UL) {
+            ReportError((XmlTestSuiteError) c, ptr, lineBegin, lineEnd, lineNum);
+        }
+        code = code >> 1;
+        c++;
+    }
+}

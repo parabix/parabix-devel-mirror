@@ -10,10 +10,9 @@
 #include <kernels/pipeline_builder.h>
 #include <kernels/s2p_kernel.h>
 #include <kernels/source_kernel.h>
-#include <kernels/error_monitor_kernel.h>
+#include <kernels/deletion.h>
 #include <kernels/p2s_kernel.h>
 #include <kernels/scanning.h>
-#include <kernels/stdout_kernel.h>
 #include <kernels/stream_select.h>
 #include <kernels/streams_merge.h>
 #include <kernels/streamset_collapse.h>
@@ -198,6 +197,28 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
     P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, LineSpans);
+
+    StreamSet * const CollapsedErrors = P->CreateStreamSet();
+    P->CreateKernelCall<CollapseStreamSet>(Errors, CollapsedErrors);
+    StreamSet * const CollapsedErrorsIndices = P->CreateStreamSet(1, 64);
+    P->CreateKernelCall<ScanIndexGenerator>(CollapsedErrors, CollapsedErrorsIndices);
+    StreamSet * const CollapsedErrorsLineNumbers = P->CreateStreamSet(1, 64);
+    P->CreateKernelCall<LineNumberGenerator>(CollapsedErrors, LineBreakStream, CollapsedErrorsLineNumbers);
+    // a little hack to allow the P2S kernel to be used: only select the first 8 error streams,
+    // code 0 will be used for the last error stream
+    StreamSet * const ParallelErrorCodes = P->CreateStreamSet(8, 1);
+    FilterByMask(P, CollapsedErrors, so::Select(P, Errors, so::Range(0, 8)), ParallelErrorCodes);
+    StreamSet * const ErrorCodes = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<P2SKernel>(ParallelErrorCodes, ErrorCodes);
+    Kernel * const errorsReader = P->CreateKernelCall<LineBasedReader>(
+        ByteStream, 
+        CollapsedErrorsIndices, 
+        CollapsedErrorsLineNumbers, 
+        LineSpans, 
+        "postproc_errorStreamsCallback", 
+        AdditionalStreams{ErrorCodes}
+    );
+    pxDriver.LinkFunction(errorsReader, "postproc_errorStreamsCallback", postproc_errorStreamsCallback);
 
     POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 1), postproc_validateNameStart);
     POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 2), postproc_validateName);

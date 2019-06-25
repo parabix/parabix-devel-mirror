@@ -27,4 +27,6 @@ void postproc_validateDecRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 
 void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum);
 
+void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code);
+
 } // extern "C"

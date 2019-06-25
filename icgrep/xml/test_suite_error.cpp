@@ -73,7 +73,26 @@ const char * AsMessage(XmlTestSuiteError error) {
             return "Illegal XML 1.0 character reference";
         case XmlTestSuiteError::ATTREF:
             return "Attribute values contain '<' characters after reference expansion";
+        case XmlTestSuiteError::ILLEGAL_CHAR:
+            return "Error: illegal character";
+        case XmlTestSuiteError::UTF8_ERROR:
+            return "UTF-8 error found";
+        case XmlTestSuiteError::PI_SYNTAX:
+            return "Error in PI syntax";
+        case XmlTestSuiteError::COMMENT:
+            return "Error in comment syntax";
+        case XmlTestSuiteError::PI_CD_CT_ERROR:
+            return "Error in comment, CDATA or processing instruction syntax";
+        case XmlTestSuiteError::TAG:
+            return "Tag parsing error found";
+        case XmlTestSuiteError::REF:
+            return "Reference error found";
+        case XmlTestSuiteError::NAME_SYNTAX:
+            return "name syntax error";
+        case XmlTestSuiteError::CD_CLOSER:
+            return "Error: ]]> in text";
         default:
+            assert ("unexpected error xml test suite error" && false);
             return "Invalid XML Error Code";
     }
 }

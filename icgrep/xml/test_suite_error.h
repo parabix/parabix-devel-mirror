@@ -10,6 +10,7 @@
 #include <cinttypes>
 
 enum class XmlTestSuiteError {
+    /* Post Processing Errors */
     NAME_START = 1,
     NAME,
     XML_PI_NAME,
@@ -17,7 +18,18 @@ enum class XmlTestSuiteError {
     UNDEFREF,
     CHARREF,
     XML10CHARREF,
-    ATTREF
+    ATTREF,
+
+    /* Error Stream Errors */
+    ILLEGAL_CHAR,
+    UTF8_ERROR,
+    PI_SYNTAX,
+    COMMENT,
+    PI_CD_CT_ERROR,
+    TAG,
+    REF,
+    NAME_SYNTAX,
+    CD_CLOSER
 };
 
 const char * AsMessage(XmlTestSuiteError error);
