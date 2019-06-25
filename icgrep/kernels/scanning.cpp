@@ -68,7 +68,7 @@ void generic::SingleStreamScanKernelTemplate::generateMultiBlockLogic(BuilderRef
     blockNo->addIncoming(nextBlockNo, mBuildStrideMask);
     Value * const blockIndex = b->CreateAdd(blockNo, b->CreateMul(strideNo, mSW.NUM_BLOCKS_PER_STRIDE));
     maskBuildingIterationBody(b, blockIndex);
-    Value * const block = b->loadInputStreamBlock("scan", blockIndex);
+    Value * const block = b->loadInputStreamBlock("scan", b->getInt32(0), blockIndex);
     Value * const any = b->simd_any(mSW.fieldWidth, block);
     Value * const signMask = b->CreateZExt(b->hsimd_signmask(mSW.fieldWidth, any), mSW.StrideMaskTy);
     Value * const shiftedSignMask = b->CreateShl(signMask, b->CreateZExtOrTrunc(b->CreateMul(blockNo, mSW.WORDS_PER_BLOCK), mSW.StrideMaskTy));
@@ -90,7 +90,7 @@ void generic::SingleStreamScanKernelTemplate::generateMultiBlockLogic(BuilderRef
     Value * const blockNumOfWord = b->CreateUDiv(wordOffset, mSW.WORDS_PER_BLOCK);
     Value * const blockOffset = b->CreateURem(wordOffset, mSW.WORDS_PER_BLOCK);
     Value * const processingBlockIndex = b->CreateAdd(strideOffset, blockNumOfWord);
-    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr("scan", processingBlockIndex), mSW.PointerTy);
+    Value * const stridePtr = b->CreateBitCast(b->getInputStreamBlockPtr("scan", b->getInt32(0), processingBlockIndex), mSW.PointerTy);
     Value * const wordPtr = b->CreateGEP(stridePtr, blockOffset);
     Value * const word = b->CreateLoad(wordPtr);
     willProcessWord(b, word);
@@ -129,11 +129,11 @@ void generic::SingleStreamScanKernelTemplate::generateMultiBlockLogic(BuilderRef
 
 const uint32_t generic::SingleStreamScanKernelTemplate::MaxStrideWidth = 4096;
 
-generic::SingleStreamScanKernelTemplate::SingleStreamScanKernelTemplate(BuilderRef b, std::string && name, StreamSet * scan, StreamSet * source)
-: MultiBlockKernel(b, name + "_sb" + std::to_string(codegen::ScanBlocks), {{"scan", scan, FixedRate(1), ZeroExtended()}, {"source", source}}, {}, {}, {}, {})
+generic::SingleStreamScanKernelTemplate::SingleStreamScanKernelTemplate(BuilderRef b, std::string && name, StreamSet * scan)
+: MultiBlockKernel(b, name + "_sb" + std::to_string(codegen::ScanBlocks), {{"scan", scan}}, {}, {}, {}, {})
 , mSW(b, std::min(codegen::ScanBlocks * b->getBitBlockWidth(), MaxStrideWidth))
 {
-    assert (source->getNumElements() == 1 && source->getFieldWidth() == 8);
+    assert (scan->getNumElements() == 1 && scan->getFieldWidth() == 1);
     uint32_t strideWidth = std::min(codegen::ScanBlocks * b->getBitBlockWidth(), MaxStrideWidth);
     if (!IS_POW_2(codegen::ScanBlocks)) {
         report_fatal_error("scan-blocks must be a power of 2");
@@ -147,25 +147,46 @@ generic::SingleStreamScanKernelTemplate::SingleStreamScanKernelTemplate(BuilderR
 
 
 /* ----------------------------------------------------------------------------------------------------------------- *
- * ScanPositionGenerator
+ * ScanIndexGenerator
  * ----------------------------------------------------------------------------------------------------------------- */
 
-void ScanPositionGenerator::initialize(BuilderRef b) {
+ScanIndexGenerator::ScanIndexGenerator(BuilderRef b, StreamSet * scan, StreamSet * output)
+: generic::SingleStreamScanKernelTemplate(b, "ScanIndexGenerator", scan)
+{
+    assert (scan->getNumElements() == 1 && scan->getFieldWidth() == 1);
+    assert (output->getNumElements() == 1 && output->getFieldWidth() == 64);
+    mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
+}
+
+void ScanIndexGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex, Value * const blockIndex, Value * const bitOffset) {
+    Value * const producedItemCount = b->getProducedItemCount("output");
+    b->setProducedItemCount("output", b->CreateAdd(producedItemCount, b->getSize(1)));
+    Value * const val = b->CreateZExtOrBitCast(absoluteIndex, b->getInt64Ty());
+    b->CreateStore(val, b->getRawOutputPointer("output", b->getInt32(0), producedItemCount));
+}
+
+
+
+/* ----------------------------------------------------------------------------------------------------------------- *
+ * LineNumberGenerator
+ * ----------------------------------------------------------------------------------------------------------------- */
+
+void LineNumberGenerator::initialize(BuilderRef b) {
     const uint32_t BITS_PER_BYTE = 8;
     mLineCountArrayBlockPtr = b->CreateAlignedAlloca(b->getBitBlockType(), b->getBitBlockWidth() / BITS_PER_BYTE, mSW.NUM_BLOCKS_PER_STRIDE);
 }
 
-void ScanPositionGenerator::willProcessStride(BuilderRef b, Value * const /*strideNo*/) {
+void LineNumberGenerator::willProcessStride(BuilderRef b, Value * const /*strideNo*/) {
     mInitialLineNum = b->getScalarField("finalStrideLineNum");
 }
 
-void ScanPositionGenerator::maskBuildingIterationHead(BuilderRef b) {
+void LineNumberGenerator::maskBuildingIterationHead(BuilderRef b) {
     mBaseCounts = b->CreatePHI(b->getBitBlockType(), 2);
     mBaseCounts->addIncoming(b->allZeroes(), mStrideStart);
 }
 
-void ScanPositionGenerator::maskBuildingIterationBody(BuilderRef b, Value * const blockIndex) {
-    Value * const breakBlock = b->loadInputStreamBlock("lines", blockIndex);
+void LineNumberGenerator::maskBuildingIterationBody(BuilderRef b, Value * const blockIndex) {
+    Value * const breakBlock = b->loadInputStreamBlock("lines", b->getInt32(0), blockIndex);
     Value * breakCounts = b->hsimd_partial_sum(mSW.width, b->simd_popcount(mSW.width, breakBlock));
     breakCounts = b->simd_add(mSW.width, breakCounts, mBaseCounts);
     b->CreateBlockAlignedStore(b->bitCast(breakCounts), b->CreateGEP(mLineCountArrayBlockPtr, mBlockNo));
@@ -174,11 +195,9 @@ void ScanPositionGenerator::maskBuildingIterationBody(BuilderRef b, Value * cons
     mBaseCounts->addIncoming(nextBaseCounts, mBuildStrideMask);
 }
 
-void ScanPositionGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex,  Value * const blockIndex, Value * const bitOffset) {
+void LineNumberGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex,  Value * const blockIndex, Value * const bitOffset) {
     Value * const producedItemCount = b->getProducedItemCount("output");
     b->setProducedItemCount("output", b->CreateAdd(producedItemCount, b->getSize(1)));
-    Value * const val = b->CreateZExtOrBitCast(absoluteIndex, b->getInt64Ty());
-    b->CreateStore(val, b->getRawOutputPointer("output", b->getInt32(0), producedItemCount));
     Value * const blockNo = b->CreateUDiv(mWordOffset, mSW.WORDS_PER_BLOCK);
     Value * const wordIndex = b->CreateURem(mWordOffset, mSW.WORDS_PER_BLOCK);
     Value * lineCount = b->CreateLoad(b->CreateGEP(mLineCountArrayBlockPtr, blockNo));
@@ -187,28 +206,30 @@ void ScanPositionGenerator::generateProcessingLogic(BuilderRef b, Value * const 
     // which come after the scan-bit possition but are included in the value
     // of lineCount. We need to subtract the number of such break positions to
     // get the correct line number.
-    Value * const breaksBlockPtr = b->CreateBitCast(b->getInputStreamBlockPtr("lines", blockIndex), mSW.PointerTy);
+    Value * const breaksBlockPtr = b->CreateBitCast(b->getInputStreamBlockPtr("lines", b->getInt32(0), blockIndex), mSW.PointerTy);
     Value * const breaksWord = b->CreateLoad(b->CreateGEP(breaksBlockPtr, wordIndex));
     Value * const highMask = b->CreateNot(b->CreateMaskToLowestBitInclusive(mProcessingWord));
     Value * const maskedBreaksWord = b->CreateAnd(breaksWord, highMask);
     lineCount = b->CreateSub(lineCount, b->CreatePopcount(maskedBreaksWord));
     lineCount = b->CreateZExt(lineCount, b->getInt64Ty());
     lineCount = b->CreateAdd(mInitialLineNum, lineCount);
-    b->CreateStore(lineCount, b->getRawOutputPointer("output", b->getInt32(1), producedItemCount));
+    b->CreateStore(lineCount, b->getRawOutputPointer("output", b->getInt32(0), producedItemCount));
 }
 
-void ScanPositionGenerator::didProcessStride(BuilderRef b, Value * const /*strideNo*/) {
+void LineNumberGenerator::didProcessStride(BuilderRef b, Value * const /*strideNo*/) {
     Value * nextFinalStrideLineNum = b->CreateZExtOrTrunc(mHighestLineCount, b->getInt64Ty());
     nextFinalStrideLineNum = b->CreateAdd(mInitialLineNum, nextFinalStrideLineNum);
     b->setScalarField("finalStrideLineNum", nextFinalStrideLineNum);
 }
 
-ScanPositionGenerator::ScanPositionGenerator(BuilderRef b, StreamSet * scan, StreamSet * linebreakStream, StreamSet * source, StreamSet * output)
-: generic::SingleStreamScanKernelTemplate(b, "ScanPositionGenerator", scan, source)
+LineNumberGenerator::LineNumberGenerator(BuilderRef b, StreamSet * scan, StreamSet * linebreaks, StreamSet * output)
+: generic::SingleStreamScanKernelTemplate(b, "LineNumberGenerator", scan)
 {
-    assert (linebreakStream->getNumElements() == 1 && linebreakStream->getFieldWidth() == 1);
+    assert (scan->getNumElements() == 1 && scan->getFieldWidth() == 1);
+    assert (linebreaks->getNumElements() == 1 && linebreaks->getFieldWidth() == 1);
+    assert (output->getNumElements() == 1 && output->getFieldWidth() == 64);
     addInternalScalar(b->getInt64Ty(), "finalStrideLineNum");
-    mInputStreamSets.push_back({"lines", linebreakStream});
+    mInputStreamSets.push_back({"lines", linebreaks});
     mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
 }
 
@@ -230,8 +251,8 @@ void LineSpanGenerator::generateProcessingLogic(BuilderRef b, Value * const abso
     b->setProducedItemCount("output", b->CreateAdd(producedCount, b->getSize(1)));
 }
 
-LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, StreamSet * source, StreamSet * output)
-: generic::SingleStreamScanKernelTemplate(b, "LineSpanGenerator", linebreakStream, source)
+LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, StreamSet * output)
+: generic::SingleStreamScanKernelTemplate(b, "LineSpanGenerator", linebreakStream)
 {
     assert (linebreakStream->getNumElements() == 1 && linebreakStream->getFieldWidth() == 1);
     addInternalScalar(b->getInt64Ty(), "lineBegin");
@@ -241,10 +262,78 @@ LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, 
 
 
 /* ----------------------------------------------------------------------------------------------------------------- *
- * LineBasedScanPositionReader
+ * LineBasedReader
  * ----------------------------------------------------------------------------------------------------------------- */
 
-void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+    Module * const module = b->getModule();
+    Type * const sizeTy = b->getSizeTy();
+    Value * const sz_ONE = b->getSize(1);
+
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    BasicBlock * const readItem = b->CreateBasicBlock("readItem");
+    BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
+    Value * const initialStride = b->getProcessedItemCount("scan");
+    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(b->getInt64(0), b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(1), initialStride))));
+    b->CreateCondBr(isInvalidFinalItem, exitBlock, readItem);
+
+    b->SetInsertPoint(readItem);
+    PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
+    strideNo->addIncoming(initialStride, entryBlock);
+    Value * const nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
+    strideNo->addIncoming(nextStrideNo, readItem);
+    Value * const scanItem = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(0), strideNo));
+    Value * const scanPtr = b->getRawInputPointer("source", scanItem);
+    b->setProcessedItemCount("scan", nextStrideNo);
+    std::vector<Value *> callbackParams{};
+    callbackParams.push_back(scanPtr);
+    for (auto const & name : mAdditionalStreamNames) {
+        Value * const item = b->CreateLoad(b->getRawInputPointer(name, b->getInt32(0), strideNo));
+        callbackParams.push_back(item);
+        b->setProcessedItemCount(name, nextStrideNo);
+    }
+    Function * const callback = module->getFunction(mCallbackName); assert (callback);
+    b->CreateCall(callback, ArrayRef<Value *>(callbackParams));
+    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), readItem, exitBlock);
+
+    b->SetInsertPoint(exitBlock);
+}
+
+ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName)
+: MultiBlockKernel(b, std::string("ScanReader"), {{"source", source}, {"scan", scanIndices, FixedRate(1), Principal()}}, {}, {}, {}, {})
+, mCallbackName(callbackName)
+, mAdditionalStreamNames()
+{
+    assert (scanIndices->getNumElements() == 1 && scanIndices->getFieldWidth() == 64);
+    assert (source->getNumElements() == 1);
+    addAttribute(SideEffecting());
+    setStride(1);
+}
+
+ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName, AdditionalStreams additionalStreams)
+: MultiBlockKernel(b, std::string("ScanReader"), {{"source", source}, {"scan", scanIndices, FixedRate(1), Principal()}}, {}, {}, {}, {})
+, mCallbackName(callbackName)
+, mAdditionalStreamNames()
+{
+    assert (scanIndices->getNumElements() == 1 && scanIndices->getFieldWidth() == 64);
+    assert (source->getNumElements() == 1);
+    addAttribute(SideEffecting());
+    setStride(1);
+    size_t i = 0;
+    for (auto const & stream : additionalStreams) {
+        std::string name = "__additional_" + std::to_string(i++);
+        mInputStreamSets.push_back({name, stream, FixedRate(1)});
+        mAdditionalStreamNames.push_back(name);
+    }
+}
+
+
+
+/* ----------------------------------------------------------------------------------------------------------------- *
+ * LineBasedReader
+ * ----------------------------------------------------------------------------------------------------------------- */
+
+void LineBasedReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     Module * const module = b->getModule();
 
     Type * const i64Ty = b->getInt64Ty();
@@ -269,22 +358,32 @@ void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * 
     scanIndex->addIncoming(initialProcessedScanValue, entryBlock);
     PHINode * const lineIndex = b->CreatePHI(i64Ty, 3);
     lineIndex->addIncoming(initialProcessedLineValue, entryBlock);
-    Value * const lineNumber = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(1), scanIndex));
+    Value * const lineNumber = b->CreateLoad(b->getRawInputPointer("lineNums", b->getInt32(0), scanIndex));
     // We need to match lineNumber with lineIndex to retrieve the start and end
     // pointers for the line. If their values don't match now, we keep skipping
     // over line spans until they do.
     b->CreateCondBr(b->CreateICmpEQ(lineNumber, lineIndex), triggerCallback, skipLineSpan);
 
     b->SetInsertPoint(triggerCallback);
+    std::vector<Value *> callbackParams{};
+    callbackParams.reserve(4 + mAdditionalStreamNames.size());
     Value * const scanVal = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(0), scanIndex));
     Value * const scanPtr = b->getRawInputPointer("source", scanVal);
+    callbackParams.push_back(scanPtr);
     Value * const beginVal = b->CreateLoad(b->getRawInputPointer("lines", b->getInt32(0), lineIndex));
     Value * const beginPtr = b->getRawInputPointer("source", beginVal);
+    callbackParams.push_back(beginPtr);
     Value * const endVal = b->CreateLoad(b->getRawInputPointer("lines", b->getInt32(1), lineIndex));
     Value * const endPtr = b->getRawInputPointer("source", endVal);
+    callbackParams.push_back(endPtr);
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
     Value * const oneIndexedLineNumber = b->CreateAdd(lineNumber, i64_ONE);
-    b->CreateCall(callback, {scanPtr, beginPtr, endPtr, oneIndexedLineNumber});
+    callbackParams.push_back(oneIndexedLineNumber);
+    for (auto const & name : mAdditionalStreamNames) {
+        Value * const item = b->CreateLoad(b->getRawInputPointer(name, b->getInt32(0), scanIndex));
+        callbackParams.push_back(item);
+    }
+    b->CreateCall(callback, ArrayRef<Value *>(callbackParams));
     // Increment scanIndex but not lineIndex as there may be multiple scan
     // positions on this line.
     Value * const nextScanIndex = b->CreateAdd(scanIndex, i64_ONE);
@@ -318,21 +417,62 @@ void LineBasedScanPositionReader::generateMultiBlockLogic(BuilderRef b, Value * 
     finalLineIndex->addIncoming(lineIndex, triggerCallback);
     finalLineIndex->addIncoming(nextLineIndex, skipLineSpan);
     b->setProcessedItemCount("scan", finalScanIndex);
+    b->setProcessedItemCount("lineNums", finalScanIndex);
+    for (auto const & name : mAdditionalStreamNames) {
+        b->setProcessedItemCount(name, finalScanIndex);
+    }
     b->setProcessedItemCount("lines", finalLineIndex);
     b->CreateBr(exitBlock);
 
     b->SetInsertPoint(exitBlock);
 }
 
-LineBasedScanPositionReader::LineBasedScanPositionReader(BuilderRef b, StreamSet * scanPositions, StreamSet * lineSpans, StreamSet * source, StringRef callbackName)
+LineBasedReader::LineBasedReader(BuilderRef b, StreamSet * source, StreamSet * scanPositions, StreamSet * lineNumbers, StreamSet * lineSpans, StringRef callbackName)
 : MultiBlockKernel(b, "LineBasedScanPositionReader_" + std::string(callbackName), 
-    {{"scan", scanPositions, BoundedRate(0, 1), Principal()}, {"lines", lineSpans, BoundedRate(0, 1)}, {"source", source}}, {}, {}, {}, {})
+    { // input streamsets
+        {"scan", scanPositions, BoundedRate(0, 1), Principal()}, 
+        {"lineNums", lineNumbers, BoundedRate(0, 1)}, 
+        {"lines", lineSpans, BoundedRate(0, 1)}, 
+        {"source", source}
+    }, {}, {}, {}, {})
 , mCallbackName(callbackName)
+, mAdditionalStreamNames()
 {
-    assert (scanPositions->getNumElements() == 2 && scanPositions->getFieldWidth() == 64);
+    assert (scanPositions->getNumElements() == 1 && scanPositions->getFieldWidth() == 64);
+    assert (lineNumbers->getNumElements() == 1 && lineNumbers->getFieldWidth() == 64);
     assert (lineSpans->getNumElements() == 2 && lineSpans->getFieldWidth() == 64);
     addAttribute(SideEffecting());
     setStride(1);
+}
+
+LineBasedReader::LineBasedReader(BuilderRef b, 
+                                 StreamSet * source, 
+                                 StreamSet * scanPositions, 
+                                 StreamSet * lineNumbers, 
+                                 StreamSet * lineSpans, 
+                                 StringRef callbackName, 
+                                 AdditionalStreams additionalStreams)
+: MultiBlockKernel(b, "LineBasedScanPositionReader_" + std::string(callbackName), 
+    { // input streamsets
+        {"scan", scanPositions, BoundedRate(0, 1), Principal()}, 
+        {"lineNums", lineNumbers, BoundedRate(0, 1)}, 
+        {"lines", lineSpans, BoundedRate(0, 1)}, 
+        {"source", source}
+    }, {}, {}, {}, {})
+, mCallbackName(callbackName)
+, mAdditionalStreamNames()
+{
+    assert (scanPositions->getNumElements() == 1 && scanPositions->getFieldWidth() == 64);
+    assert (lineNumbers->getNumElements() == 1 && lineNumbers->getFieldWidth() == 64);
+    assert (lineSpans->getNumElements() == 2 && lineSpans->getFieldWidth() == 64);
+    addAttribute(SideEffecting());
+    setStride(1);
+    size_t i = 0;
+    for (auto const & stream : additionalStreams) {
+        std::string name = "__additional_" + std::to_string(i++);
+        mInputStreamSets.push_back({name, stream, BoundedRate(0, 1)});
+        mAdditionalStreamNames.push_back(name);
+    }
 }
 
 } // namespace kernel

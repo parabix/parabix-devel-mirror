@@ -184,9 +184,12 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
 #define POSTPROCESS_SCAN_KERNEL(SCAN_STREAM, CALLBACK) \
 { \
-    StreamSet * const ScanPositions = P->CreateStreamSet(2, 64); \
-    P->CreateKernelCall<ScanPositionGenerator>(SCAN_STREAM, LineBreakStream, ByteStream, ScanPositions); \
-    Kernel * const k = P->CreateKernelCall<LineBasedScanPositionReader>(ScanPositions, LineSpans, ByteStream, #CALLBACK); \
+    StreamSet * const ScanStream = SCAN_STREAM; \
+    StreamSet * const ScanPositions = P->CreateStreamSet(1, 64); \
+    P->CreateKernelCall<ScanIndexGenerator>(ScanStream, ScanPositions); \
+    StreamSet * const LineNumbers = P->CreateStreamSet(1, 64); \
+    P->CreateKernelCall<LineNumberGenerator>(ScanStream, LineBreakStream, LineNumbers); \
+    Kernel * const k = P->CreateKernelCall<LineBasedReader>(ByteStream, ScanPositions, LineNumbers, LineSpans, #CALLBACK); \
     pxDriver.LinkFunction(k, #CALLBACK, CALLBACK); \
 }
 
@@ -194,7 +197,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreakStream);
 
     StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
-    P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, ByteStream, LineSpans);
+    P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, LineSpans);
 
     POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 1), postproc_validateNameStart);
     POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 2), postproc_validateName);
