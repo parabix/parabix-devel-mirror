@@ -34,7 +34,7 @@ static bool asciiSeqEq(const uint8_t * ptr, std::string const & reference) {
     return true;
 }
 
-#define ASCII_TO_LOWER(C) (C >= 'A' && C <= 'Z' ? (C - 0x20) : C)
+#define ASCII_TO_LOWER(C) (C >= 'A' && C <= 'Z' ? (C + 0x20) : C)
 
 static bool asciiCaselessSeqEq(const uint8_t * ptr, std::string const & reference) {
     const char * cptr = reinterpret_cast<const char *>(ptr);
@@ -84,7 +84,7 @@ void postproc_validateName(const uint8_t * ptr, const uint8_t * lineBegin, const
 
 void postproc_validatePIName(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
     if (asciiCaselessSeqEq(ptr + 1, "xml") && (ptr[4] == '?' || ptr[4] <= ' ')) {
-        if (lineNum != 1 || (ptr - lineBegin != 1)) {
+        if (lineNum != 1 || (ptr - lineBegin != 1) || !asciiSeqEq(ptr + 1, "xml")) {
             // ptr is pointing at the '?' character, but to get the correct
             // location for the error message it should be pointing at the
             // character just after (usually the 'x' in "xml").
