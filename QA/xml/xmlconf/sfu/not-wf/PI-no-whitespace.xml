@@ -1,0 +1,4 @@
+<!-- Whitespace is required between a PI target and the PI body, if nonempty. -->
+<document>
+<?process()?>
+</document>

@@ -1,0 +1,5 @@
+<!DOCTYPE dummy PUBLIC "foo" SYSTEM "fie" >
+<dummy>
+<!-- Can't have a SYSTEM keyword if there is a PUBLIC keyword. -->
+
+</dummy>

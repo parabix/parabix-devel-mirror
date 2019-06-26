@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    @(#)sfu-not-wf.xml	
+-->
+<TEST ID="PI-no-whitespace" URI="not-wf/PI-no-whitespace.xml" TYPE="not-wf" SECTIONS="2.6 [16]">
+    If the body of a PI is nonempty, whitespace is required after the target.</TEST>
+
+<TEST ID="PUBLIC-SYSTEM" URI="not-wf/PUBLIC-SYSTEM.xml" TYPE="not-wf" SECTIONS="4.2.2 [75]">
+    Can't have a SYSTEM keyword if there is a PUBLIC keyword.</TEST>
+
+<TEST ID="AttValFollow-AttNameStart" URI="not-wf/AttValFollow-AttNameStart.xml" TYPE="not-wf" SECTIONS="3.1 [40]">
+    A new attribute name cannot immediately follow an attribute value without intervening whitespace.</TEST>
+
