@@ -85,7 +85,11 @@ void postproc_validateName(const uint8_t * ptr, const uint8_t * lineBegin, const
 void postproc_validatePIName(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
     if (asciiCaselessSeqEq(ptr + 1, "xml") && (ptr[4] == '?' || ptr[4] <= ' ')) {
         if (lineNum != 1 || (ptr - lineBegin != 1)) {
-            ReportError(XmlTestSuiteError::XML_PI_NAME, ptr, lineBegin, lineEnd, lineNum);
+            // ptr is pointing at the '?' character, but to get the correct
+            // location for the error message it should be pointing at the
+            // character just after (usually the 'x' in "xml").
+            auto correctedPtr = ptr + 1;
+            ReportError(XmlTestSuiteError::XML_PI_NAME, correctedPtr, lineBegin, lineEnd, lineNum);
         }
     }
 }
