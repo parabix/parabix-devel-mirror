@@ -145,7 +145,7 @@ protected:
 };
 
 WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * U8index, StreamSet * WordMarks)
-: PabloKernel(kb, "RootMarks", {Binding{"source", BasisBits}, Binding{"U8index", U8index}}, {Binding{"WordMarks", WordMarks, FixedRate(), Add1()}}) { }
+: PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}, Binding{"U8index", U8index}}, {Binding{"WordMarks", WordMarks, FixedRate(), Add1()}}) { }
 
 void WordMarkKernel::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
@@ -225,15 +225,17 @@ private:
 };
 
 void WordAccumulator::accumulate_word (char * word_start, char * root_end, char * word_end) {
-    const auto bytes = word_end - word_start;
-    std::string new_word(word_start, bytes);
-    //llvm::errs() << "Found word: |" << new_word << "|\n";
-    if (word_end != root_end) {
-        std::string extension(root_end, word_end - root_end);
-        //llvm::errs() << "Found extension: |" << extension << "|\n";
-        mExtensionBag[extension]++;
+    if (word_end > word_start) {
+        const auto bytes = word_end - word_start;
+        std::string new_word(word_start, bytes);
+        //llvm::errs() << "Found word: |" << new_word << "|\n";
+        if (word_end != root_end) {
+            std::string extension(root_end, word_end - root_end);
+            //llvm::errs() << "Found extension: |" << extension << "|\n";
+            mExtensionBag[extension]++;
+        }
+        mWordBag[new_word]++;
     }
-    mWordBag[new_word]++;
 }
 
 void WordAccumulator::dumpWords() {
