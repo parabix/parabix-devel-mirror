@@ -432,53 +432,62 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         accessibleItems[i] = accessible;
     }
 
-    Value * minFixedRateFactor = nullptr;
+    Value * minInputFixedRateFactor = nullptr;
+    Value * minOutputFixedRateFactor = nullptr;
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed()) {
             Value * const fixedRateFactor =
                 b->CreateMulRate(accessibleItems[i], mFixedRateLCM / rate.getRate());
-            minFixedRateFactor =
-                b->CreateUMin(minFixedRateFactor, fixedRateFactor);
+            if (LLVM_UNLIKELY(input.isPrincipal())) {
+                minOutputFixedRateFactor = fixedRateFactor;
+            }
+            minInputFixedRateFactor =
+                b->CreateUMin(minInputFixedRateFactor, fixedRateFactor);
         }
     }
 
-    // truncate any fixed rate input down to the length of the shortest stream
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
-        const ProcessingRate & rate = input.getRate();
-        Value * accessible = accessibleItems[i];
-        if (rate.isFixed() && minFixedRateFactor) {
-            const auto factor = rate.getRate() / mFixedRateLCM;
-            Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
-            const auto buffer = getInputBufferVertex(i);
-            const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
-            // ... but ensure that it reflects whether it was produced with an Add(k) rate.
-            if (LLVM_UNLIKELY(k != RateValue{0})) {
-                // (x + (g/h)) * (c/d) = (xh + g) * c/hd
-                Constant * const h = b->getSize(k.denominator());
-                Value * const xh = b->CreateMul(minFixedRateFactor, h);
-                Constant * const g = b->getSize(k.numerator());
-                Value * const y = b->CreateAdd(xh, g);
-                const auto r = factor / RateValue{k.denominator()};
-                Value * const z = b->CreateCeilUMulRate(y, r);
-                calculated = b->CreateSelect(isClosedNormally(b, i), z, calculated);
-            }
-            if (LLVM_UNLIKELY(mCheckAssertions)) {
-                Value * correctItemCount = b->CreateICmpULE(calculated, accessibleItems[i]);
-                if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
-                    correctItemCount = b->CreateOr(correctItemCount, mIsInputZeroExtended[i]);
+    if (minInputFixedRateFactor) {
+        // truncate any fixed rate input down to the length of the shortest stream
+        for (unsigned i = 0; i < numOfInputs; ++i) {
+            const Binding & input = getInputBinding(i);
+            const ProcessingRate & rate = input.getRate();
+            if (rate.isFixed()) {
+                Value * accessible = accessibleItems[i];
+                const auto factor = rate.getRate() / mFixedRateLCM;
+                Value * calculated = b->CreateCeilUMulRate(minInputFixedRateFactor, factor);
+                const auto buffer = getInputBufferVertex(i);
+                const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
+                // ... but ensure that it reflects whether it was produced with an Add(k) rate.
+                if (LLVM_UNLIKELY(k.numerator() != 0)) {
+                    // (x + (g/h)) * (c/d) = (xh + g) * c/hd
+                    Constant * const h = b->getSize(k.denominator());
+                    Value * const xh = b->CreateMul(minInputFixedRateFactor, h);
+                    Constant * const g = b->getSize(k.numerator());
+                    Value * const y = b->CreateAdd(xh, g);
+                    const auto r = factor / RateValue{k.denominator()};
+                    Value * const z = b->CreateCeilUMulRate(y, r);
+                    calculated = b->CreateSelect(isClosedNormally(b, i), z, calculated);
                 }
-                b->CreateAssert(correctItemCount,
-                                input.getName() +
-                                ": final calculated rate item count (%d) "
-                                "exceeds accessible item count (%d)",
-                                calculated, accessibleItems[i]);
+
+                if (LLVM_UNLIKELY(mCheckAssertions)) {
+                    Value * correctItemCount = b->CreateICmpULE(calculated, accessible);
+                    if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
+                        correctItemCount = b->CreateOr(correctItemCount, mIsInputZeroExtended[i]);
+                    }
+                    b->CreateAssert(correctItemCount,
+                                    input.getName() +
+                                    ": final calculated rate item count (%d) "
+                                    "exceeds accessible item count (%d)",
+                                    calculated, accessible);
+                }
+                accessibleItems[i] = calculated;
             }
-            accessible = calculated;
         }
-        accessibleItems[i] = accessible;
+        if (LLVM_LIKELY(minOutputFixedRateFactor == nullptr)) {
+            minOutputFixedRateFactor = minInputFixedRateFactor;
+        }
     }
 
     const auto numOfOutputs = writableItems.size();
@@ -488,9 +497,9 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         Value * writable = mWritableOutputItems[i];
         if (rate.isPartialSum()) {
             writable = mFirstOutputStrideLength[i];
-        } else if (rate.isFixed() && minFixedRateFactor) {
+        } else if (rate.isFixed() && minOutputFixedRateFactor) {
             const auto factor = rate.getRate() / mFixedRateLCM;
-            Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+            Value * calculated = b->CreateCeilUMulRate(minOutputFixedRateFactor, factor);
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
                                 output.getName() +
@@ -511,7 +520,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         }
         writableItems[i] = writable;
     }
-    return minFixedRateFactor;
+    return minInputFixedRateFactor;
 }
 
 

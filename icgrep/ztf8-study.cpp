@@ -75,7 +75,7 @@ void BitPositionsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Constant * sz_SW_BITS = ConstantInt::get(sizeTy, scanWordTy->getBitWidth());
     const unsigned scansPerStride = mStride / scanWordTy->getBitWidth();
     PointerType * const scanWordPointerType =  scanWordTy->getPointerTo();
-    
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const forEachScanWord = b->CreateBasicBlock("forEachScanWord");
     BasicBlock * const forBitsInScanWord = b->CreateBasicBlock("forBitsInScanWord");
@@ -89,7 +89,7 @@ void BitPositionsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * positionStreamPtr = b->getRawOutputPointer("positions", sz_ZERO, positionCount);
 
     b->CreateBr(forEachScanWord);
-    
+
     b->SetInsertPoint(forEachScanWord);
     PHINode * const scanWordIndex = b->CreatePHI(sizeTy, 2);
     scanWordIndex->addIncoming(sz_ZERO, entryBlock);
@@ -97,40 +97,40 @@ void BitPositionsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     scanWordPos->addIncoming(markerStrmPos, entryBlock);
     PHINode * const positionIndex = b->CreatePHI(sizeTy, 2);
     positionIndex->addIncoming(sz_ZERO, entryBlock);
-    
+
     Value * scanWord = b->CreateLoad(b->CreateGEP(scanWordStreamPtr, scanWordIndex), "markerBits");
-    
+
     b->CreateCondBr(b->CreateICmpNE(scanWord, sw_ZERO), forBitsInScanWord, scanWordDone);
-    
+
     b->SetInsertPoint(forBitsInScanWord);
     PHINode * const scanWordPhi = b->CreatePHI(scanWordTy, 2);
     scanWordPhi->addIncoming(scanWord, forEachScanWord);
     PHINode * const innerPositionIndex = b->CreatePHI(sizeTy, 2);
     innerPositionIndex->addIncoming(positionIndex, forEachScanWord);
-    
+
     Value * markerPosn = b->CreateZExtOrTrunc(b->CreateCountForwardZeroes(scanWordPhi, true), sizeTy);
     markerPosn = b->CreateAdd(markerPosn, scanWordPos, "markerPosn");
-    
+
     b->CreateStore(markerPosn, b->CreateGEP(positionStreamPtr, innerPositionIndex));
     Value * nextScanWord = b->CreateResetLowestBit(scanWordPhi);
     Value * nextInnerPositionIndex = b->CreateAdd(innerPositionIndex, sz_ONE);
     scanWordPhi->addIncoming(nextScanWord, forBitsInScanWord);
     innerPositionIndex->addIncoming(nextInnerPositionIndex, forBitsInScanWord);
     b->CreateCondBr(b->CreateICmpNE(nextScanWord, sw_ZERO), forBitsInScanWord, scanWordDone);
-    
+
     b->SetInsertPoint(scanWordDone);
     PHINode * const positionAfterScanWord = b->CreatePHI(sizeTy, 2);
     positionAfterScanWord->addIncoming(positionIndex, forEachScanWord);
     positionAfterScanWord->addIncoming(nextInnerPositionIndex, forBitsInScanWord);
-    
+
     Value * nextScanWordIdx = b->CreateAdd(scanWordIndex, sz_ONE);
     Value * nextScanWordPos = b->CreateAdd(scanWordPos, sz_SW_BITS);
     scanWordIndex->addIncoming(nextScanWordIdx, scanWordDone);
     scanWordPos->addIncoming(nextScanWordPos, scanWordDone);
     positionIndex->addIncoming(positionAfterScanWord, scanWordDone);
-    
+
     b->CreateCondBr(b->CreateICmpNE(nextScanWordIdx, numOfScanWords), forEachScanWord, scanWordsAllDone);
-    
+
     b->SetInsertPoint(scanWordsAllDone);
 }
 
@@ -161,7 +161,7 @@ void WordMarkKernel::generatePabloMethod() {
     PabloAST * wordChar = f->second;
     PabloAST * U8index = getInputStreamSet("U8index")[0];
     PabloAST * U8nonfinal = pb.createNot(U8index);
-    
+
     PabloAST * nonWordChar = pb.createAnd(pb.createNot(wordChar), U8index);
     // Find the end of the encodeable substring root as well as the overall
     // end of the encodeable substring.   Care must be taken to ensure correct
@@ -190,7 +190,15 @@ protected:
 };
 
 U8_Lookahead::U8_Lookahead(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks, StreamSet * RootMarks, StreamSet * WordEnds)
-: PabloKernel(kb, "U8_Lookahead", {Binding{"source", BasisBits, FixedRate(1), ZeroExtended()}, Binding{"WordMarks", WordMarks, FixedRate(1), LookAhead(3)}}, {Binding{"RootMarks", RootMarks}, Binding{"WordEnds", WordEnds}}) { }
+: PabloKernel(kb, "U8_Lookahead",
+// input
+{Binding{"source", BasisBits},
+ Binding{"WordMarks", WordMarks, FixedRate(1), {Principal(), LookAhead(3)}}},
+// output
+{Binding{"RootMarks", RootMarks},
+ Binding{"WordEnds", WordEnds}}) {
+
+}
 
 void U8_Lookahead::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
@@ -204,7 +212,7 @@ void U8_Lookahead::generatePabloMethod() {
     rootEnds = pb.createOr(rootEnds, pb.createAnd(prefix2, pb.createLookahead(marks[0], 1)));
     rootEnds = pb.createOr(rootEnds, pb.createAnd(prefix3, pb.createLookahead(marks[0], 2)));
     rootEnds = pb.createOr(rootEnds, pb.createAnd(prefix4, pb.createLookahead(marks[0], 3)), "markedRootEnds");
-    
+
     PabloAST * wordEnds = pb.createOr(pb.createAnd(ASCII, marks[1]), pb.createAtEOF(marks[1]));
     wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix2, pb.createLookahead(marks[1], 1)));
     wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix3, pb.createLookahead(marks[1], 2)));
@@ -316,7 +324,7 @@ void ZTF8_Reporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
 typedef void (*ztf8FunctionType)(uint32_t fd, WordAccumulator *);
 
 ztf8FunctionType generatePipeline(CPUDriver & pxDriver) {
-    
+
     auto & b = pxDriver.getBuilder();
     auto P = pxDriver.makePipeline({Binding{b->getInt32Ty(), "inputFileDecriptor"},
                                     Binding{b->getIntAddrTy(), "callbackObject"}}, {});
@@ -324,28 +332,28 @@ ztf8FunctionType generatePipeline(CPUDriver & pxDriver) {
     // File data from mmap
     StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
-    
+
     StreamSet * BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-    
+
     StreamSet * const U8index = P->CreateStreamSet(1);
     P->CreateKernelCall<UTF8_index>(BasisBits, U8index);
-    
+
     StreamSet * WordMarks = P->CreateStreamSet(2);
     P->CreateKernelCall<WordMarkKernel>(BasisBits, U8index, WordMarks);
-    
+
     StreamSet * RootMarks = P->CreateStreamSet(1);
     StreamSet * EndMarks = P->CreateStreamSet(1);
     P->CreateKernelCall<U8_Lookahead>(BasisBits, WordMarks, RootMarks, EndMarks);
 
     StreamSet * RootMarkPosns = P->CreateStreamSet(1, sizeof(size_t) * 8);
     StreamSet * EndMarkPosns = P->CreateStreamSet(1, sizeof(size_t) * 8);
-    
+
     P->CreateKernelCall<BitPositionsKernel>(RootMarks, RootMarkPosns);
     P->CreateKernelCall<BitPositionsKernel>(EndMarks, EndMarkPosns);
 
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
-    
+
     Kernel * reporterK = P->CreateKernelCall<ZTF8_Reporter>(ByteStream, RootMarkPosns, EndMarkPosns, callbackObject);
     pxDriver.LinkFunction(reporterK, "accumulate_word_wrapper", accumulate_word_wrapper);
 
