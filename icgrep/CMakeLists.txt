@@ -427,3 +427,6 @@ add_custom_target (text_viewer
   COMMAND python2 viewer.py -t
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
 
+add_custom_target (xml_test
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA/xml
+  COMMAND python3 run_test_suite.py "${CMAKE_BINARY_DIR}/xml")
