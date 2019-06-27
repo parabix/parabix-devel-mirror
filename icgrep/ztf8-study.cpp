@@ -99,7 +99,8 @@ void BitPositionsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     positionIndex->addIncoming(sz_ZERO, entryBlock);
 
     Value * scanWord = b->CreateLoad(b->CreateGEP(scanWordStreamPtr, scanWordIndex), "markerBits");
-
+    b->CreateAssertZero(b->CreateAnd(scanWord, b->CreateShl(scanWord, 1)),
+                        "Data corruption: adjacent marker bits");
     b->CreateCondBr(b->CreateICmpNE(scanWord, sw_ZERO), forBitsInScanWord, scanWordDone);
 
     b->SetInsertPoint(forBitsInScanWord);
@@ -233,6 +234,7 @@ private:
 };
 
 void WordAccumulator::accumulate_word (char * word_start, char * root_end, char * word_end) {
+    //assert(word_end > word_start);
     if (word_end > word_start) {
         const auto bytes = word_end - word_start;
         std::string new_word(word_start, bytes);
@@ -248,6 +250,9 @@ void WordAccumulator::accumulate_word (char * word_start, char * root_end, char 
 
 void WordAccumulator::dumpWords() {
     for (auto const& w : mWordBag) {
+        llvm::errs() << "|" << w.first << "|: " << w.second << "\n";
+    }
+    for (auto const& w : mExtensionBag) {
         llvm::errs() << "|" << w.first << "|: " << w.second << "\n";
     }
 }
