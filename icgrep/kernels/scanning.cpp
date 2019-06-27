@@ -44,9 +44,9 @@ void generic::SingleStreamScanKernelTemplate::generateMultiBlockLogic(BuilderRef
     mWordDone = b->CreateBasicBlock("wordDone");
     mStrideDone = b->CreateBasicBlock("strideDone");
     mExitBlock = b->CreateBasicBlock("exitBlock");
+    initialize(b);
     Value * const scanStreamProcessedItemCount = b->getProcessedItemCount("scan");
     Value * const MASK_ZERO = Constant::getNullValue(mSW.StrideMaskTy);
-    initialize(b);
     b->CreateBr(mStrideStart);
 
     b->SetInsertPoint(mStrideStart);
@@ -239,6 +239,11 @@ LineNumberGenerator::LineNumberGenerator(BuilderRef b, StreamSet * scan, StreamS
  * LineSpanGenerator
  * ----------------------------------------------------------------------------------------------------------------- */
 
+void LineSpanGenerator::initialize(BuilderRef b) {
+    mFinalBlock = b->CreateBasicBlock("finalBlock");
+    mLineSpanExit = b->CreateBasicBlock("lineSpanExit");
+}
+
 void LineSpanGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex) {
     Value * const producedCount = b->getProducedItemCount("output");
     Value * const beginIdx = b->getScalarField("lineBegin");
@@ -251,12 +256,30 @@ void LineSpanGenerator::generateProcessingLogic(BuilderRef b, Value * const abso
     b->setProducedItemCount("output", b->CreateAdd(producedCount, b->getSize(1)));
 }
 
+void LineSpanGenerator::finalize(BuilderRef b) {
+    // Value * atNonLineBreakTerminatedEOF = b->CreateICmpEQ(b->getScalarField("lineBegin"), b->getProcessedItemCount("scan"));
+    b->CreateCondBr(mIsFinal, mFinalBlock, mLineSpanExit);
+
+    b->SetInsertPoint(mFinalBlock);
+    Value * const producedCount = b->getProducedItemCount("output");
+    Value * const beginIdx = b->getScalarField("lineBegin");
+    Value * const endIdx = beginIdx;
+    Value * const beginStorePtr = b->getRawOutputPointer("output", b->getInt32(0), producedCount);
+    Value * const endStorePtr = b->getRawOutputPointer("output", b->getInt32(1), producedCount);
+    b->CreateStore(beginIdx, beginStorePtr);
+    b->CreateStore(endIdx, endStorePtr);
+    b->setProducedItemCount("output", b->CreateAdd(producedCount, b->getSize(1)));
+    b->CreateBr(mLineSpanExit);
+
+    b->SetInsertPoint(mLineSpanExit);
+}
+
 LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, StreamSet * output)
 : generic::SingleStreamScanKernelTemplate(b, "LineSpanGenerator", linebreakStream)
 {
     assert (linebreakStream->getNumElements() == 1 && linebreakStream->getFieldWidth() == 1);
     addInternalScalar(b->getInt64Ty(), "lineBegin");
-    mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
+    mOutputStreamSets.push_back({"output", output, PopcountOf("scan"), Add1()});
 }
 
 
@@ -356,9 +379,9 @@ void LineBasedReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     strideNo->addIncoming(i64_ZERO, entryBlock);
     PHINode * const scanIndex = b->CreatePHI(i64Ty, 3);
     scanIndex->addIncoming(initialProcessedScanValue, entryBlock);
-    PHINode * const lineIndex = b->CreatePHI(i64Ty, 3);
+    PHINode * const lineIndex = b->CreatePHI(i64Ty, 3, "lbr line #");
     lineIndex->addIncoming(initialProcessedLineValue, entryBlock);
-    Value * const lineNumber = b->CreateLoad(b->getRawInputPointer("lineNums", b->getInt32(0), scanIndex));
+    Value * const lineNumber = b->CreateLoad(b->getRawInputPointer("lineNums", b->getInt32(0), scanIndex), "lbr looking for line #");
     // We need to match lineNumber with lineIndex to retrieve the start and end
     // pointers for the line. If their values don't match now, we keep skipping
     // over line spans until they do.

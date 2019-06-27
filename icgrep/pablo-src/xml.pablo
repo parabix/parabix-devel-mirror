@@ -200,7 +200,7 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, E
     temp64 = temp63 & ~basis_bits[3]
     temp65 = temp64 & temp60
     lex.Hex = temp62 | temp65
-    err.IllegalChar = x00_x1F & ~lex.WS
+    err.IllegalChar = InFile(x00_x1F & ~lex.WS)
 
     ### Validate_utf8(basis_bits, u8):
     if basis_bits[7] {
@@ -358,7 +358,7 @@ kernel Parse_CtCDPI
 
         # Common processing
         CtCDPI_Cursor = PI_Cursor | CD_Cursor | Ct_Cursor
-        ctCDPI_mask = InclusiveSpan(CtCDPI_starts, CtCDPI_ends)
+        ctCDPI_mask = InclusiveSpan(InFile(CtCDPI_starts), CtCDPI_ends)
         # ctCDPI_mask = (CtCDPI_ends - CtCDPI_starts) | CtCDPI_ends
 
         # If any of the Comment, CDATA or PI markups are unterminated, it is an error.

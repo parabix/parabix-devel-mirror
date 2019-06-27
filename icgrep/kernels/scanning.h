@@ -167,7 +167,12 @@ class LineSpanGenerator : public generic::SingleStreamScanKernelTemplate {
 public:
     LineSpanGenerator(BuilderRef b, StreamSet * linebreaks, StreamSet * output);
 protected:
+    void initialize(BuilderRef b) override;
     void generateProcessingLogic(BuilderRef b, llvm::Value * absoluteIndex) override;
+    void finalize(BuilderRef b) override;
+private:
+    llvm::BasicBlock * mFinalBlock = nullptr;
+    llvm::BasicBlock * mLineSpanExit = nullptr;
 };
 
 

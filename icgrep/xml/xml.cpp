@@ -77,7 +77,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         Bindings { // Output Stream Bindings
             Binding {"lex", Lex}, 
             Binding {"u8", U8}, 
-            Binding {"err", LexError} 
+            Binding {"err", LexError, FixedRate(1), Add1()} 
         }
     );
 
@@ -96,7 +96,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
             Binding {"marker", Marker},
             Binding {"ctCDPI_Callouts", CtCDPI_Callouts},
             Binding {"check_streams", CT_CD_PI_CheckStreams},
-            Binding {"err", CT_CD_PI_Error}
+            Binding {"err", CT_CD_PI_Error, FixedRate(1), Add1()}
         }
     );
 
@@ -112,7 +112,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         },
         Bindings { // Output Stream Bindings
             Binding {"tag_Callouts", TagCallouts},
-            Binding {"err", TagError}
+            Binding {"err", TagError, FixedRate(1), Add1()}
         }
     );
 
@@ -128,7 +128,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         },
         Bindings { // Output Stream Bindings
             Binding {"ref_Callouts", RefCallouts},
-            Binding {"err", RefError}
+            Binding {"err", RefError, FixedRate(1), Add1()}
         }
     );
 
@@ -147,7 +147,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         },
         Bindings { // Output Stream Bindings
             Binding {"check_streams", Name_CheckStreams},
-            Binding {"err", NameError}
+            Binding {"err", NameError, FixedRate(1), Add1()}
         }
     );
 
@@ -163,7 +163,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         },
         Bindings { // Output Stream Bindings
             Binding {"check_streams", CS_CheckStreams},
-            Binding {"err", CheckStreamsError}
+            Binding {"err", CheckStreamsError, FixedRate(1), Add1()}
         }
     );
 
