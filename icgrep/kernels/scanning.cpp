@@ -208,7 +208,7 @@ void LineNumberGenerator::generateProcessingLogic(BuilderRef b, Value * const ab
     // get the correct line number.
     Value * const breaksBlockPtr = b->CreateBitCast(b->getInputStreamBlockPtr("lines", b->getInt32(0), blockIndex), mSW.PointerTy);
     Value * const breaksWord = b->CreateLoad(b->CreateGEP(breaksBlockPtr, wordIndex));
-    Value * const highMask = b->CreateNot(b->CreateMaskToLowestBitInclusive(mProcessingWord));
+    Value * const highMask = b->CreateNot(b->CreateMaskToLowestBitExclusive(mProcessingWord));
     Value * const maskedBreaksWord = b->CreateAnd(breaksWord, highMask);
     lineCount = b->CreateSub(lineCount, b->CreatePopcount(maskedBreaksWord));
     lineCount = b->CreateZExt(lineCount, b->getInt64Ty());
