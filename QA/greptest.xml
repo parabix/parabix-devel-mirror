@@ -458,97 +458,95 @@ abcdefghijklmnopqrstuvwxyzABCDEFGhIJKLMNOPQRstuVWXYZ
 abcdefghijklmnopqrstuvwxyzABCDEFGhIJKLMNOPQRstuVWXYZ
 abcdefghijklmnopqrstuvwxyzABCDEFGhIJKLMNOPQRstuVWXYZ
 abcdefghijklmno</datafile>
-<grepcase regexp="ab" datafile="StartEndAlt" grepcount="4"/>
-<grepcase regexp="a*b" datafile="StartEndAlt" grepcount="10"/>
-<grepcase regexp="ab*" datafile="StartEndAlt" grepcount="15"/>
-<grepcase regexp="^user|^I|our$" datafile="StartEndAlt" grepcount="5"/>
+<grepcase regexp="ab" datafile="StartEndAlt" greplines="2 4 9 10"/>
+<grepcase regexp="a*b" datafile="StartEndAlt" greplines="2 3 4 5 6 7 9 10 12 13"/>
+<grepcase regexp="ab*" datafile="StartEndAlt" greplines="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"/>
+<grepcase regexp="^user|^I|our$" datafile="StartEndAlt" greplines="4 7 10 12 15"/>
+<grepcase regexp="fe|si" datafile="simple1" greplines="2 3 4"/>
+<grepcase regexp="fe|si" datafile="." flags="-c -r -include=simpl*" greplines="2 3 4"/>
+<grepcase regexp="in" datafile="simple1" greplines="2 3"/>
+<grepcase regexp="in" datafile="." flags="-c -r -include=s* -exclude=s[A-Za-hj-z]*" greplines="2 3"/>
+<grepcase regexp="[A-Z]" datafile="simple1" greplines="2"/>
+<grepcase regexp="fodder|simple" datafile="simple1" greplines="3 4"/>
+<grepcase regexp="(?g)fodder|simple" datafile="simple1" greplines="3 4"/>
+<grepcase regexp="\w{4}\s+\w{4}\s+\w{4}" datafile="simple1" greplines="3"/>
 
-<grepcase regexp="fe|si" datafile="simple1" grepcount="3"/>
-<grepcase regexp="fe|si" datafile="." flags="-c -r -include=simpl*" grepcount="3"/>
-<grepcase regexp="in" datafile="simple1" grepcount="2"/>
-<grepcase regexp="in" datafile="." flags="-c -r -include=s* -exclude=s[A-Za-hj-z]*" grepcount="2"/>
-<grepcase regexp="[A-Z]" datafile="simple1" grepcount="1"/>
-<grepcase regexp="fodder|simple" datafile="simple1" grepcount="2"/>
-<grepcase regexp="(?g)fodder|simple" datafile="simple1" grepcount="2"/>
-<grepcase regexp="\w{4}\s+\w{4}\s+\w{4}" datafile="simple1" grepcount="1"/>
+<grepcase regexp="[cde]{3}" datafile="bounded_charclass" greplines="5 6 7"/>
+<grepcase regexp="[f-h]{5}" datafile="bounded_charclass" greplines="8 9 10"/>
+<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" greplines="7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" flags="-c -enable-pablo-s2p" greplines="7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="[a-z]{5,15}" datafile="bounded_charclass" greplines="7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" greplines="9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" greplines="7 8 9 10 11 12 13 14 15 16 17"/>
+<grepcase regexp="=(?:[a-z]{3,5}){2,};" datafile="bounded_charclass" greplines="8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="=(?:[a-z]{4,5}){2,};" datafile="bounded_charclass" greplines="10 11 12 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="(([wxy]{2}){3}){2}" datafile="bounded_charclass" greplines="25 26 27"/>
+<grepcase regexp="(([wxy]{2}?){3}?){2}?" datafile="bounded_charclass" greplines="25 26 27"/>
+<grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" greplines="6 8 10 12 14 16 18 20 22 24 26 28"/>
+<grepcase regexp="[\u0061-\u007A]{6}" datafile="bounded_charclass" greplines="8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="[\o{142}-d]{2}" datafile="bounded_charclass" greplines="4 5 6"/>
+<grepcase regexp="[\x61-\U0000007A]{6}" datafile="bounded_charclass" greplines="8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28"/>
+<grepcase regexp="(?i)[A-T]{6}" datafile="bounded_charclass" greplines="8 9 10 11 12 13 14 15 16 17 18 19 20 21 22"/>
+<grepcase regexp="(?i)=S[A-T]S*;" datafile="bounded_charclass" greplines="21"/>
+<grepcase regexp="=[0-9]{100};" datafile="bounded_charclass" greplines="29"/>
+<grepcase regexp="=[0-9]{50,};" datafile="bounded_charclass" greplines="2 29 30 31 32 33 34 35 36"/>
+<grepcase regexp="=[0-9]{107,};" datafile="bounded_charclass" greplines="2 30 31 32 33 34 35 36"/>
+<grepcase regexp="=[0-9]{107,};" datafile="bounded_charclass" flags="-c -m=5" greplines="2 30 31 32 33"/>
+<grepcase regexp="=0123[0-9]{107,};" datafile="bounded_charclass" greplines="2 31 32 33 34 35 36"/>
+<grepcase regexp="=[0-9]{299,};" datafile="bounded_charclass" greplines="2 36"/>
+<grepcase regexp="=0123[0-9]{295,};" datafile="bounded_charclass" greplines="2 36"/>
+<grepcase regexp="=[0-9]{140};" datafile="bounded_charclass" greplines="33"/>
+<grepcase regexp="=[0-9a-z]{12,200};" datafile="bounded_charclass" greplines="14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35"/>
+<grepcase regexp="=[0-9a-z]{200,1000};" datafile="bounded_charclass" greplines="2 35 36"/>
+<grepcase regexp="=[0-9]{500,1000};" datafile="bounded_charclass" greplines="2"/>
+<grepcase regexp="=0123[0-9]{496,996};" datafile="bounded_charclass" greplines="2"/>
+<grepcase regexp="=([a-f].{0,2})+;" datafile="bounded_charclass" greplines="3 4 5 6 7 8"/>
+<grepcase regexp="=[acegikmoq](..)*;" datafile="bounded_charclass" greplines="3 5 7 9 11 13 15 17 19"/>
 
-<grepcase regexp="[cde]{3}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="[f-h]{5}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" grepcount="22"/>
-<grepcase regexp="[a-z]{5}" datafile="bounded_charclass" flags="-c -enable-pablo-s2p" grepcount="22"/>
-<grepcase regexp="[a-z]{5,15}" datafile="bounded_charclass" grepcount="22"/>
-<grepcase regexp="=[a-z]{7,}" datafile="bounded_charclass" grepcount="20"/>
-<grepcase regexp="=[a-z]{5,15};" datafile="bounded_charclass" grepcount="11"/>
-<grepcase regexp="=(?:[a-z]{3,5}){2,};" datafile="bounded_charclass" grepcount="21"/>
-<grepcase regexp="=(?:[a-z]{4,5}){2,};" datafile="bounded_charclass" grepcount="18"/>
-<grepcase regexp="(([wxy]{2}){3}){2}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="(([wxy]{2}?){3}?){2}?" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="=([a-z][c-z])*;" datafile="bounded_charclass" grepcount="12"/>
-<grepcase regexp="[\u0061-\u007A]{6}" datafile="bounded_charclass" grepcount="21"/>
-<grepcase regexp="[\o{142}-d]{2}" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="[\x61-\U0000007A]{6}" datafile="bounded_charclass" grepcount="21"/>
-<grepcase regexp="(?i)[A-T]{6}" datafile="bounded_charclass" grepcount="15"/>
-<grepcase regexp="(?i)=S[A-T]S*;" datafile="bounded_charclass" grepcount="1"/>
-<grepcase regexp="=[0-9]{100};" datafile="bounded_charclass" grepcount="1"/>
-<grepcase regexp="=[0-9]{50,};" datafile="bounded_charclass" grepcount="9"/>
-<grepcase regexp="=[0-9]{107,};" datafile="bounded_charclass" grepcount="8"/>
-<grepcase regexp="=[0-9]{107,};" datafile="bounded_charclass" flags="-c -m=5" grepcount="5"/>
-<grepcase regexp="=0123[0-9]{107,};" datafile="bounded_charclass" grepcount="7"/>
-<grepcase regexp="=[0-9]{299,};" datafile="bounded_charclass" grepcount="2"/>
-<grepcase regexp="=0123[0-9]{295,};" datafile="bounded_charclass" grepcount="2"/>
-<grepcase regexp="=[0-9]{140};" datafile="bounded_charclass" grepcount="1"/>
-<grepcase regexp="=[0-9a-z]{12,200};" datafile="bounded_charclass" grepcount="22"/>
-<grepcase regexp="=[0-9a-z]{200,1000};" datafile="bounded_charclass" grepcount="3"/>
-<grepcase regexp="=[0-9]{500,1000};" datafile="bounded_charclass" grepcount="1"/>
-<grepcase regexp="=0123[0-9]{496,996};" datafile="bounded_charclass" grepcount="1"/>
-<grepcase regexp="=([a-f].{0,2})+;" datafile="bounded_charclass" grepcount="6"/>
-<grepcase regexp="=[acegikmoq](..)*;" datafile="bounded_charclass" grepcount="9"/>
+<grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="2 3 4 5 6 7 10"/>
+<grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="5 6 9 10"/>
+<grepcase regexp="M(az)*T" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="2 3 4 5 7 11"/>
+<grepcase regexp="ez+t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="6 10"/>
+<grepcase regexp="b([a-d]z)*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="2 9"/>
+<grepcase regexp="[^D]og" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="4 10"/>
+<grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="9 10"/>
+<grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="2 3 4"/>
+<grepcase regexp="do*?c|ez*?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="5 6 9 10"/>
+<grepcase regexp="^.....\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="2 3 4 5 6 7"/>
+<grepcase regexp="^\X\X\X\X\X\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" greplines="2 3 4 5 6 7"/>
 
+<grepcase regexp="[]]" datafile="special_characters" greplines="2 3 4 7 10 11 12 15 17"/>
+<grepcase regexp="[-]" datafile="special_characters" greplines="6 7 10 12 13 14 15 16"/>
+<grepcase regexp="[-]" datafile="special_characters" flags="-c -m=4" greplines="6 7 10 12"/>
+<grepcase regexp="[]^-]" datafile="special_characters" greplines="2 3 4 6 7 10 11 12 13 14 15 16 17 18"/>
+<grepcase regexp="[\-\]\^]" datafile="special_characters" greplines="2 3 4 6 7 10 11 12 13 14 15 16 17 18"/>
+<grepcase regexp="[^]]" datafile="special_characters" greplines="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18"/>
+<grepcase regexp="[^-]" datafile="special_characters" greplines="2 3 4 5 6 7 8 9 10 11 12 13 15 17 18"/>
+<grepcase regexp="[^^]" datafile="special_characters" greplines="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17"/>
+<grepcase regexp="[^]-]" datafile="special_characters" greplines="2 3 4 5 6 7 8 9 10 11 12 13 15 18"/>
+<grepcase regexp="[.]" datafile="special_characters" greplines="3 5 7 9 11 13 15"/>
+<grepcase regexp=")" datafile="special_characters" greplines="3"/>
 
-<grepcase regexp="^D[zabcdefoy]g" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="7"/>
-<grepcase regexp="do*c|ez*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
-<grepcase regexp="M(az)*T" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>          
-<grepcase regexp="ez+t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2" />
-<grepcase regexp="b([a-d]z)*t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
-<grepcase regexp="[^D]og" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
-<grepcase regexp="Na?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="2"/>
-<grepcase regexp="h.t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="3" />
-<grepcase regexp="do*?c|ez*?t" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="4"/>
-<grepcase regexp="^.....\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>
-<grepcase regexp="^\X\X\X\X\X\b" datafile="RangeAltSeqMatchStarKplusWhileNotOptAny" grepcount="6"/>
-
-<grepcase regexp="[]]" datafile="special_characters" grepcount="9"/>
-<grepcase regexp="[-]" datafile="special_characters" grepcount="8"/>
-<grepcase regexp="[-]" datafile="special_characters" flags="-c -m=4" grepcount="4"/>
-<grepcase regexp="[]^-]" datafile="special_characters" grepcount="14"/>
-<grepcase regexp="[\-\]\^]" datafile="special_characters" grepcount="14"/>
-<grepcase regexp="[^]]" datafile="special_characters" grepcount="16"/>
-<grepcase regexp="[^-]" datafile="special_characters" grepcount="15"/>
-<grepcase regexp="[^^]" datafile="special_characters" grepcount="16"/>
-<grepcase regexp="[^]-]" datafile="special_characters" grepcount="14"/>
-<grepcase regexp="[.]" datafile="special_characters" grepcount="7"/>
-<grepcase regexp=")" datafile="special_characters" grepcount="1"/>
-
-<grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" grepcount="60"/>
-<grepcase regexp="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="116"/>
+<grepcase regexp="^((([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])[.]){3})([2][5][0-5]|([2][0-4]|[1][0-9]|[0-9])?[0-9])$" datafile="ips" greplines="2 3 4 5 6 7 8 9 10 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62"/>
+<grepcase regexp="^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.([a-zA-Z]{2}|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" greplines="2 3 4 5 6 7 9 10 11 12 13 14 15 16 17 19 20 21 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 47 48 49 50 51 52 53 54 55 56 57 58 59 60 62 63 64 65 66 67 68 69 70 71 74 75 77 78 79 80 81 82 83 84 85 86 88 89 90 91 92 93 94 95 96 97 98 99 100 101 102 103 104 105 106 107 108 109 110 111 113 114 115 116 117 118 119 120 121 122 123 124 125 126 127"/>
 <!--<grepcase regexp="^(?g)[a-zA-Z0-9._%+-]+(?-g)@(?g)[a-zA-Z0-9.-]+(?-g)\.((?g)[a-zA-Z]{2}(?-g)|com|org|net|edu|gov|mil|biz|info|mobi|name|aero|asia|jobs|museum)$" datafile="emails" grepcount="120"/>-->
-<grepcase regexp="^[-+]?([1-9]0?)+\.?((0*[1-9])+|0)([eE][-+]?([0-9]+)+)?$" datafile="floats" grepcount="26"/>
+<grepcase regexp="^[-+]?([1-9]0?)+\.?((0*[1-9])+|0)([eE][-+]?([0-9]+)+)?$" datafile="floats" greplines="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 19 21 42 51 61 65 67 69 70 75"/>
+
 
 <!-- . should match a unique character, even if it is 3 bytes. -->
-<grepcase regexp="'.'" datafile="LU_test" grepcount="1"/>
-<grepcase regexp="'...'" datafile="LU_test" grepcount="0"/>
-<grepcase regexp="\u{1e20}" datafile="LU_test" grepcount="1"/>
-<grepcase regexp="\u1e20" datafile="LU_test" grepcount="1"/>
-<grepcase regexp="\U00001e20" datafile="LU_test" grepcount="1"/>
-<grepcase regexp="\o{17040}" datafile="LU_test" grepcount="1"/>
-<grepcase regexp="\u{1e21}" datafile="LU_test" grepcount="0"/>
-<grepcase regexp="\u1e21" datafile="LU_test" grepcount="0"/>
-<grepcase regexp="\U00001e21" datafile="LU_test" grepcount="0"/>
-<grepcase regexp="\o{17041}" datafile="LU_test" grepcount="0"/>
-<grepcase regexp="\p{Lu}" datafile="LU_test" grepcount="2"/>
-<grepcase regexp="'\p{Lu}'" datafile="LU_test" grepcount="1"/>
-<grepcase regexp="\p{Ll}" datafile="LU_test" grepcount="1"/>
-
+<grepcase regexp="'.'" datafile="LU_test" greplines="3"/>
+<grepcase regexp="'...'" datafile="LU_test" greplines=""/>
+<grepcase regexp="\u{1e20}" datafile="LU_test" greplines="3"/>
+<grepcase regexp="\u1e20" datafile="LU_test" greplines="3"/>
+<grepcase regexp="\U00001e20" datafile="LU_test" greplines="3"/>
+<grepcase regexp="\o{17040}" datafile="LU_test" greplines="3"/>
+<grepcase regexp="\u{1e21}" datafile="LU_test" greplines=""/>
+<grepcase regexp="\u1e21" datafile="LU_test" greplines=""/>
+<grepcase regexp="\U00001e21" datafile="LU_test" greplines=""/>
+<grepcase regexp="\o{17041}" datafile="LU_test" greplines=""/>
+<grepcase regexp="\p{Lu}" datafile="LU_test" greplines="2 3"/>
+<grepcase regexp="'\p{Lu}'" datafile="LU_test" greplines="3"/>
+<grepcase regexp="\p{Ll}" datafile="LU_test" greplines="2"/>
 
 <datafile id="codepoints">
 A line with 0x89 &#x89;
@@ -564,12 +562,12 @@ A line with 0x1245 &#x1245;
 কীককককী
 A plain line.
 </datafile>
-<grepcase regexp="[\u{1234}-\u{1245}]" datafile="codepoints" grepcount="2"/>
-<grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" grepcount="1"/>
-<grepcase regexp="[你好]" datafile="codepoints" grepcount="2"/>
-<grepcase regexp="^\u{4F60}$" datafile="codepoints" grepcount="1"/>
-<grepcase regexp="(?g)^\u{4F60}$" datafile="codepoints" grepcount="1"/> 
-<grepcase regexp="^ক$" datafile="codepoints" grepcount="1"/> 
+<grepcase regexp="[\u{1234}-\u{1245}]" datafile="codepoints" greplines="3 4"/>
+<grepcase regexp="[\u{086}-\u{9A}]" datafile="codepoints" greplines="2"/>
+<grepcase regexp="[你好]" datafile="codepoints" greplines="5 6"/>
+<grepcase regexp="^\u{4F60}$" datafile="codepoints" greplines="5"/>
+<grepcase regexp="(?g)^\u{4F60}$" datafile="codepoints" greplines="5"/>
+<grepcase regexp="^ক$" datafile="codepoints" greplines="7"/>
 <!-- Bad tests:
 <grepcase regexp="(?g)^ক$" datafile="codepoints" grepcount="2"/>
 <grepcase regexp="^ক$" datafile="codepoints" grepcount="1"/> 
@@ -580,7 +578,7 @@ A plain line.
 <grepcase regexp="(?g)(^ক{1,2}$)|(^ক{4,6}$)" datafile="codepoints" grepcount="6"/> 
 -->
 <datafile id = "EmptyFile"/>
-<grepcase regexp="ab" datafile="EmptyFile" grepcount="0"/> 
+<grepcase regexp="ab" datafile="EmptyFile" greplines=""/> 
 <datafile id = "LineBreaking">CRLF1&#13;&#10;CRLF2&#13;&#10;CRLF3&#13;&#10;
 LS1&#x2028;LS2&#x2028;LS3&#x2028;PS1&#x2029;PS2&#x2029;PS3&#x2029;&#x2003;
 PS4&#x2029;CRLF4&#13;&#10;LS4&#x2028;LS5&#x2028;CRLF5&#13;&#10;LS6&#x2028;&#x2003;
@@ -595,12 +593,11 @@ Unterminated</datafile>
 <grepcase regexp="PS" datafile="LineBreaking" flags="-c -Unicode-lines" grepcount="4"/>
 <grepcase regexp="\S" datafile="LineBreaking" flags="-c -Unicode-lines" grepcount="16"/>
 <grepcase regexp="$" datafile="LineBreaking" flags="-c -Unicode-lines" grepcount="19"/>
-<grepcase regexp="$" datafile="LineBreaking" grepcount="9"/>
+<grepcase regexp="$" datafile="LineBreaking" greplines="1 2 3 4 5 6 7 8 9"/>
 <grepcase regexp="\p{ascii}" datafile="LineBreaking" flags="-c -Unicode-lines" grepcount="16"/>
 
-<grepcase regexp="[a-z]{20}" datafile="4KiB-onepage" grepcount="77"/>
-<grepcase regexp="[a-z]{15}" datafile="4KiB-onepage" grepcount="78"/>
-
+<grepcase regexp="[a-z]{20}" datafile="4KiB-onepage" greplines="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77"/>
+<grepcase regexp="[a-z]{15}" datafile="4KiB-onepage" greplines="1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63 64 65 66 67 68 69 70 71 72 73 74 75 76 77 78"/>
 
 <!-- The following data file is produced from auxiliary/GraphemeBreakTest.txt by
 (1) removing all comment lines and lines containing 0001, 000A, 000D or D800
@@ -819,16 +816,17 @@ Unterminated</datafile>
 &#x0646;&#x200D;&#x0020;
 </datafile>
 
-<grepcase regexp="^\X$" datafile="graphemebreaktest" flags="-c -Unicode-lines" grepcount="55"/>
+<grepcase regexp="^\X$" datafile="graphemebreaktest" flags="-c -Unicode-lines" greplines="3 4 5 6 23 24 25 26 43 44 45 46 63 64 65 66 67 69 73 75 83 84 85 86 89 91 103 104 105 106 111 123 124 125 126 129 131 143 144 145 146 151 163 164 165 166 177 183 184 185 186 202 203 204 206"/>
 <!--<grepcase regexp="^\X\X$" datafile="graphemebreaktest" grepcount="153"/>
 <grepcase regexp="^\X{3}$" datafile="graphemebreaktest" grepcount="2"/>-->
-<grepcase regexp="^\X{4,}$" datafile="graphemebreaktest" grepcount="0"/>
+<grepcase regexp="^\X{4,}$" datafile="graphemebreaktest" greplines=""/>
 <!--<grepcase regexp=" \b{g}" datafile="graphemebreaktest" grepcount="28"/>
 <grepcase regexp=" \B{g}" datafile="graphemebreaktest" grepcount="13"/>-->
-<grepcase regexp="\x{1160}\b{g}" datafile="graphemebreaktest" grepcount="26"/>
-<grepcase regexp="\x{1160}\B{g}" datafile="graphemebreaktest" grepcount="14"/>
-<grepcase regexp="\b{g}\x{308}" datafile="graphemebreaktest" grepcount="0"/>
-<grepcase regexp="\B{g}\x{308}" datafile="graphemebreaktest" grepcount="100"/>
+<grepcase regexp="\x{1160}\b{g}" datafile="graphemebreaktest" greplines="9 10 29 30 49 50 69 70 81 87 89 90 93 95 97 99 109 110 129 130 149 150 169 170 189 190"/>
+<grepcase regexp="\x{1160}\B{g}" datafile="graphemebreaktest" greplines="82 83 84 85 86 88 89 90 91 92 94 96 98 100"/>
+<grepcase regexp="\b{g}\x{308}" datafile="graphemebreaktest" greplines=""/>
+<grepcase regexp="\B{g}\x{308}" datafile="graphemebreaktest" greplines="2 4 6 8 10 12 14 16 18 20 22 24 26 28 30 32 34 36 38 40 42 44 46 48 50 52 54 56 58 60 62 64 66 68 70 72 74 76 78 80 82 84 86 88 90 92 94 96 98 100 102 104 106 108 110 112 114 116 118 120 122 124 126 128 130 132 134 136 138 140 142 144 146 148 150 152 154 156 158 160 162 164 166 168 170 172 174 176 178 180 182 184 186 188 190 192 194 196 198 200"/>
+
 
 <datafile id="hira_border">aa ba ca
 &#x3096;&#x309d;&#x002d;&#x3088;&#x308a;a
@@ -846,20 +844,20 @@ Unterminated</datafile>
 &#x03b1;&#x03b2;&#x03b3;
 </datafile>
 
-<grepcase regexp="\b{script=hira}a" datafile="hira_border" grepcount="2"/>
-<grepcase regexp="\b{script=hira}" datafile="hira_border" grepcount="3"/>
-<grepcase regexp="\p{script=/Hir./}" datafile="hira_border" grepcount="3"/>
-<grepcase regexp="\p{script=/.*Hir.*/}" datafile="hira_border" grepcount="3"/>
-<grepcase regexp="\p{script=/Hir.gana/}" datafile="hiragana_and_katakana" grepcount="3"/>
-<grepcase regexp="\p{script=/Kat.kana/}" datafile="hiragana_and_katakana" grepcount="2"/>
-<grepcase regexp="\p{script=/(Kata|Hira).ana/}" datafile="hiragana_and_katakana" grepcount="5"/>
-<grepcase regexp="\p{script=/(kata|Hira).ana/}" datafile="hiragana_and_katakana" grepcount="3"/>
-<grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" grepcount="3"/>
+<grepcase regexp="\b{script=hira}a" datafile="hira_border" greplines="2 3"/>
+<grepcase regexp="\b{script=hira}" datafile="hira_border" greplines="2 3 4"/>
+<grepcase regexp="\p{script=/Hir./}" datafile="hira_border" greplines="2 3 4"/>
+<grepcase regexp="\p{script=/.*Hir.*/}" datafile="hira_border" greplines="2 3 4"/>
+<grepcase regexp="\p{script=/Hir.gana/}" datafile="hiragana_and_katakana" greplines="1 2 3"/>
+<grepcase regexp="\p{script=/Kat.kana/}" datafile="hiragana_and_katakana" greplines="4 5"/>
+<grepcase regexp="\p{script=/(Kata|Hira).ana/}" datafile="hiragana_and_katakana" greplines="1 2 3 4 5"/>
+<grepcase regexp="\p{script=/(kata|Hira).ana/}" datafile="hiragana_and_katakana" greplines="1 2 3"/>
+<grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" greplines="1 2 3"/>
 
-<grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-c -enable-object-cache=0 -thread-num=2" grepcount="8"/>
-<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines" grepcount="5"/>
-<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines=0" grepcount="6"/>
-<grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" datafile="../All_good" grepcount="27"/>
+<grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-c -enable-object-cache=0 -thread-num=2" greplines="9958 126660 126661 126662 126663 126664 126665 126666"/>
+<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines" greplines="224 225 226 227 228"/>
+<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines=0" greplines="224 225 226 227 228 229"/>
+<grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" datafile="../All_good" greplines="881 882 883 884 885 886 887 888 889 890 891 892 893 894 895 896 897 898 899 900 901 902 903 904 905 906 907"/>
 
 <datafile id = "Unterminated7">7</datafile>
 <grepcase regexp="[0-9]" datafile="Unterminated7" flags="" grepcount="7"/>
