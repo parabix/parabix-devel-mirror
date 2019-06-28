@@ -407,6 +407,9 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Erro
     tag_Callouts.AttVal_ends = <0>
     # After the element name, there may or may not be an attlist.
 
+    # No WS character after ElemName; must be at the end
+    AttListEnd = tag_Callouts.ElemName_ends & AttListDelim
+
     if tag_Callouts.ElemName_ends & lex.WS {
         AfterWS = ScanThru(tag_Callouts.ElemName_ends, lex.WS)
         AttListEnd = AfterWS & AttListDelim
@@ -446,12 +449,7 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Erro
             AttNameStart = AfterWS & ~AttListDelim
             ParseError = ParseError | AttValFollow & AttNameStart
         }
-    }
-
-    # else:
-    #     # No WS character after ElemName; must be at the end
-    #     AttListEnd = tag_Callouts.ElemName_ends & AttListDelim
-    #     ParseError = ParseError | tag_Callouts.ElemName_ends & ~AttListDelim
+    } 
 
     STagEnds = AttListEnd & lex.RAngle
     # Mark any "/" characters found as the ends of empty element tags.
