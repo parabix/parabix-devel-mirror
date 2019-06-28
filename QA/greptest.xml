@@ -463,9 +463,9 @@ abcdefghijklmno</datafile>
 <grepcase regexp="ab*" datafile="StartEndAlt" greplines="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"/>
 <grepcase regexp="^user|^I|our$" datafile="StartEndAlt" greplines="4 7 10 12 15"/>
 <grepcase regexp="fe|si" datafile="simple1" greplines="2 3 4"/>
-<grepcase regexp="fe|si" datafile="." flags="-c -r -include=simpl*" greplines="2 3 4"/>
+<grepcase regexp="fe|si" datafile="." flags="-c -r -include=simpl*" grepcount="3"/>
 <grepcase regexp="in" datafile="simple1" greplines="2 3"/>
-<grepcase regexp="in" datafile="." flags="-c -r -include=s* -exclude=s[A-Za-hj-z]*" greplines="2 3"/>
+<grepcase regexp="in" datafile="." flags="-c -r -include=s* -exclude=s[A-Za-hj-z]*" grepcount="2"/>
 <grepcase regexp="[A-Z]" datafile="simple1" greplines="2"/>
 <grepcase regexp="fodder|simple" datafile="simple1" greplines="3 4"/>
 <grepcase regexp="(?g)fodder|simple" datafile="simple1" greplines="3 4"/>
@@ -868,9 +868,11 @@ Unterminated</datafile>
 </datafile>
 <datafile id="7890">7890
 </datafile>
+<!--
 <grepcase regexp="7{4}" datafile="." flags="-include=7* -l -r" grepcount="7777"/>
 <grepcase regexp="7{4}" datafile="." flags="-include=7* -L -r" grepcount="7890"/>
+-->
 
-<grepcase regexp="[AI].*(?i:[AI])" datafile="simple1" grepcount="1"/>
+<grepcase regexp="[AI].*(?i:[AI])" datafile="simple1" greplines="2"/>
 </greptest>
 

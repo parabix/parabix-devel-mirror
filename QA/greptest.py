@@ -31,6 +31,14 @@ dataFileName = ""
 
 fileContents = {}
 
+def getFileContents(fileName):
+    if not fileName in fileContents: 
+        outfpath = os.path.join(options.datafile_dir, fileName)
+        f = codecs.open(outfpath, encoding='utf-8', mode='r')
+        fileContents[fileName] = f.read()
+        f.close()
+    return fileContents[fileName]
+
 def start_element_open_file(name, attrs):
     global outf
     global outfpath
@@ -66,6 +74,35 @@ def selectLines(fileName, lineNums, Unix):
         for n in lineNums:
             result += theLines[n-1]
 
+def expected_grep_results(fileName, grepLines, flags):
+    if "-l" in flags:
+        if len(grepLines) > 0:
+            return fileName
+        else: return ""
+    if "-L" in flags:
+        if len(grepLines) == 0:
+            return fileName
+        else: return ""
+    allLines = getFileContents(fileName).splitlines(True)
+    if "-v" in flags:
+        fileLines = len(allLines)
+        invLines = []
+        for i in range(fileLines):
+            if not i in grepLines:
+                invLines.append(i)
+        grepLines = invLines
+    if "-m" in flags and flags["-m"] < len(grepLines):
+        grepLines = grepLines[0:flags["-m"]]
+    if "-c" in flags:
+        return "%i" % len(grepLines)
+    result = ""
+    for matchedLine in grepLines:
+        if "-n" in flags:
+            result += "%i:" % grepLines[matchedLine-1]
+        result += allLines[grepLines[matchedLine-1]]
+    if len(result) > 0 and result[-1] == "\n": result = result[:-1]
+    return result
+
 def end_element_close_file(name):
     global outf
     global outfpath
@@ -87,9 +124,14 @@ def escape_quotes(e):  return e.replace("'", "'\\''")
 
 failure_count = 0
 
-def execute_grep_test(flags, regexp, datafile, expected_count):
+def execute_grep_test(flags, regexp, datafile, expected_result):
     global failure_count
-    grep_cmd = "%s %s '%s' %s" % (grep_program_under_test, flags, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
+    flag_string = ""
+    for f in flags:
+        if flag_string != "": flag_string += " "
+        if flags[f] == True: flag_string += f
+        else: flag_string += f + "=" + flags[f]
+    grep_cmd = "%s %s '%s' %s" % (grep_program_under_test, flag_string, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
     if options.verbose:
         print("Doing: " + grep_cmd)
     try:
@@ -97,53 +139,36 @@ def execute_grep_test(flags, regexp, datafile, expected_count):
     except subprocess.CalledProcessError, e:
         grep_out = e.output
     if len(grep_out) > 0 and grep_out[-1] == '\n': grep_out = grep_out[:-1]
-    m = re.search('[0-9]+', grep_out)
-    if m == None or m.group(0) != expected_count:
-        print("Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_count, grep_out))
+    if grep_out != expected_result:
+        print("Test failure: {%s} expecting {%s} got {%s}" % (grep_cmd, expected_result, grep_out))
         failure_count += 1
     else:
         if options.verbose:
-            print("Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_count, grep_out))
+            print("Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_result, grep_out))
     
-def execute_grep_test_for_grepcase(flags, regexp, datafile, expected_count):
-    global failure_count
-    grep_cmd = "%s %s '%s' %s" % (grep_program_under_test, flags, escape_quotes(regexp), os.path.join(options.datafile_dir, datafile))
-    if options.verbose:
-        print("Doing: " + grep_cmd)
-    try:
-        grep_out = subprocess.check_output(grep_cmd.encode('utf-8'), cwd=options.exec_dir, shell=True)
-    except subprocess.CalledProcessError, e:
-        grep_out = e.output
-    matched = grep_out.splitlines()
-    y = ""
-    for line in matched:
-        if y != "": y += " "
-        y += line.split(':')[0] 
-    print '<grepcase regexp="%s" datafile="%s" greplines="%s"/>'  %(regexp, datafile, y)
-
 def start_element_do_test(name, attrs):
     if name == 'grepcase':
-        regexp = None
-        datafile = None
-        expected_count = None
-        flags = None
-        for a in attrs:
-            if a == 'regexp':
-                regexp = attrs[a]
-            elif a == 'datafile':
-                datafile = attrs[a]
-            elif a == 'grepcount':
-                expected_count = attrs[a]
-            elif a == 'greplines':
-                if attrs[a]=="": expected_count = "0"
-                else: expected_count = str(len(attrs[a].split(" ")))
-            elif a == 'flags':
-                flags = attrs[a]
-        if regexp == None or datafile == None or expected_count == None:
+        if not 'regexp' in attrs or not 'datafile' in attrs:
             print("Bad grepcase: missing regexp and/or datafile attributes.")
             return
-        if flags == None: flags = "-c" # Our default is counting if flags not set explicitly
-        execute_grep_test(flags, regexp, datafile, expected_count)
+        flags = {}
+        if 'flags' in attrs: 
+            for field in attrs['flags'].split(' '):
+                flag_and_value = field.split('=')
+                flag = flag_and_value[0]
+                if len(flag_and_value) == 1: 
+                    flags[flag] = True
+                else: flags[flag] = flag_and_value[1]
+        else: flags["-c"] = True # Our default is counting if flags not set explicitly
+        if 'grepcount' in attrs:
+            expected_result = "%s" % attrs['grepcount']
+        elif 'greplines' in attrs:
+            if attrs['greplines'] == '': expected_result = "0"
+            else: 
+                lineFields = attrs['greplines'].split(' ')
+                lines = [int(f) for f in lineFields]
+                expected_result = expected_grep_results(attrs['datafile'], lines, flags)
+        execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
 
 def run_tests(greptest_xml):
     global failure_count
