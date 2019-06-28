@@ -77,7 +77,7 @@ def run_tests():
 
 if __name__ == "__main__":
     # get executable
-    if len(sys.argv) != 2:
+    if len(sys.argv) != 2 and len(sys.argv) != 3:
         print("USAGE: python3 run_test_suite.py <xml exe> [-v]")
         exit(1)
     xml_exe = sys.argv[1]
