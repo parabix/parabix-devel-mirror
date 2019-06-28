@@ -457,6 +457,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                 Value * accessible = accessibleItems[i];
                 const auto factor = rate.getRate() / mFixedRateLCM;
                 Value * calculated = b->CreateCeilUMulRate(minInputFixedRateFactor, factor);
+
                 const auto buffer = getInputBufferVertex(i);
                 const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
                 // ... but ensure that it reflects whether it was produced with an Add(k) rate.
@@ -498,8 +499,10 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         if (rate.isPartialSum()) {
             writable = mFirstOutputStrideLength[i];
         } else if (rate.isFixed() && minOutputFixedRateFactor) {
+
             const auto factor = rate.getRate() / mFixedRateLCM;
             Value * calculated = b->CreateCeilUMulRate(minOutputFixedRateFactor, factor);
+
             if (LLVM_UNLIKELY(mCheckAssertions)) {
                 b->CreateAssert(b->CreateICmpULE(calculated, writable),
                                 output.getName() +

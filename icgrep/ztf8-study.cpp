@@ -87,7 +87,6 @@ void BitPositionsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * scanWordStreamPtr = b->getRawInputPointer("markers", sz_ZERO, markerStrmPos);
     scanWordStreamPtr = b->CreateBitCast(scanWordStreamPtr, scanWordPointerType);
     Value * positionStreamPtr = b->getRawOutputPointer("positions", sz_ZERO, positionCount);
-
     b->CreateBr(forEachScanWord);
 
     b->SetInsertPoint(forEachScanWord);
@@ -99,8 +98,10 @@ void BitPositionsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     positionIndex->addIncoming(sz_ZERO, entryBlock);
 
     Value * scanWord = b->CreateLoad(b->CreateGEP(scanWordStreamPtr, scanWordIndex), "markerBits");
-    b->CreateAssertZero(b->CreateAnd(scanWord, b->CreateShl(scanWord, 1)),
-                        "Data corruption: adjacent marker bits");
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssertZero(b->CreateAnd(scanWord, b->CreateShl(scanWord, 1)),
+                            "Data corruption: adjacent marker bits");
+    }
     b->CreateCondBr(b->CreateICmpNE(scanWord, sw_ZERO), forBitsInScanWord, scanWordDone);
 
     b->SetInsertPoint(forBitsInScanWord);

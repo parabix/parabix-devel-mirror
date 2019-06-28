@@ -130,27 +130,28 @@ size_t StreamSetBuffer::getOverflowCapacity(BuilderPtr b) const {
 Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Value * absolutePosition) const {
     Type * const itemTy = mBaseType->getArrayElementType()->getVectorElementType();
     const auto itemWidth = itemTy->getPrimitiveSizeInBits();
-
     IntegerType * const sizeTy = b->getSizeTy();
     streamIndex = b->CreateZExt(streamIndex, sizeTy);
     absolutePosition = b->CreateZExt(absolutePosition, sizeTy);
 
     if (LLVM_UNLIKELY(itemWidth < 8)) {
+        const Rational itemsPerByte{8, itemWidth};
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            const Rational itemsPerByte{8, itemWidth};
             b->CreateAssertZero(b->CreateURemRate(absolutePosition, itemsPerByte),
                                 "absolutePosition must be byte aligned");
         }
+        absolutePosition = b->CreateUDivRate(absolutePosition, itemsPerByte);
     }
 
     const auto blockWidth = b->getBitBlockWidth();
-    Constant * const BLOCK_WIDTH = b->getSize(blockWidth);
-    Value * const baseOffset = b->CreateRoundDown(absolutePosition, BLOCK_WIDTH);
+    const Rational blocksPerItem{blockWidth, std::max(itemWidth, 8U)};
+    Value * const baseOffset = b->CreateUDivRate(absolutePosition, blocksPerItem);
     Value * const streamCount = getStreamSetCount(b);
     Value * const streamSetOffset = b->CreateMul(baseOffset, streamCount);
-    Value * const streamOffset = b->CreateMul(streamIndex, BLOCK_WIDTH);
-    Value * const itemOffset = b->CreateURem(absolutePosition, BLOCK_WIDTH);
-    Value * const position = b->CreateAdd(b->CreateAdd(streamSetOffset, streamOffset), itemOffset);
+    Value * const streamOffset = b->CreateMulRate(b->CreateAdd(streamSetOffset, streamIndex), blocksPerItem);
+    Value * const itemOffset = b->CreateURemRate(absolutePosition, blocksPerItem);
+    Value * const position = b->CreateAdd(streamOffset, itemOffset);
+
     PointerType * const itemPtrTy = itemTy->getPointerTo(mAddressSpace);
     Value * const baseAddress = b->CreatePointerCast(getBaseAddress(b), itemPtrTy);
     return b->CreateGEP(baseAddress, position);
@@ -301,9 +302,6 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const f
     if (LLVM_UNLIKELY(mLinear)) {
         return b->CreateSub(totalItems, fromPosition);
     } else {
-
-
-
         Value * const capacity = getCapacity(b);
         Value * const fromOffset = b->CreateURem(fromPosition, capacity);
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);

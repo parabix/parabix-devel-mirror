@@ -81,9 +81,10 @@ Value * checkHeapAddress(CBuilder * const b, Value * const Ptr, Value * const Si
     Value * check = b->CreateCall(isPoisoned, { addr, b->CreateTrunc(Size, sizeTy) });
     return b->CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy));
 }
+
 #define CHECK_HEAP_ADDRESS(Ptr, Size, Name) \
 if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
-    CreateAssert(checkHeapAddress(this, Ptr, Size), Name " was given unallocated memory address"); \
+    __CreateAssert(checkHeapAddress(this, Ptr, Size), Name " was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR, {Size, Ptr}); \
 }
 #else
 #define CHECK_HEAP_ADDRESS(Ptr, Size, Name)
@@ -778,7 +779,7 @@ Value * CBuilder::CreatePrefetch(Value * ptr, PrefetchRW mode, unsigned locality
     Value * modeVal = getInt32(mode == PrefetchRW::Read ? 0 : 1);
     Value * localityVal = getInt32(locality > 3 ? 3 : locality);
     Value * cacheKind = getInt32(c == CacheType::Instruction ? 0 : 1);
-    return CreateCall(prefetchIntrin, {CreateBitCast(ptr, getInt8PtrTy()), modeVal, localityVal, cacheKind}); 
+    return CreateCall(prefetchIntrin, {CreateBitCast(ptr, getInt8PtrTy()), modeVal, localityVal, cacheKind});
 }
 
 PointerType * LLVM_READNONE CBuilder::getFILEptrTy() {
