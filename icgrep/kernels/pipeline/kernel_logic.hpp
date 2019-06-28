@@ -72,13 +72,16 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             const StreamSetBuffer * const buffer = getInputBuffer(i);
             const auto itemWidth = getItemWidth(buffer->getBaseType());
             Constant * const ITEM_WIDTH = b->getSize(itemWidth);
-
-            const auto blocksPerStride = ceiling(rate.getRate() * RateValue{mKernel->getStride(), blockWidth});
-            Constant * const BLOCKS_PER_STRIDE = b->getSize(blocksPerStride);
+            const RateValue stridesPerBlock(mKernel->getStride(), blockWidth);
+            const auto strideRate = rate.getRate() * stridesPerBlock;
+            const auto stridesPerSegment = ceiling(strideRate); assert (stridesPerSegment >= 1);
+            Constant * const STRIDES_PER_SEGMENT = b->getSize(stridesPerSegment);
 
             BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_genMaskedInput", mKernelLoopCall);
             BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelLoopCall);
             BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectedInput", mKernelLoopCall);
+
+
 
             Value * const tooMany = b->CreateICmpULT(accessibleItems[i], mAccessibleInputItems[i]);
             Value * computeMask = tooMany;
@@ -95,7 +98,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             // the truncated input stream.
 
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + " truncating item count to ", accessibleItems[i]);
+            b->CallPrintInt(prefix + " truncating item count (" + std::to_string(itemWidth) + ") to ", accessibleItems[i]);
             #endif
 
             // TODO: if we can prove that this will be the last kernel invocation that will ever touch this stream)
@@ -111,13 +114,12 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
             Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
 
-            Value * const limit = b->CreateAdd(start, BLOCKS_PER_STRIDE);
+            Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
             Value * const limitPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, limit);
             Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
 
             Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
             Value * segmentBytes = strideBytes;
-
 
             Value * initial = start;
             Value * initialPtr = startPtr;
@@ -126,23 +128,21 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             Value * end = start;
             Value * fullBytesToCopy = nullptr;
 
-            if (blocksPerStride > 1 || input.isDeferred()) {
-
+            if (stridesPerSegment != 1 || input.isDeferred()) {
                 if (input.isDeferred()) {
                     initial = b->CreateLShr(mAlreadyProcessedDeferredPhi[i], LOG_2_BLOCK_WIDTH);
                     initialPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, initial);
                     initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
                 }
-
+                // if a kernel reads in multiple strides of data per segment, we may be able to
+                // copy over a portion of it with a single memcpy.
                 Value * endPtrInt = startPtrInt;
-
-                if (blocksPerStride > 1) {
+                if (stridesPerSegment  != 1) {
                     end = b->CreateAdd(mAlreadyProcessedPhi[i], accessibleItems[i]);
                     end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
                     Value * const endPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, end);
                     endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                 }
-
                 fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
                 segmentBytes = b->CreateAdd(fullBytesToCopy, strideBytes);
             }
@@ -174,37 +174,33 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
             streamIndex->addIncoming(ZERO, loopEntryBlock);
 
-            Value * inputPtr = nullptr;
-            Value * outputPtr = nullptr;
+            Value * inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], streamIndex, end);
+            Value * outputPtr = tmp.getStreamBlockPtr(b, maskedEpoch, streamIndex, end);
 
             if (itemWidth > 1) {
-                Value * const endPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, end, ZERO);
+                Value * const endPtr = inputPtr;
                 Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                 inputPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, end, packIndex);
                 Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
                 Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
-                Value * const bufferPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, ZERO);
-                b->CreateMemCpy(bufferPtr, endPtr, bytesToCopy, blockWidth / 8);
-                outputPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, start, packIndex);
-            } else {
-                inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], streamIndex, end);
-                outputPtr = tmp.getStreamBlockPtr(b, maskedEpoch, streamIndex, end);
+                b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
+                outputPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, packIndex);
             }
+
 
             assert (inputPtr->getType() == outputPtr->getType());
             Value * const val = b->CreateBlockAlignedLoad(inputPtr);
             Value * const maskedVal = b->CreateAnd(val, mask);
-
             b->CreateBlockAlignedStore(maskedVal, outputPtr);
 
             if (itemWidth > 1) {
-                Value * firstPackToClear = b->CreateAdd(packIndex, ONE);
-                Value * const clearPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, firstPackToClear);
+                Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
+                Value * const clearPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, nextPackIndex);
                 Value * const clearPtrInt = b->CreatePtrToInt(clearPtr, intPtrTy);
                 Value * const clearEndPtr = tmp.getStreamPackPtr(b, maskedEpoch, streamIndex, end, ITEM_WIDTH);
                 Value * const clearEndPtrInt = b->CreatePtrToInt(clearEndPtr, intPtrTy);
                 Value * const bytesToClear = b->CreateSub(clearEndPtrInt, clearPtrInt);
-                b->CreateMemZero(outputPtr, bytesToClear, blockWidth / 8);
+                b->CreateMemZero(clearPtr, bytesToClear, blockWidth / 8);
             }
 
             Value * const nextIndex = b->CreateAdd(streamIndex, ONE);
