@@ -303,12 +303,7 @@ ENDIF()
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python greptest.py ${CMAKE_BINARY_DIR}/icgrep)
-
-add_test(
-  NAME greptest_ternary
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep -ccc-type=ternary -EnableTernaryOpt")
+  COMMAND python greptest.py --random_flag_count=2 ${CMAKE_BINARY_DIR}/icgrep)
 
 add_test(
   NAME proptest
@@ -363,7 +358,6 @@ add_test(
 #  COMMAND python main.py ${CMAKE_BINARY_DIR}/lz4_decoder
 #)
 
-SET_PROPERTY(TEST greptest greptest_ternary PROPERTY TIMEOUT 400)
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test abc_test_ternary PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
