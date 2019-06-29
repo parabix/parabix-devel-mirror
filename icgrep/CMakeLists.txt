@@ -365,7 +365,7 @@ SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 add_custom_target (greptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA
-  COMMAND python greptest.py "${CMAKE_BINARY_DIR}/icgrep")
+  COMMAND python greptest.py --random_flag_count=2 "${CMAKE_BINARY_DIR}/icgrep")
 
 add_custom_target (proptest
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../QA

@@ -184,6 +184,7 @@ flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
             '-v' : [],
             '-n' : [],
             '-m' : ['2', '5'],
+            '-match-coordinates' : ['2', '8'],
             '-DisableMatchStar' : [],
             '-ccc-type' : ['ternary'],
             '-EnableTernaryOpt' : []}
