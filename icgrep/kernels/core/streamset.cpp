@@ -134,27 +134,25 @@ Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Va
     streamIndex = b->CreateZExt(streamIndex, sizeTy);
     absolutePosition = b->CreateZExt(absolutePosition, sizeTy);
 
+    const auto blockWidth = b->getBitBlockWidth();
+    Constant * const BLOCK_WIDTH = b->getSize(blockWidth);
+    Value * blockIndex = b->CreateUDiv(absolutePosition, BLOCK_WIDTH);
+    Value * positionInBlock = b->CreateURem(absolutePosition, BLOCK_WIDTH);
+    Value * blockPtr = getStreamBlockPtr(b, getBaseAddress(b), streamIndex, blockIndex);
     if (LLVM_UNLIKELY(itemWidth < 8)) {
         const Rational itemsPerByte{8, itemWidth};
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             b->CreateAssertZero(b->CreateURemRate(absolutePosition, itemsPerByte),
                                 "absolutePosition must be byte aligned");
         }
-        absolutePosition = b->CreateUDivRate(absolutePosition, itemsPerByte);
+        positionInBlock = b->CreateUDivRate(positionInBlock, itemsPerByte);
+        PointerType * const itemPtrTy = b->getInt8Ty()->getPointerTo(mAddressSpace);
+        blockPtr = b->CreatePointerCast(blockPtr, itemPtrTy);
+        return b->CreateGEP(blockPtr, positionInBlock);
     }
-
-    const auto blockWidth = b->getBitBlockWidth();
-    const Rational blocksPerItem{blockWidth, std::max(itemWidth, 8U)};
-    Value * const baseOffset = b->CreateUDivRate(absolutePosition, blocksPerItem);
-    Value * const streamCount = getStreamSetCount(b);
-    Value * const streamSetOffset = b->CreateMul(baseOffset, streamCount);
-    Value * const streamOffset = b->CreateMulRate(b->CreateAdd(streamSetOffset, streamIndex), blocksPerItem);
-    Value * const itemOffset = b->CreateURemRate(absolutePosition, blocksPerItem);
-    Value * const position = b->CreateAdd(streamOffset, itemOffset);
-
     PointerType * const itemPtrTy = itemTy->getPointerTo(mAddressSpace);
-    Value * const baseAddress = b->CreatePointerCast(getBaseAddress(b), itemPtrTy);
-    return b->CreateGEP(baseAddress, position);
+    blockPtr = b->CreatePointerCast(blockPtr, itemPtrTy);
+    return b->CreateGEP(blockPtr, positionInBlock);
 }
 
 Value * StreamSetBuffer::addOverflow(BuilderPtr b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
