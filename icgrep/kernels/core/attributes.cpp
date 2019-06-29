@@ -35,6 +35,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME(Expandable);
         NAME(CanTerminateEarly);
         NAME(MustExplicitlyTerminate);
+        NAME(MayFatallyTerminate);
         NAME(SideEffecting);
         NAME(Family);
         NAME(InternallySynchronized);
