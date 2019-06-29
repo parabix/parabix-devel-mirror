@@ -112,11 +112,13 @@ def expected_grep_results(fileName, grepLines, flags):
     if "-Unicode-lines" in flags:
         allLines = fileData.splitlines(True)
     else:
+        if len(fileData) > 0 and fileData[-1] == "\n":
+            fileData = fileData[:-1]
         allLines = [l + "\n" for l in fileData.split('\n')]
     if "-v" in flags:
         fileLines = len(allLines)
         invLines = []
-        for i in range(fileLines):
+        for i in range(1, fileLines+1):
             if not i in grepLines:
                 invLines.append(i)
         grepLines = invLines
@@ -131,7 +133,8 @@ def expected_grep_results(fileName, grepLines, flags):
         if "-n" in flags:
             result += u"%i:" % matchedLine
         result += allLines[matchedLine-1]
-    if len(result) > 0 and result[-1] == u"\n": result = result[:-1]
+    if len(result) > 0 and result[-1] == u'\n':
+        result = result[:-1]
     return result
 
 def end_element_close_file(name):
@@ -178,6 +181,8 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
             print(u"Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_result, grep_out))
 
 flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
+            '-v' : [],
+            '-n' : [],
             '-m' : ['2', '5'],
             '-DisableMatchStar' : [],
             '-ccc-type' : ['ternary'],
@@ -214,7 +219,8 @@ def start_element_do_test(name, attrs):
                 if int(flags["-m"]) < int(attrs['grepcount']):
                     expected_result = flags["-m"]
         elif 'greplines' in attrs:
-            if attrs['greplines'] == '': expected_result = u""
+            if attrs['greplines'] == '':
+                expected_result = expected_grep_results(attrs['datafile'], [], flags)
             else:
                 lineFields = attrs['greplines'].split(' ')
                 lines = [int(f) for f in lineFields]
