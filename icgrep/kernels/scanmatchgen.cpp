@@ -308,7 +308,7 @@ enum MatchCoordinatesEnum {LINE_STARTS = 0, LINE_ENDS = 1, LINE_NUMBERS = 2};
 MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                StreamSet * const Matches, StreamSet * const LineBreakStream,
                                                StreamSet * const Coordinates, unsigned strideBlocks)
-: MultiBlockKernel(b, "matchCoordinates" + std::to_string(Coordinates->getNumElements()),
+: MultiBlockKernel(b, "matchCoordinates" + std::to_string(strideBlocks),
 // inputs
 {Binding{"matchResult", Matches}, Binding{"lineBreak", LineBreakStream, FixedRate(1), ZeroExtended()}},
 // outputs
@@ -322,6 +322,9 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
  InternalScalar{b->getSizeTy(), "LineStart"}}) {
      // The stride size must be limited so that the scanword mask is a single size_t value.
      setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+     assert (Matches->getNumElements() == 1);
+     assert (LineBreakStream->getNumElements() == 1);
+     assert (Coordinates->getNumElements() == 3);
 }
 
 void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -619,14 +622,14 @@ void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     b->SetInsertPoint(coordinatesDone);
     //b->setProcessedItemCount("InputStream", matchRecordEnd);
     b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
-    
+
     b->SetInsertPoint(callFinalizeScan);
     b->setProcessedItemCount("InputStream", avail);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
     b->CreateCall(finalizer, {accumulator, bufferEnd});
     b->CreateBr(scanReturn);
-    
+
     b->SetInsertPoint(scanReturn);
 
 }
