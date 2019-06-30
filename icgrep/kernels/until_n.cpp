@@ -147,7 +147,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
     Value * const blockOffset = b->CreateOr(basePosition, packPosition);
     Value * const inputValue2 = b->loadInputStreamBlock("bits", ZERO, blockIndex2);
     Value * const mask = b->bitblock_mask_to(blockOffset, true);
-    Value * const maskedInputValue = b->CreateAnd(inputValue2, mask);
+    Value * const maskedInputValue = b->CreateAnd(inputValue2, mask, "untilNmasked");
     b->storeOutputStreamBlock("uptoN", ZERO, blockIndex2, maskedInputValue);
     Value * const priorProducedItemCount = b->getProducedItemCount("uptoN");
     const auto log2BlockWidth = std::log2<unsigned>(b->getBitBlockWidth());

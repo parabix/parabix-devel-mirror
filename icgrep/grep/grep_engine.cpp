@@ -202,10 +202,8 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::gatherUnicodeProperties(mREs[i], mUnicodeProperties);
         mREs[i] = regular_expression_passes(mREs[i]);
     }
-    if ((mEngineKind == EngineKind::EmitMatches) || (mEngineKind == EngineKind::CountOnly)) {
-        if (!allAnchored || (mGrepRecordBreak == GrepRecordBreakKind::Unicode)) {
-            setComponent(mRequiredComponents, Component::MoveMatchesToEOL);
-        }
+    if (!allAnchored || (mGrepRecordBreak == GrepRecordBreakKind::Unicode)) {
+        setComponent(mRequiredComponents, Component::MoveMatchesToEOL);
     }
 }
 
@@ -256,7 +254,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     const auto internalS2P = isSimple && (isWithinByteTestLimit || hasTriCC);
 
     Component internalComponents = Component::NoComponents;
-    if (internalS2P && hasComponent(mRequiredComponents, Component::MoveMatchesToEOL)) {
+    if (internalS2P && hasComponent(mRequiredComponents, Component::MoveMatchesToEOL) && !mInvertMatches) {
         setComponent(internalComponents, Component::MoveMatchesToEOL);
     }
 

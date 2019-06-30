@@ -64,57 +64,15 @@ def char_data_write_contents(data):
     if in_datafile:
         outf.write(data)
 
-def max_count(grepCount, ):
-    if "-l" in flags:
-        if len(grepLines) > 0:
-            return fileName
-        else: return u""
-    if "-L" in flags:
-        if len(grepLines) == 0:
-            return fileName
-        else: return u""
-    fileData = getFileContents(fileName)
-    if "-Unicode-lines" in flags:
-        allLines = fileData.splitlines(True)
-    else:
-        allLines = [l + "\n" for l in fileData.split('\n')]
-    if "-v" in flags:
-        fileLines = len(allLines)
-        invLines = []
-        for i in range(fileLines):
-            if not i in grepLines:
-                invLines.append(i)
-        grepLines = invLines
-    if "-m" in flags:
-        maxcount = int(flags["-m"])
-        if maxcount < len(grepLines):
-            grepLines = grepLines[0:maxcount]
-    if "-c" in flags:
-        return u"%i" % len(grepLines)
-    result = u""
-    for matchedLine in grepLines:
-        if "-n" in flags:
-            result += u"%i:" % matchedLine
-        result += allLines[matchedLine-1]
-    if len(result) > 0 and result[-1] == u"\n": result = result[:-1]
-    return result
-
 def expected_grep_results(fileName, grepLines, flags):
-    if "-l" in flags:
-        if len(grepLines) > 0:
-            return fileName
-        else: return u""
-    if "-L" in flags:
-        if len(grepLines) == 0:
-            return fileName
-        else: return u""
     fileData = getFileContents(fileName)
-    if "-Unicode-lines" in flags:
+    if "-Unicode-lines" in flags and flags["-Unicode-lines"] != 0:
         allLines = fileData.splitlines(True)
     else:
-        if len(fileData) > 0 and fileData[-1] == "\n":
-            fileData = fileData[:-1]
-        allLines = [l + "\n" for l in fileData.split('\n')]
+        if len(fileData) == 0: allLines = []
+        else:
+            if fileData[-1] == "\n": fileData = fileData[:-1]
+            allLines = [l + "\n" for l in fileData.split('\n')]
     if "-v" in flags:
         fileLines = len(allLines)
         invLines = []
@@ -122,6 +80,14 @@ def expected_grep_results(fileName, grepLines, flags):
             if not i in grepLines:
                 invLines.append(i)
         grepLines = invLines
+    if "-l" in flags:
+        if len(grepLines) > 0:
+            return os.path.join(options.datafile_dir, fileName)
+        else: return u""
+    if "-L" in flags:
+        if len(grepLines) == 0:
+            return os.path.join(options.datafile_dir, fileName)
+        else: return u""
     if "-m" in flags:
         maxcount = int(flags["-m"])
         if maxcount < len(grepLines):
@@ -180,23 +146,34 @@ def execute_grep_test(flags, regexp, datafile, expected_result):
         if options.verbose:
             print(u"Test success: regexp {%s} on datafile {%s} expecting {%s} got {%s}" % (regexp, datafile, expected_result, grep_out))
 
+
 flag_map = {'-CarryMode' : ['Compressed', 'BitBlock'],
+            'counting_choices' : ["-c", "-l", "-L"],
             '-v' : [],
             '-n' : [],
             '-m' : ['2', '5'],
             '-match-coordinates' : ['2', '8'],
             '-DisableMatchStar' : [],
+            '-segment-size' : ['8192', '16384', '32768'],
             '-ccc-type' : ['ternary'],
             '-EnableTernaryOpt' : []}
 
-def add_random_flags(flags):
+def add_random_flags(flags, fileLength):
+    selected = {}
     for i in range(options.random_flag_count):
         rand_flag = flag_map.keys()[random.randint(0, len(flag_map) - 1)]
+        # Avoid duplicate flags and expensive test cases
+        while rand_flag in selected or (rand_flag == "-v" and fileLength > 4000):
+            rand_flag = flag_map.keys()[random.randint(0, len(flag_map) - 1)]
+        selected[rand_flag] = True
         values = flag_map[rand_flag]
         if values == []:
             flags[rand_flag] = True
         else:
-            flags[rand_flag] = values[random.randint(0, len(values) - 1)]
+            choice = values[random.randint(0, len(values) - 1)]
+            if rand_flag[0] == "-":
+                flags[rand_flag] = choice
+            else: flags[choice] = True
 
 def start_element_do_test(name, attrs):
     if name == 'grepcase':
@@ -211,22 +188,30 @@ def start_element_do_test(name, attrs):
                 if len(flag_and_value) == 1:
                     flags[flag] = True
                 else: flags[flag] = flag_and_value[1]
-        else:
-            add_random_flags(flags)
         if 'grepcount' in attrs:
             flags["-c"] = True
             expected_result = attrs['grepcount']
             if "-m" in flags:
                 if int(flags["-m"]) < int(attrs['grepcount']):
                     expected_result = flags["-m"]
-        elif 'greplines' in attrs:
-            if attrs['greplines'] == '':
-                expected_result = expected_grep_results(attrs['datafile'], [], flags)
-            else:
+            execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
+        else:
+            if not 'greplines' in attrs:
+                raise Exception('Expecting grepcount or greplines in grepcase')
+            fileLength = len(getFileContents(attrs['datafile']))
+            lines = []
+            if attrs['greplines'] != '':
                 lineFields = attrs['greplines'].split(' ')
                 lines = [int(f) for f in lineFields]
+            if len(flags) > 0:
                 expected_result = expected_grep_results(attrs['datafile'], lines, flags)
-        execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
+                execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
+            else:
+                for i in range(options.tests_per_grepcase):
+                    flags = {}
+                    add_random_flags(flags, fileLength)
+                    expected_result = expected_grep_results(attrs['datafile'], lines, flags)
+                    execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
 
 def run_tests(greptest_xml):
     global failure_count
@@ -253,6 +238,9 @@ if __name__ == '__main__':
     option_parser.add_option('--random_flag_count',
                           dest = 'random_flag_count', type='int', default=0,
                           help = 'number of random flags to add')
+    option_parser.add_option('--tests_per_grepcase',
+                          dest = 'tests_per_grepcase', type='int', default=1,
+                          help = 'number of tests to generate per grepcase')
     option_parser.add_option('-v', '--verbose',
                           dest = 'verbose', action='store_true', default=False,
                           help = 'verbose output: show successful tests')

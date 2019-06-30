@@ -544,9 +544,8 @@ void MatchedLinesKernel::generatePabloMethod() {
     PabloAST * lineBreaks = pb.createExtract(getInputStreamVar("lineBreaks"), pb.getInteger(0));
     PabloAST * notLB = pb.createNot(lineBreaks);
     PabloAST * match_follow = pb.createMatchStar(matchResults, notLB);
-    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(notLB, 1), "unterminatedLineAtEOF");
     Var * const matchedLines = getOutputStreamVar("matchedLines");
-    pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, pb.createOr(lineBreaks, unterminatedLineAtEOF)));
+    pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, lineBreaks, "matchedLines"));
 }
 
 MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
@@ -563,7 +562,7 @@ MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuil
 void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
     Value * input = iBuilder->loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
     Value * lbs = iBuilder->loadInputStreamBlock("lineBreaks", iBuilder->getInt32(0));
-    Value * inverted = iBuilder->CreateXor(input, lbs);
+    Value * inverted = iBuilder->CreateAnd(iBuilder->CreateNot(input), lbs, "inverted");
     iBuilder->storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
