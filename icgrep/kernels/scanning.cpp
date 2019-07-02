@@ -291,6 +291,7 @@ LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, 
 void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     Module * const module = b->getModule();
     Type * const sizeTy = b->getSizeTy();
+    Value * const sz_ZERO = b->getSize(0);
     Value * const sz_ONE = b->getSize(1);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -302,20 +303,30 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
 
     b->SetInsertPoint(readItem);
     PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
-    strideNo->addIncoming(initialStride, entryBlock);
+    strideNo->addIncoming(sz_ZERO, entryBlock);
     Value * const nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
     strideNo->addIncoming(nextStrideNo, readItem);
-    Value * const scanItem = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(0), strideNo));
-    // FIXME: We are assuming that we have access to the entire source stream, this may not always be the case.
-    Value * const scanPtr = b->getRawInputPointer("source", scanItem);
-    b->setProcessedItemCount("source", scanItem);
-    b->setProcessedItemCount("scan", nextStrideNo);
     std::vector<Value *> callbackParams{};
-    callbackParams.push_back(scanPtr);
+    Value * maxScanIndex = nullptr;
+    Value * const index = b->CreateAdd(strideNo, initialStride);
+    for (uint32_t i = 0; i < mNumScanStreams; ++i) {
+        Value * const scanItem = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(i), index));
+        if (maxScanIndex != nullptr) {
+            maxScanIndex = b->CreateUMax(maxScanIndex, scanItem);
+        } else {
+            maxScanIndex = scanItem;
+        }
+        // FIXME: We are assuming that we have access to the entire source stream, this may not always be the case.
+        Value * const scanPtr = b->getRawInputPointer("source", scanItem);
+        callbackParams.push_back(scanPtr);
+    }
+    b->setProcessedItemCount("source", maxScanIndex);
+    Value * const nextIndex = b->CreateAdd(nextStrideNo, initialStride);
+    b->setProcessedItemCount("scan", nextIndex);
     for (auto const & name : mAdditionalStreamNames) {
-        Value * const item = b->CreateLoad(b->getRawInputPointer(name, b->getInt32(0), strideNo));
+        Value * const item = b->CreateLoad(b->getRawInputPointer(name, b->getInt32(0), index));
         callbackParams.push_back(item);
-        b->setProcessedItemCount(name, nextStrideNo);
+        b->setProcessedItemCount(name, nextIndex);
     }
     Function * const callback = module->getFunction(mCallbackName); assert (callback);
     b->CreateCall(callback, ArrayRef<Value *>(callbackParams));
@@ -327,12 +338,13 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
 ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName)
 : MultiBlockKernel(b, std::string("ScanReader"), {
     {"scan", scanIndices, BoundedRate(0, 1), Principal()},
-    {"source", source, GreedyRate(1), Deferred()}
+    {"source", source, BoundedRate(0, 1)}
   }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()
+, mNumScanStreams(scanIndices->getNumElements())
 {
-    assert (scanIndices->getNumElements() == 1 && scanIndices->getFieldWidth() == 64);
+    assert (scanIndices->getFieldWidth() == 64);
     assert (source->getNumElements() == 1);
     addAttribute(SideEffecting());
     setStride(1);
@@ -345,8 +357,9 @@ ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices
   }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()
+, mNumScanStreams(scanIndices->getNumElements())
 {
-    assert (scanIndices->getNumElements() == 1 && scanIndices->getFieldWidth() == 64);
+    assert (scanIndices->getFieldWidth() == 64);
     assert (source->getNumElements() == 1);
     addAttribute(SideEffecting());
     setStride(1);
@@ -466,7 +479,7 @@ LineBasedReader::LineBasedReader(BuilderRef b, StreamSet * source, StreamSet * s
         {"scan", scanPositions, BoundedRate(0, 1), Principal()}, 
         {"lineNums", lineNumbers, BoundedRate(0, 1)}, 
         {"lines", lineSpans, BoundedRate(0, 1)}, 
-        {"source", source, GreedyRate(1), Deferred()}
+        {"source", source, BoundedRate(0, 1)}
     }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()

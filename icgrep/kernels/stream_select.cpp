@@ -128,6 +128,11 @@ static uint32_t resultStreamCount(selops::__selop<StreamSet *> const & selop) {
     }
 }
 
+static uint32_t resultStreamFieldWidth(selops::__selop<StreamSet *> const & selop) {
+    assert (selop.bindings.size() > 0);
+    return selop.bindings[0].first->getFieldWidth();
+}
+
 static uint32_t resultStreamCount(std::vector<selops::__selop<StreamSet *>> const & ops) {
     uint32_t count = 0;
     for (auto const & op : ops) {
@@ -272,7 +277,8 @@ std::vector<uint32_t> Range(uint32_t lb, uint32_t ub) {
 
 static StreamSet * runOperation(ProgramBuilderRef P, selops::__selop<StreamSet *> op) {
     uint32_t n = resultStreamCount(op);
-    StreamSet * const output = P->CreateStreamSet(n);
+    uint32_t fw = resultStreamFieldWidth(op);
+    StreamSet * const output = P->CreateStreamSet(n, fw);
     P->CreateKernelCall<StreamSelect>(output, op);
     return output;
 }

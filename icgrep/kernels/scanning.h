@@ -182,22 +182,27 @@ using AdditionalStreams = std::initializer_list<StreamSet *>;
  * Reads a stream of scan indices to trigger a callback function.
  *
  * The scan indices are converted to pointers to elements in a source stream.
+ * 
+ * Any number of scan index streams are allowed in the `scanIndices` stream set.
+ * All of which will be converted to pointers and passed to the callback.
  *
  * Optionally, additional streams may be suplied to supplement the scan pointer
  * when performing the callback. A single element will be extracted from each
  * stream and passed to the callback as a parameter. For example, adding a
  * stream of line numbers (generated via the LineNumberGenerator kernel) will
- * pass the line number of of each scan position to the callback.
+ * pass the line number of of each scan position to the callback. Note that
+ * unlike streams in the `scanIndices` streamset, none of these  additional
+ * streams will be converted to pointers.
  *
  * Any additional streams will be processed at a rate equal to the scan stream.
  * Items from additional streams will be passed to the callback in the same
  * order that the streams appear in the kernel's constructor.
  *
  * Signature:
- *  kernel ScanReader :: [<i8>[1] source, <i64>[1] scanIndices, func(i8*, ...), ...] -> []
+ *  kernel ScanReader :: [<i8>[1] source, <i64>[N] scanIndices, func(i8*, i8*..., ...), ...] -> []
  * 
  * Callback Signature:
- *  void (*) (const uint8_t * scanPtr, ...);
+ *  void (*) (const uint8_t * scanPtr, i8*..., ...);
  *
  * Code Example:
  *  Supplying line numbers to a callback:
@@ -218,6 +223,24 @@ using AdditionalStreams = std::initializer_list<StreamSet *>;
  *  Note that in this example, the line numbers are zero-indexed when passed to
  *  the callout. This differs from the LineBasedKernel which internally converts
  *  line numbers to one-indexed before passing them to the callback.
+ * 
+ * Code Example 2:
+ *  Using start and end streams to print out some text:
+ * 
+ *      extern "C" void callback(const uint8_t * begin, const uint8_t * end) {
+ *          std::cout << std::string(begin, end) << "\n";
+ *      }
+ *      // ...
+ *      StreamSet * const source = ...; // <i8>[1]
+ *      StreamSet * const starts = ...; // <i1>[1]
+ *      StreamSet * const ends = ...;   // <i1>[1]
+ *  
+ *      StreamSet * const startIndeices = P->CreateStreamSet(1, 64); // <i64>[1]
+ *      P->CreateKernelCall<ScanIndexGenerator>(starts, startIndices);
+ *      StreamSet * const endIndices = P->CreateStreamSet(1, 64); // <i64>[1]
+ *      P->CreateKernelCall<ScanIndexGenerator>(ends, endIndices)
+ *      Kernel * const reader = P->CreateKernelCall<ScanReader>(source, streamops::Select(P, {{startIndices, {0}}, {endIndices, {0}}}), "callback");
+ *      pxDriver.LinkFunction(reader, "callback", callback);
  */
 class ScanReader : public MultiBlockKernel {
 public:
@@ -231,6 +254,7 @@ protected:
 private:
     llvm::StringRef          mCallbackName;
     std::vector<std::string> mAdditionalStreamNames;
+    const uint32_t           mNumScanStreams;
 };
 
 /**
