@@ -335,8 +335,20 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     b->SetInsertPoint(exitBlock);
 }
 
+static std::string ScanReader_GenerateName(StreamSet * scan, StringRef callbackName) {
+    return "ScanReader_" + std::to_string(scan->getNumElements()) + "xscan" + "_" + std::string(callbackName);
+}
+
+static std::string ScanReader_GenerateName(StreamSet * scan, StringRef callbackName, AdditionalStreams const & additionalStreams) {
+    std::string name = ScanReader_GenerateName(scan, callbackName);
+    for (auto const & stream : additionalStreams) {
+        name += "_" + std::to_string(stream->getNumElements()) + "xi" + std::to_string(stream->getFieldWidth());
+    }
+    return name;
+}
+
 ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName)
-: MultiBlockKernel(b, std::string("ScanReader"), {
+: MultiBlockKernel(b, ScanReader_GenerateName(scanIndices, callbackName), {
     {"scan", scanIndices, BoundedRate(0, 1), Principal()},
     {"source", source, BoundedRate(0, 1)}
   }, {}, {}, {}, {})
@@ -351,7 +363,7 @@ ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices
 }
 
 ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName, AdditionalStreams additionalStreams)
-: MultiBlockKernel(b, std::string("ScanReader"), {
+: MultiBlockKernel(b, ScanReader_GenerateName(scanIndices, callbackName, additionalStreams), {
     {"scan", scanIndices, BoundedRate(0, 1), Principal()},
     {"source", source, GreedyRate(1), Deferred()}
   }, {}, {}, {}, {})
@@ -473,8 +485,20 @@ void LineBasedReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     b->SetInsertPoint(exitBlock);
 }
 
+static std::string LineBasedReader_GenerateName(StreamSet * scan, StringRef callbackName) {
+    return "LineBasedReader_" + std::to_string(scan->getNumElements()) + "xscan" + "_" + std::string(callbackName);
+}
+
+static std::string LineBasedReader_GenerateName(StreamSet * scan, StringRef callbackName, AdditionalStreams const & additionalStreams) {
+    std::string name = LineBasedReader_GenerateName(scan, callbackName);
+    for (auto const & stream : additionalStreams) {
+        name += "_" + std::to_string(stream->getNumElements()) + "xi" + std::to_string(stream->getFieldWidth());
+    }
+    return name;
+}
+
 LineBasedReader::LineBasedReader(BuilderRef b, StreamSet * source, StreamSet * scanPositions, StreamSet * lineNumbers, StreamSet * lineSpans, StringRef callbackName)
-: MultiBlockKernel(b, "LineBasedScanPositionReader_" + std::string(callbackName), 
+: MultiBlockKernel(b, LineBasedReader_GenerateName(scanPositions, callbackName), 
     { // input streamsets
         {"scan", scanPositions, BoundedRate(0, 1), Principal()}, 
         {"lineNums", lineNumbers, BoundedRate(0, 1)}, 
@@ -498,7 +522,7 @@ LineBasedReader::LineBasedReader(BuilderRef b,
                                  StreamSet * lineSpans, 
                                  StringRef callbackName, 
                                  AdditionalStreams additionalStreams)
-: MultiBlockKernel(b, "LineBasedScanPositionReader_" + std::string(callbackName), 
+: MultiBlockKernel(b, LineBasedReader_GenerateName(scanPositions, callbackName, additionalStreams), 
     { // input streamsets
         {"scan", scanPositions, BoundedRate(0, 1), Principal()}, 
         {"lineNums", lineNumbers, BoundedRate(0, 1)}, 
