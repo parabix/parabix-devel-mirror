@@ -297,7 +297,7 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     BasicBlock * const readItem = b->CreateBasicBlock("readItem");
     BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
     Value * const initialStride = b->getProcessedItemCount("scan");
-    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(b->getInt64(0), b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(1), initialStride))));
+    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(b->getSize(0), b->getAccessibleItemCount("scan")));
     b->CreateCondBr(isInvalidFinalItem, exitBlock, readItem);
 
     b->SetInsertPoint(readItem);
@@ -306,7 +306,9 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     Value * const nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
     strideNo->addIncoming(nextStrideNo, readItem);
     Value * const scanItem = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(0), strideNo));
+    // FIXME: We are assuming that we have access to the entire source stream, this may not always be the case.
     Value * const scanPtr = b->getRawInputPointer("source", scanItem);
+    b->setProcessedItemCount("source", scanItem);
     b->setProcessedItemCount("scan", nextStrideNo);
     std::vector<Value *> callbackParams{};
     callbackParams.push_back(scanPtr);
@@ -323,7 +325,10 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
 }
 
 ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName)
-: MultiBlockKernel(b, std::string("ScanReader"), {{"source", source}, {"scan", scanIndices, FixedRate(1), Principal()}}, {}, {}, {}, {})
+: MultiBlockKernel(b, std::string("ScanReader"), {
+    {"scan", scanIndices, BoundedRate(0, 1), Principal()},
+    {"source", source, GreedyRate(1), Deferred()}
+  }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()
 {
@@ -334,7 +339,10 @@ ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices
 }
 
 ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName, AdditionalStreams additionalStreams)
-: MultiBlockKernel(b, std::string("ScanReader"), {{"source", source}, {"scan", scanIndices, FixedRate(1), Principal()}}, {}, {}, {}, {})
+: MultiBlockKernel(b, std::string("ScanReader"), {
+    {"scan", scanIndices, BoundedRate(0, 1), Principal()},
+    {"source", source, GreedyRate(1), Deferred()}
+  }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()
 {
@@ -345,7 +353,7 @@ ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices
     size_t i = 0;
     for (auto const & stream : additionalStreams) {
         std::string name = "__additional_" + std::to_string(i++);
-        mInputStreamSets.push_back({name, stream, FixedRate(1)});
+        mInputStreamSets.push_back({name, stream, BoundedRate(0, 1)});
         mAdditionalStreamNames.push_back(name);
     }
 }
@@ -371,7 +379,7 @@ void LineBasedReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
     Value * const initialProcessedScanValue = b->getProcessedItemCount("scan");
     Value * const initialProcessedLineValue = b->getProcessedItemCount("lines");
-    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(i64_ZERO, b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(1), initialProcessedScanValue))));
+    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(b->getSize(0), b->getAccessibleItemCount("scan")));
     b->CreateCondBr(isInvalidFinalItem, exitBlock, processScanPosition);
 
     b->SetInsertPoint(processScanPosition);
@@ -391,7 +399,9 @@ void LineBasedReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     std::vector<Value *> callbackParams{};
     callbackParams.reserve(4 + mAdditionalStreamNames.size());
     Value * const scanVal = b->CreateLoad(b->getRawInputPointer("scan", b->getInt32(0), scanIndex));
+    // FIXME: We are assuming that we have access to the entire source stream, this may not always be the case.
     Value * const scanPtr = b->getRawInputPointer("source", scanVal);
+    b->setProcessedItemCount("scan", b->CreateAdd(scanVal, b->getInt64(1)));
     callbackParams.push_back(scanPtr);
     Value * const beginVal = b->CreateLoad(b->getRawInputPointer("lines", b->getInt32(0), lineIndex));
     Value * const beginPtr = b->getRawInputPointer("source", beginVal);
@@ -456,7 +466,7 @@ LineBasedReader::LineBasedReader(BuilderRef b, StreamSet * source, StreamSet * s
         {"scan", scanPositions, BoundedRate(0, 1), Principal()}, 
         {"lineNums", lineNumbers, BoundedRate(0, 1)}, 
         {"lines", lineSpans, BoundedRate(0, 1)}, 
-        {"source", source}
+        {"source", source, GreedyRate(1), Deferred()}
     }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()
