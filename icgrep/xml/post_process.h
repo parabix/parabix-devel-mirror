@@ -29,4 +29,6 @@ void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 
 void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code);
 
+void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition);
+
 } // extern "C"

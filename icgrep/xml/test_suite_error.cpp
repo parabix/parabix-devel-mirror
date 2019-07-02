@@ -39,12 +39,22 @@ private:
 
 struct TestSuiteError {
     XmlTestSuiteError   code;
-    uint64_t            line;
-    uint64_t            column;
+    uint64_t            line;       // mutually exclusive with position
+    uint64_t            column;     // mutually exclusive with position
+    uint64_t            position;   // mutually exclusive with line+column
+
+    TestSuiteError(XmlTestSuiteError code, uint64_t line, uint64_t column)
+    : code(code), line(line), column(column), position(0) {}
+
+    TestSuiteError(XmlTestSuiteError code, uint64_t position)
+    : code(code), line(UINT64_MAX), column(UINT64_MAX), position(position) {}
 
     struct Comparator {
         bool operator() (TestSuiteError const & lhs, TestSuiteError const & rhs) const {
             if (lhs.line == rhs.line) {
+                if (lhs.column == rhs.column) {
+                    return lhs.position > rhs.position;
+                }
                 return lhs.column > rhs.column;
             }
             return lhs.line > rhs.line;
@@ -91,6 +101,10 @@ const char * AsMessage(XmlTestSuiteError error) {
             return "name syntax error";
         case XmlTestSuiteError::CD_CLOSER:
             return "Error: ]]> in text";
+        case XmlTestSuiteError::TAG_NAME_MISMATCH:
+            return "tag name mismatch";
+        case XmlTestSuiteError::TAG_MATCH_ERROR:
+            return "Tag matching error";
         default:
             assert ("unexpected error xml test suite error" && false);
             return "Invalid XML Error Code";
@@ -105,10 +119,30 @@ void ReportError(XmlTestSuiteError code, const uint8_t * ptr, const uint8_t * li
     ErrorQueue.push(err);
 }
 
+void ReportError(XmlTestSuiteError code, uint64_t position) {
+    ErrorQueue.push(TestSuiteError{code, position});
+}
+
+// #define SHOW_ALL_ERRORS
+
 void ShowError() {
     if (ErrorQueue.empty()) {
         return;
     }
+#ifdef SHOW_ALL_ERRORS
+    while (!ErrorQueue.empty()) {
+#endif
     auto err = ErrorQueue.pop();
-    fprintf(stderr, "%s at line %" PRIu64 ", column %" PRIu64 "\n", AsMessage(err.code), err.line, err.column);
+    switch (err.code) {
+        case XmlTestSuiteError::TAG_NAME_MISMATCH:
+        case XmlTestSuiteError::TAG_MATCH_ERROR:
+            fprintf(stderr, "%s at position = %" PRIu64 "\n", AsMessage(err.code), err.position);
+            break;
+        default:
+            fprintf(stderr, "%s at line %" PRIu64 ", column %" PRIu64 "\n", AsMessage(err.code), err.line, err.column);
+            break;
+#ifdef SHOW_ALL_ERRORS
+    }
+#endif
+    }
 }

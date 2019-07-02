@@ -29,12 +29,18 @@ enum class XmlTestSuiteError {
     TAG,
     REF,
     NAME_SYNTAX,
-    CD_CLOSER
+    CD_CLOSER,
+
+    /* Positional Errors */ // (i.e., the position field is used instead of line+column)
+    TAG_NAME_MISMATCH,
+    TAG_MATCH_ERROR
 };
 
 const char * AsMessage(XmlTestSuiteError error);
 
 void ReportError(XmlTestSuiteError code, const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNumber);
+
+void ReportError(XmlTestSuiteError code, uint64_t position);
 
 /**
  * Prints the first logged error to stderr.

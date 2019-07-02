@@ -365,7 +365,7 @@ ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices
 ScanReader::ScanReader(BuilderRef b, StreamSet * source, StreamSet * scanIndices, StringRef callbackName, AdditionalStreams additionalStreams)
 : MultiBlockKernel(b, ScanReader_GenerateName(scanIndices, callbackName, additionalStreams), {
     {"scan", scanIndices, BoundedRate(0, 1), Principal()},
-    {"source", source, GreedyRate(1), Deferred()}
+    {"source", source, BoundedRate(0, 1)}
   }, {}, {}, {}, {})
 , mCallbackName(callbackName)
 , mAdditionalStreamNames()

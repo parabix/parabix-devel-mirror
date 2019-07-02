@@ -66,7 +66,7 @@ type Ref_Callouts = <i1>[6] {
     HexRef_ends
 }
 
-type Tag_Callouts = <i1>[9] {
+type Tag_Callouts = <i1>[11] {
     ElemName_starts,
     ElemName_ends,
     AttName_starts,
@@ -75,7 +75,9 @@ type Tag_Callouts = <i1>[9] {
     AttVal_ends,
     AttVal_spans,
     EmptyTag_marks,
-    EndTag_marks
+    EndTag_marks,
+    Name_starts,    # both opening and closing tags
+    Name_ends       # both opening and closing tags
 }
 
 type ID_Callouts = <i1>[4] {
@@ -399,6 +401,9 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Erro
     # Must have at least one name character for a legal start tag.
     # Mark any occurrences of null names as errors.
     ParseError = tag_Callouts.ElemName_starts & tag_Callouts.ElemName_ends
+
+    tag_Callouts.Name_starts = tag_Callouts.ElemName_starts
+    tag_Callouts.Name_ends = tag_Callouts.ElemName_ends
     
     # Initialize the accumulators for attribute name and value positions.
     tag_Callouts.AttName_starts = <0>  
@@ -453,13 +458,21 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Erro
 
     STagEnds = AttListEnd & lex.RAngle
     # Mark any "/" characters found as the ends of empty element tags.
-    tag_Callouts.EmptyTag_marks = Advance(AttListEnd & lex.Slash, 1)
+    emptyTagSlash = AttListEnd & lex.Slash
+    tag_Callouts.EmptyTag_marks = Advance(emptyTagSlash)
+
+    # For empty tags, we add the ending "/>" to the name start/end streams
+    # the tag matching callback will interpret this as an empty tag.
+    tag_Callouts.Name_starts |= emptyTagSlash
+    tag_Callouts.Name_ends |= Advance(tag_Callouts.EmptyTag_marks)
     
     ParseError = ParseError | tag_Callouts.EmptyTag_marks & ~lex.RAngle
 
     # End Tag Parsing
 
     EndTagEnds = AdvanceThenScanThru(tag_Callouts.EndTag_marks, lex.NameScan)
+    tag_Callouts.Name_starts |= tag_Callouts.EndTag_marks
+    tag_Callouts.Name_ends |= EndTagEnds
     if EndTagEnds & lex.WS {
         EndTagEnds = ScanThru(EndTagEnds, lex.WS)
     }

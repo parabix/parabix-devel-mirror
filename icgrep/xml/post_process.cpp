@@ -8,7 +8,9 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <stack>
 #include <string>
+#include <llvm/Support/Compiler.h>
 #include <xml/namechars.h>
 #include <xml/test_suite_error.h>
 
@@ -199,5 +201,41 @@ void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegi
         }
         code = code >> 1;
         c++;
+    }
+}
+
+static std::stack<std::string> TagStack{};
+
+void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition) {
+    assert (begin <= end);
+    if (begin == end) { // these errors are handled by the error streams
+        return;
+    }
+
+    auto b = reinterpret_cast<const char *>(begin);
+    auto e = reinterpret_cast<const char *>(end);
+    auto pos = namePosition + 1; // to 1-indexed
+    std::string name(b, e);
+    
+    if (name == "/>") {
+        // end of empty tag; pop off top element
+        assert (!TagStack.empty()); // should never have a '/' name without a tag in the stack
+        TagStack.pop();
+    } else if (name[0] == '/') {
+        // closing tag; pop off and match
+        if (TagStack.empty()) {
+            ReportError(XmlTestSuiteError::TAG_MATCH_ERROR, pos);
+            return;
+        }
+
+        std::string opener = TagStack.top();
+        TagStack.pop();
+        if (opener != name.substr(1)) {
+            ReportError(XmlTestSuiteError::TAG_NAME_MISMATCH, pos);
+            return;
+        }
+    } else {
+        // opening tag
+        TagStack.push(name);
     }
 }

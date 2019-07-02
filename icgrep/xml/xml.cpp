@@ -101,7 +101,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     );
 
     StreamSet * const TagError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
-    StreamSet * const TagCallouts = P->CreateStreamSet(9, 1);
+    StreamSet * const TagCallouts = P->CreateStreamSet(11, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -180,6 +180,20 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     );
 
     /* Post Process Scanning */
+
+    StreamSet * const NameStartIndices = P->CreateStreamSet(1, 64);
+    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, TagCallouts, 9), NameStartIndices);
+    StreamSet * const NameEndIndices = P->CreateStreamSet(1, 64);
+    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, TagCallouts, 10), NameEndIndices);
+
+    Kernel * const tagMatcher = P->CreateKernelCall<ScanReader>(
+        ByteStream, 
+        so::Select(P, {{NameStartIndices, {0}}, {NameEndIndices, {0}}}), 
+        "postproc_tagMatcher",
+        AdditionalStreams{ NameStartIndices } // for positional info in error messages
+    );
+    pxDriver.LinkFunction(tagMatcher, "postproc_tagMatcher", postproc_tagMatcher);
+
 
 #define POSTPROCESS_SCAN_KERNEL(SCAN_STREAM, CALLBACK) \
 { \
