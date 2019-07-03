@@ -275,6 +275,7 @@ bool operator != (RawStringView const & lhs, std::string const & rhs) {
 }
 
 static llvm::SmallVector<RawStringView, 32> TagStack{};
+static bool isWithinDocument = true;
 
 void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition) {
     assert (begin <= end);
@@ -289,21 +290,32 @@ void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t na
     
     if (name == "/>") {
         // end of empty tag; pop off top element
-        assert (!TagStack.empty()); // should never have a "/>" name without a tag in the stack
-        TagStack.pop_back();
+        if (LLVM_LIKELY(isWithinDocument)) {
+            assert (!TagStack.empty());
+            TagStack.pop_back();
+            isWithinDocument = !TagStack.empty();
+        }
     } else if (name[0] == '/') {
         // closing tag; pop off and match
-        if (TagStack.empty()) {
+        if (LLVM_UNLIKELY(TagStack.empty())) {
             ReportError(XmlTestSuiteError::TAG_MATCH_ERROR, pos);
             return;
         }
 
-        RawStringView opener = TagStack.pop_back_val();
-        if (opener != RawStringView(name.begin() + 1, name.end())) {
-            ReportError(XmlTestSuiteError::TAG_NAME_MISMATCH, pos);
-            return;
+        if (LLVM_LIKELY(isWithinDocument)) {
+            RawStringView opener = TagStack.pop_back_val();
+            isWithinDocument = !TagStack.empty();
+            if (LLVM_UNLIKELY(opener != RawStringView(name.begin() + 1, name.end()))) {
+                ReportError(XmlTestSuiteError::TAG_NAME_MISMATCH, pos);
+                return;
+            }
         }
     } else {
+        if (LLVM_UNLIKELY(!isWithinDocument)) {
+            // pos should point to the opening '<' character and not the begining of the name
+            ReportError(XmlTestSuiteError::CONTENT_AFTER_ROOT, pos - 1);
+            return;
+        }
         // opening tag
         TagStack.push_back(name);
     }

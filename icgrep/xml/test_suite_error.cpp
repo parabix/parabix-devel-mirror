@@ -105,6 +105,8 @@ const char * AsMessage(XmlTestSuiteError error) {
             return "tag name mismatch";
         case XmlTestSuiteError::TAG_MATCH_ERROR:
             return "Tag matching error";
+        case XmlTestSuiteError::CONTENT_AFTER_ROOT:
+            return "illegal content after root element";
         default:
             assert ("unexpected error xml test suite error" && false);
             return "Invalid XML Error Code";
@@ -136,6 +138,7 @@ void ShowError() {
     switch (err.code) {
         case XmlTestSuiteError::TAG_NAME_MISMATCH:
         case XmlTestSuiteError::TAG_MATCH_ERROR:
+        case XmlTestSuiteError::CONTENT_AFTER_ROOT:
             fprintf(stderr, "%s at position = %" PRIu64 "\n", AsMessage(err.code), err.position);
             break;
         default:
