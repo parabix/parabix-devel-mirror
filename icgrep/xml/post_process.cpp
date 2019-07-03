@@ -8,8 +8,8 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <stack>
 #include <string>
+#include <llvm/ADT/SmallVector.h>
 #include <llvm/Support/Compiler.h>
 #include <xml/namechars.h>
 #include <xml/test_suite_error.h>
@@ -204,7 +204,77 @@ void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegi
     }
 }
 
-static std::stack<std::string> TagStack{};
+class RawStringView {
+public:
+    RawStringView(const char * begin, const char * end)
+    : __b(begin), __e(end) { assert (begin <= end); }
+
+    RawStringView(RawStringView const & other)
+    : __b(other.__b), __e(other.__e) {}
+    
+    const char * begin() const noexcept { return __b; }
+    const char * end() const noexcept { return __e; }
+    
+    size_t size() const noexcept {
+        ptrdiff_t diff = __e - __b;
+        assert (diff >= 0);
+        return (size_t) diff;
+    }
+    char operator[] (size_t i) const {
+        assert (i < size());
+        return __b[i];
+    }
+private:
+    const char * __b;
+    const char * __e;
+};
+
+bool operator == (RawStringView const & lhs, RawStringView const & rhs) {
+    if (LLVM_LIKELY(lhs.size() != rhs.size())) {
+        return false;
+    } else if (LLVM_UNLIKELY(lhs.begin() == rhs.begin())) {
+        // know that lhs.size() == rhs.size()
+        return true;
+    } else {
+        const char * lit = lhs.begin();
+        const char * rit = rhs.begin();
+        while (lit != lhs.end()) { // know that lhs.size() == rhs.size()
+            if (*lit != *rit) {
+                return false;
+            }
+            lit++;
+            rit++;
+        }
+        return true;
+    }
+}
+
+bool operator != (RawStringView const & lhs, RawStringView const & rhs) {
+    return !(lhs == rhs);
+}
+
+bool operator == (RawStringView const & lhs, std::string const & rhs) {
+    if (LLVM_LIKELY(lhs.size() != rhs.length())) {
+        return false;
+    } else {
+        const char * lit = lhs.begin();
+        std::string::const_iterator rit = rhs.begin();
+        while (lit != lhs.end()) { // know that lhs.size() == rhs.size()
+            if (*lit != *rit) {
+                return false;
+            }
+            lit++;
+            rit++;
+        }
+        return true;
+    }
+}
+
+bool operator != (RawStringView const & lhs, std::string const & rhs) {
+    return !(lhs == rhs);
+}
+
+static llvm::SmallVector<RawStringView, 32> TagStack{};
 
 void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition) {
     assert (begin <= end);
@@ -215,12 +285,12 @@ void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t na
     auto b = reinterpret_cast<const char *>(begin);
     auto e = reinterpret_cast<const char *>(end);
     auto pos = namePosition + 1; // to 1-indexed
-    std::string name(b, e);
+    RawStringView name(b, e);
     
     if (name == "/>") {
         // end of empty tag; pop off top element
-        assert (!TagStack.empty()); // should never have a '/' name without a tag in the stack
-        TagStack.pop();
+        assert (!TagStack.empty()); // should never have a "/>" name without a tag in the stack
+        TagStack.pop_back();
     } else if (name[0] == '/') {
         // closing tag; pop off and match
         if (TagStack.empty()) {
@@ -228,14 +298,13 @@ void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t na
             return;
         }
 
-        std::string opener = TagStack.top();
-        TagStack.pop();
-        if (opener != name.substr(1)) {
+        RawStringView opener = TagStack.pop_back_val();
+        if (opener != RawStringView(name.begin() + 1, name.end())) {
             ReportError(XmlTestSuiteError::TAG_NAME_MISMATCH, pos);
             return;
         }
     } else {
         // opening tag
-        TagStack.push(name);
+        TagStack.push_back(name);
     }
 }
