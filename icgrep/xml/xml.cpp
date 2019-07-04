@@ -261,7 +261,7 @@ int main(int argc, char ** argv) {
     CPUDriver pxDriver("xml-pablo");
     auto em = ErrorManager::Create();
     auto parser = RecursiveParser::Create(SimpleLexer::Create(em), em);
-    auto xmlSource = SourceFile::Relative("xml-new.pablo");
+    auto xmlSource = SourceFile::Relative("xml.pablo");
     if (xmlSource == nullptr) {
         std::cerr << "pablo-parser: error loading pablo source file: xml.pablo\n";
     }
