@@ -68,9 +68,9 @@ static atomic_priority_queue<TestSuiteError, TestSuiteError::Comparator> ErrorQu
 const char * AsMessage(XmlTestSuiteError error) {
     switch (error) {
         case XmlTestSuiteError::NAME_START:
-            return "name start error";
+            return "Name start error";
         case XmlTestSuiteError::NAME:
-            return "name error";
+            return "Name error";
         case XmlTestSuiteError::XML_PI_NAME:
             return "[Xx][Mm][Ll] illegal as PI name";
         case XmlTestSuiteError::CDATA:
@@ -98,15 +98,17 @@ const char * AsMessage(XmlTestSuiteError error) {
         case XmlTestSuiteError::REF:
             return "Reference error found";
         case XmlTestSuiteError::NAME_SYNTAX:
-            return "name syntax error";
+            return "Name syntax error";
         case XmlTestSuiteError::CD_CLOSER:
             return "Error: ]]> in text";
         case XmlTestSuiteError::TAG_NAME_MISMATCH:
-            return "tag name mismatch";
+            return "Tag name mismatch";
         case XmlTestSuiteError::TAG_MATCH_ERROR:
             return "Tag matching error";
+        case XmlTestSuiteError::CONTENT_BEFORE_ROOT:
+            return "Illegal content before root element";
         case XmlTestSuiteError::CONTENT_AFTER_ROOT:
-            return "illegal content after root element";
+            return "Illegal content after root element";
         default:
             assert ("unexpected error xml test suite error" && false);
             return "Invalid XML Error Code";
@@ -138,6 +140,7 @@ void ShowError() {
     switch (err.code) {
         case XmlTestSuiteError::TAG_NAME_MISMATCH:
         case XmlTestSuiteError::TAG_MATCH_ERROR:
+        case XmlTestSuiteError::CONTENT_BEFORE_ROOT:
         case XmlTestSuiteError::CONTENT_AFTER_ROOT:
             fprintf(stderr, "%s at position = %" PRIu64 "\n", AsMessage(err.code), err.position);
             break;

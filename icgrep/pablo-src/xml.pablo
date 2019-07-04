@@ -1,231 +1,178 @@
 #
 # Copyright (c) 2019 International Characters.
 # This software is licensed to the public under the Open Software License 3.0.
-# icgrep is a trademark of International Characters.
 #
 
-type BasisBits = <i1>[8]
+type basis = <i1>[8]
+
+type Error = <i1>[9] {
+    illegalChar,
+    utf8,
+    pi,     # processing instruction
+    ct,     # comment syntax
+    ccp,    # comment, CDATA, or processing instruction
+    tag,
+    ref,
+    name,
+    cdCloser
+}
+
+
+#
+# Lexing
+#
 
 type U8 = <i1>[1] {
     suffix
 }
 
 type Lex = <i1>[27] {
-    CR,
-    LF,
-    HT,
-    SP,
-    CRLF,
-    RefStart,
-    Semicolon,
-    Colon,
-    LAngle,
-    RAngle,
-    LBracket,
-    RBracket,
-    Exclam,
-    QMark,
-    Hyphen,
-    Equals,
-    SQuote,
-    DQuote,
-    Slash,
-    Hash,
+    cr,
+    lf,
+    ht,
+    sp,
+    crlf,
+    refStart,
+    semicolon,
+    colon,
+    lAngle,
+    rAngle,
+    lBracket,
+    rBracket,
+    exclam,
+    qmark,
+    hyphen,
+    equals,
+    sQuote,
+    dQuote,
+    slash,
+    hash,
     x,
-    ASCII_name_start,
-    ASCII_name_char,
-    NameScan,
-    Digit,
-    Hex,
-    WS
+    asciiNameStart,
+    asciiNameChar,
+    nameScan,
+    digit,
+    hex,
+    ws
 }
 
-type Marker = <i1>[3] {
-    LAngle_scope,
-    Ref_opener,
-    CD_closer
-}
-
-type CtCDPI_Callouts = <i1>[8] {
-    Ct_starts,
-    Ct_ends,
-    CD_starts,
-    CD_ends,
-    PI_starts,
-    PI_name_starts,
-    PI_name_ends,
-    PI_ends
-}
-
-type Ref_Callouts = <i1>[6] {
-    GenRef_starts,
-    GenRef_ends,
-    DecRef_starts,
-    DecRef_ends,
-    HexRef_starts,
-    HexRef_ends
-}
-
-type Tag_Callouts = <i1>[11] {
-    ElemName_starts,
-    ElemName_ends,
-    AttName_starts,
-    AttName_ends,
-    AttVal_starts,
-    AttVal_ends,
-    AttVal_spans,
-    EmptyTag_marks,
-    EndTag_marks,
-    Name_starts,    # both opening and closing tags
-    Name_ends       # both opening and closing tags
-}
-
-type ID_Callouts = <i1>[4] {
-    pubid_start,
-    pubid_end,
-    sysid_start,
-    sysid_end
-}
-
-type Check_streams = <i1>[6] {
-    misc_mask,
-    non_ascii_name_starts,
-    non_ascii_names,
-    tag_marks,
-    name_follows,
-    att_refs
-}
-
-type Error = <i1>[9] {
-    IllegalChar,
-    UTF8_Error,
-    PI_Error,
-    CT_Error,
-    CT_CD_PI_Error,
-    Tag_Error,
-    Ref_Error,
-    Name_Error,
-    CheckStreams_Error
-}
-
-
-kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, Error err] {
-    temp1 = basis_bits[7] | basis_bits[6]
-    temp2 = basis_bits[5] & ~basis_bits[4]
+kernel ClassifyBytesValidateUtf8 :: [basis basis] -> [Lex lex, U8 u8, Error err] {
+    temp1 = basis[7] | basis[6]
+    temp2 = basis[5] & ~basis[4]
     temp3 = temp2 & ~temp1
-    temp4 = basis_bits[2] & ~basis_bits[3]
-    temp5 = basis_bits[1] & ~basis_bits[0]
+    temp4 = basis[2] & ~basis[3]
+    temp5 = basis[1] & ~basis[0]
     temp6 = temp4 & temp5
-    lex.RefStart = temp3 & temp6
-    temp7 = basis_bits[5] & basis_bits[4]
+    lex.refStart = temp3 & temp6
+    temp7 = basis[5] & basis[4]
     temp8 = temp7 & ~temp1
-    temp9 = basis_bits[3] & ~basis_bits[2]
-    temp10 = basis_bits[1] & basis_bits[0]
+    temp9 = basis[3] & ~basis[2]
+    temp10 = basis[1] & basis[0]
     temp11 = temp9 & temp10
-    lex.Semicolon = temp8 & temp11
-    temp12 = basis_bits[3] & basis_bits[2]
-    temp13 = basis_bits[1] | basis_bits[0]
+    lex.semicolon = temp8 & temp11
+    temp12 = basis[3] & basis[2]
+    temp13 = basis[1] | basis[0]
     temp14 = temp12 & ~temp13
-    lex.LAngle = temp8 & temp14
+    lex.lAngle = temp8 & temp14
     temp15 = temp12 & temp5
-    lex.RAngle = temp8 & temp15
-    temp16 = basis_bits[6] & ~basis_bits[7]
-    temp17 = basis_bits[4] & ~basis_bits[5]
+    lex.rAngle = temp8 & temp15
+    temp16 = basis[6] & ~basis[7]
+    temp17 = basis[4] & ~basis[5]
     temp18 = temp16 & temp17
-    lex.LBracket = temp18 & temp11
-    temp19 = basis_bits[0] & ~basis_bits[1]
+    lex.lBracket = temp18 & temp11
+    temp19 = basis[0] & ~basis[1]
     temp20 = temp12 & temp19
-    lex.RBracket = temp18 & temp20
-    temp21 = basis_bits[3] | basis_bits[2]
+    lex.rBracket = temp18 & temp20
+    temp21 = basis[3] | basis[2]
     temp22 = temp19 & ~temp21
-    lex.Exclam = temp3 & temp22
+    lex.exclam = temp3 & temp22
     temp23 = temp12 & temp10
-    lex.QMark = temp8 & temp23
-    lex.Hyphen = temp3 & temp20
-    lex.Equals = temp8 & temp20
+    lex.qmark = temp8 & temp23
+    lex.hyphen = temp3 & temp20
+    lex.equals = temp8 & temp20
     temp24 = temp4 & temp10
-    lex.SQuote = temp3 & temp24
+    lex.sQuote = temp3 & temp24
     temp25 = temp5 & ~temp21
-    lex.DQuote = temp3 & temp25
-    lex.Slash = temp3 & temp23
+    lex.dQuote = temp3 & temp25
+    lex.slash = temp3 & temp23
     temp26 = temp10 & ~temp21
-    lex.Hash = temp3 & temp26
+    lex.hash = temp3 & temp26
     temp27 = temp16 & temp7
     temp28 = temp9 & ~temp13
     lex.x = temp27 & temp28
     temp29 = temp9 & temp5
-    lex.Colon = temp8 & temp29
+    lex.colon = temp8 & temp29
     temp30 = temp18 & temp23
-    temp31 = temp30 | lex.Colon
-    temp32 = temp16 & ~basis_bits[5]
-    temp33 = basis_bits[2] | temp10
-    temp34 = basis_bits[3] & temp33
+    temp31 = temp30 | lex.colon
+    temp32 = temp16 & ~basis[5]
+    temp33 = basis[2] | temp10
+    temp34 = basis[3] & temp33
     temp35 = ~temp34
     temp36 = temp21 | temp13
-    temp37 = (basis_bits[4] & temp35) | (~(basis_bits[4]) & temp36)
+    temp37 = (basis[4] & temp35) | (~(basis[4]) & temp36)
     temp38 = temp32 & temp37
     temp39 = temp31 | temp38
-    temp40 = temp16 & basis_bits[5]
+    temp40 = temp16 & basis[5]
     temp41 = temp40 & temp37
-    lex.ASCII_name_start = temp39 | temp41
-    temp42 = temp30 | lex.Hyphen
+    lex.asciiNameStart = temp39 | temp41
+    temp42 = temp30 | lex.hyphen
     temp43 = temp3 & temp15
     temp44 = temp42 | temp43
     temp45 = temp8 & ~temp34
     temp46 = temp44 | temp45
     temp47 = temp46 | temp38
-    lex.ASCII_name_char = temp47 | temp41
-    lex.NameScan = lex.ASCII_name_char | basis_bits[7]
-    temp48 = temp1 | basis_bits[5]
+    lex.asciiNameChar = temp47 | temp41
+    lex.nameScan = lex.asciiNameChar | basis[7]
+    temp48 = temp1 | basis[5]
     x00_x1F = ~temp48
-    temp49 = basis_bits[5] | basis_bits[4]
+    temp49 = basis[5] | basis[4]
     temp50 = temp1 | temp49
-    lex.CR = temp20 & ~temp50
-    lex.LF = temp29 & ~temp50
+    lex.cr = temp20 & ~temp50
+    lex.lf = temp29 & ~temp50
     temp51 = temp9 & temp19
-    lex.HT = temp51 & ~temp50
-    lex.SP = temp3 & ~temp36
+    lex.ht = temp51 & ~temp50
+    lex.sp = temp3 & ~temp36
     temp52 = temp20 | temp29
     temp53 = temp52 | temp51
     temp54 = temp53 & ~temp50
-    lex.WS = temp54 | lex.SP
-    temp55 = basis_bits[2] | basis_bits[1]
-    temp56 = basis_bits[3] & temp55
-    lex.Digit = temp8 & ~temp56
+    lex.ws = temp54 | lex.sp
+    temp55 = basis[2] | basis[1]
+    temp56 = basis[3] & temp55
+    lex.digit = temp8 & ~temp56
     temp57 = temp16 & ~temp49
-    temp58 = temp57 & ~basis_bits[3]
+    temp58 = temp57 & ~basis[3]
     temp59 = ~temp10
-    temp60 = (basis_bits[2] & temp59)|(~(basis_bits[2]) & temp13)
+    temp60 = (basis[2] & temp59)|(~(basis[2]) & temp13)
     temp61 = temp58 & temp60
-    temp62 = lex.Digit | temp61
+    temp62 = lex.digit | temp61
     temp63 = temp16 & temp2
-    temp64 = temp63 & ~basis_bits[3]
+    temp64 = temp63 & ~basis[3]
     temp65 = temp64 & temp60
-    lex.Hex = temp62 | temp65
-    err.IllegalChar = InFile(x00_x1F & ~lex.WS)
+    lex.hex = temp62 | temp65
+    err.illegalChar = InFile(x00_x1F & ~lex.ws)
 
-    ### Validate_utf8(basis_bits, u8):
-    if basis_bits[7] {
+    # If non-ascii, validate UTF-8
+    if basis[7] {
         suffix = <0>
         u8_error = <0>
         u8_FFFE_FFFF = <0>
-        u8anyscope = <0> #local
-        unibyte = ~basis_bits[7]
+        u8anyscope = <0>
+        unibyte = ~basis[7]
 
-        prefix = basis_bits[7] & basis_bits[6]
-        prefix2 = prefix & ~basis_bits[5]
+        prefix = basis[7] & basis[6]
+        prefix2 = prefix & ~basis[5]
         prefix3 = prefix & temp2
         prefix4 = prefix & temp7
-        suffix = basis_bits[7] & ~basis_bits[6]
+        suffix = basis[7] & ~basis[6]
         temp66 = prefix & ~temp49
-        temp67 = temp21 | basis_bits[1]
+        temp67 = temp21 | basis[1]
         temp68 = temp66 & ~temp67
-        temp69 = basis_bits[2] & temp13
-        temp70 = basis_bits[3] | temp69
+        temp69 = basis[2] & temp13
+        temp70 = basis[3] | temp69
         temp71 = prefix4 & temp70
         badprefix = temp68 | temp71
         u8_error = badprefix
-        scope22 = Advance(prefix2, 1)
+        scope22 = Advance(prefix2)
         u8anyscope = scope22
         if prefix3 | prefix4 {
             xE0 = prefix3 & ~temp36
@@ -233,8 +180,8 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, E
             xF0 = prefix4 & ~temp36
             temp72 = temp4 & ~temp13
             xF4 = prefix4 & temp72
-            xA0_xBF = suffix & basis_bits[5]
-            x80_x9F = suffix & ~basis_bits[5]
+            xA0_xBF = suffix & basis[5]
+            x80_x9F = suffix & ~basis[5]
             x90_xBF = suffix & temp49
             x80_x8F = suffix & ~temp49
             xEF = prefix3 & temp23
@@ -242,19 +189,19 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, E
             xBF = temp73 & temp23
             xBE = temp73 & temp15
 
-            scope32 = Advance(prefix3, 1)
-            scope33 = Advance(scope32, 1)
-            scope42 = Advance(prefix4, 1)
-            scope43 = Advance(scope42, 1)
-            scope44 = Advance(scope43, 1)
+            scope32 = Advance(prefix3)
+            scope33 = Advance(scope32)
+            scope42 = Advance(prefix4)
+            scope43 = Advance(scope42)
+            scope44 = Advance(scope43)
 
-            E0_F0_scope = Advance(xE0 | xF0, 1)
-            ED_F4_scope = Advance(xED | xF4, 1)
+            E0_F0_scope = Advance(xE0 | xF0)
+            ED_F4_scope = Advance(xED | xF4)
             xE0_scope = scope32 & E0_F0_scope
             xED_scope = scope32 & ED_F4_scope
             xF0_scope = scope42 & E0_F0_scope
             xF4_scope = scope42 & ED_F4_scope
-            xEF_scope = Advance(xEF, 1)
+            xEF_scope = Advance(xEF)
 
             u8lastscope = scope22 | scope33 | scope44
             u8anyscope = u8lastscope | scope32 | scope42 | scope43
@@ -266,280 +213,341 @@ kernel ClassifyBytesValidateUtf8 :: [BasisBits basis_bits] -> [Lex lex, U8 u8, E
 
             u8_error = u8_error | u8error1 | u8error2 | u8error3 | u8error4
 
-            EF_BF_pending = Advance(xEF_scope & xBF, 1)
+            EF_BF_pending = Advance(xEF_scope & xBF)
 
             u8_FFFE_FFFF = (EF_BF_pending & (xBE | xBF))
         }
         u8mismatch = u8anyscope ^ suffix
         u8_error = u8_error | u8mismatch | u8_FFFE_FFFF
-        err.UTF8_Error = u8_error
+        err.utf8 = u8_error
     }
 }
 
 
-kernel Parse_CtCDPI
-:: [Lex lex]
--> [Marker marker, CtCDPI_Callouts ctCDPI_Callouts, Check_streams check_streams, Error err]
-{
-    ctCDPI_Callouts.Ct_starts = <0>
-    ctCDPI_Callouts.Ct_ends = <0>
-    ctCDPI_Callouts.CD_starts = <0>
-    ctCDPI_Callouts.CD_ends = <0>
-    ctCDPI_Callouts.PI_starts = <0>
-    ctCDPI_Callouts.PI_name_starts = <0>
-    ctCDPI_Callouts.PI_name_ends = <0>
-    ctCDPI_Callouts.PI_ends = <0>
-    CtCDPI_starts = <0>
-    CtCDPI_ends = <0>
-    ctCDPI_mask = <0>
+#
+# Pre Processing - Comments, CDATA, Processing Instructions
+#
 
-    v = lex.LAngle | lex.Hyphen
-    w = lex.Hyphen | lex.QMark
-    v1 = Advance(v, 1)
-    w1 = Advance(w, 1)
+type Marker = <i1>[5] {
+    lAngleScope,
+    refOpener,
+    cdOpener,
+    cdCloser,
+    ccpMask
+}
 
-    LAngle_scope = v1 & ~w1
-    PI_opener = LAngle_scope & lex.QMark
-    CtCD_opener= LAngle_scope & lex.Exclam
-    CtCDPI_opener = PI_opener | CtCD_opener
-    CD_closer = <0>
+type CCPCallouts = <i1>[8] {
+    ctStarts,       # Comment starts
+    ctEnds,         # Comment ends
+    cdStarts,       # CDATA starts
+    cdEnds,         # CDATA ends
+    piStarts,       # Processing instruction starts
+    piNameStarts,   # Processing instruction name starts
+    piNameEnds,     # Processing instruction name ends
+    piEnds          # Processing instruciton ends
+}
 
-    DoubleHyphen = v1 & w1 & lex.Hyphen
-    if lex.RBracket {
-        DoubleRBracket = Advance(lex.RBracket, 1) & lex.RBracket
-        CD_closer = Advance(DoubleRBracket, 1) & lex.RAngle
+kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error err] {
+    v = lex.lAngle | lex.hyphen
+    w = lex.hyphen | lex.qmark
+    v1 = Advance(v)
+    w1 = Advance(w)
+
+    lAngleScope = v1 & ~w1
+    piOpener = lAngleScope & lex.qmark
+    piCloser = w1 & ~v1 & lex.rAngle
+    ctcdOpener = lAngleScope & lex.exclam
+    ccpOpener = piOpener | ctcdOpener
+    doubleHyphen = v1 & w1 & lex.hyphen
+    cdCloser = <0>
+    if lex.rBracket {
+        doubleRBracket = Advance(lex.rBracket) & lex.rBracket
+        cdCloser = Advance(doubleRBracket) & lex.rAngle
     }
-    PI_closer = w1 & ~v1 & lex.RAngle
 
-    # Initiate the scan
-    CtCDPI_Cursor = ScanTo(~Advance(<1>, 1), CtCDPI_opener)
-    while CtCDPI_Cursor {
-        CtCDPI_starts = CtCDPI_starts | CtCDPI_Cursor
-        PI_Cursor = CtCDPI_Cursor & PI_opener
-        CD_Ct_Cursor = Advance(CtCDPI_Cursor & ~PI_Cursor, 1)
-        CD_Cursor = CD_Ct_Cursor & lex.LBracket
-        Ct_Cursor = CD_Ct_Cursor & lex.Hyphen
+    callouts.cdStarts = <0> # FIXME: removing this causes an llvm compiler error
 
-        # PI processing
-        if PI_Cursor {
-            ctCDPI_Callouts.PI_starts = ctCDPI_Callouts.PI_starts |  PI_Cursor
-            PI_Cursor = Advance(PI_Cursor, 1)
-            ctCDPI_Callouts.PI_name_starts = ctCDPI_Callouts.PI_name_starts |  PI_Cursor
-            PI_name_end = ScanThru(PI_Cursor, lex.NameScan)
-            PI_error = PI_Cursor & PI_name_end
-            PI_noWS = PI_name_end & ~lex.WS
-            PI_error = PI_error |  PI_noWS & ~lex.QMark | Advance(PI_noWS, 1) & ~PI_closer
-            err.PI_Error = PI_error
-            ctCDPI_Callouts.PI_name_ends = ctCDPI_Callouts.PI_name_ends |  PI_name_end
-            PI_Cursor = ScanTo(PI_name_end, PI_closer)
-            ctCDPI_Callouts.PI_ends = ctCDPI_Callouts.PI_ends |  PI_Cursor
-            CtCDPI_ends = CtCDPI_ends |  PI_Cursor
+    ccpStarts = <0>
+    ccpEnds = <0>
+    mask = <0>
+    # Begin scan
+    cursor = ScanTo(~Advance(<1>, 1), ccpOpener)
+    while cursor {
+        ccpStarts |= cursor
+        piCursor = cursor & piOpener
+        ctcdCursor = Advance(cursor & ~piCursor)
+        ctCursor = ctcdCursor & lex.hyphen
+        cdCursor = ctcdCursor & lex.lBracket
+
+        # Comment processing
+        if ctCursor {
+            callouts.ctStarts |= ctCursor
+            ctCursor = Advance(ctCursor)
+            ctError = ctCursor & ~lex.hyphen # `<!-[^-]` is an error
+            # Advance twice past <!--, so that we don't treat <!--- as being a terminated comment
+            ctCursor = Advance(ctCursor, 2)
+            ctCursor = Advance(ScanTo(ctCursor, doubleHyphen))
+            err.ct |= ctError | ctCursor & ~lex.rAngle # `--[^>]` is an error
+            callouts.ctEnds |= ctCursor
+            ccpEnds |= ctCursor
         }
 
         # CDATA section processing
-        if CD_Cursor {
-            ctCDPI_Callouts.CD_starts = ctCDPI_Callouts.CD_starts |  CD_Cursor
-            CD_Cursor = ScanTo(CD_Cursor, CD_closer)
-            ctCDPI_Callouts.CD_ends = ctCDPI_Callouts.CD_ends |  CD_Cursor
-            CtCDPI_ends = CtCDPI_ends |  CD_Cursor
+        if cdCursor {
+            callouts.cdStarts |= cdCursor
+            cdCursor = ScanTo(cdCursor, cdCloser)
+            callouts.cdEnds |= cdCursor
+            ccpEnds |= cdCursor
         }
 
-        # Comment processing
-        if Ct_Cursor {
-            ctCDPI_Callouts.Ct_starts = ctCDPI_Callouts.Ct_starts |  Ct_Cursor
-            Ct_Cursor = Advance(Ct_Cursor, 1)
-            Ct_error = Ct_Cursor & ~lex.Hyphen
-            # Advance twice past <!--, so that we don't treat <!---
-            # as being a terminated comment.
-            Ct_Cursor = Advance(Ct_Cursor, 2)
-            Ct_Cursor = Advance(ScanTo(Ct_Cursor, DoubleHyphen), 1)
-            err.CT_Error = Ct_error | Ct_Cursor & ~lex.RAngle
-            ctCDPI_Callouts.Ct_ends = ctCDPI_Callouts.Ct_ends |  Ct_Cursor
-            CtCDPI_ends = CtCDPI_ends |  Ct_Cursor
+        # PI processing
+        if piCursor {
+            callouts.piStarts |= piCursor
+            piCursor = Advance(piCursor)
+            callouts.piNameStarts |= piCursor
+            nameEnd = ScanThru(piCursor, lex.nameScan)
+            noWs = nameEnd & ~lex.ws
+            err.pi |= piCursor & nameEnd        # Empty names are an error
+                   | noWs & ~lex.qmark          # Anything other than whitespace or a '?' after a PI name is an error
+                   | Advance(noWs) & ~piCloser  # Look for closer after '?' with no leading whitespace
+            callouts.piNameEnds |= nameEnd
+            piCursor = ScanTo(nameEnd, piCloser)
+            callouts.piEnds |= piCursor
+            ccpEnds |= piCursor
         }
 
         # Common processing
-        CtCDPI_Cursor = PI_Cursor | CD_Cursor | Ct_Cursor
-        ctCDPI_mask = InclusiveSpan(InFile(CtCDPI_starts), CtCDPI_ends)
-        # ctCDPI_mask = (CtCDPI_ends - CtCDPI_starts) | CtCDPI_ends
+        cursor = ctCursor | cdCursor | piCursor
 
-        # If any of the Comment, CDATA or PI markups are unterminated, it is an error.
-        ctCDPI_error = AtEOF(ctCDPI_mask)
-        err.CT_CD_PI_Error = ctCDPI_error
+        # Need not '|=' mask/err.cpp ccpStars and ccpEnds handle the accumulation for us
+        mask = InclusiveSpan(InFile(ccpStarts), ccpEnds)
+        err.ccp = AtEOF(mask) # any unterminated comment, CDATA, or PI is an error
 
-        CtCDPI_Cursor = InFile(ScanTo(CtCDPI_Cursor, CtCDPI_opener))
-    }
+        cursor = InFile(ScanTo(cursor, ccpOpener))
+    } # while cursor (i.e, scan loop)
 
-    check_streams.misc_mask = InFile(lex.WS | lex.LAngle | InclusiveSpan(ctCDPI_Callouts.Ct_starts | ctCDPI_Callouts.PI_starts, ctCDPI_Callouts.Ct_ends | ctCDPI_Callouts.PI_ends) | CtCDPI_starts)
-
-    # Identify the remaining significant markers for XML processing.
-    marker.LAngle_scope = LAngle_scope & ~ctCDPI_mask
-    marker.Ref_opener = lex.RefStart & ~ctCDPI_mask
-    marker.CD_closer = CD_closer & ~ctCDPI_mask
+    # Identify the remaining significant markers for XML processing
+    marker.lAngleScope = lAngleScope & ~mask
+    marker.refOpener = lex.refStart & ~mask
+    marker.cdOpener = callouts.cdStarts
+    marker.cdCloser = cdCloser & ~mask
+    marker.ccpMask = mask
 }
 
 
-kernel ParseTags :: [Lex lex, Marker marker] -> [Tag_Callouts tag_Callouts, Error err] {
 
-    EqExpected = <0>
-    AttListEnd = <0>
-    
-    # Delimiters for scans.
-    DQuoteDelim = lex.DQuote | lex.LAngle
-    SQuoteDelim = lex.SQuote | lex.LAngle
-    AttListDelim = lex.Slash | lex.RAngle
-    
-    # Start the parallel parsing by inspecting the character
-    # after the opening "<" of a tag.
-    tag_Callouts.ElemName_starts = marker.LAngle_scope & ~lex.Slash
-    tag_Callouts.EndTag_marks = marker.LAngle_scope & lex.Slash
-    
-    # Start Tag/Empty Element Tag Parsing
+#
+# XML Tag Parsing & Post Process Stream Generation
+#
 
-    # Advance all cursors by scanning through the tag name.
-    tag_Callouts.ElemName_ends = ScanThru(tag_Callouts.ElemName_starts, lex.NameScan)
-    # Must have at least one name character for a legal start tag.
-    # Mark any occurrences of null names as errors.
-    ParseError = tag_Callouts.ElemName_starts & tag_Callouts.ElemName_ends
+type TagCallouts = <i1>[9] {
+    elemNameStarts,
+    elemNameEnds,
+    attrNameStarts,
+    attrNameEnds,
+    attrValStarts,
+    attrValEnds,
+    attrValSpans,
+    emptyTagMarks,
+    endTagMarks
+}
 
-    tag_Callouts.Name_starts = tag_Callouts.ElemName_starts
-    tag_Callouts.Name_ends = tag_Callouts.ElemName_ends
-    
-    # Initialize the accumulators for attribute name and value positions.
-    tag_Callouts.AttName_starts = <0>  
-    tag_Callouts.AttName_ends = <0>
-    tag_Callouts.AttVal_starts = <0>
-    tag_Callouts.AttVal_ends = <0>
-    # After the element name, there may or may not be an attlist.
+type PostProcessTagMatchingStreams = <i1>[5] {
+    # pointers
+    starts,
+    ends,
 
-    # No WS character after ElemName; must be at the end
-    AttListEnd = tag_Callouts.ElemName_ends & AttListDelim
+    # code streams
+    names,
+    cdStarts,
+    outOfTagElements
+}
 
-    if tag_Callouts.ElemName_ends & lex.WS {
-        AfterWS = ScanThru(tag_Callouts.ElemName_ends, lex.WS)
-        AttListEnd = AfterWS & AttListDelim
-        AttNameStart = AfterWS & ~AttListDelim
-        
-        DQuoteAttVal = <0>
-        SQuoteAttVal = <0>
-        AttValEnd = <0>
-        
+kernel ParseTags :: [Lex lex, Marker marker] -> [TagCallouts callouts, PostProcessTagMatchingStreams post, Error err] {
+    # scan delimiters
+    dQuoteDelim = lex.dQuote | lex.lAngle
+    sQuoteDelim = lex.sQuote | lex.lAngle
+    attrListDelim = lex.slash | lex.rAngle
 
-        #
-        # The following loop iterates through attributes within a start tag.
+    # Start parallel parsing by inspecting the character after the opening '<' of a tag
+    callouts.elemNameStarts = marker.lAngleScope & ~lex.slash
+    callouts.endTagMarks = marker.lAngleScope & lex.slash
+    post.starts = callouts.elemNameStarts | callouts.endTagMarks
+
+    # Start tag/empty element tag parsing
+    callouts.elemNameEnds = ScanThru(callouts.elemNameStarts, lex.nameScan)
+    # Must have at least one name character for a legal tag name
+    err.tag = callouts.elemNameStarts & callouts.elemNameEnds # null names are errors
+    post.ends = callouts.elemNameEnds
+
+    callouts.attrValEnds = <0> # FIXME: removing this causes an llvm compiler error
+
+    # No whitespace after element name; must be at the end
+    attrListEnd = callouts.elemNameEnds & attrListDelim
+
+    # Anything other than whitespace, '/', or '>' after a tag name is an error
+    err.tag |= callouts.elemNameEnds & ~lex.ws & ~attrListDelim
+
+    if callouts.elemNameEnds & lex.ws {
+        afterWS = ScanThru(callouts.elemNameEnds, lex.ws)
+        attrListEnd = afterWS & attrListDelim
+        attrNameStart = afterWS & ~attrListDelim
+
+        # Iterate through attributes within a start tag.
         # Because all start tags are processed in parallel, the number of
         # iterations is the maximum number of attributes found in any one
         # start tag, plus one.
-        while AttNameStart {
-            ParseError = ParseError | AttNameStart &~ lex.NameScan
-            tag_Callouts.AttName_starts = tag_Callouts.AttName_starts | AttNameStart
-            AttNameFollow = ScanThru(AttNameStart, lex.NameScan)
-            tag_Callouts.AttName_ends = tag_Callouts.AttName_ends | AttNameFollow
-            # Scan through WS to the expected '=' delimiter.
-            EqExpected = ScanThru(AttNameFollow, lex.WS)
+        while attrNameStart {
+            err.tag |= attrNameStart & ~lex.nameScan
+            callouts.attrNameStarts |= attrNameStart
+            # Scan through the attribute name
+            attrNameFollow = ScanThru(attrNameStart, lex.nameScan)
+            callouts.attrNameEnds |= attrNameFollow
 
-            ParseError = ParseError | EqExpected &~ lex.Equals
-            AttValPos = AdvanceThenScanThru(EqExpected, lex.WS)
-            tag_Callouts.AttVal_starts = tag_Callouts.AttVal_starts | AttValPos
-            DQuoteAttVal = AttValPos & lex.DQuote
-            SQuoteAttVal = AttValPos & lex.SQuote
-            DQuoteAttEnd = AdvanceThenScanTo(DQuoteAttVal, DQuoteDelim)
-            SQuoteAttEnd = AdvanceThenScanTo(SQuoteAttVal, SQuoteDelim)
-            AttValEnd = DQuoteAttEnd | SQuoteAttEnd
-            ParseError = ParseError | (AttValPos | AttValEnd) & ~(lex.DQuote | lex.SQuote)
-            AttValFollow = Advance(AttValEnd, 1)
-            tag_Callouts.AttVal_ends = tag_Callouts.AttVal_ends | AttValFollow
-            AfterWS = ScanThru(AttValFollow, lex.WS)
-            AttListEnd = AttListEnd | AfterWS & AttListDelim
-            AttNameStart = AfterWS & ~AttListDelim
-            ParseError = ParseError | AttValFollow & AttNameStart
+            # Check for the '=' after the name and some optional whitespace
+            expectedEQ = ScanThru(attrNameFollow, lex.ws)
+            err.tag |= expectedEQ & ~lex.equals # no '=' is an error
+
+            # Process the attribute value
+            attrValPos = AdvanceThenScanThru(expectedEQ, lex.ws)
+            dQuoteAttrVal = attrValPos & lex.dQuote
+            sQuoteAttrVal = attrValPos & lex.sQuote
+            dQuoteAttrValEnd = AdvanceThenScanTo(dQuoteAttrVal, dQuoteDelim)
+            sQuoteAttrValEnd = AdvanceThenScanTo(sQuoteAttrVal, sQuoteDelim)
+            attrValEnd = dQuoteAttrValEnd | sQuoteAttrValEnd
+            err.tag |= (attrValPos | attrValEnd) & ~(lex.dQuote | lex.sQuote)
+
+            attrValFollow = Advance(attrValEnd)
+            callouts.attrValEnds |= attrValFollow
+
+            # Advance to either the next attribute or the end of the attribute list
+            afterWS = ScanThru(attrValFollow, lex.ws)
+            attrListEnd |= afterWS & attrListDelim
+            attrNameStart = afterWS & ~attrListDelim
+            err.tag |= attrValFollow & attrNameStart
         }
-    } 
-
-    STagEnds = AttListEnd & lex.RAngle
-    # Mark any "/" characters found as the ends of empty element tags.
-    emptyTagSlash = AttListEnd & lex.Slash
-    tag_Callouts.EmptyTag_marks = Advance(emptyTagSlash)
-
-    # For empty tags, we add the ending "/>" to the name start/end streams
-    # the tag matching callback will interpret this as an empty tag.
-    tag_Callouts.Name_starts |= emptyTagSlash
-    tag_Callouts.Name_ends |= Advance(tag_Callouts.EmptyTag_marks)
-    
-    ParseError = ParseError | tag_Callouts.EmptyTag_marks & ~lex.RAngle
-
-    # End Tag Parsing
-
-    EndTagEnds = AdvanceThenScanThru(tag_Callouts.EndTag_marks, lex.NameScan)
-    tag_Callouts.Name_starts |= tag_Callouts.EndTag_marks
-    tag_Callouts.Name_ends |= EndTagEnds
-    if EndTagEnds & lex.WS {
-        EndTagEnds = ScanThru(EndTagEnds, lex.WS)
     }
-    ParseError = ParseError | EndTagEnds & ~lex.RAngle
-    err.Tag_Error = ParseError
-        
-        
+
+    emptyTagSlash = attrListEnd & lex.slash
+    callouts.emptyTagMarks = Advance(emptyTagSlash)
+
+    # For empty tags, we add the ending "/>" to the start/end streams. This 
+    # tells the tag matcher to pop of the empty tag name withouth trying to 
+    # match it to anything.
+    post.starts |= emptyTagSlash
+    post.ends |= Advance(callouts.emptyTagMarks)
+
+    # An empty tag '/' not immediately followed by a '>' is an error
+    err.tag |= callouts.emptyTagMarks & ~lex.rAngle
+
+    # End tag parsing
+
+    endTagEnds = AdvanceThenScanThru(callouts.endTagMarks, lex.nameScan)
+    post.ends |= endTagEnds
+    if endTagEnds & lex.ws {
+        endTagEnds = ScanThru(endTagEnds, lex.ws)
+    }
+    err.tag |= endTagEnds & ~lex.rAngle # end tags must only consist of a name and maybe some whitespace
+
     # Attribute value spans
-    tag_Callouts.AttVal_spans =  SpanUpTo(tag_Callouts.AttVal_starts, tag_Callouts.AttVal_ends)
+    callouts.attrValSpans = SpanUpTo(callouts.attrValStarts, callouts.attrValEnds)
+
+    # Construct Post Processing Streams
+
+    post.names = post.starts
+    post.cdStarts = marker.cdOpener
+    post.starts |= marker.cdOpener
+    post.ends |= marker.cdOpener
+
+    # Find points of interest outside of tags.
+    # Used to find illegal elements outside of the root tag.
+    sTagEnds = attrListEnd & lex.rAngle
+    tagEnds = sTagEnds | endTagEnds | callouts.emptyTagMarks | ~Advance(<1>)
+    thru = lex.ws | marker.ccpMask | lex.lAngle
+    post.outOfTagElements = InFile(AdvanceThenScanThru(tagEnds, thru) & ~marker.lAngleScope)
+    post.starts |= post.outOfTagElements
+    post.ends |= post.outOfTagElements
+
+    # Check for bad CDATA closers
+    err.cdCloser = marker.cdCloser & ~callouts.attrValSpans
 }
 
 
-kernel ParseRef :: [Lex lex, Marker marker] -> [Ref_Callouts ref_Callouts, Error err] {
-    # All remaining "&" must be reference start characters; parse them.
-    # err.Ref_Error = <0>
-    if marker.Ref_opener {
-        Ref_scope = Advance(marker.Ref_opener, 1)
-        NumRef2 = Ref_scope & lex.Hash
-        ref_Callouts.GenRef_starts = Ref_scope &~ lex.Hash
-        NumRef3 = Advance(NumRef2, 1)
-        HexRef3 = NumRef3 & lex.x
-        ref_Callouts.DecRef_starts = NumRef3 &~ lex.x
-        ref_Callouts.HexRef_starts = Advance(HexRef3, 1) 
-        ref_Callouts.GenRef_ends = ScanThru(ref_Callouts.GenRef_starts, lex.NameScan)
-        ref_Callouts.DecRef_ends = ScanThru(ref_Callouts.DecRef_starts, lex.Digit)
-        ref_Callouts.HexRef_ends = ScanThru(ref_Callouts.HexRef_starts, lex.Hex)
+#
+# Reference Parsing
+#
 
-        # Error checks
-        # At least one digit required for DecRef, one hex digit for HexRef.
-        err.Ref_Error |= ref_Callouts.DecRef_starts & ~lex.Digit
-        err.Ref_Error |= ref_Callouts.HexRef_starts & ~lex.Hex
-        # Semicolon terminator required (also covers unterminated at EOF).
-        ref_ends = ref_Callouts.GenRef_ends | ref_Callouts.DecRef_ends | ref_Callouts.HexRef_ends
-        err.Ref_Error |= ref_ends & ~lex.Semicolon
+type RefCallouts = <i1>[6] {
+    genStarts,
+    genEnds,
+    decStarts,
+    decEnds,
+    hexStarts,
+    hexEnds
+}
+
+kernel ParseRef :: [Lex lex, Marker marker] -> [RefCallouts callouts, Error err] {
+    # All remaining '&' characters must be reference start characters
+    if marker.refOpener {
+        refScope = Advance(marker.refOpener)
+        numRefHash = refScope & lex.hash
+        callouts.genStarts = refScope & ~lex.hash
+        numRef = Advance(numRefHash)
+        hexRef = numRef & lex.x
+        callouts.decStarts = numRef & ~lex.x
+        callouts.hexStarts = Advance(hexRef)
+        
+        # Scan to ends
+        callouts.genEnds = ScanThru(callouts.genStarts, lex.nameScan)
+        callouts.decEnds = ScanThru(callouts.decStarts, lex.digit)
+        callouts.hexEnds = ScanThru(callouts.hexStarts, lex.hex)
+
+        # Error checking
+
+        # At least one digit is required for dec refs, and one hex digit for hex refs
+        err.ref = callouts.decStarts & ~lex.digit
+        err.ref |= callouts.hexStarts & ~lex.hex
+
+        # Semicolon terminator is required (also covers unterminated at EOF)
+        refEnds = callouts.genEnds | callouts.decEnds | callouts.hexEnds
+        err.ref |= refEnds & ~lex.semicolon
     }
 }
 
+
+
+#
+# XML Name Validation
+#
+
+type CheckStreams = <i1>[3] {
+    nonAsciiNameStarts,
+    nonAsciiNames,
+    attrRefs
+}
 
 kernel ValidateXmlNames 
-:: [CtCDPI_Callouts ctCDPI_Callouts, Ref_Callouts ref_Callouts, Tag_Callouts tag_Callouts, Lex lex, U8 u8]
--> [Check_streams check_streams, Error err] 
+:: [CCPCallouts ccp, TagCallouts tag, RefCallouts ref, Marker marker, Lex lex, U8 u8] 
+-> [CheckStreams check, Error err] 
 {
-    PI_names = SpanUpTo(ctCDPI_Callouts.PI_name_starts, ctCDPI_Callouts.PI_name_ends)
-    GenRefs = SpanUpTo(ref_Callouts.GenRef_starts, ref_Callouts.GenRef_ends)
-    ElemNames = SpanUpTo(tag_Callouts.ElemName_starts, tag_Callouts.ElemName_ends)
-    AttNames = SpanUpTo(tag_Callouts.AttName_starts, tag_Callouts.AttName_ends)
-    qname_stream =  ElemNames | AttNames
-    ncname_stream = PI_names | GenRefs
-    name_stream = qname_stream | ncname_stream
-    name_start = name_stream & ~Advance(name_stream)
-    name_cursor = name_stream & ~Advance(name_stream)
-    void_prefix_err = name_cursor & lex.Colon
-    namespace_sep = ScanThru(name_cursor, lex.NameScan & ~lex.Colon) & lex.Colon
-    local_part_start = Advance(namespace_sep)
-    local_part_err = local_part_start & ~lex.NameScan
-    colon2_err = ScanThru(local_part_start, lex.NameScan & ~lex.Colon) & lex.Colon
-    ncname_err = ncname_stream & lex.Colon
-    err.Name_Error = void_prefix_err | local_part_err | colon2_err | ncname_err
+    piNames = SpanUpTo(ccp.piNameStarts, ccp.piNameEnds)
+    genRefs = SpanUpTo(ref.genStarts, ref.genEnds)
+    elemNames = SpanUpTo(tag.elemNameStarts, tag.elemNameEnds)
+    attrNames = SpanUpTo(tag.attrNameStarts, tag.attrNameEnds)
+    qNameStream = elemNames | attrNames
+    ncNameStream = piNames | genRefs
+    nameStream = qNameStream | ncNameStream
+    nameStart = nameStream & ~Advance(nameStream)
+    nameCursor = nameStream & ~Advance(nameStream)
+    voidPrefixErr = nameCursor & lex.colon
+    namespaceSep = ScanThru(nameCursor, lex.nameScan & ~lex.colon) & lex.colon
+    localPartStart = Advance(namespaceSep)
+    localPartErr = localPartStart & ~lex.nameScan
+    colon2Err = ScanThru(localPartStart, lex.nameScan & ~lex.colon) & lex.colon
+    ncNameErr = ncNameStream & lex.colon
+    err.name = voidPrefixErr | localPartErr | colon2Err | ncNameErr
 
-    check_streams.non_ascii_name_starts = name_start & ~lex.ASCII_name_start
-    check_streams.non_ascii_names = (name_stream & ~name_start) & ~lex.ASCII_name_char & ~u8.suffix
-}
-
-
-kernel DoCheckStreams :: [Marker marker, Tag_Callouts tag_Callouts] -> [Check_streams check_streams, Error err] {
-    err.CheckStreams_Error = marker.CD_closer & ~tag_Callouts.AttVal_spans
-    check_streams.tag_marks = tag_Callouts.EmptyTag_marks
-    check_streams.name_follows = tag_Callouts.ElemName_ends
-    check_streams.att_refs = tag_Callouts.AttVal_spans & marker.Ref_opener
+    check.nonAsciiNameStarts = nameStart & ~lex.asciiNameStart
+    check.nonAsciiNames = (nameStream & ~nameStart) & ~lex.asciiNameChar & ~u8.suffix
+    check.attrRefs = tag.attrValSpans & marker.refOpener
 }

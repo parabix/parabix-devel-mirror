@@ -72,7 +72,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         xmlPabloSrc,
         "ClassifyBytesValidateUtf8",
         Bindings { // Input Stream Bindings
-            Binding {"basis_bits", BasisBits} 
+            Binding {"basis", BasisBits} 
         }, 
         Bindings { // Output Stream Bindings
             Binding {"lex", Lex}, 
@@ -81,27 +81,26 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         }
     );
 
-    StreamSet * const Marker = P->CreateStreamSet(3, 1);
-    StreamSet * const CtCDPI_Callouts = P->CreateStreamSet(8, 1);
-    StreamSet * const CT_CD_PI_CheckStreams = P->CreateStreamSet(6, 1);
-    StreamSet * const CT_CD_PI_Error = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
+    StreamSet * const Marker = P->CreateStreamSet(5, 1);
+    StreamSet * const CCPCallouts = P->CreateStreamSet(8, 1);
+    StreamSet * const CCPError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
-        "Parse_CtCDPI",
+        "Preprocess",
         Bindings { // Input Stream Bindings
             Binding {"lex", Lex}
         },
         Bindings { // Output Stream Bindings
             Binding {"marker", Marker},
-            Binding {"ctCDPI_Callouts", CtCDPI_Callouts},
-            Binding {"check_streams", CT_CD_PI_CheckStreams},
-            Binding {"err", CT_CD_PI_Error, FixedRate(1), Add1()}
+            Binding {"callouts", CCPCallouts},
+            Binding {"err", CCPError, FixedRate(1), Add1()}
         }
     );
 
     StreamSet * const TagError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
-    StreamSet * const TagCallouts = P->CreateStreamSet(11, 1);
+    StreamSet * const TagCallouts = P->CreateStreamSet(9, 1);
+    StreamSet * const PostProcessTagMatchingStreams = P->CreateStreamSet(5, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
@@ -111,7 +110,8 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
             Binding {"marker", Marker}
         },
         Bindings { // Output Stream Bindings
-            Binding {"tag_Callouts", TagCallouts},
+            Binding {"callouts", TagCallouts},
+            Binding {"post", PostProcessTagMatchingStreams},
             Binding {"err", TagError, FixedRate(1), Add1()}
         }
     );
@@ -127,70 +127,58 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
             Binding {"marker", Marker}
         },
         Bindings { // Output Stream Bindings
-            Binding {"ref_Callouts", RefCallouts},
+            Binding {"callouts", RefCallouts},
             Binding {"err", RefError, FixedRate(1), Add1()}
         }
     );
 
-    StreamSet * const Name_CheckStreams = P->CreateStreamSet(6, 1);
+    StreamSet * const CheckStreams = P->CreateStreamSet(3 ,1);
     StreamSet * const NameError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         xmlPabloSrc,
         "ValidateXmlNames",
         Bindings { // Input Stream Bindings
-            Binding {"ctCDPI_Callouts", CtCDPI_Callouts},
-            Binding {"ref_Callouts", RefCallouts},
-            Binding {"tag_Callouts", TagCallouts},
+            Binding {"ccp", CCPCallouts},
+            Binding {"tag", TagCallouts},
+            Binding {"ref", RefCallouts},
+            Binding {"marker", Marker},
             Binding {"lex", Lex},
             Binding {"u8", U8}
         },
         Bindings { // Output Stream Bindings
-            Binding {"check_streams", Name_CheckStreams},
+            Binding {"check", CheckStreams},
             Binding {"err", NameError, FixedRate(1), Add1()}
         }
     );
 
-    StreamSet * const CS_CheckStreams = P->CreateStreamSet(6, 1);
-    StreamSet * const CheckStreamsError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
-    P->CreateKernelCall<PabloSourceKernel>(
-        parser,
-        xmlPabloSrc,
-        "DoCheckStreams",
-        Bindings { // Input Stream Bindings
-            Binding {"marker", Marker},
-            Binding {"tag_Callouts", TagCallouts}
-        },
-        Bindings { // Output Stream Bindings
-            Binding {"check_streams", CS_CheckStreams},
-            Binding {"err", CheckStreamsError, FixedRate(1), Add1()}
-        }
-    );
-
-    StreamSet * const CheckStreams = P->CreateStreamSet(6, 1);
-    P->CreateKernelCall<StreamsMerge>(
-        std::vector<StreamSet *>{CT_CD_PI_CheckStreams, Name_CheckStreams, CS_CheckStreams},
-        CheckStreams
-    );
-
     StreamSet * const Errors = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<StreamsMerge>(
-        std::vector<StreamSet *>{LexError, CT_CD_PI_Error, TagError, RefError, NameError, CheckStreamsError}, 
+        std::vector<StreamSet *>{LexError, CCPError, TagError, RefError, NameError}, 
         Errors
     );
 
     /* Post Process Scanning */
 
-    StreamSet * const NameStartIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, TagCallouts, 9), NameStartIndices);
-    StreamSet * const NameEndIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, TagCallouts, 10), NameEndIndices);
+    StreamSet * const PostProcStartIndices = P->CreateStreamSet(1, 64);
+    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, PostProcessTagMatchingStreams, 0), PostProcStartIndices);
+    StreamSet * const PostProcEndIndices = P->CreateStreamSet(1, 64);
+    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, PostProcessTagMatchingStreams, 1), PostProcEndIndices);
+
+    // Create Tag Matching Stream Codes
+    StreamSet * const CodeStreams = so::Select(P, PostProcessTagMatchingStreams, so::Range(2, 5));
+    StreamSet * const CollapsedCodeStreams = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<CollapseStreamSet>(CodeStreams, CollapsedCodeStreams);
+    StreamSet * const ParallelCodes = P->CreateStreamSet(3, 1);
+    FilterByMask(P, CollapsedCodeStreams, CodeStreams, ParallelCodes);
+    StreamSet * const Codes = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<P2SKernel>(ParallelCodes, Codes);
 
     Kernel * const tagMatcher = P->CreateKernelCall<ScanReader>(
         ByteStream, 
-        so::Select(P, {{NameStartIndices, {0}}, {NameEndIndices, {0}}}), 
+        so::Select(P, {{PostProcStartIndices, {0}}, {PostProcEndIndices, {0}}}), 
         "postproc_tagMatcher",
-        AdditionalStreams{ NameStartIndices } // for positional info in error messages
+        AdditionalStreams{ PostProcStartIndices, Codes }
     );
     pxDriver.LinkFunction(tagMatcher, "postproc_tagMatcher", postproc_tagMatcher);
 
@@ -234,14 +222,14 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     );
     pxDriver.LinkFunction(errorsReader, "postproc_errorStreamsCallback", postproc_errorStreamsCallback);
 
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 1), postproc_validateNameStart);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 2), postproc_validateName);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CtCDPI_Callouts, 4), postproc_validatePIName);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CtCDPI_Callouts, 2), postproc_validateCDATA);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 0), postproc_validateNameStart);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 1), postproc_validateName);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CCPCallouts, 4), postproc_validatePIName);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CCPCallouts, 2), postproc_validateCDATA);
     POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 0), postproc_validateGenRef);
     POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 2), postproc_validateDecRef);
     POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 4), postproc_validateHexRef);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 5), postproc_validateAttRef);
+    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 2), postproc_validateAttRef);
 
     return reinterpret_cast<XMLProcessFunctionType>(P->compile());
 }
@@ -273,7 +261,7 @@ int main(int argc, char ** argv) {
     CPUDriver pxDriver("xml-pablo");
     auto em = ErrorManager::Create();
     auto parser = RecursiveParser::Create(SimpleLexer::Create(em), em);
-    auto xmlSource = SourceFile::Relative("xml.pablo");
+    auto xmlSource = SourceFile::Relative("xml-new.pablo");
     if (xmlSource == nullptr) {
         std::cerr << "pablo-parser: error loading pablo source file: xml.pablo\n";
     }

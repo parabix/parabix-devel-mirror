@@ -34,6 +34,7 @@ enum class XmlTestSuiteError {
     /* Positional Errors */ // (i.e., the position field is used instead of line+column)
     TAG_NAME_MISMATCH,
     TAG_MATCH_ERROR,
+    CONTENT_BEFORE_ROOT,
     CONTENT_AFTER_ROOT
 };
 

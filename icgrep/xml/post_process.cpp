@@ -275,48 +275,68 @@ bool operator != (RawStringView const & lhs, std::string const & rhs) {
 }
 
 static llvm::SmallVector<RawStringView, 32> TagStack{};
-static bool isWithinDocument = true;
+static bool reachedFirstTag = false;
+static bool isWithinDocument = false;
 
-void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition) {
+void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition, uint8_t code) {
+    const uint8_t NAME_CODE = 0x1;
+    const uint8_t CDATA_CODE = 0x2;
+    const uint8_t OUT_OF_TAG_CODE = 0x4;
     assert (begin <= end);
-    if (begin == end) { // these errors are handled by the error streams
-        return;
-    }
 
-    auto b = reinterpret_cast<const char *>(begin);
-    auto e = reinterpret_cast<const char *>(end);
-    auto pos = namePosition + 1; // to 1-indexed
-    RawStringView name(b, e);
-    
-    if (name == "/>") {
-        // end of empty tag; pop off top element
-        if (LLVM_LIKELY(isWithinDocument)) {
-            assert (!TagStack.empty());
-            TagStack.pop_back();
-            isWithinDocument = !TagStack.empty();
-        }
-    } else if (name[0] == '/') {
-        // closing tag; pop off and match
-        if (LLVM_UNLIKELY(TagStack.empty())) {
-            ReportError(XmlTestSuiteError::TAG_MATCH_ERROR, pos);
+    if (code == NAME_CODE) {
+        if (begin == end) { // these errors are handled by the error streams
             return;
         }
 
-        if (LLVM_LIKELY(isWithinDocument)) {
-            RawStringView opener = TagStack.pop_back_val();
-            isWithinDocument = !TagStack.empty();
-            if (LLVM_UNLIKELY(opener != RawStringView(name.begin() + 1, name.end()))) {
-                ReportError(XmlTestSuiteError::TAG_NAME_MISMATCH, pos);
+        auto b = reinterpret_cast<const char *>(begin);
+        auto e = reinterpret_cast<const char *>(end);
+        auto pos = namePosition + 1; // to 1-indexed
+        RawStringView name(b, e);
+        
+        if (name == "/>") {
+            // end of empty tag; pop off top element
+            if (LLVM_LIKELY(isWithinDocument)) {
+                assert (!TagStack.empty());
+                TagStack.pop_back();
+                isWithinDocument = !TagStack.empty();
+            }
+        } else if (name[0] == '/') {
+            // closing tag; pop off and match
+            if (LLVM_UNLIKELY(TagStack.empty())) {
+                ReportError(XmlTestSuiteError::TAG_MATCH_ERROR, pos);
                 return;
+            }
+
+            if (LLVM_LIKELY(isWithinDocument)) {
+                RawStringView opener = TagStack.pop_back_val();
+                isWithinDocument = !TagStack.empty();
+                if (LLVM_UNLIKELY(opener != RawStringView(name.begin() + 1, name.end()))) {
+                    ReportError(XmlTestSuiteError::TAG_NAME_MISMATCH, pos);
+                    return;
+                }
+            }
+        } else {
+            if (LLVM_UNLIKELY(!reachedFirstTag)) {
+                reachedFirstTag = true;
+                isWithinDocument = true;
+            }
+            if (LLVM_UNLIKELY(!isWithinDocument)) {
+                // pos should point to the opening '<' character and not the begining of the name
+                ReportError(XmlTestSuiteError::CONTENT_AFTER_ROOT, pos - 1);
+                return;
+            }
+            TagStack.push_back(name);
+        }
+    } else if (code == CDATA_CODE || code == OUT_OF_TAG_CODE) {
+        if (LLVM_UNLIKELY(!isWithinDocument)) {
+            if (!reachedFirstTag) {
+                ReportError(XmlTestSuiteError::CONTENT_BEFORE_ROOT, namePosition);
+            } else {
+                ReportError(XmlTestSuiteError::CONTENT_AFTER_ROOT, namePosition);
             }
         }
     } else {
-        if (LLVM_UNLIKELY(!isWithinDocument)) {
-            // pos should point to the opening '<' character and not the begining of the name
-            ReportError(XmlTestSuiteError::CONTENT_AFTER_ROOT, pos - 1);
-            return;
-        }
-        // opening tag
-        TagStack.push_back(name);
+        llvm_unreachable("invalid code");
     }
 }
