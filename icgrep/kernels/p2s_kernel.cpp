@@ -192,7 +192,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
 }
 
 P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * basisBits, StreamSet * byteStream)
-: BlockOrientedKernel(b, "p2s",
+: BlockOrientedKernel(b, "p2s_" + std::to_string(basisBits->getNumElements()),
 {Binding{"basisBits", basisBits}},
 {Binding{"byteStream", byteStream}},
 {}, {}, {}) {
