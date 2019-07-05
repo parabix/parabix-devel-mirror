@@ -74,6 +74,7 @@ private:
     std::unique_ptr<CarryManager> const mCarryManager;
     TranslationMap                      mMarker;
     unsigned                            mBranchCount;
+    llvm::BasicBlock *                  mEntryBlock;
     std::vector<llvm::BasicBlock *>     mBasicBlock;
 };
 

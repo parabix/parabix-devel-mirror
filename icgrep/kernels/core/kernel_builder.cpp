@@ -17,7 +17,7 @@ Value * KernelBuilder::getScalarFieldPtr(const StringRef fieldName) {
         FixedArray<Value *, 2> indices;
         indices[0] = getInt32(0);
         indices[1] = getInt32(mKernel->getSharedScalarIndex(this, fieldName));
-        scalar = CreateGEP(mKernel->getHandle(), indices);
+        scalar = CreateGEP(mKernel->getHandle(), indices, fieldName);
     }
     return scalar;
 }

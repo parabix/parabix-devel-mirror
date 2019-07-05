@@ -265,8 +265,6 @@ kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error er
         cdCloser = Advance(doubleRBracket) & lex.rAngle
     }
 
-    callouts.cdStarts = <0> # FIXME: removing this causes an llvm compiler error
-
     ccpStarts = <0>
     ccpEnds = <0>
     mask = <0>
@@ -380,8 +378,6 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [TagCallouts callouts, PostProce
     err.tag = callouts.elemNameStarts & callouts.elemNameEnds # null names are errors
     post.ends = callouts.elemNameEnds
 
-    callouts.attrValEnds = <0> # FIXME: removing this causes an llvm compiler error
-
     # No whitespace after element name; must be at the end
     attrListEnd = callouts.elemNameEnds & attrListDelim
 
@@ -431,8 +427,8 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [TagCallouts callouts, PostProce
     emptyTagSlash = attrListEnd & lex.slash
     callouts.emptyTagMarks = Advance(emptyTagSlash)
 
-    # For empty tags, we add the ending "/>" to the start/end streams. This 
-    # tells the tag matcher to pop of the empty tag name withouth trying to 
+    # For empty tags, we add the ending "/>" to the start/end streams. This
+    # tells the tag matcher to pop of the empty tag name withouth trying to
     # match it to anything.
     post.starts |= emptyTagSlash
     post.ends |= Advance(callouts.emptyTagMarks)
@@ -496,7 +492,7 @@ kernel ParseRef :: [Lex lex, Marker marker] -> [RefCallouts callouts, Error err]
         hexRef = numRef & lex.x
         callouts.decStarts = numRef & ~lex.x
         callouts.hexStarts = Advance(hexRef)
-        
+
         # Scan to ends
         callouts.genEnds = ScanThru(callouts.genStarts, lex.nameScan)
         callouts.decEnds = ScanThru(callouts.decStarts, lex.digit)
@@ -526,9 +522,9 @@ type CheckStreams = <i1>[3] {
     attrRefs
 }
 
-kernel ValidateXmlNames 
-:: [CCPCallouts ccp, TagCallouts tag, RefCallouts ref, Marker marker, Lex lex, U8 u8] 
--> [CheckStreams check, Error err] 
+kernel ValidateXmlNames
+:: [CCPCallouts ccp, TagCallouts tag, RefCallouts ref, Marker marker, Lex lex, U8 u8]
+-> [CheckStreams check, Error err]
 {
     piNames = SpanUpTo(ccp.piNameStarts, ccp.piNameEnds)
     genRefs = SpanUpTo(ref.genStarts, ref.genEnds)

@@ -94,6 +94,7 @@ void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> & b) {
     mMarker.emplace(entryBlock->createOnes(), b->allOnes());
     mBranchCount = 0;
     addBranchCounter(b);
+    mEntryBlock = b->GetInsertBlock();
     compileBlock(b, entryBlock);
     mCarryManager->finalizeCodeGen(b);
 }
@@ -229,7 +230,7 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
 
     for (const Var * var : escaped) {
         if (LLVM_UNLIKELY(var->isKernelParameter())) {
-            mMarker.emplace(var, compileExpression(b, var, false));
+            compileExpression(b, var, false);
         } else {
             auto f = mMarker.find(var);
             if (LLVM_UNLIKELY(f == mMarker.end())) {
@@ -354,6 +355,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     if (LLVM_LIKELY(outerCondition->getType() == b->getBitBlockType())) {
         outerCondition = b->bitblock_any(mCarryManager->generateSummaryTest(b, outerCondition));
     }
+
     b->CreateCondBr(outerCondition, whileBodyBlock, whileEndBlock);
 
     b->SetInsertPoint(whileBodyBlock);
@@ -412,8 +414,8 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     compileBlock(b, whileBody);
 
     // After the whileBody has been compiled, we may be in a different basic block.
-
-    mCarryManager->leaveLoopBody(b, b->GetInsertBlock());
+    BasicBlock * const whileExitBlock = b->GetInsertBlock();
+    mCarryManager->leaveLoopBody(b, whileExitBlock);
 
 
 #ifdef ENABLE_BOUNDED_WHILE
@@ -423,8 +425,6 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
         condition = b->CreateAnd(condition, b->CreateICmpUGT(new_bound, ConstantInt::getNullValue(b->getSizeTy())));
     }
 #endif
-
-    BasicBlock * const whileExitBlock = b->GetInsertBlock();
 
     // and for any variant nodes in the loop body
     for (auto & variant : variants) {
@@ -797,22 +797,30 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
             value = getPointerToVar(b, var, index);
         } else if (LLVM_UNLIKELY(isa<Var>(expr))) {
             const Var * const var = cast<Var>(expr);
-            if (LLVM_UNLIKELY(var->isKernelParameter())) {
-                if (var->isScalar()) {
-                    return b->getScalarFieldPtr(var->getName());
-                } else if (var->isReadOnly()) {
-                    return b->getInputStreamBlockPtr(var->getName(), b->getInt32(0));
-                } else if (var->isReadNone()) {
-                    return b->getOutputStreamBlockPtr(var->getName(), b->getInt32(0));
+            if (LLVM_LIKELY(var->isKernelParameter())) {
+                const auto ip = b->saveIP();
+                Instruction * const inst = mEntryBlock->getFirstNonPHI();
+                if (inst) {
+                    b->SetInsertPoint(mEntryBlock, inst->getIterator());
                 }
+                if (var->isScalar()) {
+                    value = b->getScalarFieldPtr(var->getName());
+                } else if (var->isReadOnly()) {
+                    value = b->getInputStreamBlockPtr(var->getName(), b->getInt32(0));
+                } else if (var->isReadNone()) {
+                    value = b->getOutputStreamBlockPtr(var->getName(), b->getInt32(0));
+                }
+                if (inst) {
+                    b->restoreIP(ip);
+                }
+            } else { // use before def error
+                SmallVector<char, 128> tmp;
+                raw_svector_ostream out(tmp);
+                out << "PabloCompiler: ";
+                expr->print(out);
+                out << " is not a scalar value or was used before definition";
+                report_fatal_error(out.str());
             }
-            // use before def error
-            SmallVector<char, 128> tmp;
-            raw_svector_ostream out(tmp);
-            out << "PabloCompiler: ";
-            expr->print(out);
-            out << " is not a scalar value or was used before definition";
-            report_fatal_error(out.str());
         } else if (LLVM_UNLIKELY(isa<Operator>(expr))) {
             const Operator * const op = cast<Operator>(expr);
             const PabloAST * lh = op->getLH();
@@ -979,6 +987,12 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
 Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuilder> & b, const Var * var, Value * index1, Value * index2)  {
     assert (var && index1);
     if (LLVM_LIKELY(var->isKernelParameter())) {
+        Value * ptr = nullptr;
+        const auto ip = b->saveIP();
+        Instruction * const inst = mEntryBlock->getFirstNonPHI();
+        if (inst) {
+            b->SetInsertPoint(mEntryBlock, inst->getIterator());
+        }
         if (LLVM_UNLIKELY(var->isScalar())) {
             std::string tmp;
             raw_string_ostream out(tmp);
@@ -988,15 +1002,15 @@ Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuild
             report_fatal_error(out.str());
         } else if (var->isReadOnly()) {
             if (index2) {
-                return b->getInputStreamPackPtr(var->getName(), index1, index2);
+                ptr = b->getInputStreamPackPtr(var->getName(), index1, index2);
             } else {
-                return b->getInputStreamBlockPtr(var->getName(), index1);
+                ptr = b->getInputStreamBlockPtr(var->getName(), index1);
             }
         } else if (var->isReadNone()) {
             if (index2) {
-                return b->getOutputStreamPackPtr(var->getName(), index1, index2);
+                ptr = b->getOutputStreamPackPtr(var->getName(), index1, index2);
             } else {
-                return b->getOutputStreamBlockPtr(var->getName(), index1);
+                ptr = b->getOutputStreamBlockPtr(var->getName(), index1);
             }
         } else {
             std::string tmp;
@@ -1007,6 +1021,10 @@ Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuild
             out << " cannot be read from or written to";
             report_fatal_error(out.str());
         }
+        if (inst) {
+            b->restoreIP(ip);
+        }
+        return ptr;
     } else {
         Value * const ptr = compileExpression(b, var, false);
         std::vector<Value *> offsets;
