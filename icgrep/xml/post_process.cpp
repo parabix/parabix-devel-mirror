@@ -11,6 +11,7 @@
 #include <string>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/Support/Compiler.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <xml/namechars.h>
 #include <xml/test_suite_error.h>
 
