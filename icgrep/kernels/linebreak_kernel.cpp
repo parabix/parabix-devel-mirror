@@ -11,10 +11,13 @@
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <cc/cc_compiler.h>
 #include <cc/cc_compiler_target.h>
+#include <re/re_name.h>
+#include <re/re_cc.h>
+#include <UCD/ucd_compiler.hpp>
 #include <pablo/builder.hpp>
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/kernel_builder.h>
-
+#include <kernels/pipeline_builder.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace cc;
@@ -23,8 +26,6 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 using namespace IDISA;
-
-
 
 std::string sourceShape(StreamSet * s) {
     return std::to_string(s->getNumElements()) + "x" + std::to_string(s->getFieldWidth());
@@ -72,13 +73,12 @@ std::string NullModeAnnotation(NullCharMode nullMode) {
     return "";
 }
 
-Bindings makeOutputBreakBindings(StreamSet * s, UnterminatedLineAtEOF eofMode) {
+Bindings makeOutputBreakBindings(UnterminatedLineAtEOF eofMode, StreamSet * lb) {
     if (eofMode == UnterminatedLineAtEOF::Add1) {
-        return {Binding{"Breaks", s, FixedRate(), Add1()}};
+        return {Binding{"LB", lb, FixedRate(), Add1()}};
     }
-    return {Binding{"Breaks", s}};
+    return {Binding{"LB", lb}};
 }
-
 
 NullTerminatorKernel::NullTerminatorKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                StreamSet * Source,
@@ -86,7 +86,7 @@ NullTerminatorKernel::NullTerminatorKernel(const std::unique_ptr<kernel::KernelB
                                                UnterminatedLineAtEOF eofMode)
 : PabloKernel(b, "lf" + sourceShape(Source) + EOF_annotation(eofMode),
               {Binding{"Source", Source}},
-              makeOutputBreakBindings(Terminators, eofMode),
+              makeOutputBreakBindings(eofMode, Terminators),
               {}, {}),
   mEOFmode(eofMode) {}
 
@@ -114,7 +114,7 @@ UnixLinesKernelBuilder::UnixLinesKernelBuilder(const std::unique_ptr<kernel::Ker
                                                Scalar * signalNullObject)
 : PabloKernel(b, "UnixLines" + sourceShape(Basis) + EOF_annotation(eofMode) + NullModeAnnotation(nullMode),
               {Binding{"basis", Basis}},
-              makeOutputBreakBindings(LineEnds, eofMode),
+              makeOutputBreakBindings(eofMode, LineEnds),
               makeInputScalarBindings(signalNullObject), {}),
   mEOFmode(eofMode),
   mNullMode(nullMode) {
@@ -147,61 +147,150 @@ void UnixLinesKernelBuilder::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutput(0), 0), LB);
 }
 
-LineBreakKernelBuilder::LineBreakKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned basisBitsCount)
-: PabloKernel(b, "lb" + std::to_string(basisBitsCount),
-// inputs
-{Binding{b->getStreamSetTy(basisBitsCount), "basis", FixedRate(), Principal()}
-,Binding{b->getStreamSetTy(1), "lf", FixedRate(), LookAhead(1)}},
-// outputs
-{Binding{b->getStreamSetTy(1), "linebreak", FixedRate(1), Add1()}
-,Binding{b->getStreamSetTy(1), "cr+lf", FixedRate(1), Add1()}}) {
+UnicodeLinesKernelBuilder::UnicodeLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                                     StreamSet * Basis,
+                                                     StreamSet * LF,
+                                                     StreamSet * LineEnds,
+                                                     StreamSet * u8index,
+                                                     UnterminatedLineAtEOF eofMode,
+                                                     NullCharMode nullMode,
+                                                     Scalar * signalNullObject)
+: PabloKernel(b, "UnicodeLB" + sourceShape(Basis) + EOF_annotation(eofMode) + NullModeAnnotation(nullMode),
+              {Binding{"basis", Basis},
+                  Binding{"lf", LF, FixedRate(), LookAhead(1)}},
+              makeOutputBreakBindings(eofMode, LineEnds),
+              makeInputScalarBindings(signalNullObject), {}),
+mEOFmode(eofMode),
+mNullMode(nullMode) {
+    if (eofMode == UnterminatedLineAtEOF::Add1) {
+        getOutputStreamSetBindings().emplace_back("u8index", u8index, FixedRate(), Add1());
+    } else {
+        getOutputStreamSetBindings().emplace_back("u8index", u8index);
+    }
+    if (nullMode == NullCharMode::Abort) {
+        addAttribute(CanTerminateEarly());
+        addAttribute(MayFatallyTerminate());
+    }
 }
 
-void LineBreakKernelBuilder::generatePabloMethod() {
+void UnicodeLinesKernelBuilder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
-
-    Integer * const ZERO = pb.getInteger(0);
-
-    PabloAST * const LF = pb.createExtract(getInput(1), ZERO, "LF");
-    PabloAST * const CR = ccc.compileCC(makeByte(0x0D));
-    PabloAST * const LF_VT_FF_CR = ccc.compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
+    std::unique_ptr<CC_Compiler> ccc;
+    if (getInputStreamSet("basis").size() == 1) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+    }
+    if (mNullMode == NullCharMode::Abort) {
+        pb.createTerminateAt(ccc->compileCC(makeCC(0, &cc::Byte)), pb.getInteger(0));
+    }
+    PabloAST * const LF = pb.createExtract(getInput(1), pb.getInteger(0), "LF");
+    PabloAST * const CR = ccc->compileCC(makeByte(0x0D));
+    PabloAST * const LF_VT_FF_CR = ccc->compileCC("LF,VT,FF,CR", makeByte(0x0A, 0x0D), pb);
     Var * const LineBreak = pb.createVar("LineBreak", LF_VT_FF_CR);
 
     // Remove the CR of any CR+LF
-    Var * const CRLF = pb.createVar("CRLF", pb.createZeroes());
+    Var * const CR_before_LF = pb.createVar("CR_before_LF", pb.createZeroes());
     auto crb = pb.createScope();
     pb.createIf(CR, crb);
     PabloAST * const lookaheadLF = crb.createLookahead(LF, 1, "lookaheadLF");
-    PabloAST * const crlf = crb.createAnd(CR, lookaheadLF);
-    crb.createAssign(CRLF, crlf);
-    PabloAST * removedCRLF = crb.createAnd(LineBreak, crb.createNot(CRLF));
+    crb.createAssign(CR_before_LF, crb.createAnd(CR, lookaheadLF));
+    PabloAST * removedCRLF = crb.createXor(LineBreak, CR_before_LF);
     crb.createAssign(LineBreak, removedCRLF);
 
+    Zeroes * const ZEROES = pb.createZeroes();
+    PabloAST * const u8pfx = ccc->compileCC(makeByte(0xC0, 0xFF));
 
-    // Record the CR marker of any CR+LF
-    pb.createAssign(pb.createExtract(getOutput(1), ZERO), CRLF);
+    Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
+    Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
+    Var * const valid_pfx = pb.createVar("valid_pfx", u8pfx);
 
-    // Check for Unicode Line Breaks
-    PabloAST * u8pfx = ccc.compileCC(makeByte(0xC0, 0xFF));
     auto it = pb.createScope();
     pb.createIf(u8pfx, it);
-    PabloAST * u8pfx2 = ccc.compileCC(makeByte(0xC2, 0xDF), it);
-    PabloAST * u8pfx3 = ccc.compileCC(makeByte(0xE0, 0xEF), it);
+    PabloAST * const u8pfx2 = ccc->compileCC(makeByte(0xC2, 0xDF), it);
+    PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
+    PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
+    PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
 
+    //
     // Two-byte sequences
+    Var * const anyscope = it.createVar("anyscope", ZEROES);
     auto it2 = it.createScope();
     it.createIf(u8pfx2, it2);
-    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc.compileCC(makeByte(0xC2), it2), 1), ccc.compileCC(makeByte(0x85), it2), "NEL");
+    it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
+    PabloAST * NEL = it2.createAnd(it2.createAdvance(ccc->compileCC(makeByte(0xC2), it2), 1), ccc->compileCC(makeByte(0x85), it2), "NEL");
     it2.createAssign(LineBreak, it2.createOr(LineBreak, NEL));
 
+
+    //
     // Three-byte sequences
+    Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
     auto it3 = it.createScope();
     it.createIf(u8pfx3, it3);
-    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc.compileCC(makeByte(0xE2), it3), 1), ccc.compileCC(makeByte(0x80), it3));
-    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc.compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
+    PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
+    it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
+    PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
+    PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
+    it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
+    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
+    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
+    PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
+    it3.createAssign(EF_invalid, EX_invalid);
+    PabloAST * E2_80 = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE2), it3), 1), ccc->compileCC(makeByte(0x80), it3));
+    PabloAST * LS_PS = it3.createAnd(it3.createAdvance(E2_80, 1), ccc->compileCC(makeByte(0xA8,0xA9), it3), "LS_PS");
     it3.createAssign(LineBreak, it3.createOr(LineBreak, LS_PS));
 
-    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(LineBreak), 1), "unterminatedLineAtEOF");
-    pb.createAssign(pb.createExtract(getOutput(0), ZERO), pb.createOr(LineBreak, unterminatedLineAtEOF, "EOL"));
+    //
+    // Four-byte sequences
+    auto it4 = it.createScope();
+    it.createIf(u8pfx4, it4);
+    PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
+    PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
+    PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
+    PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
+    it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
+    PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
+    it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
+    PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF0), it4), 1), ccc->compileCC(makeByte(0x80, 0x8F), it4));
+    PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(makeByte(0xF4), it4), 1), ccc->compileCC(makeByte(0x90, 0xBF), it4));
+    PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
+    it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
+
+    //
+    // Invalid cases
+    PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+    //  Any scope that does not have a suffix byte, and any suffix byte that is not in
+    //  a scope is a mismatch, i.e., invalid UTF-8.
+    PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
+    //
+    PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
+    it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+    PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
+    //
+    //
+    it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
+    pb.createAssign(nonFinal, pb.createOr(nonFinal, CR_before_LF));
+
+    Var * const u8index = getOutputStreamVar("u8index");
+    PabloAST * u8final = pb.createNot(nonFinal);
+    pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u8final);
+    PabloAST * notLB = pb.createNot(LineBreak);
+    if (mEOFmode == UnterminatedLineAtEOF::Add1) {
+        PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(notLB, 1), "unterminatedLineAtEOF");
+        pb.createAssign(LineBreak, pb.createOr(LineBreak, unterminatedLineAtEOF));
+    }
+    pb.createAssign(pb.createExtract(getOutputStreamVar("LB"), pb.getInteger(0)), LineBreak);
+}
+
+void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
+                       StreamSet * Basis,
+                       StreamSet * UnicodeLB,
+                       StreamSet * u8index,
+                       UnterminatedLineAtEOF m,
+                       NullCharMode nullMode,
+                       Scalar * signalNullObject) {
+    StreamSet * const LF = P->CreateStreamSet();
+    P->CreateKernelCall<LineFeedKernelBuilder>(Basis, LF);
+    P->CreateKernelCall<UnicodeLinesKernelBuilder>
+         (Basis, LF, UnicodeLB, u8index, m, nullMode, signalNullObject);
 }

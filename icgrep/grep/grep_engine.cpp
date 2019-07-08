@@ -240,7 +240,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         setComponent(mRequiredComponents, Component::GraphemeClusterBoundary);
     }
 
-    StreamSet * LineBreakStream = P->CreateStreamSet();
+    StreamSet * LineBreakStream = P->CreateStreamSet(1, 1);
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
 
     re::RE * prefixRE;
@@ -275,12 +275,9 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         }
         SourceStream = BasisBits;
     }
-
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         UnicodeLB = P->CreateStreamSet();
-        StreamSet * const LineFeedStream = P->CreateStreamSet();
-        P->CreateKernelCall<LineFeedKernelBuilder>(SourceStream, LineFeedStream);
-        P->CreateKernelCall<RequiredStreams_UTF8>(SourceStream, LineFeedStream, U8index, UnicodeLB);
+        UnicodeLinesLogic(P, SourceStream, UnicodeLB, U8index, UnterminatedLineAtEOF::Add1);
         LineBreakStream = UnicodeLB;
     }
     else if (!internalS2P) {

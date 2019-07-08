@@ -23,33 +23,6 @@ protected:
     void generatePabloMethod() override;
 };
 
-class UnicodeLineBreakKernel : public pablo::PabloKernel {
-public:
-    UnicodeLineBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & kb);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
-class RequiredStreams_UTF8 : public pablo::PabloKernel {
-public:
-    RequiredStreams_UTF8(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * LineFeedStream, StreamSet * RequiredStreams, StreamSet * UnicodeLB);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
-class RequiredStreams_UTF16 : public pablo::PabloKernel {
-public:
-    RequiredStreams_UTF16(const std::unique_ptr<kernel::KernelBuilder> & kb);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
 enum class GrepCombiningType {None, Exclude, Include};
 class GrepKernelOptions {
     friend class ICGrepKernel;

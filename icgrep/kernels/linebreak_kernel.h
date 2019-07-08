@@ -9,6 +9,7 @@
 #include <cc/alphabet.h>
 
 namespace kernel { class KernelBuilder; }
+namespace kernel { class ProgramBuilder; }
 using namespace kernel;
 
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
@@ -69,13 +70,30 @@ protected:
     NullCharMode mNullMode;
 };
 
-class LineBreakKernelBuilder final : public pablo::PabloKernel {
+class UnicodeLinesKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineBreakKernelBuilder(const std::unique_ptr<KernelBuilder> & b, unsigned basisBitsCount);
+    UnicodeLinesKernelBuilder(const std::unique_ptr<KernelBuilder> & b,
+                              StreamSet * Basis,
+                              StreamSet * LF,
+                              StreamSet * UnicodeLB,
+                              StreamSet * u8index,
+                              UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
+                              NullCharMode nullMode = NullCharMode::Data,
+                              Scalar * signalNullObject = nullptr);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
+    UnterminatedLineAtEOF mEOFmode;
+    NullCharMode mNullMode;
 };
+
+void UnicodeLinesLogic(const std::unique_ptr<ProgramBuilder> & P,
+                       StreamSet * Basis,
+                       StreamSet * LineEnds,
+                       StreamSet * u8index,
+                       UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
+                       NullCharMode nullMode = NullCharMode::Data,
+                       Scalar * signalNullObject = nullptr);
 
 #endif
