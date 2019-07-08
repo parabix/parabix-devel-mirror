@@ -136,6 +136,100 @@ RecursiveParser::ParserState::~ParserState() {
 }
 
 
+static bool validateTypeEquivalence(std::shared_ptr<SourceFile> sourceFile,
+                                    std::shared_ptr<ErrorManager> em,
+                                    PabloType * type,
+                                    kernel::Binding const & binding)
+{
+    std::string const & name = binding.getName();
+    auto invalidBindingType = [](std::string const & name, std::string const & type) -> std::string {
+        return "Binding '" + name + "' does not match parameter type: " + type;
+    };
+    
+    if (auto scalar = llvm::dyn_cast<ScalarType>(type)) {
+        if (!llvm::isa<kernel::Scalar>(binding.getRelationship())) {
+            em->logTextError(sourceFile, invalidBindingType(name, "Scalar"));
+            return false;
+        }
+
+        if (binding.getFieldWidth() != scalar->getBitWidth()) {
+            em->logTextError(sourceFile, "Scalar field width mismatch between binding and parameter: " + name);
+            return false;
+        }
+    } else if (llvm::isa<StreamType>(type)) {
+        em->logTextError(sourceFile, "Single stream kernel I/O bindings are not supported at this time.");
+    } else if (auto streamSet = llvm::dyn_cast<StreamSetType>(type)) {
+        if (!llvm::isa<kernel::StreamSet>(binding.getRelationship())) {
+            em->logTextError(sourceFile, invalidBindingType(name, "StreamSet"));
+            return false;
+        }
+
+        if (binding.getFieldWidth() != streamSet->getElementBitWidth()) {
+            em->logTextError(sourceFile, "StreamSet field width mismatch between binding and parameter: " + name);
+            return false;
+        }
+
+        if (binding.getNumElements() != streamSet->getStreamCount()) {
+            em->logTextError(sourceFile, "StreamSet element count mismatch between binding and parameter: " + name);
+            return false;
+        }
+    } else if (auto alias = llvm::dyn_cast<AliasType>(type)) {
+        return validateTypeEquivalence(sourceFile, em, alias->getAliasedType(), binding);
+    } else if (auto namedStreamSet = llvm::dyn_cast<NamedStreamSetType>(type)) {
+        return validateTypeEquivalence(sourceFile, em, namedStreamSet->getAliasedType(), binding);
+    } else {
+        llvm_unreachable("invalid PabloType");
+        return false;
+    }
+
+    return true;
+}
+
+
+static std::vector<std::reference_wrapper<const kernel::Binding>> concatBindings(kernel::Bindings const & a, kernel::Bindings const & b) {
+    std::vector<std::reference_wrapper<const kernel::Binding>> kernelIO{};
+    kernelIO.reserve(a.size() + b.size());
+    for (auto & elem : a) {
+        kernelIO.push_back(std::cref(elem));
+    }
+    for (auto & elem : b) {
+        kernelIO.push_back(std::cref(elem));
+    }
+    return kernelIO;
+}
+
+static bool validateIOSignatureBinding(std::shared_ptr<SourceFile> sourceFile,
+                                       std::shared_ptr<ErrorManager> em,
+                                       std::vector<std::pair<std::string, PabloType *>> const & parsedParamList,
+                                       std::vector<std::reference_wrapper<const kernel::Binding>> const & bindings)
+{
+    std::unordered_map<std::string, PabloType *> mappedParamList(parsedParamList.begin(), parsedParamList.end());
+
+    for (auto const & binding : bindings) {
+        std::string const & name = binding.get().getName();
+        auto param = mappedParamList.find(name);
+        if (param == mappedParamList.end()) {
+            em->logTextError(sourceFile, "Binding to undefined parameter: " + name);
+            return false;
+        }
+        PabloType * type = param->second;
+        if (!validateTypeEquivalence(sourceFile, em, type, binding.get())) {
+            return false;
+        }
+        mappedParamList.erase(param);
+    }
+
+    if (mappedParamList.size() == 0) {
+        return true;
+    } else {
+        for (auto const & param : mappedParamList) {
+            em->logTextError(sourceFile, "Unbound parameter: " + param.first);
+        }
+        return false;
+    }
+}
+
+
 bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) {
     assert (kernel);
     assert (!kernelName.empty());
@@ -168,12 +262,24 @@ bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloS
     }
     state.index = kernelLocIt->getValue();
 
-    // Parse kernel.
+    // Parse kernel's signature.
     auto signature = parseKernelSignature(state);
     if (!signature || !mErrorManager->shouldContinue()) {
         return false;
     }
-    // TODO: check signature
+    
+    // Check that the parsed signature matches C++ kernel binding.
+    auto sig = *signature;
+    auto inputBindings = concatBindings(kernel->getInputStreamSetBindings(), kernel->getInputScalarBindings());
+    if (!validateIOSignatureBinding(sourceFile, mErrorManager, sig.getInputBindings(), inputBindings)) {
+        return false;
+    }
+    auto outputBindings = concatBindings(kernel->getOutputStreamSetBindings(), kernel->getOutputScalarBindings());
+    if (!validateIOSignatureBinding(sourceFile, mErrorManager, sig.getOutputBindings(), outputBindings)) {
+        return false;
+    }
+
+    // Parse kernel's body.
     auto block = parseBlock(state);
     if (block == nullptr || mErrorManager->hasErrors()) {
         return false;
