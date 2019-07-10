@@ -15,6 +15,7 @@
 #include <atomic>
 #include <boost/filesystem.hpp>
 #include <re/parsers/GLOB_parser.h>
+#include <kernels/linebreak_kernel.h>
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -70,20 +71,20 @@ public:
 
     virtual ~GrepEngine() = 0;
 
-    void setPreferMMap() {mPreferMMap = true;}
+    void setPreferMMap(bool b = true) {mPreferMMap = b;}
 
-    void showFileNames() {mShowFileNames = true;}
+    void showFileNames(bool b = true) {mShowFileNames = b;}
     void setStdinLabel(std::string lbl) {mStdinLabel = lbl;}
-    void showLineNumbers() {mShowLineNumbers = true;}
+    void showLineNumbers(bool b = true) {mShowLineNumbers = b;}
     void setContextLines(unsigned before, unsigned after) {mBeforeContext = before; mAfterContext = after;}
-    void setInitialTab() {mInitialTab = true;}
+    void setInitialTab(bool b = true) {mInitialTab = b;}
 
     void setMaxCount(int m) {mMaxCount = m;}
-    void setGrepStdIn() {mGrepStdIn = true;}
-    void setInvertMatches() {mInvertMatches = true;}
-    void setCaseInsensitive()  {mCaseInsensitive = true;}
+    void setGrepStdIn(bool b = true) {mGrepStdIn = b;}
+    void setInvertMatches(bool b = true) {mInvertMatches = b;}
+    void setCaseInsensitive(bool b = true)  {mCaseInsensitive = b;}
 
-    void suppressFileMessages() {mSuppressFileMessages = true;}
+    void suppressFileMessages(bool b = true) {mSuppressFileMessages = b;}
     void setBinaryFilesOption(argv::BinaryFilesMode mode) {mBinaryFilesMode = mode;}
     void setRecordBreak(GrepRecordBreakKind b);
     void initFileResult(const std::vector<boost::filesystem::path> & filenames);
@@ -100,8 +101,10 @@ protected:
     typedef uint32_t component_t;
     enum class Component : component_t {
         NoComponents = 0,
-        MoveMatchesToEOL = 0x01,
-        GraphemeClusterBoundary = 0x02
+        S2P = 0x01,
+        UTF8index = 0x02,
+        MoveMatchesToEOL = 0x04,
+        GraphemeClusterBoundary = 0x08
     };
     bool hasComponent(Component compon_set, Component c);
     void setComponent(Component & compon_set, Component c);
@@ -130,6 +133,7 @@ protected:
     bool mInvertMatches;
     int mMaxCount;
     bool mGrepStdIn;
+    NullCharMode mNullMode;
     BaseDriver & mGrepDriver;
     void * mMainMethod;
 

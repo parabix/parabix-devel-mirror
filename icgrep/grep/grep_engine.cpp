@@ -122,6 +122,7 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mInvertMatches(false),
     mMaxCount(0),
     mGrepStdIn(false),
+    mNullMode(NullCharMode::Data),
     mGrepDriver(driver),
     mMainMethod(nullptr),
     mNextFileToGrep(0),
@@ -216,18 +217,15 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
 
     //  Regular Expression Processing and Analysis Phase
-
-    StreamSet * ByteStream = nullptr;
+    StreamSet * ByteStream = InputStream;
     if (mBinaryFilesMode == argv::Text) {
-        ByteStream = InputStream;
+        mNullMode = NullCharMode::Data;
     } else if (mBinaryFilesMode == argv::WithoutMatch) {
-        ByteStream = P->CreateStreamSet(1, 8);
-        Kernel * binaryCheckK = P->CreateKernelCall<AbortOnNull>(InputStream, ByteStream, callbackObject);
-        mGrepDriver.LinkFunction(binaryCheckK, "signal_dispatcher", kernel::signal_dispatcher);
+        mNullMode = NullCharMode::Abort;
     } else {
-        llvm::report_fatal_error("Binary mode not supported.");
+        mNullMode = NullCharMode::Break;
     }
-
+    
     const auto numOfREs = mREs.size();
     SmallVector<bool, 4> hasGCB(numOfREs);
     bool anyGCB = false;
@@ -269,21 +267,24 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(SourceStream, BasisBits);
         } else {
-            //P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-            Kernel * s2pK = P->CreateKernelCall<S2PKernel>(SourceStream, BasisBits, callbackObject);
-            mGrepDriver.LinkFunction(s2pK, "signal_dispatcher", kernel::signal_dispatcher);
+            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+            //Kernel * s2pK = P->CreateKernelCall<S2PKernel>(SourceStream, BasisBits, callbackObject);
+            //mGrepDriver.LinkFunction(s2pK, "signal_dispatcher", kernel::signal_dispatcher);
         }
         SourceStream = BasisBits;
     }
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         UnicodeLB = P->CreateStreamSet();
-        UnicodeLinesLogic(P, SourceStream, UnicodeLB, U8index, UnterminatedLineAtEOF::Add1);
+        UnicodeLinesLogic(P, SourceStream, UnicodeLB, U8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
         LineBreakStream = UnicodeLB;
     }
     else if (!internalS2P) {
         P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-            P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1);
+            Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
+            if (mNullMode == NullCharMode::Abort) {
+                mGrepDriver.LinkFunction(k, "signal_dispatcher", kernel::signal_dispatcher);
+            }
         } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
             P->CreateKernelCall<NullTerminatorKernel>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1);
         }
