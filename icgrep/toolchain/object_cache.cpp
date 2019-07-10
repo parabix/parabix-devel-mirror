@@ -352,9 +352,7 @@ inline void ParabixObjectCache::loadCacheSettings() noexcept {
     }
     #endif
 
-    using p = sys::fs::perms;
-    const auto permissions = p::owner_read | p::owner_write | p::group_read | p::group_write;
-    const auto err = sys::fs::create_directories(mCachePath, true, permissions);
+    const auto err = sys::fs::create_directories(mCachePath, true);
 
     if (LLVM_UNLIKELY(err)) {
         std::string tmp;

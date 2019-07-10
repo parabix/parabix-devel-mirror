@@ -383,13 +383,16 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     Value * const processState = allocateThreadState(b, Constant::getNullValue(b->getPThreadTy()));
     b->CreateCall(threadFunc, b->CreatePointerCast(processState, voidPtrTy));
 
+    // wait for all other threads to complete
+    AllocaInst * const status = b->CreateAlloca(voidPtrTy);
+    for (unsigned i = 0; i < threads; ++i) {
+        Value * threadId = b->CreateLoad(threadIdPtr[i]);
+        b->CreatePThreadJoinCall(threadId, status);
+    }
+
     if (mPipelineKernel->hasThreadLocal()) {
         Value * terminated = readTerminationSignalFromLocalState(b, initialThreadLocal);
-        // wait for all other threads to complete
-        AllocaInst * const status = b->CreateAlloca(voidPtrTy);
         for (unsigned i = 0; i < threads; ++i) {
-            Value * threadId = b->CreateLoad(threadIdPtr[i]);
-            b->CreatePThreadJoinCall(threadId, status);
             SmallVector<Value *, 2> args;
             if (LLVM_LIKELY(mPipelineKernel->isStateful())) {
                 args.push_back(initialSharedState);
