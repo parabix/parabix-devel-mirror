@@ -148,9 +148,11 @@ protected:
     std::vector<re:: RE *> mREs;
     std::set<re::Name *> mUnicodeProperties;
     re::CC * mBreakCC;
+    re::RE * mPrefixRE;
+    re::RE * mSuffixRE;
     std::string mFileSuffix;
-    Component mRequiredComponents;
-    bool mMoveMatchesToEOL;
+    Component mExternalComponents;
+    Component mInternalComponents;
     pthread_t mEngineThread;
 };
 

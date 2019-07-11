@@ -129,8 +129,8 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mNextFileToPrint(0),
     grepMatchFound(false),
     mGrepRecordBreak(GrepRecordBreakKind::LF),
-    mRequiredComponents(static_cast<Component>(0)),
-    mMoveMatchesToEOL(true),
+    mExternalComponents(static_cast<Component>(0)),
+    mInternalComponents(static_cast<Component>(0)),
     mEngineThread(pthread_self()) {}
 
 GrepEngine::~GrepEngine() { }
@@ -203,9 +203,47 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::gatherUnicodeProperties(mREs[i], mUnicodeProperties);
         mREs[i] = regular_expression_passes(mREs[i]);
     }
-    if (!allAnchored || (mGrepRecordBreak == GrepRecordBreakKind::Unicode)) {
-        setComponent(mRequiredComponents, Component::MoveMatchesToEOL);
+
+    for (unsigned i = 0; i < mREs.size(); ++i) {
+        if (hasGraphemeClusterBoundary(mREs[i])) {
+            setComponent(mExternalComponents, Component::GraphemeClusterBoundary);
+            break;
+        }
     }
+    //
+    // Moving matches to EOL.   Mathches need to be aligned at EOL if for
+    // scanning or counting processes (with a max count != 1).   If the REs
+    // are not all anchored, then we need to move the matches to EOL.
+    // Moving matches is also required for UnicodeLines mode, because matches
+    // may be on the CR of a CRLF, as well as for InvertMatches mode.
+    if ((mEngineKind == EngineKind::EmitMatches) || (mMaxCount != 1) || mInvertMatches) {
+        if (!allAnchored || (mGrepRecordBreak == GrepRecordBreakKind::Unicode)) {
+            // Move matches to EOL.   This may be achieved internally by modifying
+            // the regular expression or externally.   The internal approach is more
+            // generally more efficient, but cannot be used if colorization is needed
+            // or in UnicodeLines mode.
+            if ((mGrepRecordBreak == GrepRecordBreakKind::Unicode) || (mEngineKind == EngineKind::EmitMatches) | mInvertMatches) {
+                setComponent(mExternalComponents, Component::MoveMatchesToEOL);
+            } else {
+                setComponent(mInternalComponents, Component::MoveMatchesToEOL);
+            }
+        }
+    }
+    // For simple regular expressions with a small number of characters, we
+    // can bypass transposition and use the Direct CC compiler.
+    mPrefixRE = nullptr;
+    mSuffixRE = nullptr;
+    if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
+        (!hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) &&
+        mUnicodeProperties.empty()) {
+        if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
+            return;  // skip transposition
+        } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
+            return;  // skip transposition and set mPrefixRE, mSuffixRE
+        }
+    }
+    setComponent(mExternalComponents, Component::S2P);
+    setComponent(mExternalComponents, Component::UTF8index);
 }
 
 // Code Generation
@@ -227,42 +265,15 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
     
     const auto numOfREs = mREs.size();
-    SmallVector<bool, 4> hasGCB(numOfREs);
-    bool anyGCB = false;
-
-    for(unsigned i = 0; i < numOfREs; ++i) {
-        hasGCB[i] = hasGraphemeClusterBoundary(mREs[i]);
-        anyGCB |= hasGCB[i];
-    }
-    if (anyGCB) {
-        setComponent(mRequiredComponents, Component::GraphemeClusterBoundary);
-    }
-
-    StreamSet * LineBreakStream = P->CreateStreamSet(1, 1);
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
-
-    re::RE * prefixRE;
-    re::RE * suffixRE;
-
-    // For simple regular expressions with a small number of characters, we
-    // can bypass transposition and use the Direct CC compiler.
-    const auto isSimple = (numOfREs == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) && (!anyGCB) && mUnicodeProperties.empty();
-    const auto isWithinByteTestLimit = byteTestsWithinLimit(mREs[0], ByteCClimit);
-    const auto hasTriCC = hasTriCCwithinLimit(mREs[0], ByteCClimit, prefixRE, suffixRE);
-    const auto internalS2P = isSimple && (isWithinByteTestLimit || hasTriCC);
-
-    Component internalComponents = Component::NoComponents;
-    if (internalS2P && hasComponent(mRequiredComponents, Component::MoveMatchesToEOL) && !mInvertMatches) {
-        setComponent(internalComponents, Component::MoveMatchesToEOL);
-    }
-
     StreamSet * SourceStream = ByteStream;
+    StreamSet * LineBreakStream = P->CreateStreamSet(1, 1);
     StreamSet * const U8index = P->CreateStreamSet();
     StreamSet * UnicodeLB = nullptr;
     std::map<std::string, StreamSet *> propertyStream;
     StreamSet * GCB_stream = nullptr;
 
-    if (!internalS2P) {
+    if (hasComponent(mExternalComponents, Component::S2P)) {
         StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(SourceStream, BasisBits);
@@ -278,8 +289,10 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         UnicodeLinesLogic(P, SourceStream, UnicodeLB, U8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
         LineBreakStream = UnicodeLB;
     }
-    else if (!internalS2P) {
-        P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
+    else {
+        if (hasComponent(mExternalComponents, Component::UTF8index)) {
+            P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
+        }
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
             Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
             if (mNullMode == NullCharMode::Abort) {
@@ -298,12 +311,10 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             P->CreateKernelCall<UnicodePropertyKernelBuilder>(p, SourceStream, property);
         }
     }
-
-    if (hasComponent(mRequiredComponents, Component::GraphemeClusterBoundary)) {
+    if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
         GCB_stream = P->CreateStreamSet();
         P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, U8index, GCB_stream);
     }
-
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
         MatchResultsBufs[i] = MatchResults;
@@ -311,12 +322,12 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         options->setIndexingAlphabet(&cc::UTF8);
         options->setSource(SourceStream);
         options->setResults(MatchResults);
-        if (hasComponent(internalComponents, Component::MoveMatchesToEOL)) {
+        if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
             re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
-            if (isWithinByteTestLimit) {
+            if (mSuffixRE == nullptr) {
                 mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
             } else {
-                suffixRE = re::makeSeq({suffixRE, re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
+                mSuffixRE = re::makeSeq({mSuffixRE, re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
             }
         }
         options->setRE(mREs[i]);
@@ -329,31 +340,15 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                 options->addExternal(name, f->second);
             }
         }
-        if (hasGCB[i]) { assert (GCB_stream);
+        if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
+            assert (GCB_stream);
             options->addExternal("\\b{g}", GCB_stream);
         }
-        if (internalS2P) {
-            if (!isWithinByteTestLimit) {
-                if (MultithreadedSimpleRE) {
-                    auto CCs = re::collectCCs(prefixRE, cc::Byte);
-                    for (auto cc : CCs) {
-                        auto ccName = makeName(cc);
-                        prefixRE = re::replaceCC(prefixRE, cc, ccName);
-                        suffixRE = re::replaceCC(suffixRE, cc, ccName);
-                        auto ccNameStr = ccName->getFullName();
-                        StreamSet * const ccStream = P->CreateStreamSet(1, 1);
-                        P->CreateKernelCall<CharacterClassKernelBuilder>(ccNameStr, std::vector<re::CC *>{cc}, SourceStream, ccStream);
-                        options->addExternal(ccNameStr, ccStream);
-                    }
-                }
-                options->setPrefixRE(prefixRE);
-                options->setRE(suffixRE);
-            }
-            if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-                Kernel * LB_nullK = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1, NullCharMode::Abort, callbackObject);
-                mGrepDriver.LinkFunction(LB_nullK, "signal_dispatcher", kernel::signal_dispatcher);
-            } else {
-                P->CreateKernelCall<CharacterClassKernelBuilder>("Null", std::vector<re::CC *>{mBreakCC}, SourceStream, LineBreakStream);
+        
+        if (!hasComponent(mExternalComponents, Component::S2P)) {
+            if (mSuffixRE != nullptr) {
+                options->setPrefixRE(mPrefixRE);
+                options->setRE(mSuffixRE);
             }
         } else {
             options->addExternal("UTF8_index", U8index);
@@ -384,7 +379,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         P->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
         Matches = MergedMatches;
     }
-    if (hasComponent(mRequiredComponents, Component::MoveMatchesToEOL) && !hasComponent(internalComponents, Component::MoveMatchesToEOL)) {
+    if (hasComponent(mExternalComponents, Component::MoveMatchesToEOL)) {
         StreamSet * const MovedMatches = P->CreateStreamSet();
         P->CreateKernelCall<MatchedLinesKernel>(Matches, LineBreakStream, MovedMatches);
         Matches = MovedMatches;

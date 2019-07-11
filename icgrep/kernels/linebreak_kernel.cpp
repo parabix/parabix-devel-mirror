@@ -18,6 +18,7 @@
 #include <IR_Gen/idisa_builder.h>
 #include <kernels/kernel_builder.h>
 #include <kernels/pipeline_builder.h>
+#include <kernels/callback.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace cc;
@@ -291,6 +292,9 @@ void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
                        Scalar * signalNullObject) {
     StreamSet * const LF = P->CreateStreamSet();
     P->CreateKernelCall<LineFeedKernelBuilder>(Basis, LF);
-    P->CreateKernelCall<UnicodeLinesKernelBuilder>
+    Kernel * k = P->CreateKernelCall<UnicodeLinesKernelBuilder>
          (Basis, LF, UnicodeLB, u8index, m, nullMode, signalNullObject);
+    if (nullMode == NullCharMode::Abort) {
+        P->getDriver().LinkFunction(k, "signal_dispatcher", kernel::signal_dispatcher);
+    }
 }
