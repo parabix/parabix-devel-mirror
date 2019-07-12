@@ -4,25 +4,26 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "decomposition.h"
+#include <re/compile/decomposition.h>
+
 #include <string>
 #include <vector>
 #include <locale>
 #include <codecvt>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_alt.h>
-#include <re/re_group.h>
-#include <re/re_range.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_toolchain.h>
-#include <UCD/unicode_set.h>
-#include <UCD/PropertyAliases.h>
-#include <UCD/PropertyObjects.h>
-#include <UCD/PropertyValueAliases.h>
 #include <llvm/Support/Casting.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_group.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/compile/re_toolchain.h>
+#include <ucd/core/unicode_set.h>
+#include <ucd/data/PropertyAliases.h>
+#include <ucd/data/PropertyObjects.h>
+#include <ucd/data/PropertyValueAliases.h>
 
 
 using namespace llvm;

@@ -6,7 +6,7 @@
 #ifndef PABLO_KERNEL_H
 #define PABLO_KERNEL_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 #include <pablo/pabloAST.h>
 #include <pablo/symbol_generator.h>
 #include <util/slab_allocator.h>

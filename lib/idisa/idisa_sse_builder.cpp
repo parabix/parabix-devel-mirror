@@ -4,7 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "idisa_sse_builder.h"
+#include <idisa/idisa_sse_builder.h>
+
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 

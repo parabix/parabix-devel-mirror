@@ -1,7 +1,7 @@
 #ifndef FUNCTIONTYPEBUILDER_H
 #define FUNCTIONTYPEBUILDER_H
 
-#include <IR_Gen/TypeBuilder.h>
+#include <codegen/TypeBuilder.h>
 
 // NOTE: Currently, LLVM TypeBuilder can deduce FuntionTypes for up to 5 arguments. The following
 // templates have no limit but should be deprecated if the TypeBuilder ever supports n-ary functions.

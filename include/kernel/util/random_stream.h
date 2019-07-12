@@ -1,7 +1,7 @@
 #ifndef RANDOM_STREAM_H
 #define RANDOM_STREAM_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 namespace kernel { class KernelBuilder; }
 
 namespace kernel {

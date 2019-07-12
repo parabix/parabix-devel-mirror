@@ -4,31 +4,32 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "equivalence.h"
+#include <re/compile/equivalence.h>
+
 #include <string>
 #include <locale>
 #include <codecvt>
-#include <cc/alphabet.h>
-#include <re/re_re.h>
-#include <re/re_seq.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_group.h>
-#include <re/re_range.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_toolchain.h>
-#include <re/Unicode/decomposition.h>
-#include <re/printer_re.h>
-#include "UCD/PropertyAliases.h"
-#include "UCD/PropertyObjects.h"
-#include "UCD/PropertyValueAliases.h"
-#include <UCD/Equivalence.h>
-#include <UCD/PrecomposedMappings.h>
-#include <UCD/unicode_set.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
+#include <re/adt/printer_re.h>
+#include <re/adt/re_re.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_group.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/cc/alphabet.h>
+#include <re/compile/re_toolchain.h>
+#include <re/compile/decomposition.h>
+#include <ucd/core/unicode_set.h>
+#include "ucd/data/PropertyAliases.h"
+#include "ucd/data/PropertyObjects.h"
+#include "ucd/data/PropertyValueAliases.h"
+#include <ucd/data/Equivalence.h>
+#include <ucd/data/PrecomposedMappings.h>
 
 using namespace re;
 using namespace llvm;

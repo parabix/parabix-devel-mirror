@@ -1,18 +1,19 @@
-#include "ucd_compiler.hpp"
-#include <cc/alphabet.h>
-#include <cc/cc_compiler.h>
-#include <UCD/unicode_set.h>
-#include <re/re_name.h>
-#include <re/re_cc.h>
-#include <utf8_encoder.h>
-#include <utf16_encoder.h>
+#include <ucd/compile/ucd_compiler.hpp>
+
 #include <array>
+#include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/raw_ostream.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <pablo/printer_pablos.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <llvm/Support/raw_ostream.h>
+#include <re/cc/alphabet.h>
+#include <re/cc/cc_compiler.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_cc.h>
+#include <ucd/core/unicode_set.h>
+#include <ucd/compile/utf8_encoder.h>
+#include <ucd/compile/utf16_encoder.h>
 
 using namespace cc;
 using namespace re;

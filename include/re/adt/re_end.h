@@ -7,7 +7,7 @@
 #ifndef END_H
 #define END_H
 
-#include "re_re.h"
+#include <re/adt/re_re.h>
 
 namespace re {
 

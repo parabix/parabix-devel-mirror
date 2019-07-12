@@ -1,10 +1,10 @@
 #ifndef UNICODE_SET_H
 #define UNICODE_SET_H
 
-#include "UCD_Config.h"
 #include <stdint.h>
 #include <vector>
 #include <boost/iterator/iterator_facade.hpp>
+#include <ucd/core/UCD_Config.h>
 #include <util/slab_allocator.h>
 
 //

@@ -1,5 +1,6 @@
-#include "processing_rate.h"
-#include "kernel.h"
+#include <kernel/core/processing_rate.h>
+
+#include <kernel/core/kernel.h>
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/raw_ostream.h>
 #include <array>

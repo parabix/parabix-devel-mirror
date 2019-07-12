@@ -1,9 +1,9 @@
 #ifndef RE_NAME_H
 #define RE_NAME_H
 
-#include <re/re_re.h>
-#include <re/re_cc.h>
 #include <llvm/Support/Casting.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_re.h>
 
 namespace UCD {
     class UnicodeSet;

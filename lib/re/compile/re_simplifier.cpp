@@ -1,15 +1,15 @@
-#include "re_simplifier.h"
-#include <re/re_name.h>
-#include <re/re_alt.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_range.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_toolchain.h>
-#include <re/re_toolchain.h>
+#include <re/compile/re_simplifier.h>
+
 #include <boost/container/flat_set.hpp>
+#include <re/adt/re_name.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/compile/re_toolchain.h>
 
 using namespace llvm;
 

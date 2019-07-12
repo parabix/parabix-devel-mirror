@@ -1,6 +1,6 @@
-#include <kernels/pipeline_builder.h>
-#include <kernels/optimizationbranch.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/pipeline/pipeline_builder.h>
+#include <kernel/pipeline/optimizationbranch.h>
+#include <kernel/core/kernel_builder.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/function_output_iterator.hpp>
 #include <boost/graph/adjacency_list.hpp>

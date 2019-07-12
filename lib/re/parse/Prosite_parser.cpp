@@ -4,15 +4,16 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "Prosite_parser.h"
-#include <re/parsers/parser_helper.h>
-#include <re/re_alt.h>
-#include <re/re_any.h>
-#include <re/re_seq.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_diff.h>
-#include <re/re_rep.h>
+#include <re/parse/Prosite_parser.h>
+
+#include <re/parse/parser_helper.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_rep.h>
 
 namespace re{
 

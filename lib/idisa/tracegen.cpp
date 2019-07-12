@@ -1,4 +1,4 @@
-#include "tracegen.h"
+#include <idisa/tracegen.h>
 
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>

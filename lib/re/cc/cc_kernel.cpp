@@ -3,12 +3,13 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "cc_kernel.h"
-#include <re/re_cc.h>
-#include <cc/cc_compiler.h>
-#include <cc/cc_compiler_target.h>
-#include <kernels/kernel_builder.h>
+#include <re/cc/cc_kernel.h>
+
+#include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
+#include <re/adt/re_cc.h>
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
 
 using namespace cc;
 using namespace kernel;

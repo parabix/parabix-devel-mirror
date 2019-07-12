@@ -4,9 +4,9 @@
  */
 
 
-#include "cc_scan_kernel.h"
+#include <kernel/util/cc_scan_kernel.h>
 #include <llvm/IR/Module.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 
 using namespace llvm;

@@ -7,7 +7,7 @@
 #ifndef ICGREP_RE_PARSER_PROSITE_H
 #define ICGREP_RE_PARSER_PROSITE_H
 
-#include <re/parsers/parser.h>
+#include <re/parse/parser.h>
 
 namespace re {
     class RE_Parser_PROSITE : public RE_Parser  {

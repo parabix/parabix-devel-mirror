@@ -3,14 +3,15 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "deletion.h"
+#include <kernel/util/deletion.h>
+
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/Support/raw_ostream.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/idisa_target.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <toolchain/driver.h>
 #include <toolchain/cpudriver.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/pipeline_builder.h>
-#include <llvm/Support/raw_ostream.h>
-#include <IR_Gen/idisa_target.h>
-#include <llvm/IR/Intrinsics.h>
 
 using namespace llvm;
 

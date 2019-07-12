@@ -4,17 +4,18 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "GLOB_parser.h"
-#include <re/re_cc.h>
-#include <re/re_range.h>
-#include <re/re_alt.h>
-#include <re/re_seq.h>
-#include <re/re_diff.h>
-#include <re/re_rep.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_utility.h>
+#include <re/parse/GLOB_parser.h>
+
 #include <fstream>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_utility.h>
 
 namespace re {
 

@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "pablo_compiler.h"
+#include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/codegenstate.h>
@@ -34,8 +34,8 @@
 #endif
 #include <pablo/compressed_carry_manager.h>
 #include <pablo/pablo_toolchain.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Support/raw_os_ostream.h>

@@ -7,7 +7,7 @@
 #define UTF16_GEN_H
 
 #include <pablo/pablo_kernel.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 //
 // UTF-16 encoding requires one or two code units per Unicode character.

@@ -3,11 +3,11 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "scan_kernel.h"
+#include <kernel/util/scan_kernel.h>
 
 #include <vector>
 #include <toolchain/toolchain.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/IR/Module.h>
 
 using namespace llvm;

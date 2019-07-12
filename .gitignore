@@ -1,5 +1,6 @@
 # Don't track build directories
 icgrep*build
+build
 libllv*
 llvm*build
 debug*build

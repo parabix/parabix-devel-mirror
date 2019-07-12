@@ -1,7 +1,7 @@
 #ifndef INTERNAL_POPCOUNT_KERNEL_H
 #define INTERNAL_POPCOUNT_KERNEL_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 

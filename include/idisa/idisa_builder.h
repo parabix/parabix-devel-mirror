@@ -6,7 +6,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include "CBuilder.h"
+#include <codegen/CBuilder.h>
 #include <llvm/IR/DerivedTypes.h>
 namespace llvm { class Constant; }
 namespace llvm { class LoadInst; }

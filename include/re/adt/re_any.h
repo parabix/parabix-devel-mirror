@@ -7,11 +7,11 @@
 #ifndef ANY_H
 #define ANY_H
 
-#include "re_re.h"
-#include "re_cc.h"
-#include "re_name.h"
-#include <UCD/unicode_set.h>
 #include <llvm/Support/Casting.h>
+#include <re/adt/re_re.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_name.h>
+#include <ucd/core/unicode_set.h>
 
 namespace re {
 

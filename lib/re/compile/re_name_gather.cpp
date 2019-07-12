@@ -1,21 +1,22 @@
-#include "re_name_gather.h"
-#include <re/re_name.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_range.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_group.h>
-#include <re/re_analysis.h>
-#include <cc/alphabet.h>
-#include <UCD/ucd_compiler.hpp>
-#include <UCD/resolve_properties.h>
+#include <re/compile/re_name_gather.h>
+
 #include <boost/container/flat_set.hpp>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/re_group.h>
+#include <re/cc/alphabet.h>
+#include <re/compile/re_analysis.h>
+#include <ucd/compile/ucd_compiler.hpp>
+#include <ucd/compile/resolve_properties.h>
 
 using namespace llvm;
 namespace re {

@@ -4,13 +4,13 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "error.h"
+#include <pablo/parse/error.h>
 
 #include <cassert>
 #include <iostream>
 #include <boost/make_unique.hpp>
-#include <pablo/parser/source_file.h>
-#include <pablo/parser/token.h>
+#include <pablo/parse/source_file.h>
+#include <pablo/parse/token.h>
 
 namespace pablo {
 namespace parse {

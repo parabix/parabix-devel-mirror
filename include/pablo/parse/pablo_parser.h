@@ -12,8 +12,8 @@
 #include <boost/optional.hpp>
 #include <pablo/pablo_kernel.h>
 #include <pablo/builder.hpp>
-#include <pablo/pablo_source_kernel.h>
-#include <pablo/parser/kernel_signature.h>
+#include <pablo/parse/pablo_source_kernel.h>
+#include <pablo/parse/kernel_signature.h>
 
 namespace pablo {
 namespace parse {

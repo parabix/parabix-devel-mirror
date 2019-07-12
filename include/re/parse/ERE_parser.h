@@ -7,7 +7,7 @@
 #ifndef ERE_PARSER_H
 #define ERE_PARSER_H
 
-#include <re/parsers/parser.h>
+#include <re/parse/parser.h>
 
 namespace re {
     class ERE_Parser : public RE_Parser  {

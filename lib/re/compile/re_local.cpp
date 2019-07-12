@@ -1,15 +1,16 @@
-#include "re_local.h"
-#include <re/re_name.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_analysis.h>
-#include <re/re_nullable.h>
-#include <re/re_toolchain.h>
+#include <re/compile/re_local.h>
+
+#include <re/adt/re_name.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/compile/re_analysis.h>
+#include <re/compile/re_nullable.h>
+#include <re/compile/re_toolchain.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 

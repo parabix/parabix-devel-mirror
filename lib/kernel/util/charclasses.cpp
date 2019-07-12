@@ -3,13 +3,13 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "charclasses.h"
-#include <re/re_toolchain.h>
-#include <kernels/kernel_builder.h>
-#include <UCD/ucd_compiler.hpp>
-#include <cc/cc_compiler.h>
-#include <cc/cc_compiler_target.h>
-#include <re/re_name.h>
+#include <kernel/util/charclasses.h>
+#include <re/compile/re_toolchain.h>
+#include <kernel/core/kernel_builder.h>
+#include <ucd/compile/ucd_compiler.hpp>
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
+#include <re/adt/re_name.h>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>

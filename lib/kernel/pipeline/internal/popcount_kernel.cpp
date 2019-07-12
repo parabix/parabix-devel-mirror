@@ -1,5 +1,6 @@
 #include "popcount_kernel.h"
-#include <kernels/kernel_builder.h>
+
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

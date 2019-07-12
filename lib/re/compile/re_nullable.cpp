@@ -1,17 +1,18 @@
-#include "re_nullable.h"
-#include <re/re_alt.h>             // for Alt, makeAlt
-#include <re/re_any.h>             // for makeAny, Any
-#include <re/re_assertion.h>       // for Assertion, Assertion::Sense, Asser...
-#include <re/re_diff.h>            // for Diff, makeDiff
-#include <re/re_intersect.h>       // for Intersect
-#include <re/re_name.h>            // for Name
-#include <re/re_rep.h>             // for Rep, makeRep
-#include <re/re_seq.h>             // for Seq, makeSeq
-#include <re/re_group.h>             // for Seq, makeSeq
-#include <re/re_toolchain.h>
-#include <re/validation.h>
-#include <vector>                  // for vector, allocator
-#include <llvm/Support/Casting.h>  // for dyn_cast, isa
+#include <re/compile/re_nullable.h>
+
+#include <vector>                      // for vector, allocator
+#include <llvm/Support/Casting.h>      // for dyn_cast, isa
+#include <re/adt/re_alt.h>             // for Alt, makeAlt
+#include <re/adt/re_any.h>             // for makeAny, Any
+#include <re/adt/re_assertion.h>       // for Assertion, Assertion::Sense, Asser...
+#include <re/adt/re_diff.h>            // for Diff, makeDiff
+#include <re/adt/re_intersect.h>       // for Intersect
+#include <re/adt/re_name.h>            // for Name
+#include <re/adt/re_rep.h>             // for Rep, makeRep
+#include <re/adt/re_seq.h>             // for Seq, makeSeq
+#include <re/adt/re_group.h>           // for Seq, makeSeq
+#include <re/compile/re_toolchain.h>
+#include <re/compile/validation.h>
 
 /*
 

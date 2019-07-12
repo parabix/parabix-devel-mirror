@@ -1,6 +1,6 @@
 
-#include "fake_stream_generating_kernel.h"
-#include <kernels/kernel_builder.h>
+#include <kernel/util/fake_stream_generating_kernel.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
 

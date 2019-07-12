@@ -7,7 +7,7 @@
 #define UTF8_GEN_H
 
 #include <pablo/pablo_kernel.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 //
 // UTF-8 encoding requires one to four bytes per Unicode character.

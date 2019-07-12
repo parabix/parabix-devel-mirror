@@ -4,7 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <UCD/unicode_set.h>
+#include <ucd/core/unicode_set.h>
+
 using codepoint_t = UCD::codepoint_t;
 
 template <int Bits> class UTF {

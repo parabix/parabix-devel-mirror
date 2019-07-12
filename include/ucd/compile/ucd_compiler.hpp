@@ -1,9 +1,10 @@
 #ifndef UCDCOMPILER_HPP
 #define UCDCOMPILER_HPP
 
-#include "UCD_Config.h"
-#include <boost/container/flat_map.hpp>
+#include <ucd/core/UCD_Config.h>
+
 #include <vector>
+#include <boost/container/flat_map.hpp>
 
 namespace cc {
     class CC_Compiler;

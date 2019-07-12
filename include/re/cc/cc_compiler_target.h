@@ -6,7 +6,7 @@
 #ifndef CC_COMPILER_TARGET_H
 #define CC_COMPILER_TARGET_H
 
-#include "cc_compiler.h"
+#include <re/cc/cc_compiler.h>
 
 namespace cc {
 

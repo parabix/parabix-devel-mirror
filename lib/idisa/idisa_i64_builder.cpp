@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "idisa_i64_builder.h"
+#include <idisa/idisa_i64_builder.h>
 
 using namespace llvm;
 

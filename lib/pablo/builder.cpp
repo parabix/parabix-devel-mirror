@@ -1,4 +1,5 @@
-#include "builder.hpp"
+#include <pablo/builder.hpp>
+
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
 #include <pablo/branch.h>

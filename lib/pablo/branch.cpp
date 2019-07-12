@@ -1,4 +1,4 @@
-#include "branch.h"
+#include <pablo/branch.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pe_var.h>
 #include <pablo/ps_assign.h>

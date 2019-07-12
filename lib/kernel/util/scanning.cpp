@@ -3,10 +3,9 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "scanning.h"
+#include <kernel/util/scanning.h>
 #include <llvm/IR/Module.h>
-
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 #define IS_POW_2(i) ((i > 0) && ((i & (i - 1)) == 0))
 

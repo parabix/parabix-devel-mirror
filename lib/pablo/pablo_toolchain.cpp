@@ -4,15 +4,16 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include <pablo/pablo_toolchain.h>
+
 #include <toolchain/toolchain.h>
-#include "pablo_toolchain.h"
 #include <pablo/pablo_kernel.h>
-#include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/optimizers/codemotionpass.h>
-#include <pablo/optimizers/distributivepass.h>
-#include <pablo/optimizers/schedulingprepass.h>
-#include <pablo/passes/flattenif.hpp>
-#include <pablo/analysis/pabloverifier.hpp>
+#include <pablo/pablo_simplifier.hpp>
+#include <pablo/codemotionpass.h>
+#include <pablo/distributivepass.h>
+#include <pablo/schedulingprepass.h>
+#include <pablo/flattenif.hpp>
+#include <pablo/pabloverifier.hpp>
 #include <pablo/printer_pablos.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/FileSystem.h>

@@ -1,4 +1,4 @@
-#include <kernels/pipeline_kernel.h>
+#include <kernel/pipeline/pipeline_kernel.h>
 #include "pipeline_compiler.hpp"
 #include <llvm/IR/Function.h>
 

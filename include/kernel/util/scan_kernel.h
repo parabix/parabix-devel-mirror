@@ -6,7 +6,7 @@
 #ifndef SCAN_KERNEL_H
 #define SCAN_KERNEL_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 

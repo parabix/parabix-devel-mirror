@@ -4,10 +4,10 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "simple_lexer.h"
+#include <pablo/parse/simple_lexer.h>
 
 #include <cctype>
-#include <pablo/parser/error_text.h>
+#include <pablo/parse/error_text.h>
 
 namespace pablo {
 namespace parse {

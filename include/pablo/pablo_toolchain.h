@@ -7,6 +7,8 @@
 #ifndef PABLO_TOOLCHAIN_H
 #define PABLO_TOOLCHAIN_H
 
+#include <string>
+
 namespace llvm { namespace cl { class OptionCategory; } }
 namespace pablo { class PabloKernel; }
 

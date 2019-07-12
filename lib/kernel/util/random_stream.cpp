@@ -2,10 +2,10 @@
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include "random_stream.h"
+#include <kernel/util/random_stream.h>
 #include <llvm/IR/Module.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
 #include <toolchain/toolchain.h>
 
 using namespace kernel;

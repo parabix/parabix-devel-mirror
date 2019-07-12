@@ -2,11 +2,11 @@
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include "stdout_kernel.h"
+#include <kernel/util/stdout_kernel.h>
 #include <llvm/IR/Module.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <toolchain/toolchain.h>
-#include <kernels/core/streamset.h>
+#include <kernel/core/streamset.h>
 
 namespace llvm { class Type; }
 

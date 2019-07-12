@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "cc_compiler_target.h"
+#include <re/cc/cc_compiler_target.h>
 #include <toolchain/toolchain.h>
 
 using namespace std;

@@ -1,4 +1,5 @@
-#include "codemotionpass.h"
+#include <pablo/codemotionpass.h>
+
 #include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
 #include <pablo/branch.h>
@@ -6,7 +7,7 @@
 #include <pablo/pe_var.h>
 #include <boost/container/flat_set.hpp>
 #ifndef NDEBUG
-#include <pablo/analysis/pabloverifier.hpp>
+#include <pablo/pabloverifier.hpp>
 #endif
 
 using namespace llvm;

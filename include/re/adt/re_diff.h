@@ -1,7 +1,7 @@
 #ifndef RE_DIFF_H
 #define RE_DIFF_H
 
-#include <re/re_re.h>
+#include <re/adt/re_re.h>
 
 namespace re {
 

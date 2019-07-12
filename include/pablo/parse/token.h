@@ -10,7 +10,7 @@
 #include <ostream>
 #include <memory>
 #include <string>
-#include <pablo/parser/source_file.h>
+#include <pablo/parse/source_file.h>
 #include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
 

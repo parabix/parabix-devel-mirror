@@ -1,7 +1,7 @@
-#include <kernels/pipeline/pipeline_compiler.hpp>
-#include <kernels/pipeline/analysis/lexographic_ordering.hpp>
-#include <kernels/pipeline/internal/popcount_kernel.h>
-#include <kernels/pipeline/internal/regionselectionkernel.h>
+#include "../pipeline_compiler.hpp"
+#include "lexographic_ordering.hpp"
+#include "../internal/popcount_kernel.h"
+#include "../internal/regionselectionkernel.h"
 #include <boost/graph/topological_sort.hpp>
 
 namespace kernel {

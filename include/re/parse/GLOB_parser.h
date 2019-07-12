@@ -7,10 +7,10 @@
 #ifndef GLOB_PARSER_H
 #define GLOB_PARSER_H
 
-#include <re/parsers/parser.h>
-#include <re/parsers/ERE_parser.h>
 #include <vector>
 #include <boost/filesystem.hpp>
+#include <re/parse/parser.h>
+#include <re/parse/ERE_parser.h>
 
 //  GLOB parsing for Filename expansion in accord with Posix rules
 //  IEEE-1003.1 XCU section  2.13 Pattern Matching Notation

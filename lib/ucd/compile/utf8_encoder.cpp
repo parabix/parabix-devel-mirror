@@ -4,7 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <utf8_encoder.h>
+#include <ucd/compile/utf8_encoder.h>
+
 #include <assert.h>
 #include <algorithm>
 #include <stdexcept>

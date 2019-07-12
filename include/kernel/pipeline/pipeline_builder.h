@@ -1,7 +1,7 @@
 #ifndef PIPELINE_BUILDER_H
 #define PIPELINE_BUILDER_H
 
-#include <kernels/pipeline_kernel.h>
+#include <kernel/pipeline/pipeline_kernel.h>
 
 class BaseDriver;
 

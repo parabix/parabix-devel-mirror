@@ -4,43 +4,43 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <toolchain/toolchain.h>
-#include <grep_interface.h>
-#include <re/re_toolchain.h>
-#include <re/re_any.h>
-#include <re/re_name.h>
-#include <re/re_cc.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_alt.h>
-#include <re/re_seq.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_group.h>
-#include <re/re_range.h>
-#include <re/re_assertion.h>
-#include <cc/cc_compiler.h>            // for CC_Compiler
-#include <llvm/Support/CommandLine.h>  // for clEnumVal, clEnumValEnd, Optio...
-#include <re/re_compiler.h>            // for RE_Compiler
-#include <re/re_nullable.h>            // for RE_Nullable
-#include <re/re_star_normal.h>         // for RE_Star_Normal
-#include <re/re_simplifier.h>          // for RE_Simplifier
-#include <re/re_minimizer.h>
-#include <re/re_local.h>
-#include <re/printer_re.h>
-#include <re/re_analysis.h>
-#include <re/re_cc.h>
-#include <re/casing.h>
-#include <re/exclude_CC.h>
-#include <re/re_name_resolve.h>
+ // TODO: REFACTOR THIS FILE!!!
 
-#include <re/grapheme_clusters.h>
-#include <re/re_contextual_simplification.h>
-#include <re/validation.h>
-#include <re/Unicode/decomposition.h>
-#include <re/Unicode/equivalence.h>
+#include <re/compile/re_toolchain.h>
+
+#include "../../../tools/icgrep/grep_interface.h"
+#include <llvm/Support/CommandLine.h>  // for clEnumVal, clEnumValEnd, Optio...
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_group.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/printer_re.h>
+#include <re/cc/cc_compiler.h>            // for CC_Compiler
+#include <re/compile/re_compiler.h>            // for RE_Compiler
+#include <re/compile/re_nullable.h>            // for RE_Nullable
+#include <re/compile/re_star_normal.h>         // for RE_Star_Normal
+#include <re/compile/re_simplifier.h>          // for RE_Simplifier
+#include <re/compile/re_minimizer.h>
+#include <re/compile/re_local.h>
+#include <re/compile/re_analysis.h>
+#include <re/compile/casing.h>
+#include <re/compile/exclude_CC.h>
+#include <re/compile/re_name_resolve.h>
+#include <re/compile/grapheme_clusters.h>
+#include <re/compile/re_contextual_simplification.h>
+#include <re/compile/validation.h>
+#include <re/compile/decomposition.h>
+#include <re/compile/equivalence.h>
 #include <toolchain/toolchain.h>
 
 using namespace pablo;

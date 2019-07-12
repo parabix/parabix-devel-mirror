@@ -9,6 +9,7 @@
  */
 
 #include <utility>
+
 namespace UCD {
 	const auto UnicodeVersion = "11.0.0";
 	using codepoint_t = unsigned;

@@ -1,7 +1,8 @@
-﻿#include "object_cache.h"
-#include "object_cache_util.hpp"
-#include <kernels/core/kernel.h>
-#include <kernels/kernel_builder.h>
+#include <toolchain/object_cache.h>
+
+#include <toolchain/object_cache_util.hpp>
+#include <kernel/core/kernel.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/IR/Metadata.h>

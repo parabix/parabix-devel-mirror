@@ -5,7 +5,7 @@
 #ifndef RADIX64_H
 #define RADIX64_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace llvm { class Module; }
 namespace llvm { class Value; }

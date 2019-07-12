@@ -1,7 +1,7 @@
 #ifndef RE_STAR_NORMAL_H
 #define RE_STAR_NORMAL_H
 
-#include <re/re_toolchain.h>
+#include <re/compile/re_toolchain.h>
 
 namespace re {
 

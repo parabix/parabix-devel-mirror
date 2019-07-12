@@ -4,15 +4,15 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "symbol_table.h"
+#include <pablo/parse/symbol_table.h>
 
 #include <pablo/builder.hpp>
 #include <pablo/pabloAST.h>
-#include <pablo/pablo_source_kernel.h>
 #include <pablo/ps_assign.h>
-#include <pablo/parser/error_text.h>
-#include <pablo/parser/pablo_type.h>
-#include <pablo/parser/token.h>
+#include <pablo/parse/error_text.h>
+#include <pablo/parse/pablo_source_kernel.h>
+#include <pablo/parse/pablo_type.h>
+#include <pablo/parse/token.h>
 
 namespace pablo {
 namespace parse {

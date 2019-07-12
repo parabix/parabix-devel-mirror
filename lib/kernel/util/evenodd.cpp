@@ -3,8 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "evenodd.h"
-#include <kernels/kernel_builder.h>
+#include <kernel/util/evenodd.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

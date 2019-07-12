@@ -7,8 +7,8 @@
 #ifndef RE_H
 #define RE_H
 
-#include <util/slab_allocator.h>
 #include <vector>
+#include <util/slab_allocator.h>
 
 namespace re {
 

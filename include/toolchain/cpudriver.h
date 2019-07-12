@@ -1,6 +1,6 @@
 #ifndef CPUDRIVER_H
 #define CPUDRIVER_H
-#include "driver.h"
+#include <toolchain/driver.h>
 #include <toolchain/toolchain.h>
 namespace llvm { class ExecutionEngine; }
 namespace llvm { class TargetMachine; }

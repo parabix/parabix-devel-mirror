@@ -2,7 +2,7 @@
 #ifndef ICGREP_BITSTREAM_GATHER_PDEP_KERNEL_H
 #define ICGREP_BITSTREAM_GATHER_PDEP_KERNEL_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <string>
 

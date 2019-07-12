@@ -5,9 +5,10 @@
  *
  */
 
-#include "CaseFolding.h"
-#include <UCD/unicode_set.h>
+#include <ucd/data/CaseFolding.h>
+
 #include <algorithm>
+#include <ucd/core/unicode_set.h>
 
 using namespace UCD;
 

@@ -3,12 +3,12 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "scanmatchgen.h"
+#include <kernel/util/scanmatchgen.h>
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
-#include <kernels/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <grep/grep_engine.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

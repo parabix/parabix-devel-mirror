@@ -2,8 +2,8 @@
 #define RESOLVE_PROPERTIES_H
 
 #include <string>
-#include <UCD/unicode_set.h>
-#include <UCD/PropertyObjects.h>
+#include <ucd/core/unicode_set.h>
+#include <ucd/data/PropertyObjects.h>
 
 namespace re {
     class RE;

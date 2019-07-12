@@ -3,15 +3,15 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "UCD_property_kernel.h"
-#include <kernels/core/kernel.h>
-#include <re/re_toolchain.h>
-#include <re/re_name.h>
-#include <cc/cc_compiler.h>
-#include <cc/cc_compiler_target.h>
-#include <UCD/ucd_compiler.hpp>
+#include <kernel/util/UCD_property_kernel.h>
+#include <kernel/core/kernel.h>
+#include <re/compile/re_toolchain.h>
+#include <re/adt/re_name.h>
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
+#include <ucd/compile/ucd_compiler.hpp>
 #include <pablo/pablo_toolchain.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
 

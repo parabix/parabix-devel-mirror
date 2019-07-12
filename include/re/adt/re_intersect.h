@@ -1,7 +1,7 @@
 #ifndef RE_INTERSECT_H
 #define RE_INTERSECT_H
 
-#include <re/re_re.h>
+#include <re/adt/re_re.h>
 
 namespace re {
 

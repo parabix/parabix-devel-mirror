@@ -4,32 +4,32 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "file_select.h"
+#include <util/file_select.h>
+
+#include <fstream>
+#include <string>
+#include <boost/filesystem.hpp>
+#include <grep/grep_engine.h>
+#include <grep/searchable_buffer.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/raw_ostream.h>
-#include <boost/filesystem.hpp>
+#include <re/adt/re_re.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_utility.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/printer_re.h>
+#include <re/compile/re_toolchain.h>
+#include <re/parse/parser.h>
+#include <re/parse/GLOB_parser.h>
 #include <toolchain/toolchain.h>
-#include <re/re_re.h>
-#include <re/re_alt.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_cc.h>
-#include <re/re_utility.h>
-#include <re/re_assertion.h>
-#include <re/re_toolchain.h>
-#include <re/parsers/parser.h>
-#include <re/parsers/GLOB_parser.h>
-#include <re/printer_re.h>
-#include <grep/grep_engine.h>
-#include <grep/searchable_buffer.h>
 #include <toolchain/cpudriver.h>
-#include <fstream>
-#include <string>
-#include <re/printer_re.h>
 
 using namespace llvm;
 using error_code = boost::system::error_code;

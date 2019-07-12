@@ -6,7 +6,7 @@
 #define LINEBREAK_KERNEL_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
-#include <cc/alphabet.h>
+#include <re/cc/alphabet.h>
 
 namespace kernel { class KernelBuilder; }
 namespace kernel { class ProgramBuilder; }

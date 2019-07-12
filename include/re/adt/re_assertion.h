@@ -7,11 +7,11 @@
 #ifndef RE_ASSERTION_H
 #define RE_ASSERTION_H
 
-#include <re/re_re.h>
-#include <re/re_nullable.h>
-#include <re/re_empty_set.h>
-#include <re/re_seq.h>
-#include <re/re_alt.h>
+#include <re/adt/re_re.h>
+#include <re/adt/re_empty_set.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_alt.h>
+#include <re/compile/re_nullable.h>
 
 namespace re {
 

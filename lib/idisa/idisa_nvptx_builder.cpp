@@ -3,8 +3,9 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
+#include <idisa/idisa_nvptx_builder.h>
+
 #include <toolchain/toolchain.h>
-#include "idisa_nvptx_builder.h"
 #include <llvm/IR/InlineAsm.h>
 #include <llvm/IR/Module.h>
 

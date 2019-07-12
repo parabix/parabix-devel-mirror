@@ -9,7 +9,7 @@
 
 #include <map>
 #include <set>
-#include <re/re_cc.h>
+#include <re/adt/re_cc.h>
 
 namespace re { class Name; }
 

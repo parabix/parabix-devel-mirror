@@ -9,7 +9,7 @@
 
 #include "PropertyAliases.h"
 #include "PropertyValueAliases.h"
-#include "unicode_set.h"
+#include <ucd/core/unicode_set.h>
 #include <string>
 #include <vector>
 #include <unordered_map>

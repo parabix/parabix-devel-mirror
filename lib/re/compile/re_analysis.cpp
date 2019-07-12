@@ -1,27 +1,29 @@
-#include "re_analysis.h"
-#include <UCD/unicode_set.h>
-#include <re/re_cc.h>
-#include <re/re_name.h>
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_any.h>
-#include <re/re_seq.h>
-#include <re/re_alt.h>
-#include <re/re_rep.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_group.h>
-#include <re/re_nullable.h>
-#include <re/to_utf8.h>
-#include <re/printer_re.h>
-#include <cc/alphabet.h>
-#include <cc/multiplex_CCs.h>
-#include <UCD/UTF.h>
+#include <re/compile/re_analysis.h>
+
 #include <limits.h>
+#include <set>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <set>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/re_group.h>
+#include <re/adt/printer_re.h>
+#include <re/cc/alphabet.h>
+#include <re/cc/multiplex_CCs.h>
+#include <re/compile/re_nullable.h>
+#include <re/compile/to_utf8.h>
+#include <ucd/core/unicode_set.h>
+#include <ucd/compile/UTF.h>
+
 using namespace llvm;
 
 namespace re {

@@ -4,10 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "symbol_generator.h"
+#include <pablo/symbol_generator.h>
+
 #include <pablo/pe_string.h>
 #include <pablo/pe_integer.h>
-#include <IR_Gen/idisa_builder.h>
+#include <idisa/idisa_builder.h>
 
 namespace pablo {
 

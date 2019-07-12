@@ -6,7 +6,7 @@
 
 #include <toolchain/toolchain.h>
 #include <pablo/pablo_toolchain.h>
-#include <UCD/UCD_Config.h>
+#include <ucd/core/UCD_Config.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <boost/interprocess/mapped_region.hpp>

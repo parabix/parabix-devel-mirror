@@ -4,16 +4,16 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_assertion.h"
-#include "re_cc.h"
-#include "re_start.h"
-#include "re_end.h"
-#include "re_any.h"
-#include "re_seq.h"
-#include "re_alt.h"
-#include "re_diff.h"
-#include "re_nullable.h"
-#include <re/re_toolchain.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_diff.h>
+#include <re/compile/re_nullable.h>
+#include <re/compile/re_toolchain.h>
 
 using namespace llvm;
 

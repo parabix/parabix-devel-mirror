@@ -7,7 +7,7 @@
 #ifndef UTF8_ENCODER_H
 #define UTF8_ENCODER_H
 
-#include <UCD/unicode_set.h>
+#include <ucd/core/unicode_set.h>
 
 namespace cc {
 

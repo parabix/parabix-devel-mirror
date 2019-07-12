@@ -7,7 +7,7 @@
 #pragma once
 
 #include <string>
-#include <pablo/parser/token.h>
+#include <pablo/parse/token.h>
 
 namespace pablo {
 namespace parse {

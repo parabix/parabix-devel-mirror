@@ -7,11 +7,11 @@
 #ifndef RE_TO_PABLO_COMPILER_H
 #define RE_TO_PABLO_COMPILER_H
 
-#include <re/re_seq.h>  // for Seq
+#include <vector>                       // for vector<>::iterator
 #include <boost/container/flat_map.hpp>
 #include <pablo/builder.hpp>
-#include <vector>       // for vector<>::iterator
-#include <cc/alphabet.h>
+#include <re/adt/re_seq.h>              // for Seq
+#include <re/cc/alphabet.h>
 
 namespace cc { class CC_Compiler; class Alphabet;}
 namespace pablo { class PabloAST; }

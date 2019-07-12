@@ -3,26 +3,27 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include <re/re_re.h>
-#include "resolve_properties.h"
-#include <re/re_alt.h>
-#include <re/re_any.h>
-#include <re/re_name.h>
-#include <re/re_diff.h>
-#include <re/re_start.h> 
-#include <re/re_end.h> 
-#include <re/re_cc.h> 
-#include <re/re_seq.h> 
-#include <re/re_assertion.h>
-#include <re/parsers/parser.h>
-#include <re/re_name_resolve.h>
-#include <re/grapheme_clusters.h>
-#include <re/re_compiler.h>
-#include "UCD/PropertyAliases.h"
-#include "UCD/PropertyObjects.h"
-#include "UCD/PropertyValueAliases.h"
+#include <ucd/compile/resolve_properties.h>
+
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
+#include <re/adt/re_re.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_start.h> 
+#include <re/adt/re_end.h> 
+#include <re/adt/re_cc.h> 
+#include <re/adt/re_seq.h> 
+#include <re/adt/re_assertion.h>
+#include <re/parse/parser.h>
+#include <re/compile/re_name_resolve.h>
+#include <re/compile/grapheme_clusters.h>
+#include <re/compile/re_compiler.h>
+#include <ucd/data/PropertyAliases.h>
+#include <ucd/data/PropertyObjects.h>
+#include <ucd/data/PropertyValueAliases.h>
 
 using namespace UCD;
 using namespace re;

@@ -3,15 +3,16 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "pablo_kernel.h"
+#include <pablo/pablo_kernel.h>
+
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <pablo/pablo_toolchain.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Module.h>
 

@@ -6,7 +6,7 @@
  *  icgrep is a trademark of International Characters, Inc.
  *
  */
-#include <UCD/unicode_set.h>
+#include <ucd/core/unicode_set.h>
 
 namespace UCD {
     

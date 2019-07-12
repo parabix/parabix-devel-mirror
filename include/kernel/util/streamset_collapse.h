@@ -6,7 +6,7 @@
 #ifndef STREAMSET_COLLAPSE_H
 #define STREAMSET_COLLAPSE_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 

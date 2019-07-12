@@ -3,8 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "hex_convert.h"
-#include <kernels/kernel_builder.h>
+#include <kernel/util/hex_convert.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 

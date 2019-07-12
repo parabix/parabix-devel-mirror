@@ -7,7 +7,7 @@
 #ifndef PCRE_PARSER_H
 #define PCRE_PARSER_H
 
-#include <re/parsers/parser.h>
+#include <re/parse/parser.h>
 
 namespace re {
     class PCRE_Parser : public RE_Parser {

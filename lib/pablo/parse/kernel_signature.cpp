@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "kernel_signature.h"
+#include <pablo/parse/kernel_signature.h>
 
 #include <llvm/Support/raw_ostream.h>
 

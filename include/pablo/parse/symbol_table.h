@@ -11,8 +11,8 @@
 #include <memory>
 #include <unordered_map>
 #include <boost/optional.hpp>
-#include <pablo/parser/error.h>
-#include <pablo/parser/kernel_signature.h>
+#include <pablo/parse/error.h>
+#include <pablo/parse/kernel_signature.h>
 
 namespace pablo {
 

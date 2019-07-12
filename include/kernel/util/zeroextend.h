@@ -1,7 +1,7 @@
 #ifndef ZEROEXTEND_H
 #define ZEROEXTEND_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 

@@ -3,10 +3,10 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "kernel.h"
+#include <kernel/core/kernel.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/driver.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Constants.h>
@@ -26,7 +26,7 @@
 #include <llvm/Support/Format.h>
 #include <sstream>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/pipeline_kernel.h>
+// #include <kernel/pipeline/pipeline_kernel.h>
 
 using namespace llvm;
 using namespace boost;

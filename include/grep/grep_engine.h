@@ -6,16 +6,17 @@
  */
 #ifndef GREP_ENGINE_H
 #define GREP_ENGINE_H
-#include <grep_interface.h>
-#include <kernels/callback.h>
-#include <cc/multiplex_CCs.h>
+
+#include "../../tools/icgrep/grep_interface.h" // TODO: consider moving grep_interface to this library
 #include <string>
 #include <vector>
 #include <sstream>
 #include <atomic>
 #include <boost/filesystem.hpp>
-#include <re/parsers/GLOB_parser.h>
-#include <kernels/linebreak_kernel.h>
+#include <re/cc/multiplex_CCs.h>
+#include <re/parse/GLOB_parser.h>
+#include <kernel/util/callback.h>
+#include <kernel/util/linebreak_kernel.h>
 
 namespace re { class CC; }
 namespace re { class RE; }

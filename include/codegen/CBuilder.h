@@ -6,7 +6,7 @@
 #define CBUILDER_H
 
 #include <toolchain/toolchain.h>
-#include <IR_Gen/FunctionTypeBuilder.h>
+#include <codegen/FunctionTypeBuilder.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/ADT/Triple.h>

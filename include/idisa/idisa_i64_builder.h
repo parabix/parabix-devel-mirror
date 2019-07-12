@@ -6,7 +6,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include <IR_Gen/idisa_builder.h>
+#include <idisa/idisa_builder.h>
 
 namespace IDISA {
     const unsigned I64_width = 64;

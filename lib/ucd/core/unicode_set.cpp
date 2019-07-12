@@ -17,8 +17,9 @@
 // (c) Explicitly listing all the quads of Mixed type.
 //
 
-#include "unicode_set.h"
-#include "assert.h"
+#include <ucd/core/unicode_set.h>
+
+#include <cassert>
 #include <string>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>

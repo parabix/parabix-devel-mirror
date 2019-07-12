@@ -4,8 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_empty_set.h"
-#include <re/re_alt.h>
+#include <re/adt/re_empty_set.h>
+#include <re/adt/re_alt.h>
 
 namespace re {
 

@@ -7,8 +7,8 @@
 #ifndef TO_UTF8_H
 #define TO_UTF8_H
 
-#include <re/re_re.h>
-#include <re/re_toolchain.h>
+#include <re/adt/re_re.h>
+#include <re/compile/re_toolchain.h>
 
 namespace re {
 class CC;

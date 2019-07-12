@@ -6,7 +6,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <IR_Gen/idisa_builder.h>
+#include <idisa/idisa_builder.h>
 
 namespace IDISA {
 

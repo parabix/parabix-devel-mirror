@@ -5,7 +5,7 @@
 #ifndef SPREAD_BY_MASK_H
 #define SPREAD_BY_MASK_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <string>
 #include <toolchain/driver.h>

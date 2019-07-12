@@ -6,7 +6,7 @@
 #define CHARCLASSES_H
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
-#include <cc/alphabet.h>
+#include <re/cc/alphabet.h>
 
 namespace kernel { class KernelBuilder; }
 namespace IDISA { class IDISA_Builder; }

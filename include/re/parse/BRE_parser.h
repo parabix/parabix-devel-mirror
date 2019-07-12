@@ -7,8 +7,8 @@
 #ifndef BRE_PARSER_H
 #define BRE_PARSER_H
 
-#include <re/parsers/parser.h>
-#include <re/parsers/ERE_parser.h>
+#include <re/parse/parser.h>
+#include <re/parse/ERE_parser.h>
 
 namespace re {
     class BRE_Parser : public ERE_Parser  {

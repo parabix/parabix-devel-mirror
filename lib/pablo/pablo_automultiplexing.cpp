@@ -1,4 +1,5 @@
-#include "pablo_automultiplexing.hpp"
+#include <pablo/pablo_automultiplexing.hpp>
+
 #include <pablo/builder.hpp>
 #include <pablo/printer_pablos.h>
 #include <boost/container/flat_set.hpp>

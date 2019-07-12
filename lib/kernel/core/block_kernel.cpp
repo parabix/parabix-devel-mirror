@@ -3,9 +3,9 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "kernel.h"
+#include <kernel/core/kernel.h>
 #include <toolchain/toolchain.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Instructions.h>

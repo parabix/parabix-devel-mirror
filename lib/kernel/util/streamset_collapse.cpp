@@ -3,9 +3,9 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "streamset_collapse.h"
+#include <kernel/util/streamset_collapse.h>
 
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "source_file.h"
+#include <pablo/parse/source_file.h>
 
 #include <llvm/ADT/SmallString.h>
 #include <llvm/Support/Path.h>

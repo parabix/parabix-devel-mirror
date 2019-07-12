@@ -4,22 +4,21 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_diff.h"
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_name.h>
-#include <re/re_empty_set.h>
-#include <re/re_nullable.h>
-#include <re/validation.h>
-#include <re/re_toolchain.h>
+#include <re/adt/re_diff.h>
+
+#include <re/adt/re_cc.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_empty_set.h>
+#include <re/compile/re_nullable.h>
+#include <re/compile/re_toolchain.h>
+#include <re/compile/validation.h>
 #include <llvm/Support/Casting.h>
 
 using namespace llvm;
 
 namespace re {
 
-#include <re/re_empty_set.h>
-    
 RE * makeDiff(RE * lh, RE * rh) {
     if (isEmptySeq(lh)) {
         if (isNullable(rh)) return makeEmptySet();

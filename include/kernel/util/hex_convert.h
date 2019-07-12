@@ -5,7 +5,7 @@
 #ifndef HEX_CONVERT_H
 #define HEX_CONVERT_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 //

@@ -2,9 +2,9 @@
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include "radix64.h"
-#include <kernels/core/streamset.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/util/radix64.h>
+#include <kernel/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

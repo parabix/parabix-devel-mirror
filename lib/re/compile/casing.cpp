@@ -1,22 +1,23 @@
-#include <re/casing.h>
-#include <re/re_cc.h>
-#include <UCD/unicode_set.h>
-#include <UCD/CaseFolding.h>
-#include <re/re_alt.h>             // for Alt, makeAlt
-#include <re/re_any.h>             // for makeAny, Any
-#include <re/re_assertion.h>       // for Assertion, Assertion::Sense, Asser...
-#include <re/re_start.h>
-#include <re/re_end.h>
-#include <re/re_diff.h>            // for Diff, makeDiff
-#include <re/re_group.h>
-#include <re/re_intersect.h>       // for Intersect
-#include <re/re_name.h>            // for Name
-#include <re/re_rep.h>             // for Rep, makeRep
-#include <re/re_seq.h>             // for Seq, makeSeq
-#include <vector>                  // for vector, allocator
-#include <llvm/Support/Casting.h>  // for dyn_cast, isa
+#include <re/compile/casing.h>
+
+#include <vector>                      // for vector, allocator
+#include <re/adt/re_cc.h>
+#include <re/adt/re_alt.h>             // for Alt, makeAlt
+#include <re/adt/re_any.h>             // for makeAny, Any
+#include <re/adt/re_assertion.h>       // for Assertion, Assertion::Sense, Asser...
+#include <re/adt/re_start.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_diff.h>            // for Diff, makeDiff
+#include <re/adt/re_group.h>
+#include <re/adt/re_intersect.h>       // for Intersect
+#include <re/adt/re_name.h>            // for Name
+#include <re/adt/re_rep.h>             // for Rep, makeRep
+#include <re/adt/re_seq.h>             // for Seq, makeSeq
+#include <re/compile/re_toolchain.h>
+#include <ucd/core/unicode_set.h>
+#include <ucd/data/CaseFolding.h>
+#include <llvm/Support/Casting.h>      // for dyn_cast, isa
 #include <llvm/Support/ErrorHandling.h>
-#include <re/re_toolchain.h>
 
 using namespace llvm;
 

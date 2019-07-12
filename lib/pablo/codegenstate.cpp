@@ -4,7 +4,9 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "codegenstate.h"
+#include <pablo/codegenstate.h>
+
+#include <idisa/idisa_builder.h>
 #include <pablo/printer_pablos.h>
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
@@ -26,7 +28,6 @@
 #include <pablo/ps_assign.h>
 #include <pablo/ps_terminate.h>
 #include <pablo/pablo_kernel.h>
-#include <IR_Gen/idisa_builder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_os_ostream.h>
 

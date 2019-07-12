@@ -3,19 +3,19 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "grapheme_kernel.h"
-#include <re/re_toolchain.h>
-#include <re/re_name.h>
-#include <cc/cc_compiler.h>         // for CC_Compiler
-#include <cc/cc_compiler_target.h>
-#include <UCD/ucd_compiler.hpp>
-#include <re/re_compiler.h>
-#include <re/grapheme_clusters.h>
-#include <re/re_name_gather.h>
-#include <re/re_name_resolve.h>
-#include <re/to_utf8.h>
+#include <kernel/util/grapheme_kernel.h>
+#include <re/compile/re_toolchain.h>
+#include <re/adt/re_name.h>
+#include <re/cc/cc_compiler.h>         // for CC_Compiler
+#include <re/cc/cc_compiler_target.h>
+#include <ucd/compile/ucd_compiler.hpp>
+#include <re/compile/re_compiler.h>
+#include <re/compile/grapheme_clusters.h>
+#include <re/compile/re_name_gather.h>
+#include <re/compile/re_name_resolve.h>
+#include <re/compile/to_utf8.h>
 #include <pablo/pablo_toolchain.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
 
 using namespace kernel;

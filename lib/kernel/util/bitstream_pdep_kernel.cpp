@@ -3,8 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "bitstream_pdep_kernel.h"
-#include <kernels/kernel_builder.h>
+#include <kernel/util/bitstream_pdep_kernel.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Intrinsics.h>

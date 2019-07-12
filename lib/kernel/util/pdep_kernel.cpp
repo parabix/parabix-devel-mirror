@@ -2,16 +2,17 @@
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include "pdep_kernel.h"
-#include <kernels/kernel_builder.h>
-#include <kernels/pipeline_builder.h>
+#include <kernel/util/pdep_kernel.h>
+
+#include <llvm/IR/Intrinsics.h>
+#include <llvm/IR/Module.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/idisa_target.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/driver.h>
 #include <toolchain/cpudriver.h>
-#include <IR_Gen/idisa_target.h>
-#include <llvm/IR/Intrinsics.h>
-#include <llvm/IR/Module.h>
 
 using namespace llvm;
 

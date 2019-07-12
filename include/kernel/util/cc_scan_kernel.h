@@ -5,7 +5,7 @@
 #ifndef EDITDSCAN_KERNEL_H
 #define EDITDSCAN_KERNEL_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Function; }
 namespace llvm { class Module; }

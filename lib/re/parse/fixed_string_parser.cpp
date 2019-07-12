@@ -4,10 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/parsers/parser.h>
-#include "fixed_string_parser.h"
-#include <re/re_alt.h>
-#include <re/re_seq.h>
+#include <re/parse/fixed_string_parser.h>
+
+#include <re/parse/parser.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_seq.h>
 
 namespace re {
 

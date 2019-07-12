@@ -7,7 +7,7 @@
 #ifndef RE_CONTEXTUAL_SIMPLIFICATION_H
 #define RE_CONTEXTUAL_SIMPLIFICATION_H
 
-#include <re/re_toolchain.h>
+#include <re/compile/re_toolchain.h>
 
 namespace re {
 

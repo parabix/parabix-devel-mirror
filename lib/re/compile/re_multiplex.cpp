@@ -1,26 +1,27 @@
-#include "re_multiplex.h"
-#include <re/re_name.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_assertion.h>
-#include <re/re_group.h>
-#include <re/re_analysis.h>
-#include <re/re_utility.h>
-#include <re/printer_re.h>
-#include <re/re_toolchain.h>
-#include <UCD/ucd_compiler.hpp>
-#include <UCD/resolve_properties.h>
-#include <boost/container/flat_set.hpp>
-#include <cc/alphabet.h>
-#include <cc/multiplex_CCs.h>
-#include <sstream>
-#include <iostream>
+#include <re/compile/re_multiplex.h>
+
 #include <functional>
+#include <iostream>
+#include <sstream>
+#include <boost/container/flat_set.hpp>
 #include <llvm/Support/raw_ostream.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/re_group.h>
+#include <re/adt/re_utility.h>
+#include <re/adt/printer_re.h>
+#include <re/cc/alphabet.h>
+#include <re/cc/multiplex_CCs.h>
+#include <re/compile/re_analysis.h>
+#include <re/compile/re_toolchain.h>
+#include <ucd/compile/ucd_compiler.hpp>
+#include <ucd/compile/resolve_properties.h>
 
 using namespace boost::container;
 using namespace llvm;

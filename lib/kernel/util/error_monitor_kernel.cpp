@@ -3,11 +3,11 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "error_monitor_kernel.h"
+#include <kernel/util/error_monitor_kernel.h>
 
 #include <cinttypes>
-#include <kernels/core/streamset.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

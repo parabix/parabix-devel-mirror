@@ -1,6 +1,6 @@
-#include "cpudriver.h"
+#include <toolchain/cpudriver.h>
 
-#include <IR_Gen/idisa_target.h>
+#include <kernel/core/idisa_target.h>
 #include <toolchain/toolchain.h>
 #include <llvm/Support/DynamicLibrary.h>           // for LoadLibraryPermanently
 #include <llvm/ExecutionEngine/ExecutionEngine.h>  // for EngineBuilder
@@ -28,8 +28,8 @@
 #include <llvm/Transforms/Utils.h>
 #endif
 #include <toolchain/object_cache.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/pipeline_builder.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Verifier.h>
 #include "llvm/IR/Mangler.h"
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)

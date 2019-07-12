@@ -1,13 +1,13 @@
-#include "directorysearch.h"
+#include <kernel/util/directorysearch.h>
 
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/syscall.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/IR/Module.h>
-#include <IR_Gen/TypeBuilder.h>
+#include <codegen/TypeBuilder.h>
 
 #define FIRST_NONSYSTEM_INODE 11
 

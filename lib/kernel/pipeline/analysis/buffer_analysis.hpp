@@ -1,7 +1,7 @@
 #ifndef BUFFER_ANALYSIS_HPP
 #define BUFFER_ANALYSIS_HPP
 
-#include <kernels/pipeline/pipeline_compiler.hpp>
+#include "../pipeline_compiler.hpp"
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <tuple>

@@ -1,6 +1,7 @@
-#include "driver.h"
-#include <kernels/kernel_builder.h>
-#include <kernels/pipeline_builder.h>
+#include <toolchain/driver.h>
+
+#include <kernel/core/kernel_builder.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Module.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/object_cache.h>

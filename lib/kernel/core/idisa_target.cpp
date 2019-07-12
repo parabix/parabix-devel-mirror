@@ -3,17 +3,18 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "idisa_target.h"
+#include <kernel/core/idisa_target.h>
+
 #include <toolchain/toolchain.h>
-#include <IR_Gen/idisa_sse_builder.h>
-#include <IR_Gen/idisa_avx_builder.h>
-#include <IR_Gen/idisa_i64_builder.h>
-#include <IR_Gen/idisa_nvptx_builder.h>
+#include <idisa/idisa_sse_builder.h>
+#include <idisa/idisa_avx_builder.h>
+#include <idisa/idisa_i64_builder.h>
+#include <idisa/idisa_nvptx_builder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/ADT/Triple.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace kernel;
 using namespace llvm;

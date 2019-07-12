@@ -11,7 +11,7 @@
 #include "PropertyAliases.h"
 #include "PropertyObjects.h"
 #include "PropertyValueAliases.h"
-#include "unicode_set.h"
+#include <ucd/core/unicode_set.h>
 
 namespace UCD {
     namespace ALPHA_ns {

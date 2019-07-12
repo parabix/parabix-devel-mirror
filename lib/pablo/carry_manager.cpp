@@ -4,7 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "carry_manager.h"
+#include <pablo/carry_manager.h>
+
 #include <pablo/carry_data.h>
 #include <pablo/codegenstate.h>
 #include <llvm/IR/BasicBlock.h>
@@ -16,7 +17,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <toolchain/toolchain.h>
 #include <array>
 

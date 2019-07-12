@@ -1,7 +1,7 @@
 #ifndef DIRECTORYSEARCH_H
 #define DIRECTORYSEARCH_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel { class KernelBuilder; }
 

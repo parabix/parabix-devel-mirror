@@ -4,18 +4,18 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "rd_parser.h"
+#include <pablo/parse/rd_parser.h>
 
 #include <unordered_set>
-#include <kernels/core/streamset.h>
+#include <kernel/core/streamset.h>
 #include <llvm/Support/Casting.h>
 #include <pablo/builder.hpp>
 #include <pablo/branch.h>
 #include <pablo/pablo_intrinsic.h>
 #include <pablo/pe_ones.h>
 #include <pablo/pe_zeroes.h>
-#include <pablo/parser/error_text.h>
-#include <pablo/parser/pablo_type.h>
+#include <pablo/parse/error_text.h>
+#include <pablo/parse/pablo_type.h>
 #include <pablo/ps_assign.h>
 
 

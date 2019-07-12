@@ -1,7 +1,7 @@
 #ifndef RE_RANGE_H
 #define RE_RANGE_H
 
-#include <re/re_re.h>
+#include <re/adt/re_re.h>
 
 //
 // Ranges generally represent CCs, but might not be able to be

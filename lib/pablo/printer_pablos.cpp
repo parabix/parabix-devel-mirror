@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "printer_pablos.h"
+#include <pablo/printer_pablos.h>
 
 #include <pablo/arithmetic.h>
 #include <pablo/boolean.h>

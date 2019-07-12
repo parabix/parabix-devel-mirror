@@ -5,7 +5,7 @@
 #ifndef MULTIPLEX_CCS_H
 #define MULTIPLEX_CCS_H
 
-#include <cc/alphabet.h>
+#include <re/cc/alphabet.h>
 
 namespace re { class CC; }
 

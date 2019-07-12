@@ -4,27 +4,8 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/parsers/parser.h>
-#include <re/parsers/parser_helper.h>
-#include <re/parsers/PCRE_parser.h>
-#include <re/parsers/ERE_parser.h>
-#include <re/parsers/BRE_parser.h>
-#include <re/parsers/GLOB_parser.h>
-#include <re/parsers/Prosite_parser.h>
-#include <re/parsers/fixed_string_parser.h>
-#include <re/re_name.h>
-#include <re/re_alt.h>
-#include <re/re_any.h>
-#include <re/re_end.h>
-#include <re/re_rep.h>
-#include <re/re_seq.h>
-#include <re/re_start.h>
-#include <re/re_range.h>
-#include <re/re_diff.h>
-#include <re/re_intersect.h>
-#include <re/re_group.h>
-#include <re/re_assertion.h>
-#include <re/printer_re.h>
+#include <re/parse/parser.h>
+
 #include <sstream>
 #include <string>
 #include <algorithm>
@@ -33,6 +14,26 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
+#include <re/parse/parser_helper.h>
+#include <re/parse/PCRE_parser.h>
+#include <re/parse/ERE_parser.h>
+#include <re/parse/BRE_parser.h>
+#include <re/parse/GLOB_parser.h>
+#include <re/parse/Prosite_parser.h>
+#include <re/parse/fixed_string_parser.h>
+#include <re/adt/re_name.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_end.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_start.h>
+#include <re/adt/re_range.h>
+#include <re/adt/re_diff.h>
+#include <re/adt/re_intersect.h>
+#include <re/adt/re_group.h>
+#include <re/adt/re_assertion.h>
+#include <re/adt/printer_re.h>
 
 using namespace llvm;
 

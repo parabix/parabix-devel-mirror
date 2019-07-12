@@ -5,7 +5,7 @@
 #ifndef STREAMSMERGE_H
 #define STREAMSMERGE_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 #include <vector>
 
 namespace IDISA { class IDISA_Builder; }

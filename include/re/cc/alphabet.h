@@ -8,8 +8,8 @@
 #define ALPHABET_H
 
 #include <string>
-#include <UCD/unicode_set.h>
 #include <vector>
+#include <ucd/core/unicode_set.h>
 
 namespace cc {
     

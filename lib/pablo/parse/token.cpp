@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "token.h"
+#include <pablo/parse/token.h>
 
 #include <iomanip>
 

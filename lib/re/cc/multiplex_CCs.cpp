@@ -4,14 +4,14 @@
  */
 
 #include <map>
-#include <UCD/unicode_set.h>
-#include <re/re_cc.h>
-#include "boost/dynamic_bitset.hpp"
-#include <cc/multiplex_CCs.h>
-#include <re/printer_re.h>
+#include <boost/dynamic_bitset.hpp>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/printer_re.h>
+#include <re/cc/multiplex_CCs.h>
+#include <ucd/core/unicode_set.h>
 
 namespace cc {
 

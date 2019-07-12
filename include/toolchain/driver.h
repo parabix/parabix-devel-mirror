@@ -1,11 +1,11 @@
 #ifndef DRIVER_H
 #define DRIVER_H
 
-#include <IR_Gen/FunctionTypeBuilder.h>
+#include <codegen/FunctionTypeBuilder.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 // #include <kernels/core/streamset.h>
-#include <kernels/core/relationship.h>
+#include <kernel/core/relationship.h>
 #include <util/slab_allocator.h>
 #include <string>
 #include <vector>

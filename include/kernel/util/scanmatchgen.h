@@ -5,7 +5,7 @@
 #ifndef SCANMATCHGEN_H
 #define SCANMATCHGEN_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Function; }
 namespace llvm { class Module; }

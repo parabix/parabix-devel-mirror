@@ -4,10 +4,10 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "pablo_parser.h"
+#include <pablo/parse/pablo_parser.h>
 
-#include <pablo/parser/kernel_signature.h>
-#include <pablo/parser/source_file.h>
+#include <pablo/parse/kernel_signature.h>
+#include <pablo/parse/source_file.h>
 
 namespace pablo {
 namespace parse {

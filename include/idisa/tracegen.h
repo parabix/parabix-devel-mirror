@@ -5,7 +5,7 @@
 #ifndef TRACEGEN_H
 #define TRACEGEN_H
 
-#include "idisa_builder.h"
+#include <idisa/idisa_builder.h>
 #include <string>
 
 class TraceTool {

@@ -4,12 +4,13 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "re_rep.h"
-#include "re_assertion.h"
-#include "re_seq.h"
-#include "re_empty_set.h"
-#include "re_alt.h"
-#include "re_nullable.h"
+#include <re/adt/re_rep.h>
+
+#include <re/adt/re_assertion.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_empty_set.h>
+#include <re/adt/re_alt.h>
+#include <re/compile/re_nullable.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 

@@ -5,8 +5,8 @@
 #ifndef P2S_KERNEL_H
 #define P2S_KERNEL_H
 
-#include <cc/alphabet.h>
-#include <kernels/core/kernel.h>
+#include <re/cc/alphabet.h>
+#include <kernel/core/kernel.h>
 
 namespace IDISA { class IDISA_Builder; }
 

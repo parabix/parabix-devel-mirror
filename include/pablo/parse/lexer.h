@@ -9,9 +9,9 @@
 #include <memory>
 #include <vector>
 #include <boost/optional.hpp>
-#include <pablo/parser/error.h>
-#include <pablo/parser/token.h>
-#include <pablo/parser/source_file.h>
+#include <pablo/parse/error.h>
+#include <pablo/parse/token.h>
+#include <pablo/parse/source_file.h>
 
 namespace pablo {
 namespace parse {

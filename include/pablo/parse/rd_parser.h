@@ -6,16 +6,16 @@
 
 #pragma once
 
-#include <pablo/parser/pablo_parser.h>
+#include <pablo/parse/pablo_parser.h>
 
 #include <memory>
 #include <unordered_map>
 #include <vector>
 #include <llvm/ADT/StringMap.h>
-#include <pablo/parser/error.h>
-#include <pablo/parser/lexer.h>
-#include <pablo/parser/symbol_table.h>
-#include <pablo/parser/token.h>
+#include <pablo/parse/error.h>
+#include <pablo/parse/lexer.h>
+#include <pablo/parse/symbol_table.h>
+#include <pablo/parse/token.h>
 
 namespace pablo {
 

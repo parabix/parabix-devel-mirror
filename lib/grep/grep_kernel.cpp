@@ -3,17 +3,14 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "grep_kernel.h"
-#include <cc/alphabet.h>
-#include <re/printer_re.h>
-#include <re/re_cc.h>
-#include <re/re_name.h>
-#include <re/re_toolchain.h>
-#include <re/re_reverse.h>
+#include <grep/grep_kernel.h>
+
 #include <grep/grep_engine.h>
+#include <kernel/core/kernel_builder.h>
+#include <llvm/IR/Module.h>
+#include <llvm/Support/raw_ostream.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_toolchain.h>
-#include <kernels/kernel_builder.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_ones.h>          // for Ones
 #include <pablo/pe_var.h>           // for Var
@@ -23,14 +20,18 @@
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_pack.h>
-#include <cc/cc_compiler.h>         // for CC_Compiler
-#include <cc/cc_compiler_target.h>
-#include <cc/alphabet.h>
-#include <cc/multiplex_CCs.h>
-#include <re/re_compiler.h>
-#include <UCD/ucd_compiler.hpp>
-#include <llvm/IR/Module.h>
-#include <llvm/Support/raw_ostream.h>
+#include <re/adt/printer_re.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_name.h>
+#include <re/cc/alphabet.h>
+#include <re/compile/re_toolchain.h>
+#include <re/compile/re_reverse.h>
+#include <re/cc/cc_compiler.h>         // for CC_Compiler
+#include <re/cc/cc_compiler_target.h>
+#include <re/cc/alphabet.h>
+#include <re/cc/multiplex_CCs.h>
+#include <re/compile/re_compiler.h>
+#include <ucd/compile/ucd_compiler.hpp>
 
 using namespace kernel;
 using namespace pablo;

@@ -3,10 +3,10 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "stream_select.h"
+#include <kernel/util/stream_select.h>
 
 #include <unordered_map>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 using namespace llvm;
 

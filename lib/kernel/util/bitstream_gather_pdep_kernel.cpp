@@ -1,6 +1,6 @@
 
-#include "bitstream_gather_pdep_kernel.h"
-#include <kernels/kernel_builder.h>
+#include <kernel/util/bitstream_gather_pdep_kernel.h>
+#include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Intrinsics.h>

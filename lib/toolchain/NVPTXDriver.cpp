@@ -4,10 +4,11 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "NVPTXDriver.h"
-#include <IR_Gen/idisa_target.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/core/kernel.h>
+#include <toolchain/NVPTXDriver.h>
+
+#include <kernel/core/idisa_target.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/kernel.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 #include <toolchain/toolchain.h>

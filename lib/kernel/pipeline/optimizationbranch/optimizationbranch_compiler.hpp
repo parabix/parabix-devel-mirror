@@ -1,15 +1,15 @@
 #ifndef OPTIMIZATIONBRANCH_COMPILER_HPP
 #define OPTIMIZATIONBRANCH_COMPILER_HPP
 
-#include <kernels/optimizationbranch.h>
-#include <kernels/pipeline_kernel.h>
-#include <kernels/core/streamset.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/pipeline/optimizationbranch.h>
+#include <kernel/pipeline/pipeline_kernel.h>
+#include <kernel/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/SmallVector.h>
-#include <kernels/core/refwrapper.h>
+#include <kernel/core/refwrapper.h>
 #include  <array>
 
 using namespace llvm;

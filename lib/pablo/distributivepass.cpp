@@ -1,4 +1,4 @@
-#include "distributivepass.h"
+#include <pablo/distributivepass.h>
 
 #include <pablo/pablo_kernel.h>
 #include <pablo/codegenstate.h>
@@ -18,8 +18,8 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/builder.hpp>
 
-#include <pablo/optimizers/pablo_simplifier.hpp>
-#include <pablo/analysis/pabloverifier.hpp>
+#include <pablo/pablo_simplifier.hpp>
+#include <pablo/pabloverifier.hpp>
 
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>

@@ -3,21 +3,20 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "linebreak_kernel.h"
-#include <re/re_cc.h>
-#include <re/re_toolchain.h>
+#include <kernel/util/linebreak_kernel.h>
+#include <re/compile/re_toolchain.h>
 #include <pablo/pe_ones.h>          // for Ones
 #include <pablo/pe_var.h>           // for Var
 #include <pablo/pe_zeroes.h>        // for Zeroes
-#include <cc/cc_compiler.h>
-#include <cc/cc_compiler_target.h>
-#include <re/re_name.h>
-#include <re/re_cc.h>
-#include <UCD/ucd_compiler.hpp>
 #include <pablo/builder.hpp>
-#include <IR_Gen/idisa_builder.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/pipeline_builder.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_name.h>
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
+#include <ucd/compile/ucd_compiler.hpp>
+#include <idisa/idisa_builder.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace cc;

@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "pablo_type.h"
+#include <pablo/parse/pablo_type.h>
 
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>

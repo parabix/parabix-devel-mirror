@@ -1,9 +1,10 @@
-#include "p2s_kernel.h"
-#include <cc/alphabet.h>
-#include <kernels/core/streamset.h>
-#include <kernels/kernel_builder.h>
-#include <toolchain/toolchain.h>
+#include <kernel/util/p2s_kernel.h>
+
 #include <llvm/Support/Compiler.h>
+#include <kernel/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
+#include <re/cc/alphabet.h>
+#include <toolchain/toolchain.h>
 
 namespace llvm { class Value; }
 

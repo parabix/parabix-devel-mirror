@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include <pablo/parser/source_file.h>
+#include <pablo/parse/source_file.h>
 
 namespace pablo {
 namespace parse {

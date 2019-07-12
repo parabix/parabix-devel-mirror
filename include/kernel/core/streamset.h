@@ -8,7 +8,7 @@
 
 #include <llvm/IR/Type.h>  // for Type
 #include <llvm/IR/DerivedTypes.h>  // for Type
-#include <kernels/core/ptrwrapper.hpp>
+#include <kernel/core/ptrwrapper.hpp>
 
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class Value; }

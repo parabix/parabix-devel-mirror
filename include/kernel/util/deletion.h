@@ -5,7 +5,7 @@
 #ifndef DELETION_H
 #define DELETION_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <toolchain/driver.h>
 

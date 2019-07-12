@@ -5,18 +5,19 @@
  *
  */
 
-#include "PropertyObjects.h"
-#include "PropertyObjectTable.h"
+#include <ucd/data/PropertyObjects.h>
+
+#include <codecvt>
+#include <sstream>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
-#include <sstream>
 #include <llvm/Support/ErrorHandling.h>
-#include <toolchain/cpudriver.h>
 #include <grep/grep_engine.h>
+#include <re/adt/re_cc.h>
+#include <re/compile/re_analysis.h>
+#include <toolchain/cpudriver.h>
+#include <ucd/data/PropertyObjectTable.h>
 #include <util/aligned_allocator.h>
-#include <re/re_analysis.h>
-#include <re/re_cc.h>
-#include <codecvt>
 
 
 using namespace llvm;

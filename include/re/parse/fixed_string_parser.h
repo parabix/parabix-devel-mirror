@@ -6,7 +6,8 @@
 
 #ifndef PARSE_FIXED_STRING_PARSER_H
 #define PARSE_FIXED_STRING_PARSER_H
-#include <re/parsers/parser.h>
+
+#include <re/parse/parser.h>
 
 namespace re {
     class FixedStringParser : public RE_Parser {

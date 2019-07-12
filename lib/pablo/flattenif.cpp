@@ -1,8 +1,8 @@
-#include "flattenif.hpp"
+#include <pablo/flattenif.hpp>
 #include <pablo/codegenstate.h>
 #include <pablo/branch.h>
 #ifndef NDEBUG
-#include <pablo/analysis/pabloverifier.hpp>
+#include <pablo/pabloverifier.hpp>
 #endif
 
 using namespace llvm;

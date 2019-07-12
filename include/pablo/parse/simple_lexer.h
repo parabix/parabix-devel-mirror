@@ -8,8 +8,8 @@
 
 #include <vector>
 #include <boost/make_unique.hpp>
-#include <pablo/parser/error.h>
-#include <pablo/parser/lexer.h>
+#include <pablo/parse/error.h>
+#include <pablo/parse/lexer.h>
 
 namespace pablo {
 namespace parse {

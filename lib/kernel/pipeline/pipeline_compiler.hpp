@@ -1,10 +1,10 @@
 ﻿#ifndef PIPELINE_COMPILER_HPP
 #define PIPELINE_COMPILER_HPP
 
-#include <kernels/pipeline_kernel.h>
-#include <kernels/core/streamset.h>
-#include <kernels/kernel_builder.h>
-#include <kernels/core/refwrapper.h>
+#include <kernel/pipeline/pipeline_kernel.h>
+#include <kernel/core/streamset.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/refwrapper.h>
 #include <util/extended_boost_graph_containers.h>
 #include <toolchain/toolchain.h>
 #include <boost/container/flat_set.hpp>

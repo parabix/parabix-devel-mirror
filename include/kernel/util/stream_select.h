@@ -9,8 +9,8 @@
 #include <initializer_list>
 #include <utility>
 #include <vector>
-#include <kernels/pipeline_builder.h>
-#include <kernels/core/kernel.h>
+#include <kernel/pipeline/pipeline_builder.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 

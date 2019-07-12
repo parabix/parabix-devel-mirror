@@ -6,7 +6,7 @@
 #define CC_KERNEL_H
 
 #include <pablo/pablo_kernel.h>
-#include <kernels/callback.h>
+// #include <kernel/util/callback.h>
 
 namespace IDISA { class IDISA_Builder; }
 namespace re { class CC; }

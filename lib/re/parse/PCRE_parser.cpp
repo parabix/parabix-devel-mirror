@@ -4,8 +4,9 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include "PCRE_parser.h"
-#include <re/parsers/parser_helper.h>
+#include <re/parse/PCRE_parser.h>
+
+#include <re/parse/parser_helper.h>
 
 namespace re{
 

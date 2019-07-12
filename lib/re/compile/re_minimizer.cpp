@@ -1,14 +1,15 @@
-#include "re_minimizer.h"
-#include <re/re_name.h>
-#include <re/re_alt.h>
-#include <re/re_cc.h>
-#include <re/re_seq.h>
-#include <re/re_rep.h>
-#include <re/re_range.h>
+#include <re/compile/re_minimizer.h>
+
+#include <re/adt/re_name.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_cc.h>
+#include <re/adt/re_seq.h>
+#include <re/adt/re_rep.h>
+#include <re/adt/re_range.h>
+#include <re/compile/re_toolchain.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <llvm/ADT/SmallVector.h>
-#include <re/re_toolchain.h>
 
 using namespace llvm;
 using namespace boost::container;

@@ -8,10 +8,10 @@
 #define CC_COMPILER_H
 
 
-#include <re/re_cc.h>
-#include <pablo/builder.hpp>
-#include <cc/alphabet.h>
 #include <stdint.h>
+#include <pablo/builder.hpp>
+#include <re/adt/re_cc.h>
+#include <re/cc/alphabet.h>
 
 namespace cc {
 

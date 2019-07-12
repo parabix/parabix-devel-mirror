@@ -1,6 +1,6 @@
-#include <kernels/optimizationbranch.h>
+#include <kernel/pipeline/optimizationbranch.h>
 #include "optimizationbranch_compiler.hpp"
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 
 namespace kernel {
 

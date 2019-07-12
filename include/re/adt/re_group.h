@@ -1,8 +1,8 @@
 #ifndef RE_GROUP_H
 #define RE_GROUP_H
 
-#include <re/re_re.h>
 #include <llvm/Support/Casting.h>
+#include <re/adt/re_re.h>
 
 namespace re {
     

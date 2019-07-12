@@ -5,7 +5,7 @@
 #ifndef STDOUT_KERNEL_H
 #define STDOUT_KERNEL_H
 
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace IDISA { class IDISA_Builder; }
 

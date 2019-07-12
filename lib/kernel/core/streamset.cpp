@@ -3,11 +3,12 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "streamset.h"
-#include "kernel.h"
+#include <kernel/core/streamset.h>
+
+#include <kernel/core/kernel.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/core/kernel_builder.h>
 #include <toolchain/toolchain.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Format.h>

@@ -3,9 +3,9 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include "s2p_kernel.h"
-#include <kernels/callback.h>
-#include <kernels/kernel_builder.h>
+#include <kernel/util/s2p_kernel.h>
+#include <kernel/util/callback.h>
+#include <kernel/core/kernel_builder.h>
 #include <pablo/pabloAST.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_pack.h>

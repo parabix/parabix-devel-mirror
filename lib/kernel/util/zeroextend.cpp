@@ -1,6 +1,6 @@
-#include "zeroextend.h"
-#include <kernels/kernel_builder.h>
-#include <kernels/core/streamset.h>
+#include <kernel/util/zeroextend.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;

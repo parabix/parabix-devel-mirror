@@ -7,7 +7,7 @@
 #define ERROR_MONITOR_KERNEL_H
 
 #include <initializer_list>
-#include <kernels/core/kernel.h>
+#include <kernel/core/kernel.h>
 
 namespace kernel {
 

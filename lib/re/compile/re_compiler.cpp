@@ -6,35 +6,36 @@
 
 
 
-#include "re_compiler.h"
-#include <pablo/pe_ones.h>          // for Ones
-#include <pablo/pe_var.h>           // for Var
-#include <pablo/pe_zeroes.h>        // for Zeroes
-#include <re/printer_re.h>
-#include <re/re_alt.h>
-#include <re/re_analysis.h>         // for isByteLength, isUnicodeUnitLength
-#include <re/re_any.h>
-#include <re/re_assertion.h>        // for Assertion, Assertion::Sense, Asse...
-#include <re/re_cc.h>               // for makeCC
-#include <re/re_diff.h>             // for Diff
-#include <re/re_end.h>
-#include <re/re_intersect.h>        // for Intersect
-#include <re/re_name.h>             // for Name, Name::Type, Name::Type::Zer...
-#include <re/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
-#include <re/re_seq.h>              // for Seq
-#include <re/re_start.h>
-#include <re/re_local.h>
-#include <re/to_utf8.h>
-#include <re/re_toolchain.h>        // for AlgorithmOptionIsSet, RE_Algorith...
-#include <cc/alphabet.h>
-#include <cc/cc_compiler_target.h>
-#include <cc/multiplex_CCs.h>
-#include <cc/cc_compiler.h>
-#include <UCD/ucd_compiler.hpp>
-#include "pablo/builder.hpp"        // for PabloBuilder
-#include <llvm/ADT/STLExtras.h> // for make_unique
+#include <re/compile/re_compiler.h>
+
+#include <llvm/ADT/STLExtras.h>         // for make_unique
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <pablo/builder.hpp>            // for PabloBuilder
+#include <pablo/pe_ones.h>              // for Ones
+#include <pablo/pe_var.h>               // for Var
+#include <pablo/pe_zeroes.h>            // for Zeroes
+#include <re/adt/printer_re.h>
+#include <re/adt/re_alt.h>
+#include <re/adt/re_any.h>
+#include <re/adt/re_assertion.h>        // for Assertion, Assertion::Sense, Asse...
+#include <re/adt/re_cc.h>               // for makeCC
+#include <re/adt/re_diff.h>             // for Diff
+#include <re/adt/re_end.h>
+#include <re/adt/re_intersect.h>        // for Intersect
+#include <re/adt/re_name.h>             // for Name, Name::Type, Name::Type::Zer...
+#include <re/adt/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
+#include <re/adt/re_seq.h>              // for Seq
+#include <re/adt/re_start.h>
+#include <re/cc/alphabet.h>
+#include <re/cc/cc_compiler_target.h>
+#include <re/cc/multiplex_CCs.h>
+#include <re/cc/cc_compiler.h>
+#include <re/compile/to_utf8.h>
+#include <re/compile/re_analysis.h>     // for isByteLength, isUnicodeUnitLength
+#include <re/compile/re_local.h>
+#include <re/compile/re_toolchain.h>    // for AlgorithmOptionIsSet, RE_Algorith...
+#include <ucd/compile/ucd_compiler.hpp>
 
 namespace pablo { class PabloAST; }
 namespace pablo { class Var; }
