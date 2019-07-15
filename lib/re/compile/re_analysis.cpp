@@ -17,9 +17,9 @@
 #include <re/adt/re_assertion.h>
 #include <re/adt/re_group.h>
 #include <re/adt/printer_re.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/multiplex_CCs.h>
-#include <re/compile/re_nullable.h>
+#include <re/compile/remove_nullable.h>
 #include <re/compile/to_utf8.h>
 #include <ucd/core/unicode_set.h>
 #include <ucd/compile/UTF.h>
@@ -676,7 +676,4 @@ bool DefiniteLengthBackReferencesOnly(const RE * re) {
     return true; // otherwise = CC, Any, Start, End, Range
 }
 
-void UndefinedNameError(const Name * n) {
-    report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");
-}
 }

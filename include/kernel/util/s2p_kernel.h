@@ -5,7 +5,7 @@
 #ifndef S2P_KERNEL_H
 #define S2P_KERNEL_H
 
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <pablo/pablo_kernel.h>
 #include <string>
 

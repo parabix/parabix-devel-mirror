@@ -8,6 +8,7 @@
 #define RE_VALIDATION_H
 
 #include <string>
+
 namespace re { class RE; class CC;}
 namespace cc { class Alphabet;}
 namespace re { class Name; class Start; class End; class CC; class Seq; class Alt;

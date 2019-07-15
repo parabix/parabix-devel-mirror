@@ -27,14 +27,14 @@
 #include <re/adt/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
 #include <re/adt/re_seq.h>              // for Seq
 #include <re/adt/re_start.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/multiplex_CCs.h>
 #include <re/cc/cc_compiler.h>
 #include <re/compile/to_utf8.h>
 #include <re/compile/re_analysis.h>     // for isByteLength, isUnicodeUnitLength
 #include <re/compile/re_local.h>
-#include <re/compile/re_toolchain.h>    // for AlgorithmOptionIsSet, RE_Algorith...
+#include <re/toolchain/toolchain.h>
 #include <ucd/compile/ucd_compiler.hpp>
 
 namespace pablo { class PabloAST; }

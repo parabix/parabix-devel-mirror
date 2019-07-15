@@ -6,7 +6,7 @@
 #include <pablo/bixnum.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <llvm/Support/raw_ostream.h>

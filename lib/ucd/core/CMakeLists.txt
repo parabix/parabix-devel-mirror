@@ -3,7 +3,5 @@
 
 # module: ucd.core
 
-add_library(ucd.core
+parabix_add_module(ucd.core
     unicode_set.cpp)
-
-parabix_set_library_name(ucd.core)

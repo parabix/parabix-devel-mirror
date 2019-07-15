@@ -5,21 +5,13 @@
 #include <sstream>
 #include <boost/container/flat_set.hpp>
 #include <llvm/Support/raw_ostream.h>
-#include <re/adt/re_name.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_cc.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_rep.h>
-#include <re/adt/re_diff.h>
-#include <re/adt/re_intersect.h>
-#include <re/adt/re_assertion.h>
-#include <re/adt/re_group.h>
+#include <re/adt/adt.h>
 #include <re/adt/re_utility.h>
 #include <re/adt/printer_re.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/multiplex_CCs.h>
 #include <re/compile/re_analysis.h>
-#include <re/compile/re_toolchain.h>
+#include <re/compile/re_transformer.h>
 #include <ucd/compile/ucd_compiler.hpp>
 #include <ucd/compile/resolve_properties.h>
 

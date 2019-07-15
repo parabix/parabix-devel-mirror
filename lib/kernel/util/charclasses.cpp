@@ -4,7 +4,7 @@
  */
 
 #include <kernel/util/charclasses.h>
-#include <re/compile/re_toolchain.h>
+#include <re/toolchain/toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <ucd/compile/ucd_compiler.hpp>
 #include <re/cc/cc_compiler.h>

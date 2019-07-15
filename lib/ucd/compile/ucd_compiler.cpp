@@ -7,7 +7,7 @@
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <pablo/printer_pablos.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/cc_compiler.h>
 #include <re/adt/re_name.h>
 #include <re/adt/re_cc.h>

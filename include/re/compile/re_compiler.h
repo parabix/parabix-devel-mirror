@@ -11,7 +11,7 @@
 #include <boost/container/flat_map.hpp>
 #include <pablo/builder.hpp>
 #include <re/adt/re_seq.h>              // for Seq
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 
 namespace cc { class CC_Compiler; class Alphabet;}
 namespace pablo { class PabloAST; }

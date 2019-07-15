@@ -17,24 +17,36 @@ add_executable(x8u16
 
 target_link_libraries(u8u16
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
     re.cc
     toolchain)
 
 target_link_libraries(u32u8
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
     re.cc
     toolchain)
 
 target_link_libraries(u32u16
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
     re.cc
     toolchain)
 
 target_link_libraries(x8u16
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
     re.cc
     toolchain)

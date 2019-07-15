@@ -14,7 +14,7 @@
 #include <toolchain/toolchain.h>
 #include <re/parse/parser.h>
 #include <re/adt/re_alt.h>
-#include <re/compile/re_toolchain.h>
+#include <re/toolchain/toolchain.h>
 #include <fstream>
 #include <string>
 

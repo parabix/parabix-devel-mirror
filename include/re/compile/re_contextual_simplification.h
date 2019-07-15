@@ -7,11 +7,12 @@
 #ifndef RE_CONTEXTUAL_SIMPLIFICATION_H
 #define RE_CONTEXTUAL_SIMPLIFICATION_H
 
-#include <re/compile/re_toolchain.h>
+#include <re/compile/re_transformer.h>
 
 namespace re {
 
-    RE * simplifyAssertions(RE * r);
+RE * simplifyAssertions(RE * r);
+
 class RE_ContextSimplifier : public RE_Transformer {
 public:
     inline RE_ContextSimplifier() : RE_Transformer("ContextSimplification") {}

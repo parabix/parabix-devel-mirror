@@ -10,10 +10,15 @@ add_executable(icgrep
 target_link_libraries(icgrep
     grep
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
+    re.alphabet
     re.cc
     re.compile
     re.parse
+    re.toolchain
     ucd.compile
     ucd.core
     ucd.data

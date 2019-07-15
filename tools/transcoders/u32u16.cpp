@@ -6,7 +6,7 @@
 
 #include <kernel/core/idisa_target.h>                   // for GetIDISA_Builder
 #include <re/cc/cc_compiler.h>                        // for CC_Compiler
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/utf16gen.h>
 #include <kernel/util/deletion.h>                      // for DeletionKernel
 #include <kernel/util/source_kernel.h>

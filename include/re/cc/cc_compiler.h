@@ -11,7 +11,7 @@
 #include <stdint.h>
 #include <pablo/builder.hpp>
 #include <re/adt/re_cc.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 
 namespace cc {
 

@@ -8,5 +8,8 @@ add_executable(gb18030
 
 target_link_libraries(gb18030
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
     re.cc)

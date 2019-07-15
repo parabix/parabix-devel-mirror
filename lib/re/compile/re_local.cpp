@@ -1,16 +1,15 @@
+/*
+ *  Copyright (c) 2019 International Characters.
+ *  This software is licensed to the public under the Open Software License 3.0.
+ *  icgrep is a trademark of International Characters.
+ */
+
 #include <re/compile/re_local.h>
 
-#include <re/adt/re_name.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_cc.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_rep.h>
-#include <re/adt/re_diff.h>
-#include <re/adt/re_intersect.h>
-#include <re/adt/re_assertion.h>
+#include<re/adt/adt.h>
+#include <re/adt/nullable.h>
 #include <re/compile/re_analysis.h>
-#include <re/compile/re_nullable.h>
-#include <re/compile/re_toolchain.h>
+#include <re/compile/re_transformer.h>
 #include <boost/container/flat_map.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 

@@ -3,7 +3,8 @@
 
 # module: re.adt
 
-add_library(re.adt
+parabix_add_module(re.adt
+    nullable.cpp
     printer_re.cpp
     re_assertion.cpp
     re_cc.cpp
@@ -13,11 +14,9 @@ add_library(re.adt
     re_range.cpp
     re_re.cpp
     re_rep.cpp
-    re_utility.cpp)
-
-parabix_set_library_name(re.adt)
+    re_utility.cpp
+    validation.cpp)
 
 target_link_libraries(re.adt
-    re.cc
-    re.compile
-    ucd.core)
+    re.alphabet
+    re.toolchain)

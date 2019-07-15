@@ -10,7 +10,7 @@
 #include <re/adt/re_seq.h>
 #include <re/adt/re_empty_set.h>
 #include <re/adt/re_alt.h>
-#include <re/compile/re_nullable.h>
+#include <re/adt/nullable.h>
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
 

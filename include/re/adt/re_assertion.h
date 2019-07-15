@@ -11,7 +11,7 @@
 #include <re/adt/re_empty_set.h>
 #include <re/adt/re_seq.h>
 #include <re/adt/re_alt.h>
-#include <re/compile/re_nullable.h>
+#include <re/adt/nullable.h>
 
 namespace re {
 
@@ -91,11 +91,8 @@ RE * makeSOT();
     
 // End-of-text boundary assertion.
 RE * makeEOT();
-    
-RE * expandBoundaryAssertion(RE * r);
-    
-RE * lookaheadPromotion(RE * r);
-}
+
+} // namespace re
 
 #endif // RE_ASSERTION_H
 

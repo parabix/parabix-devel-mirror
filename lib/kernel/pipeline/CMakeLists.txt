@@ -13,4 +13,5 @@ add_library(kernel.pipeline
 parabix_set_library_name(kernel.pipeline)
 
 target_link_libraries(kernel.pipeline
-    kernel.core)
+    kernel.core
+    kernel.util)

@@ -8,6 +8,9 @@ add_executable(wc
 
 target_link_libraries(wc
     pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
     re.adt
     re.cc
     toolchain

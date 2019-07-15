@@ -23,12 +23,11 @@
 #include <re/adt/printer_re.h>
 #include <re/adt/re_cc.h>
 #include <re/adt/re_name.h>
-#include <re/cc/alphabet.h>
-#include <re/compile/re_toolchain.h>
+#include <re/alphabet/alphabet.h>
+#include <re/toolchain/toolchain.h>
 #include <re/compile/re_reverse.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
-#include <re/cc/alphabet.h>
 #include <re/cc/multiplex_CCs.h>
 #include <re/compile/re_compiler.h>
 #include <ucd/compile/ucd_compiler.hpp>

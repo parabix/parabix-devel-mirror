@@ -18,8 +18,7 @@ private:
 };
 
 RE * makeDiff(RE * lh, RE * rh);
-    
-RE * resolveDiffs(RE * r);
+
 }
 
 #endif // RE_DIFF_H

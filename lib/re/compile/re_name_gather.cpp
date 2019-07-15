@@ -13,7 +13,7 @@
 #include <re/adt/re_intersect.h>
 #include <re/adt/re_assertion.h>
 #include <re/adt/re_group.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/compile/re_analysis.h>
 #include <ucd/compile/ucd_compiler.hpp>
 #include <ucd/compile/resolve_properties.h>

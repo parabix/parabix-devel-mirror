@@ -6,7 +6,7 @@
 
 #include <re/cc/cc_compiler.h>
 
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <pablo/codegenstate.h>
 #include <pablo/boolean.h>
 #include <pablo/pe_zeroes.h>

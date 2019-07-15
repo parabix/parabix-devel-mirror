@@ -4,7 +4,7 @@
  */
 
 #include <kernel/util/grapheme_kernel.h>
-#include <re/compile/re_toolchain.h>
+#include <re/toolchain/toolchain.h>
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>

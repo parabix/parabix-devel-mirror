@@ -8,7 +8,7 @@
 #define RE_CC_H
 
 #include <re/adt/re_re.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <ucd/core/unicode_set.h>
 
 namespace re {

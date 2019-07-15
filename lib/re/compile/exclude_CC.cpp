@@ -8,20 +8,8 @@
 
 #include <llvm/Support/Casting.h>
 #include <llvm/Support/ErrorHandling.h>
-#include <re/adt/re_cc.h>
-#include <re/adt/re_name.h>
-#include <re/adt/re_start.h>
-#include <re/adt/re_end.h>
-#include <re/adt/re_any.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_rep.h>
-#include <re/adt/re_group.h>
-#include <re/adt/re_range.h>
-#include <re/adt/re_diff.h>
-#include <re/adt/re_intersect.h>
-#include <re/adt/re_assertion.h>
-#include <re/compile/re_toolchain.h>
+#include <re/adt/adt.h>
+#include <re/compile/re_transformer.h>
 
 using namespace llvm;
 

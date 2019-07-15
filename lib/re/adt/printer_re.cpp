@@ -21,7 +21,7 @@
 #include <re/adt/re_intersect.h>
 #include <re/adt/re_assertion.h>
 #include <re/adt/re_group.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 
 using namespace re;
 using namespace llvm;

@@ -7,7 +7,7 @@
 
 #include <kernel/core/idisa_target.h>
 
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/cc_kernel.h>

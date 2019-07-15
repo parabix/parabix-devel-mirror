@@ -3,7 +3,7 @@
 #include <llvm/Support/Compiler.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <toolchain/toolchain.h>
 
 namespace llvm { class Value; }

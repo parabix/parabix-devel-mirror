@@ -5,7 +5,7 @@
  */
 
 
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <llvm/Support/ErrorHandling.h>
 
 namespace cc {

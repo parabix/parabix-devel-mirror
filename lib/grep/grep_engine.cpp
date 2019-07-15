@@ -47,7 +47,7 @@
 #include <re/adt/re_assertion.h>
 #include <re/adt/re_utility.h>
 #include <re/adt/printer_re.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <re/cc/cc_kernel.h>
 #include <re/cc/multiplex_CCs.h>
 #include <re/compile/casing.h>

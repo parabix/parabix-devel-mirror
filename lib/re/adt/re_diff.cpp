@@ -6,13 +6,10 @@
 
 #include <re/adt/re_diff.h>
 
-#include <re/adt/re_cc.h>
+#include <re/adt/nullable.h>
 #include <re/adt/re_seq.h>
-#include <re/adt/re_name.h>
 #include <re/adt/re_empty_set.h>
-#include <re/compile/re_nullable.h>
-#include <re/compile/re_toolchain.h>
-#include <re/compile/validation.h>
+#include <re/adt/validation.h>
 #include <llvm/Support/Casting.h>
 
 using namespace llvm;
@@ -31,24 +28,4 @@ RE * makeDiff(RE * lh, RE * rh) {
     return Diff::Create(lh, rh);
 }
 
-class DiffResolver : public RE_Transformer {
-public:
-    DiffResolver() : RE_Transformer("DiffResolver") {}
-    RE * transformDiff(Diff * d) override {
-        RE * lh = d->getLH();
-        RE * rh = d->getRH();
-        if (defined<CC>(lh) && defined<CC>(rh)) {
-            CC * lh_cc = defCast<CC>(lh);
-            CC * rh_cc = defCast<CC>(rh);
-            if (lh_cc->getAlphabet() == rh_cc->getAlphabet()) {
-                return subtractCC(lh_cc, rh_cc);
-            }
-        }
-        return d;
-    }
-};
-
-RE * resolveDiffs(RE * r) {
-    return DiffResolver().transformRE(r);
-}
 }

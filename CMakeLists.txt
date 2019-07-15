@@ -86,19 +86,19 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic")
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
 endif()
 
 # Disable RunTime Type Information
 if(MSVC) # using Visual Studio C++
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
 else() # using Clang, GCC, Intel C++, etc
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-rtti")
 endif()
 
 # Disable Dual ABI support
 if(DISABLE_DUAL_ABI)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GLIBCXX_USE_CXX11_ABI=0")
 endif()
 
 set(CMAKE_REQUIRED_FLAGS)
@@ -108,9 +108,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_VERSION='\"${Parabix_REVISION}
 
 # Use gold linker on Linux:gcc
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
-  endif()
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fuse-ld=gold")
+    endif()
 endif()
 
 # Release & Debug flags
@@ -123,7 +123,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -f
 
 CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_LINK_OPTIONS_NO_PIE COMPILER_SUPPORTS_NO_PIE)
 if (COMPILER_SUPPORTS_NO_PIE)
-  set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_LINK_OPTIONS_NO_PIE}")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_LINK_OPTIONS_NO_PIE}")
 endif()
 
 # Use address sanitizer if desiered
@@ -148,6 +148,11 @@ function(parabix_set_library_name NAME)
 endfunction(parabix_set_library_name)
 
 
+function(parabix_add_module NAME)
+    add_library(${NAME} ${ARGN})
+    parabix_set_library_name(${NAME})
+endfunction(parabix_add_module)
+
 
 ###   Add Subdirectories   ###
 
@@ -161,9 +166,11 @@ add_subdirectory(lib/kernel/util)
 add_subdirectory(lib/pablo)
 add_subdirectory(lib/pablo/parse)
 add_subdirectory(lib/re/adt)
+add_subdirectory(lib/re/alphabet)
 add_subdirectory(lib/re/cc)
 add_subdirectory(lib/re/compile)
 add_subdirectory(lib/re/parse)
+add_subdirectory(lib/re/toolchain)
 add_subdirectory(lib/toolchain)
 add_subdirectory(lib/ucd/compile)
 add_subdirectory(lib/ucd/core)

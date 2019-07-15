@@ -21,14 +21,14 @@
 #include <re/adt/re_diff.h>
 #include <re/adt/re_intersect.h>
 #include <re/adt/re_assertion.h>
-#include <re/compile/re_toolchain.h>
+#include <re/compile/re_transformer.h>
 
 
 using namespace llvm;
 
 namespace re {
     
-    using CaptureMap = std::map<std::string, Name *>;
+using CaptureMap = std::map<std::string, Name *>;
 
 class ReverseTransformer : public RE_Transformer {
 public:

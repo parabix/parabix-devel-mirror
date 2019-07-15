@@ -4,7 +4,6 @@
 # module: re.cc
 
 add_library(re.cc
-    alphabet.cpp
     cc_compiler_target.cpp
     cc_compiler.cpp
     cc_kernel.cpp

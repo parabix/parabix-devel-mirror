@@ -18,7 +18,7 @@
 #include <re/adt/re_diff.h>
 #include <re/adt/re_intersect.h>
 #include <re/adt/re_assertion.h>
-#include <re/cc/alphabet.h>
+#include <re/alphabet/alphabet.h>
 #include <ucd/core/unicode_set.h>
 #include <ucd/compile/UTF.h>
 

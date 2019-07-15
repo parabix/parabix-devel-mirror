@@ -11,15 +11,8 @@
 #include <locale>
 #include <codecvt>
 #include <llvm/Support/Casting.h>
-#include <re/adt/re_cc.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_group.h>
-#include <re/adt/re_range.h>
-#include <re/adt/re_diff.h>
-#include <re/adt/re_intersect.h>
-#include <re/adt/re_assertion.h>
-#include <re/compile/re_toolchain.h>
+#include <re/adt/adt.h>
+#include <re/compile/re_transformer.h>
 #include <ucd/core/unicode_set.h>
 #include <ucd/data/PropertyAliases.h>
 #include <ucd/data/PropertyObjects.h>
