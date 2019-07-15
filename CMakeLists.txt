@@ -188,3 +188,115 @@ add_subdirectory(tools/wc)
 # add_subdirectory(tools/wc/wc-pablo)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
+
+
+###   Test Suite   ###
+
+set(QA_DIR ${PROJECT_SOURCE_DIR}/QA)
+set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
+
+add_test(
+  NAME greptest
+  WORKING_DIRECTORY ${QA_DIR}
+  COMMAND python greptest.py --random_flag_count=2 ${BIN_DIR}/icgrep)
+
+add_test(
+  NAME proptest
+  WORKING_DIRECTORY ${QA_DIR}
+  COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/proptest.xml ${BIN_DIR}/icgrep)
+
+if (EXISTS /usr/local/data/arwiki-20150901-pages-articles.xml)
+add_test (NAME perf_test_1
+  WORKING_DIRECTORY ${QA_DIR}
+  COMMAND python greptest.py -d /usr/local/data/ -t ${QA_DIR}/perftest.xml ${BIN_DIR}/icgrep)
+endif()
+
+add_test(
+  NAME abc_test
+  WORKING_DIRECTORY ${QA_DIR}
+  COMMAND ./run_abc ${BIN_DIR}/icgrep)
+
+add_test(
+  NAME abc_test_ternary
+  WORKING_DIRECTORY ${QA_DIR}
+  COMMAND ./run_abc "${BIN_DIR}/icgrep -byte-CC-limit=0 -ccc-type=ternary")
+
+add_test(
+  NAME u8u16_test
+  WORKING_DIRECTORY ${QA_DIR}/u8u16
+  COMMAND ./run_all "${BIN_DIR}/u8u16 -thread-num=2")
+
+add_test(
+  NAME u32u8_test
+  WORKING_DIRECTORY ${QA_DIR}/
+  COMMAND ./test_u32u8 "${BIN_DIR}/u32u8")
+
+add_test(
+    NAME editd_test
+    WORKING_DIRECTORY ${QA_DIR}/editd
+    COMMAND python run_all.py -e ${BIN_DIR})
+
+add_test(
+    NAME base64_test
+    WORKING_DIRECTORY ${QA_DIR}/base64
+    COMMAND python base64test.py ${BIN_DIR}/base64)
+
+
+SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
+SET_PROPERTY(TEST abc_test abc_test_ternary PROPERTY TIMEOUT 100)
+SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
+
+
+add_custom_target (greptest
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py --random_flag_count=2 "${BIN_DIR}/icgrep")
+
+add_custom_target (proptest
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/proptest.xml "${BIN_DIR}/icgrep")
+
+add_custom_target (u8u16_test
+    WORKING_DIRECTORY ${QA_DIR}/u8u16
+    COMMAND ./run_all "${BIN_DIR}/u8u16 -thread-num=2")
+
+add_custom_target (u32u8_test
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND ./test_u32u8 "${BIN_DIR}/u32u8 -EnableAsserts -VerifyIR")
+
+add_custom_target (editd_test
+    WORKING_DIRECTORY ${QA_DIR}/editd
+    COMMAND python run_all.py -e ${BIN_DIR})
+
+add_custom_target (base64_test
+    WORKING_DIRECTORY ${QA_DIR}/base64
+    COMMAND python base64test.py "${BIN_DIR}/base64")
+
+add_custom_target (abc_gen
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python abc_testgen.py)
+
+add_custom_target (abc_test
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND ./run_abc "${BIN_DIR}/icgrep")
+
+add_custom_target (check
+    COMMAND ${CMAKE_CTEST_COMMAND} --output-on-failure
+    DEPENDS icgrep u8u16 u32u8 base64 editd idisa_test)
+
+add_custom_target (perf_icgrep
+    COMMAND python2 perf.py icgrep
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance
+    DEPENDS icgrep)
+
+add_custom_target (viewer
+    COMMAND python2 viewer.py
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
+
+add_custom_target (text_viewer
+    COMMAND python2 viewer.py -t
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/../performance)
+
+add_custom_target (xml_test
+    WORKING_DIRECTORY ${QA_DIR}/xml
+    COMMAND python3 run_test_suite.py "${BIN_DIR}/xml")
+
