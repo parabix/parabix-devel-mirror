@@ -5,16 +5,16 @@
 
 add_custom_target(recompile-object-cache ALL touch  ${CMAKE_CURRENT_SOURCE_DIR}/object_cache.cpp)
 
-add_library(toolchain
+parabix_add_module(toolchain
     cpudriver.cpp
     driver.cpp
     # NVPTXDriver.cpp
     object_cache.cpp
     toolchain.cpp)
 
-parabix_set_library_name(toolchain)
-
-target_link_libraries(toolchain kernel.core)
+target_link_libraries(toolchain 
+    kernel.core
+    pablo)
 
 add_executable(cachejanitord
     object_cache_daemon.cpp)

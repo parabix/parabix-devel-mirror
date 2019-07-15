@@ -3,15 +3,13 @@
 
 # module: idisa
 
-add_library(idisa
+parabix_add_module(idisa
     idisa_avx_builder.cpp
     idisa_builder.cpp
     idisa_i64_builder.cpp
     # idisa_nvptx_builder.cpp
     idisa_sse_builder.cpp
     tracegen.cpp)
-
-parabix_set_library_name(idisa)
 
 target_link_libraries(idisa
     codegen)

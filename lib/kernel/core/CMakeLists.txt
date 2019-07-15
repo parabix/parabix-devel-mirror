@@ -18,5 +18,5 @@ add_library(kernel.core
 parabix_set_library_name(kernel.core)
 
 target_link_libraries(kernel.core
-    idisa 
-    codegen)
+    codegen
+    idisa)
