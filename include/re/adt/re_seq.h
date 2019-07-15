@@ -13,7 +13,7 @@
 #include <re/adt/re_cc.h>
 #include <re/adt/re_re.h>
 #include <re/adt/re_empty_set.h>
-#include <ucd/core/unicode_set.h>
+#include <unicode/core/unicode_set.h>
 #include <util/slab_allocator.h>
 
 namespace re {

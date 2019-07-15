@@ -16,6 +16,6 @@ target_link_libraries(grep
     re.cc
     re.compile
     toolchain
-    ucd.compile
+    unicode.compile
     kernel.pipeline
     kernel.util)

@@ -17,4 +17,4 @@ parabix_set_library_name(re.cc)
 target_link_libraries(re.cc
     pablo
     re.adt
-    ucd.core)
+    unicode.core)

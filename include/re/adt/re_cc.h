@@ -9,7 +9,7 @@
 
 #include <re/adt/re_re.h>
 #include <re/alphabet/alphabet.h>
-#include <ucd/core/unicode_set.h>
+#include <unicode/core/unicode_set.h>
 
 namespace re {
 

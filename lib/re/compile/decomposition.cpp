@@ -13,10 +13,10 @@
 #include <llvm/Support/Casting.h>
 #include <re/adt/adt.h>
 #include <re/compile/re_transformer.h>
-#include <ucd/core/unicode_set.h>
-#include <ucd/data/PropertyAliases.h>
-#include <ucd/data/PropertyObjects.h>
-#include <ucd/data/PropertyValueAliases.h>
+#include <unicode/core/unicode_set.h>
+#include <unicode/data/PropertyAliases.h>
+#include <unicode/data/PropertyObjects.h>
+#include <unicode/data/PropertyValueAliases.h>
 
 
 using namespace llvm;

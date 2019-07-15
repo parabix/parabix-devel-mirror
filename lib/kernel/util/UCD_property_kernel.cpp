@@ -9,7 +9,7 @@
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
-#include <ucd/compile/ucd_compiler.hpp>
+#include <unicode/compile/ucd_compiler.hpp>
 #include <pablo/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
@@ -37,10 +37,10 @@ void UnicodePropertyKernelBuilder::generatePabloMethod() {
     } else {
         ccc = llvm::make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("source"));
     }
-    UCD::UCDCompiler ucdCompiler(*ccc.get());
+    UCD::UCDCompiler unicodeCompiler(*ccc.get());
     UCD::UCDCompiler::NameMap nameMap;
     nameMap.emplace(mName, nullptr);
-    ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+    unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     auto f = nameMap.find(mName);
     if (f == nameMap.end()) llvm::report_fatal_error("Unknown property");
     PabloAST * theStream = f-> second;

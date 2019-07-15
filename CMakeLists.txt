@@ -172,9 +172,9 @@ add_subdirectory(lib/re/compile)
 add_subdirectory(lib/re/parse)
 add_subdirectory(lib/re/toolchain)
 add_subdirectory(lib/toolchain)
-add_subdirectory(lib/ucd/compile)
-add_subdirectory(lib/ucd/core)
-add_subdirectory(lib/ucd/data)
+add_subdirectory(lib/unicode/compile)
+add_subdirectory(lib/unicode/core)
+add_subdirectory(lib/unicode/data)
 add_subdirectory(lib/util)
 
 # Executables

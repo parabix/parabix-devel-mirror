@@ -9,7 +9,7 @@
  */
 
 #include <vector>
-#include <ucd/core/unicode_set.h>
+#include <unicode/core/unicode_set.h>
 
 std::vector<UCD::codepoint_t> & get_GB_DoubleByteTable();
 

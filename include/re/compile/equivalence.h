@@ -11,8 +11,8 @@
 #include <locale>
 #include <codecvt>
 #include <re/compile/re_toolchain.h>
-#include <ucd/core/unicode_set.h>
-#include <ucd/data/Equivalence.h>
+#include <unicode/core/unicode_set.h>
+#include <unicode/data/Equivalence.h>
 
 namespace re { class RE; class CC; class Seq; class Group;}
 namespace UCD { class EnumeratedPropertyObject; class StringPropertyObject;}

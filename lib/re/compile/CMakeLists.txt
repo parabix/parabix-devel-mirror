@@ -35,6 +35,6 @@ target_link_libraries(re.compile
     pablo
     re.adt
     re.cc
-    ucd.core
-    ucd.compile
-    ucd.data)
+    unicode.core
+    unicode.compile
+    unicode.data)

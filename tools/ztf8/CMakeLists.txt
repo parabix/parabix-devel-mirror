@@ -14,4 +14,4 @@ target_link_libraries(ztf8-study
     re.adt
     re.cc
     re.compile
-    ucd.compile)
+    unicode.compile)

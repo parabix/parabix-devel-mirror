@@ -64,7 +64,7 @@
 #include <sys/stat.h>
 #include <toolchain/cpudriver.h>
 #include <toolchain/toolchain.h>
-#include <ucd/compile/resolve_properties.h>
+#include <unicode/compile/resolve_properties.h>
 #include <util/file_select.h>
 
 using namespace llvm;

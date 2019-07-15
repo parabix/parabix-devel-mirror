@@ -19,7 +19,7 @@ target_link_libraries(icgrep
     re.compile
     re.parse
     re.toolchain
-    ucd.compile
-    ucd.core
-    ucd.data
+    unicode.compile
+    unicode.core
+    unicode.data
     util)

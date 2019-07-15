@@ -12,8 +12,8 @@
 #include <re/cc/multiplex_CCs.h>
 #include <re/compile/re_analysis.h>
 #include <re/compile/re_transformer.h>
-#include <ucd/compile/ucd_compiler.hpp>
-#include <ucd/compile/resolve_properties.h>
+#include <unicode/compile/ucd_compiler.hpp>
+#include <unicode/compile/resolve_properties.h>
 
 using namespace boost::container;
 using namespace llvm;

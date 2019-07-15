@@ -3,8 +3,8 @@
 #include <vector>                      // for vector, allocator
 #include <re/adt/adt.h>
 #include <re/compile/re_transformer.h>
-#include <ucd/core/unicode_set.h>
-#include <ucd/data/CaseFolding.h>
+#include <unicode/core/unicode_set.h>
+#include <unicode/data/CaseFolding.h>
 #include <llvm/Support/Casting.h>      // for dyn_cast, isa
 #include <llvm/Support/ErrorHandling.h>
 

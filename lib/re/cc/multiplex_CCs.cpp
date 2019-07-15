@@ -11,7 +11,7 @@
 #include <re/adt/re_cc.h>
 #include <re/adt/printer_re.h>
 #include <re/cc/multiplex_CCs.h>
-#include <ucd/core/unicode_set.h>
+#include <unicode/core/unicode_set.h>
 
 namespace cc {
 

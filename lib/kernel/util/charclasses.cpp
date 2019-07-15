@@ -6,7 +6,7 @@
 #include <kernel/util/charclasses.h>
 #include <re/toolchain/toolchain.h>
 #include <kernel/core/kernel_builder.h>
-#include <ucd/compile/ucd_compiler.hpp>
+#include <unicode/compile/ucd_compiler.hpp>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/adt/re_name.h>
@@ -75,11 +75,11 @@ void CharClassesKernel::generatePabloMethod() {
         names.push_back(name);
     }
 
-    UCD::UCDCompiler ucdCompiler(*ccc.get());
+    UCD::UCDCompiler unicodeCompiler(*ccc.get());
     if (LLVM_UNLIKELY(AlgorithmOptionIsSet(DisableIfHierarchy))) {
-        ucdCompiler.generateWithoutIfHierarchy(nameMap, pb);
+        unicodeCompiler.generateWithoutIfHierarchy(nameMap, pb);
     } else {
-        ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+        unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     }
     for (unsigned i = 0; i < names.size(); i++) {
         auto t = nameMap.find(names[i]);

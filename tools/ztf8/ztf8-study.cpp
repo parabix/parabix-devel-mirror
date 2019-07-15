@@ -27,8 +27,8 @@
 #include <kernel/util/scanmatchgen.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
-#include <ucd/compile/resolve_properties.h>
-#include <ucd/compile/ucd_compiler.hpp>
+#include <unicode/compile/resolve_properties.h>
+#include <unicode/compile/ucd_compiler.hpp>
 #include <string>
 #include <toolchain/toolchain.h>
 #include <re/compile/re_name_resolve.h>

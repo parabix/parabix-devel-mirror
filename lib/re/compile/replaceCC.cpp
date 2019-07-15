@@ -15,7 +15,7 @@
 #include <re/adt/re_intersect.h>
 #include <re/adt/re_assertion.h>
 #include <re/alphabet/alphabet.h>
-#include <ucd/core/unicode_set.h>
+#include <unicode/core/unicode_set.h>
 
 using namespace llvm;
 namespace re {

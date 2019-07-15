@@ -21,8 +21,8 @@
 #include <re/cc/multiplex_CCs.h>
 #include <re/compile/remove_nullable.h>
 #include <re/compile/to_utf8.h>
-#include <ucd/core/unicode_set.h>
-#include <ucd/compile/UTF.h>
+#include <unicode/core/unicode_set.h>
+#include <unicode/compile/UTF.h>
 
 using namespace llvm;
 

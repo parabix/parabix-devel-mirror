@@ -8,7 +8,7 @@
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
-#include <ucd/compile/ucd_compiler.hpp>
+#include <unicode/compile/ucd_compiler.hpp>
 #include <re/compile/re_compiler.h>
 #include <re/compile/grapheme_clusters.h>
 #include <re/compile/re_name_gather.h>
@@ -35,7 +35,7 @@ GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<ker
 void GraphemeClusterBreakKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
-    UCD::UCDCompiler ucdCompiler(ccc);
+    UCD::UCDCompiler unicodeCompiler(ccc);
     re::RE_Compiler re_compiler(getEntryScope(), ccc);
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     std::set<re::Name *> externals;
@@ -45,7 +45,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
         nameMap.emplace(name, nullptr);
     }
     GCB = resolveUnicodeNames(GCB);
-    ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+    unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     re_compiler.addPrecompiled("UTF8_nonfinal", pb.createExtract(getInputStreamVar("nonFinal"), pb.getInteger(0)));
     PabloAST * const gcb = re_compiler.compile(GCB);
     Var * const breaks = getOutputStreamVar("\\b{g}");

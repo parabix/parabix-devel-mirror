@@ -7,4 +7,4 @@ parabix_add_module(re.alphabet
     alphabet.cpp)
 
 target_link_libraries(re.alphabet
-    ucd.core)
+    unicode.core)

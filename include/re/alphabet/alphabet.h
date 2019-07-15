@@ -9,7 +9,7 @@
 
 #include <string>
 #include <vector>
-#include <ucd/core/unicode_set.h>
+#include <unicode/core/unicode_set.h>
 
 namespace cc {
     
