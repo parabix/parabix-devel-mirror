@@ -3,6 +3,9 @@
 
 # module: transcoders
 
+add_executable(gb18030
+    gb18030.cpp)
+
 add_executable(u8u16
     u8u16.cpp)
 
@@ -14,6 +17,14 @@ add_executable(u32u16
 
 add_executable(x8u16
     x8u16.cpp)
+
+target_link_libraries(gb18030
+    pablo
+    kernel.core
+    kernel.pipeline
+    kernel.util
+    re.adt
+    re.cc)
 
 target_link_libraries(u8u16
     pablo

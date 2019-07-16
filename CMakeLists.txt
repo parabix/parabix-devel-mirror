@@ -180,7 +180,6 @@ add_subdirectory(lib/util)
 # Executables
 add_subdirectory(tools/base64)
 add_subdirectory(tools/editd)
-add_subdirectory(tools/gb18030)
 add_subdirectory(tools/icgrep)
 add_subdirectory(tools/idisa_test)
 add_subdirectory(tools/transcoders)
