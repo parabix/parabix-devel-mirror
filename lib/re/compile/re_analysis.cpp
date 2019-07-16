@@ -22,7 +22,7 @@
 #include <re/compile/remove_nullable.h>
 #include <re/compile/to_utf8.h>
 #include <unicode/core/unicode_set.h>
-#include <unicode/compile/UTF.h>
+#include <unicode/utf/UTF.h>
 
 using namespace llvm;
 

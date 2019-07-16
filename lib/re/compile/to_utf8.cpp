@@ -20,7 +20,7 @@
 #include <re/adt/re_assertion.h>
 #include <re/alphabet/alphabet.h>
 #include <unicode/core/unicode_set.h>
-#include <unicode/compile/UTF.h>
+#include <unicode/utf/UTF.h>
 
 using namespace llvm;
 

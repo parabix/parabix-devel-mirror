@@ -175,6 +175,7 @@ add_subdirectory(lib/toolchain)
 add_subdirectory(lib/unicode/compile)
 add_subdirectory(lib/unicode/core)
 add_subdirectory(lib/unicode/data)
+add_subdirectory(lib/unicode/utf)
 add_subdirectory(lib/util)
 
 # Executables

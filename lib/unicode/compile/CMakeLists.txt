@@ -5,9 +5,7 @@
 
 parabix_add_module(unicode.compile
     resolve_properties.cpp
-    ucd_compiler.cpp
-    utf8_encoder.cpp
-    utf16_encoder.cpp)
+    ucd_compiler.cpp)
 
 target_link_libraries(unicode.compile
     pablo
@@ -16,4 +14,5 @@ target_link_libraries(unicode.compile
     re.parse
     re.compile
     unicode.core
-    unicode.data)
+    unicode.data
+    unicode.utf)

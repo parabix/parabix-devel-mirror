@@ -12,8 +12,8 @@
 #include <re/adt/re_name.h>
 #include <re/adt/re_cc.h>
 #include <unicode/core/unicode_set.h>
-#include <unicode/compile/utf8_encoder.h>
-#include <unicode/compile/utf16_encoder.h>
+#include <unicode/utf/utf8_encoder.h>
+#include <unicode/utf/utf16_encoder.h>
 
 using namespace cc;
 using namespace re;

@@ -37,4 +37,5 @@ target_link_libraries(re.compile
     re.cc
     unicode.core
     unicode.compile
-    unicode.data)
+    unicode.data
+    unicode.utf)
