@@ -5,11 +5,10 @@
 
 #include <kernel/util/UCD_property_kernel.h>
 #include <kernel/core/kernel.h>
-#include <re/compile/re_toolchain.h>
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
-#include <unicode/compile/ucd_compiler.hpp>
+#include <re/ucd/ucd_compiler.hpp>
 #include <pablo/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>

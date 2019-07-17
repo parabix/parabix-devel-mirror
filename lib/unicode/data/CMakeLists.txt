@@ -9,8 +9,4 @@ parabix_add_module(unicode.data
     PropertyObjects.cpp)
 
 target_link_libraries(unicode.data
-    unicode.core
-    grep
-    re.adt
-    re.compile
-    toolchain)
+    unicode.core)

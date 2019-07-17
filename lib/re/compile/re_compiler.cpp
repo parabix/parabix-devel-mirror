@@ -35,7 +35,7 @@
 #include <re/compile/re_analysis.h>     // for isByteLength, isUnicodeUnitLength
 #include <re/compile/re_local.h>
 #include <re/toolchain/toolchain.h>
-#include <unicode/compile/ucd_compiler.hpp>
+#include <re/ucd/ucd_compiler.hpp>
 
 namespace pablo { class PabloAST; }
 namespace pablo { class Var; }

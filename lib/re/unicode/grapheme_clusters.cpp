@@ -1,9 +1,9 @@
-#include <re/compile/grapheme_clusters.h>
+#include <re/unicode/grapheme_clusters.h>
 
 #include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
-#include <re/compile/re_name_resolve.h>
 #include <re/compile/re_transformer.h>
+#include <re/unicode/re_name_resolve.h>
 
 #include <vector>                  // for vector, allocator
 #include <llvm/Support/Casting.h>  // for dyn_cast, isa

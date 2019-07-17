@@ -25,7 +25,6 @@
 #include <re/adt/re_utility.h>
 #include <re/adt/re_assertion.h>
 #include <re/adt/printer_re.h>
-#include <re/compile/re_toolchain.h>
 #include <re/parse/parser.h>
 #include <re/parse/GLOB_parser.h>
 #include <toolchain/toolchain.h>

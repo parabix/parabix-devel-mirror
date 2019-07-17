@@ -18,12 +18,12 @@
 #include <re/adt/re_end.h>
 #include <re/adt/re_utility.h>
 #include <re/parse/parser.h>
+#include <re/toolchain/toolchain.h>
 #include <grep/grep_engine.h>
 #include "grep_interface.h"
 #include <fstream>
 #include <string>
 #include <toolchain/toolchain.h>
-#include <re/compile/re_toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <boost/filesystem.hpp>
 #include <util/file_select.h>

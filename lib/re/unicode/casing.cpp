@@ -1,4 +1,4 @@
-#include <re/compile/casing.h>
+#include <re/unicode/casing.h>
 
 #include <vector>                      // for vector, allocator
 #include <re/adt/adt.h>

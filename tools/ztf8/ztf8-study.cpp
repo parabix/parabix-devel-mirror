@@ -27,12 +27,11 @@
 #include <kernel/util/scanmatchgen.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
-#include <unicode/compile/resolve_properties.h>
-#include <unicode/compile/ucd_compiler.hpp>
+#include <re/ucd/ucd_compiler.hpp>
+#include <re/unicode/resolve_properties.h>
 #include <string>
 #include <toolchain/toolchain.h>
-#include <re/compile/re_name_resolve.h>
-#include <re/compile/re_toolchain.h>
+#include <re/unicode/re_name_resolve.h>
 #include <pablo/pablo_toolchain.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_ones.h>

@@ -8,12 +8,12 @@
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
-#include <unicode/compile/ucd_compiler.hpp>
 #include <re/compile/re_compiler.h>
-#include <re/compile/grapheme_clusters.h>
 #include <re/compile/re_name_gather.h>
-#include <re/compile/re_name_resolve.h>
 #include <re/compile/to_utf8.h>
+#include <re/ucd/ucd_compiler.hpp>
+#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/re_name_resolve.h>
 #include <pablo/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
@@ -44,6 +44,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     for (auto & name : externals) {
         nameMap.emplace(name, nullptr);
     }
+    // GCB rule shouldn't have any regex names so using re::resolveUnicodeNames is good enough.
     GCB = resolveUnicodeNames(GCB);
     unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
     re_compiler.addPrecompiled("UTF8_nonfinal", pb.createExtract(getInputStreamVar("nonFinal"), pb.getInteger(0)));

@@ -3,24 +3,14 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include <unicode/compile/resolve_properties.h>
+#include <re/unicode/resolve_properties.h>
 
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
-#include <re/adt/re_re.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_any.h>
-#include <re/adt/re_name.h>
-#include <re/adt/re_diff.h>
-#include <re/adt/re_start.h> 
-#include <re/adt/re_end.h> 
-#include <re/adt/re_cc.h> 
-#include <re/adt/re_seq.h> 
-#include <re/adt/re_assertion.h>
-#include <re/parse/parser.h>
-#include <re/compile/re_name_resolve.h>
-#include <re/compile/grapheme_clusters.h>
+#include <re/adt/adt.h>
 #include <re/compile/re_compiler.h>
+#include <re/unicode/re_name_resolve.h>
+#include <re/unicode/grapheme_clusters.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>
 #include <unicode/data/PropertyValueAliases.h>
@@ -93,10 +83,8 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             auto theprop = static_cast<UCD::property_t>(propit->second);
             auto propObj = getPropertyObject(theprop);
             if ((value.length() > 0) && (value[0] == '/')) {
-                // resolve a regular expression
-                re::RE * propValueRe = RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
-                propValueRe = re::resolveUnicodeNames(propValueRe);  // Recursive name resolution may be required.
-                return propObj->GetCodepointSetMatchingPattern(propValueRe);
+                assert(false && "UCD::resolveUnicodeSet(re::Name *) does not support regex name resolution, use grep::resolveUnicodeSet(re::Name *) instead");
+                llvm::report_fatal_error("");
             }
             if ((value.length() > 0) && (value[0] == '@')) {
                 // resolve a @property@ or @identity@ expression.

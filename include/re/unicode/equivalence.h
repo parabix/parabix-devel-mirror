@@ -10,7 +10,6 @@
 #include <string>
 #include <locale>
 #include <codecvt>
-#include <re/compile/re_toolchain.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/Equivalence.h>
 

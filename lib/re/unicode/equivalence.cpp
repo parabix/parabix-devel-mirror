@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/compile/equivalence.h>
+#include <re/unicode/equivalence.h>
 
 #include <string>
 #include <locale>
@@ -15,7 +15,7 @@
 #include <re/adt/printer_re.h>
 #include <re/alphabet/alphabet.h>
 #include <re/compile/re_transformer.h>
-#include <re/compile/decomposition.h>
+#include <re/unicode/decomposition.h>
 #include <unicode/core/unicode_set.h>
 #include "unicode/data/PropertyAliases.h"
 #include "unicode/data/PropertyObjects.h"

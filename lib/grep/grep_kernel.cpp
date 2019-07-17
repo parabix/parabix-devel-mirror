@@ -30,7 +30,6 @@
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/multiplex_CCs.h>
 #include <re/compile/re_compiler.h>
-#include <unicode/compile/ucd_compiler.hpp>
 
 using namespace kernel;
 using namespace pablo;

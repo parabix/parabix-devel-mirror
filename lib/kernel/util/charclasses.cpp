@@ -6,10 +6,10 @@
 #include <kernel/util/charclasses.h>
 #include <re/toolchain/toolchain.h>
 #include <kernel/core/kernel_builder.h>
-#include <unicode/compile/ucd_compiler.hpp>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/adt/re_name.h>
+#include <re/ucd/ucd_compiler.hpp>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>

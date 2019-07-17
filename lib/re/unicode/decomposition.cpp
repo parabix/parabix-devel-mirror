@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/compile/decomposition.h>
+#include <re/unicode/decomposition.h>
 
 #include <string>
 #include <vector>

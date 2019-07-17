@@ -1,12 +1,11 @@
 # Copyright (c) 2019 International Characters.
 # This software is licensed to the public under the Open Software License 3.0.
 
-# module: icgrep
+# module: re.ucd
 
-add_executable(icgrep
-    grep_interface.cpp
-    icgrep.cpp)
+parabix_add_module(re.ucd
+    ucd_compiler.cpp)
 
-target_link_libraries(icgrep
-    grep
-    util)
+target_link_libraries(re.ucd
+    re.cc
+    unicode.utf)

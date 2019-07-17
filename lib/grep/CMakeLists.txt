@@ -3,19 +3,15 @@
 
 # module: grep
 
-add_library(grep
+parabix_add_module(grep
     grep_engine.cpp
-    grep_kernel.cpp)
-
-parabix_set_library_name(grep)
+    grep_kernel.cpp
+    grep_name_resolve.cpp
+    resolve_properties.cpp
+    regex_passes.cpp)
 
 target_link_libraries(grep
-    kernel.core
-    pablo
-    re.adt
-    re.cc
-    re.compile
-    toolchain
-    unicode.compile
     kernel.pipeline
-    kernel.util)
+    kernel.util
+    re.parse
+    re.unicode)

@@ -20,6 +20,9 @@
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Casting.h>
 #include <grep/grep_kernel.h>
+#include <grep/grep_name_resolve.h>
+#include <grep/regex_passes.h>
+#include <grep/resolve_properties.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
@@ -50,21 +53,19 @@
 #include <re/alphabet/alphabet.h>
 #include <re/cc/cc_kernel.h>
 #include <re/cc/multiplex_CCs.h>
-#include <re/compile/casing.h>
 #include <re/compile/exclude_CC.h>
 #include <re/compile/to_utf8.h>
-#include <re/compile/re_toolchain.h>
 #include <re/compile/re_analysis.h>
-#include <re/compile/re_name_resolve.h>
 #include <re/compile/re_name_gather.h>
 #include <re/compile/collect_ccs.h>
 #include <re/compile/replaceCC.h>
 #include <re/compile/re_multiplex.h>
-#include <re/compile/grapheme_clusters.h>
+#include <re/unicode/casing.h>
+#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/re_name_resolve.h>
 #include <sys/stat.h>
 #include <toolchain/cpudriver.h>
 #include <toolchain/toolchain.h>
-#include <unicode/compile/resolve_properties.h>
 #include <util/file_select.h>
 
 using namespace llvm;

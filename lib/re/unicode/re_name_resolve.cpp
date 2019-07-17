@@ -1,4 +1,4 @@
-#include <re/compile/re_name_resolve.h>
+#include <re/unicode/re_name_resolve.h>
 
 #include <boost/container/flat_set.hpp>
 #include <llvm/Support/ErrorHandling.h>
@@ -6,7 +6,7 @@
 #include <re/alphabet/alphabet.h>
 #include <re/compile/re_analysis.h>
 #include <re/compile/re_transformer.h>
-#include <unicode/compile/resolve_properties.h>
+#include <re/unicode/resolve_properties.h>
 
 
 using namespace boost::container;

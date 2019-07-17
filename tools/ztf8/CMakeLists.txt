@@ -6,12 +6,4 @@ add_executable(ztf8-study
     ztf8-study.cpp)
 
 target_link_libraries(ztf8-study
-    grep
-    kernel.core
-    kernel.pipeline
-    kernel.util
-    pablo
-    re.adt
-    re.cc
-    re.compile
-    unicode.compile)
+    grep)
