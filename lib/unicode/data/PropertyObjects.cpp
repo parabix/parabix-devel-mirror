@@ -7,6 +7,8 @@
 
 #include <unicode/data/PropertyObjects.h>
 
+#include <string>
+#include <locale>
 #include <codecvt>
 #include <sstream>
 #include <llvm/Support/Casting.h>

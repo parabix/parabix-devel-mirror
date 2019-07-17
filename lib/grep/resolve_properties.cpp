@@ -8,6 +8,7 @@
 
 #include <string>
 #include <grep/grep_engine.h>
+#include <llvm/Support/Casting.h>
 #include <re/adt/re_re.h>
 #include <re/adt/re_name.h>
 #include <re/parse/parser.h>
@@ -18,6 +19,8 @@
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <util/aligned_allocator.h>
+
+using namespace llvm;
 
 namespace grep {
 
@@ -67,7 +70,21 @@ void SetByLineNumberAccumulator::accumulate_match(const size_t lineNum, char * /
 
 
 const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::PropertyObject * propObj, re::RE * pattern) {
-    llvm::report_fatal_error("grep::GetCodepointSetMatchingPattern(UCD::PropertyObject *, re::RE *): operation is unsupported");
+    if (auto p = dyn_cast<UCD::BinaryPropertyObject>(propObj)) {
+        return GetCodepointSetMatchingPattern(p, pattern);
+    } else if (auto p = dyn_cast<UCD::EnumeratedPropertyObject>(propObj)) {
+        return GetCodepointSetMatchingPattern(p, pattern);
+    } else if (auto p = dyn_cast<UCD::ExtensionPropertyObject>(propObj)) {
+        return GetCodepointSetMatchingPattern(p, pattern);
+    } else if (auto p = dyn_cast<UCD::NumericPropertyObject>(propObj)) {
+        return GetCodepointSetMatchingPattern(p, pattern);
+    } else if (auto p = dyn_cast<UCD::StringOverridePropertyObject>(propObj)) {
+        return GetCodepointSetMatchingPattern(p, pattern);
+    } else if (auto p = dyn_cast<UCD::StringOverridePropertyObject>(propObj)) {
+        return GetCodepointSetMatchingPattern(p, pattern);
+    } else {
+        llvm::report_fatal_error("grep::GetCodepointSetMatchingPattern(UCD::PropertyObject *, re::RE *): operation is unsupported");
+    }
 }
 
 const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::BinaryPropertyObject * propObj, re::RE * pattern) {
@@ -199,6 +216,8 @@ UCD::UnicodeSet resolveUnicodeSet(re::Name * const name) {
             re::RE * propValueRe = re::RE_Parser::parse(value.substr(1), re::DEFAULT_MODE, re::PCRE, false);
             propValueRe = re::resolveUnicodeNames(propValueRe); // Recursive name resolution may be required
             return GetCodepointSetMatchingPattern(propObj, propValueRe);
+        } else {
+            return UCD::resolveUnicodeSet(name);
         }
     } else {
         return UCD::resolveUnicodeSet(name);
