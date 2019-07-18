@@ -8,7 +8,7 @@ add_executable(base64
 
 target_link_libraries(base64
     pablo
-    kernel.core
+    kernel.io
     kernel.pipeline
     kernel.util
     re.adt

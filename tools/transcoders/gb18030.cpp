@@ -16,8 +16,8 @@
 #include <kernel/util/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/basis/s2p_kernel.h>
-#include <kernel/util/source_kernel.h>
-#include <kernel/util/stdout_kernel.h>
+#include <kernel/io/source_kernel.h>
+#include <kernel/io/stdout_kernel.h>
 #include <kernel/util/deletion.h>
 #include <kernel/util/pdep_kernel.h>
 #include <kernel/util/error_monitor_kernel.h>

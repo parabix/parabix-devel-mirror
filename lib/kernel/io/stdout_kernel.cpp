@@ -2,7 +2,9 @@
  *  Copyright (c) 2016 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include <kernel/util/stdout_kernel.h>
+
+#include <kernel/io/stdout_kernel.h>
+
 #include <llvm/IR/Module.h>
 #include <kernel/core/kernel_builder.h>
 #include <toolchain/toolchain.h>

@@ -27,8 +27,6 @@ add_library(kernel.util
     scan_kernel.cpp
     scanmatchgen.cpp
     scanning.cpp
-    source_kernel.cpp
-    stdout_kernel.cpp
     stream_select.cpp
     stream_shift.cpp
     streams_merge.cpp
@@ -43,8 +41,5 @@ add_library(kernel.util
 parabix_set_library_name(kernel.util)
 
 target_link_libraries(kernel.util
-    grep
     kernel.core
-    re.adt
-    re.cc
     re.compile)

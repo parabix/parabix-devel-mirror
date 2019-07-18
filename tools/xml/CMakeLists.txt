@@ -16,6 +16,7 @@ add_dependencies(xml xml.pablosrc)
 target_link_libraries(xml
     pablo.parse
     kernel.basis
+    kernel.io
     kernel.pipeline
     kernel.util
     toolchain)

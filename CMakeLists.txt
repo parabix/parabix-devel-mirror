@@ -180,6 +180,7 @@ add_subdirectory(lib/util)
 
 # Kernel Libraries
 add_subdirectory(lib/kernel/basis)
+add_subdirectory(lib/kernel/io)
 add_subdirectory(lib/kernel/util)
 
 # Executables

@@ -13,6 +13,7 @@ parabix_add_module(grep
 target_link_libraries(grep
     kernel.pipeline
     kernel.basis
+    kernel.io
     kernel.util
     re.parse
     re.unicode)

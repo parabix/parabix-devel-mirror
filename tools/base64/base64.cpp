@@ -6,9 +6,9 @@
 
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
-#include <kernel/util/source_kernel.h>
+#include <kernel/io/source_kernel.h>
+#include <kernel/io/stdout_kernel.h>
 #include <kernel/util/radix64.h>
-#include <kernel/util/stdout_kernel.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/Support/CommandLine.h>

@@ -8,6 +8,7 @@ add_executable(wc
 
 target_link_libraries(wc
     kernel.basis
+    kernel.io
     kernel.util
     re.cc
     util)

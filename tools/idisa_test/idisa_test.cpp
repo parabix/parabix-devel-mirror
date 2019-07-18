@@ -14,10 +14,10 @@
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/streamset.h>
-#include <kernel/util/source_kernel.h>
+#include <kernel/io/source_kernel.h>
 #include <kernel/util/hex_convert.h>
 #include <kernel/basis/s2p_kernel.h>
-#include <kernel/util/stdout_kernel.h>
+#include <kernel/io/stdout_kernel.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
 #include <kernel/pipeline/pipeline_builder.h>

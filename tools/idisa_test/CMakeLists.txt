@@ -8,4 +8,6 @@ add_executable(idisa_test
 
 target_link_libraries(idisa_test
     kernel.basis
+    kernel.io
+    kernel.pipeline
     kernel.util)

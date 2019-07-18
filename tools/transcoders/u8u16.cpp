@@ -16,8 +16,8 @@
 #include <kernel/util/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/basis/s2p_kernel.h>
-#include <kernel/util/source_kernel.h>
-#include <kernel/util/stdout_kernel.h>
+#include <kernel/io/source_kernel.h>
+#include <kernel/io/stdout_kernel.h>
 #include <kernel/util/swizzle.h>
 #include <kernel/util/zeroextend.h>
 #include <pablo/builder.hpp>

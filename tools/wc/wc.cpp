@@ -11,7 +11,7 @@
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/basis/s2p_kernel.h>
-#include <kernel/util/source_kernel.h>
+#include <kernel/io/source_kernel.h>
 #include <kernel/core/streamset.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
