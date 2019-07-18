@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/s2p_kernel.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/util/callback.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/pabloAST.h>

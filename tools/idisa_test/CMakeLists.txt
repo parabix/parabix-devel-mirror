@@ -7,7 +7,5 @@ add_executable(idisa_test
     idisa_test.cpp)
 
 target_link_libraries(idisa_test
-    kernel.core
-    kernel.pipeline
-    kernel.util
-    pablo)
+    kernel.basis
+    kernel.util)

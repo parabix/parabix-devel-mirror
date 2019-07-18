@@ -14,9 +14,8 @@ add_executable(xml
 add_dependencies(xml xml.pablosrc)
 
 target_link_libraries(xml
-    pablo
     pablo.parse
-    kernel.core
+    kernel.basis
     kernel.pipeline
     kernel.util
     toolchain)

@@ -15,11 +15,11 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/streamset.h>
 #include <kernel/util/source_kernel.h>
-#include <kernel/util/s2p_kernel.h>
 #include <kernel/util/streams_merge.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>

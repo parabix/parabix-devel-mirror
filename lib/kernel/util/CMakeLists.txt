@@ -21,11 +21,9 @@ add_library(kernel.util
     grapheme_kernel.cpp
     hex_convert.cpp
     linebreak_kernel.cpp
-    p2s_kernel.cpp
     pdep_kernel.cpp
     radix64.cpp
     random_stream.cpp
-    s2p_kernel.cpp
     scan_kernel.cpp
     scanmatchgen.cpp
     scanning.cpp

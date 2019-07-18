@@ -162,7 +162,6 @@ add_subdirectory(lib/grep)
 add_subdirectory(lib/idisa)
 add_subdirectory(lib/kernel/core)
 add_subdirectory(lib/kernel/pipeline)
-add_subdirectory(lib/kernel/util)
 add_subdirectory(lib/pablo)
 add_subdirectory(lib/pablo/parse)
 add_subdirectory(lib/re/adt)
@@ -178,6 +177,10 @@ add_subdirectory(lib/unicode/core)
 add_subdirectory(lib/unicode/data)
 add_subdirectory(lib/unicode/utf)
 add_subdirectory(lib/util)
+
+# Kernel Libraries
+add_subdirectory(lib/kernel/basis)
+add_subdirectory(lib/kernel/util)
 
 # Executables
 add_subdirectory(tools/base64)

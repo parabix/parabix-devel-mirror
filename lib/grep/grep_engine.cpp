@@ -23,6 +23,7 @@
 #include <grep/grep_name_resolve.h>
 #include <grep/regex_passes.h>
 #include <grep/resolve_properties.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
@@ -34,7 +35,6 @@
 #include <kernel/util/linebreak_kernel.h>
 #include <kernel/util/streams_merge.h>
 #include <kernel/util/source_kernel.h>
-#include <kernel/util/s2p_kernel.h>
 #include <kernel/util/scanmatchgen.h>
 #include <kernel/util/until_n.h>
 #include <kernel/util/deletion.h>

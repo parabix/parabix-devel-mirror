@@ -20,7 +20,7 @@
 #include <kernel/util/pdep_kernel.h>
 #include <kernel/util/stream_select.h>
 #include <kernel/util/stream_shift.h>
-#include <kernel/util/s2p_kernel.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/util/source_kernel.h>
 #include <grep/grep_engine.h>
 #include <grep/grep_kernel.h>

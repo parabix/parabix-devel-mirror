@@ -12,10 +12,10 @@
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/streamset.h>
 #include <kernel/pipeline/pipeline_builder.h>
-#include <kernel/util/s2p_kernel.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/util/source_kernel.h>
 #include <kernel/util/deletion.h>
-#include <kernel/util/p2s_kernel.h>
+#include <kernel/basis/p2s_kernel.h>
 #include <kernel/util/scanning.h>
 #include <kernel/util/stream_select.h>
 #include <kernel/util/streams_merge.h>

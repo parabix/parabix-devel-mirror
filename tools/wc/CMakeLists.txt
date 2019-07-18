@@ -7,11 +7,7 @@ add_executable(wc
     wc.cpp)
 
 target_link_libraries(wc
-    pablo
-    kernel.core
-    kernel.pipeline
+    kernel.basis
     kernel.util
-    re.adt
     re.cc
-    toolchain
     util)

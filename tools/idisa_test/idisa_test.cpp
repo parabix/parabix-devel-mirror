@@ -16,7 +16,7 @@
 #include <kernel/core/streamset.h>
 #include <kernel/util/source_kernel.h>
 #include <kernel/util/hex_convert.h>
-#include <kernel/util/s2p_kernel.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/util/stdout_kernel.h>
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>

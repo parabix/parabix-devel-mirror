@@ -12,6 +12,7 @@ add_executable(editd
 
 target_link_libraries(editd
     pablo
+    kernel.basis
     kernel.util
     re.adt
     re.cc)
