@@ -2,7 +2,7 @@
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
-#include <kernel/util/pdep_kernel.h>
+#include <kernel/streamutils/pdep_kernel.h>
 
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>

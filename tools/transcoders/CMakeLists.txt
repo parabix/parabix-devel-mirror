@@ -22,6 +22,7 @@ target_link_libraries(gb18030
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
     re.cc)
 
@@ -29,6 +30,7 @@ target_link_libraries(u8u16
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
     re.cc
     toolchain)
@@ -37,6 +39,7 @@ target_link_libraries(u32u8
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
     re.cc
     toolchain)
@@ -45,6 +48,7 @@ target_link_libraries(u32u16
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
     re.cc
     toolchain)
@@ -53,6 +57,7 @@ target_link_libraries(x8u16
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
     re.cc
     toolchain)

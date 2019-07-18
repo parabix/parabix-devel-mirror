@@ -34,11 +34,11 @@
 #include <kernel/util/UCD_property_kernel.h>
 #include <kernel/util/grapheme_kernel.h>
 #include <kernel/util/linebreak_kernel.h>
-#include <kernel/util/streams_merge.h>
+#include <kernel/streamutils/streams_merge.h>
 #include <kernel/util/scanmatchgen.h>
 #include <kernel/util/until_n.h>
-#include <kernel/util/deletion.h>
-#include <kernel/util/pdep_kernel.h>
+#include <kernel/streamutils/deletion.h>
+#include <kernel/streamutils/pdep_kernel.h>
 #include <pablo/pablo_kernel.h>
 #include <re/adt/re_cc.h>
 #include <re/adt/re_diff.h>

@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/deletion.h>
+#include <kernel/streamutils/deletion.h>
 
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/Support/raw_ostream.h>

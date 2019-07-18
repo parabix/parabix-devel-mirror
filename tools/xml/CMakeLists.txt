@@ -18,5 +18,6 @@ target_link_libraries(xml
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
     toolchain)

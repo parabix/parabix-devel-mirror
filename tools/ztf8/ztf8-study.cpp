@@ -16,10 +16,10 @@
 #include <re/adt/re_re.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
-#include <kernel/util/deletion.h>
-#include <kernel/util/pdep_kernel.h>
-#include <kernel/util/stream_select.h>
-#include <kernel/util/stream_shift.h>
+#include <kernel/streamutils/deletion.h>
+#include <kernel/streamutils/pdep_kernel.h>
+#include <kernel/streamutils/stream_select.h>
+#include <kernel/streamutils/stream_shift.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/io/source_kernel.h>
 #include <grep/grep_engine.h>

@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/streams_merge.h>
+#include <kernel/streamutils/streams_merge.h>
 #include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>
 

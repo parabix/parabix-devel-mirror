@@ -12,7 +12,6 @@ add_library(kernel.util
     callback.cpp
     cc_scan_kernel.cpp
     charclasses.cpp
-    deletion.cpp
     delmask_kernel.cpp
     # directorysearch.cpp
     error_monitor_kernel.cpp
@@ -21,16 +20,11 @@ add_library(kernel.util
     grapheme_kernel.cpp
     hex_convert.cpp
     linebreak_kernel.cpp
-    pdep_kernel.cpp
     radix64.cpp
     random_stream.cpp
     scan_kernel.cpp
     scanmatchgen.cpp
     scanning.cpp
-    stream_select.cpp
-    stream_shift.cpp
-    streams_merge.cpp
-    streamset_collapse.cpp
     swizzle.cpp
     swizzled_multiple_pdep_kernel.cpp
     u8u32_kernel.cpp

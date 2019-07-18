@@ -14,12 +14,12 @@
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/io/source_kernel.h>
-#include <kernel/util/deletion.h>
+#include <kernel/streamutils/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/util/scanning.h>
-#include <kernel/util/stream_select.h>
-#include <kernel/util/streams_merge.h>
-#include <kernel/util/streamset_collapse.h>
+#include <kernel/streamutils/stream_select.h>
+#include <kernel/streamutils/streams_merge.h>
+#include <kernel/streamutils/streamset_collapse.h>
 #include <kernel/util/linebreak_kernel.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>

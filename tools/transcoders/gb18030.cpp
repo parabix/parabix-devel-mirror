@@ -13,13 +13,12 @@
 #include <re/cc/utf8gen.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
-#include <kernel/util/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/io/source_kernel.h>
 #include <kernel/io/stdout_kernel.h>
-#include <kernel/util/deletion.h>
-#include <kernel/util/pdep_kernel.h>
+#include <kernel/streamutils/deletion.h>
+#include <kernel/streamutils/pdep_kernel.h>
 #include <kernel/util/error_monitor_kernel.h>
 #include <pablo/builder.hpp>
 #include <pablo/pablo_kernel.h>

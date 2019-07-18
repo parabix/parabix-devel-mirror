@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/stream_shift.h>
+#include <kernel/streamutils/stream_shift.h>
 #include <pablo/builder.hpp>
 
 using namespace llvm;

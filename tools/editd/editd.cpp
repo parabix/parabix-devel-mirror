@@ -20,7 +20,7 @@
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/streamset.h>
 #include <kernel/io/source_kernel.h>
-#include <kernel/util/streams_merge.h>
+#include <kernel/streamutils/streams_merge.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <re/cc/cc_compiler.h>

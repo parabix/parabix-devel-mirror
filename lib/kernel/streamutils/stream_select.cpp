@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/stream_select.h>
+#include <kernel/streamutils/stream_select.h>
 
 #include <unordered_map>
 #include <kernel/core/kernel_builder.h>

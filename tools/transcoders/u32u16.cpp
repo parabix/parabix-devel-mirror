@@ -8,12 +8,12 @@
 #include <re/cc/cc_compiler.h>                        // for CC_Compiler
 #include <re/alphabet/alphabet.h>
 #include <re/cc/utf16gen.h>
-#include <kernel/util/deletion.h>                      // for DeletionKernel
+#include <kernel/streamutils/deletion.h>                      // for DeletionKernel
 #include <kernel/io/source_kernel.h>
 #include <kernel/basis/p2s_kernel.h>                    // for P2S16KernelWithCom...
 #include <kernel/basis/s2p_kernel.h>                    // for S2PKernel
 #include <kernel/io/stdout_kernel.h>                 // for StdOutKernel_
-#include <kernel/util/pdep_kernel.h>
+#include <kernel/streamutils/pdep_kernel.h>
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
