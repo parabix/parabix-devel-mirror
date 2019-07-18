@@ -1,3 +1,4 @@
+# Copyright (c) 2019 International Characters.
 # This software is licensed to the public under the Open Software License 3.0.
 
 # module: xml
@@ -18,6 +19,7 @@ target_link_libraries(xml
     kernel.basis
     kernel.io
     kernel.pipeline
+    kernel.scan
     kernel.streamutils
     kernel.unicode
     kernel.util

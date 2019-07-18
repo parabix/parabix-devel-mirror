@@ -16,7 +16,7 @@
 #include <kernel/io/source_kernel.h>
 #include <kernel/streamutils/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
-#include <kernel/util/scanning.h>
+#include <kernel/scan/scanning.h>
 #include <kernel/streamutils/stream_select.h>
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/streamutils/streamset_collapse.h>

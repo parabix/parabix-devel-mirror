@@ -12,7 +12,6 @@ parabix_add_module(kernel.util
     radix64.cpp
     random_stream.cpp
     scanmatchgen.cpp
-    scanning.cpp
     swizzle.cpp
     swizzled_multiple_pdep_kernel.cpp
     until_n.cpp

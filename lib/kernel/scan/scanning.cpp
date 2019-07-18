@@ -3,7 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/scanning.h>
+#include <kernel/scan/scanning.h>
+
 #include <llvm/IR/Module.h>
 #include <kernel/core/kernel_builder.h>
 
