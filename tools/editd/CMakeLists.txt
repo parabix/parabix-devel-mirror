@@ -16,6 +16,4 @@ target_link_libraries(editd
     kernel.io
     kernel.pipeline
     kernel.streamutils
-    kernel.util
-    re.adt
     re.cc)

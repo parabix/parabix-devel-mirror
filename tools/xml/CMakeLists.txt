@@ -22,5 +22,4 @@ target_link_libraries(xml
     kernel.scan
     kernel.streamutils
     kernel.unicode
-    kernel.util
     toolchain)

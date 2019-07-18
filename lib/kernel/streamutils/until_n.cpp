@@ -3,7 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/until_n.h>
+#include <kernel/streamutils/until_n.h>
+
 #include <llvm/IR/Module.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/streamset.h>

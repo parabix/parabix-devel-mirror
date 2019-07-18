@@ -24,7 +24,7 @@
 #include <kernel/io/source_kernel.h>
 #include <grep/grep_engine.h>
 #include <grep/grep_kernel.h>
-#include <kernel/util/scanmatchgen.h>
+#include <kernel/scan/scanmatchgen.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/ucd/ucd_compiler.hpp>

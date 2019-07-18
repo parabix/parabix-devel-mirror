@@ -1,4 +1,5 @@
-#include <kernel/util/zeroextend.h>
+#include <kernel/streamutils/zeroextend.h>
+
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/streamset.h>
 #include <llvm/Support/raw_ostream.h>

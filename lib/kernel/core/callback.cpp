@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
-#include <kernel/util/callback.h>
+#include <kernel/core/callback.h>
 #include <llvm/Support/ErrorHandling.h>
 using namespace kernel;
 

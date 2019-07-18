@@ -4,7 +4,7 @@
  */
 
 #include <kernel/basis/s2p_kernel.h>
-#include <kernel/util/callback.h>
+#include <kernel/core/callback.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/pabloAST.h>
 #include <pablo/builder.hpp>

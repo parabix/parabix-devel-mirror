@@ -18,8 +18,8 @@
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/io/source_kernel.h>
 #include <kernel/io/stdout_kernel.h>
-#include <kernel/util/swizzle.h>
-#include <kernel/util/zeroextend.h>
+#include <kernel/streamutils/swizzle.h>
+#include <kernel/streamutils/zeroextend.h>
 #include <pablo/builder.hpp>
 #include <pablo/boolean.h>
 #include <pablo/pablo_kernel.h>

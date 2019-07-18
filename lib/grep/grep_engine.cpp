@@ -29,14 +29,14 @@
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/io/source_kernel.h>
-#include <kernel/util/callback.h>
+#include <kernel/core/callback.h>
 #include <kernel/unicode/charclasses.h>
 #include <kernel/unicode/UCD_property_kernel.h>
 #include <kernel/unicode/grapheme_kernel.h>
 #include <kernel/unicode/linebreak_kernel.h>
 #include <kernel/streamutils/streams_merge.h>
-#include <kernel/util/scanmatchgen.h>
-#include <kernel/util/until_n.h>
+#include <kernel/scan/scanmatchgen.h>
+#include <kernel/streamutils/until_n.h>
 #include <kernel/streamutils/deletion.h>
 #include <kernel/streamutils/pdep_kernel.h>
 #include <pablo/pablo_kernel.h>

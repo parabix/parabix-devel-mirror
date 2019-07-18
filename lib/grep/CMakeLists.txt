@@ -14,8 +14,8 @@ target_link_libraries(grep
     kernel.pipeline
     kernel.basis
     kernel.io
+    kernel.scan
     kernel.streamutils
     kernel.unicode
-    kernel.util
     re.parse
     re.unicode)

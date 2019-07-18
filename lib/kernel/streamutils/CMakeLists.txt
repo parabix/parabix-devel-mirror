@@ -9,7 +9,11 @@ parabix_add_module(kernel.streamutils
     stream_select.cpp
     stream_shift.cpp
     streams_merge.cpp
-    streamset_collapse.cpp)
+    streamset_collapse.cpp
+    swizzle.cpp
+    swizzled_multiple_pdep_kernel.cpp
+    until_n.cpp
+    zeroextend.cpp)
 
 target_link_libraries(kernel.streamutils
     toolchain # TODO: remove this dependnecy

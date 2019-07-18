@@ -15,7 +15,7 @@
 #include <boost/filesystem.hpp>
 #include <re/cc/multiplex_CCs.h>
 #include <re/parse/GLOB_parser.h>
-#include <kernel/util/callback.h>
+#include <kernel/core/callback.h>
 #include <kernel/unicode/linebreak_kernel.h>
 
 namespace re { class CC; }

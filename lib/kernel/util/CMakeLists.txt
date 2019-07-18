@@ -3,20 +3,11 @@
 
 # module: kernel.util
 
-# TODO: break this module into separate kernel moduels
-
 parabix_add_module(kernel.util
-    callback.cpp
     error_monitor_kernel.cpp
     hex_convert.cpp
     radix64.cpp
-    random_stream.cpp
-    scanmatchgen.cpp
-    swizzle.cpp
-    swizzled_multiple_pdep_kernel.cpp
-    until_n.cpp
-    zeroextend.cpp)
+    random_stream.cpp)
 
 target_link_libraries(kernel.util
-    kernel.core
-    re.compile)
+    kernel.core)

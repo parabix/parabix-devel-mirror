@@ -3,7 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/swizzled_multiple_pdep_kernel.h>
+#include <kernel/streamutils/swizzled_multiple_pdep_kernel.h>
+
 #include <kernel/core/kernel_builder.h>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Intrinsics.h>

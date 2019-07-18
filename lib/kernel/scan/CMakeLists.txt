@@ -4,7 +4,8 @@
 # module: kernel.scan
 
 parabix_add_module(kernel.scan
-    scanning.cpp)
+    scanning.cpp
+    scanmatchgen.cpp)
 
 target_link_libraries(kernel.scan
     kernel.core)

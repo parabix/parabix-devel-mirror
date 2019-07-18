@@ -7,6 +7,7 @@ add_library(kernel.core
     attributes.cpp
     binding.cpp
     block_kernel.cpp
+    callback.cpp
     idisa_target.cpp
     kernel_builder.cpp
     kernel.cpp

@@ -25,7 +25,6 @@
 #include <toolchain/toolchain.h>
 #include <toolchain/cpudriver.h>
 #include <kernel/core/streamset.h>
-#include <kernel/util/hex_convert.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>
 #include <llvm/IR/DerivedTypes.h>
