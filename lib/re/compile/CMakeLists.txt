@@ -26,5 +26,4 @@ parabix_add_module(re.compile
     to_utf8.cpp)
 
 target_link_libraries(re.compile
-    re.cc
     re.ucd)
