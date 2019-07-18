@@ -30,10 +30,10 @@
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/io/source_kernel.h>
 #include <kernel/util/callback.h>
-#include <kernel/util/charclasses.h>
-#include <kernel/util/UCD_property_kernel.h>
-#include <kernel/util/grapheme_kernel.h>
-#include <kernel/util/linebreak_kernel.h>
+#include <kernel/unicode/charclasses.h>
+#include <kernel/unicode/UCD_property_kernel.h>
+#include <kernel/unicode/grapheme_kernel.h>
+#include <kernel/unicode/linebreak_kernel.h>
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/util/scanmatchgen.h>
 #include <kernel/util/until_n.h>

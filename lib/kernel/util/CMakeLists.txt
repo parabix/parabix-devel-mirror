@@ -7,18 +7,14 @@
 
 parabix_add_module(kernel.util
     callback.cpp
-    charclasses.cpp
     error_monitor_kernel.cpp
-    grapheme_kernel.cpp
     hex_convert.cpp
-    linebreak_kernel.cpp
     radix64.cpp
     random_stream.cpp
     scanmatchgen.cpp
     scanning.cpp
     swizzle.cpp
     swizzled_multiple_pdep_kernel.cpp
-    UCD_property_kernel.cpp
     until_n.cpp
     zeroextend.cpp)
 

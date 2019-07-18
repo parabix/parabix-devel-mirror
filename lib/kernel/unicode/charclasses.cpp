@@ -3,7 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/charclasses.h>
+#include <kernel/unicode/charclasses.h>
+
 #include <re/toolchain/toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <re/cc/cc_compiler.h>

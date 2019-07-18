@@ -16,7 +16,7 @@
 #include <re/cc/multiplex_CCs.h>
 #include <re/parse/GLOB_parser.h>
 #include <kernel/util/callback.h>
-#include <kernel/util/linebreak_kernel.h>
+#include <kernel/unicode/linebreak_kernel.h>
 
 namespace re { class CC; }
 namespace re { class RE; }

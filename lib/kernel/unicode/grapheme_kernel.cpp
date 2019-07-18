@@ -3,7 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/grapheme_kernel.h>
+#include <kernel/unicode/grapheme_kernel.h>
+
 #include <re/toolchain/toolchain.h>
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler

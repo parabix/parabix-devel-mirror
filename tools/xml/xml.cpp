@@ -20,7 +20,7 @@
 #include <kernel/streamutils/stream_select.h>
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/streamutils/streamset_collapse.h>
-#include <kernel/util/linebreak_kernel.h>
+#include <kernel/unicode/linebreak_kernel.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
 #include <pablo/pablo_toolchain.h>

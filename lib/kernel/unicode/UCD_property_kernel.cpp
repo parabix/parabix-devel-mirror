@@ -3,7 +3,8 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/util/UCD_property_kernel.h>
+#include <kernel/unicode/UCD_property_kernel.h>
+
 #include <kernel/core/kernel.h>
 #include <re/adt/re_name.h>
 #include <re/cc/cc_compiler.h>
