@@ -4,14 +4,14 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/cc/utf16gen.h>
+#include <pablo/bixnum/utf16gen.h>
 
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Value.h>
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/builder.hpp>
-#include <pablo/bixnum.h>
+#include <pablo/bixnum/bixnum.h>
 #include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
 #include <pablo/pe_zeroes.h>
 #include <re/cc/cc_compiler.h>                     // for CC_Compiler

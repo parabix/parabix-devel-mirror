@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <pablo/bixnum.h>
+#include <pablo/bixnum/bixnum.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <re/alphabet/alphabet.h>

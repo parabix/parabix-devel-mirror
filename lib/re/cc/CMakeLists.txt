@@ -3,16 +3,12 @@
 
 # module: re.cc
 
-add_library(re.cc
+parabix_add_module(re.cc
     cc_compiler_target.cpp
     cc_compiler.cpp
     cc_kernel.cpp
     GB_18030_data.cpp
-    multiplex_CCs.cpp
-    utf8gen.cpp
-    utf16gen.cpp)
-
-parabix_set_library_name(re.cc)
+    multiplex_CCs.cpp)
 
 target_link_libraries(re.cc
     pablo

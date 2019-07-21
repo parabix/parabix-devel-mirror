@@ -19,14 +19,15 @@ add_executable(x8u16
     x8u16.cpp)
 
 target_link_libraries(gb18030
+    pablo.bixnum
     kernel.basis
     kernel.io
     kernel.pipeline
     kernel.streamutils
-    kernel.util
-    re.cc)
+    kernel.util)
 
 target_link_libraries(u8u16
+    pablo.bixnum
     kernel.basis
     kernel.io
     kernel.pipeline
@@ -35,6 +36,7 @@ target_link_libraries(u8u16
     toolchain)
 
 target_link_libraries(u32u8
+    pablo.bixnum
     kernel.basis
     kernel.io
     kernel.pipeline
@@ -43,6 +45,7 @@ target_link_libraries(u32u8
     toolchain)
 
 target_link_libraries(u32u16
+    pablo.bixnum
     kernel.basis
     kernel.io
     kernel.pipeline

@@ -3,8 +3,7 @@
 
 # module: pablo
 
-add_library(pablo
-    bixnum.cpp
+parabix_add_module(pablo
     branch.cpp
     builder.cpp
     carry_manager.cpp
@@ -24,8 +23,5 @@ add_library(pablo
     schedulingprepass.cpp
     symbol_generator.cpp)
 
-parabix_set_library_name(pablo)
-
 target_link_libraries(pablo
-    kernel.core
-    re.cc) # TODO: move bixnum.cpp out of the pablo module
+    kernel.core)

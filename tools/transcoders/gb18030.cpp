@@ -10,7 +10,7 @@
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/cc_kernel.h>
 #include <re/cc/GB_18030_data.h>
-#include <re/cc/utf8gen.h>
+#include <pablo/bixnum/utf8gen.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/basis/p2s_kernel.h>
@@ -25,7 +25,7 @@
 #include <pablo/boolean.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
-#include <pablo/bixnum.h>
+#include <pablo/bixnum/bixnum.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <kernel/pipeline/driver/cpudriver.h>

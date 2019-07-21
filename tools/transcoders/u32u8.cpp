@@ -6,7 +6,7 @@
 
 #include <kernel/core/idisa_target.h>                   // for GetIDISA_Builder
 #include <re/cc/cc_compiler.h>                        // for CC_Compiler
-#include <re/cc/utf8gen.h>
+#include <pablo/bixnum/utf8gen.h>
 #include <kernel/streamutils/deletion.h>                      // for DeletionKernel
 #include <kernel/io/source_kernel.h>
 #include <kernel/basis/p2s_kernel.h>                    // for P2S16KernelWithCom...
