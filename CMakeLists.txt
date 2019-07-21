@@ -158,6 +158,7 @@ endfunction(parabix_add_module)
 
 # Framework Libraries
 add_subdirectory(lib/codegen)
+add_subdirectory(lib/fileselect)
 add_subdirectory(lib/grep)
 add_subdirectory(lib/idisa)
 add_subdirectory(lib/kernel/core)
@@ -177,7 +178,6 @@ add_subdirectory(lib/toolchain)
 add_subdirectory(lib/unicode/core)
 add_subdirectory(lib/unicode/data)
 add_subdirectory(lib/unicode/utf)
-add_subdirectory(lib/util)
 
 # Kernel Libraries
 add_subdirectory(lib/kernel/basis)

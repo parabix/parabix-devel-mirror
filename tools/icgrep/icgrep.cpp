@@ -26,7 +26,7 @@
 #include <toolchain/toolchain.h>
 #include <pablo/pablo_toolchain.h>
 #include <boost/filesystem.hpp>
-#include <util/file_select.h>
+#include <fileselect/file_select.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique

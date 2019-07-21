@@ -3,7 +3,7 @@
 
 # module: pablo.parse
 
-add_library(pablo.parse
+parabix_add_module(pablo.parse
     error.cpp
     kernel_signature.cpp
     pablo_parser.cpp
@@ -14,8 +14,6 @@ add_library(pablo.parse
     source_file.cpp
     symbol_table.cpp
     token.cpp)
-
-parabix_set_library_name(pablo.parse)
 
 target_link_libraries(pablo.parse
     pablo)

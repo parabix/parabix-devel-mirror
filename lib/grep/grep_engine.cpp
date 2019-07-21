@@ -66,7 +66,6 @@
 #include <sys/stat.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
-#include <util/file_select.h>
 
 using namespace llvm;
 using namespace cc;

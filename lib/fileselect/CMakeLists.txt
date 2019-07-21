@@ -1,13 +1,10 @@
 # Copyright (c) 2019 International Characters.
 # This software is licensed to the public under the Open Software License 3.0.
 
-# module: wc
+# module: fileselect
 
-add_executable(wc
-    wc.cpp)
+parabix_add_module(fileselect
+    file_select.cpp)
 
-target_link_libraries(wc
-    fileselect
-    kernel.basis
-    kernel.io
-    re.cc)
+target_link_libraries(fileselect
+    grep)

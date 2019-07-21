@@ -3,7 +3,7 @@
 
 # module: kerenl.core
 
-add_library(kernel.core
+parabix_add_module(kernel.core
     attributes.cpp
     binding.cpp
     block_kernel.cpp
@@ -16,8 +16,5 @@ add_library(kernel.core
     relationship.cpp
     streamset.cpp)
 
-parabix_set_library_name(kernel.core)
-
 target_link_libraries(kernel.core
-    codegen
     idisa)

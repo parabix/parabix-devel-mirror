@@ -8,5 +8,5 @@ add_executable(icgrep
     icgrep.cpp)
 
 target_link_libraries(icgrep
-    grep
-    util)
+    fileselect
+    grep)

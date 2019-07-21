@@ -3,7 +3,7 @@
 
 # module: re.parse
 
-add_library(re.parse
+parabix_add_module(re.parse
     BRE_parser.cpp
     ERE_parser.cpp
     fixed_string_parser.cpp
@@ -11,8 +11,6 @@ add_library(re.parse
     parser.cpp
     PCRE_parser.cpp
     Prosite_parser.cpp)
-
-parabix_set_library_name(re.parse)
 
 target_link_libraries(re.parse
     re.adt)

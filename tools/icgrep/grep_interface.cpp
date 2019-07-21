@@ -10,7 +10,7 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/Signals.h>
 #include <llvm/Support/raw_ostream.h>
-#include <util/file_select.h>
+#include <fileselect/file_select.h>
 #include <toolchain/toolchain.h>
 #include <re/parse/parser.h>
 #include <re/adt/re_alt.h>
