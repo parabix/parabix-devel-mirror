@@ -30,7 +30,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 using namespace llvm;
 

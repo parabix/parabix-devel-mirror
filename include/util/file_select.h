@@ -14,7 +14,7 @@
 #include <vector>
 #include <llvm/Support/CommandLine.h>
 #include <boost/filesystem.hpp>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 namespace re { class RE; }
 

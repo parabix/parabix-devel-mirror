@@ -28,7 +28,7 @@
 #include <re/parse/parser.h>
 #include <re/parse/GLOB_parser.h>
 #include <toolchain/toolchain.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 using namespace llvm;
 using error_code = boost::system::error_code;

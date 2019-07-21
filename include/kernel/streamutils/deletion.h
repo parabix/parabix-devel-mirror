@@ -7,7 +7,7 @@
 
 #include <kernel/core/kernel.h>
 #include <llvm/IR/Value.h>
-#include <toolchain/driver.h>
+#include <kernel/pipeline/driver/driver.h>
 
 namespace IDISA { class IDISA_Builder; }
 

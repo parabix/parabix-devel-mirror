@@ -64,7 +64,7 @@
 #include <re/unicode/grapheme_clusters.h>
 #include <re/unicode/re_name_resolve.h>
 #include <sys/stat.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
 #include <util/file_select.h>
 

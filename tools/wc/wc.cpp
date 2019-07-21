@@ -20,7 +20,7 @@
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pablo_toolchain.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
 #include <util/file_select.h>
 #include <fcntl.h>

@@ -10,8 +10,8 @@
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/pipeline/pipeline_builder.h>
-#include <toolchain/driver.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/driver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 using namespace llvm;
 

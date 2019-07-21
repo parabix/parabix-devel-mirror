@@ -7,6 +7,7 @@
 
 #include <toolchain/toolchain.h>
 #include <codegen/FunctionTypeBuilder.h>
+#include <codegen/virtual_driver.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/ADT/Triple.h>
@@ -22,8 +23,6 @@ namespace llvm { class Module; }
 namespace llvm { class PointerType; }
 namespace llvm { class Type; }
 namespace llvm { class Value; }
-
-class BaseDriver;
 
 inline bool is_power_2(const uint64_t n) {
     return ((n & (n - 1)) == 0) && n;
@@ -418,11 +417,11 @@ public:
     llvm::CallInst * CreateSRandCall(llvm::Value * randomSeed);
     llvm::CallInst * CreateRandCall();
 
-    void setDriver(BaseDriver & driver) {
+    void setDriver(codegen::VirtualDriver & driver) {
         mDriver = &driver;
     }
 
-    BaseDriver & getDriver() const {
+    codegen::VirtualDriver & getDriver() const {
         return *mDriver;
     }
 
@@ -458,7 +457,7 @@ protected:
     unsigned                        mCacheLineAlignment;
     llvm::IntegerType * const       mSizeType;
     llvm::StructType *              mFILEtype;
-    BaseDriver *                    mDriver;
+    codegen::VirtualDriver *        mDriver;
     llvm::LLVMContext               mContext;
     const std::string               mTriple;
 };

@@ -5,7 +5,7 @@
  */
 
 #include <toolchain/toolchain.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <kernel/io/source_kernel.h>
 #include <kernel/io/stdout_kernel.h>
 #include <kernel/util/radix64.h>

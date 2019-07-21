@@ -8,7 +8,7 @@
 #include <kernel/core/kernel.h>
 #include <llvm/IR/Value.h>
 #include <string>
-#include <toolchain/driver.h>
+#include <kernel/pipeline/driver/driver.h>
 
 namespace kernel {
 

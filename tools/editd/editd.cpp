@@ -26,7 +26,7 @@
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/cc_kernel.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <mutex>

@@ -16,6 +16,5 @@ parabix_add_module(kernel.streamutils
     zeroextend.cpp)
 
 target_link_libraries(kernel.streamutils
-    toolchain # TODO: remove this dependnecy
     pablo
     kernel.pipeline)

@@ -4,7 +4,7 @@
 #include <kernel/core/kernel.h>
 #include <type_traits>
 #include <functional>
-#include <toolchain/driver.h>
+#include <kernel/pipeline/driver/driver.h>
 #include <boost/container/flat_map.hpp>
 
 namespace llvm { class Value; }

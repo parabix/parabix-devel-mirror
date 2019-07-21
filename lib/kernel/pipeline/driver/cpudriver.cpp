@@ -1,4 +1,4 @@
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 #include <kernel/core/idisa_target.h>
 #include <toolchain/toolchain.h>

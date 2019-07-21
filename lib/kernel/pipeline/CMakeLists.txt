@@ -3,15 +3,15 @@
 
 # module: kernel.pipeline
 
-add_library(kernel.pipeline
+parabix_add_module(kernel.pipeline
+    driver/driver.cpp
+    driver/cpudriver.cpp
+    # driver/NVPTXDriver.cpp
     internal/popcount_kernel.cpp
     internal/regionselectionkernel.cpp
     optimizationbranch/optimizationbranch.cpp
     pipeline_builder.cpp
     pipeline_kernel.cpp)
 
-parabix_set_library_name(kernel.pipeline)
-
 target_link_libraries(kernel.pipeline
-    kernel.core
-    kernel.util)
+    kernel.core)

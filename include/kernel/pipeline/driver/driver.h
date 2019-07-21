@@ -2,9 +2,9 @@
 #define DRIVER_H
 
 #include <codegen/FunctionTypeBuilder.h>
+#include <codegen/virtual_driver.h>
 #include <llvm/ExecutionEngine/GenericValue.h>
 #include <kernel/core/kernel.h>
-// #include <kernels/core/streamset.h>
 #include <kernel/core/relationship.h>
 #include <util/slab_allocator.h>
 #include <string>
@@ -16,7 +16,7 @@ namespace kernel { class KernelBuilder; }
 namespace kernel { class ProgramBuilder; }
 class CBuilder;
 
-class BaseDriver {
+class BaseDriver : public codegen::VirtualDriver {
     friend class CBuilder;
     friend class kernel::ProgramBuilder;
 

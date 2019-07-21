@@ -28,7 +28,7 @@
 #include <pablo/parse/pablo_parser.h>
 #include <pablo/parse/simple_lexer.h>
 #include <pablo/parse/rd_parser.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
 #include <fcntl.h>
 #include <iostream>

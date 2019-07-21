@@ -23,7 +23,7 @@
 #include <kernel/core/kernel_builder.h>
 #include <pablo/pe_zeroes.h>
 #include <toolchain/toolchain.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <kernel/core/streamset.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/CallingConv.h>

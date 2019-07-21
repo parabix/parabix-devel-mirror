@@ -37,7 +37,7 @@
 #include <pablo/pe_ones.h>
 #include <fcntl.h>
 #include <iostream>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 
 using namespace kernel;
 using namespace llvm;

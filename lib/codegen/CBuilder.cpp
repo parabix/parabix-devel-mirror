@@ -17,7 +17,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
 #include <toolchain/toolchain.h>
-#include <toolchain/driver.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <cstdarg>

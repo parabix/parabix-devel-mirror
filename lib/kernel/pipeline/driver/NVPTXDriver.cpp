@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <toolchain/NVPTXDriver.h>
+#include <kernel/pipeline/driver/NVPTXDriver.h>
 
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/kernel_builder.h>

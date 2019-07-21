@@ -15,7 +15,7 @@
 #include <re/compile/re_analysis.h>
 #include <re/unicode/re_name_resolve.h>
 #include <re/unicode/resolve_properties.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjectTable.h>
 #include <util/aligned_allocator.h>

@@ -7,7 +7,7 @@
 #ifndef NVPTXDRIVER_H
 #define NVPTXDRIVER_H
 
-#include <toolchain/driver.h>
+#include <kernel/pipeline/driver/driver.h>
 
 class NVPTXDriver final : public BaseDriver {
     friend class CBuilder;

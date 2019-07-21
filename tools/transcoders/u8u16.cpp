@@ -26,7 +26,7 @@
 #include <pablo/pablo_toolchain.h>
 #include <pablo/bixnum.h>
 #include <pablo/pe_zeroes.h>
-#include <toolchain/cpudriver.h>
+#include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
 
 #include <sys/stat.h>

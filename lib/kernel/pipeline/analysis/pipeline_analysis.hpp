@@ -571,7 +571,7 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
         return std::get<0>(c[REGION_START]) == nullptr || std::get<0>(c[REGION_END]) == nullptr;
     };
 
-    BaseDriver & driver = b->getDriver();
+    BaseDriver & driver = reinterpret_cast<BaseDriver &>(b->getDriver());
 
     const auto numOfKernels = kernels.size();
 
@@ -755,7 +755,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
         return;
     }
 
-    BaseDriver & driver = b->getDriver();
+    BaseDriver & driver = reinterpret_cast<BaseDriver &>(b->getDriver());
 
     IntegerType * const sizeTy = b->getSizeTy();
 
