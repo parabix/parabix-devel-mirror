@@ -7,6 +7,7 @@
 #include <re/compile/re_inspector.h>
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <re/adt/adt.h>
 
 using namespace llvm;

@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <functional>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/ErrorHandling.h>
 #include "maxsat.hpp"
 
 using namespace llvm;

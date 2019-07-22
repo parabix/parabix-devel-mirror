@@ -25,6 +25,7 @@
 #include <llvm/Support/Format.h>
 #include <sstream>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 // #include <kernel/pipeline/pipeline_kernel.h>
 
 using namespace llvm;

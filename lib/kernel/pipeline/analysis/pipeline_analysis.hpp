@@ -3,6 +3,7 @@
 #include "../internal/popcount_kernel.h"
 #include "../internal/regionselectionkernel.h"
 #include <boost/graph/topological_sort.hpp>
+#include <llvm/Support/ErrorHandling.h>
 
 namespace kernel {
 

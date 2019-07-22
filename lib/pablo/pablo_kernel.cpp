@@ -16,6 +16,7 @@
 #include <kernel/core/streamset.h>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/ErrorHandling.h>
 
 #include <pablo/branch.h>
 #include <sys/stat.h>

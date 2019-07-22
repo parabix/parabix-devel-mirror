@@ -38,6 +38,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Type.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
 #include <boost/container/flat_set.hpp>
 

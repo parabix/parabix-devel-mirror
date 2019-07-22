@@ -17,6 +17,7 @@
 #include <boost/dynamic_bitset.hpp>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/BitVector.h>
 #include <util/slab_allocator.h>

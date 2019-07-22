@@ -2,6 +2,7 @@
 #define IO_CALCULATION_LOGIC_HPP
 
 #include "pipeline_compiler.hpp"
+#include <llvm/Support/ErrorHandling.h>
 
 namespace kernel {
 

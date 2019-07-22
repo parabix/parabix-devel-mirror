@@ -3,6 +3,8 @@
 
 #include "pipeline_compiler.hpp"
 
+#include <llvm/Support/ErrorHandling.h>
+
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -5,6 +5,7 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <tuple>
+#include <llvm/Support/ErrorHandling.h>
 
 // TODO: any buffers that exist only to satisfy the output dependencies are unnecessary.
 // We could prune away kernels if none of their outputs are needed but we'd want some

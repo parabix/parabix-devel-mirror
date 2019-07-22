@@ -7,6 +7,7 @@
 #include <re/compile/re_transformer.h>
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
 #include <re/toolchain/toolchain.h>

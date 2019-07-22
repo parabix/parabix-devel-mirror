@@ -13,6 +13,7 @@
 #include <pablo/parse/pablo_source_kernel.h>
 #include <pablo/parse/pablo_type.h>
 #include <pablo/parse/token.h>
+#include <llvm/Support/ErrorHandling.h>
 
 namespace pablo {
 namespace parse {

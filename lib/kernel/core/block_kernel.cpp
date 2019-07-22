@@ -19,6 +19,7 @@
 #endif
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/Support/Debug.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <boost/graph/adjacency_list.hpp>
 #include <util/extended_boost_graph_containers.h>
 #include <sstream>

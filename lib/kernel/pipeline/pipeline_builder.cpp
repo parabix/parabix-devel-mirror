@@ -6,6 +6,7 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/topological_sort.hpp>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <toolchain/toolchain.h>

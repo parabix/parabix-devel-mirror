@@ -9,6 +9,7 @@
 #include <toolchain/toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <llvm/IR/Module.h>
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace llvm;
 
