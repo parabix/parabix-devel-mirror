@@ -43,7 +43,7 @@ static cl::opt<re::RE_Syntax, true> RegexpSyntaxOption(cl::desc("Regular express
         clEnumValN(re::RE_Syntax::PCRE, "perl-regexp", "Alias for -P"),
         clEnumValN(re::RE_Syntax::FileGLOB, "GLOB", "Posix GLOB syntax for file name patterns"),
         clEnumValN(re::RE_Syntax::PROSITE, "PROSITE", "PROSITE protein patterns syntax")
-        CL_ENUM_VAL_SENTINEL), cl::cat(RE_Options), cl::Grouping, cl::location(RegexpSyntax), cl::init(re::RE_Syntax::PCRE));
+        CL_ENUM_VAL_SENTINEL), cl::cat(RE_Options), cl::location(RegexpSyntax), cl::init(re::RE_Syntax::PCRE));
 
 bool IgnoreCaseFlag;
 static cl::opt<bool, true> IgnoreCaseOption("i", cl::location(IgnoreCaseFlag), cl::desc("Ignore case distinctions in the pattern and the file."), cl::cat(RE_Options), cl::Grouping);
@@ -62,11 +62,11 @@ static cl::opt<bool, true> WordRegexpOption("w", cl::location(WordRegexpFlag), c
 static cl::alias WordRegexpAlias("word-regexp", cl::desc("Alias for -w"), cl::aliasopt(WordRegexpOption));
 
 std::vector<std::string> RegexpVector;
-static cl::list<std::string, std::vector<std::string>> RegexpOption("e", cl::location(RegexpVector), cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(RE_Options), cl::Grouping);
+static cl::list<std::string, std::vector<std::string>> RegexpOption("e", cl::location(RegexpVector), cl::desc("Regular expression"), cl::ZeroOrMore, cl::cat(RE_Options));
 static cl::alias RegexpAlias("regexp", cl::desc("Alias for -e"), cl::aliasopt(RegexpOption));
 
 std::string FileFlag;
-static cl::opt<std::string, true> FileOption("f", cl::location(FileFlag), cl::desc("Take regular expressions (one per line) from a file."), cl::cat(RE_Options), cl::Grouping);
+static cl::opt<std::string, true> FileOption("f", cl::location(FileFlag), cl::desc("Take regular expressions (one per line) from a file."), cl::cat(RE_Options));
 static cl::alias FileAlias("file", cl::desc("Alias for -f"), cl::aliasopt(FileOption));
     
 /*
@@ -123,7 +123,7 @@ static cl::opt<GrepModeType, true> GrepModeOption(cl::desc("Abbreviated output m
         clEnumValN(FilesWithoutMatch, "files-without-match", "Alias for -L"),
         clEnumValN(QuietMode, "quiet", "Alias for -q"),
         clEnumValN(QuietMode, "silent", "Alias for -q")
-        CL_ENUM_VAL_SENTINEL), cl::cat(Output_Options), cl::Grouping, cl::location(Mode), cl::init(NormalMode));
+        CL_ENUM_VAL_SENTINEL), cl::cat(Output_Options), cl::location(Mode), cl::init(NormalMode));
 
 bool WithFilenameFlag;
 static cl::opt<bool, true> WithFilenameOption("H", cl::location(WithFilenameFlag), cl::desc("Show the file name with each matching line."), cl::cat(Output_Options), cl::Grouping);
@@ -177,7 +177,7 @@ static cl::alias ContextAlias("context", cl::desc("Alias for -C"), cl::aliasopt(
 
 int MaxCountFlag;
 static cl::opt<int, true> MaxCountOption("m", cl::location(MaxCountFlag),
-                                         cl::desc("Process only the first <num> matches per file3."),
+                                         cl::desc("Process only the first <num> matches per file."),
                                          cl::cat(Output_Options), cl::Grouping);
 static cl::alias MaxCountAlias("max-count", cl::desc("Alias for -m"), cl::aliasopt(MaxCountOption));
 
