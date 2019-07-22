@@ -11,6 +11,7 @@
 #include <re/adt/re_range.h>
 #include <re/compile/re_transformer.h>
 #include <re/unicode/resolve_properties.h>
+#include <llvm/Support/ErrorHandling.h>
 
 using namespace re;
 
