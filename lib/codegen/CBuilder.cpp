@@ -881,6 +881,10 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
         pthreadCreateFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_create", m);
         pthreadCreateFunc->setCallingConv(CallingConv::C);
     }
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        __CreateAssert(CreateIsNotNull(thread), "PThreadCreate: thread cannot be null", {});
+        __CreateAssert(CreateIsNotNull(start_routine), "PThreadCreate: start_routine cannot be null", {});
+    }
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
 }
 
@@ -1738,6 +1742,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
 //                    }
 //                    #endif
                     if (ci.getCalledFunction() == assertFunc) {
+                        assert (ci.getNumArgOperands() >= 5);
                         bool remove = false;
                         Value * const check = ci.getOperand(0);
                         Constant * static_check = nullptr;
@@ -1768,7 +1773,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 // attempt to fill in what constants we can and report <any> for all others.
                                 boost::format fmt(msg);
                                 for (unsigned i = 5; i < ci.getNumArgOperands(); ++i) {
-                                    Value * const arg = ci.getOperand(3);
+                                    Value * const arg = ci.getOperand(i);
                                     if (LLVM_LIKELY(isa<Constant>(arg))) {
                                         if (LLVM_LIKELY(isa<ConstantInt>(arg))) {
                                             const auto v = cast<ConstantInt>(arg)->getLimitedValue();
