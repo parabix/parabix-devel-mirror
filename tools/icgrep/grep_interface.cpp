@@ -18,7 +18,7 @@
 #include <fstream>
 #include <string>
 
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 
 using namespace llvm;
 

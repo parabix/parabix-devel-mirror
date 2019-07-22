@@ -5,7 +5,7 @@
  */
 
 #include <toolchain/toolchain.h>
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 #include <unicode/core/UCD_Config.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>

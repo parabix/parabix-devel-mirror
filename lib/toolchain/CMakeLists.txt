@@ -4,7 +4,8 @@
 # module: toolchain
 
 parabix_add_module(toolchain
+    pablo_toolchain.cpp
     toolchain.cpp)
 
 target_link_libraries(toolchain
-    pablo)
+    ${REQ_LLVM_LIBRARIES})

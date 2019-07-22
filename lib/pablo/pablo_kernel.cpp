@@ -10,7 +10,8 @@
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
-#include <pablo/pablo_toolchain.h>
+#include <pablo/passes.h>
+#include <toolchain/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/streamset.h>
 #include <toolchain/toolchain.h>

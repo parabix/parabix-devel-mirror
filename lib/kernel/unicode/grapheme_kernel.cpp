@@ -15,7 +15,6 @@
 #include <re/ucd/ucd_compiler.hpp>
 #include <re/unicode/grapheme_clusters.h>
 #include <re/unicode/re_name_resolve.h>
-#include <pablo/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
 

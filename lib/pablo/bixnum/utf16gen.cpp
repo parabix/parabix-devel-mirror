@@ -12,7 +12,6 @@
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/builder.hpp>
 #include <pablo/bixnum/bixnum.h>
-#include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
 #include <pablo/pe_zeroes.h>
 #include <re/cc/cc_compiler.h>                     // for CC_Compiler
 

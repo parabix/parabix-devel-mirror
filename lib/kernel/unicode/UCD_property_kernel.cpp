@@ -10,7 +10,6 @@
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/ucd/ucd_compiler.hpp>
-#include <pablo/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/builder.hpp>
 #include <llvm/Support/ErrorHandling.h>

@@ -14,7 +14,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_matchstar.h>
 #include <pablo/pe_var.h>
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 #ifndef NDEBUG
 #include <pablo/pabloverifier.hpp>
 #endif

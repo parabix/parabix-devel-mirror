@@ -19,7 +19,7 @@
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
 #include <llvm/Support/Debug.h>                    // for dbgs
 #include <pablo/pablo_kernel.h>                    // for PabloKernel
-#include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
+#include <toolchain/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <pablo/pe_zeroes.h>
 #include <toolchain/toolchain.h>

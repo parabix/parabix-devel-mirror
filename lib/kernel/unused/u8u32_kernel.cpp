@@ -12,7 +12,6 @@
 #include <re/cc/cc_compiler_target.h>
 #include <pablo/builder.hpp>
 #include <llvm/IR/Module.h>
-#include <pablo/pablo_toolchain.h>                 // for pablo_function_passes
 
 using namespace kernel;
 using namespace pablo;

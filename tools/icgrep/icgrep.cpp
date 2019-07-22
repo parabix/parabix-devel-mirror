@@ -24,7 +24,7 @@
 #include <fstream>
 #include <string>
 #include <toolchain/toolchain.h>
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 #include <boost/filesystem.hpp>
 #include <fileselect/file_select.h>
 #include <sys/stat.h>

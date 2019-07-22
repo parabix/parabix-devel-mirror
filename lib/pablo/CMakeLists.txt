@@ -13,10 +13,10 @@ parabix_add_module(pablo
     distributivepass.cpp
     flattenif.cpp
     # pablo_automultiplexing.cpp # TODO: use source variable
+    passes.cpp
     pablo_compiler.cpp
     pablo_kernel.cpp
     pablo_simplifier.cpp
-    pablo_toolchain.cpp
     pabloAST.cpp
     pabloverifier.cpp
     printer_pablos.cpp

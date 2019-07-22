@@ -8,9 +8,9 @@
 #define PABLO_TOOLCHAIN_H
 
 #include <string>
+#include <llvm/Support/FileSystem.h>
 
 namespace llvm { namespace cl { class OptionCategory; } }
-namespace pablo { class PabloKernel; }
 
 namespace pablo {
 
@@ -36,13 +36,14 @@ enum class PabloCarryMode {
 };
 extern PabloCarryMode CarryMode;
 
+extern llvm::sys::fs::OpenFlags PabloOutputFileFlag;
+extern llvm::sys::fs::OpenFlags PabloOptimizedOutputFileFlag;
+
 const llvm::cl::OptionCategory * pablo_toolchain_flags();
 
 bool DebugOptionIsSet(const PabloDebugFlags flag);
 
 bool CompileOptionIsSet(const PabloCompilationFlags flag);
-
-void pablo_function_passes(PabloKernel * kernel);
 
 }
 #endif

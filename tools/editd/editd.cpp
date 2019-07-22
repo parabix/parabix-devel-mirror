@@ -11,7 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <toolchain/toolchain.h>
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>

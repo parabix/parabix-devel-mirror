@@ -6,7 +6,6 @@
 
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
-#include <pablo/pablo_toolchain.h>
 #include <pablo/codegenstate.h>
 #include <pablo/boolean.h>
 #include <pablo/arithmetic.h>
@@ -33,7 +32,7 @@
 #include <pablo/carry_manager.h>
 #endif
 #include <pablo/compressed_carry_manager.h>
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/streamset.h>
 #include <llvm/IR/Module.h>

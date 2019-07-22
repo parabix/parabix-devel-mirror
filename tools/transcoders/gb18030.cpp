@@ -24,7 +24,7 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/boolean.h>
 #include <pablo/pablo_kernel.h>
-#include <pablo/pablo_toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 #include <pablo/bixnum/bixnum.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
