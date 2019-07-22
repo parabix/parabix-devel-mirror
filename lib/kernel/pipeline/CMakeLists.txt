@@ -14,4 +14,4 @@ parabix_add_module(kernel.pipeline
     pipeline_kernel.cpp)
 
 target_link_libraries(kernel.pipeline
-    kernel.core)
+    objcache)

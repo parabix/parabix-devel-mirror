@@ -4,7 +4,7 @@
 #include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Module.h>
 #include <toolchain/toolchain.h>
-#include <toolchain/object_cache.h>
+#include <objcache/object_cache.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace kernel;

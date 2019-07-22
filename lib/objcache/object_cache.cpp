@@ -1,6 +1,6 @@
-#include <toolchain/object_cache.h>
+#include <objcache/object_cache.h>
 
-#include <toolchain/object_cache_util.hpp>
+#include <objcache/object_cache_util.hpp>
 #include <kernel/core/kernel.h>
 #include <kernel/core/kernel_builder.h>
 #include <llvm/Support/raw_ostream.h>

@@ -27,7 +27,7 @@
 #include <llvm/Transforms/InstCombine/InstCombine.h>
 #include <llvm/Transforms/Utils.h>
 #endif
-#include <toolchain/object_cache.h>
+#include <objcache/object_cache.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Verifier.h>
