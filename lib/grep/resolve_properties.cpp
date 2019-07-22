@@ -78,7 +78,7 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::PropertyObject * propO
         return GetCodepointSetMatchingPattern(p, pattern);
     } else if (auto p = dyn_cast<UCD::NumericPropertyObject>(propObj)) {
         return GetCodepointSetMatchingPattern(p, pattern);
-    } else if (auto p = dyn_cast<UCD::StringOverridePropertyObject>(propObj)) {
+    } else if (auto p = dyn_cast<UCD::StringPropertyObject>(propObj)) {
         return GetCodepointSetMatchingPattern(p, pattern);
     } else if (auto p = dyn_cast<UCD::StringOverridePropertyObject>(propObj)) {
         return GetCodepointSetMatchingPattern(p, pattern);
