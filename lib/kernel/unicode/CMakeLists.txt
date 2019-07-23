@@ -10,4 +10,5 @@ parabix_add_module(kernel.unicode
     UCD_property_kernel.cpp)
 
 target_link_libraries(kernel.unicode
+    kernel.pipeline
     re.unicode)

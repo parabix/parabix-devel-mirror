@@ -13,4 +13,5 @@ parabix_add_module(re.parse
     Prosite_parser.cpp)
 
 target_link_libraries(re.parse
-    re.adt)
+    re.adt
+    ${Boost_LIBRARIES})

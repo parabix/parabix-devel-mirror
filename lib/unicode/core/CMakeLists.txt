@@ -5,3 +5,6 @@
 
 parabix_add_module(unicode.core
     unicode_set.cpp)
+
+target_link_libraries(unicode.core
+    toolchain)

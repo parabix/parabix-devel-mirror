@@ -5,3 +5,6 @@
 
 parabix_add_module(re.toolchain
     toolchain.cpp)
+
+target_link_libraries(re.toolchain
+    toolchain)

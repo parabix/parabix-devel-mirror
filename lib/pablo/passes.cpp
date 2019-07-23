@@ -38,7 +38,7 @@ void pablo_function_passes(PabloKernel * kernel) {
     }
 
 #ifdef NDEBUG
-    if (DebugOptions.isSet(VerifyPablo)) {
+    if (pablo::DebugOptionIsSet(VerifyPablo)) {
 #endif
         PabloVerifier::verify(kernel, "creation");
 #ifdef NDEBUG

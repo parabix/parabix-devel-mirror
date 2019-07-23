@@ -10,5 +10,4 @@ add_dependencies(codegen recompile-object-cache)
 
 target_link_libraries(codegen
     toolchain
-    ${REQ_LLVM_LIBRARIES}
     ${Boost_LIBRARIES})
