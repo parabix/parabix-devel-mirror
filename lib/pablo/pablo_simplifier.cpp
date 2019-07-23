@@ -157,12 +157,12 @@ private:
 };
 
 
-struct PassContainer {
+struct SimplifierPassContainer {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PassContainer()
+SimplifierPassContainer()
 : UseTernaryOptimizations(CompileOptionIsSet(EnableTernaryOpt)) {
 
 }
@@ -1246,7 +1246,7 @@ flat_set<const Statement *>         mSideEffecting;
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool Simplifier::optimize(PabloKernel * kernel) {
-    PassContainer pc;
+    SimplifierPassContainer pc;
     pc.run(kernel);
     #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-simplification");

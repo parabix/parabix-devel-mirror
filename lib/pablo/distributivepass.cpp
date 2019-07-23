@@ -74,7 +74,7 @@ using DistributionSets = std::vector<DistributionSet>;
 
 using IndependentSetGraph = adjacency_list<vecS, vecS, undirectedS, size_t>;
 
-struct PassContainer {
+struct DistributivePassContainer {
 
     /** ------------------------------------------------------------------------------------------------------------- *
      * @brief run
@@ -108,7 +108,7 @@ struct PassContainer {
         return false;
     }
 
-    PassContainer()
+    DistributivePassContainer()
     : compactedGraph(false)
     , V{0, IdentityHash(G), IdentityComparator(G)} {
 
@@ -441,13 +441,13 @@ repeat: getReverseTopologicalOrdering();
                 return *this;
             }
 
-            PrePassInserter(PassContainer & pc) : self(pc) { }
+            PrePassInserter(DistributivePassContainer & pc) : self(pc) { }
             PrePassInserter & operator*() { return *this; }
             PrePassInserter & operator++() { return *this; }
             PrePassInserter & operator++(int) { return *this; }
 
         public:
-            PassContainer & self;
+            DistributivePassContainer & self;
         };
 
         ordering.clear();
@@ -1752,7 +1752,7 @@ private:
             }));
             #endif
             size_t h = 0;
-            boost::hash_combine(h, static_cast<value_of>(PassContainer::getType(u, G)));
+            boost::hash_combine(h, static_cast<value_of>(DistributivePassContainer::getType(u, G)));
             for (auto e : make_iterator_range(in_edges(u, G))) {
                 boost::hash_combine(h, source(e, G));
             }
@@ -1828,7 +1828,7 @@ private:
  * @brief optimize
  ** ------------------------------------------------------------------------------------------------------------- */
 bool DistributivePass::optimize(PabloKernel * const kernel) {
-    PassContainer C;
+    DistributivePassContainer C;
     C.run(kernel);
     #ifndef NDEBUG
     PabloVerifier::verify(kernel, "post-distributive-pass");
