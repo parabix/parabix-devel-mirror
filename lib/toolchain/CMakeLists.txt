@@ -3,27 +3,42 @@
 
 # module: toolchain
 
+# IMPORTANT:
+#
+# If an explicit link with LLVM is needed, link with this library indead.
+#
+# i.e.,
+#   DO:
+#       target_link_libraries(<mylib> toolchain)
+#
+#   DON'T:
+#       target_link_libraries(<mylib> ${REQ_LLVM_LIBRARIES})
+
 parabix_add_module(toolchain
     pablo_toolchain.cpp
     toolchain.cpp)
 
-# Embed whole LLVMSupport static library in the toolchain shared library to
-# allow LLVM's command line library to work properly.
 if(APPLE)
-    # Use Darwin only '-all_load' flag on macOS.
-    set(ALL_LOAD_BEGIN "")
-    set(ALL_LOAD_END "-all_load")
+    # The Darwin linker on macOS does not support the --whole-archive flag.
+    # Instead it has -all_load which does something similar. On macOS we need
+    # to load all of the static LLVM libraries into this shared library in order
+    # for symbol resolution of global varaibles in LLVM's Command Line library
+    # to work as expected.
+    #
+    # We also need to declare this link PRIVATE or else it won't work. I don't
+    # know why as it seems very counter intuitive, but it doesn't work any other
+    # way.
+    target_link_libraries(toolchain PRIVATE -all_load ${REQ_LLVM_LIBRARIES})
 else()
-    # Use GNU --whole-archive option on Linux.
-    set(ALL_LOAD_BEGIN "-Wl,--whole-archive")
-    set(ALL_LOAD_END "-Wl,--no-whole-archive")
+    # On Linux we use --whole-archive to embed the symbols from LLVMSupport into
+    # this shared library so that, when other libraries need to locate the global
+    # variables used in LLVM's Command Line library they will find them here and
+    # not import new isntances from LLVM (hence the need to link with this library
+    # and not directly to LLVM).
+    #
+    # We can't embed symbols from all LLVM libraries as the GNU linker fails with
+    # multiple definition errors (this doesn't happend with the Darwin linker).
+    target_link_libraries(toolchain
+        -Wl,--whole-archive LLVMSupport -Wl,--no-whole-archive
+        ${REQ_LLVM_LIBRARIES})
 endif(APPLE)
-
-# Remove LLVMSupport from the list of LLVM libraries as to no link with it twice.
-list(REMOVE_ITEM REQ_LLVM_LIBRARIES LLVMSupport)
-
-target_link_libraries(toolchain
-    ${ALL_LOAD_BEGIN}
-    LLVMSupport
-    ${ALL_LOAD_END}
-    ${REQ_LLVM_LIBRARIES})

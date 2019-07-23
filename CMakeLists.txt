@@ -1,6 +1,18 @@
 # Copyright (c) 2019 International Characters.
 # This software is licensed to the public under the Open Software License 3.0.
 
+# IMPORTANT:
+#
+# If an explicit link with LLVM is needed, link with the toolchain library indead.
+# See lib/toolchain/CMakeLists.txt for more info.
+#
+# i.e.,
+#   DO:
+#       target_link_libraries(<mylib> toolchain)
+#
+#   DON'T:
+#       target_link_libraries(<mylib> ${REQ_LLVM_LIBRARIES})
+
 cmake_minimum_required(VERSION 2.8)
 
 project(parabix)
