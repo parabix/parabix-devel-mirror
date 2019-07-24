@@ -25,6 +25,7 @@ option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 
+option(USE_STATIC_LIBS "Build static libraries" OFF)
 
 # Ensure custom FindXYZ.cmake files are found
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -55,7 +56,7 @@ message(STATUS "LLVM Version Integer: ${LLVM_VERSION_INTEGER}")
 
 ###   Import Dependency: Boost   ###
 
-set(Boost_USE_STATIC_LIBS OFF)
+set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.61 REQUIRED COMPONENTS system filesystem iostreams)
@@ -164,7 +165,11 @@ endfunction(parabix_set_library_name)
 
 
 function(parabix_add_module NAME)
-    add_library(${NAME} SHARED ${ARGN})
+    if(USE_STATIC_LIBS)
+        add_library(${NAME} STATIC ${ARGN})
+    else()    
+        add_library(${NAME} SHARED ${ARGN})
+    endif(USE_STATIC_LIBS)
     parabix_set_library_name(${NAME})
 endfunction(parabix_add_module)
 
