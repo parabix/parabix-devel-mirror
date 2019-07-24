@@ -7,14 +7,14 @@ add_custom_target(xml.pablosrc
     COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/xml.pablo $ENV{HOME}/.cache/parabix
     DEPENDS xml.pablo)
 
-add_executable(xml
+parabix_add_executable(
+NAME
+    xml
+SRC
     post_process.cpp
     test_suite_error.cpp
-    xml.cpp)
-
-add_dependencies(xml xml.pablosrc)
-
-target_link_libraries(xml
+    xml.cpp
+DEPS
     pablo.parse
     kernel.basis
     kernel.io
@@ -22,4 +22,7 @@ target_link_libraries(xml
     kernel.scan
     kernel.streamutils
     kernel.unicode
-    toolchain)
+    toolchain
+)
+
+add_dependencies(xml xml.pablosrc)

@@ -3,11 +3,14 @@
 
 # module: kernel.util
 
-parabix_add_module(kernel.util
+parabix_add_module(
+NAME
+    kernel.util
+SRC
     error_monitor_kernel.cpp
     hex_convert.cpp
     radix64.cpp
-    random_stream.cpp)
-
-target_link_libraries(kernel.util
-    kernel.core)
+    random_stream.cpp
+DEPS
+    kernel.core
+)

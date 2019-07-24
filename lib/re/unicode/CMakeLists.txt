@@ -3,14 +3,17 @@
 
 # module: re.unicode
 
-parabix_add_module(re.unicode
+parabix_add_module(
+NAME
+    re.unicode
+SRC
     casing.cpp
     decomposition.cpp
     equivalence.cpp
     grapheme_clusters.cpp
     re_name_resolve.cpp
-    resolve_properties.cpp)
-
-target_link_libraries(re.unicode
+    resolve_properties.cpp
+DEPS
     re.compile
-    unicode.data)
+    unicode.data
+)

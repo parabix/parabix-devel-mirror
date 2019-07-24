@@ -3,15 +3,18 @@
 
 # module: re.parse
 
-parabix_add_module(re.parse
+parabix_add_module(
+NAME
+    re.parse
+SRC
     BRE_parser.cpp
     ERE_parser.cpp
     fixed_string_parser.cpp
     GLOB_parser.cpp
     parser.cpp
     PCRE_parser.cpp
-    Prosite_parser.cpp)
-
-target_link_libraries(re.parse
+    Prosite_parser.cpp
+DEPS
     re.adt
-    ${Boost_LIBRARIES})
+    ${Boost_LIBRARIES}
+)

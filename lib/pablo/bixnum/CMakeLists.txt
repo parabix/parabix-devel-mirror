@@ -3,10 +3,13 @@
 
 # module: pablo.bixnum
 
-parabix_add_module(pablo.bixnum
+parabix_add_module(
+NAME 
+    pablo.bixnum
+SRC
     bixnum.cpp
     utf8gen.cpp
-    utf16gen.cpp)
-
-target_link_libraries(pablo.bixnum
-    re.cc)
+    utf16gen.cpp
+DEPS
+    re.cc
+)

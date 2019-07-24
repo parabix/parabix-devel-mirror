@@ -3,7 +3,10 @@
 
 # module: kerenl.core
 
-parabix_add_module(kernel.core
+parabix_add_module(
+NAME    
+    kernel.core
+SRC
     attributes.cpp
     binding.cpp
     block_kernel.cpp
@@ -14,7 +17,7 @@ parabix_add_module(kernel.core
     multiblock_kernel.cpp
     processing_rate.cpp
     relationship.cpp
-    streamset.cpp)
-
-target_link_libraries(kernel.core
-    idisa)
+    streamset.cpp
+DEPS
+    idisa
+)

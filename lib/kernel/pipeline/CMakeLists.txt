@@ -3,7 +3,10 @@
 
 # module: kernel.pipeline
 
-parabix_add_module(kernel.pipeline
+parabix_add_module(
+NAME
+    kernel.pipeline
+SRC
     driver/driver.cpp
     driver/cpudriver.cpp
     # driver/NVPTXDriver.cpp
@@ -11,7 +14,7 @@ parabix_add_module(kernel.pipeline
     internal/regionselectionkernel.cpp
     optimizationbranch/optimizationbranch.cpp
     pipeline_builder.cpp
-    pipeline_kernel.cpp)
-
-target_link_libraries(kernel.pipeline
-    objcache)
+    pipeline_kernel.cpp
+DEPS
+    objcache
+)

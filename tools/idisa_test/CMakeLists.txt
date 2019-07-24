@@ -3,11 +3,14 @@
 
 # module: idisa_test
 
-add_executable(idisa_test
-    idisa_test.cpp)
-
-target_link_libraries(idisa_test
+parabix_add_executable(
+NAME
+    idisa_test
+SRC
+    idisa_test.cpp
+DEPS
     kernel.basis
     kernel.io
     kernel.pipeline
-    kernel.util)
+    kernel.util
+)

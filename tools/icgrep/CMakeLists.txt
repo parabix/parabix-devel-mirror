@@ -3,10 +3,13 @@
 
 # module: icgrep
 
-add_executable(icgrep
+parabix_add_executable(
+NAME
+    icgrep
+SRC
     grep_interface.cpp
-    icgrep.cpp)
-
-target_link_libraries(icgrep
+    icgrep.cpp
+DEPS
     fileselect
-    grep)
+    grep
+)

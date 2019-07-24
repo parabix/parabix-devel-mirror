@@ -25,7 +25,17 @@ option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 
-option(USE_STATIC_LIBS "Build static libraries" OFF)
+# Framework build style: default is collection of static libraries
+option(BUILD_SHARED_LIBS "Build framework as a collection of shared libraries" OFF)
+option(BUILD_SINGLE_SHARED_LIB "Build framework as a single shared library" OFF)
+
+if(BUILD_SHARED_LIBS AND BUILD_SINGLE_SHARED_LIB)
+    message(FATAL_ERROR "Options BUILD_SHARED_LIBS and BUILD_SINGLE_SHARED_LIB are mutually exclusive")
+endif()
+
+# Target for single shared library
+set(PARABIX_MONO_TARGET parabix_framework)
+
 
 # Ensure custom FindXYZ.cmake files are found
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -163,18 +173,66 @@ function(parabix_set_library_name NAME)
     set_target_properties(${NAME} PROPERTIES OUTPUT_NAME ${LIBRARY_NAME})
 endfunction(parabix_set_library_name)
 
+include(CMakeParseArguments)
 
-function(parabix_add_module NAME)
-    if(USE_STATIC_LIBS)
-        add_library(${NAME} STATIC ${ARGN})
-    else()    
-        add_library(${NAME} SHARED ${ARGN})
-    endif(USE_STATIC_LIBS)
-    parabix_set_library_name(${NAME})
+function(parabix_add_module)
+    cmake_parse_arguments(
+        ARG         # resultant argument prefix
+        ""          # boolean args
+        "NAME"      # mono-valued arguments:
+                    #   NAME: target name
+        "SRC;DEPS"  # multi-valued arguments:
+                    #   SRC:  source file list
+                    #   DEPS: target dependencies
+        ${ARGN}     # arguments to parse
+    )
+    if(NOT ARG_NAME)
+        message(FATAL_ERROR "parabix_add_module: A target name is required")
+    endif()
+    if(BUILD_SINGLE_SHARED_LIB)
+        foreach(SRC ${ARG_SRC})
+            target_sources(${PARABIX_MONO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${SRC})
+        endforeach()
+    else()
+        if(BUILD_SHARED_LIBS)
+            add_library(${ARG_NAME} SHARED ${ARG_SRC})
+            parabix_set_library_name(${ARG_NAME})
+        else() # build static
+            add_library(${ARG_NAME} STATIC ${ARG_SRC})
+        endif()
+        parabix_set_library_name(${ARG_NAME})
+        target_link_libraries(${ARG_NAME} ${ARG_DEPS})
+    endif()
 endfunction(parabix_add_module)
+
+function(parabix_add_executable)
+    cmake_parse_arguments(
+        ARG         # resultant argument prefix
+        ""          # boolean args
+        "NAME"      # mono-valued arguments:
+                    #   NAME: target name
+        "SRC;DEPS"  # multi-valued arguments:
+                    #   SRC:  source file list
+                    #   DEPS: target dependencies
+        ${ARGN}     # arguments to parse
+    )
+    if(NOT ARG_NAME)
+        message(FATAL_ERROR "parabix_add_executable: A target name is required")
+    endif()
+    add_executable(${ARG_NAME} ${ARG_SRC})
+    if(BUILD_SINGLE_SHARED_LIB)
+        target_link_libraries(${ARG_NAME} ${PARABIX_MONO_TARGET})
+    else()
+        target_link_libraries(${ARG_NAME} ${ARG_DEPS})
+    endif()
+endfunction(parabix_add_executable)
 
 
 ###   Add Subdirectories   ###
+
+if(BUILD_SINGLE_SHARED_LIB)
+    add_library(${PARABIX_MONO_TARGET} SHARED "")
+endif()
 
 # Framework Libraries
 add_subdirectory(lib/codegen)
@@ -218,6 +276,11 @@ add_subdirectory(tools/wc)
 # add_subdirectory(tools/wc/wc-pablo)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
+
+# Target definition for single shared library
+if(BUILD_SINGLE_SHARED_LIB)
+    target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
+endif()
 
 
 ###   Test Suite   ###

@@ -3,12 +3,15 @@
 
 # module: kernel.unicode
 
-parabix_add_module(kernel.unicode
+parabix_add_module(
+NAME
+    kernel.unicode
+SRC
     charclasses.cpp
     grapheme_kernel.cpp
     linebreak_kernel.cpp
-    UCD_property_kernel.cpp)
-
-target_link_libraries(kernel.unicode
+    UCD_property_kernel.cpp
+DEPS
     kernel.pipeline
-    re.unicode)
+    re.unicode
+)

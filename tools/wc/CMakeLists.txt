@@ -3,11 +3,14 @@
 
 # module: wc
 
-add_executable(wc
-    wc.cpp)
-
-target_link_libraries(wc
+parabix_add_executable(
+NAME
+    wc
+SRC
+    wc.cpp
+DEPS
     fileselect
     kernel.basis
     kernel.io
-    re.cc)
+    re.cc
+)

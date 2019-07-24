@@ -3,9 +3,12 @@
 
 # module: kernel.scan
 
-parabix_add_module(kernel.scan
+parabix_add_module(
+NAME
+    kernel.scan
+SRC
     scanning.cpp
-    scanmatchgen.cpp)
-
-target_link_libraries(kernel.scan
-    kernel.core)
+    scanmatchgen.cpp
+DEPS
+    kernel.core
+)

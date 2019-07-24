@@ -3,13 +3,16 @@
 
 # module: base64
 
-add_executable(base64
-    base64.cpp)
-
-target_link_libraries(base64
+parabix_add_executable(
+NAME
+    base64
+SRC
+    base64.cpp
+DEPS
     pablo
     kernel.io
     kernel.pipeline
     kernel.util
     re.adt
-    re.cc)
+    re.cc
+)

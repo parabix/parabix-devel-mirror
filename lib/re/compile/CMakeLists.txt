@@ -3,7 +3,10 @@
 
 # module: re.compile
 
-parabix_add_module(re.compile
+parabix_add_module(
+NAME
+    re.compile
+SRC
     assertion_transformations.cpp
     collect_ccs.cpp
     exclude_CC.cpp
@@ -23,7 +26,7 @@ parabix_add_module(re.compile
     remove_nullable.cpp
     replaceCC.cpp
     resolve_diffs.cpp
-    to_utf8.cpp)
-
-target_link_libraries(re.compile
-    re.ucd)
+    to_utf8.cpp
+DEPS
+    re.ucd
+)

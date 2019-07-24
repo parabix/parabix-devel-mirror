@@ -3,8 +3,11 @@
 
 # module: unicode.core
 
-parabix_add_module(unicode.core
-    unicode_set.cpp)
-
-target_link_libraries(unicode.core
-    toolchain)
+parabix_add_module(
+NAME
+    unicode.core
+SRC
+    unicode_set.cpp
+DEPS
+    toolchain
+)

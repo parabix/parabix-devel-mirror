@@ -3,7 +3,10 @@
 
 # module: kernel.streamutils
 
-parabix_add_module(kernel.streamutils
+parabix_add_module(
+NAME
+    kernel.streamutils
+SRC
     deletion.cpp
     pdep_kernel.cpp
     stream_select.cpp
@@ -13,8 +16,8 @@ parabix_add_module(kernel.streamutils
     swizzle.cpp
     swizzled_multiple_pdep_kernel.cpp
     until_n.cpp
-    zeroextend.cpp)
-
-target_link_libraries(kernel.streamutils
+    zeroextend.cpp
+DEPS
     pablo
-    kernel.pipeline)
+    kernel.pipeline
+)

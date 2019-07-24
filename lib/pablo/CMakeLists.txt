@@ -3,7 +3,10 @@
 
 # module: pablo
 
-parabix_add_module(pablo
+parabix_add_module(
+NAME
+    pablo
+SRC
     branch.cpp
     builder.cpp
     carry_manager.cpp
@@ -21,7 +24,7 @@ parabix_add_module(pablo
     pabloverifier.cpp
     printer_pablos.cpp
     schedulingprepass.cpp
-    symbol_generator.cpp)
-
-target_link_libraries(pablo
-    kernel.core)
+    symbol_generator.cpp
+DEPS
+    kernel.core
+)

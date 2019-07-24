@@ -3,9 +3,12 @@
 
 # module: kernel.basis
 
-parabix_add_module(kernel.basis
+parabix_add_module(
+NAME
+    kernel.basis
+SRC
     p2s_kernel.cpp
-    s2p_kernel.cpp)
-
-target_link_libraries(kernel.basis
-    pablo)
+    s2p_kernel.cpp
+DEPS
+    pablo
+)

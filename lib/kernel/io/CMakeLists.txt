@@ -3,9 +3,12 @@
 
 # module: kernel.io
 
-parabix_add_module(kernel.io
+parabix_add_module(
+NAME
+    kernel.io
+SRC
     source_kernel.cpp
-    stdout_kernel.cpp)
-
-target_link_libraries(kernel.io
-    kernel.core)
+    stdout_kernel.cpp
+DEPS
+    kernel.core
+)

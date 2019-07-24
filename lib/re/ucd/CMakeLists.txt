@@ -3,9 +3,12 @@
 
 # module: re.ucd
 
-parabix_add_module(re.ucd
-    ucd_compiler.cpp)
-
-target_link_libraries(re.ucd
+parabix_add_module(
+NAME
+    re.ucd
+SRC
+    ucd_compiler.cpp
+DEPS
     re.cc
-    unicode.utf)
+    unicode.utf
+)

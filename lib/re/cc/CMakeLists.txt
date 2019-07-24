@@ -3,14 +3,17 @@
 
 # module: re.cc
 
-parabix_add_module(re.cc
+parabix_add_module(
+NAME
+    re.cc
+SRC
     cc_compiler_target.cpp
     cc_compiler.cpp
     cc_kernel.cpp
     GB_18030_data.cpp
-    multiplex_CCs.cpp)
-
-target_link_libraries(re.cc
+    multiplex_CCs.cpp
+DEPS
     pablo
     re.adt
-    unicode.core)
+    unicode.core
+)

@@ -3,14 +3,16 @@
 
 # module: grep
 
-parabix_add_module(grep
+parabix_add_module(
+NAME
+    grep
+SRC
     grep_engine.cpp
     grep_kernel.cpp
     grep_name_resolve.cpp
     resolve_properties.cpp
-    regex_passes.cpp)
-
-target_link_libraries(grep
+    regex_passes.cpp
+DEPS
     kernel.pipeline
     kernel.basis
     kernel.io
@@ -18,4 +20,5 @@ target_link_libraries(grep
     kernel.streamutils
     kernel.unicode
     re.parse
-    re.unicode)
+    re.unicode
+)

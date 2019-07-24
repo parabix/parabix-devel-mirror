@@ -3,8 +3,11 @@
 
 # module: fileselect
 
-parabix_add_module(fileselect
-    file_select.cpp)
-
-target_link_libraries(fileselect
-    grep)
+parabix_add_module(
+NAME
+    fileselect
+SRC
+    file_select.cpp
+DEPS
+    grep
+)

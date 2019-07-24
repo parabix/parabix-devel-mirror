@@ -3,9 +3,12 @@
 
 # module: unicode.utf
 
-parabix_add_module(unicode.utf
+parabix_add_module(
+NAME
+    unicode.utf
+SRC
     utf8_encoder.cpp
-    utf16_encoder.cpp)
-
-target_link_libraries(unicode.utf
-    unicode.core)
+    utf16_encoder.cpp
+DEPS
+    unicode.core
+)

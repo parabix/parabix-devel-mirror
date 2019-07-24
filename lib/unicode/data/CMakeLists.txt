@@ -3,10 +3,13 @@
 
 # module: unicode.data
 
-parabix_add_module(unicode.data
+parabix_add_module(
+NAME
+    unicode.data
+SRC
     CaseFolding.cpp
     Equivalence.cpp
-    PropertyObjects.cpp)
-
-target_link_libraries(unicode.data
-    unicode.core)
+    PropertyObjects.cpp
+DEPS
+    unicode.core
+)

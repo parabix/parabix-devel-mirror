@@ -3,7 +3,10 @@
 
 # module: pablo.parse
 
-parabix_add_module(pablo.parse
+parabix_add_module(
+NAME
+    pablo.parse
+SRC
     error.cpp
     kernel_signature.cpp
     pablo_parser.cpp
@@ -13,7 +16,7 @@ parabix_add_module(pablo.parse
     simple_lexer.cpp
     source_file.cpp
     symbol_table.cpp
-    token.cpp)
-
-target_link_libraries(pablo.parse
-    pablo)
+    token.cpp
+DEPS
+    pablo
+)

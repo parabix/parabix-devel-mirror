@@ -3,8 +3,11 @@
 
 # module: re.toolchain
 
-parabix_add_module(re.toolchain
-    toolchain.cpp)
-
-target_link_libraries(re.toolchain
-    toolchain)
+parabix_add_module(
+NAME
+    re.toolchain
+SRC
+    toolchain.cpp
+DEPS
+    toolchain
+)

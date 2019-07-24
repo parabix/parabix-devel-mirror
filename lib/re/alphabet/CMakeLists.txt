@@ -3,8 +3,11 @@
 
 # module: re.alphabet
 
-parabix_add_module(re.alphabet
-    alphabet.cpp)
-
-target_link_libraries(re.alphabet
-    unicode.core)
+parabix_add_module(
+NAME
+    re.alphabet
+SRC
+    alphabet.cpp
+DEPS
+    unicode.core
+)
