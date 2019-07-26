@@ -3,7 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/streamutils/streamset_collapse.h>
+#include <kernel/streamutils/collapse.h>
 
 #include <kernel/core/kernel_builder.h>
 
