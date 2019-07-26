@@ -1,9 +1,6 @@
 # Don't track build directories
-icgrep*build
-build
+*build*
 libllv*
-llvm*build
-debug*build
 # Don't track LLVM source
 llvm-[0-9]*.src
 
