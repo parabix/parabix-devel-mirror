@@ -7,12 +7,12 @@ parabix_add_module(
 NAME
     kernel.streamutils
 SRC
+    collapse.cpp
     deletion.cpp
     pdep_kernel.cpp
     stream_select.cpp
     stream_shift.cpp
     streams_merge.cpp
-    streamset_collapse.cpp
     swizzle.cpp
     swizzled_multiple_pdep_kernel.cpp
     until_n.cpp
