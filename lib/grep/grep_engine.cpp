@@ -246,16 +246,21 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     setComponent(mExternalComponents, Component::UTF8index);
 }
 
-// Code Generation
-//
-// All engines share a common pipeline to compute a stream of Matches from a given input Bytestream.
-
-std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet * InputStream) {
-
+StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, StreamSet * ByteStream) {
+    if (hasComponent(mExternalComponents, Component::S2P)) {
+        StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
+        if (PabloTransposition) {
+            P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
+        } else {
+            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+        }
+        return BasisBits;
+    }
+    else return ByteStream;
+}
+    
+std::pair<StreamSet *, StreamSet *> GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
-
-    //  Regular Expression Processing and Analysis Phase
-    StreamSet * ByteStream = InputStream;
     if (mBinaryFilesMode == argv::Text) {
         mNullMode = NullCharMode::Data;
     } else if (mBinaryFilesMode == argv::WithoutMatch) {
@@ -263,29 +268,10 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     } else {
         mNullMode = NullCharMode::Break;
     }
-    
-    const auto numOfREs = mREs.size();
-    std::vector<StreamSet *> MatchResultsBufs(numOfREs);
-    StreamSet * SourceStream = ByteStream;
     StreamSet * LineBreakStream = P->CreateStreamSet(1, 1);
-    StreamSet * const U8index = P->CreateStreamSet();
-    StreamSet * UnicodeLB = nullptr;
-    std::map<std::string, StreamSet *> propertyStream;
-    StreamSet * GCB_stream = nullptr;
-
-    if (hasComponent(mExternalComponents, Component::S2P)) {
-        StreamSet * BasisBits = P->CreateStreamSet(ENCODING_BITS, 1);
-        if (PabloTransposition) {
-            P->CreateKernelCall<S2P_PabloKernel>(SourceStream, BasisBits);
-        } else {
-            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-            //Kernel * s2pK = P->CreateKernelCall<S2PKernel>(SourceStream, BasisBits, callbackObject);
-            //mGrepDriver.LinkFunction(s2pK, "signal_dispatcher", kernel::signal_dispatcher);
-        }
-        SourceStream = BasisBits;
-    }
+    StreamSet * U8index = P->CreateStreamSet(1, 1);
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-        UnicodeLB = P->CreateStreamSet();
+        StreamSet * UnicodeLB = P->CreateStreamSet(1, 1);
         UnicodeLinesLogic(P, SourceStream, UnicodeLB, U8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
         LineBreakStream = UnicodeLB;
     }
@@ -302,6 +288,25 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
             P->CreateKernelCall<NullTerminatorKernel>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1);
         }
     }
+    return std::make_pair(LineBreakStream, U8index);
+}
+
+// Code Generation
+//
+// All engines share a common pipeline to compute a stream of Matches from a given input Bytestream.
+
+std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet * InputStream) {
+    StreamSet * SourceStream = getBasis(P, InputStream);
+    
+    StreamSet * LineBreakStream;
+    StreamSet * U8index;
+    std::tie(LineBreakStream, U8index) = grepPrologue(P, SourceStream);
+
+    const auto numOfREs = mREs.size();
+    std::vector<StreamSet *> MatchResultsBufs(numOfREs);
+    
+    std::map<std::string, StreamSet *> propertyStream;
+    StreamSet * GCB_stream = nullptr;
 
     if (PropertyKernels) {
         for (auto p : mUnicodeProperties) {

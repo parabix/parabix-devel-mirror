@@ -110,8 +110,17 @@ protected:
     bool hasComponent(Component compon_set, Component c);
     void setComponent(Component & compon_set, Component c);
 
-    std::pair<kernel::StreamSet *, kernel::StreamSet *> grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P,
-                                                                     kernel::StreamSet * ByteStream);
+    // Transpose to basis bit streams, if required otherwise return the source byte stream.
+    kernel::StreamSet * getBasis(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
+    
+    // Initial grep set-up.
+    // Implement any required checking/processing of null characters, determine the
+    // line break stream and the U8 index stream (if required).
+    std::pair<kernel::StreamSet *, kernel::StreamSet *>
+        grepPrologue(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * SourceStream);
+    
+    std::pair<kernel::StreamSet *, kernel::StreamSet *>
+        grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
 
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
