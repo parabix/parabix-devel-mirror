@@ -9,7 +9,6 @@ NAME
 SRC
     charclasses.cpp
     grapheme_kernel.cpp
-    linebreak_kernel.cpp
     UCD_property_kernel.cpp
 DEPS
     kernel.pipeline

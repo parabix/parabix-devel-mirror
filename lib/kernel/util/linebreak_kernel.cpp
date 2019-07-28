@@ -1,9 +1,9 @@
 /*
- *  Copyright (c) 2018 International Characters.
+ *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 
-#include <kernel/unicode/linebreak_kernel.h>
+#include <kernel/util/linebreak_kernel.h>
 
 #include <pablo/pe_ones.h>          // for Ones
 #include <pablo/pe_var.h>           // for Var
@@ -29,29 +29,6 @@ using namespace IDISA;
 
 std::string sourceShape(StreamSet * s) {
     return std::to_string(s->getNumElements()) + "x" + std::to_string(s->getFieldWidth());
-}
-
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream)
-: PabloKernel(b, "lf" + sourceShape(Basis),
-              // input
-{Binding{"basis", Basis}},
-              // output
-{Binding{"lf", LineFeedStream}}),
-mNumOfStreams(Basis->getNumElements()),
-mStreamFieldWidth(Basis->getFieldWidth())
-{
-}
-
-void LineFeedKernelBuilder::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
-    if (mNumOfStreams == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
-    } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
-    }
-    PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
-    pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
 }
 
 Bindings makeInputScalarBindings(Scalar * signalNullObject) {
@@ -80,32 +57,6 @@ Bindings makeOutputBreakBindings(UnterminatedLineAtEOF eofMode, StreamSet * lb) 
     return {Binding{"LB", lb}};
 }
 
-NullTerminatorKernel::NullTerminatorKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                               StreamSet * Source,
-                                               StreamSet * Terminators,
-                                               UnterminatedLineAtEOF eofMode)
-: PabloKernel(b, "lf" + sourceShape(Source) + EOF_annotation(eofMode),
-              {Binding{"Source", Source}},
-              makeOutputBreakBindings(eofMode, Terminators),
-              {}, {}),
-  mEOFmode(eofMode) {}
-
-void NullTerminatorKernel::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::unique_ptr<CC_Compiler> ccc;
-    if (getInputStreamSet("Source").size() == 1) {
-        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
-    } else {
-        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
-    }
-    PabloAST * NUL = ccc->compileCC("NUL", makeByte(0x0), pb);
-    if (mEOFmode == UnterminatedLineAtEOF::Add1) {
-        PabloAST * unterminatedRecordAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(NUL), 1), "unterminatedRecordAtEOF");
-        NUL = pb.createOr(NUL, unterminatedRecordAtEOF);
-    }
-    pb.createAssign(pb.createExtract(getOutput(0), 0), NUL);
-}
-
 UnixLinesKernelBuilder::UnixLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                StreamSet * Basis,
                                                StreamSet * LineEnds,
@@ -116,8 +67,8 @@ UnixLinesKernelBuilder::UnixLinesKernelBuilder(const std::unique_ptr<kernel::Ker
               {Binding{"basis", Basis}},
               makeOutputBreakBindings(eofMode, LineEnds),
               makeInputScalarBindings(signalNullObject), {}),
-  mEOFmode(eofMode),
-  mNullMode(nullMode) {
+mEOFmode(eofMode),
+mNullMode(nullMode) {
     if (nullMode == NullCharMode::Abort) {
         addAttribute(CanTerminateEarly());
         addAttribute(MayFatallyTerminate());
@@ -146,6 +97,64 @@ void UnixLinesKernelBuilder::generatePabloMethod() {
     }
     pb.createAssign(pb.createExtract(getOutput(0), 0), LB);
 }
+
+/*  Helper class to provide a LF stream as input to UnicodeLines logic,
+    necessary so that LookAhead operations on the stream are available
+    for CRLF processing.  */
+
+class LineFeedKernelBuilder final : public pablo::PabloKernel {
+public:
+    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    unsigned mNumOfStreams;
+    unsigned mStreamFieldWidth;
+};
+
+LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream)
+: PabloKernel(b, "lf" + sourceShape(Basis),
+              // input
+{Binding{"basis", Basis}},
+              // output
+{Binding{"lf", LineFeedStream}}),
+mNumOfStreams(Basis->getNumElements()),
+mStreamFieldWidth(Basis->getFieldWidth())
+{
+}
+
+void LineFeedKernelBuilder::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::unique_ptr<CC_Compiler> ccc;
+    if (mNumOfStreams == 1) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+    }
+    PabloAST * LF = ccc->compileCC("LF", makeByte(0x0A), pb);
+    pb.createAssign(pb.createExtract(getOutput(0), 0), LF);
+}
+
+/* The kernel that implements the core UnicodeLines logic */
+
+class UnicodeLinesKernelBuilder final : public pablo::PabloKernel {
+public:
+    UnicodeLinesKernelBuilder(const std::unique_ptr<KernelBuilder> & b,
+                              StreamSet * Basis,
+                              StreamSet * LF,
+                              StreamSet * UnicodeLB,
+                              StreamSet * u8index,
+                              UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
+                              NullCharMode nullMode = NullCharMode::Data,
+                              Scalar * signalNullObject = nullptr);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    UnterminatedLineAtEOF mEOFmode;
+    NullCharMode mNullMode;
+};
 
 UnicodeLinesKernelBuilder::UnicodeLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                      StreamSet * Basis,
@@ -296,4 +305,30 @@ void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
     if (nullMode == NullCharMode::Abort) {
         P->getDriver().LinkFunction(k, "signal_dispatcher", kernel::signal_dispatcher);
     }
+}
+
+NullDelimiterKernel::NullDelimiterKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                         StreamSet * Source,
+                                         StreamSet * Terminators,
+                                         UnterminatedLineAtEOF eofMode)
+: PabloKernel(b, "nullDelim" + sourceShape(Source) + EOF_annotation(eofMode),
+              {Binding{"Source", Source}},
+              makeOutputBreakBindings(eofMode, Terminators),
+              {}, {}),
+mEOFmode(eofMode) {}
+
+void NullDelimiterKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::unique_ptr<CC_Compiler> ccc;
+    if (getInputStreamSet("Source").size() == 1) {
+        ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
+    } else {
+        ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
+    }
+    PabloAST * NUL = ccc->compileCC("NUL", makeByte(0x0), pb);
+    if (mEOFmode == UnterminatedLineAtEOF::Add1) {
+        PabloAST * unterminatedRecordAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(NUL), 1), "unterminatedRecordAtEOF");
+        NUL = pb.createOr(NUL, unterminatedRecordAtEOF);
+    }
+    pb.createAssign(pb.createExtract(getOutput(0), 0), NUL);
 }

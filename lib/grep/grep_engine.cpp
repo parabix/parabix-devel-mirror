@@ -33,7 +33,7 @@
 #include <kernel/unicode/charclasses.h>
 #include <kernel/unicode/UCD_property_kernel.h>
 #include <kernel/unicode/grapheme_kernel.h>
-#include <kernel/unicode/linebreak_kernel.h>
+#include <kernel/util/linebreak_kernel.h>
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/scan/scanmatchgen.h>
 #include <kernel/streamutils/until_n.h>
@@ -285,7 +285,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPrologue(const std::unique_p
                 mGrepDriver.LinkFunction(k, "signal_dispatcher", kernel::signal_dispatcher);
             }
         } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-            P->CreateKernelCall<NullTerminatorKernel>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1);
+            P->CreateKernelCall<NullDelimiterKernel>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1);
         }
     }
     return std::make_pair(LineBreakStream, U8index);

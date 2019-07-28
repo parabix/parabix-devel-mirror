@@ -1,6 +1,16 @@
 /*
- *  Copyright (c) 2016 International Characters.
+ *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
+ *
+ *  Line Break Support
+ *
+ *  This module provides methods for identifying lines/records in a file based
+ *  on three standard conventions, together with attributes for null data and
+ *  unterminated final lines.
+ *
+ *  1.   Unix Lines terminated by LF
+ *  2.   Unicode lines terminated by LF, CR, VT, FF, NEL, PS, LS and CRLF
+ *  3.   Strings terminated by NUL.
  */
 #ifndef LINEBREAK_KERNEL_H
 #define LINEBREAK_KERNEL_H
@@ -12,34 +22,10 @@ namespace kernel { class KernelBuilder; }
 namespace kernel { class ProgramBuilder; }
 using namespace kernel;
 
-class LineFeedKernelBuilder final : public pablo::PabloKernel {
-public:
-    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-    unsigned mNumOfStreams;
-    unsigned mStreamFieldWidth;
-};
-
 /*  An input file may contain a final line without a line terminator.
     Line break kernels can add logic to produce a mark one past EOF
     to indicate the end of such an unterminated final line. */
 enum class UnterminatedLineAtEOF {Ignore, Add1};
-
-class NullTerminatorKernel final : public pablo::PabloKernel {
-public:
-    NullTerminatorKernel(const std::unique_ptr<KernelBuilder> & b,
-                         StreamSet * Source,
-                         StreamSet * NullTerminators,
-                         UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-    UnterminatedLineAtEOF mEOFmode;
-};
 
 /*  Line break kernels may handle null characters in an input file using
     one of three different modes:
@@ -70,24 +56,6 @@ protected:
     NullCharMode mNullMode;
 };
 
-class UnicodeLinesKernelBuilder final : public pablo::PabloKernel {
-public:
-    UnicodeLinesKernelBuilder(const std::unique_ptr<KernelBuilder> & b,
-                              StreamSet * Basis,
-                              StreamSet * LF,
-                              StreamSet * UnicodeLB,
-                              StreamSet * u8index,
-                              UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
-                              NullCharMode nullMode = NullCharMode::Data,
-                              Scalar * signalNullObject = nullptr);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-    UnterminatedLineAtEOF mEOFmode;
-    NullCharMode mNullMode;
-};
-
 void UnicodeLinesLogic(const std::unique_ptr<ProgramBuilder> & P,
                        StreamSet * Basis,
                        StreamSet * LineEnds,
@@ -95,5 +63,18 @@ void UnicodeLinesLogic(const std::unique_ptr<ProgramBuilder> & P,
                        UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
                        NullCharMode nullMode = NullCharMode::Data,
                        Scalar * signalNullObject = nullptr);
+
+class NullDelimiterKernel final : public pablo::PabloKernel {
+public:
+    NullDelimiterKernel(const std::unique_ptr<KernelBuilder> & b,
+                        StreamSet * Source,
+                        StreamSet * NullDelimiters,
+                        UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    UnterminatedLineAtEOF mEOFmode;
+};
 
 #endif

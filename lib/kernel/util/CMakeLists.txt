@@ -8,9 +8,12 @@ NAME
     kernel.util
 SRC
     error_monitor_kernel.cpp
+    linebreak_kernel.cpp
     hex_convert.cpp
     radix64.cpp
     random_stream.cpp
 DEPS
-    kernel.core
+    pablo
+    re.cc
+    kernel.pipeline
 )

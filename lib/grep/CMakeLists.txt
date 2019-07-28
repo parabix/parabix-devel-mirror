@@ -18,6 +18,7 @@ DEPS
     kernel.io
     kernel.scan
     kernel.streamutils
+    kernel.util
     kernel.unicode
     re.parse
     re.unicode
