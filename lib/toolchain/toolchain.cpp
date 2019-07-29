@@ -8,6 +8,7 @@
 #include <toolchain/pablo_toolchain.h>
 #include <unicode/core/UCD_Config.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/Host.h>
 #include <llvm/Support/raw_ostream.h>
 #include <boost/interprocess/mapped_region.hpp>
 
@@ -79,9 +80,6 @@ static cl::opt<std::string> ObjectCacheDirOption("object-cache-dir", cl::init(""
                                                  cl::desc("Path to the object cache diretory"), cl::cat(CodeGenOptions));
 
 
-static cl::opt<unsigned, true> CacheLimitOption("cache-days-limit", cl::location(CacheDaysLimit), cl::init(15),
-                                          cl::desc("number of days a cache entry may be unused before auto deletion may be applied"), cl::cat(CodeGenOptions));
-
 static cl::opt<int, true> FreeCallBisectOption("free-bisect-value", cl::location(FreeCallBisectLimit), cl::init(-1),
                                                     cl::desc("The number of free calls to allow in bisecting"), cl::cat(CodeGenOptions));
 
@@ -97,8 +95,8 @@ static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::locat
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
 
-static cl::opt<unsigned, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
-                                          cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
+static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(-1),
+                                          cl::desc("Number of threads used for segment pipeline parallel (relative to number of cores if 0 or negative"), cl::value_desc("integer"));
 
 static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),
                                           cl::desc("Number of blocks per stride for scanning kernels"), cl::value_desc("positive initeger"));
@@ -127,7 +125,7 @@ unsigned SegmentSize;
 
 unsigned BufferSegments;
 
-unsigned ThreadNum;
+int ThreadNum;
 
 unsigned ScanBlocks;
 
@@ -165,8 +163,6 @@ std::string ProgramName;
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {
     AddParabixVersionPrinter();
 
-
-
     codegen::ProgramName = argv[0];
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (hiding.size() != 0) {
@@ -202,6 +198,11 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 #ifndef CUDA_ENABLED
     if (NVPTX) {
         report_fatal_error("CUDA compiler is not supported.");
+    }
+#endif
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+    if (ThreadNum <= 0) {
+        ThreadNum = llvm::sys::getHostNumPhysicalCores() + ThreadNum;
     }
 #endif
 }
