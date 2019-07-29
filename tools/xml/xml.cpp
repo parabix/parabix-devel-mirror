@@ -38,7 +38,6 @@
 #include <sys/stat.h>
 
 namespace fs = boost::filesystem;
-namespace so = kernel::streamops;
 namespace su = kernel::streamutils;
 
 using namespace llvm;
@@ -164,16 +163,16 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     /* Post Process Scanning */
 
     StreamSet * const PostProcStartIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, PostProcessTagMatchingStreams, 0), PostProcStartIndices);
+    P->CreateKernelCall<ScanIndexGenerator>(su::Select(P, PostProcessTagMatchingStreams, 0), PostProcStartIndices);
     StreamSet * const PostProcEndIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, PostProcessTagMatchingStreams, 1), PostProcEndIndices);
+    P->CreateKernelCall<ScanIndexGenerator>(su::Select(P, PostProcessTagMatchingStreams, 1), PostProcEndIndices);
 
     // Tag Matching
-    StreamSet * const TagMatchingBasisStreams = so::Select(P, PostProcessTagMatchingStreams, so::Range(2, 5));
+    StreamSet * const TagMatchingBasisStreams = su::Select(P, PostProcessTagMatchingStreams, su::Range(2, 5));
     StreamSet * const TagMatchingCodes = su::Multiplex(P, TagMatchingBasisStreams);
     Kernel * const tagMatcher = P->CreateKernelCall<ScanReader>(
         ByteStream, 
-        so::Select(P, {{PostProcStartIndices, {0}}, {PostProcEndIndices, {0}}}), 
+        su::Select(P, {{PostProcStartIndices, {0}}, {PostProcEndIndices, {0}}}), 
         "postproc_tagMatcher",
         AdditionalStreams{ PostProcStartIndices, TagMatchingCodes }
     );
@@ -201,7 +200,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
                   x      x     0x2: list end
      */
     { // Duplicate Attribute Detection Scope
-        StreamSet * const BasisStreams = so::Select(P, TagCallouts, {2, 9});
+        StreamSet * const BasisStreams = su::Select(P, TagCallouts, {2, 9});
 
         // `StartIndices` are the primary scanning indices.
         //
@@ -213,7 +212,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         // name meaning we don't need to include it in this merge. The start of
         // a new list is determined by the multiplexed code.
         StreamSet * const StartIndices = P->CreateStreamSet(1, 64);
-        P->CreateKernelCall<ScanIndexGenerator>(so::Merge(P, TagCallouts, {2, 9}), StartIndices);
+        P->CreateKernelCall<ScanIndexGenerator>(su::Merge(P, TagCallouts, {2, 9}), StartIndices);
 
         // `EndIndices` are an additional stream which denotes the ends of
         // attribute names or values.
@@ -225,12 +224,12 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         // `attrListEnds` is present in both start and end index streams as there
         // needs to be a one-to-one correspondence between the two streams.
         StreamSet * const EndIndices = P->CreateStreamSet(1, 64);
-        P->CreateKernelCall<ScanIndexGenerator>(so::Merge(P, TagCallouts, {3, 9}), EndIndices);
+        P->CreateKernelCall<ScanIndexGenerator>(su::Merge(P, TagCallouts, {3, 9}), EndIndices);
 
         StreamSet * const Codes = su::Multiplex(P, BasisStreams);
         Kernel * reader = P->CreateKernelCall<ScanReader>(
             ByteStream,
-            so::Select(P, {{StartIndices, {0}}, {EndIndices, {0}}}),
+            su::Select(P, {{StartIndices, {0}}, {EndIndices, {0}}}),
             "postproc_duplicateAttrDetector",
             AdditionalStreams { StartIndices, Codes }
         );
@@ -262,7 +261,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     P->CreateKernelCall<LineNumberGenerator>(CollapsedErrors, LineBreakStream, CollapsedErrorsLineNumbers);
     // a little hack to allow the P2S kernel to be used: only select the first 8 error streams,
     // code 0 will be used for the last error stream
-    StreamSet * const ErrorCodes = su::MultiplexWithMask(P, so::Select(P, Errors, so::Range(0, 8)), CollapsedErrors);
+    StreamSet * const ErrorCodes = su::MultiplexWithMask(P, su::Select(P, Errors, su::Range(0, 8)), CollapsedErrors);
     Kernel * const errorsReader = P->CreateKernelCall<LineBasedReader>(
         ByteStream, 
         CollapsedErrorsIndices, 
@@ -273,14 +272,14 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     );
     pxDriver.LinkFunction(errorsReader, "postproc_errorStreamsCallback", postproc_errorStreamsCallback);
 
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 0), postproc_validateNameStart);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 1), postproc_validateName);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CCPCallouts, 4), postproc_validatePIName);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CCPCallouts, 2), postproc_validateCDATA);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 0), postproc_validateGenRef);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 2), postproc_validateDecRef);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, RefCallouts, 4), postproc_validateHexRef);
-    POSTPROCESS_SCAN_KERNEL(so::Select(P, CheckStreams, 2), postproc_validateAttRef);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, CheckStreams, 0), postproc_validateNameStart);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, CheckStreams, 1), postproc_validateName);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, CCPCallouts, 4), postproc_validatePIName);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, CCPCallouts, 2), postproc_validateCDATA);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, RefCallouts, 0), postproc_validateGenRef);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, RefCallouts, 2), postproc_validateDecRef);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, RefCallouts, 4), postproc_validateHexRef);
+    POSTPROCESS_SCAN_KERNEL(su::Select(P, CheckStreams, 2), postproc_validateAttRef);
 
     return reinterpret_cast<XMLProcessFunctionType>(P->compile());
 }

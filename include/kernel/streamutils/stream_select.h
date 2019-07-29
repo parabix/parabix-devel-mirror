@@ -14,7 +14,7 @@
 
 namespace kernel {
 
-namespace selops {
+namespace __selops {
 
 enum class __op { __select, __merge, __intersect };
 
@@ -26,9 +26,9 @@ struct __selop {
     __param_bindings    bindings;
 };
 
-} // namespace selops
+} // namespace __selops
 
-using SelectOperation = selops::__selop<StreamSet *>;
+using SelectOperation = __selops::__selop<StreamSet *>;
 
 using SelectOperationList = std::vector<SelectOperation>;
 
@@ -78,11 +78,11 @@ protected:
     void generateDoBlockMethod(BuilderRef b) override;
 
 private:
-    std::vector<selops::__selop<std::string>> mOperations;
+    std::vector<__selops::__selop<std::string>> mOperations;
 };
 
 
-namespace streamops {
+namespace streamutils {
 
 /**
  * Generates a vector of consecutive integers starting at an inclusive lower
