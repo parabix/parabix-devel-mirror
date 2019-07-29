@@ -108,7 +108,7 @@ void postproc_validateGenRef(const uint8_t * ptr, const uint8_t * lineBegin, con
     bool valid =    asciiSeqEq(ptr, "gt;")
                  || asciiSeqEq(ptr, "lt;")
                  || asciiSeqEq(ptr, "amp;")
-                 || asciiSeqEq(ptr, "quote;")
+                 || asciiSeqEq(ptr, "quot;")
                  || asciiSeqEq(ptr, "apos;");
     if (!valid) {
         ReportError(XmlTestSuiteError::UNDEFREF, ptr, lineBegin, lineEnd, lineNum);
