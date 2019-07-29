@@ -12,11 +12,13 @@
 #include <vector>
 #include <sstream>
 #include <atomic>
+#include <set>
 #include <boost/filesystem.hpp>
 #include <re/cc/multiplex_CCs.h>
 #include <re/parse/GLOB_parser.h>
 #include <kernel/core/callback.h>
 #include <kernel/util/linebreak_kernel.h>
+#include <grep/grep_kernel.h>
 
 namespace re { class CC; }
 namespace re { class RE; }
@@ -116,12 +118,11 @@ protected:
     // Initial grep set-up.
     // Implement any required checking/processing of null characters, determine the
     // line break stream and the U8 index stream (if required).
-    std::pair<kernel::StreamSet *, kernel::StreamSet *>
-        grepPrologue(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * SourceStream);
-    
-    std::pair<kernel::StreamSet *, kernel::StreamSet *>
-        grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
-
+    void grepPrologue(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * SourceStream);
+    // Prepare external property and GCB streams, if required.
+    void prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream);
+    void addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, std::unique_ptr<GrepKernelOptions> & options, re::RE * regexp);
+    StreamSet * grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
@@ -163,6 +164,10 @@ protected:
     std::string mFileSuffix;
     Component mExternalComponents;
     Component mInternalComponents;
+    std::map<std::string, StreamSet *> mPropertyStreamMap;
+    StreamSet * mLineBreakStream;
+    StreamSet * mU8index;
+    StreamSet * mGCB_stream;
     pthread_t mEngineThread;
 };
 

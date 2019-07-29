@@ -10,7 +10,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <iostream>
-#include <set>
 #include <sched.h>
 #include <boost/filesystem.hpp>
 #include <llvm/IR/Module.h>
@@ -19,7 +18,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/Casting.h>
-#include <grep/grep_kernel.h>
 #include <grep/grep_name_resolve.h>
 #include <grep/regex_passes.h>
 #include <grep/resolve_properties.h>
@@ -131,6 +129,9 @@ GrepEngine::GrepEngine(BaseDriver &driver) :
     mGrepRecordBreak(GrepRecordBreakKind::LF),
     mExternalComponents(static_cast<Component>(0)),
     mInternalComponents(static_cast<Component>(0)),
+    mLineBreakStream(nullptr),
+    mU8index(nullptr),
+    mGCB_stream(nullptr),
     mEngineThread(pthread_self()) {}
 
 GrepEngine::~GrepEngine() { }
@@ -259,7 +260,7 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
     else return ByteStream;
 }
     
-std::pair<StreamSet *, StreamSet *> GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
+void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
     if (mBinaryFilesMode == argv::Text) {
         mNullMode = NullCharMode::Data;
@@ -268,58 +269,73 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPrologue(const std::unique_p
     } else {
         mNullMode = NullCharMode::Break;
     }
-    StreamSet * LineBreakStream = P->CreateStreamSet(1, 1);
-    StreamSet * U8index = P->CreateStreamSet(1, 1);
+    mLineBreakStream = P->CreateStreamSet(1, 1);
+    mU8index = P->CreateStreamSet(1, 1);
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-        StreamSet * UnicodeLB = P->CreateStreamSet(1, 1);
-        UnicodeLinesLogic(P, SourceStream, UnicodeLB, U8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
-        LineBreakStream = UnicodeLB;
+        UnicodeLinesLogic(P, SourceStream, mLineBreakStream, mU8index, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
     }
     else {
         if (hasComponent(mExternalComponents, Component::UTF8index)) {
-            P->CreateKernelCall<UTF8_index>(SourceStream, U8index);
+            P->CreateKernelCall<UTF8_index>(SourceStream, mU8index);
         }
         if (mGrepRecordBreak == GrepRecordBreakKind::LF) {
-            Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
+            Kernel * k = P->CreateKernelCall<UnixLinesKernelBuilder>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1, mNullMode, callbackObject);
             if (mNullMode == NullCharMode::Abort) {
                 mGrepDriver.LinkFunction(k, "signal_dispatcher", kernel::signal_dispatcher);
             }
         } else { // if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-            P->CreateKernelCall<NullDelimiterKernel>(SourceStream, LineBreakStream, UnterminatedLineAtEOF::Add1);
+            P->CreateKernelCall<NullDelimiterKernel>(SourceStream, mLineBreakStream, UnterminatedLineAtEOF::Add1);
         }
     }
-    return std::make_pair(LineBreakStream, U8index);
 }
 
-// Code Generation
-//
-// All engines share a common pipeline to compute a stream of Matches from a given input Bytestream.
-
-std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet * InputStream) {
-    StreamSet * SourceStream = getBasis(P, InputStream);
-    
-    StreamSet * LineBreakStream;
-    StreamSet * U8index;
-    std::tie(LineBreakStream, U8index) = grepPrologue(P, SourceStream);
-
-    const auto numOfREs = mREs.size();
-    std::vector<StreamSet *> MatchResultsBufs(numOfREs);
-    
-    std::map<std::string, StreamSet *> propertyStream;
-    StreamSet * GCB_stream = nullptr;
-
+void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
     if (PropertyKernels) {
         for (auto p : mUnicodeProperties) {
             auto name = p->getFullName();
             StreamSet * property = P->CreateStreamSet(1, 1);
-            propertyStream.emplace(name, property);
+            mPropertyStreamMap.emplace(name, property);
             P->CreateKernelCall<UnicodePropertyKernelBuilder>(p, SourceStream, property);
         }
     }
     if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
-        GCB_stream = P->CreateStreamSet();
-        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, U8index, GCB_stream);
+        mGCB_stream = P->CreateStreamSet(1, 1);
+        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, mU8index, mGCB_stream);
     }
+}
+
+void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, std::unique_ptr<GrepKernelOptions> & options, re::RE * regexp) {
+    std::set<re::Name *> props;
+    re::gatherUnicodeProperties(regexp, props);
+    for (const auto & p : props) {
+        auto name = p->getFullName();
+        const auto f = mPropertyStreamMap.find(name);
+        if (f != mPropertyStreamMap.end()) {
+            options->addExternal(name, f->second);
+        }
+    }
+    if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
+        assert (GCB_stream);
+        options->addExternal("\\b{g}", mGCB_stream);
+    }
+    if (hasComponent(mExternalComponents, Component::UTF8index)) {
+        options->addExternal("UTF8_index", mU8index);
+    }
+    if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
+        options->addExternal("UTF8_LB", mLineBreakStream);
+    }
+}
+
+StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet * InputStream) {
+    StreamSet * SourceStream = getBasis(P, InputStream);
+
+    grepPrologue(P, SourceStream);
+
+    prepareExternalStreams(P, SourceStream);
+
+    const auto numOfREs = mREs.size();
+    std::vector<StreamSet *> MatchResultsBufs(numOfREs);
+
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
         MatchResultsBufs[i] = MatchResults;
@@ -335,46 +351,14 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
                 mSuffixRE = re::makeSeq({mSuffixRE, re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
             }
         }
-        options->setRE(mREs[i]);
-        std::set<re::Name *> props;
-        re::gatherUnicodeProperties(mREs[i], props);
-        for (const auto & p : props) {
-            auto name = p->getFullName();
-            const auto f = propertyStream.find(name);
-            if (f != propertyStream.end()) {
-                options->addExternal(name, f->second);
-            }
-        }
-        if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
-            assert (GCB_stream);
-            options->addExternal("\\b{g}", GCB_stream);
-        }
-        
-        if (!hasComponent(mExternalComponents, Component::S2P)) {
-            if (mSuffixRE != nullptr) {
-                options->setPrefixRE(mPrefixRE);
-                options->setRE(mSuffixRE);
-            }
+        if (mSuffixRE != nullptr) {
+            options->setPrefixRE(mPrefixRE);
+            options->setRE(mSuffixRE);
         } else {
-            options->addExternal("UTF8_index", U8index);
-            if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
-                options->addExternal("UTF8_LB", LineBreakStream);
-            }
-            if (CC_Multiplexing) {
-                const auto UnicodeSets = re::collectCCs(mREs[i], cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});
-                if (UnicodeSets.size() <= 1) {
-                    options->setRE(mREs[i]);
-                } else {
-                    auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
-                    mREs[i] = transformCCs(mpx, mREs[i]);
-                    options->setRE(mREs[i]);
-                    auto mpx_basis = mpx->getMultiplexedCCs();
-                    StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
-                    P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), SourceStream, CharClasses);
-                    options->addAlphabet(mpx, CharClasses);
-                }
-            }
+            options->setRE(mREs[i]);
         }
+
+        addExternalStreams(P, options, mREs[i]);
         P->CreateKernelCall<ICGrepKernel>(std::move(options));
     }
 
@@ -386,12 +370,12 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
     }
     if (hasComponent(mExternalComponents, Component::MoveMatchesToEOL)) {
         StreamSet * const MovedMatches = P->CreateStreamSet();
-        P->CreateKernelCall<MatchedLinesKernel>(Matches, LineBreakStream, MovedMatches);
+        P->CreateKernelCall<MatchedLinesKernel>(Matches, mLineBreakStream, MovedMatches);
         Matches = MovedMatches;
     }
     if (mInvertMatches) {
         StreamSet * const InvertedMatches = P->CreateStreamSet();
-        P->CreateKernelCall<InvertMatchesKernel>(Matches, LineBreakStream, InvertedMatches);
+        P->CreateKernelCall<InvertMatchesKernel>(Matches, mLineBreakStream, InvertedMatches);
         Matches = InvertedMatches;
     }
     if (mMaxCount > 0) {
@@ -400,7 +384,7 @@ std::pair<StreamSet *, StreamSet *> GrepEngine::grepPipeline(const std::unique_p
         P->CreateKernelCall<UntilNkernel>(maxCount, Matches, TruncatedMatches);
         Matches = TruncatedMatches;
     }
-    return std::pair<StreamSet *, StreamSet *>(LineBreakStream, Matches);
+    return Matches;
 }
 
 
@@ -426,7 +410,7 @@ void GrepEngine::grepCodeGen() {
 
     StreamSet * const ByteStream = P->CreateStreamSet(1, ENCODING_BITS);
     P->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
-    StreamSet * const Matches = grepPipeline(P, ByteStream).second;
+    StreamSet * const Matches = grepPipeline(P, ByteStream);
     P->CreateKernelCall<PopcountKernel>(Matches, P->getOutputScalar("countResult"));
 
     mMainMethod = P->compile();
@@ -493,30 +477,28 @@ void EmitMatchesEngine::grepCodeGen() {
     StreamSet * const ByteStream = E->CreateStreamSet(1, ENCODING_BITS);
     E->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
 
-    StreamSet * LineBreakStream;
-    StreamSet * Matches;
-    std::tie(LineBreakStream, Matches) = grepPipeline(E, ByteStream);
+    StreamSet * Matches = grepPipeline(E, ByteStream);
 
     if ((mAfterContext != 0) || (mBeforeContext != 0)) {
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
-        FilterByMask(E, LineBreakStream, Matches, MatchesByLine);
+        FilterByMask(E, mLineBreakStream, Matches, MatchesByLine);
         StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
         StreamSet * SelectedLines = E->CreateStreamSet(1, 1);
-        SpreadByMask(E, LineBreakStream, ContextByLine, SelectedLines);
+        SpreadByMask(E, mLineBreakStream, ContextByLine, SelectedLines);
         Matches = SelectedLines;
     }
 
     if (MatchCoordinateBlocks > 0) {
         StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
-        E->CreateKernelCall<MatchCoordinatesKernel>(Matches, LineBreakStream, MatchCoords, MatchCoordinateBlocks);
+        E->CreateKernelCall<MatchCoordinatesKernel>(Matches, mLineBreakStream, MatchCoords, MatchCoordinateBlocks);
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
         Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, callbackObject);
         mGrepDriver.LinkFunction(matchK, "accumulate_match_wrapper", accumulate_match_wrapper);
         mGrepDriver.LinkFunction(matchK, "finalize_match_wrapper", finalize_match_wrapper);
     } else {
         Scalar * const callbackObject = E->getInputScalar("callbackObject");
-        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(Matches, LineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
+        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(Matches, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
         mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
         mGrepDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", finalize_match_wrapper);
     }
