@@ -94,9 +94,13 @@ static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(Se
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
-
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(-1),
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(0),
                                           cl::desc("Number of threads used for segment pipeline parallel (relative to number of cores if 0 or negative"), cl::value_desc("integer"));
+#else
+static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
+                                          cl::desc("Number of threads used for segment pipeline parallel", cl::value_desc("positive integer"));
+#endif
 
 static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),
                                           cl::desc("Number of blocks per stride for scanning kernels"), cl::value_desc("positive initeger"));
