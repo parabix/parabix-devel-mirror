@@ -315,7 +315,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
         }
     }
     if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
-        assert (GCB_stream);
+        assert (mGCB_stream);
         options->addExternal("\\b{g}", mGCB_stream);
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
