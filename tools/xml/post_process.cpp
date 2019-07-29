@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdlib>
 #include <string>
+#include <llvm/ADT/SmallSet.h>
 #include <llvm/ADT/SmallVector.h>
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/ErrorHandling.h>
@@ -225,6 +226,21 @@ public:
         assert (i < size());
         return __b[i];
     }
+
+public:
+
+    struct Less {
+        bool operator () (RawStringView const & lhs, RawStringView const & rhs) const {
+            size_t n = std::min(lhs.size(), rhs.size());
+            for (size_t i = 0; i < n; ++i) {
+                if (lhs[i] < rhs[i]) {
+                    return true;
+                }
+            }
+            return lhs.size() < rhs.size();
+        }
+    };
+
 private:
     const char * __b;
     const char * __e;
@@ -339,5 +355,25 @@ void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t na
         }
     } else {
         llvm_unreachable("invalid code");
+    }
+}
+
+static llvm::SmallSet<RawStringView, 8, RawStringView::Less> AttrSet;
+
+void postproc_duplicateAttrDetector(const uint8_t * begin, const uint8_t * end, uint64_t pos, uint8_t code) {
+    const uint8_t ATTR_NAME = 0x1;
+    const uint8_t ATTR_LIST_END = 0x2;
+    auto b = reinterpret_cast<const char *>(begin);
+    auto e = reinterpret_cast<const char *>(end);
+    if (code == ATTR_NAME) {
+        RawStringView name(b, e);
+        bool inserted = AttrSet.insert(name).second;
+        if (!inserted) {
+            ReportError(XmlTestSuiteError::DUPLICATE_ATTR_NAME, pos);
+        }
+    } else if (code == ATTR_LIST_END) {
+        AttrSet.clear();
+    } else {
+        llvm::report_fatal_error("unexpected code");
     }
 }

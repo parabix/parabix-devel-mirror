@@ -109,6 +109,8 @@ const char * AsMessage(XmlTestSuiteError error) {
             return "Illegal content before root element";
         case XmlTestSuiteError::CONTENT_AFTER_ROOT:
             return "Illegal content after root element";
+        case XmlTestSuiteError::DUPLICATE_ATTR_NAME:
+            return "Attribute name is not unique";
         default:
             assert ("unexpected error xml test suite error" && false);
             return "Invalid XML Error Code";
@@ -142,6 +144,7 @@ void ShowError() {
         case XmlTestSuiteError::TAG_MATCH_ERROR:
         case XmlTestSuiteError::CONTENT_BEFORE_ROOT:
         case XmlTestSuiteError::CONTENT_AFTER_ROOT:
+        case XmlTestSuiteError::DUPLICATE_ATTR_NAME:
             fprintf(stderr, "%s at position = %" PRIu64 "\n", AsMessage(err.code), err.position);
             break;
         default:

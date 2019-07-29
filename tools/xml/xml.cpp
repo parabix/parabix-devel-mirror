@@ -17,9 +17,10 @@
 #include <kernel/streamutils/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
 #include <kernel/scan/scanning.h>
+#include <kernel/streamutils/collapse.h>
 #include <kernel/streamutils/stream_select.h>
 #include <kernel/streamutils/streams_merge.h>
-#include <kernel/streamutils/collapse.h>
+#include <kernel/streamutils/multiplex.h>
 #include <kernel/util/linebreak_kernel.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
@@ -38,6 +39,7 @@
 
 namespace fs = boost::filesystem;
 namespace so = kernel::streamops;
+namespace su = kernel::streamutils;
 
 using namespace llvm;
 using namespace kernel;
@@ -100,7 +102,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     );
 
     StreamSet * const TagError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
-    StreamSet * const TagCallouts = P->CreateStreamSet(9, 1);
+    StreamSet * const TagCallouts = P->CreateStreamSet(10, 1);
     StreamSet * const PostProcessTagMatchingStreams = P->CreateStreamSet(5, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
@@ -166,22 +168,74 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     StreamSet * const PostProcEndIndices = P->CreateStreamSet(1, 64);
     P->CreateKernelCall<ScanIndexGenerator>(so::Select(P, PostProcessTagMatchingStreams, 1), PostProcEndIndices);
 
-    // Create Tag Matching Stream Codes
-    StreamSet * const CodeStreams = so::Select(P, PostProcessTagMatchingStreams, so::Range(2, 5));
-    StreamSet * const CollapsedCodeStreams = P->CreateStreamSet(1, 1);
-    P->CreateKernelCall<CollapseStreamSet>(CodeStreams, CollapsedCodeStreams);
-    StreamSet * const ParallelCodes = P->CreateStreamSet(3, 1);
-    FilterByMask(P, CollapsedCodeStreams, CodeStreams, ParallelCodes);
-    StreamSet * const Codes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(ParallelCodes, Codes);
-
+    // Tag Matching
+    StreamSet * const TagMatchingBasisStreams = so::Select(P, PostProcessTagMatchingStreams, so::Range(2, 5));
+    StreamSet * const TagMatchingCodes = su::Multiplex(P, TagMatchingBasisStreams);
     Kernel * const tagMatcher = P->CreateKernelCall<ScanReader>(
         ByteStream, 
         so::Select(P, {{PostProcStartIndices, {0}}, {PostProcEndIndices, {0}}}), 
         "postproc_tagMatcher",
-        AdditionalStreams{ PostProcStartIndices, Codes }
+        AdditionalStreams{ PostProcStartIndices, TagMatchingCodes }
     );
     pxDriver.LinkFunction(tagMatcher, "postproc_tagMatcher", postproc_tagMatcher);
+
+
+    /*
+        Duplicate Attribute Detection
+
+        For each element, attribute names will be sequentially added to a set
+        to ensure that there are no duplicate attributes. At the end of an
+        element's attribute list, the set will be cleared out so that it is
+        ready to validate the next element.
+
+        Example:
+            <node attr="..." attr="..."/>
+                  ^   ^      ^   ^     ^
+                  a   b      c   d     x
+
+            Scan Reader Input (processed from top to bottom):
+                start   end   codes
+                -----  -----  -----
+                  a      b     0x1: attr name
+                  c      d     0x1: attr name
+                  x      x     0x2: list end
+     */
+    { // Duplicate Attribute Detection Scope
+        StreamSet * const BasisStreams = so::Select(P, TagCallouts, {2, 9});
+
+        // `StartIndices` are the primary scanning indices.
+        //
+        // Consists of the following streams merged together:
+        //  - attrNameStarts
+        //  - attrListEnds
+        //
+        // `attrListStarts` always has a bit at the start of the first attribute
+        // name meaning we don't need to include it in this merge. The start of
+        // a new list is determined by the multiplexed code.
+        StreamSet * const StartIndices = P->CreateStreamSet(1, 64);
+        P->CreateKernelCall<ScanIndexGenerator>(so::Merge(P, TagCallouts, {2, 9}), StartIndices);
+
+        // `EndIndices` are an additional stream which denotes the ends of
+        // attribute names or values.
+        //
+        // Consists of the following streams merged together:
+        //  - attrNameEnds
+        //  - attrListEnds
+        //
+        // `attrListEnds` is present in both start and end index streams as there
+        // needs to be a one-to-one correspondence between the two streams.
+        StreamSet * const EndIndices = P->CreateStreamSet(1, 64);
+        P->CreateKernelCall<ScanIndexGenerator>(so::Merge(P, TagCallouts, {3, 9}), EndIndices);
+
+        StreamSet * const Codes = su::Multiplex(P, BasisStreams);
+        Kernel * reader = P->CreateKernelCall<ScanReader>(
+            ByteStream,
+            so::Select(P, {{StartIndices, {0}}, {EndIndices, {0}}}),
+            "postproc_duplicateAttrDetector",
+            AdditionalStreams { StartIndices, Codes }
+        );
+        pxDriver.LinkFunction(reader, "postproc_duplicateAttrDetector", postproc_duplicateAttrDetector);
+    } // End Duplication Attribute Detection Scope
 
 
 #define POSTPROCESS_SCAN_KERNEL(SCAN_STREAM, CALLBACK) \
@@ -201,18 +255,14 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
     P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, LineSpans);
 
-    StreamSet * const CollapsedErrors = P->CreateStreamSet();
-    P->CreateKernelCall<CollapseStreamSet>(Errors, CollapsedErrors);
+    StreamSet * const CollapsedErrors = su::Collapse(P, Errors);
     StreamSet * const CollapsedErrorsIndices = P->CreateStreamSet(1, 64);
     P->CreateKernelCall<ScanIndexGenerator>(CollapsedErrors, CollapsedErrorsIndices);
     StreamSet * const CollapsedErrorsLineNumbers = P->CreateStreamSet(1, 64);
     P->CreateKernelCall<LineNumberGenerator>(CollapsedErrors, LineBreakStream, CollapsedErrorsLineNumbers);
     // a little hack to allow the P2S kernel to be used: only select the first 8 error streams,
     // code 0 will be used for the last error stream
-    StreamSet * const ParallelErrorCodes = P->CreateStreamSet(8, 1);
-    FilterByMask(P, CollapsedErrors, so::Select(P, Errors, so::Range(0, 8)), ParallelErrorCodes);
-    StreamSet * const ErrorCodes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(ParallelErrorCodes, ErrorCodes);
+    StreamSet * const ErrorCodes = su::MultiplexWithMask(P, so::Select(P, Errors, so::Range(0, 8)), CollapsedErrors);
     Kernel * const errorsReader = P->CreateKernelCall<LineBasedReader>(
         ByteStream, 
         CollapsedErrorsIndices, 

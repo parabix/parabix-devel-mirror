@@ -31,4 +31,6 @@ void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegi
 
 void postproc_tagMatcher(const uint8_t * begin, const uint8_t * end, uint64_t namePosition, uint8_t code);
 
+void postproc_duplicateAttrDetector(const uint8_t * begin, const uint8_t * end, uint64_t pos, uint8_t code);
+
 } // extern "C"

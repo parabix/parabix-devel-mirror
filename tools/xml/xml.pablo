@@ -338,7 +338,7 @@ kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error er
 # XML Tag Parsing & Post Process Stream Generation
 #
 
-type TagCallouts = <i1>[9] {
+type TagCallouts = <i1>[10] {
     elemNameStarts,
     elemNameEnds,
     attrNameStarts,
@@ -347,7 +347,8 @@ type TagCallouts = <i1>[9] {
     attrValEnds,
     attrValSpans,
     emptyTagMarks,
-    endTagMarks
+    endTagMarks,
+    attrListEnds
 }
 
 type PostProcessTagMatchingStreams = <i1>[5] {
@@ -426,6 +427,8 @@ kernel ParseTags :: [Lex lex, Marker marker] -> [TagCallouts callouts, PostProce
 
     emptyTagSlash = attrListEnd & lex.slash
     callouts.emptyTagMarks = Advance(emptyTagSlash)
+
+    callouts.attrListEnds = attrListEnd
 
     # For empty tags, we add the ending "/>" to the start/end streams. This
     # tells the tag matcher to pop of the empty tag name withouth trying to
