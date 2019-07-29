@@ -26,11 +26,11 @@ option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for car
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 
 # Framework build style: default is collection of static libraries
-option(BUILD_SHARED_LIBS "Build framework as a collection of shared libraries" OFF)
+option(BUILD_SHARED_LIBS "Build framework as a collection of shared libraries" ON)
 option(BUILD_SINGLE_SHARED_LIB "Build framework as a single shared library" OFF)
 
 if(BUILD_SHARED_LIBS AND BUILD_SINGLE_SHARED_LIB)
-    message(FATAL_ERROR "Options BUILD_SHARED_LIBS and BUILD_SINGLE_SHARED_LIB are mutually exclusive")
+    set(BUILD_SHARED_LIBS OFF)
 endif()
 
 # Target for single shared library
