@@ -230,6 +230,14 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             }
         }
     }
+    if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {        
+        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
+        for (unsigned i = 0; i < mREs.size(); ++i) {
+            if (!hasEndAnchor(mREs[i])) {
+                mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
+            }
+        }
+    }
     // For simple regular expressions with a small number of characters, we
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
@@ -343,14 +351,6 @@ StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, 
         options->setIndexingAlphabet(&cc::UTF8);
         options->setSource(SourceStream);
         options->setResults(MatchResults);
-        if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
-            re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
-            if (mSuffixRE == nullptr) {
-                mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
-            } else {
-                mSuffixRE = re::makeSeq({mSuffixRE, re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
-            }
-        }
         if (mSuffixRE != nullptr) {
             options->setPrefixRE(mPrefixRE);
             options->setRE(mSuffixRE);
