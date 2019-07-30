@@ -31,6 +31,8 @@ public:
     SymbolTable(std::shared_ptr<ErrorManager> errorDelegate, PabloBuilder * pb);
     SymbolTable(std::shared_ptr<ErrorManager> errorDelegate, PabloBuilder * pb, SymbolTable * parent);
 
+    ~SymbolTable();
+
     /**
      * Assigns a value to a symbol inferred from an identifier token. 
      * 
@@ -113,7 +115,6 @@ private:
         enum Attr : size_t {
             INPUT,          // is the symbol a kernel input
             OUTPUT,         // is the symbol a kernel output
-            HAS_VALUE,      // does the symbol have a value or is it uninitialized
             INDEXABLE,      // is the symbol indexable, either by '[]' or by '.'
             DOT_INDEXABLE,  // is the symbol indexable via '.' notation
         };
@@ -130,6 +131,7 @@ private:
         Token *         token;
         PabloType *     type;
         std::bitset<8>  attr;
+        std::unordered_map<size_t, bool> setInitStatus;
     };
 
     // searches only this symbol table
@@ -140,6 +142,9 @@ private:
 
     // searches local and higher symbol tables
     boost::optional<Entry> find(std::string const & name);
+
+    // returns `true` if this is the symbol table for the tope level scope
+    bool isTopLevelScope() const noexcept;
 
     std::shared_ptr<ErrorManager>           mErrorManager;
     PabloBuilder *                          mBuilder;

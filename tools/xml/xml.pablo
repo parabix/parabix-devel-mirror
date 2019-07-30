@@ -57,6 +57,18 @@ type Lex = <i1>[27] {
 }
 
 kernel ClassifyBytesValidateUtf8 :: [basis basis] -> [Lex lex, U8 u8, Error err] {
+    err[0] = <0>
+    err[1] = <0>
+    err[2] = <0>
+    err[3] = <0>
+    err[4] = <0>
+    err[5] = <0>
+    err[6] = <0>
+    err[7] = <0>
+    err[8] = <0>
+
+    u8[0] = <0>
+
     temp1 = basis[7] | basis[6]
     temp2 = basis[5] & ~basis[4]
     temp3 = temp2 & ~temp1
@@ -129,6 +141,7 @@ kernel ClassifyBytesValidateUtf8 :: [basis basis] -> [Lex lex, U8 u8, Error err]
     temp50 = temp1 | temp49
     lex.cr = temp20 & ~temp50
     lex.lf = temp29 & ~temp50
+    lex.crlf = Advance(lex.cr) & lex.lf
     temp51 = temp9 & temp19
     lex.ht = temp51 & ~temp50
     lex.sp = temp3 & ~temp36
@@ -248,6 +261,25 @@ type CCPCallouts = <i1>[8] {
 }
 
 kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error err] {
+    callouts[0] = <0>
+    callouts[1] = <0>
+    callouts[2] = <0>
+    callouts[3] = <0>
+    callouts[4] = <0>
+    callouts[5] = <0>
+    callouts[6] = <0>
+    callouts[7] = <0>
+
+    err[0] = <0>
+    err[1] = <0>
+    err[2] = <0>
+    err[3] = <0>
+    err[4] = <0>
+    err[5] = <0>
+    err[6] = <0>
+    err[7] = <0>
+    err[8] = <0>
+
     v = lex.lAngle | lex.hyphen
     w = lex.hyphen | lex.qmark
     v1 = Advance(v)
@@ -363,6 +395,27 @@ type PostProcessTagMatchingStreams = <i1>[5] {
 }
 
 kernel ParseTags :: [Lex lex, Marker marker] -> [TagCallouts callouts, PostProcessTagMatchingStreams post, Error err] {
+    callouts[0] = <0>
+    callouts[1] = <0>
+    callouts[2] = <0>
+    callouts[3] = <0>
+    callouts[4] = <0>
+    callouts[5] = <0>
+    callouts[6] = <0>
+    callouts[7] = <0>
+    callouts[8] = <0>
+    callouts[9] = <0>
+
+    err[0] = <0>
+    err[1] = <0>
+    err[2] = <0>
+    err[3] = <0>
+    err[4] = <0>
+    err[5] = <0>
+    err[6] = <0>
+    err[7] = <0>
+    err[8] = <0>
+
     # scan delimiters
     dQuoteDelim = lex.dQuote | lex.lAngle
     sQuoteDelim = lex.sQuote | lex.lAngle
@@ -486,6 +539,23 @@ type RefCallouts = <i1>[6] {
 }
 
 kernel ParseRef :: [Lex lex, Marker marker] -> [RefCallouts callouts, Error err] {
+    callouts[0] = <0>
+    callouts[1] = <0>
+    callouts[2] = <0>
+    callouts[3] = <0>
+    callouts[4] = <0>
+    callouts[5] = <0>
+
+    err[0] = <0>
+    err[1] = <0>
+    err[2] = <0>
+    err[3] = <0>
+    err[4] = <0>
+    err[5] = <0>
+    err[6] = <0>
+    err[7] = <0>
+    err[8] = <0>
+
     # All remaining '&' characters must be reference start characters
     if marker.refOpener {
         refScope = Advance(marker.refOpener)
@@ -529,6 +599,16 @@ kernel ValidateXmlNames
 :: [CCPCallouts ccp, TagCallouts tag, RefCallouts ref, Marker marker, Lex lex, U8 u8]
 -> [CheckStreams check, Error err]
 {
+    err[0] = <0>
+    err[1] = <0>
+    err[2] = <0>
+    err[3] = <0>
+    err[4] = <0>
+    err[5] = <0>
+    err[6] = <0>
+    err[7] = <0>
+    err[8] = <0>
+
     piNames = SpanUpTo(ccp.piNameStarts, ccp.piNameEnds)
     genRefs = SpanUpTo(ref.genStarts, ref.genEnds)
     elemNames = SpanUpTo(tag.elemNameStarts, tag.elemNameEnds)

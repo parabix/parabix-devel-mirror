@@ -23,6 +23,7 @@ SymbolTable::Entry::Entry()
 , token(nullptr)
 , type(nullptr)
 , attr(0)
+, setInitStatus()
 {}
 
 SymbolTable::Entry::Entry(Entry const & other)
@@ -30,6 +31,7 @@ SymbolTable::Entry::Entry(Entry const & other)
 , token(other.token)
 , type(other.type)
 , attr(other.attr)
+, setInitStatus(other.setInitStatus)
 {}
 
 SymbolTable::Entry::Entry(Entry && other)
@@ -37,6 +39,7 @@ SymbolTable::Entry::Entry(Entry && other)
 , token(other.token)
 , type(other.type)
 , attr(std::move(other.attr))
+, setInitStatus(std::move(other.setInitStatus))
 {}
 
 SymbolTable::Entry::Entry(PabloAST * value, Token * token, std::initializer_list<Attr> attr)
@@ -44,6 +47,7 @@ SymbolTable::Entry::Entry(PabloAST * value, Token * token, std::initializer_list
 , token(token)
 , type(nullptr)
 , attr(0)
+, setInitStatus()
 {
     for (auto const & a : attr) {
         this->attr.set(a);
@@ -72,14 +76,13 @@ PabloAST * SymbolTable::assign(Token * token, PabloAST * value) {
     auto optEntry = find(name);
     if (optEntry) {
         Entry & e = *optEntry;
-        e.attr.set(Entry::HAS_VALUE);
         Var * const var = llvm::cast<Var>(e.value);
         assert (var);
         Assign * const assign = mBuilder->createAssign(var, value);
         return llvm::cast<PabloAST>(assign);
     } else {
         Var * const var = mBuilder->createVar(token->getText(), value);
-        Entry entry(var, token, {Entry::HAS_VALUE});
+        Entry entry(var, token, {});
         mEntries.insert({name, std::move(entry)});
         return value;
     }
@@ -121,6 +124,9 @@ PabloAST * SymbolTable::indexedAssign(Token * token, Token * index, PabloAST * v
         }
     } else {
         idx = index->getValue();
+    }
+    if (isTopLevelScope()) {
+        mEntries[name].setInitStatus[(size_t) idx] = true;
     }
     PabloAST * const var = e.value;
     assert (llvm::isa<Var>(var));
@@ -195,13 +201,13 @@ void SymbolTable::addInputVar(Token * identifier, PabloType * type, PabloSourceK
         mErrorManager->logFatalError(identifier, "input scalars are not supported in pablo kernels");
     } else if (llvm::isa<StreamType>(type)) {
         var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::INPUT, Entry::HAS_VALUE});
+        e = Entry(var, identifier, {Entry::INPUT});
     } else if (llvm::isa<StreamSetType>(type)) {
         var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::INPUT, Entry::HAS_VALUE, Entry::INDEXABLE});
+        e = Entry(var, identifier, {Entry::INPUT, Entry::INDEXABLE});
     } else if (llvm::isa<NamedStreamSetType>(type)) {
         var = kernel->getInputStreamVar(name);
-        e = Entry(var, identifier, {Entry::INPUT, Entry::HAS_VALUE, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
+        e = Entry(var, identifier, {Entry::INPUT, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
     } else {
         llvm_unreachable(("invalid input type: " + type->asString(true)).c_str());
     }
@@ -230,12 +236,18 @@ void SymbolTable::addOutputVar(Token * identifier, PabloType * type, PabloSource
     } else if (llvm::isa<StreamType>(type)) {
         var = kernel->getOutputStreamVar(identifier->getText());
         e = Entry(var, identifier, {Entry::OUTPUT});
-    } else if (llvm::isa<StreamSetType>(type)) {
+    } else if (auto t = llvm::dyn_cast<StreamSetType>(type)) {
         var = kernel->getOutputStreamVar(identifier->getText());
         e = Entry(var, identifier, {Entry::OUTPUT, Entry::INDEXABLE});
-    } else if (llvm::isa<NamedStreamSetType>(type)) {
+        for (size_t i = 0; i < t->getStreamCount(); ++i) {
+            e.setInitStatus.insert({i, false});
+        }
+    } else if (auto t = llvm::dyn_cast<NamedStreamSetType>(type)) {
         var = kernel->getOutputStreamVar(name);
         e = Entry(var, identifier, {Entry::OUTPUT, Entry::INDEXABLE, Entry::DOT_INDEXABLE});
+        for (size_t i = 0; i < t->getStreamNames().size(); ++i) {
+            e.setInitStatus.insert({i, false});
+        }
     } else {
         llvm_unreachable(("invalid output type: " + type->asString(true)).c_str());
     }
@@ -273,6 +285,11 @@ boost::optional<SymbolTable::Entry> SymbolTable::find(std::string const & name) 
 }
 
 
+bool SymbolTable::isTopLevelScope() const noexcept {
+    return mParent == nullptr;
+}
+
+
 SymbolTable::SymbolTable(std::shared_ptr<ErrorManager> errorDelegate, PabloBuilder * pb)
 : mErrorManager(std::move(errorDelegate))
 , mBuilder(pb)
@@ -292,6 +309,26 @@ SymbolTable::SymbolTable(std::shared_ptr<ErrorManager> errorDelegate, PabloBuild
 {
     assert (mErrorManager != nullptr);
     assert (mBuilder != nullptr);
+}
+
+SymbolTable::~SymbolTable() {
+    if (isTopLevelScope()) {
+        // log an error if all output entries don't have top level values
+        for (auto const & kv : mEntries) {
+            auto e = kv.second;
+            if (e.attr[Entry::OUTPUT]) {
+                for (auto const & kv : e.setInitStatus) {
+                    if (!kv.second) {
+                        auto msg = "output variable '" 
+                                 + e.token->getText() 
+                                 + "[" + std::to_string(kv.first) + "]" 
+                                 + "' may be uninitialized by the end of this kernel";
+                        mErrorManager->logError(e.token, msg);
+                    }
+                }
+            }
+        }
+    }
 }
 
 } // namespace pablo::parse
