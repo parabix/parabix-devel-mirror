@@ -16,12 +16,13 @@
 #include <kernel/io/source_kernel.h>
 #include <kernel/streamutils/deletion.h>
 #include <kernel/basis/p2s_kernel.h>
-#include <kernel/scan/scanning.h>
+#include <kernel/scan/scan.h>
 #include <kernel/streamutils/collapse.h>
 #include <kernel/streamutils/stream_select.h>
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/streamutils/multiplex.h>
 #include <kernel/util/linebreak_kernel.h>
+#include <kernel/util/debug_display.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
 #include <toolchain/pablo_toolchain.h>
@@ -162,21 +163,29 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
 
     /* Post Process Scanning */
 
-    StreamSet * const PostProcStartIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(su::Select(P, PostProcessTagMatchingStreams, 0), PostProcStartIndices);
-    StreamSet * const PostProcEndIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(su::Select(P, PostProcessTagMatchingStreams, 1), PostProcEndIndices);
+    /*
+        Tag Matching
 
-    // Tag Matching
-    StreamSet * const TagMatchingBasisStreams = su::Select(P, PostProcessTagMatchingStreams, su::Range(2, 5));
-    StreamSet * const TagMatchingCodes = su::Multiplex(P, TagMatchingBasisStreams);
-    Kernel * const tagMatcher = P->CreateKernelCall<ScanReader>(
-        ByteStream, 
-        su::Select(P, {{PostProcStartIndices, {0}}, {PostProcEndIndices, {0}}}), 
-        "postproc_tagMatcher",
-        AdditionalStreams{ PostProcStartIndices, TagMatchingCodes }
-    );
-    pxDriver.LinkFunction(tagMatcher, "postproc_tagMatcher", postproc_tagMatcher);
+        A stream of start and end element names is scanned through with each
+        start name being pushed onto a stack. When a end name is encountered,
+        it is compared to the top name in the stack. If they don't match, a
+        tag name missmatch error is logged.
+
+        The ending "/>" of empty tags (e.g., `<node/>`) treated as an end tag
+        name. The post processing algorithm will recognise this case and pop
+        the top name (which will be the name of the empty tag) off the stack.
+     */
+    { // Tag Matching Scope
+        StreamSet * const StartIndices = scan::ToIndices(P, su::Select(P, PostProcessTagMatchingStreams, 0));
+        StreamSet * const EndIndices = scan::ToIndices(P, su::Select(P, PostProcessTagMatchingStreams, 1));
+        StreamSet * const BasisStreams = su::Select(P, PostProcessTagMatchingStreams, su::Range(2, 5));
+        StreamSet * const Codes = su::Multiplex(P, BasisStreams);
+        scan::Reader(P, pxDriver,
+            SCAN_CALLBACK(postproc_tagMatcher),
+            ByteStream,
+            { StartIndices, EndIndices },
+            { StartIndices, Codes });
+    } // End Tag Matching Scope
 
 
     /*
@@ -227,50 +236,49 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
         P->CreateKernelCall<ScanIndexGenerator>(su::Merge(P, TagCallouts, {3, 9}), EndIndices);
 
         StreamSet * const Codes = su::Multiplex(P, BasisStreams);
-        Kernel * reader = P->CreateKernelCall<ScanReader>(
-            ByteStream,
-            su::Select(P, {{StartIndices, {0}}, {EndIndices, {0}}}),
-            "postproc_duplicateAttrDetector",
-            AdditionalStreams { StartIndices, Codes }
-        );
-        pxDriver.LinkFunction(reader, "postproc_duplicateAttrDetector", postproc_duplicateAttrDetector);
+        scan::Reader(P, pxDriver, 
+            SCAN_CALLBACK(postproc_duplicateAttrDetector), 
+            ByteStream, 
+            { StartIndices, EndIndices },
+            { StartIndices, Codes });
     } // End Duplication Attribute Detection Scope
+
+
+    StreamSet * const LineBreakStream = P->CreateStreamSet();
+    P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreakStream);
+    StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
+    P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, LineSpans);
+
+
+    /**
+     * Post processing for the error streams created by the various pablo kernels
+     * defined in `xml.pablo`.
+     * 
+     * Any bit in any of the streams in `Errors` is converted to an error message
+     * via a `Code` and logged.
+     */
+    { // Error Stream Processing Scope
+        StreamSet * const Errs = su::Collapse(P, Errors);
+        StreamSet * const Indices = scan::ToIndices(P, Errs);
+        StreamSet * const LineNumbers = scan::LineNumbers(P, Errs, LineBreakStream);
+        StreamSet * const Spans = scan::FilterLineSpans(P, LineNumbers, LineSpans);
+        StreamSet * const Codes = su::MultiplexWithMask(P, su::Select(P, Errors, su::Range(0, 8)), /*mask:*/ Errs);
+        scan::Reader(P, pxDriver,  
+            SCAN_CALLBACK(postproc_errorStreamsCallback),
+            ByteStream, 
+            { Indices, Spans },
+            { LineNumbers, Codes });
+    } // End Error Stream Processing Scope
 
 
 #define POSTPROCESS_SCAN_KERNEL(SCAN_STREAM, CALLBACK) \
 { \
     StreamSet * const ScanStream = SCAN_STREAM; \
-    StreamSet * const ScanPositions = P->CreateStreamSet(1, 64); \
-    P->CreateKernelCall<ScanIndexGenerator>(ScanStream, ScanPositions); \
-    StreamSet * const LineNumbers = P->CreateStreamSet(1, 64); \
-    P->CreateKernelCall<LineNumberGenerator>(ScanStream, LineBreakStream, LineNumbers); \
-    Kernel * const k = P->CreateKernelCall<LineBasedReader>(ByteStream, ScanPositions, LineNumbers, LineSpans, #CALLBACK); \
-    pxDriver.LinkFunction(k, #CALLBACK, CALLBACK); \
+    StreamSet * const ScanPositions = scan::ToIndices(P, ScanStream); \
+    StreamSet * const LineNumbers = scan::LineNumbers(P, ScanStream, LineBreakStream); \
+    StreamSet * const Spans = scan::FilterLineSpans(P, LineNumbers, LineSpans); \
+    scan::Reader(P, pxDriver, SCAN_CALLBACK(CALLBACK), ByteStream, { ScanPositions, Spans }, { LineNumbers }); \
 }
-
-    StreamSet * const LineBreakStream = P->CreateStreamSet();
-    P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreakStream);
-
-    StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
-    P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, LineSpans);
-
-    StreamSet * const CollapsedErrors = su::Collapse(P, Errors);
-    StreamSet * const CollapsedErrorsIndices = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<ScanIndexGenerator>(CollapsedErrors, CollapsedErrorsIndices);
-    StreamSet * const CollapsedErrorsLineNumbers = P->CreateStreamSet(1, 64);
-    P->CreateKernelCall<LineNumberGenerator>(CollapsedErrors, LineBreakStream, CollapsedErrorsLineNumbers);
-    // a little hack to allow the P2S kernel to be used: only select the first 8 error streams,
-    // code 0 will be used for the last error stream
-    StreamSet * const ErrorCodes = su::MultiplexWithMask(P, su::Select(P, Errors, su::Range(0, 8)), CollapsedErrors);
-    Kernel * const errorsReader = P->CreateKernelCall<LineBasedReader>(
-        ByteStream, 
-        CollapsedErrorsIndices, 
-        CollapsedErrorsLineNumbers, 
-        LineSpans, 
-        "postproc_errorStreamsCallback", 
-        AdditionalStreams{ErrorCodes}
-    );
-    pxDriver.LinkFunction(errorsReader, "postproc_errorStreamsCallback", postproc_errorStreamsCallback);
 
     POSTPROCESS_SCAN_KERNEL(su::Select(P, CheckStreams, 0), postproc_validateNameStart);
     POSTPROCESS_SCAN_KERNEL(su::Select(P, CheckStreams, 1), postproc_validateName);

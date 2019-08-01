@@ -7,8 +7,13 @@ parabix_add_module(
 NAME
     kernel.scan
 SRC
-    scanning.cpp
+    base.cpp
+    index_generator.cpp
+    line_number_generator.cpp
+    line_span_generator.cpp
+    reader.cpp
     scanmatchgen.cpp
 DEPS
-    kernel.core
+    kernel.pipeline
+    kernel.streamutils
 )

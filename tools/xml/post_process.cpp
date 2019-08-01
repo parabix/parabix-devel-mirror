@@ -75,18 +75,21 @@ static uint32_t decValue(char c) {
 }
 
 void postproc_validateNameStart(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     if (XML_10_UTF8_NameStrt_bytes(ptr) == 0) {
         ReportError(XmlTestSuiteError::NAME_START, ptr, lineBegin, lineEnd, lineNum);
     }
 }
 
 void postproc_validateName(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     if (XML_10_UTF8_NameChar_bytes(ptr) == 0) {
         ReportError(XmlTestSuiteError::NAME, ptr, lineBegin, lineEnd, lineNum);
     }
 }
 
 void postproc_validatePIName(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     if (asciiCaselessSeqEq(ptr + 1, "xml") && (ptr[4] == '?' || ptr[4] <= ' ')) {
         if (lineNum != 1 || (ptr - lineBegin != 1) || !asciiSeqEq(ptr + 1, "xml")) {
             // ptr is pointing at the '?' character, but to get the correct
@@ -99,12 +102,14 @@ void postproc_validatePIName(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateCDATA(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     if (!asciiSeqEq(ptr, "[CDATA[")) {
         ReportError(XmlTestSuiteError::CDATA, ptr, lineBegin, lineEnd, lineNum);
     }
 }
 
 void postproc_validateGenRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     bool valid =    asciiSeqEq(ptr, "gt;")
                  || asciiSeqEq(ptr, "lt;")
                  || asciiSeqEq(ptr, "amp;")
@@ -116,6 +121,7 @@ void postproc_validateGenRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateHexRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     int val = 0;
     const uint8_t * cursor = ptr;
     while (atHexDigit(cursor)) {
@@ -134,6 +140,7 @@ void postproc_validateHexRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateDecRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     int val = 0;
     const uint8_t * cursor = ptr;
     while (atDecDigit(cursor)) {
@@ -152,6 +159,7 @@ void postproc_validateDecRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     const uint8_t * cursor = ptr;
     if (*cursor == '#') {
         cursor++;
@@ -177,6 +185,7 @@ void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code) {
+    lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     // Error streams are indexed as such:
     //  type Error = <i1>[9] {
     //      IllegalChar,
