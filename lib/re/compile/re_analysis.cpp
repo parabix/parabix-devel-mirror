@@ -191,6 +191,8 @@ bool isByteLength(const RE * re) {
             return (cc->max_codepoint() <= 0x7F);
         } else if (a == &cc::Byte) {
             return true;
+        } else if (a == &cc::UTF8) {
+            return true;
         } else if (isa<cc::MultiplexedAlphabet>(a)) {
             const cc::Alphabet * srcA = cast<cc::MultiplexedAlphabet>(a)->getSourceAlphabet();
             if (srcA == &cc::Byte) {

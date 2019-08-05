@@ -128,7 +128,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
     }
     PabloAST * nextPos = markerVar(marker);
     const cc::Alphabet * a = cc->getAlphabet();
-    if ((a == &cc::Byte) || (a == &cc::UTF8)) {
+    if ((a == &mIndexingAlphabet) || (a == &cc::Byte) || (a == &cc::UTF8)) {
         if (marker.pos == FinalMatchUnit) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
@@ -469,14 +469,16 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
     if ((ub > 1) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that 
         // allow implementation using the log2 technique.
-        if (isByteLength(repeated)) {
+        auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
+        // TODO: handle fixed lengths > 1
+        if ((lengths.first == lengths.second) && (lengths.first == 1)) {
             // log2 upper bound for fixed length (=1) class
             // Create a mask of positions reachable within ub from current marker.
             // Use matchstar, then apply filter.
             PabloAST * cursor = markerVar(AdvanceMarker(marker, InitialPostPositionUnit, pb));
             // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
             // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
-            PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, nullptr, pb);
+            PabloAST * upperLimitMask = reachable(cursor, lengths.first, ub - 1, nullptr, pb);
             PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
             // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
             // "multi-byte" character. Combine the masked range with any nonFinals.
