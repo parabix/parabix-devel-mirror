@@ -678,7 +678,7 @@ gb18030FunctionType generatePipeline(CPUDriver & pxDriver, unsigned encodingBits
         // Calculate the u8final deposit mask.
         StreamSet * const extractionMask = P->CreateStreamSet();
         P->CreateKernelCall<UTF8fieldDepositMask>(utfBasis, u8fieldMask, extractionMask);
-        P->CreateKernelCall<StreamCompressKernel>(u8fieldMask, extractionMask, u8final);
+        P->CreateKernelCall<StreamCompressKernel>(extractionMask, u8fieldMask, u8final);
 
         P->CreateKernelCall<UTF8_DepositMasks>(u8final, u8initial, u8mask12_17, u8mask6_11);
 

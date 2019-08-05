@@ -90,8 +90,8 @@ private:
 class StreamCompressKernel final : public MultiBlockKernel {
 public:
     StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
-                         , StreamSet * source
                          , StreamSet * extractionMask
+                         , StreamSet * source
                          , StreamSet * compressedOutput
                          , const unsigned FieldWidth = sizeof(size_t) * 8);
 

@@ -28,7 +28,7 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
     Scalar * base = P->CreateConstant(P->getDriver().getBuilder()->getSize(streamOffset));
     StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
     P->CreateKernelCall<FieldCompressKernel>(mask, inputs, compressed, base, extractionFieldWidth);
-    P->CreateKernelCall<StreamCompressKernel>(compressed, mask, outputs, extractionFieldWidth);
+    P->CreateKernelCall<StreamCompressKernel>(mask, compressed, outputs, extractionFieldWidth);
 }
 
 inline std::vector<Value *> parallel_prefix_deletion_masks(const std::unique_ptr<KernelBuilder> & kb, const unsigned fw, Value * del_mask) {
@@ -164,7 +164,7 @@ FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBui
                    ":" + std::to_string(outputStreamSet->getNumElements()) ,
 // input streams
 {Binding{"extractionMask", extractionMask},
-Binding{"inputStreamSet", inputStreamSet}},
+Binding{"inputStreamSet", inputStreamSet, FixedRate(), ZeroExtended()}},
 // output stream
 {Binding{"outputStreamSet", outputStreamSet}},
 // input scalar
@@ -229,13 +229,13 @@ PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::K
 }
 
 StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
-                                           , StreamSet * source
                                            , StreamSet * extractionMask
+                                           , StreamSet * source
                                            , StreamSet * compressedOutput
                                            , const unsigned FieldWidth)
 : MultiBlockKernel(b, "streamCompress" + std::to_string(FieldWidth) + "_" + std::to_string(source->getNumElements()),
-{Binding{"sourceStreamSet", source},
-Binding{"extractionMask", extractionMask}},
+{Binding{"extractionMask", extractionMask, FixedRate(), Principal()},
+    Binding{"sourceStreamSet", source, FixedRate(), ZeroExtended()}},
 {Binding{"compressedOutput", compressedOutput, PopcountOf("extractionMask")}},
 {}, {}, {})
 , mCompressedFieldWidth(FieldWidth)

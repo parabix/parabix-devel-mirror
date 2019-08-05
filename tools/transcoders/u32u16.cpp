@@ -83,7 +83,7 @@ u32u16FunctionType u32u16_gen (CPUDriver & driver, cc::ByteNumbering byteNumberi
     // Calculate the u16final deposit mask.
     StreamSet * const extractionMask = P->CreateStreamSet();
     P->CreateKernelCall<UTF16fieldDepositMask>(u32basis, u16fieldMask, extractionMask);
-    P->CreateKernelCall<StreamCompressKernel>(u16fieldMask, extractionMask, u16final);
+    P->CreateKernelCall<StreamCompressKernel>(extractionMask, u16fieldMask, u16final);
     P->CreateKernelCall<UTF16_InitialMask>(u16final, u16initial);
 
     SpreadByMask(P, u16initial, u16_SMP_basis, SMP4_0);
