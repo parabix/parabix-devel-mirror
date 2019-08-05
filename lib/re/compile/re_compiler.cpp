@@ -411,8 +411,9 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
         if (lengths.first == lengths.second) {
             PabloAST * cc = markerVar(compile(repeated, pb));
             PabloAST * cc_lb = consecutive_matches(cc, 1, lb, lengths.first, nullptr, pb);
-            const auto pos = markerPos(marker) == FinalMatchUnit ? lb : lb - 1;
-            PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), pos);
+            auto lb_lgth = lengths.first * lb;
+            auto shft = markerPos(marker) == FinalMatchUnit ? lb_lgth : lb_lgth - 1;
+            PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), shft, "marker_fwd");
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
         else if (isUnicodeUnitLength(repeated)) {
