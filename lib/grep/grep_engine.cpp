@@ -35,6 +35,7 @@
 #include <kernel/streamutils/streams_merge.h>
 #include <kernel/scan/scanmatchgen.h>
 #include <kernel/streamutils/until_n.h>
+#include <kernel/streamutils/sentinel.h>
 #include <kernel/streamutils/deletion.h>
 #include <kernel/streamutils/pdep_kernel.h>
 #include <pablo/pablo_kernel.h>
@@ -397,7 +398,9 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     options->addAlphabet(mpx, CharClasses);
     addExternalStreams(P, options, re, mU8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
-    SpreadByMask(P, mU8index, MatchResults, Results);
+    StreamSet * u8index1 = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
+    SpreadByMask(P, u8index1, MatchResults, Results);
 }
 
 void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
