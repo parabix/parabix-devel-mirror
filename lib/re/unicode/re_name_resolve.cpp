@@ -57,47 +57,21 @@ RE * resolveUnicodeNames(RE * re) {
     return UnicodeNameResolver().transformRE(re);
 }
 
- 
 class AnchorResolution : public RE_Transformer {
 public:
-    AnchorResolution(RE * anchorRE);
-    RE * transformStart(Start * s) override;
-    RE * transformEnd(End * s) override;
-
+    AnchorResolution(RE * anchorRE) : RE_Transformer("Anchor Resolution"), mAnchorRE(anchorRE) {}
+    RE * transformStart(Start * s) override {
+        RE * sot = makeNegativeLookBehindAssertion(makeByte(0x00, 0xFF));
+        return makeAlt({sot, makeLookBehindAssertion(mAnchorRE)});
+    }
+    RE * transformEnd(End * s) override{
+        RE * eot = makeNegativeLookAheadAssertion(makeByte(0x00, 0xFF));
+        return makeAlt({eot, makeLookAheadAssertion(mAnchorRE)});
+    }
 private:
     RE * mAnchorRE;
-    bool mIsNegated;
 };
  
-AnchorResolution::AnchorResolution(RE * breakRE)
-: RE_Transformer("Anchor Resolution") {
-    if (const CC * cc = dyn_cast<CC>(breakRE)) {
-        mIsNegated = true;
-        if (cc->getAlphabet() == &cc::Unicode) {
-            mAnchorRE = makeDiff(makeCC(0, 0x10FFFF), breakRE);
-        } else if (cc->getAlphabet() == &cc::Byte) {
-            mAnchorRE = makeDiff(makeByte(0, 0xFF), breakRE);
-        } else {
-            llvm::report_fatal_error("resolveAnchors: unexpected alphabet " + cc->getAlphabet()->getName());
-        }
-    } else {
-        mIsNegated = false;
-        mAnchorRE = breakRE;
-    }
-}
-
-RE * AnchorResolution::transformStart(Start * s) {
-    if (mIsNegated) return makeNegativeLookBehindAssertion(mAnchorRE);
-    RE * sot = makeNegativeLookBehindAssertion(makeByte(0x00,0xFF));
-    return makeAlt({sot, makeLookBehindAssertion(mAnchorRE)});
-}
-
-RE * AnchorResolution::transformEnd(End * e) {
-    if (mIsNegated) return makeNegativeLookAheadAssertion(mAnchorRE);
-    RE * eot = makeNegativeLookAheadAssertion(makeByte(0x00,0xFF));
-    return makeAlt({eot, makeLookAheadAssertion(mAnchorRE)});
-}
-
 RE * resolveAnchors(RE * r, RE * breakRE) {
     return AnchorResolution(breakRE).transformRE(r);
 }

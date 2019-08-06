@@ -183,9 +183,9 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         mBreakCC = re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029)));
     } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-        mBreakCC = re::makeByte(0);  // Null
+        mBreakCC = re::makeCC(0, &cc::Unicode);  // Null
     } else {
-        mBreakCC = re::makeByte(0x0A); // LF
+        mBreakCC = re::makeCC(0x0A, &cc::Unicode); // LF
     }
     re::RE * anchorRE = mBreakCC;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
@@ -254,7 +254,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     mSuffixRE = nullptr;
     if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
         (!hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) &&
-        mUnicodeProperties.empty()) {
+        mUnicodeProperties.empty() && !UnicodeIndexing) {
         if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
@@ -793,9 +793,9 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
 
     re::CC * breakCC = nullptr;
     if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
-        breakCC = re::makeByte(0x0);
+        breakCC = re::makeCC(0x0, &cc::Unicode);
     } else {// if (mGrepRecordBreak == GrepRecordBreakKind::LF)
-        breakCC = re::makeByte(0x0A);
+        breakCC = re::makeCC(0x0A, &cc::Unicode);
     }
 
     matchingRE = resolveCaseInsensitiveMode(matchingRE, mCaseInsensitive);
