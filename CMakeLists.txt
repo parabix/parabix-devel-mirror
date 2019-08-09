@@ -253,6 +253,7 @@ add_subdirectory(lib/re/parse)
 add_subdirectory(lib/re/toolchain)
 add_subdirectory(lib/re/ucd)
 add_subdirectory(lib/re/unicode)
+add_subdirectory(lib/testing)
 add_subdirectory(lib/toolchain)
 add_subdirectory(lib/unicode/core)
 add_subdirectory(lib/unicode/data)
@@ -276,6 +277,9 @@ add_subdirectory(tools/wc)
 # add_subdirectory(tools/wc/wc-pablo)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
+
+# Kernel Tests
+add_subdirectory(tests)
 
 # Target definition for single shared library
 if(BUILD_SINGLE_SHARED_LIB)

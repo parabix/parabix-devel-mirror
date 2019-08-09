@@ -12,9 +12,9 @@ using namespace llvm;
 namespace kernel {
 
 static std::string GenerateName(StringRef name, StreamSet * s) {
-    return std::string("DebugDisplay::[") + 
-           "<i" + std::to_string(s->getFieldWidth()) + ">[" + std::to_string(s->getNumElements()) + 
-           "] -> [] @" + name.str();
+    return std::string("DebugDisplay::") + 
+           "<i" + std::to_string(s->getFieldWidth()) + ">[" + std::to_string(s->getNumElements()) + "]" +
+           "@" + name.str();
 }
 
 DebugDisplayKernel::DebugDisplayKernel(BuilderRef b, StringRef name, StreamSet * s)
