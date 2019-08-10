@@ -25,22 +25,18 @@ StreamEquivalenceKernel::StreamEquivalenceKernel(
     BuilderRef b,
     StreamSet * lhs,
     StreamSet * rhs,
-    Scalar * carry)
+    Scalar * outPtr)
 : MultiBlockKernel(b, KernelName(lhs), 
     {{"lhs", lhs, FixedRate(), Principal()}, {"rhs", rhs, FixedRate(), ZeroExtended()}},
     {},
-    {{"carry", carry}},
-    {{b->getInt32Ty(), "result"}},
+    {{"result_ptr", outPtr}},
+    {},
     {})
 {
     assert(lhs->getFieldWidth() == rhs->getFieldWidth());
     assert(lhs->getNumElements() == rhs->getNumElements());
     setStride(b->getBitBlockWidth() / lhs->getFieldWidth());
-}
-
-void StreamEquivalenceKernel::generateInitializeMethod(BuilderRef b) {
-    b->setScalarField("result", b->getScalarField("carry"));
-    // b->CallPrintInt("carry in", b->getScalarField("result"));
+    addAttribute(SideEffecting());
 }
 
 void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
@@ -76,15 +72,14 @@ void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * cons
         // b->CallPrintRegister("rhs", rhs);
         Value * const vecComp = b->CreateNot(b->CreateICmpEQ(lhs, rhs));
         Value * const vecAsInt = b->CreateBitCast(vecComp, b->getIntNTy(vecComp->getType()->getVectorNumElements()));
-        Value * const neq = b->CreateZExt(vecAsInt, b->getInt64Ty(), "here");
-        Value * const scalarVal = b->getScalarField("result");
-        Value * const newScalarVal = b->CreateSelect(
-            b->CreateICmpEQ(scalarVal, ZERO), 
-            b->CreateZExt(b->CreateICmpNE(neq, b->getInt64(0)), b->getInt32Ty()), 
+        Value * const neq = b->CreateZExt(vecAsInt, b->getInt64Ty(), "here");        
+        Value * const ptrVal = b->CreateLoad(b->getScalarField("result_ptr"));
+        Value * const newPtrVal = b->CreateSelect(
+            b->CreateICmpEQ(ptrVal, ZERO),
+            b->CreateZExt(b->CreateICmpNE(neq, b->getInt64(0)), b->getInt32Ty()),
             ONE
         );
-        b->setScalarField("result", newScalarVal);
-        // b->CallPrintInt("result", b->getScalarField("result"));
+        b->CreateStore(newPtrVal, b->getScalarField("result_ptr"));
     }
     Value * const nextStrideNo = b->CreateAdd(strideNo, b->getSize(1));
     strideNo->addIncoming(nextStrideNo, loopBlock);
@@ -97,12 +92,10 @@ void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * cons
 
 namespace testing {
 
-Scalar * AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs) {
-    Scalar * carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    auto k0 = T->CreateKernelCall<kernel::StreamEquivalenceKernel>(lhs, rhs, carryIn);
-    Scalar * carryOut = k0->getOutputScalar("result");
-    auto k1 = T->CreateKernelCall<kernel::StreamEquivalenceKernel>(rhs, lhs, carryOut);
-    return k1->getOutputScalar("result");
+void AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs) {
+    auto ptr = T->getInputScalar("__ptr_out");
+    T->CreateKernelCall<kernel::StreamEquivalenceKernel>(lhs, rhs, ptr);
+    T->CreateKernelCall<kernel::StreamEquivalenceKernel>(rhs, lhs, ptr);
 }
 
 } // namespace testing

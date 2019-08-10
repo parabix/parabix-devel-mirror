@@ -15,8 +15,7 @@ auto expected0 = IntStream<uint64_t>({0, 8});
 
 TEST_CASE(tiny_scan, scanbits0, expected0) {
     auto Result = scan::ToIndices(T, Input);
-    auto rt = AssertEQ(T, Result, Expected);
-    T.setReturnValue(rt);
+    AssertEQ(T, Result, Expected);
 }
 
 
@@ -25,8 +24,7 @@ auto expected1 = IntStream<uint64_t>({});
 
 TEST_CASE(no_bits, scanbits1, expected1) {
     auto Result = scan::ToIndices(T, Input);
-    auto rt = AssertEQ(T, Result, Expected);
-    T.setReturnValue(rt);
+    AssertEQ(T, Result, Expected);
 }
 
 RUN_TESTS(

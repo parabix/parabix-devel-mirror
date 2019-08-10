@@ -15,11 +15,8 @@ auto B = IntStream<uint64_t>({1});
 TEST_CASE(mismatch_should_fail, A, B) {
     StreamSet * a = Input;
     StreamSet * b = Expected;
-    
-    auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    //                                                       v is zero extended
-    auto k = T->CreateKernelCall<StreamEquivalenceKernel>(a, b, carryIn);
-    T.setReturnValue(k->getOutputScalar("result"));
+
+    AssertEQ(T, a, b); // should fail    
 }
 
 
@@ -30,10 +27,7 @@ TEST_CASE(mismatch_should_fail_bitstream, H0, H1) {
     StreamSet * h0 = Input;
     StreamSet * h1 = Expected;
 
-    auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    //                                                        vv is zero extended
-    auto k = T->CreateKernelCall<StreamEquivalenceKernel>(h0, h1, carryIn);
-    T.setReturnValue(k->getOutputScalar("result"));
+    AssertEQ(T, h0, h1); // should fail
 }
 
 
@@ -47,10 +41,7 @@ TEST_CASE(mismatch_accross_block_boundary_should_fail_bitstream, H2, H3) {
     StreamSet * h3 = Expected;
     // util::DebugDisplay(T, "h3", h3);
 
-    auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    //                                                        vv is zero extended
-    auto k = T->CreateKernelCall<StreamEquivalenceKernel>(h2, h3, carryIn);
-    T.setReturnValue(k->getOutputScalar("result"));
+    AssertEQ(T, h2, h3); // should fail
 }
 
 
@@ -61,10 +52,7 @@ TEST_CASE(mismatch_does_fail, C, D) {
     StreamSet * c = Input;
     StreamSet * d = Expected;
 
-    auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    //                                                       v is zero extended
-    auto k = T->CreateKernelCall<StreamEquivalenceKernel>(c, d, carryIn);
-    T.setReturnValue(k->getOutputScalar("result"));
+    AssertEQ(T, c, d); // should fail
 }
 
 
@@ -72,17 +60,7 @@ TEST_CASE(scalar_carry_doesnt_work, C, D) {
     StreamSet * c = Input;
     StreamSet * d = Expected;
 
-    auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    //                                                        v is zero extended
-    auto k0 = T->CreateKernelCall<StreamEquivalenceKernel>(c, d, carryIn);
-    // This equivalence fails so carry should be 1
-    auto carry = k0->getOutputScalar("result");
-
-    //                                                        v is zero extended
-    auto k1 = T->CreateKernelCall<StreamEquivalenceKernel>(d, c, carry);
-    // This equivalence passes, but they carry in of 1 should give a result of 1
-    // failing this test, but that doesn't happen
-    T.setReturnValue(k1->getOutputScalar("result"));
+    AssertEQ(T, c, d); // should fail
 }
 
 
@@ -96,10 +74,7 @@ TEST_CASE(mismatch_does_fail_bitstream, H4, H5) {
     StreamSet * h5 = Expected;
     // util::DebugDisplay(T, "h5", h5);
 
-    auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
-    //                                                        vv is zero extended
-    auto k = T->CreateKernelCall<StreamEquivalenceKernel>(h4, h5, carryIn);
-    T.setReturnValue(k->getOutputScalar("result"));
+    AssertEQ(T, h4, h5); // should fail
 }
 
 

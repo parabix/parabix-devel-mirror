@@ -13,8 +13,7 @@ namespace kernel {
 class StreamEquivalenceKernel : public MultiBlockKernel {
     using BuilderRef = const std::unique_ptr<KernelBuilder> &;
 public:
-    StreamEquivalenceKernel(BuilderRef b, StreamSet * x, StreamSet * y, Scalar * carry);
-    void generateInitializeMethod(BuilderRef b) override;
+    StreamEquivalenceKernel(BuilderRef b, StreamSet * x, StreamSet * y, Scalar * outPtr);
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
     bool hasSignature() const override { return false; }
     bool isCachable() const override { return false; }
@@ -24,6 +23,6 @@ public:
 
 namespace testing {
 
-Scalar * AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
+void AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
 
 }

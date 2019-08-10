@@ -28,14 +28,19 @@ testing::UnitTestFunc __gen_##NAME(testing::TestEngine & T) {                   
 }                                                                                                           \
                                                                                                             \
 int32_t NAME() {                                                                                            \
+    auto result = new int32_t(0);                                                                           \
     testing::TestEngine T{};                                                                                \
     auto fn = __gen_##NAME(T);                                                                              \
-    return fn(                                                                                              \
+    fn(                                                                                                     \
         (const void *) INPUT.raw(),                                                                         \
         INPUT.size(),                                                                                       \
         (const void *) EXPECTED.raw(),                                                                      \
-        EXPECTED.size()                                                                                     \
+        EXPECTED.size(),                                                                                    \
+        result                                                                                              \
     );                                                                                                      \
+    auto rt = *result;                                                                                      \
+    delete result;                                                                                          \
+    return rt;                                                                                              \
 }                                                                                                           \
                                                                                                             \
 void __test_body_##NAME(testing::TestEngine & T, testing::StreamSet * Input, testing::StreamSet * Expected)
