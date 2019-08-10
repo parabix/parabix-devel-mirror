@@ -59,7 +59,6 @@ void UTF8_index::generatePabloMethod() {
     PabloAST * const u8pfx2 = ccc->compileCC(makeByte(0xC2, 0xDF), it);
     PabloAST * const u8pfx3 = ccc->compileCC(makeByte(0xE0, 0xEF), it);
     PabloAST * const u8pfx4 = ccc->compileCC(makeByte(0xF0, 0xF4), it);
-    PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
 
     //
     // Two-byte sequences
@@ -105,6 +104,7 @@ void UTF8_index::generatePabloMethod() {
     PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
     //  Any scope that does not have a suffix byte, and any suffix byte that is not in
     //  a scope is a mismatch, i.e., invalid UTF-8.
+    PabloAST * const u8suffix = ccc->compileCC("u8suffix", makeByte(0x80, 0xBF), it);
     PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
     //
     PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
