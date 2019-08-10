@@ -255,7 +255,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     mSuffixRE = nullptr;
     if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
         (!hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) &&
-        mUnicodeProperties.empty() && !UnicodeIndexing) {
+        mUnicodeProperties.empty()) { // && !UnicodeIndexing
         if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
@@ -278,7 +278,7 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
     }
     else return ByteStream;
 }
-    
+
 void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
     if (mBinaryFilesMode == argv::Text) {
@@ -323,7 +323,7 @@ void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & 
     }
 }
 
-    
+
 void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, std::unique_ptr<GrepKernelOptions> & options, re::RE * regexp, StreamSet * indexMask) {
     std::set<re::Name *> props;
     re::gatherUnicodeProperties(regexp, props);

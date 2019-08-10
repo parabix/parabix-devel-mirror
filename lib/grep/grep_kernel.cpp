@@ -79,8 +79,15 @@ void UTF8_index::generatePabloMethod() {
     PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
     PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
     it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
-    PabloAST * const E0_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1), ccc->compileCC(makeByte(0x80, 0x9F), it3));
-    PabloAST * const ED_invalid = it3.createAnd(it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1), ccc->compileCC(makeByte(0xA0, 0xBF), it3));
+
+    PabloAST * const advE0 = it3.createAdvance(ccc->compileCC(makeByte(0xE0), it3), 1, "advEO");
+    PabloAST * const range80_9F = ccc->compileCC(makeByte(0x80, 0x9F), it3);
+    PabloAST * const E0_invalid = it3.createAnd(advE0, range80_9F, "E0_invalid");
+
+    PabloAST * const advED = it3.createAdvance(ccc->compileCC(makeByte(0xED), it3), 1, "advED");
+    PabloAST * const rangeA0_BF = ccc->compileCC(makeByte(0xA0, 0xBF), it3);
+    PabloAST * const ED_invalid = it3.createAnd(advED, rangeA0_BF, "ED_invalid");
+
     PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
     it3.createAssign(EF_invalid, EX_invalid);
 

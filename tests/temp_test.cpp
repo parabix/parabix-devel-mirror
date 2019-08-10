@@ -15,7 +15,7 @@ auto B = IntStream<uint64_t>({1});
 TEST_CASE(mismatch_should_fail, A, B) {
     StreamSet * a = Input;
     StreamSet * b = Expected;
-    
+
     auto carryIn = T.driver().CreateConstant(T.driver().getBuilder()->getInt32(0));
     //                                                       v is zero extended
     auto k = T->CreateKernelCall<StreamEquivalenceKernel>(a, b, carryIn);

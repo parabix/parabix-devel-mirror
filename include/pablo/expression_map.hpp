@@ -6,7 +6,8 @@
 #include <util/slab_allocator.h>
 #include <llvm/ADT/ArrayRef.h>
 #include <type_traits>
-#include <map>
+#include <boost/functional/hash.hpp>
+#include <unordered_map>
 
 namespace pablo {
 
@@ -86,7 +87,7 @@ class ExpressionTable {
         using TypeId = PabloAST::ClassTypeId;
         using Key = std::tuple<TypeId, Args...>;
         using Allocator = SlabAllocator<uint8_t>;
-        using MapAllocator = ProxyAllocator<typename std::map<Key, PabloAST *, std::less<Key>>::value_type>;
+        using MapAllocator = ProxyAllocator<typename std::pair<const Key, PabloAST *>>;
         using Map = std::map<Key, PabloAST *, std::less<Key>, MapAllocator>;
 
         explicit FixedArgMap(Allocator & allocator, const Type * predecessor = nullptr) noexcept

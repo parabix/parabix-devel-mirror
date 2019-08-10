@@ -203,6 +203,22 @@ void redundancyElimination(PabloKernel * const kernel) {
     assert (mNonZero.empty());
 }
 
+#ifndef NDEBUG
+bool safe_replacement(const PabloAST * repl, const Statement * expr) {
+    if (repl == expr)
+        return false;
+    if (repl->getClassTypeId() != expr->getClassTypeId())
+        return false;
+    const auto n = expr->getNumOperands();
+    for (unsigned i = 0; i < n; ++i) {
+        if (cast<Statement>(repl)->getOperand(i) != expr->getOperand(i)) {
+            return false;
+        }
+    }
+    return dominates(repl, expr);
+}
+#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief redundancyElimination
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -261,8 +277,10 @@ bool redundancyElimination(PabloBlock * const currentScope, ExpressionTable & ex
             bool added = false;
             std::tie(replacement, added) = expressions.findOrAdd(stmt);
             if (!added) {
-                assert (replacement != stmt);
-                stmt = stmt->replaceWith(replacement);
+                assert (safe_replacement(replacement, stmt));
+                Statement * const next = stmt->getNextNode();
+                stmt->replaceAllUsesWith(replacement);
+                stmt = next;
                 continue;
             }
 

@@ -7,6 +7,7 @@ parabix_add_module(
 NAME
     pablo
 SRC
+    arithmetic.cpp
     branch.cpp
     builder.cpp
     carry_manager.cpp

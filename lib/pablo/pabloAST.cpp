@@ -5,7 +5,7 @@
  */
 
 #include <pablo/pabloAST.h>
-
+#include <pablo/arithmetic.h>
 #include <pablo/codegenstate.h>
 #include <pablo/pe_var.h>
 #include <pablo/boolean.h>
@@ -89,14 +89,14 @@ void PabloAST::replaceAllUsesWith(PabloAST * const expr) noexcept {
     if (LLVM_UNLIKELY(this == expr)) {
         return;
     }
-    SmallVector<Statement *, 16> replacement(mUsers.size());
+    SmallVector<PabloAST *, 16> replacement(mUsers.size());
     Users::size_type replacements = 0;
     PabloAST * last = nullptr;
     for (PabloAST * user : mUsers) {
         if (LLVM_UNLIKELY(user == expr || user == last)) {
             continue;
-        } else if (isa<Statement>(user)) {
-            replacement[replacements++] = cast<Statement>(user);
+        } else if (isa<Statement>(user) || isa<Operator>(user)) {
+            replacement[replacements++] = user;
             last = user;
         }
     }
@@ -205,8 +205,8 @@ void Statement::replaceUsesOfWith(PabloAST * const from, PabloAST * const to, co
            PabloAST * const op = getOperand(i);
            if (op == from) {
                setOperand(i, to);
-           } else if (LLVM_UNLIKELY(recursive && isa<Statement>(op))) {
-               cast<Statement>(op)->replaceUsesOfWith(from, to, true);
+           } else if (LLVM_UNLIKELY(recursive)) {
+               op->replaceUsesOfWith(from, to, true);
            }
         }
     }

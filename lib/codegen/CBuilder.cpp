@@ -1685,14 +1685,6 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
     bool modified = false;
     DenseSet<Value *> S;
 
-
-
-
-    CBuilder builder(M.getContext());
-    builder.setModule(&M);
-
-
-
 //    #ifdef HAS_ADDRESS_SANITIZER
 //    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
 //    DenseSet<CallInst *> alreadyTested;
@@ -1834,6 +1826,8 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         assert (assertList.size() == S.size());
         S.clear();
 
+        CBuilder builder(M.getContext());
+        builder.setModule(&M);
         builder.SetInsertPoint(&F.front());
         BasicBlock * const rethrow = builder.WriteDefaultRethrowBlock();
 

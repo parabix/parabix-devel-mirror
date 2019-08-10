@@ -141,6 +141,8 @@ public:
 
     void replaceAllUsesWith(PabloAST * const expr) noexcept;
 
+    virtual void replaceUsesOfWith(PabloAST * const from, PabloAST * const to, const bool recursive = false) { }
+
     inline Users::size_type getNumUses() const noexcept {
         return mUsers.size();
     }
@@ -245,7 +247,7 @@ public:
         return false;
     }
 
-    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to, const bool recursive = false);
+    void replaceUsesOfWith(PabloAST * const from, PabloAST * const to, const bool recursive = false) final;
 
     inline PabloAST * getOperand(const unsigned index) const noexcept {
         assert (index < getNumOperands());
