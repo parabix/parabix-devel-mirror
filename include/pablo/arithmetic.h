@@ -37,12 +37,12 @@ public:
 protected:
     Operator(const ClassTypeId typeId, llvm::Type * const type, PabloAST * const expr1, PabloAST * const expr2, Allocator & allocator)
     : PabloAST(typeId, type, allocator)
-    , mOperand({expr1, expr2}) {
+    , mOperand{expr1, expr2} {
         mOperand[0]->addUser(this);
         mOperand[1]->addUser(this);
     }
 private:
-    std::array<PabloAST *, 2> mOperand;
+    PabloAST * mOperand[2];
 };
 
 #define CREATE_OPERATOR_TYPE(Name) \
