@@ -61,12 +61,10 @@ class AnchorResolution : public RE_Transformer {
 public:
     AnchorResolution(RE * anchorRE) : RE_Transformer("Anchor Resolution"), mAnchorRE(anchorRE) {}
     RE * transformStart(Start * s) override {
-        RE * sot = makeNegativeLookBehindAssertion(makeByte(0x00, 0xFF));
-        return makeAlt({sot, makeLookBehindAssertion(mAnchorRE)});
+        return makeAlt({s, makeLookBehindAssertion(mAnchorRE)});
     }
     RE * transformEnd(End * s) override{
-        RE * eot = makeNegativeLookAheadAssertion(makeByte(0x00, 0xFF));
-        return makeAlt({eot, makeLookAheadAssertion(mAnchorRE)});
+        return makeAlt({s, makeLookAheadAssertion(mAnchorRE)});
     }
 private:
     RE * mAnchorRE;
