@@ -38,7 +38,7 @@ public:
     void setResults(StreamSet * r);
 
     void addExternal(std::string name, StreamSet * strm) {
-        mExternals.emplace_back(name, strm, FixedRate());
+        mExternals.emplace_back(name, strm, FixedRate(), ZeroExtended());
     }
 
     template <typename ... Args>

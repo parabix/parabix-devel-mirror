@@ -22,7 +22,8 @@ void AddSentinel::generatePabloMethod() {
     std::vector<PabloAST *> inputs = getInputStreamSet("input");
     Var * const outputs = getOutputStreamVar("output");
     for (unsigned i = 0; i < inputs.size(); i++) {
-        pb.createAssign(pb.createExtract(outputs, pb.getInteger(i)), pb.createOr(inputs[i], EOFbit));
+        PabloAST * extended = pb.createOr(inputs[i], EOFbit, "addSentinel");
+        pb.createAssign(pb.createExtract(outputs, pb.getInteger(i)), extended);
     }
 }
 }

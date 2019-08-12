@@ -234,7 +234,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             // the regular expression or externally.   The internal approach is more
             // generally more efficient, but cannot be used if colorization is needed
             // or in UnicodeLines mode.
-            if ((mGrepRecordBreak == GrepRecordBreakKind::Unicode) || (mEngineKind == EngineKind::EmitMatches) | mInvertMatches) {
+            if ((mGrepRecordBreak == GrepRecordBreakKind::Unicode) || (mEngineKind == EngineKind::EmitMatches) || mInvertMatches || UnicodeIndexing) {
                 setComponent(mExternalComponents, Component::MoveMatchesToEOL);
             } else {
                 setComponent(mInternalComponents, Component::MoveMatchesToEOL);
@@ -255,7 +255,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     mSuffixRE = nullptr;
     if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
         (!hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) &&
-        mUnicodeProperties.empty()) { // && !UnicodeIndexing
+        mUnicodeProperties.empty() && !UnicodeIndexing) {
         if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
@@ -372,9 +372,9 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
 
 void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-    options->setSource(Source);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});
     if (UnicodeSets.size() <= 1) {
+        options->setSource(Source);
         options->setIndexingAlphabet(&cc::UTF8);
         options->setResults(Results);
         options->setRE(re);
@@ -394,6 +394,7 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
     FilterByMask(P, mU8index, u8CharClasses, CharClasses);
     StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
+    options->setSource(CharClasses);
     options->setResults(MatchResults);
     options->addAlphabet(mpx, CharClasses);
     addExternalStreams(P, options, re, mU8index);

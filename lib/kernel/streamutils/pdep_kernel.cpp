@@ -143,7 +143,6 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     Value * const source_field_hi = b->CreateUDiv(b->CreateAdd(partialSum, fw_sub1Splat), fwSplat);
     Value * const source_shift_lo = b->CreateAnd(partialSum, fw_sub1Splat);  // parallel URem
     Value * const source_shift_hi = b->CreateAnd(b->CreateSub(fwSplat, source_shift_lo), fw_sub1Splat);
-
     // The source stream may not be positioned at a block boundary.  Partial data
     // has been saved in the kernel state, determine the next full block number
     // for loading source streams.
@@ -158,10 +157,10 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         sourceData[i] = b->loadInputStreamBlock("source", streamOffset, srcBlockNo);
         Value * A = b->simd_srlv(mFieldWidth, b->mvmd_dsll(mFieldWidth, sourceData[i], pendingDataPhi[i], field_offset_lo), bit_offset);
         Value * B = b->simd_sllv(mFieldWidth, b->mvmd_dsll(mFieldWidth, sourceData[i], pendingDataPhi[i], field_offset_hi), shift_fwd);
-        Value * full_source_block = b->simd_or(A, B);
+        Value * full_source_block = b->CreateOr(A, B, "toExpand");
         Value * C = b->simd_srlv(mFieldWidth, b->mvmd_shuffle(mFieldWidth, full_source_block, source_field_lo), source_shift_lo);
         Value * D = b->simd_sllv(mFieldWidth, b->mvmd_shuffle(mFieldWidth, full_source_block, source_field_hi), source_shift_hi);
-        Value * output = b->bitCast(b->simd_or(C, D));
+        Value * output = b->bitCast(b->CreateOr(C, D, "expanded"));
         b->storeOutputStreamBlock("output", b->getInt32(i), blockNoPhi, output);
     }
     //
