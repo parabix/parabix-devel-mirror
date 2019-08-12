@@ -28,6 +28,7 @@ testing::UnitTestFunc __gen_##NAME(testing::TestEngine & T) {                   
 }                                                                                                           \
                                                                                                             \
 int32_t NAME() {                                                                                            \
+    assert((void *) &INPUT != (void *) &EXPECTED && "input and expected streams cannot be the same");       \
     auto result = new int32_t(0);                                                                           \
     testing::TestEngine T{};                                                                                \
     auto fn = __gen_##NAME(T);                                                                              \

@@ -10,19 +10,48 @@
 
 namespace kernel {
 
+/**
+ * Kernel driving `AssertEQ` and `AssertNE` functions.
+ * 
+* Should NOT be used directly. Use either `AssertEQ` or `AssertNE` instead.
+ */
 class StreamEquivalenceKernel : public MultiBlockKernel {
     using BuilderRef = const std::unique_ptr<KernelBuilder> &;
 public:
-    StreamEquivalenceKernel(BuilderRef b, StreamSet * x, StreamSet * y, Scalar * outPtr);
+    enum class Mode { EQ, NE };
+
+    StreamEquivalenceKernel(BuilderRef b, Mode mode, StreamSet * x, StreamSet * y, Scalar * outPtr);
+    void generateInitializeMethod(BuilderRef b) override;
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+    void generateFinalizeMethod(BuilderRef b) override;
     bool hasSignature() const override { return false; }
-    bool isCachable() const override { return false; }
+    bool isCachable() const override { return true; }
+private:
+    Mode mMode;
 };
 
 }
 
 namespace testing {
 
+/**
+ * Compares two `StreamsSets` to see if they are equal setting the test case's 
+ * state to `failing` if they are not.
+ * 
+ * Preconditions:
+ *  - `lhs` and `rhs` must have the same field width
+ *  - `lhs` and `rhs` must have the same number of elements
+ */
 void AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
+
+/**
+ * Compares two `StreamsSets` to see if they are equal setting the test case's 
+ * state to `failing` if they are.
+ * 
+ * Preconditions:
+ *  - `lhs` and `rhs` must have the same field width
+ *  - `lhs` and `rhs` must have the same number of elements
+ */
+void AssertNE(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
 
 }
