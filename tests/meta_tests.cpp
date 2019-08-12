@@ -78,6 +78,38 @@ TEST_CASE(commutative_ne, commutative_ne_a, commutative_ne_b) {
 }
 
 
+auto single_rep_i = HexStream("a{10}");
+auto single_rep_e = HexStream("aaaaaaaaaa");
+
+TEST_CASE(single_rep, single_rep_i, single_rep_e) {
+    AssertEQ(T, Input, Expected);
+}
+
+
+auto grouped_rep_i = HexStream("(123abc){3}");
+auto grouped_rep_e = HexStream("123abc 123abc 123abc");
+
+TEST_CASE(grouped_rep, grouped_rep_i, grouped_rep_e) {
+    AssertEQ(T, Input, Expected);
+}
+
+
+auto rep_of_rep_i = HexStream("((123){2} (abc){2}){2}");
+auto rep_of_rep_e = HexStream("123123abcabc123123abcabc");
+
+TEST_CASE(rep_of_rep, rep_of_rep_i, rep_of_rep_e) {
+    AssertEQ(T, Input, Expected);
+}
+
+
+auto odd_bin_i = BinaryStream("(1.1){3}");
+auto odd_bin_e = BinaryStream("1.1 1.1 1.1");
+
+TEST_CASE(odd_bin, odd_bin_i, odd_bin_e) {
+    AssertEQ(T, Input, Expected);
+}
+
+
 RUN_TESTS(
     CASE(simple_eq),
     CASE(simple_ne),
@@ -86,5 +118,9 @@ RUN_TESTS(
     CASE(len_mismatch),
     CASE(len_mismatch_int),
     CASE(len_mismatch_int_block_boundary),
-    CASE(commutative_ne)
+    CASE(commutative_ne),
+    CASE(single_rep),
+    CASE(grouped_rep),
+    CASE(rep_of_rep),
+    CASE(odd_bin),
 )

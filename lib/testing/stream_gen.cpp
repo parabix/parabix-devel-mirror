@@ -11,22 +11,15 @@
 #include <kernel/util/hex_convert.h>
 #include <llvm/Support/ErrorHandling.h>
 
+#include "stream_parsing.hpp"
+
 namespace testing {
 
 namespace {
 
-// Mapping of hex digits as ascii chars to ascii chars representing the input
-// hex digit with its bits reversed.
-constexpr uint8_t ReverseHexDigitTable[] = {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-     '0',  '8',  '4',  'c',  '2',  'a',  '6',  'e',    '1',  '9', 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-
-    0xff,  '5',  'd',  '3',  'b',  '7',  'f', 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff,  '5',  'd',  '3',  'b',  '7',  'f', 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+constexpr char ReverseHexDigitTable[] = {
+    '0', '8', '4', 'c', '2', 'a', '6', 'e', 
+    '1', '9', '5', 'd', '3', 'b', '7', 'f'
 };
 
 constexpr char HexDigitTable[] = {
@@ -38,19 +31,10 @@ constexpr char HexDigitTable[] = {
 
 InMemoryStream<> HexStream(StaticStream stream) {
     std::vector<uint8_t> hex{};
-    size_t idx = 0;
-    while (stream[idx] != '\0') {
-        char c = stream[idx];
-        idx++;
-        if (std::isspace(c)) {
-            continue;
-        } else if (!std::isxdigit(c)) {
-            llvm::report_fatal_error(std::string("'").append(1, c).append("' is not a valid hex digit"));
-        }
-
-        auto digit = ReverseHexDigitTable[(int) c];
-        hex.push_back(digit);
-    }
+    auto node = ssn::parse<ssn::HexConverter>(stream);
+    ssn::ast::walk(node, [&](uint8_t v) {
+        hex.push_back(ReverseHexDigitTable[(int) v]);
+    });
     auto ims = InMemoryStream<>(std::move(hex));
     ims.setFieldWidth(1);
     return ims;
@@ -59,35 +43,21 @@ InMemoryStream<> HexStream(StaticStream stream) {
 
 InMemoryStream<> BinaryStream(StaticStream stream) {
     std::vector<uint8_t> hex{};
-    size_t idx = 0;
-
-    auto getBit = [&]() -> uint8_t {
-        while (true) {
-            if (stream[idx] == '\0') {
-                return 0;
-            }
-            char c = stream[idx];
-            idx++;
-            if (std::isspace(c)) {
-                continue;
-            } else if (c == '1') {
-                return 1;
-            } else if (c == '.' || c == '0') {
-                return 0;
-            } else {
-                llvm::report_fatal_error(std::string("'").append(1, c).append("' is not a valid binary digit"));
-            }
+    int counter = 0;
+    uint8_t builder = 0;
+    auto node = ssn::parse<ssn::BinaryConverter>(stream);
+    ssn::ast::walk(node, [&](uint8_t v) {
+        builder |= v << counter;
+        counter++;
+        if (counter == 4) {
+            hex.push_back(HexDigitTable[(int) builder]);
+            builder = 0;
+            counter = 0;
         }
-    };
-
-    while (stream[idx] != '\0') {
-        uint8_t val = 0;
-        for (size_t i = 0; i < 4; ++i) {
-            val |= getBit() << i;
-        }
-        hex.push_back(HexDigitTable[val]);
+    });
+    if (counter != 0) {
+        hex.push_back(HexDigitTable[(int) builder]);
     }
-
     auto ims = InMemoryStream<>(std::move(hex));
     ims.setFieldWidth(1);
     return ims;
