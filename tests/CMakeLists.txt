@@ -13,11 +13,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TEST_BIN_DIR})
 function(parabix_add_kernel_test NAME)
     parabix_add_executable(NAME ${NAME} SRC ${NAME}.cpp DEPS testing ${ARGN})
     set(KERNEL_TEST_LIST ${KERNEL_TEST_LIST} ${TEST_BIN_DIR}/${NAME} PARENT_SCOPE)
-    set(KERNEL_TEST_TARGET_LIST ${KERNEL_TEST_LIST} ${NAME} PARENT_SCOPE)
+    set(KERNEL_TEST_TARGET_LIST ${KERNEL_TEST_TARGET_LIST} ${NAME} PARENT_SCOPE)
 endfunction(parabix_add_kernel_test)
 
 
 ###   Test Targets   ###
+parabix_add_kernel_test(meta_tests)
 parabix_add_kernel_test(test_scan_index_gen kernel.scan)
 
 
