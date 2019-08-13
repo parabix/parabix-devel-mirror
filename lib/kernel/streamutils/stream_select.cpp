@@ -307,8 +307,7 @@ IStreamSelect::IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation o
 : MultiBlockKernel(b, "IStreamSelect" + genSignature(operation), 
     {}, 
     {{"output", output, BoundedRate(0, 1)}}, 
-    {}, {}, 
-    {InternalScalar{b->getSizeTy(), "initialStride"}})
+    {}, {}, {})
 {
     assert(resultStreamCount(operation) == output->getNumElements());
     std::unordered_map<StreamSet *, std::string> inputBindings;
@@ -332,7 +331,7 @@ void IStreamSelect::generateMultiBlockLogic(BuilderRef b, Value * const numOfStr
     BasicBlock * const block_Entry = b->GetInsertBlock();
     BasicBlock * const block_Loop = b->CreateBasicBlock("loop");
     BasicBlock * const block_Exit = b->CreateBasicBlock("exit");
-    Value * const initialStride = b->getScalarField("initialStride");
+    Value * const initialStride = b->getProducedItemCount("output");
     b->CreateCondBr(mIsFinal, block_Exit, block_Loop);
 
     b->SetInsertPoint(block_Loop);
