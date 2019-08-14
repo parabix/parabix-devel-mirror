@@ -171,7 +171,8 @@ void WordMarkKernel::generatePabloMethod() {
     // with a non-word character.   It is also possible that the final position
     // of the root is at end of file if the final encodeable substring ends in
     // a word character.   The final word end is always at the EOF position.
-    PabloAST * wordCharBehindOrStart = pb.createNot(pb.createAdvance(pb.createNot(wordChar), 1));
+    PabloAST * SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
+    PabloAST * wordCharBehindOrStart = pb.createOr(pb.createAdvance(wordChar, 1), SOT);
     PabloAST * afterWord = pb.createScanThru(wordCharBehindOrStart, U8nonfinal);
     PabloAST * rootEnd = pb.createAnd(afterWord, nonWordChar, "markRoot");
     PabloAST * afterNon = pb.createScanThru(pb.createAdvance(nonWordChar, 1), U8nonfinal);
@@ -238,7 +239,7 @@ void WordAccumulator::accumulate_word (char * word_start, char * root_end, char 
     if (word_end > word_start) {
         const auto bytes = word_end - word_start;
         std::string new_word(word_start, bytes);
-        //llvm::errs() << "Found word: |" << new_word << "|\n";
+        llvm::errs() << "Found word: |" << new_word << "|\n";
         if (word_end != root_end) {
             std::string extension(root_end, word_end - root_end);
             //llvm::errs() << "Found extension: |" << extension << "|\n";
@@ -297,6 +298,7 @@ void ZTF8_Reporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     Constant * const sz_ONE = b->getSize(1);
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const processWords = b->CreateBasicBlock("processWords");
+    BasicBlock * const updatePending = b->CreateBasicBlock("updatePending");
     BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
 
     Value * accumulator = b->getScalarField("accumulator_address");
@@ -322,7 +324,10 @@ void ZTF8_Reporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder>
     Value * haveMoreWords = b->CreateICmpNE(nextWordNum, wordsAvail);
     phiWordStart->addIncoming(wordEndPosn, b->GetInsertBlock());
     phiWordNum->addIncoming(nextWordNum, b->GetInsertBlock());
-    b->CreateCondBr(haveMoreWords, processWords, coordinatesDone);
+    b->CreateCondBr(haveMoreWords, processWords, updatePending);
+    b->SetInsertPoint(updatePending);
+    b->setScalarField("PendingWordStartPos", wordEndPosn);
+    b->CreateBr(coordinatesDone);
     b->SetInsertPoint(coordinatesDone);
 }
 

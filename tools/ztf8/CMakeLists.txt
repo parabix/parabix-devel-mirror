@@ -10,3 +10,14 @@ SRC
 DEPS
     grep
 )
+
+parabix_add_executable(
+NAME
+    matchprior
+SRC
+    matchprior.cpp
+DEPS
+    fileselect
+    kernel.basis
+    kernel.io
+)
