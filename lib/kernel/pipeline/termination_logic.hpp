@@ -33,7 +33,6 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
             add_edge(producer, consumer, G);
         }
     }
-    clear_out_edges(PipelineInput, G);
 
     for (unsigned consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
         for (const auto & relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
@@ -67,6 +66,8 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
 
     transitive_reduction_dag(G);
+
+    clear_out_edges(PipelineInput, G);
 
     // we are only interested in the incoming edges of the pipeline output
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -159,6 +160,7 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mTerminationGraph))) {
         const auto kernel = source(e, mTerminationGraph);
         Value * const signal = mTerminationSignals[kernel];
+        assert (signal);
         assert (signal->getType() == unterminated->getType());
         // if this is a hard termination, such as a fatal error, any can terminate the pipeline.
         // however, a kernel that can terminate with a fatal error, may not necessarily do so.
