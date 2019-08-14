@@ -1,13 +1,10 @@
 /*
- *  Copyright (c) 2018 International Characters.
+ *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  *  icgrep is a trademark of International Characters.
  */
 
-#include <kernel/core/idisa_target.h>
 #include <boost/filesystem.hpp>
-#include <re/cc/cc_compiler.h>
-#include <re/cc/cc_compiler_target.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/basis/s2p_kernel.h>
@@ -20,7 +17,7 @@
 #include <pablo/builder.hpp>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
-#include <pablo/pe_ones.h>
+#include <pablo/pe_zeroes.h>
 #include <toolchain/pablo_toolchain.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
@@ -30,7 +27,6 @@
 #include <iostream>
 #include <string>
 #include <sys/stat.h>
-#include <vector>
 
 namespace fs = boost::filesystem;
 
@@ -43,90 +39,66 @@ static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ..
 
 static cl::opt<unsigned> priorDistance("distance", cl::desc("distance for prior match (default 2)"), cl::init(2),  cl::cat(matchpriorFlags));
 
-static int defaultDisplayColumnWidth = 7;  // default field width
+static int defaultDisplayColumnWidth = 10;  // default field width
 
 std::vector<fs::path> allFiles;
 
-std::vector<uint64_t> priorCount;
-std::vector<uint64_t> byteCount;
-
-uint64_t TotalBytes = 0;
-uint64_t TotalPrior = 0;
-
-using namespace pablo;
 using namespace kernel;
-
-//  The callback routine that records counts in progress.
-//
-extern "C" {
-    void record_prior_counts(uint64_t prior, uint64_t bytes, uint64_t fileIdx) {
-        priorCount[fileIdx] = prior;
-        byteCount[fileIdx] = bytes;
-        TotalPrior += prior;
-        TotalBytes += bytes;
-    }
-}
 
 class MatchPriorKernel final: public pablo::PabloKernel {
 public:
-    MatchPriorKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable);
+    MatchPriorKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable, Scalar * countResult);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-MatchPriorKernel::MatchPriorKernel (const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable)
-: PabloKernel(b, "matchprior_" + std::to_string(priorDistance),
+MatchPriorKernel::MatchPriorKernel (const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable, Scalar * countResult)
+    : pablo::PabloKernel(b, "matchprior_" + std::to_string(priorDistance),
     {Binding{"countable", countable}},
     {},
     {},
-    {Binding{b->getSizeTy(), "matchCount"}}) {
-    addAttribute(SideEffecting());
+    {Binding{"matchCount", countResult}}) {
 }
 
 void MatchPriorKernel::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> basis = getInputStreamSet("countable");
+    pablo::PabloBuilder pb(getEntryScope());
+    std::vector<pablo::PabloAST *> basis = getInputStreamSet("countable");
 
-    PabloAST * matchesprior = pb.createOnes();
-    for (unsigned i = 0; i < 7; i++) {
-        matchesprior = pb.createAnd(matchesprior, pb.createXor(basis[i], pb.createAdvance(basis[i], priorDistance)),
-                                    "matches_prior_" + std::to_string(priorDistance) + "_to_bit" + std::to_string(i));
+    pablo::PabloAST * mismatches = pb.createZeroes();
+    for (unsigned i = 0; i < 8; i++) {
+        mismatches = pb.createOr(mismatches,
+                                 pb.createXor(basis[i], pb.createAdvance(basis[i], priorDistance)),
+                                 "mismatches_" + std::to_string(priorDistance) + "_to_bit" + std::to_string(i));
     }
-    Var * matchCount = getOutputScalarVar("matchCount");
+    pablo::PabloAST * matchesprior = pb.createInFile(pb.createNot(mismatches), "matchesprior");
+    pablo::Var * matchCount = getOutputScalarVar("matchCount");
     pb.createAssign(matchCount, pb.createCount(matchesprior));
 }
 
-typedef void (*MatchPriorFunctionType)(uint32_t fd, uint32_t fileIdx);
+typedef uint64_t (*MatchPriorFunctionType)(uint32_t fd);
 
 MatchPriorFunctionType mpPipelineGen(CPUDriver & pxDriver) {
-
-    auto & iBuilder = pxDriver.getBuilder();
-
-    Type * const int32Ty = iBuilder->getInt32Ty();
-
-    auto P = pxDriver.makePipeline({Binding{int32Ty, "fd"}, Binding{int32Ty, "fileIdx"}});
-
+    auto & b = pxDriver.getBuilder();
+    Type * const int32Ty = b->getInt32Ty();
+    auto P = pxDriver.makePipeline({Binding{int32Ty, "fd"}},
+                                   {Binding{b->getInt64Ty(), "countResult"}});
     Scalar * const fileDescriptor = P->getInputScalar("fd");
-    Scalar * const fileIdx = P->getInputScalar("fileIdx");
-
     StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
-
-    Kernel * mmapK = P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
-
+    P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
     StreamSet * BasisBits = P->CreateStreamSet(8, 1);
-    
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-
-    Kernel * const mpk = P->CreateKernelCall<MatchPriorKernel>(BasisBits);
-
-    Scalar * const matchCount = mpk->getOutputScalar("matchCount");
-    Scalar * const fileSize = mmapK->getOutputScalar("fileItems");
-
-    P->CreateCall("record_prior_counts", record_prior_counts, {matchCount, fileSize, fileIdx});
-
+    P->CreateKernelCall<MatchPriorKernel>(BasisBits, P->getOutputScalar("countResult"));
     return reinterpret_cast<MatchPriorFunctionType>(P->compile());
+}
+
+size_t file_size(const int fd) {
+    struct stat st;
+    if (LLVM_UNLIKELY(fstat(fd, &st) != 0)) {
+        st.st_size = 0;
+    }
+    return st.st_size;
 }
 
 void mp(MatchPriorFunctionType fn_ptr, const uint32_t fileIdx) {
@@ -150,45 +122,26 @@ void mp(MatchPriorFunctionType fn_ptr, const uint32_t fileIdx) {
         close(fd);
         return;
     }
-    fn_ptr(fd, fileIdx);
+    uint64_t countResult = fn_ptr(fd);
+    std::cout << std::setw(defaultDisplayColumnWidth);
+    std::cout << countResult << std::setw(defaultDisplayColumnWidth);
+    std::cout << file_size(fd);
+    std::cout << " " << fileName << std::endl;
     close(fd);
 }
 
 int main(int argc, char *argv[]) {
-    codegen::ParseCommandLineOptions(argc, argv, {&matchpriorFlags, pablo_toolchain_flags(), codegen::codegen_flags()});
+    codegen::ParseCommandLineOptions(argc, argv, {&matchpriorFlags, pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
     }
     CPUDriver pxDriver("mp");
-
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
-
     const auto fileCount = allFiles.size();
 
     auto matchPriorFunctionPtr = mpPipelineGen(pxDriver);
-
-    priorCount.resize(fileCount);
-    byteCount.resize(fileCount);
-
     for (unsigned i = 0; i < fileCount; ++i) {
         mp(matchPriorFunctionPtr, i);
     }
-    
-    int displayColumnWidth = std::to_string(TotalBytes).size() + 1;
-    if (displayColumnWidth < defaultDisplayColumnWidth) displayColumnWidth = defaultDisplayColumnWidth;
-
-    for (unsigned i = 0; i < fileCount; ++i) {
-        std::cout << std::setw(displayColumnWidth-1);
-        std::cout << priorCount[i] << std::setw(displayColumnWidth);
-        std::cout << byteCount[i];
-        std::cout << " " << allFiles[i].string() << std::endl;
-    }
-    if (inputFiles.size() > 1) {
-        std::cout << std::setw(displayColumnWidth-1);
-        std::cout << TotalPrior << std::setw(displayColumnWidth);
-        std::cout << TotalBytes;
-        std::cout << " total" << std::endl;
-    }
-
     return 0;
 }
