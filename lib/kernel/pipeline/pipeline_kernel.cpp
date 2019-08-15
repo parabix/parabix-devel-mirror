@@ -1,5 +1,5 @@
 #include <kernel/pipeline/pipeline_kernel.h>
-#include "pipeline_compiler.hpp"
+#include "compiler/pipeline_compiler.hpp"
 #include <llvm/IR/Function.h>
 
 // NOTE: the pipeline kernel is primarily a proxy for the pipeline compiler. Ideally, by making some kernels

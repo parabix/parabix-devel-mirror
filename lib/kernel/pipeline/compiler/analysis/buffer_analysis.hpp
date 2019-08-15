@@ -79,7 +79,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     assert (codegen::BufferSegments > 0);
     assert (codegen::ThreadNum > 0);
 
-    const auto requiredThreadSegments = ((codegen::ThreadNum > 1U) ? codegen::ThreadNum + 1U : 1U);
+    const auto requiredThreadSegments = ((codegen::ThreadNum > 1) ? codegen::ThreadNum + 1U : 1U);
     const auto numOfSegments = std::max(codegen::BufferSegments, requiredThreadSegments);
     const auto blockWidth = b->getBitBlockWidth();
 

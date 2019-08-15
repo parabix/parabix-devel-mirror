@@ -10,8 +10,8 @@ SRC
     driver/driver.cpp
     driver/cpudriver.cpp
     # driver/NVPTXDriver.cpp
-    internal/popcount_kernel.cpp
-    internal/regionselectionkernel.cpp
+    compiler/internal/popcount_kernel.cpp
+    compiler/internal/regionselectionkernel.cpp
     optimizationbranch/optimizationbranch.cpp
     pipeline_builder.cpp
     pipeline_kernel.cpp
