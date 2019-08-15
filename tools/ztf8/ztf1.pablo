@@ -1,0 +1,60 @@
+#
+# Copyright (c) 2019 International Characters.
+# This software is licensed to the public under the Open Software License 3.0.
+#
+# ZTF-1 Compression and Decompression Calculations
+# - initial version: 2-byte sequence compression only
+
+type BasisBits = <i1>[8]
+type Mask = <i1>[1]
+
+kernel ZTF1_Compression_Mask :: [BasisBits bb] -> [Mask mask] {
+    prefix = bb[7] & bb[6]
+    adv_pfx_bit0 = AdvanceThenScanTo(bb[0] & prefix, prefix)
+    adv_pfx_bit1 = AdvanceThenScanTo(bb[1] & prefix, prefix)
+    adv_pfx_bit2 = AdvanceThenScanTo(bb[2] & prefix, prefix)
+    adv_pfx_bit3 = AdvanceThenScanTo(bb[3] & prefix, prefix)
+    adv_pfx_bit4 = AdvanceThenScanTo(bb[4] & prefix, prefix)
+    adv_pfx_bit5 = AdvanceThenScanTo(bb[5] & prefix, prefix)
+    mismatch = adv_pfx_bit0 ^ bb[0]
+    mismatch |= adv_pfx_bit1 ^ bb[1]
+    mismatch |= adv_pfx_bit2 ^ bb[2]
+    mismatch |= adv_pfx_bit3 ^ bb[3]
+    mismatch |= adv_pfx_bit4 ^ bb[4]
+    mismatch |= adv_pfx_bit5 ^ bb[5]
+    pfx2 = prefix & ~bb[5]
+    mask[0] = mismatch | ~prefix
+}
+
+
+kernel ZTF1_Decompression :: [BasisBits compressed] -> [BasisBits to_insert, Mask insert_marks] {
+    prefix = bb[7] & bb[6]
+    non_prefix = ~prefix
+    suffix = bb[7] & ~ bb[6]
+    pfx3or4 = prefix & bb[5]
+    pfx4 = pfx3or4 & bb[4]
+    matched_suffix = Advance(prefix, 1) & suffix
+    matched_suffix |= Advance(pfx3or4, 2) & suffix
+    matched_suffix |= Advance(pfx4, 3) & suffix
+
+    unmatched = suffix & ~matched_suffix
+
+    pfx_bit0_adv1 = Advance(prefix & bb[0], 1)
+    pfx_bit1_adv1 = Advance(prefix & bb[1], 1)
+    pfx_bit2_adv1 = Advance(prefix & bb[2], 1)
+    pfx_bit3_adv1 = Advance(prefix & bb[3], 1)
+    pfx_bit4_adv1 = Advance(prefix & bb[4], 1)
+    pfx_bit5_adv1 = Advance(prefix & bb[5], 1)
+    pfx_adv1 = Advance(prefix, 1)
+
+    to_insert[0] = MatchStar(pfx_bit0_adv1, non_prefix) & unmatched
+    to_insert[1] = MatchStar(pfx_bit1_adv1, non_prefix) & unmatched
+    to_insert[2] = MatchStar(pfx_bit2_adv1, non_prefix) & unmatched
+    to_insert[3] = MatchStar(pfx_bit3_adv1, non_prefix) & unmatched
+    to_insert[4] = MatchStar(pfx_bit4_adv1, non_prefix) & unmatched
+    to_insert[5] = MatchStar(pfx_bit5_adv1, non_prefix) & unmatched
+    to_insert[6] = MatchStar(pfx_adv1, non_prefix) & unmatched
+    to_insert[7] = to_insert[6]
+
+    insert_marks = to_insert[6]
+}
