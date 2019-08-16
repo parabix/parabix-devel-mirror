@@ -135,7 +135,7 @@ struct Number : public Token {
     uint32_t value;
 };
 
-bool isControlChar(char c) noexcept {
+inline bool isControlChar(char c) noexcept {
     for (auto x : "(){}") {
         if (x == c) {
             return true;
