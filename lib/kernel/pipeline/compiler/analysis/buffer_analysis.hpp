@@ -827,6 +827,12 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
             outputRate.MaximumExpectedFlow = upper_expected * outputRate.Maximum;
             RateValue add{0};
             check_attribute(AttrId::Add, outputRate, add);
+            const auto buffer = target(output, G);
+            RateValue add2{0};
+            for (const auto & consumer_input : make_iterator_range(out_edges(buffer, G))) {
+                BufferRateData & inputRate = G[consumer_input];
+                check_attribute(AttrId::Add, inputRate, add2);
+            }
             RateValue roundUp{0};
             const Binding & binding = outputRate.Binding;
             if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::RoundUpTo))) {
@@ -837,7 +843,7 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 roundUp = std::max(roundUp, std::max(a, b));
             }
             outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;
-            const auto f = upper_absolute + std::max(add, roundUp);
+            const auto f = upper_absolute + std::max(add + add2, roundUp);
             outputRate.MaximumSpace = f * outputRate.Maximum;
             assert (outputRate.MinimumSpace <= outputRate.MinimumExpectedFlow);
             assert (outputRate.MaximumSpace >= outputRate.MaximumExpectedFlow);

@@ -421,12 +421,33 @@ Value * PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *>
 Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
     const auto numOfInputs = accessibleItems.size();
 
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        Value * accessible = mAccessibleInputItems[i];
+        const Binding & input = getInputBinding(i);
+        Value * selected = accessible;
+        for (const Attribute & attr : input.getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::Add:
+                    selected = b->CreateAdd(selected, b->getSize(attr.amount()));
+                    break;
+                case AttrId::Truncate:
+                    selected = b->CreateSaturatingSub(selected, b->getSize(attr.amount()));
+                    break;
+                default: break;
+            }
+        }
+        if (LLVM_UNLIKELY(selected != accessible)) {
+            accessible = b->CreateSelect(isClosedNormally(b, i), selected, accessible);
+        }
+        accessibleItems[i] = accessible;
+    }
+
     Value * principalFixedRateFactor = nullptr;
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const Binding & input = getInputBinding(i);
         const ProcessingRate & rate = input.getRate();
         if (rate.isFixed() && LLVM_UNLIKELY(input.isPrincipal())) {
-            Value * const accessible = mAccessibleInputItems[i];
+            Value * const accessible = accessibleItems[i];
             const auto factor = mFixedRateLCM / rate.getRate();
             principalFixedRateFactor = b->CreateMulRate(accessible, factor);
             break;
@@ -434,7 +455,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
     }
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        Value * accessible = mAccessibleInputItems[i];
+        Value * accessible = accessibleItems[i];
         if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
             // If this input stream is zero extended, the current input items will be MAX_INT.
             // However, since we're now in the final stride, so we can bound the stream to:
@@ -535,10 +556,17 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
 
         // update the final item counts with any Add/RoundUp attributes
         for (const Attribute & attr : output.getAttributes()) {
-            if (attr.isAdd()) {
-                writable = b->CreateAdd(writable, b->getSize(attr.amount()));
-            } else if (attr.isRoundUpTo()) {
-                writable = b->CreateRoundUp(writable, b->getSize(attr.amount()));
+            switch (attr.getKind()) {
+                case AttrId::Add:
+                    writable = b->CreateAdd(writable, b->getSize(attr.amount()));
+                    break;
+                case AttrId::Truncate:
+                    writable = b->CreateSaturatingSub(writable, b->getSize(attr.amount()));
+                    break;
+                case AttrId::RoundUpTo:
+                    writable = b->CreateRoundUp(writable, b->getSize(attr.amount()));
+                    break;
+                default: break;
             }
         }
         writableItems[i] = writable;

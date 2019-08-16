@@ -100,6 +100,10 @@ public:
         return CreateSelect(CreateICmpSGT(a, b), a, b, Name);
     }
 
+    llvm::Value * CreateSaturatingAdd(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "");
+
+    llvm::Value * CreateSaturatingSub(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "");
+
     llvm::Value * CreateMalloc(llvm::Value * const size);
 
     llvm::Value * CreateAlignedMalloc(llvm::Value * const size, const unsigned alignment);
@@ -323,9 +327,9 @@ public:
     llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits, const llvm::Twine &Name = "");
 
     llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits, const llvm::Twine &Name = "");
-    
+
     virtual llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos, const llvm::Twine &Name = "");
-    
+
     virtual llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length, const llvm::Twine &Name = "");
 
     llvm::Value * CreateCeilLog2(llvm::Value * value, const llvm::Twine &Name = "");

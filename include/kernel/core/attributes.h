@@ -116,11 +116,6 @@ struct Attribute {
 
         /** OUTPUT STREAM ATTRIBUTES **/
 
-        Add,
-
-        // An Add(K) attribute states that K items will be added to this stream after
-        // processing the final block.
-
         RoundUpTo,
 
         // A RoundUpTo(k) attribute indicates the final item count of this stream will
@@ -141,6 +136,18 @@ struct Attribute {
         // Indicates that the number of stream sets in this buffer can increase.
 
         /** INPUT/OUTPUT STREAM ATTRIBUTES **/
+
+        Add,
+
+        // Adds K items to the final item count. When applied to an output stream, for all
+        // consumers, the total item count will reflect the K added items. When applied to
+        // an input stream only that particular kernel will see K additional items.
+
+        Truncate,
+
+        // Opposite of Add; removes K items from the final item count.
+
+        // NOTE: currently supports only the removal of "added" items.
 
         Linear,
 

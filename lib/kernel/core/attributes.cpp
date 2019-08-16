@@ -25,7 +25,7 @@ void Attribute::print(llvm::raw_ostream & out) const noexcept {
         NAME_AMOUNT(RegionSelector);
         NAME(SupressNonRegionZeroFill);
         NAME(RequiresPopCountArray); NAME(RequiresNegatedPopCountArray);
-        NAME_AMOUNT(Add);
+        NAME_AMOUNT(Add); NAME_AMOUNT(Truncate);
         NAME_AMOUNT(RoundUpTo);
         NAME(ManagedBuffer);
         NAME(Misaligned);
