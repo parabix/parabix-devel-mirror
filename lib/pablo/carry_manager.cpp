@@ -954,6 +954,11 @@ void CarryManager::setNextCarryOut(BuilderRef b, Value * carryOut) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::readCarryInSummary(BuilderRef b) const {
     assert (mCarryInfo->hasSummary());
+    assert ("frame must be a pointer to a struct!" &&
+            mCurrentFrame->getType()->isPointerTy());
+    assert ("frame must be a pointer to a struct!" &&
+            mCurrentFrame->getType()->getPointerElementType()->isStructTy());
+
     unsigned count = 2;
     if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
         Type * frameTy = mCurrentFrame->getType()->getPointerElementType();
@@ -971,6 +976,9 @@ Value * CarryManager::readCarryInSummary(BuilderRef b) const {
     if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
     }
+
+    assert ("frame reports having a summary but none was found?" &&
+            mCurrentFrame->getType()->getPointerElementType()->getStructNumElements() > count);
 
     Value * const ptr = b->CreateGEP(mCurrentFrame, indicies);
     assert (ptr->getType()->getPointerElementType() == b->getBitBlockType());
@@ -1034,7 +1042,10 @@ bool isNonRegularLanguage(const PabloBlock * const scope) {
     return false;
 }
 
-static bool hasNonEmptyCarryStruct(const Type * const frameTy) {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasNonEmptyCarryStruct
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool CarryManager::hasNonEmptyCarryStruct(const Type * const frameTy) {
     if (frameTy->isStructTy()) {
         for (unsigned i = 0; i < frameTy->getStructNumElements(); ++i) {
             if (hasNonEmptyCarryStruct(frameTy->getStructElementType(i))) {
@@ -1042,6 +1053,18 @@ static bool hasNonEmptyCarryStruct(const Type * const frameTy) {
             }
         }
         return false;
+    }
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isEmptyCarryStruct
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool CarryManager::isEmptyCarryStruct(const std::vector<Type *> & frameTys) {
+    for (const Type * const t : frameTys) {
+        if (LLVM_LIKELY(hasNonEmptyCarryStruct(t))) {
+            return false;
+        }
     }
     return true;
 }
@@ -1104,8 +1127,10 @@ StructType * CarryManager::analyse(BuilderRef b, const PabloBlock * const scope,
     CarryData & cd = mCarryMetadata[carryScopeIndex];
     StructType * carryState = nullptr;
     CarryData::SummaryType summaryType = CarryData::NoSummary;
-    if (LLVM_UNLIKELY(state.empty())) {
-        carryState = StructType::get(b->getContext());
+
+    // if we have at least one non-empty carry state, check if we need a summary
+    if (LLVM_UNLIKELY(isEmptyCarryStruct(state))) {
+        carryState = StructType::get(b->getContext(), state);
     } else {
         // do we have a summary or a sequence of nested empty structs?
         if (LLVM_LIKELY(ifDepth > 0 || loopDepth > 0)) {
@@ -1119,6 +1144,7 @@ StructType * CarryManager::analyse(BuilderRef b, const PabloBlock * const scope,
                 }
             }
         }
+
         carryState = StructType::get(b->getContext(), state);
 
 

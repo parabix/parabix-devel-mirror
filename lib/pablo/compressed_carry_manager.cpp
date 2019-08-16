@@ -566,8 +566,6 @@ Type * CompressedCarryManager::getSummaryTypeFromCurrentFrame() const {
 
 
 /* ==== Scope Analyse ===== */
-
-
 StructType * CompressedCarryManager::analyse(BuilderRef b,
                                              const PabloBlock * const scope,
                                              const unsigned ifDepth,
@@ -644,8 +642,9 @@ StructType * CompressedCarryManager::analyse(BuilderRef b,
     StructType * carryStruct = nullptr;
     CarryData::SummaryType summaryType = CarryData::NoSummary;
 
-    if (LLVM_UNLIKELY(state.empty())) {
-        carryStruct = StructType::get(b->getContext());
+    // if we have at least one non-empty carry state, check if we need a summary
+    if (LLVM_UNLIKELY(isEmptyCarryStruct(state))) {
+        carryStruct = StructType::get(b->getContext(), state);
     } else {
         if (LLVM_LIKELY(ifDepth > 0 || whileDepth > 0)) {
             if (LLVM_LIKELY(canUseImplicitSummary)) {

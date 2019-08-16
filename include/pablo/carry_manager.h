@@ -125,6 +125,10 @@ protected:
     virtual void writeCurrentCarryOutSummary(BuilderRef b);
     virtual void combineCarryOutSummary(BuilderRef b, const unsigned offset);
 
+    /* Misc. routines */
+    static bool hasNonEmptyCarryStruct(const llvm::Type * const frameTy);
+    static bool isEmptyCarryStruct(const std::vector<llvm::Type *> & frameTys);
+
 protected:
 
     const PabloKernel *                             mKernel;
