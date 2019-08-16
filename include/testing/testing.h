@@ -9,4 +9,4 @@
 #include "assert.h"
 #include "macro.h"
 #include "runtime.h"
-#include "stream_gen.h"
+#include "stream_gen.hpp"

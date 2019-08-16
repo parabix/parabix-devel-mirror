@@ -87,7 +87,7 @@ Token * SimpleLexer::extractText() {
 Token * SimpleLexer::extractIntLiteral() {
     const size_t col = mCurrentColNum;
     size_t consumedCount = 0;
-    int64_t value = std::stol(mCurrentLine.substr(mCurrentColNum).to_string(), &consumedCount, /* auto base */ 0);
+    uint64_t value = std::stoul(mCurrentLine.substr(mCurrentColNum).to_string(), &consumedCount, /* auto base */ 0);
     mCurrentColNum += consumedCount;
     if (consumedCount == 0 || (mCurrentColNum < mCurrentLine.length() && !isTokenSeparator(mCurrentLine[mCurrentColNum]))) {
         mErrorManager->logError(mCurrentSource, mCurrentLineNum, col + 1 /*to 1-indexed*/, errtxt_IllegalIntegerLiteral());

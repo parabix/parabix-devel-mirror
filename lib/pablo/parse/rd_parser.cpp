@@ -760,7 +760,7 @@ PabloAST * RecursiveParser::parseLiteral(ParserState & state) {
     TokenType peekType = peek->getType();
     if (peekType == TokenType::INT_LITERAL) {
         Token * integer = state.nextToken();
-        return llvm::cast<PabloAST>(state.pb->getInteger((int64_t) integer->getValue()));
+        return llvm::cast<PabloAST>(state.pb->getInteger((uint64_t) integer->getValue()));
     } else if (peekType == TokenType::L_ANGLE) {
         state.nextToken(); // consume '<'
         Token * const i = state.nextToken();

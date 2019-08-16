@@ -3,6 +3,7 @@
  *  This software is licensed to the public under the Open Software License 3.0.
  */
 #include <kernel/streamutils/pdep_kernel.h>
+#include <kernel/streamutils/deletion.h>
 
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
@@ -432,4 +433,52 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
 
     b->SetInsertPoint(finishedStrides);
 }
+
+/*  Calculation of a spread mask given a stream marking positions of single
+    items to be inserted.  */
+
+class UnitInsertionExtractionMasks : public BlockOrientedKernel {
+public:
+    UnitInsertionExtractionMasks(const std::unique_ptr<KernelBuilder> & b,
+                                 StreamSet * insertion_mask, StreamSet * stream01, StreamSet * valid01)
+    : BlockOrientedKernel(b, "unitInsertionExtractionMasks",
+        {Binding{"insertion_mask", insertion_mask}},
+        {Binding{"stream01", stream01, FixedRate(2)}, Binding{"valid01", valid01, FixedRate(2)}},
+        {}, {},
+        {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}}) {}
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
+    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
+};
+
+void UnitInsertionExtractionMasks::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+    Constant * mask01 = b->simd_himask(2);
+    b->storeOutputStreamBlock("stream01", b->getSize(0), b->getSize(0), mask01);
+    b->storeOutputStreamBlock("stream01", b->getSize(0), b->getSize(1), mask01);
+    Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
+    Value * insertion_mask = b->loadInputStreamBlock("insertion_mask", b->getSize(0), b->getSize(0));
+    Value * extract_mask_lo = b->esimd_mergel(1, insertion_mask, fileExtentMask);
+    Value * extract_mask_hi = b->esimd_mergeh(1, insertion_mask, fileExtentMask);
+    b->storeOutputStreamBlock("valid01", b->getSize(0), b->getSize(0), extract_mask_lo);
+    b->storeOutputStreamBlock("valid01", b->getSize(0), b->getSize(1), extract_mask_hi);
+}
+
+void UnitInsertionExtractionMasks::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
+    // Standard Pablo convention for final block processing: set a bit marking
+    // the position just past EOF, as well as a mask marking all positions past EOF.
+    b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
+    CreateDoBlockMethodCall(b);
+}
+
+StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask) {
+    auto stream01 = P->CreateStreamSet(1);
+    auto valid01 = P->CreateStreamSet(1);
+    P->CreateKernelCall<UnitInsertionExtractionMasks>(insertion_mask, stream01, valid01);
+    auto spread_mask = P->CreateStreamSet(1);
+    FilterByMask(P, valid01, stream01, spread_mask);
+    return spread_mask;
+}
+
 }

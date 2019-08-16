@@ -8,6 +8,7 @@
 #include <tuple>
 #include <testing/common.h>
 #include <testing/runtime.h>
+#include <testing/stream_gen.hpp>
 #include <toolchain/toolchain.h>
 
 #define TEST_CASE(NAME, INPUT, EXPECTED)                                                                    \
@@ -19,9 +20,9 @@ testing::UnitTestFunc __gen_##NAME(testing::TestEngine & T) {                   
         {testing::BufferTypeOf(T, INPUT), #INPUT "_ptr"}, {__b_->getSizeTy(), #INPUT "_size"},              \
         {testing::BufferTypeOf(T, EXPECTED), #EXPECTED "_ptr"}, {__b_->getSizeTy(), #EXPECTED "_size"}      \
     });                                                                                                     \
-    auto Input = testing::ToStreamSet(T, INPUT.fieldWidth(),                                                \
+    auto Input = testing::ToStreamSet(T, INPUT.getFieldWidth(), INPUT.getNumElements(),                     \
         T->getInputScalar(#INPUT "_ptr"), T->getInputScalar(#INPUT "_size"));                               \
-    auto Expected = testing::ToStreamSet(T, EXPECTED.fieldWidth(),                                          \
+    auto Expected = testing::ToStreamSet(T, EXPECTED.getFieldWidth(), EXPECTED.getNumElements(),            \
         T->getInputScalar(#EXPECTED "_ptr"), T->getInputScalar(#EXPECTED "_size"));                         \
     __test_body_##NAME(T, Input, Expected);                                                                 \
     return T.compile();                                                                                     \
@@ -33,10 +34,10 @@ int32_t NAME() {                                                                
     testing::TestEngine T{};                                                                                \
     auto fn = __gen_##NAME(T);                                                                              \
     fn(                                                                                                     \
-        (const void *) INPUT.raw(),                                                                         \
-        INPUT.size(),                                                                                       \
-        (const void *) EXPECTED.raw(),                                                                      \
-        EXPECTED.size(),                                                                                    \
+        (const void *) INPUT.getBuffer().begin().base(),                                                    \
+        INPUT.getSize(),                                                                                    \
+        (const void *) EXPECTED.getBuffer().begin().base(),                                                 \
+        EXPECTED.getSize(),                                                                                 \
         result                                                                                              \
     );                                                                                                      \
     auto rt = *result;                                                                                      \

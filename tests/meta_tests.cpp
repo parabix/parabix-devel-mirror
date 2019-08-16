@@ -6,8 +6,12 @@
 // Tests for the testing framework
 
 #include <testing/testing.h>
+#include <kernel/streamutils/stream_select.h>
+#include <kernel/util/debug_display.h>
 
 using namespace testing;
+using namespace kernel;
+namespace su = kernel::streamutils;
 
 auto simple_eq_i = HexStream("0123 4567 89ab cdef");
 auto simple_eq_e = HexStream("0123 4567 89ab cdef");
@@ -21,6 +25,14 @@ auto simple_ne_i = HexStream("0123 4567 89ab cdef");
 auto simple_ne_e = HexStream("0123 4567 89ab cdee");
 
 TEST_CASE(simple_ne, simple_ne_i, simple_ne_e) {
+    AssertNE(T, Input, Expected);
+}
+
+
+auto long_hex_ne_i = HexStream("1{200}");
+auto long_hex_ne_e = HexStream("1{199}2");
+
+TEST_CASE(long_hex_ne, long_hex_ne_i, long_hex_ne_e) {
     AssertNE(T, Input, Expected);
 }
 
@@ -110,9 +122,132 @@ TEST_CASE(odd_bin, odd_bin_i, odd_bin_e) {
 }
 
 
+auto hex_set_i = HexStreamSet({
+    "a{300}",
+    "((ab){25} (01){25}){3}"
+});
+auto hex_set_e = HexStreamSet({
+    "((ab){25} (01){25}){3}",
+    "a{300}"
+});
+
+TEST_CASE(hex_set, hex_set_i, hex_set_e) {
+    auto A = Input;
+    auto B = Expected;
+    AssertEQ(T, su::Select(T, A, 0), su::Select(T, B, 1));
+    AssertEQ(T, su::Select(T, A, 1), su::Select(T, B, 0));
+}
+
+
+auto hex_set_ne_i = HexStreamSet({
+    "a{65}",
+    "f{65}",
+});
+auto hex_set_ne_e = HexStreamSet({
+    "a{64}b",
+    "f{65}",
+});
+
+TEST_CASE(hex_set_ne, hex_set_ne_i, hex_set_ne_e) {
+    auto A = Input;
+    auto B = Expected;
+    AssertNE(T, A, B);
+}
+
+
+auto bin_set_i = BinaryStreamSet({
+    "(1 .{254} 1){4}",
+    "(.1 .{252} 1.){4}",
+});
+
+auto bin_set_e = BinaryStreamSet({
+    "(.1 .{252} 1.){4}",
+    "(1 .{254} 1){4}",
+});
+
+TEST_CASE(bin_set, bin_set_i, bin_set_e) {
+    auto A = Input;
+    auto B = Expected;
+
+    auto a = su::Select(T, A, 0);
+    auto b = su::Select(T, B, 1);
+    auto c = su::Select(T, A, 1);
+    auto d = su::Select(T, B, 0);
+
+    AssertEQ(T, a, b);
+    AssertEQ(T, c, d);
+}
+
+
+auto small_set_select_i = BinaryStreamSet({"1.1", ".1."});
+
+auto small_set_select_e = BinaryStream(".1.");
+
+TEST_CASE(small_set_select, small_set_select_i, small_set_select_e) {
+    AssertEQ(T, su::Select(T, Input, 1), Expected);
+}
+
+
+auto int_set_i = IntStreamSet<uint32_t>({
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+    { 9, 8, 7, 6, 5, 4, 3, 2, 1, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0 },
+});
+
+auto int_set_e = IntStreamSet<uint32_t>({
+    { 9, 8, 7, 6, 5, 4, 3, 2, 1, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0 },
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+});
+
+TEST_CASE(int_set, int_set_i, int_set_e) {
+    auto a = su::Select(T, Input, 0);
+    auto b = su::Select(T, Expected, 1);
+    auto c = su::Select(T, Input, 1);
+    auto d = su::Select(T, Expected, 0);
+    AssertEQ(T, a, b);
+    AssertEQ(T, c, d);
+}
+
+
+auto int_set_select_i = IntStreamSet<uint16_t>({
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+});
+
+auto int_set_select_e = IntStream<uint16_t>(
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 }
+);
+
+TEST_CASE(int_set_select, int_set_select_i, int_set_select_e) {
+    AssertEQ(T, su::Select(T, Input, 1), Expected);
+}
+
+
+
+auto int_set_ne_i = IntStreamSet<uint32_t>({
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+    { 9, 8, 7, 6, 5, 4, 3, 2, 1, 90, 80, 70, 60, 50, 40, 30, 20, 10, 100 },
+});
+
+auto int_set_ne_e = IntStreamSet<uint32_t>({
+    { 9, 8, 7, 6, 5, 4, 3, 2, 1, 90, 80, 70, 60, 50, 40, 30, 20, 10, 0 },
+    { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 },
+});
+
+TEST_CASE(int_set_ne, int_set_ne_i, int_set_ne_e) {
+    auto a = su::Select(T, Input, 0);
+    auto b = su::Select(T, Expected, 1);
+    auto c = su::Select(T, Input, 1);
+    auto d = su::Select(T, Expected, 0);
+    AssertEQ(T, a, b);
+    AssertNE(T, c, d);
+}
+
+
 RUN_TESTS(
     CASE(simple_eq),
     CASE(simple_ne),
+    CASE(long_hex_ne),
     CASE(hex_binary_equivalence),
     CASE(dot_zero_equivalence),
     CASE(len_mismatch),
@@ -123,4 +258,11 @@ RUN_TESTS(
     CASE(grouped_rep),
     CASE(rep_of_rep),
     CASE(odd_bin),
+    CASE(hex_set),
+    CASE(hex_set_ne),
+    CASE(bin_set),
+    CASE(small_set_select),
+    CASE(int_set),
+    CASE(int_set_select),
+    CASE(int_set_ne),
 )
