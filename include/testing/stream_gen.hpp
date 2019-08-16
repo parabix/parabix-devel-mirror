@@ -36,6 +36,19 @@ namespace streamgen {
  */
 struct bit_t {};
 
+/// The field width of an integer type in bits.
+template<typename I> 
+struct field_width {
+    static_assert(std::is_integral<I>::value, "field_width<I>: `I` must be an integer type");
+    static const uint32_t value = sizeof(I) * 8; 
+};
+
+/// The field width of an integer type in bits.
+template<> 
+struct field_width<bit_t> { 
+    static const uint32_t value = 1; 
+};
+
 /**
  * A collection of types associated with streams derived from a single item
  * type `I`.
@@ -51,11 +64,6 @@ template<typename I>
 struct stream_traits {
 private:
     struct is_bitstream { static const bool value = std::is_same<I, bit_t>::value; };
-
-    template<typename T> 
-    struct field_width { static const uint32_t value = sizeof(T) * 8; };
-    template<> 
-    struct field_width<bit_t> { static const uint32_t value = 1; };
 public:
     static_assert(std::is_same<I, bit_t>::value || std::is_integral<I>::value, 
         "stream_traits<I>: `I` must be an integer type or bit_t");
