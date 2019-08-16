@@ -3,19 +3,35 @@
 # This software is licensed to the public under the Open Software License 3.0.
 #
 # ZTF-1 Compression and Decompression Calculations
-# - initial version: 2-byte sequence compression only
+# 
+# ZTF-1 Compression compresses valid UTF-8 files by the simple
+# process of deleting a prefix byte of a multibyte sequence
+# whenever it is the same as that of the preceding multibyte
+# sequence.  There may be intervening ASCII bytes between
+# the two multibyte sequences.   Note that if there is a run
+# containing ASCII and multibyte sequences all of which have
+# the same prefix byte, then the compressed form eliminates
+# all prefixes except the first.
+#
+# Initial version: only prefixes of 2-byte and 3-byte sequences
+# are deleted.
 
 type BasisBits = <i1>[8]
 type Mask = <i1>[1]
 
+# Compute a mask marking positions to be extracted (kept) in
+# compressing UTF-8 data to ZTF-1.
+#
 kernel ZTF1_Compression_Mask :: [BasisBits bb] -> [Mask mask] {
     prefix = bb[7] & bb[6]
+    # Move the low 6 bits of each prefix byte to the next prefix byte position.
     adv_pfx_bit0 = AdvanceThenScanTo(bb[0] & prefix, prefix)
     adv_pfx_bit1 = AdvanceThenScanTo(bb[1] & prefix, prefix)
     adv_pfx_bit2 = AdvanceThenScanTo(bb[2] & prefix, prefix)
     adv_pfx_bit3 = AdvanceThenScanTo(bb[3] & prefix, prefix)
     adv_pfx_bit4 = AdvanceThenScanTo(bb[4] & prefix, prefix)
     adv_pfx_bit5 = AdvanceThenScanTo(bb[5] & prefix, prefix)
+    # Compare the bits of each prefix byte to the bits of the previous one.
     mismatch = adv_pfx_bit0 ^ bb[0]
     mismatch |= adv_pfx_bit1 ^ bb[1]
     mismatch |= adv_pfx_bit2 ^ bb[2]
@@ -26,10 +42,15 @@ kernel ZTF1_Compression_Mask :: [BasisBits bb] -> [Mask mask] {
     pfx3or4 = prefix & bb[5]
     pfx3 = pfx3or4 & ~bb[4]
     pfx4 = pfx3or4 & bb[4]
+    # Return the mask marking bytes to be deleted with 0 bits
+    # (that is, the extraction mask marking bits to be kept).
     mask[0] = mismatch | ~ (pfx2 | pfx3)
 }
 
-
+# For a compressed ZTF-1 stream compute the mask of 1 bits
+# marking suffix positions immediately before which a prefix
+# must be inserted.
+#
 kernel ZTF1_InsertionMask :: [BasisBits bb] -> [Mask insert_marks] {
     prefix = bb[7] & bb[6]
     non_prefix = ~prefix
@@ -38,11 +59,14 @@ kernel ZTF1_InsertionMask :: [BasisBits bb] -> [Mask insert_marks] {
     pfx3or4 = prefix & bb[5]
     pfx3 = pfx3or4 & ~bb[4]
     pfx4 = pfx3or4 & bb[4]
+    # Exclude suffixes that have valid prefixes in the data stream
     matched_suffix = Advance(prefix, 1) & suffix
     matched_suffix |= Advance(pfx3or4, 2) & suffix
     matched_suffix |= Advance(pfx4, 3) & suffix
     unmatched = suffix & ~matched_suffix
     pfx2_adv1 = Advance(pfx2, 1)
+    # Mark the suffix positions at which we must insert the prior
+    # prefix of a 2-byte sequence.
     insert_pfx2 = MatchStar(pfx2_adv1, non_prefix) & unmatched
     #
     # For runs of unmatched suffixes for which we have a 3-byte prefix,
@@ -54,15 +78,18 @@ kernel ZTF1_InsertionMask :: [BasisBits bb] -> [Mask insert_marks] {
     even = Repeat(1, 0x5555555555555555)
     insert_pfx3 = MatchStar(pfx3_suffix1 & odd, pfx3_suffix) & odd & unmatched
     insert_pfx3 |= MatchStar(pfx3_suffix1 & even, pfx3_suffix) & even & unmatched
-
     insert_marks[0] = insert_pfx2 | insert_pfx3
 }
 
-
+#  Given a set of eight ZTF-1 basis streams that have been spread out
+#  to make room for the prefixes to be inserted, calculate the final 
+#  decompressed UTF-8 basis streams by filling in prior suffix data.
+#
 kernel ZTF1_Decompression :: [BasisBits ztf1_u8_indexed, Mask spread_mask] -> [BasisBits u8_basis] {
     prefix = ztf1_u8_indexed[7] & ztf1_u8_indexed[6]
     non_prefix = ~prefix
-    suffix_insert = ~spread_mask[0]
+    # Determine the positions at which prefixes are to be inserted.
+    prefix_insert = ~spread_mask[0]
     pfx_bit0_adv1 = Advance(prefix & ztf1_u8_indexed[0], 1)
     pfx_bit1_adv1 = Advance(prefix & ztf1_u8_indexed[1], 1)
     pfx_bit2_adv1 = Advance(prefix & ztf1_u8_indexed[2], 1)
@@ -71,15 +98,19 @@ kernel ZTF1_Decompression :: [BasisBits ztf1_u8_indexed, Mask spread_mask] -> [B
     pfx_bit5_adv1 = Advance(prefix & ztf1_u8_indexed[5], 1)
     pfx_adv1 = Advance(prefix, 1)
 
-    inserted_prefix_marks = MatchStar(pfx_adv1, non_prefix) & suffix_insert
-    u8_basis[6] = inserted_prefix_marks | ztf1_u8_indexed[6]
-    u8_basis[7] = inserted_prefix_marks | ztf1_u8_indexed[7]
-
-    u8_basis[0] = MatchStar(pfx_bit0_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[0]
-    u8_basis[1] = MatchStar(pfx_bit1_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[1]
-    u8_basis[2] = MatchStar(pfx_bit2_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[2]
-    u8_basis[3] = MatchStar(pfx_bit3_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[3]
-    u8_basis[4] = MatchStar(pfx_bit4_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[4]
-    u8_basis[5] = MatchStar(pfx_bit5_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[5]
+    # For each prefix, use MatchStar to move copies of each prefix bit
+    # to all positions up to the next prefix.   Then filter this stream
+    # to produce those copies only at the prefix_insert positions.
+    #
+    u8_basis[0] = MatchStar(pfx_bit0_adv1, non_prefix) & prefix_insert | ztf1_u8_indexed[0]
+    u8_basis[1] = MatchStar(pfx_bit1_adv1, non_prefix) & prefix_insert | ztf1_u8_indexed[1]
+    u8_basis[2] = MatchStar(pfx_bit2_adv1, non_prefix) & prefix_insert | ztf1_u8_indexed[2]
+    u8_basis[3] = MatchStar(pfx_bit3_adv1, non_prefix) & prefix_insert | ztf1_u8_indexed[3]
+    u8_basis[4] = MatchStar(pfx_bit4_adv1, non_prefix) & prefix_insert | ztf1_u8_indexed[4]
+    u8_basis[5] = MatchStar(pfx_bit5_adv1, non_prefix) & prefix_insert | ztf1_u8_indexed[5]
+    #
+    # The high 2 bits of a prefix to be inserted are always 1 bits.
+    u8_basis[6] = prefix_insert | ztf1_u8_indexed[6]
+    u8_basis[7] = prefix_insert | ztf1_u8_indexed[7]
 }
 
