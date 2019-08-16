@@ -8,7 +8,7 @@ namespace pablo {
 class Integer : public PabloAST {
     friend class SymbolGenerator;
 public:
-    using IntTy = int64_t;
+    using IntTy = uint64_t;
 
     static inline bool classof(const PabloAST * e) {
         return e->getClassTypeId() == ClassTypeId::Integer;
