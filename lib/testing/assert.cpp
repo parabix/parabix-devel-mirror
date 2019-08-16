@@ -12,12 +12,14 @@ using namespace llvm;
 
 namespace kernel {
 
-std::string KernelName(StreamEquivalenceKernel::Mode mode, StreamSet * x) {
+std::string KernelName(StreamEquivalenceKernel::Mode mode, StreamSet * x, StreamSet * y) {
     std::string backing;
     raw_string_ostream str(backing);
-    str << "StreamEquivalenceKernel::"
+    str << "StreamEquivalenceKernel::["
         << "<i" << x->getFieldWidth() << ">"
-        << "[" << x->getNumElements() << "]"
+        << "[" << x->getNumElements() << "],"
+        << "<i" << y->getFieldWidth() << ">"
+        << "[" << y->getNumElements() << "]]"
         << "@" << (mode == StreamEquivalenceKernel::Mode::EQ ? "EQ" : "NE");
     return str.str();
 }
@@ -28,7 +30,7 @@ StreamEquivalenceKernel::StreamEquivalenceKernel(
     StreamSet * lhs,
     StreamSet * rhs,
     Scalar * outPtr)
-: MultiBlockKernel(b, KernelName(mode, lhs),
+: MultiBlockKernel(b, KernelName(mode, lhs, rhs),
     {{"lhs", lhs, FixedRate(), Principal()}, {"rhs", rhs, FixedRate(), ZeroExtended()}},
     {},
     {{"result_ptr", outPtr}},
@@ -55,19 +57,26 @@ void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * cons
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const loopBlock = b->CreateBasicBlock("loop");
     BasicBlock * const exitBlock = b->CreateBasicBlock("exit");
-    Value * const initialOffset = b->CreateUDiv(b->getProcessedItemCount("lhs"), b->getSize(ITEMS_PER_BLOCK));
-    b->CreateBr(loopBlock);
+    Value * const hasMoreItems = b->CreateICmpNE(b->getAccessibleItemCount("lhs"), b->getSize(0));
+    Value * initialOffset = nullptr;
+    if (FW != 1) {
+        initialOffset = b->CreateUDiv(b->getProcessedItemCount("lhs"), b->getSize(ITEMS_PER_BLOCK));
+    }
+    b->CreateLikelyCondBr(hasMoreItems, loopBlock, exitBlock);
 
     b->SetInsertPoint(loopBlock);
     PHINode * strideNo = b->CreatePHI(b->getSizeTy(), 2);
     strideNo->addIncoming(b->getSize(0), entryBlock);
-    Value * const blockOffset = b->CreateAdd(strideNo, initialOffset);
+    Value * blockOffset = nullptr;
+    if (FW != 1) {
+        blockOffset = b->CreateAdd(strideNo, initialOffset);
+    }
     for (uint32_t i = 0; i < COUNT; ++i) {
         Value * lhs;
         Value * rhs;
         if (FW == 1) {
-            lhs = b->loadInputStreamBlock("lhs", b->getInt32(i), blockOffset);
-            rhs = b->loadInputStreamBlock("rhs", b->getInt32(i), blockOffset);
+            lhs = b->loadInputStreamBlock("lhs", b->getInt32(i), strideNo);
+            rhs = b->loadInputStreamBlock("rhs", b->getInt32(i), strideNo);
         } else {
             lhs = b->loadInputStreamPack("lhs", b->getInt32(i), blockOffset);
             rhs = b->loadInputStreamPack("rhs", b->getInt32(i), blockOffset);

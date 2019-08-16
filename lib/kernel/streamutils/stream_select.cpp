@@ -28,19 +28,20 @@ static std::string to_string(__op op) {
 }
 
 static std::string to_string(StreamSet * ss, uint32_t index) {
-    return "x" + std::to_string(ss->getNumElements()) + "@" + std::to_string(index);
+    return "<i" + std::to_string(ss->getFieldWidth()) + ">[" + std::to_string(ss->getNumElements()) + "]@" + std::to_string(index);
 }
 
 static std::string to_string(__selop<StreamSet *> const & selop) {
     std::string s = to_string(selop.operation);
     uint32_t index = 0;
     for (auto binding : selop.bindings) {
-        s += ":";
+        s += "_";
         s += to_string(binding.first, index);
+        s += ":";
         for (auto idx : binding.second) {
             s += std::to_string(idx);
         }
-        s += ":";
+        s += "_";
         index++;
     }
     return s;

@@ -9,10 +9,10 @@ NAME
 SRC
     assert.cpp
     runtime.cpp
-    stream_gen.cpp
 DEPS
     kernel.core
     kernel.io
     kernel.pipeline
+    kernel.streamutils
     kernel.util
 )
