@@ -954,10 +954,6 @@ void CarryManager::setNextCarryOut(BuilderRef b, Value * carryOut) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * CarryManager::readCarryInSummary(BuilderRef b) const {
     assert (mCarryInfo->hasSummary());
-    assert ("frame must be a pointer to a struct!" &&
-            mCurrentFrame->getType()->isPointerTy());
-    assert ("frame must be a pointer to a struct!" &&
-            mCurrentFrame->getType()->getPointerElementType()->isStructTy());
 
     unsigned count = 2;
     if (LLVM_UNLIKELY(mCarryInfo->hasBorrowedSummary())) {
@@ -976,9 +972,6 @@ Value * CarryManager::readCarryInSummary(BuilderRef b) const {
     if (mLoopDepth != 0) {
         indicies[count] = mLoopSelector;
     }
-
-    assert ("frame reports having a summary but none was found?" &&
-            mCurrentFrame->getType()->getPointerElementType()->getStructNumElements() > count);
 
     Value * const ptr = b->CreateGEP(mCurrentFrame, indicies);
     assert (ptr->getType()->getPointerElementType() == b->getBitBlockType());
