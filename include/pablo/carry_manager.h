@@ -10,6 +10,7 @@
 #include <pablo/carry_data.h>
 #include <llvm/ADT/SmallVector.h>
 #include <memory>
+#include <vector>
 
 namespace IDISA { class IDISA_Builder; }
 namespace llvm { class BasicBlock; }
