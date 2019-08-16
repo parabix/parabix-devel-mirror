@@ -42,6 +42,11 @@ void SpreadByMask(const std::unique_ptr<ProgramBuilder> & P,
                   unsigned streamOffset = 0,
                   StreamExpandOptimization opt = StreamExpandOptimization::None,
                   unsigned expansionFieldWidth = 64);
+    
+/*  Given a stream marking positions at which a single item is to be inserted,
+    compute the corresponding mask for SpreadByMask.  */
+
+StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask);
 
 /* The following kernels are used by SpreadByMask internally. */
 

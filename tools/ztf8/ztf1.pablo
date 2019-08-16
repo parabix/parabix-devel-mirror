@@ -23,11 +23,11 @@ kernel ZTF1_Compression_Mask :: [BasisBits bb] -> [Mask mask] {
     mismatch |= adv_pfx_bit4 ^ bb[4]
     mismatch |= adv_pfx_bit5 ^ bb[5]
     pfx2 = prefix & ~bb[5]
-    mask[0] = mismatch | ~prefix
+    mask[0] = mismatch | ~pfx2
 }
 
 
-kernel ZTF1_Decompression :: [BasisBits compressed] -> [BasisBits to_insert, Mask insert_marks] {
+kernel ZTF1_InsertionMask :: [BasisBits bb] -> [Mask insert_marks] {
     prefix = bb[7] & bb[6]
     non_prefix = ~prefix
     suffix = bb[7] & ~ bb[6]
@@ -36,25 +36,33 @@ kernel ZTF1_Decompression :: [BasisBits compressed] -> [BasisBits to_insert, Mas
     matched_suffix = Advance(prefix, 1) & suffix
     matched_suffix |= Advance(pfx3or4, 2) & suffix
     matched_suffix |= Advance(pfx4, 3) & suffix
-
     unmatched = suffix & ~matched_suffix
+    pfx_adv1 = Advance(prefix, 1)
+    insert_marks[0] = MatchStar(pfx_adv1, non_prefix) & unmatched
+}
 
-    pfx_bit0_adv1 = Advance(prefix & bb[0], 1)
-    pfx_bit1_adv1 = Advance(prefix & bb[1], 1)
-    pfx_bit2_adv1 = Advance(prefix & bb[2], 1)
-    pfx_bit3_adv1 = Advance(prefix & bb[3], 1)
-    pfx_bit4_adv1 = Advance(prefix & bb[4], 1)
-    pfx_bit5_adv1 = Advance(prefix & bb[5], 1)
+
+kernel ZTF1_Decompression :: [BasisBits ztf1_u8_indexed, Mask spread_mask] -> [BasisBits u8_basis] {
+    prefix = ztf1_u8_indexed[7] & ztf1_u8_indexed[6]
+    non_prefix = ~prefix
+    suffix_insert = ~spread_mask[0]
+    pfx_bit0_adv1 = Advance(prefix & ztf1_u8_indexed[0], 1)
+    pfx_bit1_adv1 = Advance(prefix & ztf1_u8_indexed[1], 1)
+    pfx_bit2_adv1 = Advance(prefix & ztf1_u8_indexed[2], 1)
+    pfx_bit3_adv1 = Advance(prefix & ztf1_u8_indexed[3], 1)
+    pfx_bit4_adv1 = Advance(prefix & ztf1_u8_indexed[4], 1)
+    pfx_bit5_adv1 = Advance(prefix & ztf1_u8_indexed[5], 1)
     pfx_adv1 = Advance(prefix, 1)
 
-    to_insert[0] = MatchStar(pfx_bit0_adv1, non_prefix) & unmatched
-    to_insert[1] = MatchStar(pfx_bit1_adv1, non_prefix) & unmatched
-    to_insert[2] = MatchStar(pfx_bit2_adv1, non_prefix) & unmatched
-    to_insert[3] = MatchStar(pfx_bit3_adv1, non_prefix) & unmatched
-    to_insert[4] = MatchStar(pfx_bit4_adv1, non_prefix) & unmatched
-    to_insert[5] = MatchStar(pfx_bit5_adv1, non_prefix) & unmatched
-    to_insert[6] = MatchStar(pfx_adv1, non_prefix) & unmatched
-    to_insert[7] = to_insert[6]
+    inserted_prefix_marks = MatchStar(pfx_adv1, non_prefix) & suffix_insert
+    u8_basis[6] = inserted_prefix_marks | ztf1_u8_indexed[6]
+    u8_basis[7] = inserted_prefix_marks | ztf1_u8_indexed[7]
 
-    insert_marks = to_insert[6]
+    u8_basis[0] = MatchStar(pfx_bit0_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[0]
+    u8_basis[1] = MatchStar(pfx_bit1_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[1]
+    u8_basis[2] = MatchStar(pfx_bit2_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[2]
+    u8_basis[3] = MatchStar(pfx_bit3_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[3]
+    u8_basis[4] = MatchStar(pfx_bit4_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[4]
+    u8_basis[5] = MatchStar(pfx_bit5_adv1, non_prefix) & suffix_insert | ztf1_u8_indexed[5]
 }
+

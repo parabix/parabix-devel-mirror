@@ -40,4 +40,4 @@ RUN_TESTS(
     CASE(tiny_scan),
     CASE(no_bits),
     CASE(long_scan),
-);
+)
