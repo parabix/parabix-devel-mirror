@@ -10,6 +10,7 @@
 #include <testing/runtime.h>
 #include <testing/stream_gen.hpp>
 #include <toolchain/toolchain.h>
+#include <toolchain/pablo_toolchain.h>
 
 #define TEST_CASE(NAME, INPUT, EXPECTED)                                                                    \
 void __test_body_##NAME(testing::TestEngine &, testing::StreamSet *, testing::StreamSet *);                 \
@@ -50,7 +51,7 @@ void __test_body_##NAME(testing::TestEngine & T, testing::StreamSet * Input, tes
 
 #define RUN_TESTS(...)                                                                                      \
 int main(int argc, char ** argv) {                                                                          \
-    codegen::ParseCommandLineOptions(argc, argv, {codegen::codegen_flags(), testing::cli::testFlags()});    \
+    codegen::ParseCommandLineOptions(argc, argv, {codegen::codegen_flags(), pablo::pablo_toolchain_flags(), testing::cli::testFlags()});    \
     return testing::RunTestSuite({__VA_ARGS__});                                                            \
 }
 
