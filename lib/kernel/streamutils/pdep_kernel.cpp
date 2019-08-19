@@ -434,33 +434,45 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     b->SetInsertPoint(finishedStrides);
 }
 
-/*  Calculation of a spread mask given a stream marking positions of single
-    items to be inserted.  */
+std::string InsertString(InsertPosition p) {
+    return p == InsertPosition::Before ? "Before" : "After";
+}
 
 class UnitInsertionExtractionMasks : public BlockOrientedKernel {
 public:
     UnitInsertionExtractionMasks(const std::unique_ptr<KernelBuilder> & b,
-                                 StreamSet * insertion_mask, StreamSet * stream01, StreamSet * valid01)
-    : BlockOrientedKernel(b, "unitInsertionExtractionMasks",
+                                 StreamSet * insertion_mask, StreamSet * stream01, StreamSet * valid01, InsertPosition p = InsertPosition::Before)
+    : BlockOrientedKernel(b, "unitInsertionExtractionMasks" + InsertString(p),
         {Binding{"insertion_mask", insertion_mask}},
         {Binding{"stream01", stream01, FixedRate(2)}, Binding{"valid01", valid01, FixedRate(2)}},
         {}, {},
-        {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}}) {}
+        {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}}),
+    mInsertPos(p) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
     void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
+    InsertPosition mInsertPos;
 };
 
 void UnitInsertionExtractionMasks::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
-    Constant * mask01 = b->simd_himask(2);
-    b->storeOutputStreamBlock("stream01", b->getSize(0), b->getSize(0), mask01);
-    b->storeOutputStreamBlock("stream01", b->getSize(0), b->getSize(1), mask01);
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     Value * insertion_mask = b->loadInputStreamBlock("insertion_mask", b->getSize(0), b->getSize(0));
-    Value * extract_mask_lo = b->esimd_mergel(1, insertion_mask, fileExtentMask);
-    Value * extract_mask_hi = b->esimd_mergeh(1, insertion_mask, fileExtentMask);
+    Constant * mask01 = nullptr;
+    Value * extract_mask_lo = nullptr;
+    Value * extract_mask_hi = nullptr;
+    if (mInsertPos == InsertPosition::Before) {
+        mask01 = b->simd_himask(2);
+        extract_mask_lo = b->esimd_mergel(1, insertion_mask, fileExtentMask);
+        extract_mask_hi = b->esimd_mergeh(1, insertion_mask, fileExtentMask);
+    } else {
+        mask01 = b->simd_lomask(2);
+        extract_mask_lo = b->esimd_mergel(1, fileExtentMask, insertion_mask);
+        extract_mask_hi = b->esimd_mergeh(1, fileExtentMask, insertion_mask);
+    }
+    b->storeOutputStreamBlock("stream01", b->getSize(0), b->getSize(0), mask01);
+    b->storeOutputStreamBlock("stream01", b->getSize(0), b->getSize(1), mask01);
     b->storeOutputStreamBlock("valid01", b->getSize(0), b->getSize(0), extract_mask_lo);
     b->storeOutputStreamBlock("valid01", b->getSize(0), b->getSize(1), extract_mask_hi);
 }
@@ -472,10 +484,10 @@ void UnitInsertionExtractionMasks::generateFinalBlockMethod(const std::unique_pt
     CreateDoBlockMethodCall(b);
 }
 
-StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask) {
+StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask, InsertPosition p) {
     auto stream01 = P->CreateStreamSet(1);
     auto valid01 = P->CreateStreamSet(1);
-    P->CreateKernelCall<UnitInsertionExtractionMasks>(insertion_mask, stream01, valid01);
+    P->CreateKernelCall<UnitInsertionExtractionMasks>(insertion_mask, stream01, valid01, p);
     auto spread_mask = P->CreateStreamSet(1);
     FilterByMask(P, valid01, stream01, spread_mask);
     return spread_mask;

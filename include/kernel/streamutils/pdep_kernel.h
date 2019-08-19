@@ -46,7 +46,11 @@ void SpreadByMask(const std::unique_ptr<ProgramBuilder> & P,
 /*  Given a stream marking positions at which a single item is to be inserted,
     compute the corresponding mask for SpreadByMask.  */
 
-StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask);
+enum class InsertPosition {Before, After};
+
+StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
+                                    StreamSet * insertion_mask,
+                                    InsertPosition p = InsertPosition::Before);
 
 /* The following kernels are used by SpreadByMask internally. */
 
