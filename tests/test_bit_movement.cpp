@@ -11,15 +11,15 @@
 using namespace kernel;
 using namespace testing;
 
-auto insert_mask_i = BinaryStream({"1"});
-auto insert_before_e = BinaryStream({"01"});
+auto insert_mask_i = BinaryStream({"11100001"});
+auto insert_before_e = BinaryStream({"010101111101"});
 
 TEST_CASE(insert_before1, insert_mask_i, insert_before_e) {
     auto Result = UnitInsertionSpreadMask(T, Input, InsertPosition::Before);
     AssertEQ(T, Result, Expected);
 }
 
-auto insert_after_e = BinaryStream({"10"});
+auto insert_after_e = BinaryStream({"101010111110"});
 
 TEST_CASE(insert_after1, insert_mask_i, insert_after_e) {
     auto Result = UnitInsertionSpreadMask(T, Input, InsertPosition::After);

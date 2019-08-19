@@ -20,6 +20,7 @@ endfunction(parabix_add_kernel_test)
 ###   Test Targets   ###
 parabix_add_kernel_test(meta_tests)
 parabix_add_kernel_test(test_scan_index_gen kernel.scan)
+parabix_add_kernel_test(test_bit_movement kernel.streamutils)
 
 
 # `make kernel-tests` to run all kerenl tests
