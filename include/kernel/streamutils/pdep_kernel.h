@@ -52,6 +52,22 @@ StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
                                     StreamSet * insertion_mask,
                                     InsertPosition p = InsertPosition::Before);
 
+/*   Prepare a spread mask for inserting data into bit streams.
+     At each stream position, a bixnum encodes the number of items
+     to be inserted at that position.   The resulting spread mask
+     will have a 1 bit for every original position in the stream,
+     plus a 0 bit for every position at which data is inserted.
+     The total number of 0 bits is thus the sum of the numbers
+     of items to be inserted at each position.   Let the number
+     of positions to be inserted at a given position n.   For each
+     source position sequentially, the spread mask will consist
+     of either n 0 bits followed by a 1 bit (InsertPostion::Before)
+     or a 1 bit followed by n 0 bits (InsertPosition::After).    */
+
+StreamSet * InsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
+                                StreamSet * bixNumInsertCount,
+                                InsertPosition p = InsertPosition::Before);
+
 /* The following kernels are used by SpreadByMask internally. */
 
 class StreamExpandKernel final : public MultiBlockKernel {

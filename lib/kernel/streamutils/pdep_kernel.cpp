@@ -8,11 +8,15 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Module.h>
 #include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/Support/raw_ostream.h>
 #include <kernel/pipeline/driver/driver.h>
 #include <kernel/pipeline/driver/cpudriver.h>
+#include <pablo/pablo_kernel.h>
+#include <toolchain/pablo_toolchain.h>
+#include <pablo/bixnum/bixnum.h>
 
 using namespace llvm;
 
@@ -493,4 +497,84 @@ StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, S
     return spread_mask;
 }
 
+class UGT_Kernel : public pablo::PabloKernel {
+public:
+    UGT_Kernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * bixnum, unsigned immediate, StreamSet * result) :
+    pablo::PabloKernel(b, "ugt_" + std::to_string(immediate) + "_" + std::to_string(bixnum->getNumElements()),
+                {Binding{"bixnum", bixnum}}, {Binding{"result", result}}), mTestVal(immediate) {}
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+    void generatePabloMethod() override;
+private:
+    unsigned mTestVal;
+};
+
+void UGT_Kernel::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    pablo::BixNumCompiler bnc(pb);
+    pablo::BixNum bixnum = getInputStreamSet("bixnum");
+    pablo::Var * output = getOutputStreamVar("result");
+    pb.createAssign(pb.createExtract(output, 0), bnc.UGT(bixnum, mTestVal));
+}
+
+class SpreadMaskStep : public pablo::PabloKernel {
+public:
+    SpreadMaskStep(const std::unique_ptr<KernelBuilder> & b,
+                   StreamSet * bixnum, StreamSet * result, InsertPosition p = InsertPosition::Before) :
+    pablo::PabloKernel(b, "spreadMaskStep_" + std::to_string(bixnum->getNumElements()) + "x1_" + InsertString(p),
+                {Binding{"bixnum", bixnum, FixedRate(1), LookAhead(1)}},
+                {Binding{"result", result}}), mInsertPos(p) {}
+protected:
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+    void generatePabloMethod() override;
+    InsertPosition mInsertPos;
+};
+
+void SpreadMaskStep::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    pablo::BixNumCompiler bnc(pb);
+    pablo::BixNum insert_counts = getInputStreamSet("bixnum");
+    pablo::BixNum has_insert(1);
+    has_insert[0] = bnc.UGT(insert_counts, 0);
+    // Since we have inserted one position, subtract one from the insert count.
+    pablo::BixNum remaining_to_insert = bnc.SubModular(insert_counts, has_insert);
+    // Split the original insert counts into 2.
+    pablo::BixNum divided_insert_counts = bnc.HighBits(insert_counts, insert_counts.size()-1);
+    pablo::BixNum divided_remaining = bnc.HighBits(remaining_to_insert, insert_counts.size()-1);
+    for (unsigned i = 0; i < divided_insert_counts.size(); i++) {
+        if (mInsertPos == InsertPosition::Before) {
+            divided_insert_counts[i] = pb.createOr(divided_insert_counts[i], pb.createLookahead(divided_remaining[1], 1));
+        } else {
+            divided_insert_counts[i] = pb.createOr(divided_insert_counts[i+1], pb.createAdvance(divided_remaining[i+1], 1));
+        }
+    }
+    pablo::Var * result = getOutputStreamVar("result");
+    for (unsigned i = 0; i < divided_insert_counts.size(); i++) {
+        pb.createAssign(pb.createExtract(result, i), divided_insert_counts[i]);
+    }
+}
+
+StreamSet * InsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
+                                StreamSet * bixNumInsertCount, InsertPosition pos) {
+    
+    unsigned steps = bixNumInsertCount->getNumElements();
+    if (steps == 1) {
+        return UnitInsertionSpreadMask(P, bixNumInsertCount, pos);
+    }
+    StreamSet * any_insert = P->CreateStreamSet(1);
+    P->CreateKernelCall<UGT_Kernel>(bixNumInsertCount, 0, any_insert);
+    /* Create a spread mask that adds one spread position for any position
+       at which there is at least one item to insert.  */
+    StreamSet * spread1_mask = P->CreateStreamSet(1);
+    spread1_mask = UnitInsertionSpreadMask(P, any_insert, pos);
+    /* Spread out the counts so that there are two positions for each nonzero entry. */
+    StreamSet * spread_counts = P->CreateStreamSet(steps);
+    SpreadByMask(P, spread1_mask, bixNumInsertCount, spread_counts);
+    /* Divide the count at each original position equally into the
+       two positions that were created by the unit spread process. */
+    StreamSet * reduced_counts = P->CreateStreamSet(steps - 1);
+    P->CreateKernelCall<SpreadMaskStep>(spread_counts, reduced_counts, pos);
+    return InsertionSpreadMask(P, reduced_counts, pos);
+}
 }

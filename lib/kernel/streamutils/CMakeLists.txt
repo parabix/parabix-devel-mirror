@@ -19,6 +19,6 @@ SRC
     until_n.cpp
     zeroextend.cpp
 DEPS
-    pablo
+    pablo.bixnum
     kernel.pipeline
 )
