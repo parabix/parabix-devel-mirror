@@ -539,25 +539,26 @@ void SpreadMaskStep::generatePabloMethod() {
     has_insert[0] = bnc.UGT(insert_counts, 0);
     // Since we have inserted one position, subtract one from the insert count.
     pablo::BixNum remaining_to_insert = bnc.SubModular(insert_counts, has_insert);
-    // Split the original insert counts into 2.
-    pablo::BixNum divided_insert_counts = bnc.HighBits(insert_counts, insert_counts.size()-1);
-    pablo::BixNum divided_remaining = bnc.HighBits(remaining_to_insert, insert_counts.size()-1);
-    for (unsigned i = 0; i < divided_insert_counts.size(); i++) {
+    // Split the original insert counts into 2
+    unsigned remaining_bits = insert_counts.size() - 1;
+    pablo::BixNum divided_counts = bnc.HighBits(insert_counts, remaining_bits);
+    pablo::BixNum divided_remaining = bnc.HighBits(remaining_to_insert, remaining_bits);
+    for (unsigned i = 0; i < remaining_bits; i++) {
+        std::string vname = "divided_counts[" + std::to_string(i) + "]";
         if (mInsertPos == InsertPosition::Before) {
-            divided_insert_counts[i] = pb.createOr(divided_insert_counts[i], pb.createLookahead(divided_remaining[1], 1));
+            divided_counts[i] = pb.createOr(divided_counts[i], pb.createLookahead(divided_remaining[i], 1), vname);
         } else {
-            divided_insert_counts[i] = pb.createOr(divided_insert_counts[i+1], pb.createAdvance(divided_remaining[i+1], 1));
+            divided_counts[i] = pb.createOr(divided_counts[i], pb.createAdvance(divided_remaining[i], 1), vname);
         }
     }
     pablo::Var * result = getOutputStreamVar("result");
-    for (unsigned i = 0; i < divided_insert_counts.size(); i++) {
-        pb.createAssign(pb.createExtract(result, i), divided_insert_counts[i]);
+    for (unsigned i = 0; i < remaining_bits; i++) {
+        pb.createAssign(pb.createExtract(result, i), divided_counts[i]);
     }
 }
 
 StreamSet * InsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
                                 StreamSet * bixNumInsertCount, InsertPosition pos) {
-    
     unsigned steps = bixNumInsertCount->getNumElements();
     if (steps == 1) {
         return UnitInsertionSpreadMask(P, bixNumInsertCount, pos);
@@ -575,6 +576,9 @@ StreamSet * InsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
        two positions that were created by the unit spread process. */
     StreamSet * reduced_counts = P->CreateStreamSet(steps - 1);
     P->CreateKernelCall<SpreadMaskStep>(spread_counts, reduced_counts, pos);
-    return InsertionSpreadMask(P, reduced_counts, pos);
+    StreamSet * submask = InsertionSpreadMask(P, reduced_counts, pos);
+    StreamSet * finalmask = P->CreateStreamSet(1);
+    SpreadByMask(P, submask, spread1_mask, finalmask);
+    return finalmask;
 }
 }

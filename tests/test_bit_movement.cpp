@@ -27,9 +27,15 @@ TEST_CASE(insert_after1, insert_mask_i, insert_after_e) {
 }
 
 auto insert_counts = BinaryStreamSet({"00100010", "00100000", "10000000"});
-auto insert_mult_e = BinaryStream("0000110001111011");
+auto insert_mult_before_e = BinaryStream("0000110001111011");
+auto insert_mult_after_e = BinaryStream("1000011000111101");
 
-TEST_CASE(insert_mult, insert_counts, insert_mult_e) {
+TEST_CASE(insert_mult_after, insert_counts, insert_mult_after_e) {
+    auto Result = InsertionSpreadMask(T, Input, InsertPosition::After);
+    AssertEQ(T, Result, Expected);
+}
+
+TEST_CASE(insert_mult_before, insert_counts, insert_mult_before_e) {
     auto Result = InsertionSpreadMask(T, Input, InsertPosition::Before);
     AssertEQ(T, Result, Expected);
 }
@@ -37,5 +43,6 @@ TEST_CASE(insert_mult, insert_counts, insert_mult_e) {
 RUN_TESTS(
           CASE(insert_before1),
           CASE(insert_after1),
-          CASE(insert_mult)
+          CASE(insert_mult_after),
+          CASE(insert_mult_before)
 )
