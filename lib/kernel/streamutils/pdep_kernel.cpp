@@ -546,7 +546,7 @@ void SpreadMaskStep::generatePabloMethod() {
     for (unsigned i = 0; i < remaining_bits; i++) {
         std::string vname = "divided_counts[" + std::to_string(i) + "]";
         if (mInsertPos == InsertPosition::Before) {
-            divided_counts[i] = pb.createOr(divided_counts[i], pb.createLookahead(divided_remaining[i], 1), vname);
+            divided_counts[i] = pb.createOr(divided_remaining[i], pb.createLookahead(divided_counts[i], 1), vname);
         } else {
             divided_counts[i] = pb.createOr(divided_counts[i], pb.createAdvance(divided_remaining[i], 1), vname);
         }
