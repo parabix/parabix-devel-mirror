@@ -314,11 +314,6 @@ add_test(
   COMMAND ./run_abc ${BIN_DIR}/icgrep)
 
 add_test(
-  NAME abc_test_ternary
-  WORKING_DIRECTORY ${QA_DIR}
-  COMMAND ./run_abc "${BIN_DIR}/icgrep -byte-CC-limit=0 -ccc-type=ternary")
-
-add_test(
   NAME u8u16_test
   WORKING_DIRECTORY ${QA_DIR}/u8u16
   COMMAND ./run_all "${BIN_DIR}/u8u16 -thread-num=2")
@@ -340,7 +335,7 @@ add_test(
 
 
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
-SET_PROPERTY(TEST abc_test abc_test_ternary PROPERTY TIMEOUT 100)
+SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 

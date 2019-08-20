@@ -1,8 +1,0 @@
-<character-deposit-test>
-    <random-testcase name="random39" random-deletion="true" length="39" target-character="b"/>
-    <random-testcase name="random100" random-deletion="true" length="100" target-character="b"/>
-    <random-testcase name="random1390" random-deletion="true" length="1390" target-character="b"/>
-    <random-testcase name="random11390" random-deletion="true" length="11390" target-character="b"/>
-    <random-testcase name="random118390" random-deletion="true" length="118390" target-character="b"/>
-    <random-testcase name="random418390" random-deletion="true" length="418390" target-character="b"/>
-</character-deposit-test>
