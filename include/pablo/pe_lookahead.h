@@ -24,8 +24,8 @@ public:
     }
     virtual ~Lookahead() {
     }
-    inline Var * getExpression() const {
-        return llvm::cast<Var>(getOperand(0));
+    inline PabloAST * getExpression() const {
+        return getOperand(0);
     }
     inline unsigned getAmount() const {
         return llvm::cast<Integer>(getOperand(1))->value();

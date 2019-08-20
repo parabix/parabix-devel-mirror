@@ -135,7 +135,11 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
-            const PabloAST * array = findInputParam(stmt, la->getExpression());
+            auto e = la->getExpression();
+            if (LLVM_UNLIKELY(!isa<Var>(e))) {
+                report_fatal_error("Lookahead " + stmt->getName() + " can only be performed on an input streamset");
+            }
+            const PabloAST * array = findInputParam(stmt, cast<Var>(e));
             while (array && isa<Extract>(array)) {
                 array = cast<Extract>(array)->getArray();
             }
@@ -595,7 +599,7 @@ void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder
             value = b->CreateAdd(b->mvmd_extract(fieldWidth, bitBlockCount, 0), countSoFar, "countSoFar");
             b->CreateAlignedStore(value, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
-            const Var * stream = findInputParam(l, l->getExpression());
+            const Var * stream = findInputParam(l, cast<Var>(l->getExpression()));
             Value * index = nullptr;
             if (LLVM_UNLIKELY(isa<Extract>(stream))) {
                 index = compileExpression(b, cast<Extract>(stream)->getIndex(), true);
