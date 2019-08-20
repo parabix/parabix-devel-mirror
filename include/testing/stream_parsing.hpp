@@ -221,7 +221,7 @@ public:
         if (mBuffer != nullptr) {
             auto t = std::move(mBuffer);
             mBuffer = nullptr;
-            return std::move(t);
+            return t;
         }
         // skip over any whitespace
         while (mText[mIdx] != '\0' && std::isspace(mText[mIdx])) {

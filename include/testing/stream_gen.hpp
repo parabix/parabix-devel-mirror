@@ -19,8 +19,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <kernel/io/source_kernel.h>
-#include <kernel/streamutils/stream_select.h>
-#include <kernel/util/hex_convert.h>
 #include <testing/common.h>
 #include <testing/stream_parsing.hpp>
 #include <toolchain/toolchain.h>
@@ -47,6 +45,19 @@ struct field_width {
 template<> 
 struct field_width<bit_t> { 
     static const uint32_t value = 1; 
+};
+
+/// The number of stream items per buffer item.
+template<typename I>
+struct si_per_bi {
+    static_assert(std::is_integral<I>::value, "si_per_bi<I>: `I` must be an integer type");
+    static const uint32_t value = 1;
+};
+
+/// The number of stream items per buffer item.
+template<>
+struct si_per_bi<bit_t> {
+    static const uint32_t value = 8;
 };
 
 /**
@@ -80,9 +91,6 @@ public:
     /// The field width of the stream (e.g., 1 for bitstreams, 8 for <i8>, etc.).
     static const uint32_t field_width_v = field_width<I>::value;
 
-    /// The field width of the stream's internal buffer's items.
-    static const uint32_t buffer_item_field_width_v = field_width<buffer_item_type>::value;
-
     /// Type that a single stream (i.e., <iN>[1]) is constructable from.
     using literal_t = typename std::conditional<is_bitstream_v, const char *, std::vector<I>>::type;
 
@@ -91,6 +99,9 @@ public:
 
     /// The internal buffer type of the stream.
     using buffer_t = std::vector<buffer_item_type>;
+
+    /// The number of stream items per buffer item;
+    static const uint32_t stream_items_per_buffer_item_v = si_per_bi<I>::value;
 };
 
 /**
@@ -119,14 +130,9 @@ struct copy_decoder {
     }
 };
 
-constexpr char rev_hex_table[] = {
-    '0', '8', '4', 'c', '2', 'a', '6', 'e', 
-    '1', '9', '5', 'd', '3', 'b', '7', 'f'
-};
-
-constexpr char hex_table[] = {
-    '0', '1', '2', '3', '4', '5', '6', '7', 
-    '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'
+constexpr uint8_t rev_hex_table[] = {
+    0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe, 
+    0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf
 };
 
 /**
@@ -142,10 +148,23 @@ struct hex_decoder {
     static result_t decode(typename traits::literal_t const & str) {
         traits::buffer_t buffer{};
         auto node = ssn::parse<ssn::HexConverter>(str);
+        int counter = 0;
+        size_t len = 0;
+        uint8_t builder = 0;
         ssn::ast::walk(node, [&](uint8_t v) {
-            buffer.push_back(rev_hex_table[(int) v]);
+            builder |= rev_hex_table[(int) v] << (counter * 4);
+            counter++;
+            len++;
+            if (counter == 2) {
+                buffer.push_back(builder);
+                builder = 0;
+                counter = 0;
+            }
         });
-        return std::make_tuple(buffer, buffer.size(), 1);
+        if (counter != 0) {
+            buffer.push_back(builder);
+        }
+        return std::make_tuple(buffer, len * 4, 1);
     }
 };
 
@@ -162,21 +181,23 @@ struct bin_decoder {
     static result_t decode(typename traits::literal_t const & str) {
         std::vector<uint8_t> buffer{};
         int counter = 0;
+        size_t len = 0;
         uint8_t builder = 0;
         auto node = ssn::parse<ssn::BinaryConverter>(str);
         ssn::ast::walk(node, [&](uint8_t v) {
             builder |= v << counter;
             counter++;
-            if (counter == 4) {
-                buffer.push_back(hex_table[(int) builder]);
+            len++;
+            if (counter == 8) {
+                buffer.push_back(builder);
                 builder = 0;
                 counter = 0;
             }
         });
         if (counter != 0) {
-            buffer.push_back(hex_table[(int) builder]);
+            buffer.push_back(builder);
         }
-        return std::make_tuple(buffer, buffer.size(), 1);
+        return std::make_tuple(buffer, len, 1);
     }
 };
 
@@ -217,7 +238,8 @@ struct stream_set_decoder {
         // correct data for each stream in the set.
         size_t const length = (size_t) len;
         typename traits::buffer_t buffer{};
-        size_t itemsPerChunk = blockWidth;
+        size_t increment = traits::stream_items_per_buffer_item_v;
+        size_t itemsPerChunk = blockWidth / increment;
         size_t numPasses = std::ceil((double) length / itemsPerChunk);
 
         // For each pass, pull a fixed number of items from each expanded stream
@@ -234,12 +256,9 @@ struct stream_set_decoder {
                     if (LLVM_LIKELY(idx < length)) {
                         val = buf[idx];
                     }
-                    // std::cout << val << " ";
                     buffer.push_back(val);
                 }
-                // std::cout << "\n";
             }
-            // std::cout << "\n";
         }
 
         return std::make_tuple(buffer, length, streamCount);
@@ -284,10 +303,6 @@ public:
     /// The field width of this stream.
     uint32_t getFieldWidth() const noexcept {
         return traits::field_width_v;
-    }
-
-    uint32_t getBufferFieldWidth() const noexcept {
-        return traits::buffer_item_field_width_v;
     }
 
     /// The number of elements in this stream.
@@ -482,7 +497,7 @@ using IntStreamSet = __sg::basic_stream<I, __sg::stream_set_decoder<__sg::copy_d
 /// The type of a stream's internal buffer as a LLVM type.
 template<typename Stream>
 inline llvm::Type * BufferTypeOf(TestEngine & T, Stream const & stream) {
-    return llvm::IntegerType::getIntNPtrTy(T.driver().getContext(), stream.getBufferFieldWidth());
+    return llvm::IntegerType::getIntNPtrTy(T.driver().getContext(), stream.getFieldWidth());
 }
 
 /// Constructs a `kernel::StreamSet` from a static stream's properties.
@@ -493,28 +508,8 @@ inline StreamSet * ToStreamSet(
     Scalar * pointer, 
     Scalar * size) 
 {
-    namespace su = kernel::streamutils;
-    // bitstreams are first loaded as <i8>[1] then converted to <i1>[1] via `HexToBinary`
-    StreamSet * source = T->CreateStreamSet(numElements, fieldWidth == 1 ? 8 : fieldWidth);
+    StreamSet * source = T->CreateStreamSet(numElements, fieldWidth);
     T->CreateKernelCall<kernel::MemorySourceKernel>(pointer, size, source);
-    if (fieldWidth == 1) {
-        if (numElements == 1) {
-            StreamSet * bin = T->CreateStreamSet(1, 1);
-            T->CreateKernelCall<kernel::HexToBinary>(source, bin);
-            source = bin;
-        } else {
-            // TODO: add streamset support into HexToBinary
-            std::vector<StreamSet *> binaryStreams(numElements);
-            std::vector<std::pair<StreamSet *, std::vector<uint32_t>>> bindings{};
-            for (size_t i = 0; i < numElements; ++i) {
-                auto bin = T->CreateStreamSet(1, 1);
-                binaryStreams[i] = bin;
-                T->CreateKernelCall<kernel::HexToBinary>(su::Select(T, source, i), binaryStreams[i]);
-                bindings.push_back({binaryStreams[i], {0}});
-            }
-            source = su::Select(T, bindings);
-        }
-    }
     return source;
 }
 

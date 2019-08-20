@@ -14,6 +14,5 @@ DEPS
     kernel.core
     kernel.io
     kernel.pipeline
-    kernel.streamutils
     kernel.util
 )

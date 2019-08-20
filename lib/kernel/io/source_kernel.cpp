@@ -385,6 +385,11 @@ void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
         Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
         readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
         readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
+        if (mCodeUnitWidth == 1) {
+            // If trying to load a bitstream and the number of items is not byte-aligned, load an extra byte.
+            Value * const isPartialByte = b->CreateICmpNE(b->CreateURem(fileItems, b->getSize(8)), b->getSize(0));
+            readEnd = b->CreateGEP(readEnd, b->CreateSelect(isPartialByte, b->getInt32(1), b->getInt32(0)));
+        }
     }
 
     DataLayout DL(b->getModule());
