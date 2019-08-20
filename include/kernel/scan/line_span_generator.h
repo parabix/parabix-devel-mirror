@@ -31,8 +31,8 @@ protected:
     void generateProcessingLogic(BuilderRef b, llvm::Value * absoluteIndex) override;
     void finalize(BuilderRef b) override;
 private:
-    llvm::BasicBlock * mFinalBlock = nullptr;
-    llvm::BasicBlock * mLineSpanExit = nullptr;
+    // llvm::BasicBlock * mFinalBlock = nullptr;
+    // llvm::BasicBlock * mLineSpanExit = nullptr;
 };
 
 

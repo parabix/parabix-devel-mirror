@@ -17,12 +17,12 @@ LineSpanGenerator::LineSpanGenerator(BuilderRef b, StreamSet * linebreakStream, 
 {
     assert (linebreakStream->getNumElements() == 1 && linebreakStream->getFieldWidth() == 1);
     addInternalScalar(b->getInt64Ty(), "lineBegin");
-    mOutputStreamSets.push_back({"output", output, PopcountOf("scan"), Add1()});
+    mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
 }
 
 void LineSpanGenerator::initialize(BuilderRef b) {
-    mFinalBlock = b->CreateBasicBlock("finalBlock");
-    mLineSpanExit = b->CreateBasicBlock("lineSpanExit");
+    // mFinalBlock = b->CreateBasicBlock("finalBlock");
+    // mLineSpanExit = b->CreateBasicBlock("lineSpanExit");
 }
 
 void LineSpanGenerator::generateProcessingLogic(BuilderRef b, Value * const absoluteIndex) {
@@ -38,21 +38,21 @@ void LineSpanGenerator::generateProcessingLogic(BuilderRef b, Value * const abso
 }
 
 void LineSpanGenerator::finalize(BuilderRef b) {
-    // Value * atNonLineBreakTerminatedEOF = b->CreateICmpEQ(b->getScalarField("lineBegin"), b->getProcessedItemCount("scan"));
-    b->CreateCondBr(mIsFinal, mFinalBlock, mLineSpanExit);
+    // // Value * atNonLineBreakTerminatedEOF = b->CreateICmpEQ(b->getScalarField("lineBegin"), b->getProcessedItemCount("scan"));
+    // b->CreateCondBr(mIsFinal, mFinalBlock, mLineSpanExit);
 
-    b->SetInsertPoint(mFinalBlock);
-    Value * const producedCount = b->getProducedItemCount("output");
-    Value * const beginIdx = b->getScalarField("lineBegin");
-    Value * const endIdx = beginIdx;
-    Value * const beginStorePtr = b->getRawOutputPointer("output", b->getInt32(0), producedCount);
-    Value * const endStorePtr = b->getRawOutputPointer("output", b->getInt32(1), producedCount);
-    b->CreateStore(beginIdx, beginStorePtr);
-    b->CreateStore(endIdx, endStorePtr);
-    b->setProducedItemCount("output", b->CreateAdd(producedCount, b->getSize(1)));
-    b->CreateBr(mLineSpanExit);
+    // b->SetInsertPoint(mFinalBlock);
+    // Value * const producedCount = b->getProducedItemCount("output");
+    // Value * const beginIdx = b->getScalarField("lineBegin");
+    // Value * const endIdx = beginIdx;
+    // Value * const beginStorePtr = b->getRawOutputPointer("output", b->getInt32(0), producedCount);
+    // Value * const endStorePtr = b->getRawOutputPointer("output", b->getInt32(1), producedCount);
+    // b->CreateStore(beginIdx, beginStorePtr);
+    // b->CreateStore(endIdx, endStorePtr);
+    // b->setProducedItemCount("output", b->CreateAdd(producedCount, b->getSize(1)));
+    // b->CreateBr(mLineSpanExit);
 
-    b->SetInsertPoint(mLineSpanExit);
+    // b->SetInsertPoint(mLineSpanExit);
 }
 
 
