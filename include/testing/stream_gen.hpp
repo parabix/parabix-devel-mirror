@@ -13,6 +13,7 @@
 #include <iostream>
 
 #include <cinttypes>
+#include <cstring>
 #include <type_traits>
 #include <tuple>
 #include <vector>
@@ -34,6 +35,9 @@ namespace streamgen {
  */
 struct bit_t {};
 
+/// A marker type to identify raw streams of text.
+struct text_t {};
+
 /// The field width of an integer type in bits.
 template<typename I> 
 struct field_width {
@@ -45,6 +49,12 @@ struct field_width {
 template<> 
 struct field_width<bit_t> { 
     static const uint32_t value = 1; 
+};
+
+/// The field width of an integer type in bits.
+template<> 
+struct field_width<text_t> { 
+    static const uint32_t value = 8; 
 };
 
 /// The number of stream items per buffer item.
@@ -60,6 +70,12 @@ struct si_per_bi<bit_t> {
     static const uint32_t value = 8;
 };
 
+/// The number of stream items per buffer item.
+template<>
+struct si_per_bi<text_t> {
+    static const uint32_t value = 1;
+};
+
 /**
  * A collection of types associated with streams derived from a single item
  * type `I`.
@@ -69,15 +85,19 @@ struct si_per_bi<bit_t> {
  *         some other integer type for int streams (e.g., uint64_t for <i64>).
  * 
  * Preconditions (static):
- *  - `I` must either be `bit_t` or `std::is_integral<I>::value` must be `true`.
+ *  - `I` must either be `bit_t`, `text_t` or `std::is_integral<I>::value` must 
+ *    be `true`.
  */
 template<typename I>
 struct stream_traits {
 private:
     struct is_bitstream { static const bool value = std::is_same<I, bit_t>::value; };
+    struct is_text_stream { static const bool value = std::is_same<I, text_t>::value; };
+
+    static const bool is_bit_or_text_stream_v = is_bitstream::value || is_text_stream::value;
 public:
-    static_assert(std::is_same<I, bit_t>::value || std::is_integral<I>::value, 
-        "stream_traits<I>: `I` must be an integer type or bit_t");
+    static_assert(std::is_same<I, bit_t>::value || std::is_same<I, text_t>::value || std::is_integral<I>::value,
+        "stream_traits<I>: `I` must be an integer type, bit_t, or text_t");
 
     /// The item type for a stream.
     using item_type = I;
@@ -85,14 +105,17 @@ public:
     /// Meta condition resolving to `true` iff trait types are for a bitstream.
     static const bool is_bitstream_v = is_bitstream::value;
 
+    /// Meta condition resolving to `true` iff trait types are for a text stream.
+    static const bool is_text_stream_v = is_text_stream::value;
+
     /// Item item type for a stream's internal buffer.
-    using buffer_item_type = typename std::conditional<is_bitstream_v, uint8_t, I>::type;
+    using buffer_item_type = typename std::conditional<is_bit_or_text_stream_v, uint8_t, I>::type;
 
     /// The field width of the stream (e.g., 1 for bitstreams, 8 for <i8>, etc.).
     static const uint32_t field_width_v = field_width<I>::value;
 
     /// Type that a single stream (i.e., <iN>[1]) is constructable from.
-    using literal_t = typename std::conditional<is_bitstream_v, const char *, std::vector<I>>::type;
+    using literal_t = typename std::conditional<is_bit_or_text_stream_v, const char *, std::vector<I>>::type;
 
     /// Type that a stream set is constructable from.
     using set_literal_t = std::vector<literal_t>;
@@ -127,6 +150,25 @@ struct copy_decoder {
         static_assert(std::is_same<typename traits::literal_t, typename traits::buffer_t>::value,
             "copy_decoder cannot be used when literal_t != buffer_t");
         return std::make_tuple(str, str.size(), 1);
+    }
+};
+
+/**
+ * A decoder for directly copying a C-style string to an internal buffer.
+ * 
+ * Preconditions (static):
+ *  - May only be used on streams where the item type is `text_t`.
+ */
+struct text_decoder {
+    using traits = stream_traits<text_t>;
+    using item_type = typename traits::item_type;
+    using result_t = std::tuple<typename traits::buffer_t, size_t, uint32_t>;
+
+    static result_t decode(typename traits::literal_t const & str) {
+        static_assert(traits::is_text_stream_v, "text_decoder only works for text streams");
+        const char * end = str + std::strlen(str);
+        typename traits::buffer_t buffer(str, end);
+        return std::make_tuple(buffer, buffer.size(), 1);
     }
 };
 
@@ -456,7 +498,7 @@ using BinaryStreamSet = __sg::basic_stream<__sg::bit_t, __sg::stream_set_decoder
  *          "</doc>\n"
  *      );
  */
-using TextStream = __sg::basic_stream<char, __sg::copy_decoder<char>>;
+using TextStream = __sg::basic_stream<__sg::text_t, __sg::text_decoder>;
 
 /**
  * Static-Stream type constructable from a sequence of integers. The field width
