@@ -147,6 +147,11 @@ Value * KernelBuilder::getOutputStreamPackPtr(const std::string & name, Value * 
 }
 
 StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Value * streamIndex, Value * blockOffset, Value * toStore) {
+    std::string outputName = getKernelName() + "." + name;
+    if (ConstantInt * c = dyn_cast<ConstantInt>(streamIndex)) {
+        outputName += "[" + std::to_string(c->getZExtValue()) + "]";
+    }
+    toStore->setName(outputName);
     Value * const ptr = getOutputStreamBlockPtr(name, streamIndex, blockOffset);
     Type * const storeTy = toStore->getType();
     Type * const ptrElemTy = ptr->getType()->getPointerElementType();
@@ -166,6 +171,13 @@ StoreInst * KernelBuilder::storeOutputStreamBlock(const std::string & name, Valu
 }
 
 StoreInst * KernelBuilder::storeOutputStreamPack(const std::string & name, Value * streamIndex, Value * packIndex, Value * blockOffset, Value * toStore) {
+    std::string outputName = getKernelName() + "." + name;
+    if (ConstantInt * c = dyn_cast<ConstantInt>(streamIndex)) {
+        outputName += "[" + std::to_string(c->getZExtValue()) + "]";
+        if (ConstantInt * c1 = dyn_cast<ConstantInt>(packIndex)) {
+            outputName += "[" + std::to_string(c1->getZExtValue()) + "]";
+        }
+    }
     Value * const ptr = getOutputStreamPackPtr(name, streamIndex, packIndex, blockOffset);
     Type * const storeTy = toStore->getType();
     Type * const ptrElemTy = ptr->getType()->getPointerElementType();
