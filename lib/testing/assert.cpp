@@ -62,8 +62,6 @@ void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * cons
     if (FW != 1) {
         initialOffset = b->CreateUDiv(b->getProcessedItemCount("lhs"), b->getSize(ITEMS_PER_BLOCK));
     }
-    b->CallPrintInt("accessible item count: lhs", b->getAccessibleItemCount("lhs"));
-    b->CallPrintInt("accessible item count: rh", b->getAccessibleItemCount("rhs"));
     b->CreateLikelyCondBr(hasMoreItems, loopBlock, exitBlock);
 
     b->SetInsertPoint(loopBlock);
