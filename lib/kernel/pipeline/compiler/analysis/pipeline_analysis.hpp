@@ -1478,10 +1478,23 @@ AddGraph PipelineCompiler::makeAddGraph() const {
         RateValue minAddK{0};
         if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
             minAddK = RateValue{std::numeric_limits<unsigned>::max()};
+            bool noPrincipal = true;
             for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto buffer = source(e, mBufferGraph);
-                minAddK = std::min(minAddK, G[buffer]);
+                const BufferRateData & consumerRate = mBufferGraph[e];
+                const Binding & input = consumerRate.Binding;
+                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
+                    minAddK = G[buffer];
+                    noPrincipal = false;
+                }
                 add_edge(buffer, i, G);
+            }
+            if (LLVM_LIKELY(noPrincipal)) {
+                for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                    const auto buffer = source(e, mBufferGraph);
+                    minAddK = std::min(minAddK, G[buffer]);
+                    add_edge(buffer, i, G);
+                }
             }
         }
         G[i] = minAddK;

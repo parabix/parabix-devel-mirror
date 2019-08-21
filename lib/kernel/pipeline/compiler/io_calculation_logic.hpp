@@ -147,15 +147,15 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
     Value * const processed = mAlreadyProcessedPhi[inputPort];
-    ConstantInt * facsimile = nullptr;
+    ConstantInt * lookAhead = nullptr;
     if (LLVM_LIKELY(useOverflow)) {
         const auto size = getLookAhead(getInputBufferVertex(inputPort));
         if (size) {
-            facsimile = b->getSize(size);
+            lookAhead = b->getSize(size);
         }
     }
     const Binding & input = getInputBinding(inputPort);
-    Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, facsimile);
+    Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, lookAhead);
     #ifndef DISABLE_ZERO_EXTEND
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
@@ -178,6 +178,9 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
     b->CallPrintInt(prefix + "_available", available);
     b->CallPrintInt(prefix + "_processed", processed);
     b->CallPrintInt(prefix + "_accessible", accessible);
+    if (lookAhead) {
+    b->CallPrintInt(prefix + "_lookAhead", lookAhead);
+    }
     #endif
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         Value * sanityCheck = b->CreateICmpULE(processed, available);
@@ -454,6 +457,12 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         }
     }
 
+    #ifdef PRINT_DEBUG_MESSAGES
+    if (principalFixedRateFactor) {
+        b->CallPrintInt(makeKernelName(mKernelIndex) + "_principalFixedRateFactor", principalFixedRateFactor);
+    }
+    #endif
+
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * accessible = accessibleItems[i];
         if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
@@ -493,10 +502,19 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const Binding & input = getInputBinding(i);
             const ProcessingRate & rate = input.getRate();
+
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
+            #endif
+
             if (rate.isFixed()) {
                 Value * accessible = accessibleItems[i];
                 const auto factor = rate.getRate() / mFixedRateLCM;
                 Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+
+                #ifdef PRINT_DEBUG_MESSAGES
+                b->CallPrintInt(prefix + ".calculated", calculated);
+                #endif
 
                 const auto buffer = getInputBufferVertex(i);
                 const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
@@ -526,7 +544,6 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                 accessibleItems[i] = calculated;
             }
             #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
             b->CallPrintInt(prefix + ".accessible'", accessibleItems[i]);
             #endif
         }
