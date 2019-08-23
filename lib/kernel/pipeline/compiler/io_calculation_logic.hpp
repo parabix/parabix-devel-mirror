@@ -424,22 +424,32 @@ Value * PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *>
 Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
     const auto numOfInputs = accessibleItems.size();
 
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        Value * accessible = mAccessibleInputItems[i];
-        const Binding & input = getInputBinding(i);
-        Value * selected = accessible;
-        for (const Attribute & attr : input.getAttributes()) {
+    auto summarizeItemCountAdjustment = [](const Binding & binding, int k) {
+        for (const Attribute & attr : binding.getAttributes()) {
             switch (attr.getKind()) {
                 case AttrId::Add:
-                    selected = b->CreateAdd(selected, b->getSize(attr.amount()));
+                    k += attr.amount();
                     break;
                 case AttrId::Truncate:
-                    selected = b->CreateSaturatingSub(selected, b->getSize(attr.amount()));
+                    k -= attr.amount();
                     break;
                 default: break;
             }
         }
-        if (LLVM_UNLIKELY(selected != accessible)) {
+        return k;
+    };
+
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        Value * accessible = mAccessibleInputItems[i];
+        const Binding & input = getInputBinding(i);
+        const auto k = summarizeItemCountAdjustment(input, 0);
+        if (LLVM_UNLIKELY(k != 0)) {
+            Value * selected;
+            if (LLVM_LIKELY(k > 0)) {
+                selected = b->CreateAdd(accessible, b->getSize(k));
+            } else  {
+                selected = b->CreateSaturatingSub(accessible, b->getSize(-k));
+            }
             accessible = b->CreateSelect(isClosedNormally(b, i), selected, accessible);
         }
         accessibleItems[i] = accessible;
@@ -503,29 +513,30 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
             const Binding & input = getInputBinding(i);
             const ProcessingRate & rate = input.getRate();
 
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
-            #endif
-
             if (rate.isFixed()) {
                 Value * accessible = accessibleItems[i];
                 const auto factor = rate.getRate() / mFixedRateLCM;
                 Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+                auto addPort = in_edges(mKernelIndex, mAddGraph).first + i;
+                const int k = mAddGraph[*addPort];
 
-                #ifdef PRINT_DEBUG_MESSAGES
-                b->CallPrintInt(prefix + ".calculated", calculated);
-                #endif
+                // ... but ensure that it reflects whether it was produced with an
+                // Add/Truncate attributed rate.
+                if (k) {
 
-                const auto buffer = getInputBufferVertex(i);
-                const RateValue k = mAddGraph[buffer] - mAddGraph[mKernelIndex];
-                // ... but ensure that it reflects whether it was produced with an Add(k) rate.
-                if (LLVM_UNLIKELY(k.numerator() != 0)) {
+                    const auto stride = mKernel->getStride();
+
                     // (x + (g/h)) * (c/d) = (xh + g) * c/hd
-                    Constant * const h = b->getSize(k.denominator());
+                    Constant * const h = b->getSize(stride);
                     Value * const xh = b->CreateMul(minFixedRateFactor, h);
-                    Constant * const g = b->getSize(k.numerator());
-                    Value * const y = b->CreateAdd(xh, g);
-                    const auto r = factor / RateValue{k.denominator()};
+                    Constant * const g = b->getSize(std::abs(k));
+                    Value * y;
+                    if (k > 0) {
+                        y = b->CreateAdd(xh, g);
+                    } else {
+                        y = b->CreateSub(xh, g);
+                    }
+                    const RateValue r = factor / RateValue{stride};
                     Value * const z = b->CreateCeilUMulRate(y, r);
                     calculated = b->CreateSelect(isClosedNormally(b, i), z, calculated);
                 }
@@ -544,6 +555,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                 accessibleItems[i] = calculated;
             }
             #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
             b->CallPrintInt(prefix + ".accessible'", accessibleItems[i]);
             #endif
         }

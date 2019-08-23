@@ -117,12 +117,12 @@ void StreamEquivalenceKernel::generateFinalizeMethod(BuilderRef b) {
         resultState = b->CreateSelect(result, b->getInt32(0), b->getInt32(1));
     } else {
         // To preserve commutativity of `NE` comparisons, two additional test
-        // states are needed. State `2` represents a partial passing `NE` 
+        // states are needed. State `2` represents a partial passing `NE`
         // comparison and state `3` represents a partial failing `NE` comparison.
         // `AssertNE` first checks `A != B` putting the test into a parital
         // state (`2` if the comparison returns `true` or `3` if it returns `false`).
         // The second comparison `B != A` resolves the partial state. If the second
-        // comparison returns `false` and the first comparison did as well (i.e., 
+        // comparison returns `false` and the first comparison did as well (i.e.,
         // the test is in state `3`) then the test is put into a failing state.
         // Otherwise, if either of the tests returned `true` the total assertion
         // passed.

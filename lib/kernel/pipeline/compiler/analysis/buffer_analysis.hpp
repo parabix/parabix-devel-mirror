@@ -489,6 +489,8 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
             rates.insert(inputRate.SymbolicRate);
         }
 
+        assert ("independent sources must have unique symbolic rates." && (in_degree(kernel, G) != 0 || rates.empty()));
+
         // Determine the symbolic rate of this kernel
         unsigned symbolicRate = 0;
         if (LLVM_UNLIKELY(rates.empty())) {
@@ -965,15 +967,22 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferRateData & pd = G[e];
         out << " [label=\"#" << pd.Port.Number << ": ";
         rate_range(pd.Minimum, pd.Maximum);
-        out << " {" << pd.SymbolicRate << "}"
-               "\\n(";
+        out << " {" << pd.SymbolicRate << "}";
+        const Binding & binding = pd.Binding;
+        if (binding.hasAttribute(AttrId::Principal)) {
+            out << " [P]";
+        }
+        if (binding.hasAttribute(AttrId::ZeroExtended)) {
+            out << " [Z]";
+        }
+        out << "\\n(";
         rate_range(pd.MinimumExpectedFlow, pd.MaximumExpectedFlow);
 
         out << ")\\n(";
         rate_range(pd.MinimumSpace, pd.MaximumSpace);
 
 
-        std::string name = pd.Binding.get().getName();
+        std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
         out << ")\\n" << name << "\"];\n";
     }

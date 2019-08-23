@@ -1472,47 +1472,103 @@ bool PipelineCompiler::isPipelineOutput(const unsigned outputPort) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 AddGraph PipelineCompiler::makeAddGraph() const {
     // TODO: this should generate formulas to take roundup into account
+
+    // TODO: this doesn't handle fixed I/O rate conversions correctly. E.g., 2 input items to 3 output items.
+
     AddGraph G(LastStreamSet + 1);
-    for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        RateValue minAddK{0};
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        int minAddK = 0;
         if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
-            minAddK = RateValue{std::numeric_limits<unsigned>::max()};
             bool noPrincipal = true;
+
             for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto buffer = source(e, mBufferGraph);
-                const BufferRateData & consumerRate = mBufferGraph[e];
-                const Binding & input = consumerRate.Binding;
-                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                    minAddK = G[buffer];
+                const BufferRateData & br = mBufferGraph[e];
+                const Binding & input = br.Binding;
+
+                int k = G[buffer];
+                bool isPrincipal = false;
+                for (const Attribute & attr : input.getAttributes()) {
+                    switch (attr.getKind()) {
+                        case AttrId::Add:
+                            k += attr.amount();
+                            break;
+                        case AttrId::Truncate:
+                            k -= attr.amount();
+                            break;
+                        case AttrId::Principal:
+                            isPrincipal = true;
+                            break;
+                        default: break;
+                    }
+                }
+                if (LLVM_UNLIKELY(isPrincipal)) {
+                    minAddK = k;
                     noPrincipal = false;
                 }
-                add_edge(buffer, i, G);
+
+                add_edge(buffer, i, k, G);
             }
+
             if (LLVM_LIKELY(noPrincipal)) {
-                for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                    const auto buffer = source(e, mBufferGraph);
-                    minAddK = std::min(minAddK, G[buffer]);
-                    add_edge(buffer, i, G);
+                minAddK = std::numeric_limits<int>::max();
+                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                    minAddK = std::min<int>(minAddK, G[e]);
+                }
+                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                    G[e] -= minAddK;
+                }
+            } else {
+                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                    G[e] = 0;
                 }
             }
+
         }
+
         G[i] = minAddK;
+
         for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto buffer = target(e, mBufferGraph);
             const BufferRateData & br = mBufferGraph[e];
             const Binding & output = br.Binding;
-            unsigned k = 0;
+
+            int k = minAddK;
             for (const Attribute & attr : output.getAttributes()) {
-                if (LLVM_UNLIKELY(attr.isAdd())) {
-                    k += attr.amount();
+                switch (attr.getKind()) {
+                    case AttrId::Add:
+                        k += attr.amount();
+                        break;
+                    case AttrId::Truncate:
+                        k -= attr.amount();
+                        break;
+                    default: break;
                 }
             }
-            RateValue addK{k, kernel->getStride()};
-            G[buffer] = minAddK + addK;
-            add_edge(i, buffer, G);
+
+
+            G[buffer] = k;
+            add_edge(i, buffer, k, G);
         }
     }
+
+    #if 0
+    auto & out = errs();
+    out << "digraph AddGraph {\n";
+    for (const auto v : make_iterator_range(vertices(G))) {
+        out << "v" << v << " [label=\"" << v << " (" << (int)G[v] << ")\"];\n";
+    }
+    for (const auto & e : make_iterator_range(edges(G))) {
+        const auto s = source(e, G);
+        const auto t = target(e, G);
+        const BufferRateData & r = mBufferGraph[edge(s, t, mBufferGraph).first];
+        out << "v" << s << " -> v" << t << " [label=\"" << r.Port.Number << ": " << (int)G[e] << "\"];\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+    #endif
+
     return G;
 }
 

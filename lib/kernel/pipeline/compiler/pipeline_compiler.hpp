@@ -385,7 +385,7 @@ struct PipelineGraphBundle {
     }
 };
 
-using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, RateValue, RateValue>;
+using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, int, int>;
 
 enum CycleCounter {
   INITIAL
