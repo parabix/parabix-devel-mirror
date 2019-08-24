@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "common.h"
 #include "assert.h"
 #include "macro.h"
 #include "runtime.h"
 #include "stream_gen.hpp"
+#include "test_case.hpp"

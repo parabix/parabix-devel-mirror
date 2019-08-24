@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <testing/common.h>
 #include <kernel/core/kernel.h>
+#include <kernel/pipeline/pipeline_builder.h>
 
 namespace kernel {
 
@@ -42,7 +42,7 @@ namespace testing {
  *  - `lhs` and `rhs` must have the same field width
  *  - `lhs` and `rhs` must have the same number of elements
  */
-void AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
+void AssertEQ(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * lhs, kernel::StreamSet * rhs);
 
 /**
  * Compares two `StreamsSets` to see if they are equal setting the test case's 
@@ -52,6 +52,6 @@ void AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
  *  - `lhs` and `rhs` must have the same field width
  *  - `lhs` and `rhs` must have the same number of elements
  */
-void AssertNE(TestEngine & T, StreamSet * lhs, StreamSet * rhs);
+void AssertNE(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * lhs, kernel::StreamSet * rhs);
 
 }

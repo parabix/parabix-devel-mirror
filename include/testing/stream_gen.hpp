@@ -10,8 +10,6 @@
 
 #pragma once
 
-#include <iostream>
-
 #include <cinttypes>
 #include <cstring>
 #include <type_traits>
@@ -20,7 +18,6 @@
 #include <llvm/IR/Type.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <kernel/io/source_kernel.h>
-#include <testing/common.h>
 #include <testing/stream_parsing.hpp>
 #include <toolchain/toolchain.h>
 
@@ -30,7 +27,7 @@ namespace testing {
 namespace streamgen {
 
 /**
- * A marker type used to differentiate between bitstreams (streams with field 
+ * A marker type used to differentiate between bitstreams (streams with field
  * width == 1), and streams of integers (field width > 1).
  */
 struct bit_t {};
@@ -39,22 +36,22 @@ struct bit_t {};
 struct text_t {};
 
 /// The field width of an integer type in bits.
-template<typename I> 
+template<typename I>
 struct field_width {
     static_assert(std::is_integral<I>::value, "field_width<I>: `I` must be an integer type");
-    static const uint32_t value = sizeof(I) * 8; 
+    static const uint32_t value = sizeof(I) * 8;
 };
 
 /// The field width of an integer type in bits.
-template<> 
-struct field_width<bit_t> { 
-    static const uint32_t value = 1; 
+template<>
+struct field_width<bit_t> {
+    static const uint32_t value = 1;
 };
 
 /// The field width of an integer type in bits.
-template<> 
-struct field_width<text_t> { 
-    static const uint32_t value = 8; 
+template<>
+struct field_width<text_t> {
+    static const uint32_t value = 8;
 };
 
 /// The number of stream items per buffer item.
@@ -79,13 +76,13 @@ struct si_per_bi<text_t> {
 /**
  * A collection of types associated with streams derived from a single item
  * type `I`.
- * 
+ *
  * Template Arguments:
  *  - `I`: A stream's item type to generate types for. `bit_t` for bit streams,
  *         some other integer type for int streams (e.g., uint64_t for <i64>).
- * 
+ *
  * Preconditions (static):
- *  - `I` must either be `bit_t`, `text_t` or `std::is_integral<I>::value` must 
+ *  - `I` must either be `bit_t`, `text_t` or `std::is_integral<I>::value` must
  *    be `true`.
  */
 template<typename I>
@@ -101,7 +98,7 @@ public:
 
     /// The item type for a stream.
     using item_type = I;
-    
+
     /// Meta condition resolving to `true` iff trait types are for a bitstream.
     static const bool is_bitstream_v = is_bitstream::value;
 
@@ -129,13 +126,13 @@ public:
 
 /**
  * A decoder which simply copies the input `literal_t` to create a buffer.
- * 
+ *
  * Only works for types where `literal_t` is the same as `buffer_t`. One such
  * example is integer streams.
- * 
+ *
  * Template Arguments:
  *  - `I`: A stream's item type (e.g., `bit_t`, `uint64_t`, etc.).
- * 
+ *
  * Preconditions (static):
  *  - `stream_traits<I>::literal_t` and `stream_traits<I>::buffer_t` must be
  *    the same type.
@@ -146,6 +143,8 @@ struct copy_decoder {
     using item_type = typename traits::item_type;
     using result_t = std::tuple<typename traits::buffer_t, size_t, uint32_t>;
 
+    static const size_t num_elements_v = 1;
+
     static result_t decode(typename traits::literal_t const & str) {
         static_assert(std::is_same<typename traits::literal_t, typename traits::buffer_t>::value,
             "copy_decoder cannot be used when literal_t != buffer_t");
@@ -155,7 +154,7 @@ struct copy_decoder {
 
 /**
  * A decoder for directly copying a C-style string to an internal buffer.
- * 
+ *
  * Preconditions (static):
  *  - May only be used on streams where the item type is `text_t`.
  */
@@ -163,6 +162,8 @@ struct text_decoder {
     using traits = stream_traits<text_t>;
     using item_type = typename traits::item_type;
     using result_t = std::tuple<typename traits::buffer_t, size_t, uint32_t>;
+
+    static const size_t num_elements_v = 1;
 
     static result_t decode(typename traits::literal_t const & str) {
         static_assert(traits::is_text_stream_v, "text_decoder only works for text streams");
@@ -173,19 +174,21 @@ struct text_decoder {
 };
 
 constexpr uint8_t rev_hex_table[] = {
-    0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe, 
+    0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
     0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf
 };
 
 /**
  * A decoder for converting a string of hexadecimal digits into a buffer.
- * 
+ *
  * May only be used for bitstreams.
  */
 struct hex_decoder {
     using traits = stream_traits<bit_t>;
     using item_type = typename traits::item_type;
     using result_t = std::tuple<typename traits::buffer_t, size_t, uint32_t>;
+
+    static const size_t num_elements_v = 1;
 
     static result_t decode(typename traits::literal_t const & str) {
         traits::buffer_t buffer{};
@@ -212,13 +215,15 @@ struct hex_decoder {
 
 /**
  * A decoder for converting a string of binary digits into a buffer.
- * 
+ *
  * May only be used for bitstreams.
  */
 struct bin_decoder {
     using traits = stream_traits<bit_t>;
     using item_type = typename traits::item_type;
     using result_t = std::tuple<typename traits::buffer_t, size_t, uint32_t>;
+
+    static const size_t num_elements_v = 1;
 
     static result_t decode(typename traits::literal_t const & str) {
         std::vector<uint8_t> buffer{};
@@ -246,15 +251,17 @@ struct bin_decoder {
 /**
  * A decoder for creating stream sets instead of single streams. Takes another
  * decoder type which is used to decode the individual streams.
- * 
+ *
  * Template Arguments:
  *  - `Decoder`: A decoder type for decoding individual streams.
  */
-template<class Decoder>
+template<class Decoder, size_t N>
 struct stream_set_decoder {
     using item_type = typename Decoder::item_type;
     using traits = stream_traits<item_type>;
     using result_t = std::tuple<typename traits::buffer_t, size_t, uint32_t>;
+
+    static const size_t num_elements_v = N;
 
     static result_t decode(typename traits::set_literal_t const & set) {
         size_t const streamCount = set.size();
@@ -276,7 +283,7 @@ struct stream_set_decoder {
             }
         }
 
-        // Construct the buffer in such a way that `MemorySourceKernel` reads the 
+        // Construct the buffer in such a way that `MemorySourceKernel` reads the
         // correct data for each stream in the set.
         size_t const length = (size_t) len;
         typename traits::buffer_t buffer{};
@@ -312,20 +319,20 @@ template<class Decoder>
 struct is_stream_set_decoder { static const bool value = false; };
 
 /// Meta conditional resolving to `true` if `Decoder` is some `StreamSetDecoder`.
-template<class Inner>
-struct is_stream_set_decoder<stream_set_decoder<Inner>> { static const bool value = true; };
+template<class Inner, size_t N>
+struct is_stream_set_decoder<stream_set_decoder<Inner, N>> { static const bool value = true; };
 
 /**
  * The actual stream type implementation.
- * 
+ *
  * Since buffer initialization may be dependent on command line flags, the
  * stream's internal buffer is lazily generated.
- * 
+ *
  * Template Arguments:
  *  - `I`: The stream's item type (e.g., `bit_t`, `uint64_t`, etc.).
  *  - `Decoder`: The decoder to use when generating the internal buffer from
  *      a literal value.
- * 
+ *
  * Preconditions (static):
  *  - `I` must either be `bit_t` or be an integer type.
  */
@@ -334,17 +341,21 @@ class basic_stream {
     using traits = stream_traits<I>;
     static const bool is_streamset_v = is_stream_set_decoder<Decoder>::value;
 public:
-    using literal_t = typename std::conditional<is_streamset_v, 
-                        typename traits::set_literal_t, 
+    static const size_t num_elements_v = Decoder::num_elements_v;
+
+    using literal_t = typename std::conditional<is_streamset_v,
+                        typename traits::set_literal_t,
                         typename traits::literal_t>::type;
 
 public:
+    static const uint32_t field_width_v = traits::field_width_v;
+
     explicit basic_stream(literal_t && literal)
     : mLiteral(literal) {}
 
     /// The field width of this stream.
     uint32_t getFieldWidth() const noexcept {
-        return traits::field_width_v;
+        return field_width_v;
     }
 
     /// The number of elements in this stream.
@@ -380,16 +391,19 @@ private:
     bool                      mIsInitialized = false;
 };
 
+template<typename I, class InnerDecoder, size_t N>
+using basic_stream_set = basic_stream<I, stream_set_decoder<InnerDecoder, N>>;
+
 } // namespace testing::streamgen
 
 namespace __sg = streamgen;
 
 /**
  * Static-Stream type constructable from a string of hexadecimal digits.
- * 
+ *
  * 'Static stream notation' syntax is used to construct the stream. See
  * `stream_parsing.hpp` for more information and parser implementation.
- * 
+ *
  * The conversion process from digit string to bitstream involves interpreting
  * each hex digit as its binary representation (e.g., 'c' -> '1100') and storing
  * the data in such a way that the bit order is preserved. Bitstreams written in
@@ -399,99 +413,118 @@ namespace __sg = streamgen;
  * is converted to a bitstream then printed using `PrintRegister`. The printed
  * output, "... 00 00 8d 53", is read from right to left, where as the input
  * string is read from left to right.
- * 
+ *
  * Example:
- * 
+ *
  *      auto H = HexStream("cab1");
- * 
+ *
  *  Creates a bitstream: 11.. 1.1. 11.1 ...1 (read from left to right)
  *  Which, when printed using `PrintRegister` or `util::DebugDisplay`, gives:
- * 
+ *
  *      hex = ... 00 00 8d 53
- * 
- *  Note the reverse ording of bits as the printed output is read from right 
+ *
+ *  Note the reverse ording of bits as the printed output is read from right
  *  to left.
  */
 using HexStream = __sg::basic_stream<__sg::bit_t, __sg::hex_decoder>;
 
 /**
- * Static-StreamSet type constructable from a vector or strings of hexadecimal 
+ * Static-StreamSet type constructable from a vector or strings of hexadecimal
  * digits.
- * 
+ *
  * 'Static stream notation' syntax is used to construct the stream. See
  * `stream_parsing.hpp` for more information and parser implementation.
- * 
+ *
  * Usage Example:
- * 
+ *
  *      auto Set = HexStreamSet({
  *          "1234 abcd",
  *          "dcba 4321"
  *      });
- * 
+ *
  * All streams in the set must be the same size when expanded.
- * 
+ *
  * Length Mismatch Example:
- * 
+ *
  *      auto InvalidSet = HexStreamSet({
  *          "(ab){16}",
  *          "(abcd){4}" // <-- error: length mismatch, 32 vs. 16
  *      });
  */
-using HexStreamSet = __sg::basic_stream<__sg::bit_t, __sg::stream_set_decoder<__sg::hex_decoder>>;
+// template<typename... S>
+// inline
+// __sg::basic_stream_set<__sg::bit_t, __sg::hex_decoder, sizeof...(S)>
+// HexStreamSet(S... streams) {
+//     return __sg::basic_stream_set<__sg::bit_t, __sg::hex_decoder, sizeof...(S)>({streams...});
+// }
+template<size_t N>
+inline
+__sg::basic_stream_set<__sg::bit_t, __sg::hex_decoder, N>
+HexStreamSet(const char * const (& arr)[N]) {
+    std::vector<const char *> v(arr, arr + N);
+    return __sg::basic_stream_set<__sg::bit_t, __sg::hex_decoder, N>(std::move(v));
+}
+
 
 /**
  * Static-Stream type constructable from a string of binary digits.
- * 
+ *
  * 'Static stream notation' syntax is used to construct the stream. See
  * `stream_parsing.hpp` for more information and parser implementation.
- * 
+ *
  * Dot characters ('.') may be used in place of '0' characters to make the 1 bits
  * stand out more. Along with this, any whitespace in the string will be skipped
  * over.
- * 
+ *
  * Example:
 
  *      auto B = BinaryStream("11.. 1.1. 1.11 ...1");
- * 
+ *
  *  Which, when printed using `PrintRegister` or `util::DebugDisplay`, gives:
- * 
+ *
  *      bin = ... 00 00 8d 53
  */
 using BinaryStream = __sg::basic_stream<__sg::bit_t, __sg::bin_decoder>;
 
 /**
- * Static-StreamSet type constructable from a vector of strings of binary 
+ * Static-StreamSet type constructable from a vector of strings of binary
  * digits.
- * 
+ *
  * 'Static stream notation' syntax is used to construct the stream. See
- * `stream_parsing.hpp` for more information and parser implementation. Dot 
+ * `stream_parsing.hpp` for more information and parser implementation. Dot
  * characters ('.') may be used in place of '0' characters to make the 1 bits
  * stand out more.
- * 
+ *
  * Usage Example:
- * 
+ *
  *      auto Set = BinaryStreamSet({
  *          "(1.1.){4} (...1){4}",
  *          "(...1){4} (1.1.){4}"
  *      });
- * 
+ *
  * All streams in the set must be the same size when expanded.
- * 
+ *
  * Length Mismatch Example:
- * 
- *      auto InvalidSet = HexStreamSet({
+ *
+ *      auto InvalidSet = BinaryStreamSet({
  *          "(..1.){8}",
  *          "((11..){2} 1){4}" // <-- error: length mismatch, 32 vs. 36
  *      });
  */
-using BinaryStreamSet = __sg::basic_stream<__sg::bit_t, __sg::stream_set_decoder<__sg::bin_decoder>>;
+template<size_t N>
+inline
+__sg::basic_stream_set<__sg::bit_t, __sg::bin_decoder, N>
+BinaryStreamSet(const char * const (& arr)[N]) {
+    std::vector<const char *> v(arr, arr + N);
+    return __sg::basic_stream_set<__sg::bit_t, __sg::bin_decoder, N>(std::move(v));
+}
 
 /**
  * Static-Stream type constructable from a raw ascii text string. No processing
  * is done to the input string.
- * 
+ *
  * Example:
- * 
+ *
  *      auto Text = TextStream(
  *          "<doc>\n"
  *          "   <node attr='hello'/>\n"
@@ -503,55 +536,54 @@ using TextStream = __sg::basic_stream<__sg::text_t, __sg::text_decoder>;
 /**
  * Static-Stream type constructable from a sequence of integers. The field width
  * of the resultant stream is determined by the types of the integers used (`I`).
- * 
+ *
  * Template Arguments:
  *  - `I`: Integer type to construct from, determines the field width of the
  *         resultant stream.
- * 
+ *
  * Example:
- * 
+ *
  *      auto IStream = IntStream<uint64_t>({1, 2, 3, 4, 5, 6, 7, 8, 9});
  */
 template<typename I>
 using IntStream = __sg::basic_stream<I, __sg::copy_decoder<I>>;
 
 /**
- * Static-StreamSet type constructable from a vector of sequence of integers. 
- * The field width of the resultant stream is determined by the types of the 
+ * Static-StreamSet type constructable from a vector of sequence of integers.
+ * The field width of the resultant stream is determined by the types of the
  * integers used (`I`).
- * 
+ *
  * * All streams must contain the same number of items.
- * 
+ *
  * Template Arguments:
  *  - `I`: Integer type to construct from, determines the field width of the
  *         resultant stream.
- * 
+ *
  * Example:
- * 
+ *
  *      auto ISet = IntStreamSet<uint64_t>({
  *          { 1,  2,  3,  4,  5,  6,  7,  8,  9},
  *          {10, 20, 30, 40, 50, 60, 70, 80, 90}
  *      });
  */
-template<typename I>
-using IntStreamSet = __sg::basic_stream<I, __sg::stream_set_decoder<__sg::copy_decoder<I>>>;
-
-/// The type of a stream's internal buffer as a LLVM type.
-template<typename Stream>
-inline llvm::Type * BufferTypeOf(TestEngine & T, Stream const & stream) {
-    return llvm::IntegerType::getIntNPtrTy(T.driver().getContext(), stream.getFieldWidth());
+template<typename I, size_t N>
+inline
+__sg::basic_stream_set<I, __sg::copy_decoder<I>, N>
+IntStreamSet(std::vector<I> const (&arr)[N]) {
+    std::vector<std::vector<I>> v(arr, arr + N);
+    return __sg::basic_stream_set<I, __sg::copy_decoder<I>, N>(std::move(v));
 }
 
 /// Constructs a `kernel::StreamSet` from a static stream's properties.
-inline StreamSet * ToStreamSet(
-    TestEngine & T, 
-    uint32_t fieldWidth, 
-    uint32_t numElements, 
-    Scalar * pointer, 
-    Scalar * size) 
+inline kernel::StreamSet * ToStreamSet(
+    const std::unique_ptr<kernel::ProgramBuilder> & P,
+    uint32_t fieldWidth,
+    uint32_t numElements,
+    kernel::Scalar * pointer,
+    kernel::Scalar * size)
 {
-    StreamSet * source = T->CreateStreamSet(numElements, fieldWidth);
-    T->CreateKernelCall<kernel::MemorySourceKernel>(pointer, size, source);
+    kernel::StreamSet * source = P->CreateStreamSet(numElements, fieldWidth);
+    P->CreateKernelCall<kernel::MemorySourceKernel>(pointer, size, source);
     return source;
 }
 

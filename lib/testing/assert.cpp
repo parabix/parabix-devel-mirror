@@ -9,6 +9,7 @@
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
+using namespace kernel;
 
 namespace kernel {
 
@@ -140,18 +141,18 @@ void StreamEquivalenceKernel::generateFinalizeMethod(BuilderRef b) {
 
 namespace testing {
 
-void AssertEQ(TestEngine & T, StreamSet * lhs, StreamSet * rhs) {
+void AssertEQ(const std::unique_ptr<kernel::ProgramBuilder> & P, StreamSet * lhs, StreamSet * rhs) {
     using namespace kernel;
-    auto ptr = T->getInputScalar("__ptr_out");
-    T->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::EQ, lhs, rhs, ptr);
-    T->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::EQ, rhs, lhs, ptr);
+    auto ptr = P->getInputScalar("output");
+    P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::EQ, lhs, rhs, ptr);
+    P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::EQ, rhs, lhs, ptr);
 }
 
-void AssertNE(TestEngine & T, StreamSet * lhs, StreamSet * rhs) {
+void AssertNE(const std::unique_ptr<kernel::ProgramBuilder> & P, StreamSet * lhs, StreamSet * rhs) {
     using namespace kernel;
-    auto ptr = T->getInputScalar("__ptr_out");
-    T->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, lhs, rhs, ptr);
-    T->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, rhs, lhs, ptr);
+    auto ptr = P->getInputScalar("output");
+    P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, lhs, rhs, ptr);
+    P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, rhs, lhs, ptr);
 }
 
 } // namespace testing
