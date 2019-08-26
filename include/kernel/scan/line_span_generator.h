@@ -15,6 +15,10 @@ namespace kernel {
  *
  * The production rate for the output stream is PopcountOf(linebreaks).
  *
+ * The `linebreaks` stream must be terminated by a 1 bit. If the input is a
+ * `UnixLinesKernelBuilder`, then it should use `UnterminatedLineAtEOF::Add1`
+ * to ensure that the stream is terminated by a 1 bit.
+ *
  * Signature:
  *  kernel LineSpanGenerator :: [<i1>[1] linebreaks] -> [<i64>[2] output]
  *
@@ -27,12 +31,8 @@ class LineSpanGenerator : public SingleStreamScanKernelTemplate {
 public:
     LineSpanGenerator(BuilderRef b, StreamSet * linebreaks, StreamSet * output);
 protected:
-    void initialize(BuilderRef b) override;
     void generateProcessingLogic(BuilderRef b, llvm::Value * absoluteIndex) override;
-    void finalize(BuilderRef b) override;
 private:
-    // llvm::BasicBlock * mFinalBlock = nullptr;
-    // llvm::BasicBlock * mLineSpanExit = nullptr;
 };
 
 

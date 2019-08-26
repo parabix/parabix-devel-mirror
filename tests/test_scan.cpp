@@ -48,7 +48,6 @@ auto simple_line_span_e = IntStreamSet<uint64_t>({
 
 TEST_CASE(simple_line_span, simple_line_span_i, simple_line_span_e) {
     auto Result = scan::LineSpans(T, Input<0>(T));
-    // util::DebugDisplay(T, "result", Result);
     AssertEQ(T, Result, Input<1>(T));
 }
 
@@ -59,16 +58,57 @@ auto text_line_span_source = TextStream(
 );
 auto text_line_span_e = IntStreamSet<uint64_t>({
     { 0, 4 },
-    { 5, 7 }
+    { 3, 7 }
 });
 
 TEST_CASE(text_line_span, text_line_span_source, text_line_span_e) {
     auto const LineBreaks = T->CreateStreamSet();
     P->CreateKernelCall<UnixLinesKernelBuilder>(Input<0>(T), LineBreaks, UnterminatedLineAtEOF::Add1);
-    util::DebugDisplay(T, "linebreaks", LineBreaks);
     auto const Result = scan::LineSpans(T, LineBreaks);
-    util::DebugDisplay(T, "result", Result);
     AssertEQ(T, Result, Input<1>(T));
+}
+
+
+auto long_spans_i = BinaryStream(".{1000} 1 .{512} 1");
+auto long_spans_e = IntStreamSet<uint64_t>({
+    {   0, 1001},
+    {1000, 1513}
+});
+
+TEST_CASE(long_spans, long_spans_i, long_spans_e) {
+    auto Result = scan::LineSpans(T, Input<0>(T));
+    AssertEQ(T, Result, Input<1>(T));
+}
+
+
+auto filter_spans_spans = IntStreamSet<uint64_t>({
+    { 0, 12, 19, 24, 56, 62, 70},
+    {11, 18, 23, 55, 61, 69, 74}
+});
+auto filter_spans_filter = IntStream<uint64_t>(
+    {0, 2, 3, 5}
+);
+auto filter_spans_e = IntStreamSet<uint64_t>({
+    { 0, 19, 24, 62},
+    {11, 23, 55, 69}
+});
+
+TEST_CASE(filter_spans, filter_spans_spans, filter_spans_filter, filter_spans_e) {
+    auto Result = scan::FilterLineSpans(T, Input<1>(T), Input<0>(T));
+    AssertEQ(T, Result, Input<2>(T));
+}
+
+
+auto filter_no_spans_spans = IntStreamSet<uint64_t>({
+    { 0, 12, 19, 24, 56, 62, 70},
+    {11, 18, 23, 55, 61, 69, 74}
+});
+auto filter_no_spans_filter = IntStream<uint64_t>({});
+auto filter_no_spans_e = IntStreamSet<uint64_t>({{}, {}});
+
+TEST_CASE(filter_no_spans, filter_no_spans_spans, filter_no_spans_filter, filter_no_spans_e) {
+    auto Result = scan::FilterLineSpans(T, Input<1>(T), Input<0>(T));
+    AssertEQ(T, Result, Input<2>(T));
 }
 
 
@@ -77,5 +117,8 @@ RUN_TESTS(
     CASE(no_bits),
     CASE(long_scan),
     CASE(simple_line_span),
-    // CASE(text_line_span),
+    CASE(text_line_span),
+    CASE(long_spans),
+    CASE(filter_spans),
+    CASE(filter_no_spans),
 )
