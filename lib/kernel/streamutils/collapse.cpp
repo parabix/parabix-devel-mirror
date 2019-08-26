@@ -26,7 +26,7 @@ CollapseStreamSet::CollapseStreamSet(const std::unique_ptr<KernelBuilder> & b, S
 
 namespace streamutils {
 
-StreamSet * Collapse(std::unique_ptr<ProgramBuilder> & P, StreamSet * i) {
+StreamSet * Collapse(const std::unique_ptr<ProgramBuilder> & P, StreamSet * i) {
     StreamSet * const result = P->CreateStreamSet(1, 1);
     P->CreateKernelCall<CollapseStreamSet>(i, result);
     return result;
