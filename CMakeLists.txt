@@ -94,6 +94,9 @@ endif()
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 
+# Define `CXX_STANDARD` to enable conditional compilation based on standard version.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCXX_STANDARD=${CMAKE_CXX_STANDARD}")
+
 # Add include directories.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
