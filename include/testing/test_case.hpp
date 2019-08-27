@@ -275,7 +275,7 @@ struct runtime_val_construct_iterator {};
 template<size_t Index>
 struct runtime_val_construct_iterator<Index> {
     template<typename Tuple>
-    static void call(Tuple &, ProgramBuilderRef, size_t) {};
+    static void call(Tuple &, ProgramBuilderRef, size_t) {}
 };
 
 template<size_t Index, typename I, typename... Rest>

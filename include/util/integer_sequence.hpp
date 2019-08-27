@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cinttypes>
 #include <type_traits>
 #include <utility>
 
@@ -43,24 +44,19 @@ struct integer_sequence {
 template<std::size_t... Ints>
 using index_sequence = integer_sequence<std::size_t, Ints...>;
 
-template<typename T, typename C, T... Ints>
-struct __sequence_generator {};
-
-template<typename T, T N, T... Ints>
-struct __sequence_generator<T, std::integral_constant<T, N>, Ints...>
-    : __sequence_generator<T, std::integral_constant<T, N - 1>, N - 1, Ints...>
-{};
+template<typename T, uint64_t N, T... Ints>
+struct __sequence_generator : __sequence_generator<T, N - 1, static_cast<T>(N) - 1, Ints...> {};
 
 template<typename T, T... Ints>
-struct __sequence_generator<T, std::integral_constant<T, 0>, Ints...> {
+struct __sequence_generator<T, 0, Ints...> {
     using type = integer_sequence<T, Ints...>;
 };
 
-template<typename T, T N>
-using make_integer_sequence = typename __sequence_generator<T, std::integral_constant<T, N>>::type;
+template<typename T, uint64_t N>
+using make_integer_sequence = typename __sequence_generator<T, N>::type;
 
-template<std::size_t N>
-using make_index_sequence = make_integer_sequence<std::size_t, N>;
+template<uint64_t N>
+using make_index_sequence = make_integer_sequence<uint64_t, N>;
 
 template<typename... Ts>
 using index_sequence_for = make_index_sequence<sizeof...(Ts)>;
