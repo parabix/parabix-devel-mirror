@@ -70,7 +70,7 @@ LineNumberGenerator::LineNumberGenerator(BuilderRef b, StreamSet * scan, StreamS
     assert (output->getNumElements() == 1 && output->getFieldWidth() == 64);
     addInternalScalar(b->getInt64Ty(), "finalStrideLineNum");
     mInputStreamSets.push_back({"lines", linebreaks});
-    mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
+    mOutputStreamSets.push_back({"output", output, BoundedRate(0, 1)});
 }
 
 }

@@ -1,11 +1,11 @@
 /*
  *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
  */
 
 #include "post_process.h"
 #include "test_suite_error.h"
+#include "xml_linebreak_kernel.hpp"
 
 #include <kernel/core/idisa_target.h>
 #include <boost/filesystem.hpp>
@@ -244,10 +244,11 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     } // End Duplication Attribute Detection Scope
 
 
-    StreamSet * const LineBreakStream = P->CreateStreamSet();
-    P->CreateKernelCall<UnixLinesKernelBuilder>(ByteStream, LineBreakStream);
-    StreamSet * const LineSpans = P->CreateStreamSet(2, 64);
-    P->CreateKernelCall<LineSpanGenerator>(LineBreakStream, LineSpans);
+    // Use a custom linebreak kernel which always places a bit at EOF even if
+    // the file ends in a linebreak. This is done to simplify the LineSpan
+    // logic while maintaining the ability to find errors which occur at EOF.
+    StreamSet * const LineBreakStream = XmlLineBreaks(P, ByteStream);
+    StreamSet * const LineSpans = scan::LineSpans(P, LineBreakStream);
 
 
     /**

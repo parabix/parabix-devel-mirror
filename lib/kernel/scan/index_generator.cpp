@@ -16,7 +16,7 @@ ScanIndexGenerator::ScanIndexGenerator(BuilderRef b, StreamSet * scan, StreamSet
 {
     assert (scan->getNumElements() == 1 && scan->getFieldWidth() == 1);
     assert (output->getNumElements() == 1 && output->getFieldWidth() == 64);
-    mOutputStreamSets.push_back({"output", output, PopcountOf("scan")});
+    mOutputStreamSets.push_back({"output", output, BoundedRate(0, 1)});
 }
 
 void ScanIndexGenerator::generateProcessingLogic(

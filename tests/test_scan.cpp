@@ -4,11 +4,17 @@
  */
 
 #include <testing/testing.h>
+#include <kernel/basis/s2p_kernel.h>
 #include <kernel/scan/index_generator.h>
 #include <kernel/scan/line_span_generator.h>
+#include <kernel/scan/line_number_generator.h>
+#include <kernel/streamutils/collapse.h>
+#include <kernel/streamutils/deletion.h>
 #include <kernel/util/debug_display.h>
 #include <kernel/util/linebreak_kernel.h>
-#include <kernel/streamutils/deletion.h>
+#include <kernel/unicode/charclasses.h>
+#include <re/adt/re_cc.h>
+#include <util/iota_fill.hpp>
 
 using namespace kernel;
 using namespace testing;
@@ -37,6 +43,31 @@ auto long_scan_e = IntStream<uint64_t>({105123});
 TEST_CASE(long_scan, long_scan_i, long_scan_e) {
     auto Result = scan::ToIndices(T, Input<0>(T));
     AssertEQ(T, Result, Input<1>(T));
+}
+
+
+// 445 characters
+auto scan_index_integration_text = TextStream(
+"Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor "
+"incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis "
+"nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. "
+"Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore "
+"eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt "
+"in culpa qui officia deserunt mollit anim id est laborum."
+);
+auto scan_index_integration_expected = IntStream<uint64_t>({122, 230, 333, 444});
+
+TEST_CASE(scan_index_integration, 
+    scan_index_integration_text,
+    scan_index_integration_expected)
+{
+    auto Basis = P->CreateStreamSet(8, 1);
+    P->CreateKernelCall<S2PKernel>(Input<0>(T), Basis);
+    auto Marker = P->CreateStreamSet(1, 1);
+    P->CreateKernelCall<ByteClassesKernel>(std::vector<re::CC *>{re::makeByte('.')}, Basis, Marker);
+    auto Collapsed = streamutils::Collapse(P, Marker);
+    auto Indices = scan::ToIndices(P, Collapsed);
+    AssertEQ(P, Indices, Input<1>(T));
 }
 
 
@@ -112,13 +143,25 @@ TEST_CASE(filter_no_spans, filter_no_spans_spans, filter_no_spans_filter, filter
 }
 
 
+auto one_per_line_markers    = BinaryStream("(.1...){20} (1.1.){10}");
+auto one_per_line_linebreaks = BinaryStream("(...1.){20} (.11.){10}");
+auto one_per_line_e = IntStream<uint64_t>(meta::iota_fill<uint64_t>(40, 0));
+
+TEST_CASE(one_per_line, one_per_line_markers, one_per_line_linebreaks, one_per_line_e) {
+    auto Result = scan::LineNumbers(T, Input<0>(T), Input<1>(T));
+    AssertEQ(T, Result, Input<2>(T));
+}
+
+
 RUN_TESTS(
     CASE(tiny_scan),
     CASE(no_bits),
     CASE(long_scan),
+    CASE(scan_index_integration),
     CASE(simple_line_span),
     CASE(text_line_span),
     CASE(long_spans),
     CASE(filter_spans),
     CASE(filter_no_spans),
+    CASE(one_per_line),
 )
