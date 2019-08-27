@@ -56,7 +56,7 @@ template<typename T, uint64_t N>
 using make_integer_sequence = typename __sequence_generator<T, N>::type;
 
 template<uint64_t N>
-using make_index_sequence = make_integer_sequence<uint64_t, N>;
+using make_index_sequence = make_integer_sequence<std::size_t, N>;
 
 template<typename... Ts>
 using index_sequence_for = make_index_sequence<sizeof...(Ts)>;
