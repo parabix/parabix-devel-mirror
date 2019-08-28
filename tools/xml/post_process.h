@@ -1,7 +1,6 @@
 /*
  *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
  */
 
 #pragma once
@@ -26,6 +25,8 @@ void postproc_validateHexRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 void postproc_validateDecRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum);
 
 void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum);
+
+void postproc_validateXmlDecl(const uint8_t * ptr, uint64_t position);
 
 void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code);
 

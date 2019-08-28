@@ -6,6 +6,10 @@
 
 #include "post_process.h"
 
+#include "namechars.h"
+#include "test_suite_error.h"
+#include "multiliteral.hpp"
+
 #include <cassert>
 #include <cstdlib>
 #include <string>
@@ -14,36 +18,12 @@
 #include <llvm/Support/Compiler.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <util/lookup_table.hpp>
-#include "namechars.h"
-#include "test_suite_error.h"
 
 constexpr auto IsHexDigitTable = lut::char_table(lut::is_hex_digit);
 constexpr auto IsDecDigitTable = lut::char_table(lut::is_dec_digit);
 
 constexpr auto HexValTable = lut::char_table(lut::hex_digit_val);
 constexpr auto DecValTable = lut::char_table(lut::dec_digit_val);
-
-static bool asciiSeqEq(const uint8_t * ptr, std::string const & reference) {
-    const char * cptr = reinterpret_cast<const char *>(ptr);
-    for (size_t i = 0; i < reference.length(); ++i) {
-        if (cptr[i] != reference[i]) {
-            return false;
-        }
-    }
-    return true;
-}
-
-#define ASCII_TO_LOWER(C) (C >= 'A' && C <= 'Z' ? (C + 0x20) : C)
-
-static bool asciiCaselessSeqEq(const uint8_t * ptr, std::string const & reference) {
-    const char * cptr = reinterpret_cast<const char *>(ptr);
-    for (size_t i = 0; i < reference.length(); ++i) {
-        if (ASCII_TO_LOWER(cptr[i]) != ASCII_TO_LOWER(reference[i])) {
-            return false;
-        }
-    }
-    return true;
-}
 
 static bool atHexDigit(const uint8_t * p) {
     return IsHexDigitTable[*p];
@@ -80,9 +60,10 @@ void postproc_validateName(const uint8_t * ptr, const uint8_t * lineBegin, const
 }
 
 void postproc_validatePIName(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    using xml_pi_name = multiliteral<'x', 'm', 'l'>;
     lineNum = lineNum + 1; // from 0-indexed to 1-indexed
-    if (asciiCaselessSeqEq(ptr + 1, "xml") && (ptr[4] == '?' || ptr[4] <= ' ')) {
-        if (lineNum != 1 || (ptr - lineBegin != 1) || !asciiSeqEq(ptr + 1, "xml")) {
+    if (caseless_matches<xml_pi_name>(ptr + 1) && (ptr[4] == '?' || ptr[4] <= ' ')) {
+        if (lineNum != 1 || (ptr - lineBegin != 1) || !matches<xml_pi_name>(ptr + 1)) {
             // ptr is pointing at the '?' character, but to get the correct
             // location for the error message it should be pointing at the
             // character just after (usually the 'x' in "xml").
@@ -93,19 +74,25 @@ void postproc_validatePIName(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateCDATA(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    using cdata_name = multiliteral<'[', 'C', 'D', 'A', 'T', 'A', '['>;
     lineNum = lineNum + 1; // from 0-indexed to 1-indexed
-    if (!asciiSeqEq(ptr, "[CDATA[")) {
+    if (!matches<cdata_name>(ptr)) {
         ReportError(XmlTestSuiteError::CDATA, ptr, lineBegin, lineEnd, lineNum);
     }
 }
 
 void postproc_validateGenRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    using ref_gt = multiliteral<'g', 't', ';'>;
+    using ref_lt = multiliteral<'l', 't', ';'>;
+    using ref_amp = multiliteral<'a', 'm', 'p', ';'>;
+    using ref_quot = multiliteral<'q', 'u', 'o', 't', ';'>;
+    using ref_apos = multiliteral<'a', 'p', 'o', 's', ';'>;
     lineNum = lineNum + 1; // from 0-indexed to 1-indexed
-    bool valid =    asciiSeqEq(ptr, "gt;")
-                 || asciiSeqEq(ptr, "lt;")
-                 || asciiSeqEq(ptr, "amp;")
-                 || asciiSeqEq(ptr, "quot;")
-                 || asciiSeqEq(ptr, "apos;");
+    bool valid =    matches<ref_gt>(ptr)
+                 || matches<ref_lt>(ptr)
+                 || matches<ref_amp>(ptr)
+                 || matches<ref_quot>(ptr)
+                 || matches<ref_apos>(ptr);
     if (!valid) {
         ReportError(XmlTestSuiteError::UNDEFREF, ptr, lineBegin, lineEnd, lineNum);
     }
@@ -150,6 +137,7 @@ void postproc_validateDecRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum) {
+    using ref_lt = multiliteral<'l', 't', ';'>;
     lineNum = lineNum + 1; // from 0-indexed to 1-indexed
     const uint8_t * cursor = ptr;
     if (*cursor == '#') {
@@ -170,9 +158,13 @@ void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, con
         if (val == (uint32_t) '<') {
             ReportError(XmlTestSuiteError::ATTREF, ptr, lineBegin, lineEnd, lineNum);
         }
-    } else if (asciiSeqEq(ptr, "lt;")) {
+    } else if (matches<ref_lt>(ptr)) {
         ReportError(XmlTestSuiteError::ATTREF, ptr, lineBegin, lineEnd, lineNum);
     }
+}
+
+void postproc_validateXmlDecl(const uint8_t * ptr, uint64_t position) {
+    // TODO: implement me
 }
 
 void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code) {

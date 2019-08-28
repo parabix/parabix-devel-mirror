@@ -249,7 +249,7 @@ type Marker = <i1>[5] {
     ccpMask
 }
 
-type CCPCallouts = <i1>[8] {
+type CCPCallouts = <i1>[9] {
     ctStarts,       # Comment starts
     ctEnds,         # Comment ends
     cdStarts,       # CDATA starts
@@ -257,7 +257,8 @@ type CCPCallouts = <i1>[8] {
     piStarts,       # Processing instruction starts
     piNameStarts,   # Processing instruction name starts
     piNameEnds,     # Processing instruction name ends
-    piEnds          # Processing instruciton ends
+    piEnds,         # Processing instruciton ends
+    xmlDeclStart    # Marker for the start of the XML declaration
 }
 
 kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error err] {
@@ -269,6 +270,7 @@ kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error er
     callouts[5] = <0>
     callouts[6] = <0>
     callouts[7] = <0>
+    callouts[8] = <0>
 
     err[0] = <0>
     err[1] = <0>
@@ -355,6 +357,9 @@ kernel Preprocess :: [Lex lex] -> [Marker marker, CCPCallouts callouts, Error er
 
         cursor = InFile(ScanTo(cursor, ccpOpener))
     } # while cursor (i.e, scan loop)
+
+    # Mark the location of the XML declaration if it exists
+    callouts.xmlDeclStart = callouts.piStarts & Advance(InFile(~Advance(<1>)))
 
     # Identify the remaining significant markers for XML processing
     marker.lAngleScope = lAngleScope & ~mask

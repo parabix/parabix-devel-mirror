@@ -85,7 +85,7 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     );
 
     StreamSet * const Marker = P->CreateStreamSet(5, 1);
-    StreamSet * const CCPCallouts = P->CreateStreamSet(8, 1);
+    StreamSet * const CCPCallouts = P->CreateStreamSet(9, 1);
     StreamSet * const CCPError = P->CreateStreamSet(ERROR_STREAM_COUNT, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
@@ -289,6 +289,19 @@ XMLProcessFunctionType xmlPipelineGen(CPUDriver & pxDriver, std::shared_ptr<Pabl
     POSTPROCESS_SCAN_KERNEL(su::Select(P, RefCallouts, 2), postproc_validateDecRef);
     POSTPROCESS_SCAN_KERNEL(su::Select(P, RefCallouts, 4), postproc_validateHexRef);
     POSTPROCESS_SCAN_KERNEL(su::Select(P, CheckStreams, 2), postproc_validateAttRef);
+
+    /*
+        XML Declaration Parsing
+     */
+    {
+        StreamSet * const Marker = su::Select(P, CCPCallouts, 8);
+        StreamSet * const Indices = scan::ToIndices(P, Marker);
+        scan::Reader(P, pxDriver,
+            SCAN_CALLBACK(postproc_validateXmlDecl),
+            ByteStream,
+            { Indices },
+            { Indices });
+    }
 
     return reinterpret_cast<XMLProcessFunctionType>(P->compile());
 }

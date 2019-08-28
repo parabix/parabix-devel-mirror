@@ -79,4 +79,14 @@ constexpr uint8_t dec_digit_val(char c) {
     return (c >= '0' && c <= '9') ? c - '0' : 0xff;
 }
 
+/// Converts uppercase characters to lowercase.
+constexpr uint8_t to_lower(char c) {
+    return (c >= 'A' && c <= 'Z') ? c + 0x20 : c;
+}
+
+/// Converts lowercase characters to uppercase.
+constexpr uint8_t to_upper(char c) {
+    return (c >= 'a' && c <= 'z') ? c - 0x20 : c;
+}
+
 } // namespace lut
