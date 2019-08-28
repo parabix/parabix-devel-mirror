@@ -285,9 +285,9 @@ struct stream_set_decoder {
 
         // Construct the buffer in such a way that `MemorySourceKernel` reads the
         // correct data for each stream in the set.
-        size_t const length = (size_t) len;
         typename traits::buffer_t buffer{};
         size_t increment = traits::stream_items_per_buffer_item_v;
+        size_t const length = std::ceil((double) len / increment);
         size_t itemsPerChunk = blockWidth / increment;
         size_t numPasses = std::ceil((double) length / itemsPerChunk);
 
@@ -310,7 +310,7 @@ struct stream_set_decoder {
             }
         }
 
-        return std::make_tuple(buffer, length, streamCount);
+        return std::make_tuple(buffer, (size_t) len, streamCount);
     }
 };
 
