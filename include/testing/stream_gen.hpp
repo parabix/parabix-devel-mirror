@@ -17,11 +17,43 @@
 #include <vector>
 #include <llvm/IR/Type.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <kernel/core/idisa_target.h>
 #include <kernel/io/source_kernel.h>
 #include <testing/stream_parsing.hpp>
 #include <toolchain/toolchain.h>
 
 namespace testing {
+
+namespace arch {
+
+/**
+ * Returns the block size to be used.
+ * 
+ * If the `-BlockSize` CLI option is provided, returns that value, otherwise
+ * returns the SIMD register width of the current architecture.
+ * 
+ * This function is used by `stream_set_decoder` when determining the memory
+ * layout for streamsets. `steram_set_decoder` cannot rely on the value of
+ * `codegen::BlockSize` as it may be required before the first pipeline is
+ * constructed and `codegen::BlockSize` is populated with the SIMD register
+ * width.
+ */
+inline uint32_t block_size() {
+    if (codegen::BlockSize != 0) {
+        // `codegenBlockSize` has a value so use that
+        return codegen::BlockSize;
+    }
+
+    if (AVX512BW_available()) {
+        return 512;
+    } else if (AVX2_available()) {
+        return 256;
+    } else {
+        return 128;
+    }
+}
+
+}
 
 // This namespace is meant for internal use only.
 namespace streamgen {
@@ -265,7 +297,7 @@ struct stream_set_decoder {
 
     static result_t decode(typename traits::set_literal_t const & set) {
         size_t const streamCount = set.size();
-        size_t const blockWidth = codegen::BlockSize;
+        size_t const blockWidth = arch::block_size();
 
         std::vector<typename traits::buffer_t> buffers(streamCount);
         ssize_t len = -1;
@@ -380,6 +412,13 @@ private:
     void initialize() {
         if (!mIsInitialized) {
             std::tie(mBuffer, mSize, mNumElements) = Decoder::decode(mLiteral);
+            // If mBuffer is empty, mBuffer.data() may be a nullptr. Since we
+            // directly pass the result of data() into the pipeline, we force
+            // it to not be a nullptr by forcing the vector to allocate some
+            // memory.
+            if (mBuffer.data() == nullptr) {
+                mBuffer.reserve(1);
+            }
             mIsInitialized = true;
         }
     }

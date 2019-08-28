@@ -240,8 +240,11 @@ struct argument_list_construct_iterator<streamgen::basic_stream<I, Decoder>, Res
 
     template<typename... Rs>
     static return_t call(stream_t & stream, Rs &... rest) {
+        auto const buffer_ptr = stream.getBuffer().data();
+        assert(buffer_ptr != nullptr);
+        auto const buffer_len = stream.getSize();
         return std::tuple_cat(
-            std::make_tuple(stream.getBuffer().begin().base(), stream.getSize()),
+            std::make_tuple(buffer_ptr, buffer_len),
             recursive_call_t::call(rest...)
         );
     }
