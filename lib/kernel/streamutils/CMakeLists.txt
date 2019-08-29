@@ -10,6 +10,7 @@ SRC
     collapse.cpp
     deletion.cpp
     pdep_kernel.cpp
+    run_index.cpp
     sentinel.cpp
     stream_select.cpp
     stream_shift.cpp

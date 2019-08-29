@@ -21,9 +21,10 @@ endfunction(parabix_add_kernel_test)
 parabix_add_kernel_test(meta_tests kernel.streamutils)
 parabix_add_kernel_test(test_scan kernel.basis kernel.scan kernel.unicode)
 parabix_add_kernel_test(test_bit_movement kernel.streamutils)
+parabix_add_kernel_test(index_test kernel.streamutils)
 
 
-# `make kernel-tests` to run all kerenl tests
+# `make kernel-tests` to run all kernel tests
 add_custom_target(kernel-tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMAND python3 run_kernel_tests.py ${KERNEL_TEST_LIST})
