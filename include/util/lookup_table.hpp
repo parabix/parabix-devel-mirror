@@ -98,12 +98,12 @@ constexpr uint8_t dec_digit_val(char c) {
 
 /// Converts uppercase characters to lowercase.
 constexpr uint8_t to_lower(char c) {
-    return char_range<'A', 'F'>::contains(c) ? c + 0x20 : c;
+    return char_range<'A', 'Z'>::contains(c) ? c + 0x20 : c;
 }
 
 /// Converts lowercase characters to uppercase.
 constexpr uint8_t to_upper(char c) {
-    return char_range<'a', 'f'>::contains(c) ? c - 0x20 : c;
+    return char_range<'a', 'z'>::contains(c) ? c - 0x20 : c;
 }
 
 } // namespace lut
