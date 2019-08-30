@@ -51,24 +51,41 @@ constexpr lookup_table<T, lut_size<char>::value> char_table(lut_generator_t<T, c
     return make_lookup_table<T, char>(generator);
 }
 
+/// Compile-time character range.
+template<char LB, char UB>
+struct char_range {
+    /// Returns true if `c` is within the inclusive range [LB, UB]
+    constexpr static bool contains(char c) {
+        return (c >= LB) && (c <= UB);
+    }
+};
+
+/// Whitespace table generator. Whitespace characters map to true, others to false.
+constexpr bool is_whitespace(char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+}
+
 /// Hex digit table generator. Hex digits map to true, others to false.
 constexpr bool is_hex_digit(char c) {
-    return ((c >= '0') && (c <= '9'))
-        || ((c >= 'a') && (c <= 'f'))
-        || ((c >= 'A') && (c <= 'F'));
+    return char_range<'0', '9'>::contains(c)
+        || char_range<'a', 'f'>::contains(c)
+        || char_range<'A', 'F'>::contains(c);
 }
 
 /// Decimal digit table generator. Decimal digits map to true, others to false.
 constexpr bool is_dec_digit(char c) {
-    return (c >= '0') && (c <= '9');
+    return char_range<'0', '9'>::contains(c);
 }
 
 /// Hex digit value table generator.
 /// Maps a hex digit character to its integer value or 0xff if it's not a hex digit.
 constexpr uint8_t hex_digit_val(char c) {
-    return (c >= '0' && c <= '9') ? c - '0' 
-         : ((c >= 'a' && c <= 'f') ? (c - 'a') + 10
-          : ((c >= 'A' && c <= 'F') ? (c - 'A') + 10
+    using digit = char_range<'0', '9'>;
+    using lc = char_range<'a', 'f'>;
+    using uc = char_range<'A', 'F'>;
+    return digit::contains(c) ? c - '0' 
+         : (lc::contains(c) ? (c - 'a') + 10
+          : (uc::contains(c) ? (c - 'A') + 10
            : 0xff));
 }
 
@@ -76,17 +93,17 @@ constexpr uint8_t hex_digit_val(char c) {
 /// Maps a decimal digit character to its integer value or 0xff if it's not a
 /// valid digit.
 constexpr uint8_t dec_digit_val(char c) {
-    return (c >= '0' && c <= '9') ? c - '0' : 0xff;
+    return char_range<'0', '9'>::contains(c) ? c - '0' : 0xff;
 }
 
 /// Converts uppercase characters to lowercase.
 constexpr uint8_t to_lower(char c) {
-    return (c >= 'A' && c <= 'Z') ? c + 0x20 : c;
+    return char_range<'A', 'F'>::contains(c) ? c + 0x20 : c;
 }
 
 /// Converts lowercase characters to uppercase.
 constexpr uint8_t to_upper(char c) {
-    return (c >= 'a' && c <= 'z') ? c - 0x20 : c;
+    return char_range<'a', 'f'>::contains(c) ? c - 0x20 : c;
 }
 
 } // namespace lut
