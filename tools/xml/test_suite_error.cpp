@@ -111,6 +111,10 @@ const char * AsMessage(XmlTestSuiteError error) {
             return "Illegal content after root element";
         case XmlTestSuiteError::DUPLICATE_ATTR_NAME:
             return "Attribute name is not unique";
+        case XmlTestSuiteError::DECLARATION_PARSE_ERROR:
+            return "Parsing error at position %llu in XML or Text declaration.\n";
+        case XmlTestSuiteError::NOT_UTF8:
+            return "Sorry, this xmlwf demo only works for UTF-8.\n";
         default:
             assert ("unexpected error xml test suite error" && false);
             return "Invalid XML Error Code";
@@ -146,6 +150,12 @@ void ShowError() {
         case XmlTestSuiteError::CONTENT_AFTER_ROOT:
         case XmlTestSuiteError::DUPLICATE_ATTR_NAME:
             fprintf(stderr, "%s at position = %" PRIu64 "\n", AsMessage(err.code), err.position);
+            break;
+        case XmlTestSuiteError::DECLARATION_PARSE_ERROR:
+            fprintf(stderr, AsMessage(err.code), err.position);
+            break;
+        case XmlTestSuiteError::NOT_UTF8:
+            fputs(AsMessage(err.code), stderr);
             break;
         default:
             fprintf(stderr, "%s at line %" PRIu64 ", column %" PRIu64 "\n", AsMessage(err.code), err.line, err.column);

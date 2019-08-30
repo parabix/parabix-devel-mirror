@@ -9,6 +9,7 @@
 #include "namechars.h"
 #include "test_suite_error.h"
 #include "multiliteral.hpp"
+#include "xml_decl.hpp"
 
 #include <cassert>
 #include <cstdlib>
@@ -164,7 +165,17 @@ void postproc_validateAttRef(const uint8_t * ptr, const uint8_t * lineBegin, con
 }
 
 void postproc_validateXmlDecl(const uint8_t * ptr, uint64_t position) {
-    // TODO: implement me
+    if (matches<multiliteral<'?', 'x', 'm', 'l'>>(ptr)) {
+        auto decl = XmlDeclaration::parse(ptr);
+        if (decl.is_err()) {
+            auto err_ptr = decl.unwrap_err();
+            auto pos = (err_ptr - ptr) + position;
+            ReportError(XmlTestSuiteError::DECLARATION_PARSE_ERROR, pos);
+        } else if (decl.unwrap().hasEncoding() && !decl.unwrap().isUTF8()) {
+            // `position` here is unused
+            ReportError(XmlTestSuiteError::NOT_UTF8, position);
+        }
+    }
 }
 
 void postproc_errorStreamsCallback(const uint8_t * ptr, const uint8_t * lineBegin, const uint8_t * lineEnd, uint64_t lineNum, uint8_t code) {

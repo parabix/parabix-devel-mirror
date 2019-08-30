@@ -36,7 +36,9 @@ enum class XmlTestSuiteError {
     TAG_MATCH_ERROR,
     CONTENT_BEFORE_ROOT,
     CONTENT_AFTER_ROOT,
-    DUPLICATE_ATTR_NAME
+    DUPLICATE_ATTR_NAME,
+    DECLARATION_PARSE_ERROR,
+    NOT_UTF8
 };
 
 const char * AsMessage(XmlTestSuiteError error);
