@@ -51,6 +51,12 @@ struct TestSuiteError {
 
     struct Comparator {
         bool operator() (TestSuiteError const & lhs, TestSuiteError const & rhs) const {
+            // prioritize declaration parse errors above anything else
+            if (lhs.code == XmlTestSuiteError::DECLARATION_PARSE_ERROR) {
+                return false;
+            } else if (lhs.code == XmlTestSuiteError::DECLARATION_PARSE_ERROR) {
+                return true;
+            }
             if (lhs.line == rhs.line) {
                 if (lhs.column == rhs.column) {
                     return lhs.position > rhs.position;
