@@ -43,3 +43,20 @@ DEPS
 
 add_dependencies(ztf1 ztf1.pablosrc)
 
+
+parabix_add_executable(
+NAME
+    ztf-runs
+SRC
+    ztf-runs.cpp
+DEPS
+    pablo
+    kernel.basis
+    kernel.io
+    kernel.pipeline
+    kernel.streamutils
+    kernel.util
+    toolchain
+)
+
+
