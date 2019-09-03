@@ -40,16 +40,16 @@ public:
     }
 
     inline llvm::StringRef getIntrinsicName() const noexcept {
-        #define CASE(INTRINSIC) case Intrinsic::INTRINSIC: return #INTRINSIC
+        #define PABLO_INTRINSIC_CASE(INTRINSIC) case Intrinsic::INTRINSIC: return #INTRINSIC
         switch (mIntrinsic) {
-            CASE(SpanUpTo);
-            CASE(InclusiveSpan);
-            CASE(ExclusiveSpan);
-            CASE(PrintRegister);
+            PABLO_INTRINSIC_CASE(SpanUpTo);
+            PABLO_INTRINSIC_CASE(InclusiveSpan);
+            PABLO_INTRINSIC_CASE(ExclusiveSpan);
+            PABLO_INTRINSIC_CASE(PrintRegister);
         default:
             llvm_unreachable("unexpected intrinsic");
         }
-        #undef CASE
+        #undef PABLO_INTRINSIC_CASE
     }
 
     inline bool isCarryProducing() const noexcept {
