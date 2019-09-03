@@ -10,10 +10,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${TEST_BIN_DIR})
 # Creates a new target with a given `NAME` from a source file with the same name
 # (e.g., target `test0` from `test0.cpp`). Additional dependencies may be added
 # after `NAME` and they will be linked with the resultant executable.
+#
+# Also adds a new test to `make check`.
 function(parabix_add_kernel_test NAME)
     parabix_add_executable(NAME ${NAME} SRC ${NAME}.cpp DEPS testing ${ARGN})
     set(KERNEL_TEST_LIST ${KERNEL_TEST_LIST} ${TEST_BIN_DIR}/${NAME} PARENT_SCOPE)
     set(KERNEL_TEST_TARGET_LIST ${KERNEL_TEST_TARGET_LIST} ${NAME} PARENT_SCOPE)
+    add_test(NAME "${NAME}"
+        WORKING_DIRECTORY ${TEST_BIN_DIR}
+        COMMAND ./${NAME})
 endfunction(parabix_add_kernel_test)
 
 
@@ -30,3 +35,6 @@ add_custom_target(kernel-tests
     COMMAND python3 run_kernel_tests.py ${KERNEL_TEST_LIST})
 
 add_dependencies(kernel-tests ${KERNEL_TEST_TARGET_LIST})
+
+# Build target for all kernel tests: does not run any tests
+add_custom_target(kernel-test-suite DEPENDS ${KERNEL_TEST_TARGET_LIST})
