@@ -230,6 +230,21 @@ function(parabix_add_executable)
     endif()
 endfunction(parabix_add_executable)
 
+# Creates a pablo source target which copies pablo source files to the parabix
+# cache directory.
+#
+# Usage: parabix_add_pablo_src(target-name source-files...)
+function(parabix_add_pablo_src NAME)
+    set(FILE_LIST "")
+    foreach(PABLO_FILE ${ARGN})
+        list(APPEND FILE_LIST "${CMAKE_CURRENT_SOURCE_DIR}/${PABLO_FILE}")
+    endforeach(PABLO_FILE)
+    
+    add_custom_target(${NAME}
+        COMMAND cp ${FILE_LIST} $ENV{HOME}/.cache/parabix
+        DEPENDS ${ARGN})
+endfunction(parabix_add_pablo_src)
+
 
 ###   Add Subdirectories   ###
 

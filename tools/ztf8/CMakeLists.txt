@@ -22,9 +22,7 @@ DEPS
     kernel.io
 )
 
-add_custom_target(ztf1.pablosrc 
-    COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/ztf1.pablo $ENV{HOME}/.cache/parabix
-    DEPENDS ztf1.pablo)
+parabix_add_pablo_src(ztf1.pablosrc ztf1.pablo)
 
 parabix_add_executable(
 NAME

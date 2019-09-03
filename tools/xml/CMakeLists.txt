@@ -3,9 +3,7 @@
 
 # module: xml
 
-add_custom_target(xml.pablosrc 
-    COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/xml.pablo $ENV{HOME}/.cache/parabix
-    DEPENDS xml.pablo)
+parabix_add_pablo_src(xml.pablosrc xml.pablo)
 
 parabix_add_executable(
 NAME
