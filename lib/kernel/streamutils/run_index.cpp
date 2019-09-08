@@ -14,13 +14,20 @@ using namespace pablo;
 
 namespace kernel {
 
-RunIndex::RunIndex(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const runMarks, StreamSet * runIndex)
-: PabloKernel(b, "RunIndex-" + std::to_string(runIndex->getNumElements()),
+Bindings RunIndexOutputBindings(StreamSet * runIndex, StreamSet * overflow) {
+    if (overflow == nullptr) return {Binding{"runIndex", runIndex}};
+    return {Binding{"runIndex", runIndex}, Binding{"overflow", overflow}};
+}
+    
+RunIndex::RunIndex(const std::unique_ptr<kernel::KernelBuilder> & b,
+                   StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow)
+    : PabloKernel(b, "RunIndex-" + std::to_string(runIndex->getNumElements()) + (overflow == nullptr ? "" : "overflow"),
            // input
 {Binding{"runMarks", runMarks}},
            // output
-{Binding{"runIndex", runIndex}}),
-mIndexCount(runIndex->getNumElements()) {
+RunIndexOutputBindings(runIndex, overflow)),
+mIndexCount(runIndex->getNumElements()),
+mOverflow(overflow != nullptr) {
     assert(mIndexCount > 0);
     assert(mIndexCount <= 5);
 }
@@ -34,6 +41,10 @@ void RunIndex::generatePabloMethod() {
     Var * runIndexVar = getOutputStreamVar("runIndex");
     std::vector<PabloAST *> runIndex(mIndexCount);
     PabloAST * even = nullptr;
+    PabloAST * overflow = nullptr;
+    if (mOverflow) {
+        overflow = pb.createAnd(pb.createAdvance(runMarks, 1), runMarks);
+    }
     for (unsigned i = 0; i < mIndexCount; i++) {
         switch (i) {
             case 0: even = pb.createRepeat(1, pb.getInteger(0x55, 8)); break;
@@ -54,8 +65,16 @@ void RunIndex::generatePabloMethod() {
         }
         runIndex[i] = pb.createAnd(idx, outputEnable, "runidx[" + std::to_string(i) + "]");
         pb.createAssign(pb.createExtract(runIndexVar, pb.getInteger(i)), runIndex[i]);
-        selectZero = pb.createAnd(selectZero, pb.createNot(idx), "selectZero");
-        outputEnable = pb.createAnd(outputEnable, pb.createAdvance(outputEnable, 1<<i), "outputEnable");
+        if (i < mIndexCount - 1) {
+            selectZero = pb.createAnd(selectZero, pb.createNot(idx), "selectZero");
+            outputEnable = pb.createAnd(outputEnable, pb.createAdvance(outputEnable, 1<<i), "outputEnable");
+        }
+        if (mOverflow) {
+            overflow = pb.createAnd(overflow, pb.createAdvance(overflow, 1<<i), "overflow");
+        }
+    }
+    if (mOverflow) {
+        pb.createAssign(pb.createExtract(getOutputStreamVar("overflow"), pb.getInteger(0)), overflow);
     }
 }
 }

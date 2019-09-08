@@ -13,17 +13,22 @@ namespace kernel {
  
     The runIndex parameter must be created and passed in as a stream
     set of K bitstreams.
+ 
+    An overflow bit stream may also be added as an output parameter, in which
+    case this stream will mark all those positions within runs that are
+    indexed above 2^K - 1.
 */
 
 class RunIndex : public pablo::PabloKernel {
 public:
     RunIndex(const std::unique_ptr<KernelBuilder> & b,
-               StreamSet * const runMarks, StreamSet * runIndex);
+               StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow = nullptr);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 private:
     unsigned mIndexCount;
+    bool mOverflow;
 };
 
 }
