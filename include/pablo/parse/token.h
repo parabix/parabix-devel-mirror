@@ -28,6 +28,7 @@ enum class TokenType {
     KERNEL,         // kernel
     TYPE,           // type
     WHILE,          // while
+    ATTRIBUTE,      // @[A-Z][a-zA-Z0-9]*
 
     /* === Symbols === */
     AND,            // &
@@ -108,6 +109,10 @@ public:
 
     static Token * CreateWhile(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
         return Create(TokenType::WHILE, "while", lineNum, colNum, source);
+    }
+
+    static Token * CreateAttribute(std::string const & name, size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {
+        return Create(TokenType::ATTRIBUTE, name, lineNum, colNum, source);
     }
 
     static Token * CreateAnd(size_t lineNum, size_t colNum, std::shared_ptr<SourceFile> const & source) {

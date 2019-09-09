@@ -14,6 +14,9 @@
 namespace pablo {
 namespace parse {
 
+class Token;
+class Lexer;
+
 /**
  * Wraps around boost::iostreams::mapped_file_source to provide read-only
  * access to a file with LF terminated line granularity.
@@ -82,11 +85,19 @@ public:
     boost::string_view const & line(size_t num) const;
 
     std::string const & getFilename() const { return mFilename; }
+
+    /**
+     * Tokenizes this file, storing the tokens in an internal buffer.
+     */
+    bool lex(Lexer & lexer);
+
+    std::vector<Token *> const & getTokenList() const { assert(mTokenList); return *mTokenList; }
 private:
     std::string                             mFilename;
     boost::iostreams::mapped_file_source    mSource;
     std::vector<boost::string_view>         mLineRefs;
     const char *                            mCursor;
+    std::vector<Token *> *                  mTokenList;
 };
 
 } // namespace pablo::parse

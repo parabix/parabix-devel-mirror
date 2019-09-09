@@ -6,13 +6,13 @@
 
 #pragma once
 
-#include <pablo/parse/pablo_parser.h>
-
 #include <memory>
 #include <unordered_map>
 #include <vector>
+#include <boost/optional.hpp>
 #include <llvm/ADT/StringMap.h>
 #include <pablo/parse/error.h>
+#include <pablo/parse/kernel_signature.h>
 #include <pablo/parse/lexer.h>
 #include <pablo/parse/symbol_table.h>
 #include <pablo/parse/token.h>
@@ -24,22 +24,28 @@ class PabloBuilder;
 
 namespace parse {
 
-class RecursiveParser final : public PabloParser {
+class PabloParser {
 public:
+    friend class PabloSourceKernel;
 
     static std::shared_ptr<PabloParser> Create(std::unique_ptr<Lexer> lexer, std::shared_ptr<ErrorManager> errorDelegate) {
-        return std::make_shared<RecursiveParser>(std::move(lexer), std::move(errorDelegate));
+        return std::make_shared<PabloParser>(std::move(lexer), std::move(errorDelegate));
+    }
+
+    static std::shared_ptr<PabloParser> Create() {
+        auto em = ErrorManager::Create();
+        return std::make_shared<PabloParser>(Lexer::Create(em), em);
     }
 
 public:
-    RecursiveParser() = delete;
-    RecursiveParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<ErrorManager> errorDelegate);
+    PabloParser() = delete;
+    PabloParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<ErrorManager> errorDelegate);
 
-    ~RecursiveParser();
+    ~PabloParser();
 
-    bool parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) override;
+    bool parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName);
 
-    inline std::shared_ptr<ErrorManager> getErrorManager() const override { return mErrorManager; }
+    inline std::shared_ptr<ErrorManager> getErrorManager() const { return mErrorManager; }
 
 private:
 
@@ -52,8 +58,8 @@ private:
 
     class ParserState {
     public:
-        ParserState(RecursiveParser * parser, size_t index, SourceData * sourceData);
-        ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel, SourceData * sourceData);
+        ParserState(PabloParser * parser, size_t index, SourceData * sourceData);
+        ParserState(PabloParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel, SourceData * sourceData);
         ~ParserState();
 
         Token * nextToken();
@@ -64,7 +70,7 @@ private:
         void pushSymbolTable();
         void popSymbolTable();
 
-        RecursiveParser *   parser;
+        PabloParser *       parser;
         PabloBuilder *      pb;
         PabloSourceKernel * kernel;
         size_t              index;
@@ -72,11 +78,13 @@ private:
         SourceData *        sourceData;
     };
 
+    enum class AttributePosition { KERNEL, INPUT, OUTPUT };
 
     SourceData * generateSourceDate(std::shared_ptr<SourceFile> file, std::vector<Token *> const & tokenList);
 
     boost::optional<PabloKernelSignature> parseKernelSignature(ParserState & state);
     boost::optional<PabloKernelSignature::SignatureBindings> parseSignatureBindingList(ParserState & state, bool isInput);
+    boost::optional<kernel::Attribute> parseAttribute(ParserState & state, AttributePosition attrPos);
     PabloType * parseSigType(ParserState & state);
     PabloType * parseTypeDefinition(ParserState & state);
     PabloAST * parseBlock(ParserState & state);

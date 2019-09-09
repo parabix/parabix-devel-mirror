@@ -4,7 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <pablo/parse/rd_parser.h>
+#include <pablo/parse/parser.h>
 
 #include <unordered_set>
 #include <kernel/core/streamset.h>
@@ -56,7 +56,7 @@ namespace pablo {
 namespace parse {
 
 
-Token * RecursiveParser::ParserState::nextToken() {
+Token * PabloParser::ParserState::nextToken() {
     assert (sourceData->tokenList[index]);
     Token * t = sourceData->tokenList[index];
     if (t->getType() != TokenType::EOF_TOKEN) {
@@ -67,13 +67,13 @@ Token * RecursiveParser::ParserState::nextToken() {
 }
 
 
-Token * RecursiveParser::ParserState::peekToken() {
+Token * PabloParser::ParserState::peekToken() {
     assert (sourceData->tokenList[index]);
     return sourceData->tokenList[index];
 }
 
 
-Token * RecursiveParser::ParserState::peekAhead(size_t n) {
+Token * PabloParser::ParserState::peekAhead(size_t n) {
     assert (sourceData->tokenList[index]);
     // n - 1 as we are already pointing at the next token
     // peekAhead(1) is equivalent to peekToken()
@@ -84,7 +84,7 @@ Token * RecursiveParser::ParserState::peekAhead(size_t n) {
 }
 
 
-Token * RecursiveParser::ParserState::prevToken() {
+Token * PabloParser::ParserState::prevToken() {
     assert (sourceData->tokenList[index]);
     if (index > 0) {
         assert (sourceData->tokenList[index - 1]);
@@ -94,13 +94,13 @@ Token * RecursiveParser::ParserState::prevToken() {
 }
 
 
-void RecursiveParser::ParserState::pushSymbolTable() {
+void PabloParser::ParserState::pushSymbolTable() {
     auto sym = new SymbolTable(parser->mErrorManager, pb, symbolTable);
     symbolTable = sym;
 }
 
 
-void RecursiveParser::ParserState::popSymbolTable() {
+void PabloParser::ParserState::popSymbolTable() {
     assert (symbolTable);
     auto sym = symbolTable;
     symbolTable = sym->getParent();
@@ -108,7 +108,7 @@ void RecursiveParser::ParserState::popSymbolTable() {
 }
 
 
-RecursiveParser::ParserState::ParserState(RecursiveParser * parser, size_t index, SourceData * sourceData)
+PabloParser::ParserState::ParserState(PabloParser * parser, size_t index, SourceData * sourceData)
 : parser(parser)
 , pb(nullptr)
 , kernel(nullptr)
@@ -118,7 +118,7 @@ RecursiveParser::ParserState::ParserState(RecursiveParser * parser, size_t index
 {}
 
 
-RecursiveParser::ParserState::ParserState(RecursiveParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel, SourceData * sourceData)
+PabloParser::ParserState::ParserState(PabloParser * parser, PabloBuilder * pb, PabloSourceKernel * kernel, SourceData * sourceData)
 : parser(parser)
 , pb(pb)
 , kernel(kernel)
@@ -129,7 +129,7 @@ RecursiveParser::ParserState::ParserState(RecursiveParser * parser, PabloBuilder
     pushSymbolTable();
 }
 
-RecursiveParser::ParserState::~ParserState() {
+PabloParser::ParserState::~ParserState() {
     if (symbolTable) {
         popSymbolTable();
     }
@@ -199,39 +199,39 @@ static std::vector<std::reference_wrapper<const kernel::Binding>> concatBindings
     return kernelIO;
 }
 
-static bool validateIOSignatureBinding(std::shared_ptr<SourceFile> sourceFile,
-                                       std::shared_ptr<ErrorManager> em,
-                                       std::vector<std::pair<std::string, PabloType *>> const & parsedParamList,
-                                       std::vector<std::reference_wrapper<const kernel::Binding>> const & bindings)
-{
-    std::unordered_map<std::string, PabloType *> mappedParamList(parsedParamList.begin(), parsedParamList.end());
+// static bool validateIOSignatureBinding(std::shared_ptr<SourceFile> sourceFile,
+//                                        std::shared_ptr<ErrorManager> em,
+//                                        std::vector<std::pair<std::string, PabloType *>> const & parsedParamList,
+//                                        std::vector<std::reference_wrapper<const kernel::Binding>> const & bindings)
+// {
+//     std::unordered_map<std::string, PabloType *> mappedParamList(parsedParamList.begin(), parsedParamList.end());
 
-    for (auto const & binding : bindings) {
-        std::string const & name = binding.get().getName();
-        auto param = mappedParamList.find(name);
-        if (param == mappedParamList.end()) {
-            em->logTextError(sourceFile, "Binding to undefined parameter: " + name);
-            return false;
-        }
-        PabloType * type = param->second;
-        if (!validateTypeEquivalence(sourceFile, em, type, binding.get())) {
-            return false;
-        }
-        mappedParamList.erase(param);
-    }
+//     for (auto const & binding : bindings) {
+//         std::string const & name = binding.get().getName();
+//         auto param = mappedParamList.find(name);
+//         if (param == mappedParamList.end()) {
+//             em->logTextError(sourceFile, "Binding to undefined parameter: " + name);
+//             return false;
+//         }
+//         PabloType * type = param->second;
+//         if (!validateTypeEquivalence(sourceFile, em, type, binding.get())) {
+//             return false;
+//         }
+//         mappedParamList.erase(param);
+//     }
 
-    if (mappedParamList.size() == 0) {
-        return true;
-    } else {
-        for (auto const & param : mappedParamList) {
-            em->logTextError(sourceFile, "Unbound parameter: " + param.first);
-        }
-        return false;
-    }
-}
+//     if (mappedParamList.size() == 0) {
+//         return true;
+//     } else {
+//         for (auto const & param : mappedParamList) {
+//             em->logTextError(sourceFile, "Unbound parameter: " + param.first);
+//         }
+//         return false;
+//     }
+// }
 
 
-bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) {
+bool PabloParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloSourceKernel * kernel, std::string const & kernelName) {
     assert (kernel);
     assert (!kernelName.empty());
 
@@ -289,7 +289,7 @@ bool RecursiveParser::parseKernel(std::shared_ptr<SourceFile> sourceFile, PabloS
 }
 
 
-RecursiveParser::SourceData * RecursiveParser::generateSourceDate(std::shared_ptr<SourceFile> file, std::vector<Token *> const & tokenList) {
+PabloParser::SourceData * PabloParser::generateSourceDate(std::shared_ptr<SourceFile> file, std::vector<Token *> const & tokenList) {
     llvm::StringMap<size_t> kernelLocations{};
     llvm::StringMap<PabloType *> typeDefTable{};
     for (size_t i = 0, j = 1; j < tokenList.size(); i++, j++) {
@@ -325,7 +325,7 @@ RecursiveParser::SourceData * RecursiveParser::generateSourceDate(std::shared_pt
 }
 
 
-boost::optional<PabloKernelSignature> RecursiveParser::parseKernelSignature(ParserState & state) {
+boost::optional<PabloKernelSignature> PabloParser::parseKernelSignature(ParserState & state) {
     Token * const kernel = state.nextToken();
     if (kernel->getType() != TokenType::KERNEL) {
         mErrorManager->logFatalError(kernel, "unexpected top level declaration", "expected 'kernel'");
@@ -348,10 +348,18 @@ boost::optional<PabloKernelSignature> RecursiveParser::parseKernelSignature(Pars
 }
 
 
-boost::optional<PabloKernelSignature::SignatureBindings> RecursiveParser::parseSignatureBindingList(ParserState & state, bool isInput) {
+boost::optional<PabloKernelSignature::SignatureBindings> PabloParser::parseSignatureBindingList(ParserState & state, bool isInput) {
     TOKEN_CHECK_FATAL_BOOST_NONE(state.nextToken(), TokenType::L_SBRACE, "expected a '['");
     PabloKernelSignature::SignatureBindings bindings{};
     while (state.peekToken()->getType() != TokenType::R_SBRACE && state.peekToken()->getType() != TokenType::EOF_TOKEN) {
+        std::vector<kernel::Attribute> attributeList{};
+        while (state.peekToken()->getType() == TokenType::ATTRIBUTE) {
+            auto optAttr = parseAttribute(state, isInput ? AttributePosition::INPUT : AttributePosition::OUTPUT);
+            if (optAttr == boost::none) {
+                return boost::none;
+            }
+            attributeList.push_back(*optAttr);
+        }
         auto * t = parseSigType(state);
         if (t == nullptr || !mErrorManager->shouldContinue()) {
             return boost::none;
@@ -366,7 +374,7 @@ boost::optional<PabloKernelSignature::SignatureBindings> RecursiveParser::parseS
         if (!mErrorManager->shouldContinue()) {
             return boost::none;
         }
-        bindings.emplace_back(name->getText(), t);
+        bindings.emplace_back(name->getText(), t, attributeList);
         if (state.peekToken()->getType() != TokenType::R_SBRACE) {
             TOKEN_CHECK_FATAL_BOOST_NONE(state.nextToken(), TokenType::COMMA, "expected a ','");
         }
@@ -376,7 +384,33 @@ boost::optional<PabloKernelSignature::SignatureBindings> RecursiveParser::parseS
 }
 
 
-PabloType * RecursiveParser::parseSigType(ParserState & state) {
+boost::optional<kernel::Attribute> PabloParser::parseAttribute(ParserState & state, AttributePosition attrPos) {
+    Token * const attributeToken = state.nextToken();
+    TOKEN_CHECK_FATAL_BOOST_NONE(attributeToken, TokenType::ATTRIBUTE, "expected an attribute");
+    Token * amountToken = nullptr;
+    if (state.peekToken()->getType() == TokenType::L_PAREN) {
+        // parse attribute amount
+        state.nextToken(); // consume '('
+        amountToken = state.nextToken();
+        TOKEN_CHECK_FATAL_BOOST_NONE(amountToken, TokenType::INT_LITERAL, "expected an integer literal");
+        TOKEN_CHECK_FATAL_BOOST_NONE(state.nextToken(), TokenType::R_PAREN, "expected a ')'");
+    }
+    boost::optional<uint32_t> amountValue = amountToken ? (uint32_t) amountToken->getValue() : boost::optional<uint32_t>{};
+    switch (attrPos) {
+        case AttributePosition::KERNEL:
+            return kernelAttributeFromString(mErrorManager, attributeToken, amountValue);
+        case AttributePosition::INPUT:
+            return kernelAttributeFromString(mErrorManager, attributeToken, amountValue);
+        case AttributePosition::OUTPUT:
+            return kernelAttributeFromString(mErrorManager, attributeToken, amountValue);
+        default:
+            llvm_unreachable("invlaid AttributePosition enumeration value");
+            return boost::none;
+    }
+}
+
+
+PabloType * PabloParser::parseSigType(ParserState & state) {
     Token * const t = state.nextToken();
     TokenType const type = t->getType();
     if (type == TokenType::IDENTIFIER) {
@@ -440,7 +474,7 @@ PabloType * RecursiveParser::parseSigType(ParserState & state) {
 }
 
 
-PabloType * RecursiveParser::parseTypeDefinition(ParserState & state) {
+PabloType * PabloParser::parseTypeDefinition(ParserState & state) {
     assert (state.peekToken()->getType() == TokenType::TYPE);
     state.nextToken(); // consume 'type'
     Token * const identifier = state.nextToken();
@@ -464,7 +498,7 @@ PabloType * RecursiveParser::parseTypeDefinition(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseBlock(ParserState & state) {
+PabloAST * PabloParser::parseBlock(ParserState & state) {
     TOKEN_CHECK_FATAL(state.nextToken(), TokenType::L_BRACE, "expected a '{'");
     while (state.peekToken()->getType() != TokenType::R_BRACE && state.peekToken()->getType() != TokenType::EOF_TOKEN && mErrorManager->shouldContinue()) {
         auto stmt = parseStatement(state);
@@ -480,7 +514,7 @@ PabloAST * RecursiveParser::parseBlock(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseStatement(ParserState & state) {
+PabloAST * PabloParser::parseStatement(ParserState & state) {
     Token * const t = state.peekToken();
     if (t->getType() == TokenType::IF) {
         return parseIf(state);
@@ -495,7 +529,7 @@ PabloAST * RecursiveParser::parseStatement(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseIf(ParserState & state) {
+PabloAST * PabloParser::parseIf(ParserState & state) {
     assert (state.peekToken()->getType() == TokenType::IF);
     state.nextToken(); // consume 'if'
     PabloAST * const expr = parseExpression(state);
@@ -522,7 +556,7 @@ PabloAST * RecursiveParser::parseIf(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseWhile(ParserState & state) {
+PabloAST * PabloParser::parseWhile(ParserState & state) {
     assert (state.peekToken()->getType() == TokenType::WHILE);
     state.nextToken(); // consume 'while'
     PabloAST * const expr = parseExpression(state);
@@ -549,7 +583,7 @@ PabloAST * RecursiveParser::parseWhile(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseAssign(ParserState & state) {
+PabloAST * PabloParser::parseAssign(ParserState & state) {
     Token * const assignee = state.nextToken();
     assert (assignee->getType() == TokenType::IDENTIFIER);
     std::string name = assignee->getText();
@@ -605,7 +639,7 @@ PabloAST * RecursiveParser::parseAssign(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseExpression(ParserState & state) {
+PabloAST * PabloParser::parseExpression(ParserState & state) {
     PabloAST * const term = parseTerm(state);
     if (term == nullptr) {
         return nullptr;
@@ -614,7 +648,7 @@ PabloAST * RecursiveParser::parseExpression(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::extendExpression(PabloAST * lhs, ParserState & state) {
+PabloAST * PabloParser::extendExpression(PabloAST * lhs, ParserState & state) {
     Token * const t = state.peekToken();
     TokenType const type = t->getType();
     if (type == TokenType::BAR) {
@@ -639,7 +673,7 @@ PabloAST * RecursiveParser::extendExpression(PabloAST * lhs, ParserState & state
 }
 
 
-PabloAST * RecursiveParser::parseTerm(ParserState & state) {
+PabloAST * PabloParser::parseTerm(ParserState & state) {
     PabloAST * const factor = parseFactor(state);
     if (factor == nullptr) {
         return nullptr;
@@ -648,7 +682,7 @@ PabloAST * RecursiveParser::parseTerm(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::extendTerm(PabloAST * lhs, ParserState & state) {
+PabloAST * PabloParser::extendTerm(PabloAST * lhs, ParserState & state) {
     Token * const t = state.peekToken();
     TokenType const type = t->getType();
     if (type == TokenType::AND) {
@@ -664,7 +698,7 @@ PabloAST * RecursiveParser::extendTerm(PabloAST * lhs, ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseFactor(ParserState & state) {
+PabloAST * PabloParser::parseFactor(ParserState & state) {
     TokenType peek = state.peekToken()->getType();
     if (peek == TokenType::TILDE) {
         state.nextToken(); // consume '~'
@@ -679,7 +713,7 @@ PabloAST * RecursiveParser::parseFactor(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parsePrimitive(ParserState & state) {
+PabloAST * PabloParser::parsePrimitive(ParserState & state) {
     Token * const first = state.peekToken();
     TokenType const firstType = first->getType();
     TokenType const secondType = state.peekAhead(2)->getType();
@@ -706,7 +740,7 @@ PabloAST * RecursiveParser::parsePrimitive(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseFunctionCall(ParserState & state) {
+PabloAST * PabloParser::parseFunctionCall(ParserState & state) {
     Token * const identifier = state.nextToken();
     assert (identifier->getType() == TokenType::IDENTIFIER);
     TOKEN_CHECK_FATAL(state.nextToken(), TokenType::L_PAREN, "expected '('");
@@ -738,7 +772,7 @@ PabloAST * RecursiveParser::parseFunctionCall(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseVariable(ParserState & state) {
+PabloAST * PabloParser::parseVariable(ParserState & state) {
     Token * const identifier = state.nextToken();
     assert (identifier->getType() == TokenType::IDENTIFIER);
     Token * const peekNext = state.peekToken();
@@ -755,7 +789,7 @@ PabloAST * RecursiveParser::parseVariable(ParserState & state) {
 }
 
 
-PabloAST * RecursiveParser::parseLiteral(ParserState & state) {
+PabloAST * PabloParser::parseLiteral(ParserState & state) {
     Token * const peek = state.peekToken();
     TokenType peekType = peek->getType();
     if (peekType == TokenType::INT_LITERAL) {
@@ -932,7 +966,7 @@ static inline void lazyInitializeFunctionGenMap() {
 }
 
 
-PabloAST * RecursiveParser::createFunctionCall(ParserState & state, Token * func, std::vector<Token *> const & argTokens, std::vector<PabloAST *> const & args) {
+PabloAST * PabloParser::createFunctionCall(ParserState & state, Token * func, std::vector<Token *> const & argTokens, std::vector<PabloAST *> const & args) {
     assert (argTokens.size() == args.size());
     lazyInitializeFunctionGenMap();
     std::string id = func->getText();
@@ -945,15 +979,14 @@ PabloAST * RecursiveParser::createFunctionCall(ParserState & state, Token * func
 }
 
 
-RecursiveParser::RecursiveParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<ErrorManager> errorDelegate)
-: PabloParser()
-, mLexer(std::move(lexer))
+PabloParser::PabloParser(std::unique_ptr<Lexer> lexer, std::shared_ptr<ErrorManager> errorDelegate)
+: mLexer(std::move(lexer))
 , mErrorManager(std::move(errorDelegate))
 , mSources()
 {}
 
 
-RecursiveParser::~RecursiveParser() {
+PabloParser::~PabloParser() {
     for (auto const & kv : mSources) {
         delete kv.second;
     }

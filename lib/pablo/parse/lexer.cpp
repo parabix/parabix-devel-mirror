@@ -1,10 +1,9 @@
 /*
  *  Copyright (c) 2019 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
- *  icgrep is a trademark of International Characters.
  */
 
-#include <pablo/parse/simple_lexer.h>
+#include <pablo/parse/lexer.h>
 
 #include <cctype>
 #include <pablo/parse/error_text.h>
@@ -17,7 +16,7 @@ inline static bool isTokenSeparator(char c) {
 }
 
 
-boost::optional<std::vector<Token *>> SimpleLexer::tokenize(std::shared_ptr<SourceFile> sourceFile) {
+boost::optional<std::vector<Token *>> Lexer::tokenize(std::shared_ptr<SourceFile> sourceFile) {
     mCurrentSource = sourceFile;
     std::vector<Token *> tokenList{};
     while (mCurrentSource->nextLine(mCurrentLine)) {
@@ -33,6 +32,8 @@ boost::optional<std::vector<Token *>> SimpleLexer::tokenize(std::shared_ptr<Sour
             } else if (c == '#') {
                 mCurrentColNum = mCurrentLine.length();
                 continue;
+            } else if (c == '@') {
+                token = extractAttribute();
             } else if (std::isdigit(c)) {
                 token = extractIntLiteral();
             } else if (std::isalpha(c) || c == '_') {
@@ -54,7 +55,24 @@ boost::optional<std::vector<Token *>> SimpleLexer::tokenize(std::shared_ptr<Sour
 }
 
 
-Token * SimpleLexer::extractText() {
+Token * Lexer::extractAttribute() {
+    const size_t col = mCurrentColNum;
+    mCurrentColNum++; // skip '@'
+    std::string builder = "@";
+    while (mCurrentColNum <= mCurrentLine.length() && std::isalpha(mCurrentLine[mCurrentColNum])) {
+        builder.push_back(mCurrentLine[mCurrentColNum]);
+        mCurrentColNum++;
+    }
+    auto token = Token::CreateAttribute(builder, mCurrentLineNum, col, mCurrentSource);
+    if (builder == "@") {
+        mErrorManager->logError(token, "missing attribute name", "expected a name after '@'");
+        return nullptr;
+    }
+    return token;
+}
+
+
+Token * Lexer::extractText() {
     const size_t col = mCurrentColNum;
     std::string builder{};
     bool canBeIntType = mCurrentLine[mCurrentColNum] == 'i';
@@ -84,7 +102,7 @@ Token * SimpleLexer::extractText() {
 }
 
 
-Token * SimpleLexer::extractIntLiteral() {
+Token * Lexer::extractIntLiteral() {
     const size_t col = mCurrentColNum;
     size_t consumedCount = 0;
     uint64_t value = std::stoul(mCurrentLine.substr(mCurrentColNum).to_string(), &consumedCount, /* auto base */ 0);
@@ -98,7 +116,7 @@ Token * SimpleLexer::extractIntLiteral() {
 }
 
 
-Token * SimpleLexer::extractSymbol() {
+Token * Lexer::extractSymbol() {
     const size_t col = mCurrentColNum;
     const char c = mCurrentLine[mCurrentColNum];
     Token * token = nullptr;
@@ -187,9 +205,8 @@ Token * SimpleLexer::extractSymbol() {
 }
 
 
-SimpleLexer::SimpleLexer(std::shared_ptr<ErrorManager> errorDelegate)
-: Lexer()
-, mErrorManager(std::move(errorDelegate))
+Lexer::Lexer(std::shared_ptr<ErrorManager> errorDelegate)
+: mErrorManager(std::move(errorDelegate))
 , mCurrentSource(nullptr)
 , mCurrentLine()
 , mCurrentLineNum(0)

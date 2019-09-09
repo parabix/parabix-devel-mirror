@@ -27,9 +27,8 @@
 #include <llvm/Support/Path.h>
 #include <toolchain/pablo_toolchain.h>
 #include <pablo/parse/pablo_source_kernel.h>
-#include <pablo/parse/pablo_parser.h>
-#include <pablo/parse/simple_lexer.h>
-#include <pablo/parse/rd_parser.h>
+#include <pablo/parse/parser.h>
+#include <pablo/parse/lexer.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
 #include <fcntl.h>
@@ -332,7 +331,7 @@ int main(int argc, char ** argv) {
 
     CPUDriver pxDriver("xml-pablo");
     auto em = ErrorManager::Create();
-    auto parser = RecursiveParser::Create(SimpleLexer::Create(em), em);
+    auto parser = PabloParser::Create(Lexer::Create(em), em);
     auto xmlSource = SourceFile::Relative("xml.pablo");
     if (xmlSource == nullptr) {
         std::cerr << "pablo-parser: error loading pablo source file: xml.pablo\n";

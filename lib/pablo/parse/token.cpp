@@ -24,6 +24,7 @@ std::string to_string(TokenType const & type) {
         CASE_AS_STRING(KERNEL);
         CASE_AS_STRING(TYPE);
         CASE_AS_STRING(WHILE);
+        CASE_AS_STRING(ATTRIBUTE);
         CASE_AS_STRING(AND);
         CASE_AS_STRING(ARROW);
         CASE_AS_STRING(ASSIGN);
