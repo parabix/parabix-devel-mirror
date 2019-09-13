@@ -7,6 +7,7 @@ parabix_add_module(
 NAME
     kernel.util
 SRC
+    bixhash.cpp
     error_monitor_kernel.cpp
     debug_display.cpp
     hex_convert.cpp
