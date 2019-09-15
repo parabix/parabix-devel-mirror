@@ -100,8 +100,15 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCXX_STANDARD=${CMAKE_CXX_STANDARD}")
 # Add include directories.
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-# Place compiled exutables in build/bin.
+# Place compiled executables in build/bin.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
+
+# Parabix Object Cache default
+set(PARABIX_OBJECT_CACHE "$ENV{HOME}/.cache/parabix/")
+if (NOT EXISTS(${PARABIX_OBJECT_CACHE}))
+    file(MAKE_DIRECTORY ${PARABIX_OBJECT_CACHE})
+endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_OBJECT_CACHE='\"${PARABIX_OBJECT_CACHE}\"'")
 
 # Use @rpath for dylibs on macOS
 set(CMAKE_MACOSX_RPATH ON)
@@ -241,7 +248,7 @@ function(parabix_add_pablo_src NAME)
     endforeach(PABLO_FILE)
     
     add_custom_target(${NAME}
-        COMMAND cp ${FILE_LIST} $ENV{HOME}/.cache/parabix
+        COMMAND cp ${FILE_LIST} ${PARABIX_OBJECT_CACHE}
         DEPENDS ${ARGN})
 endfunction(parabix_add_pablo_src)
 
