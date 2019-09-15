@@ -251,11 +251,11 @@ if __name__ == '__main__':
     if len(args) != 1:
         option_parser.print_usage()
         sys.exit(1)
-        if not os.path.exists(options.datafile_dir):
-            os.mkdir(options.datafile_dir)
-        if not os.path.isdir(options.datafile_dir):
-            print("Cannot use %s as working test file directory.\n" % options.datafile_dir)
-            sys.exit(1)
+    if not os.path.exists(options.datafile_dir):
+        os.mkdir(options.datafile_dir)
+    if not os.path.isdir(options.datafile_dir):
+        print("Cannot use %s as working test file directory.\n" % options.datafile_dir)
+        sys.exit(1)
     random.seed(options.random_seed)
     grep_program_under_test = args[0]
     grep_test_file = open(os.path.join(QA_dir,options.testcases), 'r')
