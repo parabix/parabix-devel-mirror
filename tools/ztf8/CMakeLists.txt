@@ -57,4 +57,21 @@ DEPS
     toolchain
 )
 
+parabix_add_executable(
+NAME
+    ztf-hash
+SRC
+    ztf-hash.cpp
+DEPS
+    grep
+    pablo
+    kernel.basis
+    kernel.io
+    kernel.pipeline
+    kernel.streamutils
+    kernel.util
+    toolchain
+)
+
+
 
