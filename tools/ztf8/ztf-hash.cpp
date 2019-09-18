@@ -57,6 +57,7 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 static cl::opt<bool> Decompression("d", cl::desc("Decompress from ZTF-Runs to UTF-8."), cl::cat(ztfHashOptions), cl::init(false));
 static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::aliasopt(Decompression));
 
+static cl::opt<bool> DeferredAttribute("deferred", cl::desc("Use Deferred Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
 
 
 class WordMarkKernel : public PabloKernel {
@@ -212,6 +213,14 @@ std::string lengthGroupStr(LengthGroup lengthGroup) {
     return std::to_string(lengthGroup.lo) + "-" + std::to_string(lengthGroup.hi);
 }
 
+Binding ByteDataBinding(LengthGroup lengthGroup, StreamSet * byteData) {
+    if (DeferredAttribute) {
+        return Binding{"byteData", byteData, FixedRate(), {Deferred()}};
+    } else {
+        return Binding{"byteData", byteData, FixedRate(), LookBehind(lengthGroup.hi)};
+    }
+}
+
 class LengthGroupCompressionMask : public MultiBlockKernel {
 public:
     LengthGroupCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
@@ -219,10 +228,10 @@ public:
                                StreamSet * symbolMarks,
                                StreamSet * symbolLengths,
                         StreamSet * const byteData, StreamSet * const hashValues, StreamSet * compressionMask, unsigned strideBlocks = 8)
-    : MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupStr(lengthGroup),
+    : MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupStr(lengthGroup) + (DeferredAttribute ? "deferred" : "lookBehind"),
                               {Binding{"symbolMarks", symbolMarks},
                                   Binding{"symbolLengths", symbolLengths},
-                                  Binding{"byteData", byteData, FixedRate(), LookBehind(lengthGroup.hi)},
+                                  ByteDataBinding(lengthGroup, byteData),
                                   Binding{"hashValues", hashValues}},
                               {Binding{"compressionMask", compressionMask, BoundedRate(0,1)}}, {}, {},
                               {InternalScalar{b->getBitBlockType(), "pendingMaskInverted"},
@@ -247,7 +256,9 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Constant * sz_TWO = b->getSize(2);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_MAXBIT = b->getSize(SIZE_T_BITS - 1);
+    Constant * sz_BLOCKWIDTH = b->getSize(b->getBitBlockWidth());
     Type * sizeTy = b->getSizeTy();
+    Type * bitBlockPtrTy = b->getBitBlockType()->getPointerTo();
 
     Type * halfLengthTy = b->getIntNTy(8 * mLengthGroup.hi/2);
     Type * halfSymPtrTy = halfLengthTy->getPointerTo();
@@ -267,9 +278,16 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     BasicBlock * const nextKey = b->CreateBasicBlock("nextKey");
     BasicBlock * const keysDone = b->CreateBasicBlock("keysDone");
     BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
+    BasicBlock * const updatePending = b->CreateBasicBlock("updatePending");
+    BasicBlock * const compressionMaskDone = b->CreateBasicBlock("compressionMaskDone");
 
     Value * const initialPos = b->getProcessedItemCount("symbolMarks");
     Value * const avail = b->getAvailableItemCount("symbolMarks");
+    Value * const initialProduced = b->getProducedItemCount("compressionMask");
+    Value * pendingMask = b->CreateNot(b->getScalarField("pendingMaskInverted"));
+    Value * producedPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialProduced), bitBlockPtrTy);
+    //b->CallPrintInt("producedPtr", producedPtr);
+    b->CreateStore(pendingMask, producedPtr);
     b->CreateBr(stridePrologue);
 
     b->SetInsertPoint(stridePrologue);
@@ -279,7 +297,6 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
     Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
     Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
-    Value * pendingMask = b->CreateNot(b->getScalarField("pendingMaskInverted"));
 
     b->CreateBr(stridePrecomputation);
     // Precompute an index mask for one stride of the symbol marks stream.
@@ -288,20 +305,17 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     keyMaskAccum->addIncoming(sz_ZERO, stridePrologue);
     PHINode * const blockNo = b->CreatePHI(sizeTy, 2);
     blockNo->addIncoming(sz_ZERO, stridePrologue);
-    PHINode * const pendingMaskPhi = b->CreatePHI(b->getBitBlockType(), 2);
-    pendingMaskPhi->addIncoming(pendingMask, stridePrologue);
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
     Value * keyBitBlock = b->loadInputStreamBlock("symbolMarks", sz_ZERO, strideBlockIndex);
     Value * const anyKey = b->simd_any(sw.width, keyBitBlock);
     Value * keyWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyKey), sizeTy);
     Value * keyMask = b->CreateOr(keyMaskAccum, b->CreateShl(keyWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "keyMask");
     // Initialize the compression mask.
-    b->storeOutputStreamBlock("compressionMask", sz_ZERO, blockNo, pendingMaskPhi);
+    b->storeOutputStreamBlock("compressionMask", b->CreateAdd(strideBlockIndex, sz_ONE), b->allOnes());
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
     keyMaskAccum->addIncoming(keyMask, stridePrecomputation);
     blockNo->addIncoming(nextBlockNo, stridePrecomputation);
     // Default initial compression mask is all ones (no zeroes => no compression).
-    pendingMaskPhi->addIncoming(b->allOnes(), stridePrecomputation);
     b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
 
     b->SetInsertPoint(strideMasksReady);
@@ -416,24 +430,30 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     b->CreateCondBr(b->CreateICmpNE(nextKeyMask, sz_ZERO), keyProcessingLoop, keysDone);
 
     b->SetInsertPoint(keysDone);
-    Value * maskPtr = b->getOutputStreamBlockPtr("compressionMask", sz_ZERO, strideNo);
-    Value * lastMask = b->CreateBlockAlignedLoad(maskPtr);
-    b->setScalarField("pendingMaskInverted", b->CreateNot(lastMask));
     strideNo->addIncoming(nextStrideNo, keysDone);
     b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), stridePrologue, stridesDone);
 
     b->SetInsertPoint(stridesDone);
     // In the next segment, we may need to access byte data in the last
     // 16 bytes of this segment.
-    //Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_MAXLENGTH);
-    //b->CallPrintInt("avail", avail);
-    //b->setProcessedItemCount("byteData", processed);
+    if (DeferredAttribute) {
+        Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_MAXLENGTH));
+        b->setProcessedItemCount("byteData", processed);
+    }
     // Although we have written the last block mask, we do not include it as
     // produced, because we may need to update it in the event that there is
     // a compressible symbol starting in this segment and finishing in the next.
-    Value * produced = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, b->getSize(b->getBitBlockWidth())));
+    Value * produced = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_BLOCKWIDTH));
     b->setProducedItemCount("compressionMask", produced);
+    b->CreateCondBr(mIsFinal, compressionMaskDone, updatePending);
+    b->SetInsertPoint(updatePending);
+    Value * pendingPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", produced), bitBlockPtrTy);
+    //b->CallPrintInt("pendingPtr", pendingPtr);
+    Value * lastMask = b->CreateBlockAlignedLoad(pendingPtr);
+    b->setScalarField("pendingMaskInverted", b->CreateNot(lastMask));
     //b->CallPrintInt("produced", produced);
+    b->CreateBr(compressionMaskDone);
+    b->SetInsertPoint(compressionMaskDone);
 }
 
 
@@ -560,11 +580,11 @@ public:
                              StreamSet * const hashMarks, StreamSet * const byteData,
                              StreamSet * const hashValues,
                              StreamSet * const result, unsigned strideBlocks = 8)
-    : MultiBlockKernel(b, "LengthGroupDecompression" + lengthGroupStr(lengthGroup),
+    : MultiBlockKernel(b, "LengthGroupDecompression" + lengthGroupStr(lengthGroup) + (DeferredAttribute ? "deferred" : "lookBehind"),
                         {Binding{"keyMarks", keyMarks},
                             Binding{"symbolLengths", symbolLengths},
                             Binding{"hashMarks", hashMarks},
-                            Binding{"byteData", byteData, FixedRate(), LookBehind(lengthGroup.hi)},
+                            ByteDataBinding(lengthGroup, byteData),
                             Binding{"hashValues", hashValues},
                         },
                        {Binding{"result", result, BoundedRate(0,1)}}, {}, {},
@@ -796,8 +816,10 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     b->SetInsertPoint(stridesDone);
     // If the segment ends in the middle of a 2-byte codeword, we need to
     // make sure that we still have access to the codeword in the next block.
-    Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, b->getSize(1)));
-    b->setProcessedItemCount("byteData", processed);
+    if (DeferredAttribute) {
+        Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_MAXLENGTH));
+        b->setProcessedItemCount("byteData", processed);
+    }
     // Although we have written the full input stream to output, there may
     // be an incomplete symbol at the end of this block.   Store the
     // data that may be overwritten as pending and set the produced item
