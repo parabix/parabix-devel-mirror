@@ -284,7 +284,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
     std::fill(mScalarValue.begin(), mScalarValue.end(), nullptr);
     readPipelineIOItemCounts(b);
-    if (mPipelineKernel->getNumOfThreads() == 1) {
+    if (mNumOfThreads == 1) {
         generateSingleThreadKernelMethod(b);
     } else {
         generateMultiThreadKernelMethod(b);
@@ -347,7 +347,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
 
     // use the process thread to handle the initial segment function after spawning
     // (n - 1) threads to handle the subsequent offsets
-    const unsigned threads = mPipelineKernel->getNumOfThreads() - 1;
+    const unsigned threads = mNumOfThreads - 1;
     Type * const pthreadsTy = ArrayType::get(b->getPThreadTy(), threads);
     AllocaInst * const pthreads = b->CreateCacheAlignedAlloca(pthreadsTy);
     SmallVector<Value *, 8> threadIdPtr(threads);
@@ -580,7 +580,7 @@ inline StructType * PipelineCompiler::getThreadLocalStateType(BuilderRef b) {
     fields[POP_COUNT_STRUCT_INDEX] = emptyTy; // getPopCountThreadLocalStateType(b);
     fields[ZERO_EXTENDED_BUFFER_INDEX] = mHasZeroExtendedStream ? b->getVoidPtrTy() : emptyTy;
     fields[ZERO_EXTENDED_SPACE_INDEX] = mHasZeroExtendedStream ? b->getSizeTy() : emptyTy;
-    if (LLVM_LIKELY(mPipelineKernel->getNumOfThreads() > 1 && mPipelineKernel->canSetTerminateSignal())) {
+    if (LLVM_LIKELY(mNumOfThreads > 1 && mPipelineKernel->canSetTerminateSignal())) {
         fields[TERMINATION_SIGNAL_INDEX] = b->getSizeTy();
     } else {
         fields[TERMINATION_SIGNAL_INDEX] = emptyTy;
@@ -602,7 +602,7 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
         mZeroExtendSpace = b->CreateGEP(localState, indices);
     }
     if (mPipelineKernel->canSetTerminateSignal()) {
-        if (mPipelineKernel->getNumOfThreads() != 1) {
+        if (mNumOfThreads != 1) {
             indices[2] = b->getInt32(TERMINATION_SIGNAL_INDEX);
             mPipelineTerminated = b->CreateGEP(localState, indices);
         } else {

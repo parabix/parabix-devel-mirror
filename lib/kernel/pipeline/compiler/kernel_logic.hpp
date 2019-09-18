@@ -57,6 +57,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
         assert (inputBaseAddress[i]);
 
+        #ifndef DISABLE_INPUT_ZEROING
         if (LLVM_LIKELY(rate.isFixed())) {
 
             // create a stack entry for this buffer at the start of the pipeline
@@ -217,7 +218,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             inputBaseAddress[i] = finalEpoch;
         }
-
+        #endif
     }
 }
 
@@ -659,7 +660,7 @@ void PipelineCompiler::loadItemCountsOfCountableRateStreams(BuilderRef b) {
  * @brief clearUnwrittenOutputData
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
-
+    #ifndef DISABLE_OUTPUT_ZEROING
     const auto blockWidth = b->getBitBlockWidth();
     const auto log2BlockWidth = floor_log2(blockWidth);
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(log2BlockWidth);
@@ -768,6 +769,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             b->CreateMemZero(startPtr, remainingBytes, blockWidth / 8);
         }
     }
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

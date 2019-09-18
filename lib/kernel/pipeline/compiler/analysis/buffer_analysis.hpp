@@ -739,6 +739,23 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                         const auto max_absolute = div_by_non_zero(outputRate.MaximumSpace, inputRate.Minimum);
                         upper_absolute = std::min(upper_absolute, max_absolute);
                     }
+
+                    // Fixed rate input streams may potentially truncate the input passed into them.
+                    // Make sure the truncation is taken into account when computing the bounds.
+                    if (LLVM_LIKELY(rate.isFixed())) {
+                        const auto flower_expected = floor(lower_expected);
+                        const auto dlower_expected = lower_expected - flower_expected;
+                        lower_expected = flower_expected;
+
+                        const auto flower_absolute = floor(lower_absolute);
+                        const auto dlower_absolute = lower_absolute - flower_absolute;
+                        lower_absolute = flower_absolute;
+
+                        upper_expected = ceiling(upper_expected + dlower_expected);
+                        upper_absolute = ceiling(upper_absolute + dlower_absolute);
+                    }
+
+
                 }
             }
 

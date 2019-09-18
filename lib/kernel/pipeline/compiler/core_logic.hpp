@@ -313,7 +313,7 @@ void PipelineCompiler::end(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mMadeProgressInLastSegment->addIncoming(progressedOrFinished, exitBlock);
     if (isOpenSystem()) {
-        Constant * const numOfThreads = b->getSize(mPipelineKernel->getNumOfThreads());
+        Constant * const numOfThreads = b->getSize(mNumOfThreads);
         Value * const nextSegNo = b->CreateAdd(mSegNo, numOfThreads);
         cast<PHINode>(mSegNo)->addIncoming(nextSegNo, exitBlock);
     }

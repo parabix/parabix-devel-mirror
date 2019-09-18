@@ -30,6 +30,15 @@
 
 // #define DISABLE_ZERO_EXTEND
 
+// #define ENABLE_DEBUG_CHECKS
+
+// #define OVERRIDE_THREAD_NUM 3
+
+// #define DISABLE_INPUT_ZEROING
+
+// #define DISABLE_OUTPUT_ZEROING
+
+
 using namespace boost;
 using namespace boost::math;
 using namespace boost::adaptors;
@@ -760,12 +769,13 @@ protected:
 
 protected:
 
-
-
     PipelineKernel * const                      mPipelineKernel;
 
-    const bool                                  mCheckAssertions;
-    const bool                                  mTrackIndividualConsumedItemCounts;
+    const bool                       			mCheckAssertions;
+    const bool	  								mPrintDebug;
+    const bool                       			mTrackIndividualConsumedItemCounts;
+       
+    const unsigned								mNumOfThreads;
 
     unsigned                                    mKernelIndex = 0;
     const Kernel *                              mKernel = nullptr;
@@ -975,12 +985,22 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P)
 : mPipelineKernel(pipelineKernel)
-#ifndef NDEBUG
+#if defined(ENABLE_DEBUG_CHECKS) || !defined(NDEBUG)
 , mCheckAssertions(true)
 #else
 , mCheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
 #endif
+#if defined(PRINT_DEBUG_MESSAGES)
+, mPrintDebug(true)
+#else
+, mPrintDebug(false)
+#endif
 , mTrackIndividualConsumedItemCounts(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
+#if defined(OVERRIDE_THREAD_NUM)
+, mNumOfThreads(OVERRIDE_THREAD_NUM)
+#else
+, mNumOfThreads(mPipelineKernel->getNumOfThreads())
+#endif
 , mStreamGraph(std::move(P.Streams))
 , mScalarGraph(std::move(P.Scalars))
 , LastKernel(P.LastKernel)
