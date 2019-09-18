@@ -69,7 +69,7 @@ protected:
 };
 
 WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * U8index, StreamSet * WordMarks)
-: PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}, Binding{"U8index", U8index}}, {Binding{"WordMarks", WordMarks, FixedRate(), Add1()}}) { }
+: PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}, Binding{"U8index", U8index}}, {Binding{"WordMarks", WordMarks}}) { }
 
 void WordMarkKernel::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
@@ -718,8 +718,8 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value * const hashSfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashMarks", hashMarkPos)), sizeTy);
     Value * symLength = b->CreateAdd(b->CreateURem(b->CreateUDiv(hashPfx, b->getSize(2)), b->getSize(16)), b->getSize(2));
     Value * hashCode = b->CreateAdd(b->CreateMul(b->CreateURem(hashPfx, b->getSize(2)), b->getSize(128)), hashSfx);
-    Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(keyLength, b->getSize(1)));
-    Value * symOffset = b->CreateSub(keyLength, b->getSize(8));
+    Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(symLength, b->getSize(1)));
+    Value * symOffset = b->CreateSub(symLength, b->getSize(8));
 
     hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(symLength, b->getSize(9)), b->getSize(16 * 256)));
     //b->CallPrintInt("hashTablePtr", hashTablePtr);
@@ -728,7 +728,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("tblEntryPtr", tblEntryPtr);
     tblPtr1 = b->CreateBitCast(tblEntryPtr, int64PtrTy);
     //b->CallPrintInt("tblPtr1", tblPtr1);
-    tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), int64PtrTy);
+    tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, symOffset), int64PtrTy);
     //b->CallPrintInt("tblPtr2", tblPtr2);
     entry1 = b->CreateLoad(tblPtr1);
     //b->CallPrintInt("entry1", entry1);
