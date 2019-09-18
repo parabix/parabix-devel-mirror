@@ -297,8 +297,9 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
     Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
     Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
-
+    Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", stridePos), bitBlockPtrTy);
     b->CreateBr(stridePrecomputation);
+
     // Precompute an index mask for one stride of the symbol marks stream.
     b->SetInsertPoint(stridePrecomputation);
     PHINode * const keyMaskAccum = b->CreatePHI(sizeTy, 2);
@@ -311,7 +312,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * keyWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyKey), sizeTy);
     Value * keyMask = b->CreateOr(keyMaskAccum, b->CreateShl(keyWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "keyMask");
     // Initialize the compression mask.
-    b->storeOutputStreamBlock("compressionMask", b->CreateAdd(strideBlockIndex, sz_ONE), b->allOnes());
+    b->CreateBlockAlignedStore(b->allOnes(), b->CreateGEP(compressMaskPtr, strideBlockIndex));
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
     keyMaskAccum->addIncoming(keyMask, stridePrecomputation);
     blockNo->addIncoming(nextBlockNo, stridePrecomputation);
