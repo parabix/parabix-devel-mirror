@@ -405,14 +405,19 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     b->SetInsertPoint(markCompression);
     // Compute a mask of bits to zero out.
     Value * maskLength = b->CreateZExt(b->CreateSub(keyLength, sz_TWO), sizeTy);
-    //b->CallPrintInt("maskLength", maskLength);
     Value * mask = b->CreateSub(b->CreateShl(sz_ONE, maskLength), sz_ONE);
-    Value * bitOffset = b->CreateURem(keyStartPos, b->getSize(SIZE_T_BITS/2));
+    // Determine a base position from which both the keyStart and the keyEnd
+    // are accessible within SIZE_T_BITS - 8, and which will not overflow
+    // the buffer.
+    Value * startBase = b->CreateSub(keyStartPos, b->CreateURem(keyStartPos, b->getSize(8)));
+    Value * markBase = b->CreateSub(keyMarkPos, b->CreateURem(keyMarkPos, sz_BITS));
+    Value * keyBase = b->CreateSelect(b->CreateICmpULT(startBase, markBase), startBase, markBase);
+    Value * bitOffset = b->CreateSub(keyStartPos, keyBase);
     //b->CallPrintInt("bitOffset", bitOffset);
     mask = b->CreateShl(mask, bitOffset);
     //b->CallPrintInt("mask", mask);
-    Value * keyBase = b->CreateSub(keyStartPos, bitOffset);
     Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), sizeTy->getPointerTo());
+
     Value * initialMask = b->CreateLoad(keyBasePtr);
     //b->CallPrintInt("initialMask", initialMask);
     Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
