@@ -194,27 +194,48 @@ struct ScanWordParameters {
     }
 };
 
+struct LengthGroup {unsigned lo; unsigned hi;};
+
+void checkLengthGroup(LengthGroup g) {
+    assert((g.hi & (g.hi - 1)) == 0);
+    assert((g.lo <= g.hi) && (g.lo > g.hi/2));
+}
+
+const unsigned HashTableEntries = 256;
+
+unsigned hashTableSize(LengthGroup g) {
+    unsigned numSubTables = (g.hi - g.lo + 1);
+    return numSubTables * g.hi * HashTableEntries;
+}
+
+std::string lengthGroupStr(LengthGroup lengthGroup) {
+    return std::to_string(lengthGroup.lo) + "-" + std::to_string(lengthGroup.hi);
+}
+
 class LengthGroupCompressionMask : public MultiBlockKernel {
 public:
     LengthGroupCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
+                               LengthGroup lengthGroup,
                                StreamSet * symbolMarks,
                                StreamSet * symbolLengths,
                         StreamSet * const byteData, StreamSet * const hashValues, StreamSet * compressionMask, unsigned strideBlocks = 8)
-    : MultiBlockKernel(b, "LengthGroupCompressionMask",
+    : MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupStr(lengthGroup),
                               {Binding{"symbolMarks", symbolMarks},
                                   Binding{"symbolLengths", symbolLengths},
-                                  Binding{"byteData", byteData, FixedRate(), {Deferred()}},
+                                  Binding{"byteData", byteData, FixedRate(), LookBehind(lengthGroup.hi)},
                                   Binding{"hashValues", hashValues}},
                               {Binding{"compressionMask", compressionMask, BoundedRate(0,1)}}, {}, {},
-                              // Hash table 8 length-based tables with 256 16-byte entries each.
                               {InternalScalar{b->getBitBlockType(), "pendingMaskInverted"},
-                                  InternalScalar{ArrayType::get(b->getInt8Ty(), 8 * 16 * 256), "hashTable"}}) {
-                                      setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
-                                  }
+                                  InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(lengthGroup)), "hashTable"}}),
+    mLengthGroup(lengthGroup) {
+        checkLengthGroup(lengthGroup);
+        setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+    }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    LengthGroup mLengthGroup;
 };
 
 void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -223,10 +244,17 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
+    Constant * sz_TWO = b->getSize(2);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_MAXBIT = b->getSize(SIZE_T_BITS - 1);
     Type * sizeTy = b->getSizeTy();
-    Type * int64PtrTy = b->getInt64Ty()->getPointerTo();
+
+    Type * halfLengthTy = b->getIntNTy(8 * mLengthGroup.hi/2);
+    Type * halfSymPtrTy = halfLengthTy->getPointerTo();
+    Constant * sz_HALF_SYM = b->getSize(mLengthGroup.hi/2);
+    Constant * sz_MINLENGTH = b->getSize(mLengthGroup.lo);
+    Constant * sz_MAXLENGTH = b->getSize(mLengthGroup.hi);
+    Constant * sz_SUBTABLE = b->getSize(HashTableEntries * mLengthGroup.hi);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
@@ -307,11 +335,11 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("keyMarkPos", keyMarkPos);
     /* Determine the key length. */
     Value * const lgthPtr = b->getRawInputPointer("symbolLengths", keyMarkPos);
-    Value * keyLength = b->CreateAdd(b->CreateZExt(b->CreateLoad(lgthPtr), sizeTy), b->getSize(2));
-    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, b->getSize(1)));
+    Value * keyLength = b->CreateAdd(b->CreateZExt(b->CreateLoad(lgthPtr), sizeTy), sz_TWO);
+    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, sz_ONE));
     //b->CallPrintInt("keyLength", keyLength);
-    // keyOffset for accessing the final 8 bytes of an entry.
-    Value * keyOffset = b->CreateSub(keyLength, b->getSize(8));
+    // keyOffset for accessing the final half of an entry.
+    Value * keyOffset = b->CreateSub(keyLength, sz_HALF_SYM);
     //b->CallPrintInt("keyOffset", keyOffset);
     // Get the hash of this key.
     Value * const keyPtr = b->getRawInputPointer("hashValues", keyMarkPos);
@@ -320,18 +348,18 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     // Starting with length 9, the length-based subtables are 16 * 256 = 4K each.
     Value * hashTableBasePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
     //b->CallPrintInt("hashTableBasePtr", hashTableBasePtr);
-    Value * hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(keyLength, b->getSize(9)), b->getSize(16 * 256)));
+    Value * hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(keyLength, sz_MINLENGTH), sz_SUBTABLE));
     //b->CallPrintInt("hashTablePtr", hashTablePtr);
-    Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, b->getSize(16)));
+    Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, sz_MAXLENGTH));
     // Use two 8-byte loads to get hash and symbol values.
     //b->CallPrintInt("tblEntryPtr", tblEntryPtr);
-    Value * tblPtr1 = b->CreateBitCast(tblEntryPtr, int64PtrTy);
+    Value * tblPtr1 = b->CreateBitCast(tblEntryPtr, halfSymPtrTy);
     //b->CallPrintInt("tblPtr1", tblPtr1);
-    Value * tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), int64PtrTy);
+    Value * tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), halfSymPtrTy);
     //b->CallPrintInt("tblPtr2", tblPtr2);
-    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos), int64PtrTy);
+    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos), halfSymPtrTy);
     //b->CallPrintInt("symPtr1", symPtr1);
-    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), b->CreateAdd(keyStartPos, keyOffset)), int64PtrTy);
+    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), b->CreateAdd(keyStartPos, keyOffset)), halfSymPtrTy);
     //b->CallPrintInt("symPtr2", symPtr2);
     // Check to see if the hash table entry is nonzero (already assigned).
     Value * sym1 = b->CreateLoad(symPtr1);
@@ -342,7 +370,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("entry1", entry1);
     Value * entry2 = b->CreateLoad(tblPtr2);
     //b->CallPrintInt("entry2", entry2);
-    Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), b->getInt64(0));
+    Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), Constant::getNullValue(halfLengthTy));
     b->CreateCondBr(isEmptyEntry, storeKey, checkKey);
     b->SetInsertPoint(storeKey);
     // We have a new symbols that allows future occurrences of the symbol to
@@ -361,15 +389,15 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
 
     b->SetInsertPoint(markCompression);
     // Compute a mask of bits to zero out.
-    Value * maskLength = b->CreateZExt(b->CreateSub(keyLength, b->getSize(2)), b->getInt64Ty());
+    Value * maskLength = b->CreateZExt(b->CreateSub(keyLength, sz_TWO), sizeTy);
     //b->CallPrintInt("maskLength", maskLength);
-    Value * mask = b->CreateSub(b->CreateShl(b->getInt64(1), maskLength), b->getInt64(1));
-    Value * bitOffset = b->CreateURem(keyStartPos, b->getSize(32));
+    Value * mask = b->CreateSub(b->CreateShl(sz_ONE, maskLength), sz_ONE);
+    Value * bitOffset = b->CreateURem(keyStartPos, b->getSize(SIZE_T_BITS/2));
     //b->CallPrintInt("bitOffset", bitOffset);
     mask = b->CreateShl(mask, bitOffset);
     //b->CallPrintInt("mask", mask);
     Value * keyBase = b->CreateSub(keyStartPos, bitOffset);
-    Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), int64PtrTy);
+    Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), sizeTy->getPointerTo());
     Value * initialMask = b->CreateLoad(keyBasePtr);
     //b->CallPrintInt("initialMask", initialMask);
     Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
@@ -397,9 +425,9 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     b->SetInsertPoint(stridesDone);
     // In the next segment, we may need to access byte data in the last
     // 16 bytes of this segment.
-    Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, b->getSize(16)));
+    //Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_MAXLENGTH);
     //b->CallPrintInt("avail", avail);
-    b->setProcessedItemCount("byteData", processed);
+    //b->setProcessedItemCount("byteData", processed);
     // Although we have written the last block mask, we do not include it as
     // produced, because we may need to update it in the event that there is
     // a compressible symbol starting in this segment and finishing in the next.
@@ -514,6 +542,7 @@ protected:
     void generatePabloMethod() override;
 };
 
+
 void ZTF_HashMarks::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * insertionMask = getInputStreamSet("insertionMask")[0];
@@ -522,32 +551,35 @@ void ZTF_HashMarks::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("hashMarks"), pb.getInteger(0)), ZTF_hash);
 }
 
-const unsigned maxSymbolLength = 16;
 class LengthGroupDecompression : public MultiBlockKernel {
 public:
     LengthGroupDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+                             LengthGroup lengthGroup,
                              StreamSet * keyMarks,
                              StreamSet * symbolLengths,
                              StreamSet * const hashMarks, StreamSet * const byteData,
                              StreamSet * const hashValues,
                              StreamSet * const result, unsigned strideBlocks = 8)
-    : MultiBlockKernel(b, "LengthGroupDecompression",
+    : MultiBlockKernel(b, "LengthGroupDecompression" + lengthGroupStr(lengthGroup),
                         {Binding{"keyMarks", keyMarks},
                             Binding{"symbolLengths", symbolLengths},
                             Binding{"hashMarks", hashMarks},
-                            Binding{"byteData", byteData, FixedRate(), {Deferred()}},
+                            Binding{"byteData", byteData, FixedRate(), LookBehind(lengthGroup.hi)},
                             Binding{"hashValues", hashValues},
                         },
                        {Binding{"result", result, BoundedRate(0,1)}}, {}, {},
-                       {InternalScalar{ArrayType::get(b->getInt8Ty(), maxSymbolLength), "pendingOutput"},
+                       {InternalScalar{ArrayType::get(b->getInt8Ty(), lengthGroup.hi), "pendingOutput"},
                            // Hash table 8 length-based tables with 256 16-byte entries each.
-                           InternalScalar{ArrayType::get(b->getInt8Ty(), 8 * 16 * 256), "hashTable"}}) {
-                               setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
-                           }
+                           InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(lengthGroup)), "hashTable"}}),
+    mLengthGroup(lengthGroup) {
+        checkLengthGroup(lengthGroup);
+        setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+    }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    LengthGroup mLengthGroup;
 };
 
 void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -558,10 +590,17 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
+    Constant * sz_TWO = b->getSize(2);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_MAXBIT = b->getSize(SIZE_T_BITS - 1);
     Type * sizeTy = b->getSizeTy();
-    Type * int64PtrTy = b->getInt64Ty()->getPointerTo();
+
+    Type * halfLengthTy = b->getIntNTy(8 * mLengthGroup.hi/2);
+    Type * halfSymPtrTy = halfLengthTy->getPointerTo();
+    Constant * sz_HALF_SYM = b->getSize(mLengthGroup.hi/2);
+    Constant * sz_MINLENGTH = b->getSize(mLengthGroup.lo);
+    Constant * sz_MAXLENGTH = b->getSize(mLengthGroup.hi);
+    Constant * sz_SUBTABLE = b->getSize(HashTableEntries * mLengthGroup.hi);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
@@ -579,7 +618,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value * const initialProduced = b->getProducedItemCount("result");
     Value * const avail = b->getAvailableItemCount("keyMarks");
     // Copy pending output data.
-    b->CreateMemCpy(b->getRawOutputPointer("result", initialProduced), b->getScalarFieldPtr("pendingOutput"), b->getSize(maxSymbolLength), 1);
+    b->CreateMemCpy(b->getRawOutputPointer("result", initialProduced), b->getScalarFieldPtr("pendingOutput"), sz_MAXLENGTH, 1);
     // Copy all new input to the output buffer; this will be then
     // overwritten when and as necessary for decompression of ZTF codes.
     Value * toCopy = b->CreateSub(avail, initialPos);
@@ -642,29 +681,27 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("keyMarkPos", keyMarkPos);
     /* Determine the key length. */
     Value * const lgthPtr = b->getRawInputPointer("symbolLengths", keyMarkPos);
-    Value * keyLength = b->CreateAdd(b->CreateZExt(b->CreateLoad(lgthPtr), sizeTy), b->getSize(2));
-    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, b->getSize(1)));
+    Value * keyLength = b->CreateAdd(b->CreateZExt(b->CreateLoad(lgthPtr), sizeTy), sz_TWO);
+    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, sz_ONE));
     //b->CallPrintInt("keyLength", keyLength);
-    // keyOffset for accessing the final 8 bytes of an entry.
-    Value * keyOffset = b->CreateSub(keyLength, b->getSize(8));
+    // keyOffset for accessing the final half of an entry.
+    Value * keyOffset = b->CreateSub(keyLength, sz_HALF_SYM);
     //b->CallPrintInt("keyOffset", keyOffset);
     // Get the hash of this key.
     Value * const keyPtr = b->getRawInputPointer("hashValues", keyMarkPos);
     Value * keyHash = b->CreateZExt(b->CreateLoad(keyPtr), sizeTy);
     //b->CallPrintInt("keyHash", keyHash);
-    // Starting with length 9, the length-based subtables are 16 * 256 = 4K each.
-    Value * hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(keyLength, b->getSize(9)), b->getSize(16 * 256)));
-    //b->CallPrintInt("hashTablePtr", hashTablePtr);
-    Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, b->getSize(16)));
+    Value * hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(keyLength, sz_MINLENGTH), sz_SUBTABLE));
+    Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, sz_MAXLENGTH));
     // Use two 8-byte loads to get hash and symbol values.
     //b->CallPrintInt("tblEntryPtr", tblEntryPtr);
-    Value * tblPtr1 = b->CreateBitCast(tblEntryPtr, int64PtrTy);
+    Value * tblPtr1 = b->CreateBitCast(tblEntryPtr, halfSymPtrTy);
     //b->CallPrintInt("tblPtr1", tblPtr1);
-    Value * tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), int64PtrTy);
+    Value * tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), halfSymPtrTy);
     //b->CallPrintInt("tblPtr2", tblPtr2);
-    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos), int64PtrTy);
+    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos), halfSymPtrTy);
     //b->CallPrintInt("symPtr1", symPtr1);
-    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), b->CreateAdd(keyStartPos, keyOffset)), int64PtrTy);
+    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), b->CreateAdd(keyStartPos, keyOffset)), halfSymPtrTy);
     //b->CallPrintInt("symPtr2", symPtr2);
     // Check to see if the hash table entry is nonzero (already assigned).
     Value * sym1 = b->CreateLoad(symPtr1);
@@ -675,7 +712,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("entry1", entry1);
     Value * entry2 = b->CreateLoad(tblPtr2);
     //b->CallPrintInt("entry2", entry2);
-    Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), b->getInt64(0));
+    Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), Constant::getNullValue(halfLengthTy));
 
     b->CreateCondBr(isEmptyEntry, storeKey, nextKey);
     b->SetInsertPoint(storeKey);
@@ -718,28 +755,28 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("hashPfx", hashPfx);
     Value * const hashSfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("byteData", hashMarkPos)), sizeTy);
     //b->CallPrintInt("hashSfx", hashSfx);
-    Value * symLength = b->CreateAdd(b->CreateURem(b->CreateUDiv(hashPfx, b->getSize(2)), b->getSize(16)), b->getSize(2));
+    Value * symLength = b->CreateAdd(b->CreateURem(b->CreateUDiv(hashPfx, sz_TWO), sz_MAXLENGTH), sz_TWO);
     //b->CallPrintInt("symLength", symLength);
-    Value * hashCode = b->CreateAdd(b->CreateMul(b->CreateURem(hashPfx, b->getSize(2)), b->getSize(128)), hashSfx);
+    Value * hashCode = b->CreateAdd(b->CreateMul(b->CreateURem(hashPfx, sz_TWO), b->getSize(128)), hashSfx);
     //b->CallPrintInt("hashCode", hashCode);
-    Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(symLength, b->getSize(1)));
-    Value * symOffset = b->CreateSub(symLength, b->getSize(8));
+    Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(symLength, sz_ONE));
+    Value * symOffset = b->CreateSub(symLength, sz_HALF_SYM);
 
-    hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(symLength, b->getSize(9)), b->getSize(16 * 256)));
+    hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(symLength, sz_MINLENGTH), sz_SUBTABLE));
     //b->CallPrintInt("hashTablePtr", hashTablePtr);
-    tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(hashCode, b->getSize(16)));
+    tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(hashCode, sz_MAXLENGTH));
     // Use two 8-byte loads to get hash and symbol values.
     //b->CallPrintInt("tblEntryPtr", tblEntryPtr);
-    tblPtr1 = b->CreateBitCast(tblEntryPtr, int64PtrTy);
+    tblPtr1 = b->CreateBitCast(tblEntryPtr, halfSymPtrTy);
     //b->CallPrintInt("tblPtr1", tblPtr1);
-    tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, symOffset), int64PtrTy);
+    tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, symOffset), halfSymPtrTy);
     //b->CallPrintInt("tblPtr2", tblPtr2);
     entry1 = b->CreateLoad(tblPtr1);
     //b->CallPrintInt("entry1", entry1);
     entry2 = b->CreateLoad(tblPtr2);
 
-    symPtr1 = b->CreateBitCast(b->getRawOutputPointer("result", b->getInt32(0), symStartPos), int64PtrTy);
-    symPtr2 = b->CreateBitCast(b->getRawOutputPointer("result", b->getInt32(0), b->CreateAdd(symStartPos, symOffset)), int64PtrTy);
+    symPtr1 = b->CreateBitCast(b->getRawOutputPointer("result", b->getInt32(0), symStartPos), halfSymPtrTy);
+    symPtr2 = b->CreateBitCast(b->getRawOutputPointer("result", b->getInt32(0), b->CreateAdd(symStartPos, symOffset)), halfSymPtrTy);
     b->CreateStore(entry1, symPtr1);
     b->CreateStore(entry2, symPtr2);
 
@@ -765,8 +802,8 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // be an incomplete symbol at the end of this block.   Store the
     // data that may be overwritten as pending and set the produced item
     // count to that which is guaranteed to be correct.
-    Value * guaranteedProduced = b->CreateSub(avail, b->getSize(maxSymbolLength));
-    b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), b->getSize(maxSymbolLength), 1);
+    Value * guaranteedProduced = b->CreateSub(avail, sz_MAXLENGTH);
+    b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_MAXLENGTH, 1);
     b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
 }
 
@@ -851,7 +888,7 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     P->CreateKernelCall<LengthGroup16>(symbolRuns, runIndex, overflow, lengthGroup9_16);
     
     StreamSet * const extractionMask = P->CreateStreamSet(1);
-    P->CreateKernelCall<LengthGroupCompressionMask>(lengthGroup9_16, lgthBytes, codeUnitStream, hashBytes, extractionMask);
+    P->CreateKernelCall<LengthGroupCompressionMask>(LengthGroup{9, 16}, lengthGroup9_16, lgthBytes, codeUnitStream, hashBytes, extractionMask);
     
     StreamSet * const encoded = P->CreateStreamSet(8);
     P->CreateKernelCall<ZTF_SymbolEncoder>(u8basis, bixHashes, extractionMask, runIndex, encoded);
@@ -919,7 +956,7 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     P->CreateKernelCall<P2SKernel>(ztfHash_u8_Basis, ztfHash_u8bytes);
 
     StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<LengthGroupDecompression>(lengthGroup9_16, lgthBytes, hashMarks, ztfHash_u8bytes, hashBytes, u8bytes);
+    P->CreateKernelCall<LengthGroupDecompression>(LengthGroup{9, 16}, lengthGroup9_16, lgthBytes, hashMarks, ztfHash_u8bytes, hashBytes, u8bytes);
 
     P->CreateKernelCall<StdOutKernel>(u8bytes);
     return reinterpret_cast<ztfHashFunctionType>(P->compile());
