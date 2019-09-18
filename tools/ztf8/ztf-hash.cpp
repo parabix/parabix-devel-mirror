@@ -714,10 +714,14 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value * hashMarkPos = b->CreateAdd(hashWordPos, hashPosInWord, "hashMarkPos");
     Value * hashPfxPos = b->CreateSub(hashMarkPos, b->getSize(1));
 
-    Value * const hashPfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashMarks", hashPfxPos)), sizeTy);
-    Value * const hashSfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashMarks", hashMarkPos)), sizeTy);
+    Value * const hashPfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("byteData", hashPfxPos)), sizeTy);
+    //b->CallPrintInt("hashPfx", hashPfx);
+    Value * const hashSfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("byteData", hashMarkPos)), sizeTy);
+    //b->CallPrintInt("hashSfx", hashSfx);
     Value * symLength = b->CreateAdd(b->CreateURem(b->CreateUDiv(hashPfx, b->getSize(2)), b->getSize(16)), b->getSize(2));
+    //b->CallPrintInt("symLength", symLength);
     Value * hashCode = b->CreateAdd(b->CreateMul(b->CreateURem(hashPfx, b->getSize(2)), b->getSize(128)), hashSfx);
+    //b->CallPrintInt("hashCode", hashCode);
     Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(symLength, b->getSize(1)));
     Value * symOffset = b->CreateSub(symLength, b->getSize(8));
 
