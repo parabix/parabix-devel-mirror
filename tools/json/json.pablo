@@ -7,13 +7,93 @@ type BasisBits = <i1>[8]
 
 # Returns a bitwise identity
 #
-kernel Json_Identity :: [BasisBits bb] -> [BasisBits output] {
-    output[0] = bb[0]
-    output[1] = bb[1]
-    output[2] = bb[2]
-    output[3] = bb[3]
-    output[4] = bb[4]
-    output[5] = bb[5]
-    output[6] = bb[6]
-    output[7] = bb[7]
+kernel JsonIdentity :: [BasisBits basis] -> [BasisBits output] {
+    output[0] = basis[0]
+    output[1] = basis[1]
+    output[2] = basis[2]
+    output[3] = basis[3]
+    output[4] = basis[4]
+    output[5] = basis[5]
+    output[6] = basis[6]
+    output[7] = basis[7]
+}
+
+type Err = <i1>[2] {
+    escapedStr,
+    utf8
+}
+
+type Lex = <i1>[16] {
+    lCurly,
+    rCurly,
+    lBracket,
+    rBracket,
+    colon,
+    comma,
+    dQuote,
+    asciiNameStart,
+    hyphen,
+    digit,
+    hex,
+    oddBackslash,
+    ws,
+    cr,
+    lf,
+    tab
+}
+
+kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex, Err err] {
+    err[0] = <0>
+    err[1] = <0>
+
+    # Brackets
+    # 01 1 11 01 1 = {
+    # 01 1 11 10 1 = }
+    # 01 0 11 01 1 = [
+    # 01 0 11 10 1 = ]
+
+    temp1 = ~basis[7] & basis[6]
+    temp2 = basis[3] & basis[4]
+    temp3 = basis[0] & temp2
+    # left
+    temp4 = basis[1] & ~basis[2]
+    # right
+    temp5 = ~basis[1] & basis[2]
+    # curly
+    temp6 = basis[5] & temp3
+    temp8 = temp1 & temp6
+    lex.lCurly = temp8 & temp4
+    lex.rCurly = temp8 & temp5
+    # bracket
+    temp9 = ~basis[5] & temp3
+    temp10 = temp1 & temp9
+    lex.lBracket = temp10 & temp4
+    lex.rBracket = temp10 & temp5
+
+    lex.colon = <0>
+    lex.comma = <0>
+    lex.dQuote = <0>
+    lex.asciiNameStart = <0>
+    lex.hyphen = <0>
+    lex.digit = <0>
+    lex.hex = <0>
+    lex.oddBackslash = <0>
+    lex.ws = <0>
+    lex.cr = <0>
+    lex.lf = <0>
+    lex.tab = <0>
+}
+
+kernel BracketLocations :: [Lex lex] -> [BasisBits output] {
+    rOrLCurly = lex.lCurly | lex.rCurly
+    rOrLBracket = lex.lBracket | lex.rBracket
+    or = rOrLBracket | rOrLCurly
+    output[0] = or
+    output[1] = or
+    output[2] = or
+    output[3] = or
+    output[4] = or
+    output[5] = or
+    output[6] = or
+    output[7] = or
 }
