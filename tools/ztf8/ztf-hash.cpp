@@ -588,13 +588,16 @@ public:
                             ByteDataBinding(lengthGroup, byteData),
                             Binding{"hashValues", hashValues},
                         },
-                       {Binding{"result", result, BoundedRate(0,1)}}, {}, {},
+                       {}, {}, {},
                        {InternalScalar{ArrayType::get(b->getInt8Ty(), lengthGroup.hi), "pendingOutput"},
                            // Hash table 8 length-based tables with 256 16-byte entries each.
                            InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(lengthGroup)), "hashTable"}}),
     mLengthGroup(lengthGroup) {
         checkLengthGroup(lengthGroup);
         setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+
+        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLengthGroup.hi) );
+
     }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
@@ -827,7 +830,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // count to that which is guaranteed to be correct.
     Value * guaranteedProduced = b->CreateSub(avail, sz_MAXLENGTH);
     b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_MAXLENGTH, 1);
-    b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+    // b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
 }
 
 

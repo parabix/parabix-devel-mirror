@@ -433,10 +433,13 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
             if (LLVM_UNLIKELY(out_degree(inputRate.Port.Number, R) != 0)) {
                 continue;
             }
+
             const auto output = in_edge(source(input, G), G);
+            assert (out_degree(inputRate.Port.Number, R) == 0);
             const BufferRateData & outputRate = G[output];
             const Binding & binding = inputRate.Binding;
             const ProcessingRate & inputProcessingRate = binding.getRate();
+
             if (LLVM_LIKELY(inputProcessingRate.isFixed())) {
                 // When going from a non-Fixed production rate to Fixed consumption rate
                 // or streaming fixed rate data at "unaligned" rates, we are potentially
@@ -486,8 +489,27 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
             } else {
                 llvm_unreachable("unknown rate type");
             }
+        }
+
+
+        // Do we have a principal input stream?
+        for (const auto & input : make_iterator_range(in_edges(kernel, G))) {
+            const BufferRateData & inputRate = G[input];
+            const Binding & binding = inputRate.Binding;
+            if (binding.hasAttribute(AttrId::Principal)) {
+                assert (out_degree(inputRate.Port.Number, R) == 0);
+                rates.insert(inputRate.SymbolicRate);
+                goto has_principal_rate;
+            }
+        }
+
+        // No; just insert all of the possible rates
+        for (const auto & input : make_iterator_range(in_edges(kernel, G))) {
+            const BufferRateData & inputRate = G[input];
             rates.insert(inputRate.SymbolicRate);
         }
+
+has_principal_rate:
 
         assert ("independent sources must have unique symbolic rates." && (in_degree(kernel, G) != 0 || rates.empty()));
 
@@ -861,8 +883,10 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 const auto b = mod(outputRate.Maximum + add, r);
                 roundUp = std::max(roundUp, std::max(a, b));
             }
+            RateValue delayed{0};
+            check_attribute(AttrId::Delayed, outputRate, delayed);
             outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;
-            const auto f = upper_absolute + std::max(add + add2, roundUp);
+            const auto f = upper_absolute + delayed + std::max(add + add2, roundUp);
             outputRate.MaximumSpace = f * outputRate.Maximum;
             assert (outputRate.MinimumSpace <= outputRate.MinimumExpectedFlow);
             assert (outputRate.MaximumSpace >= outputRate.MaximumExpectedFlow);

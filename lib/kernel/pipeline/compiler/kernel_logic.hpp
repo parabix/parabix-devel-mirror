@@ -803,7 +803,13 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
-        Value * produced = truncateBlockSize(b, output, mUpdatedProducedPhi[i]);
+        Value * produced = mUpdatedProducedPhi[i];
+        if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
+            const auto & D = output.findAttribute(AttrId::Delayed);
+            Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
+            produced = b->CreateSelect(mHalted, produced, delayed);
+        }
+        produced = truncateBlockSize(b, output, produced);
         mFullyProducedItemCount[i]->addIncoming(produced, mKernelLoopExitPhiCatch);
     }
 }

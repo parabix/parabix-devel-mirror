@@ -131,6 +131,11 @@ struct Attribute {
         // that a particular output stream needs both the consumed item count and a pointer
         // to each of its consumers logical segment number for its internal logic.
 
+        Delayed,
+
+        // Similar to Deferred, a consumer of a stream of N items with a Delayed attribute
+        // of K indicates only N - K items can be safely read.
+
         Expandable, /// NOT DONE
 
         // Indicates that the number of stream sets in this buffer can increase.
@@ -380,6 +385,10 @@ inline Attribute LookAhead(const unsigned k) {
 
 inline Attribute LookBehind(const unsigned k) {
     return Attribute(Attribute::KindId::LookBehind, k);
+}
+
+inline Attribute Delayed(const unsigned k) {
+    return Attribute(Attribute::KindId::Delayed, k);
 }
 
 inline Attribute Deferred() {
