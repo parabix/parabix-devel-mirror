@@ -302,6 +302,7 @@ add_subdirectory(tools/wc)
 # add_subdirectory(tools/wc/wc-pablo)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
+add_subdirectory(tools/util)
 
 # Kernel Tests
 add_subdirectory(tests)
