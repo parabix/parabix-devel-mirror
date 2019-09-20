@@ -58,6 +58,7 @@ static cl::opt<bool> Decompression("d", cl::desc("Decompress from ZTF-Runs to UT
 static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::aliasopt(Decompression));
 
 static cl::opt<bool> DeferredAttribute("deferred", cl::desc("Use Deferred Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
+static cl::opt<bool> DelayedAttribute("delayed", cl::desc("Use Delayed Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
 
 
 class WordMarkKernel : public PabloKernel {
@@ -86,7 +87,9 @@ void WordMarkKernel::generatePabloMethod() {
     PabloAST * wordChar = f->second;
     PabloAST * U8index = getInputStreamSet("U8index")[0];
     PabloAST * U8nonfinal = pb.createNot(U8index);
-    
+    PabloAST * LF = ccc.compileCC(re::makeByte(0x0A));
+    PabloAST * Null = ccc.compileCC(re::makeByte(0x0));
+
     PabloAST * nonWordChar = pb.createAnd(pb.createNot(wordChar), U8index);
     // Find the end of the encodeable substring root as well as the overall
     // end of the encodeable substring.   Care must be taken to ensure correct
@@ -101,6 +104,9 @@ void WordMarkKernel::generatePabloMethod() {
     PabloAST * rootEnd = pb.createAnd(afterWord, nonWordChar, "markRoot");
     PabloAST * afterNon = pb.createScanThru(pb.createAdvance(nonWordChar, 1), U8nonfinal);
     PabloAST * nextWordStart = pb.createAnd(afterNon, wordChar);
+    nextWordStart = pb.createOr(nextWordStart, LF);
+    nextWordStart = pb.createOr(nextWordStart, pb.createAdvance(LF, 1));
+    nextWordStart = pb.createOr(nextWordStart, Null);
     PabloAST * endMark = pb.createOr(nextWordStart, pb.createAtEOF(pb.createOnes()), "markEnd");
     pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), rootEnd);
     pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(1)), endMark);
@@ -118,7 +124,7 @@ protected:
 U8_Lookahead::U8_Lookahead(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks, StreamSet * RootMarks, StreamSet * WordEnds)
 : PabloKernel(kb, "U8_Lookahead",
               // input
-{Binding{"source", BasisBits},
+{Binding{"source", BasisBits, FixedRate(1), LookAhead(1)},
     Binding{"WordMarks", WordMarks, FixedRate(1), {Principal(), LookAhead(3)}}},
               // output
 {Binding{"RootMarks", RootMarks},
@@ -129,7 +135,8 @@ U8_Lookahead::U8_Lookahead(const std::unique_ptr<KernelBuilder> & kb, StreamSet 
 void U8_Lookahead::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> marks = getInputStreamSet("WordMarks");
-    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("source"));
+    std::vector<PabloAST *> basis = getInputStreamSet("source");
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
     PabloAST * prefix2 = ccc.compileCC(re::makeCC(0xC2, 0xDF));
     PabloAST * prefix3 = ccc.compileCC(re::makeCC(0xE0, 0xEF));
@@ -141,6 +148,7 @@ void U8_Lookahead::generatePabloMethod() {
     
     PabloAST * wordEnds = pb.createOr(pb.createAnd(ASCII, marks[1]), pb.createAtEOF(marks[1]));
     wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix2, pb.createLookahead(marks[1], 1)));
+    wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix2, pb.createNot(pb.createLookahead(basis[7], 1))));
     wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix3, pb.createLookahead(marks[1], 2)));
     wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix4, pb.createLookahead(marks[1], 3)), "markedWordEnds");
     pb.createAssign(pb.createExtract(getOutputStreamVar("RootMarks"), pb.getInteger(0)), rootEnds);
@@ -457,7 +465,8 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("pendingPtr", pendingPtr);
     Value * lastMask = b->CreateBlockAlignedLoad(pendingPtr);
     b->setScalarField("pendingMaskInverted", b->CreateNot(lastMask));
-    //b->CallPrintInt("produced", produced);
+    b->CallPrintInt("avail", avail);
+    b->CallPrintInt("produced", produced);
     b->CreateBr(compressionMaskDone);
     b->SetInsertPoint(compressionMaskDone);
 }
@@ -600,8 +609,11 @@ public:
     mLengthGroup(lengthGroup) {
         checkLengthGroup(lengthGroup);
         setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
-
-        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLengthGroup.hi) );
+        if (DelayedAttribute) {
+            mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLengthGroup.hi) );
+        } else {
+            mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
+        }
 
     }
     bool isCachable() const override { return true; }
@@ -835,7 +847,9 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // count to that which is guaranteed to be correct.
     Value * guaranteedProduced = b->CreateSub(avail, sz_MAXLENGTH);
     b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_MAXLENGTH, 1);
-    // b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+    if (!DelayedAttribute) {
+        b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+    }
 }
 
 
