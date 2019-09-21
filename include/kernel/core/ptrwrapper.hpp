@@ -6,13 +6,10 @@
 
 template <typename T>
 struct PtrWrapper {
-    PtrWrapper(const std::unique_ptr<T> & p) noexcept : mReference(p.get()) {}
-    PtrWrapper(const PtrWrapper<T> & p) noexcept : mReference(p.get()) {}
-    PtrWrapper(T & ref) noexcept : mReference(&ref) {}
-    PtrWrapper(T * const ref) noexcept : mReference(ref) {}
-//    operator T * () const noexcept {
-//        return get();
-//    }
+    PtrWrapper(const std::unique_ptr<T> & p) noexcept : mReference(p.get()) {  }
+    PtrWrapper(const PtrWrapper<T> & p) noexcept : mReference(p.get()) { }
+    PtrWrapper(T * const ref) noexcept : mReference(ref) { }
+
     T * operator -> () const noexcept {
         return get();
     }
@@ -23,5 +20,7 @@ struct PtrWrapper {
 private:
     T * const mReference;
 };
+
+
 
 #endif // PTRWRAPPER_HPP

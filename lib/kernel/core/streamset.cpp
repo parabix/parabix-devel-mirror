@@ -30,7 +30,7 @@ LLVM_ATTRIBUTE_NORETURN void unsupported(const char * const function, const char
     report_fatal_error(StringRef{function} + " is not supported by " + bufferType + "Buffers");
 }
 
-LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr b, Type * type, const unsigned underflow) {
+LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr & b, Type * type, const unsigned underflow) {
     if (LLVM_LIKELY(underflow == 0)) {
         return ConstantPointerNull::get(cast<PointerType>(type));
     } else {
@@ -42,14 +42,15 @@ LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr b, Type * type, const 
     }
 }
 
-LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr b, Value * ptr, const unsigned underflow) {
+LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr & b, Value * ptr, const unsigned underflow) {
     return nullPointerFor(b, ptr->getType(), underflow);
 }
 
-LLVM_READNONE inline Value * addUnderflow(BuilderPtr b, Value * ptr, const unsigned underflow) {
+LLVM_READNONE inline Value * addUnderflow(BuilderPtr & b, Value * ptr, const unsigned underflow) {
     if (LLVM_LIKELY(underflow == 0)) {
         return ptr;
     } else {
+        assert ("unspecified module" && b.get() && b->getModule());
         DataLayout DL(b->getModule());
         Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
         Constant * offset = ConstantInt::get(intPtrTy, underflow);
@@ -57,7 +58,7 @@ LLVM_READNONE inline Value * addUnderflow(BuilderPtr b, Value * ptr, const unsig
     }
 }
 
-LLVM_READNONE inline Value * subtractUnderflow(BuilderPtr b, Value * ptr, const unsigned underflow) {
+LLVM_READNONE inline Value * subtractUnderflow(BuilderPtr & b, Value * ptr, const unsigned underflow) {
     if (LLVM_LIKELY(underflow == 0)) {
         return ptr;
     } else {
@@ -478,6 +479,8 @@ Value * DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Val
     SmallVector<char, 200> buf;
     raw_svector_ostream name(buf);
 
+    assert ("unspecified module" && b.get() && b->getModule());
+
     name << "__DynamicBuffer_reserveCapacity_";
 
     Type * ty = getBaseType();
@@ -566,7 +569,7 @@ Value * DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Val
             Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
             requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
         }
-        Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
+        Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);        
         newBuffer = addUnderflow(b, newBuffer, mUnderflow);
 
         indices[1] = b->getInt32(BaseAddress);
