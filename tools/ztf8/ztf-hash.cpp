@@ -58,19 +58,20 @@ static cl::opt<bool> Decompression("d", cl::desc("Decompress from ZTF-Runs to UT
 static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::aliasopt(Decompression));
 
 static cl::opt<bool> DeferredAttribute("deferred", cl::desc("Use Deferred Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
+static cl::opt<bool> DelayedAttribute("delayed", cl::desc("Use Delayed Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
 
 
 class WordMarkKernel : public PabloKernel {
 public:
-    WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * U8index, StreamSet * WordMarks);
+    WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * U8index, StreamSet * WordMarks)
-: PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}, Binding{"U8index", U8index}}, {Binding{"WordMarks", WordMarks}}) { }
+WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks)
+: PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}}, {Binding{"WordMarks", WordMarks}}) { }
 
 void WordMarkKernel::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
@@ -84,73 +85,16 @@ void WordMarkKernel::generatePabloMethod() {
     auto f = nameMap.find(word);
     if (f == nameMap.end()) llvm::report_fatal_error("Cannot find word property");
     PabloAST * wordChar = f->second;
-    PabloAST * U8index = getInputStreamSet("U8index")[0];
-    PabloAST * U8nonfinal = pb.createNot(U8index);
-    
-    PabloAST * nonWordChar = pb.createAnd(pb.createNot(wordChar), U8index);
-    // Find the end of the encodeable substring root as well as the overall
-    // end of the encodeable substring.   Care must be taken to ensure correct
-    // behaviour at the beginning and end of file.   It is possible that the
-    // root end is at position 0, if the first encodeable substring begins
-    // with a non-word character.   It is also possible that the final position
-    // of the root is at end of file if the final encodeable substring ends in
-    // a word character.   The final word end is always at the EOF position.
-    PabloAST * SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
-    PabloAST * wordCharBehindOrStart = pb.createOr(pb.createAdvance(wordChar, 1), SOT);
-    PabloAST * afterWord = pb.createScanThru(wordCharBehindOrStart, U8nonfinal);
-    PabloAST * rootEnd = pb.createAnd(afterWord, nonWordChar, "markRoot");
-    PabloAST * afterNon = pb.createScanThru(pb.createAdvance(nonWordChar, 1), U8nonfinal);
-    PabloAST * nextWordStart = pb.createAnd(afterNon, wordChar);
-    PabloAST * endMark = pb.createOr(nextWordStart, pb.createAtEOF(pb.createOnes()), "markEnd");
-    pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), rootEnd);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(1)), endMark);
-}
-
-class U8_Lookahead : public PabloKernel {
-public:
-    U8_Lookahead(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks, StreamSet * wordEnds, StreamSet * wordBounds);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
-U8_Lookahead::U8_Lookahead(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks, StreamSet * RootMarks, StreamSet * WordEnds)
-: PabloKernel(kb, "U8_Lookahead",
-              // input
-{Binding{"source", BasisBits},
-    Binding{"WordMarks", WordMarks, FixedRate(1), {Principal(), LookAhead(3)}}},
-              // output
-{Binding{"RootMarks", RootMarks},
-    Binding{"WordEnds", WordEnds}}) {
-        
-    }
-
-void U8_Lookahead::generatePabloMethod() {
-    pablo::PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> marks = getInputStreamSet("WordMarks");
-    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("source"));
-    PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
-    PabloAST * prefix2 = ccc.compileCC(re::makeCC(0xC2, 0xDF));
-    PabloAST * prefix3 = ccc.compileCC(re::makeCC(0xE0, 0xEF));
-    PabloAST * prefix4 = ccc.compileCC(re::makeCC(0xF0, 0xF4));
-    PabloAST * rootEnds = pb.createOr(pb.createAnd(ASCII, marks[0]), pb.createAtEOF(marks[0]));
-    rootEnds = pb.createOr(rootEnds, pb.createAnd(prefix2, pb.createLookahead(marks[0], 1)));
-    rootEnds = pb.createOr(rootEnds, pb.createAnd(prefix3, pb.createLookahead(marks[0], 2)));
-    rootEnds = pb.createOr(rootEnds, pb.createAnd(prefix4, pb.createLookahead(marks[0], 3)), "markedRootEnds");
-    
-    PabloAST * wordEnds = pb.createOr(pb.createAnd(ASCII, marks[1]), pb.createAtEOF(marks[1]));
-    wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix2, pb.createLookahead(marks[1], 1)));
-    wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix3, pb.createLookahead(marks[1], 2)));
-    wordEnds = pb.createOr(wordEnds, pb.createAnd(prefix4, pb.createLookahead(marks[1], 3)), "markedWordEnds");
-    pb.createAssign(pb.createExtract(getOutputStreamVar("RootMarks"), pb.getInteger(0)), rootEnds);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("WordEnds"), pb.getInteger(0)), wordEnds);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), wordChar);
 }
 
 class ZTF_Symbols : public PabloKernel {
 public:
-    ZTF_Symbols(const std::unique_ptr<KernelBuilder> & kb, StreamSet * EndMarks, StreamSet * SymbolRuns)
-    : PabloKernel(kb, "ZTF_Symbols", {Binding{"EndMarks", EndMarks}}, {Binding{"SymbolRuns", SymbolRuns}}) { }
+    ZTF_Symbols(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basisBits, StreamSet * wordChar, StreamSet * symbolRuns)
+    : PabloKernel(kb, "ZTF_Symbols",
+        {Binding{"basisBits", basisBits, FixedRate(1), LookAhead(1)},
+         Binding{"wordChar", wordChar, FixedRate(1), LookAhead(3)}},
+        {Binding{"symbolRuns", symbolRuns}}) { }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -159,9 +103,36 @@ protected:
 
 void ZTF_Symbols::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
-    pablo::PabloAST * endMarks = getInputStreamSet("EndMarks")[0];
-    pablo::PabloAST * runs = pb.createInFile(pb.createNot(endMarks));
-    pb.createAssign(pb.createExtract(getOutputStreamVar("SymbolRuns"), pb.getInteger(0)), runs);
+    std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
+    pablo::PabloAST * wordChar = getInputStreamSet("wordChar")[0];
+    // Find start bytes of word characters.
+    PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
+    PabloAST * prefix2 = ccc.compileCC(re::makeCC(0xC2, 0xDF));
+    PabloAST * prefix3 = ccc.compileCC(re::makeCC(0xE0, 0xEF));
+    PabloAST * prefix4 = ccc.compileCC(re::makeCC(0xF0, 0xF4));
+    PabloAST * wc1 = pb.createAnd(ASCII, wordChar);
+    wc1 = pb.createOr(wc1, pb.createAnd(prefix2, pb.createLookahead(wordChar, 1)));
+    wc1 = pb.createOr(wc1, pb.createAnd(prefix3, pb.createLookahead(wordChar, 2)));
+    wc1 = pb.createOr(wc1, pb.createAnd(prefix4, pb.createLookahead(wordChar, 3)));
+    //
+    // ZTF Code symbols
+    PabloAST * ZTF_sym = pb.createAnd(pb.createAdvance(prefix2, 1), ASCII);
+    PabloAST * ZTF_prefix = pb.createAnd(prefix2, pb.createNot(pb.createLookahead(basis[7], 1)));
+    // Filter out ZTF code symbols from word characters.
+    wc1 = pb.createAnd(wc1, pb.createNot(ZTF_sym));
+    //
+    PabloAST * wordStart = pb.createAnd(pb.createNot(pb.createAdvance(wordChar, 1)), wc1);
+    // Nulls, Linefeeds and ZTF_symbols are also treated as symbol starts.
+    PabloAST * LF = ccc.compileCC(re::makeByte(0x0A));
+    PabloAST * Null = ccc.compileCC(re::makeByte(0x0));
+    PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr(LF, Null));
+    // The next character after a ZTF symbol or a line feed also starts a new symbol.
+    symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1));
+    //
+    // runs are the bytes after a start symbol until the next symStart byte.
+    pablo::PabloAST * runs = pb.createInFile(pb.createNot(symStart));
+    pb.createAssign(pb.createExtract(getOutputStreamVar("symbolRuns"), pb.getInteger(0)), runs);
 }
 
 const unsigned BITS_PER_BYTE = 8;
@@ -392,6 +363,8 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     // be compressed using the hash code.
     b->CreateStore(sym1, tblPtr1);
     b->CreateStore(sym2, tblPtr2);
+    //b->CallPrintInt("keyHash", keyHash);
+    //b->CallPrintInt("sym1", sym1);
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(checkKey);
@@ -457,7 +430,6 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("pendingPtr", pendingPtr);
     Value * lastMask = b->CreateBlockAlignedLoad(pendingPtr);
     b->setScalarField("pendingMaskInverted", b->CreateNot(lastMask));
-    //b->CallPrintInt("produced", produced);
     b->CreateBr(compressionMaskDone);
     b->SetInsertPoint(compressionMaskDone);
 }
@@ -600,8 +572,11 @@ public:
     mLengthGroup(lengthGroup) {
         checkLengthGroup(lengthGroup);
         setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
-
-        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLengthGroup.hi) );
+        if (DelayedAttribute) {
+            mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLengthGroup.hi) );
+        } else {
+            mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
+        }
 
     }
     bool isCachable() const override { return true; }
@@ -747,6 +722,8 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     b->SetInsertPoint(storeKey);
     // We have a new symbols that allows future occurrences of the symbol to
     // be compressed using the hash code.
+    //b->CallPrintInt("keyHash", keyHash);
+    //b->CallPrintInt("sym1", sym1);
     b->CreateStore(sym1, tblPtr1);
     b->CreateStore(sym2, tblPtr2);
     b->CreateBr(nextKey);
@@ -835,7 +812,9 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // count to that which is guaranteed to be correct.
     Value * guaranteedProduced = b->CreateSub(avail, sz_MAXLENGTH);
     b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_MAXLENGTH, 1);
-    // b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+    if (!DelayedAttribute) {
+        b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+    }
 }
 
 
@@ -889,19 +868,12 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
     
-    StreamSet * const U8index = P->CreateStreamSet(1);
-    P->CreateKernelCall<UTF8_index>(u8basis, U8index);
+    StreamSet * WordChars = P->CreateStreamSet(1);
+    P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
     
-    StreamSet * WordMarks = P->CreateStreamSet(2);
-    P->CreateKernelCall<WordMarkKernel>(u8basis, U8index, WordMarks);
-    
-    StreamSet * RootMarks = P->CreateStreamSet(1);
-    StreamSet * EndMarks = P->CreateStreamSet(1);
-    P->CreateKernelCall<U8_Lookahead>(u8basis, WordMarks, RootMarks, EndMarks);
-
     StreamSet * const symbolRuns = P->CreateStreamSet(1);
-    P->CreateKernelCall<ZTF_Symbols>(EndMarks, symbolRuns);
-    
+    P->CreateKernelCall<ZTF_Symbols>(u8basis, WordChars, symbolRuns);
+
     StreamSet * const runIndex = P->CreateStreamSet(4);
     StreamSet * const overflow = P->CreateStreamSet(1);
     P->CreateKernelCall<RunIndex>(symbolRuns, runIndex, overflow);
@@ -954,18 +926,11 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const hashMarks = P->CreateStreamSet(1);
     P->CreateKernelCall<ZTF_HashMarks>(ztfRunSpreadMask, hashMarks);
 
-    StreamSet * const U8index = P->CreateStreamSet(1);
-    P->CreateKernelCall<UTF8_index>(ztfHash_u8_Basis, U8index);
-
-    StreamSet * WordMarks = P->CreateStreamSet(2);
-    P->CreateKernelCall<WordMarkKernel>(ztfHash_u8_Basis, U8index, WordMarks);
-
-    StreamSet * RootMarks = P->CreateStreamSet(1);
-    StreamSet * EndMarks = P->CreateStreamSet(1);
-    P->CreateKernelCall<U8_Lookahead>(ztfHash_u8_Basis, WordMarks, RootMarks, EndMarks);
+    StreamSet * WordChars = P->CreateStreamSet(1);
+    P->CreateKernelCall<WordMarkKernel>(ztfHash_u8_Basis, WordChars);
 
     StreamSet * const symbolRuns = P->CreateStreamSet(1);
-    P->CreateKernelCall<ZTF_Symbols>(EndMarks, symbolRuns);
+    P->CreateKernelCall<ZTF_Symbols>(ztfHash_u8_Basis, WordChars, symbolRuns);
 
     StreamSet * const runIndex = P->CreateStreamSet(4);
     StreamSet * const overflow = P->CreateStreamSet(1);
