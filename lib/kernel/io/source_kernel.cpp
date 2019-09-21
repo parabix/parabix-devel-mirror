@@ -161,8 +161,9 @@ void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
     PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     Value * const buffer = b->CreatePointerCast(b->CreateCacheAlignedMalloc(bufferBytes), codeUnitPtrTy);
     b->setBaseAddress("sourceBuffer", buffer);
-    b->setScalarField("ancillaryBuffer", ConstantPointerNull::get(codeUnitPtrTy));
     b->setScalarField("buffer", buffer);
+    b->setScalarField("ancillaryBuffer", ConstantPointerNull::get(codeUnitPtrTy));
+    b->setScalarField("effectiveCapacity", bufferItems);
     b->setCapacity("sourceBuffer", bufferItems);
 }
 
@@ -180,11 +181,11 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     // Can we append to our existing buffer without impacting any subsequent kernel?
     Value * const produced = b->getProducedItemCount("sourceBuffer");
     Value * const itemsPending = b->CreateAdd(produced, itemsToRead);
-    Value * const capacity = b->getCapacity("sourceBuffer");
-    Value * const readEnd = b->getRawOutputPointer("sourceBuffer", itemsPending);
+    Value * const effectiveCapacity = b->getScalarField("effectiveCapacity");
     Value * const baseBuffer = b->getScalarField("buffer");
-    Value * const bufferLimit = b->CreateGEP(baseBuffer, capacity);
-    b->CreateLikelyCondBr(b->CreateICmpULE(readEnd, bufferLimit), readData, moveData);
+
+    Value * const permitted = b->CreateICmpULT(itemsPending, effectiveCapacity);
+    b->CreateLikelyCondBr(permitted, readData, moveData);
 
     // No. If we can copy the unconsumed data back to the start of the buffer *and* write a full
     // segment of data without overwriting the currently unconsumed data, do so since it won't
@@ -195,23 +196,46 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     // that our "unproduced" data must be block aligned.
     BasicBlock * const copyBack = b->CreateBasicBlock("CopyBack");
     BasicBlock * const expandAndCopyBack = b->CreateBasicBlock("ExpandAndCopyBack");
+
+    Value * const capacity = b->getCapacity("sourceBuffer");
+
     const auto blockSize = b->getBitBlockWidth() / 8;
     Value * const consumedItems = b->getConsumedItemCount("sourceBuffer");
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
     Constant * const ALIGNMENT_MASK = ConstantExpr::getNeg(BLOCK_WIDTH);
     Value * const consumed = b->CreateAnd(consumedItems, ALIGNMENT_MASK);
+
+    Value * const unreadItems = b->CreateSub(produced, consumed);
     Value * const unreadData = b->getRawOutputPointer("sourceBuffer", consumed);
-    Value * const remainingItems = b->CreateSub(produced, consumed);
-    Value * const potentialItems = b->CreateAdd(remainingItems, itemsToRead);
-    Value * const remainingBytes = b->CreateMul(remainingItems, codeUnitBytes);
+    Value * const potentialItems = b->CreateAdd(unreadItems, itemsToRead);
+
+    Value * const toWrite = b->CreateGEP(baseBuffer, potentialItems);
+    Value * const canCopy = b->CreateICmpULT(toWrite, unreadData);
+
+    Value * const remainingBytes = b->CreateMul(unreadItems, codeUnitBytes);
+
     // Have we consumed enough data that we can safely copy back the unconsumed data and still
     // leave enough space for one segment without needing a temporary buffer?
-    Value * const canCopy = b->CreateICmpULT(b->CreateGEP(baseBuffer, potentialItems), unreadData);
     b->CreateLikelyCondBr(canCopy, copyBack, expandAndCopyBack);
 
     // If so, just copy the data ...
     b->SetInsertPoint(copyBack);
     b->CreateMemCpy(baseBuffer, unreadData, remainingBytes, blockSize);
+
+    // Since our consumed count cannot exceed the effective capacity, in order for (consumed % capacity)
+    // to be less than (effective capacity % capacity), we must have fully read all the data past the
+    // effective capacity of the buffer. Thus we can set the effective capacity to the buffer capacity.
+    // If, however, (consumed % capacity) >= (effective capacity % capacity), then we still have some
+    // unconsumed data at the end of the buffer. Here, we can set the reclaimed capacity position to
+    // (consumed % capacity).
+
+    Value * const consumedModCap = b->CreateURem(consumed, capacity);
+    Value * const effectiveCapacityModCap = b->CreateURem(effectiveCapacity, capacity);
+    Value * const reclaimCapacity = b->CreateICmpULT(consumedModCap, effectiveCapacityModCap);
+    Value * const reclaimedCapacity = b->CreateSelect(reclaimCapacity, capacity, consumedModCap);
+
+    Value * const updatedEffectiveCapacity = b->CreateAdd(consumed, reclaimedCapacity);
+    b->setScalarField("effectiveCapacity", updatedEffectiveCapacity);
     BasicBlock * const copyBackExit = b->GetInsertBlock();
     b->CreateBr(prepareBuffer);
 
@@ -227,6 +251,8 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->CreateFree(ancillaryBuffer);
     b->setScalarField("buffer", expandedBuffer);
     b->setCapacity("sourceBuffer", expandedCapacity);
+    Value * const expandedEffectiveCapacity = b->CreateAdd(consumed, expandedCapacity);
+    b->setScalarField("effectiveCapacity", expandedEffectiveCapacity);
     BasicBlock * const expandAndCopyBackExit = b->GetInsertBlock();
     b->CreateBr(prepareBuffer);
 
@@ -297,17 +323,16 @@ void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
     // parameter, possibly overridden.
 
     Value * const useMMap = b->getScalarField("useMMap");
-    Constant * const ZERO = ConstantInt::getNullValue(useMMap->getType());
     // if the fileDescriptor is 0, the file is stdin, use readSource kernel logic.
     Value * const fd = b->getScalarField("fileDescriptor");
     Value * const notStdIn = b->CreateICmpNE(fd, b->getInt32(STDIN_FILENO));
-    Value * const tryMMap = b->CreateICmpNE(useMMap, ZERO);
-    b->CreateCondBr(b->CreateAnd(tryMMap, notStdIn), checkFileSize, initializeRead);
+    Value * const tryMMap = b->CreateAnd(b->CreateIsNotNull(useMMap), notStdIn);
+    b->CreateCondBr(tryMMap, checkFileSize, initializeRead);
 
     b->SetInsertPoint(checkFileSize);
     // If the fileSize is 0, we may have a virtual file such as /proc/cpuinfo
     Value * const fileSize = b->CreateCall(mFileSizeFunction, fd);
-    Value * const emptyFile = b->CreateIsNotNull(fileSize);
+    Value * const emptyFile = b->CreateIsNull(fileSize);
     b->CreateUnlikelyCondBr(emptyFile, initializeRead, initializeMMap);
 
     b->SetInsertPoint(initializeMMap);
@@ -316,7 +341,7 @@ void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
 
     b->SetInsertPoint(initializeRead);
     // Ensure that readSource logic is used throughout.
-    b->setScalarField("useMMap", ZERO);
+    b->setScalarField("useMMap", ConstantInt::getNullValue(useMMap->getType()));
     ReadSourceKernel::generateInitializeMethod(mCodeUnitWidth, mStride,b);
     b->CreateBr(initializeDone);
 
@@ -459,6 +484,8 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
     PointerType * const codeUnitPtrTy = b->getIntNTy(mCodeUnitWidth)->getPointerTo();
     addInternalScalar(codeUnitPtrTy, "buffer");
     addInternalScalar(codeUnitPtrTy, "ancillaryBuffer");
+    IntegerType * const sizeTy = b->getSizeTy();
+    addInternalScalar(sizeTy, "effectiveCapacity");
     addAttribute(MustExplicitlyTerminate());
     setStride(codegen::SegmentSize);
 }
@@ -482,6 +509,8 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
     PointerType * const codeUnitPtrTy = b->getIntNTy(mCodeUnitWidth)->getPointerTo();
     addInternalScalar(codeUnitPtrTy, "buffer");
     addInternalScalar(codeUnitPtrTy, "ancillaryBuffer");
+    IntegerType * const sizeTy = b->getSizeTy();
+    addInternalScalar(sizeTy, "effectiveCapacity");
     addAttribute(MustExplicitlyTerminate());
     setStride(codegen::SegmentSize);
 }
