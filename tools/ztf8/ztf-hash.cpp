@@ -359,12 +359,14 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), Constant::getNullValue(halfLengthTy));
     b->CreateCondBr(isEmptyEntry, storeKey, checkKey);
     b->SetInsertPoint(storeKey);
-    // We have a new symbols that allows future occurrences of the symbol to
+    // We have a new symbol that allows future occurrences of the symbol to
     // be compressed using the hash code.
     b->CreateStore(sym1, tblPtr1);
     b->CreateStore(sym2, tblPtr2);
+    //b->CreateWriteCall(b->getInt32(STDERR_FILENO), symPtr1, keyLength);
     //b->CallPrintInt("keyHash", keyHash);
-    //b->CallPrintInt("sym1", sym1);
+    //b->CallPrintInt("keyLength", keyLength);
+
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(checkKey);
@@ -722,8 +724,9 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     b->SetInsertPoint(storeKey);
     // We have a new symbols that allows future occurrences of the symbol to
     // be compressed using the hash code.
+    //b->CreateWriteCall(b->getInt32(STDERR_FILENO), symPtr1, keyLength);
     //b->CallPrintInt("keyHash", keyHash);
-    //b->CallPrintInt("sym1", sym1);
+    //b->CallPrintInt("keyLength", keyLength);
     b->CreateStore(sym1, tblPtr1);
     b->CreateStore(sym2, tblPtr2);
     b->CreateBr(nextKey);
@@ -839,12 +842,15 @@ protected:
 
 void LengthGroup16::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
+    BixNumCompiler bnc(pb);
     PabloAST * run = getInputStreamSet("symbolRun")[0];
     std::vector<PabloAST *> lengthBixNum = getInputStreamSet("lengthBixNum");
     PabloAST * overflow = getInputStreamSet("overflow")[0];
     PabloAST * runFinal = pb.createAnd(run, pb.createNot(pb.createLookahead(run, 1)));
     runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
-    PabloAST * group9_16 = pb.createAnd(lengthBixNum[3], runFinal);
+    // Run index codes count from 0 on the 2nd byte of a symbol.
+    // So the length is 2 more than the bixnum.
+    PabloAST * group9_16 = pb.createAnd3(bnc.UGE(lengthBixNum, 7), bnc.ULE(lengthBixNum, 14), runFinal);
     //group5_8 = pb.createAnd3(lengthBixNum[2], pb.createNot(group8_15), runFinal);
     //group3_4 = pb.createAnd3(lengthBixNum[1], pb.createNot(group5_8), runFinal);
     Var * lengthVar = getOutputStreamVar("lengthGroup9_16");
