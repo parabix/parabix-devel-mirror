@@ -22,8 +22,8 @@ type Lex = <i1>[17] {
     digit,
     hex,
     n, # first letter of null
-    t, # first letter of true
     f, # first letter of false
+    t, # first letter of true
     ws,
     cr,
     lf,
@@ -60,27 +60,72 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     lex.rBracket = temp10 & temp5
 
     # 00 1 11 01 0 = :
-    # 00 1 01 10 0 = ,
     # 00 1 00 01 0 = "
+    # 00 1 01 10 0 = ,
 
     temp11 = ~basis[7] & ~basis[6]
     temp12 = basis[5] & temp11
-    temp13 = basis[0] & temp12
+    temp13 = ~basis[0] & temp12
     temp14 = basis[1] & ~basis[2]
     temp15 = ~basis[1] & basis[2]
     # colon and quotes
     temp16 = temp13 & temp14
-    lex.colon = <0>
-    lex.comma = <0>
-    lex.dQuote = <0>
+    temp17 = basis[3] & basis[4]
+    lex.colon = temp17 & temp16
+    temp18 = ~basis[3] & ~basis[4]
+    lex.comma = temp18 & temp16
+    # double quote
+    temp19 = temp13 & temp15
+    temp20 = basis[3] & ~basis[4]
+    lex.dQuote = temp19 & temp20
 
-    # 00 1 01 10 1
-    lex.hyphen = <0>
-    lex.digit = <0>
-    lex.hex = <0>
-    lex.n = <0>
-    lex.t = <0>
-    lex.f = <0>
+    # 00 1 01 10 1 = -
+    temp21 = temp12 & temp20
+    temp22 = temp21 & temp15
+    lex.hyphen = basis[0] & temp22
+
+    # [0-9]
+    temp23 = basis[4] & basis[5]
+    temp24 = basis[6] | basis[7]
+    temp25 = temp23 & ~temp24
+    temp26 = basis[1] | basis[2]
+    temp27 = basis[3] & temp26
+    temp28 = temp25 & ~temp27
+    lex.digit = InFile(temp28)
+
+    # [a-fA-F]
+    temp29 = basis[4] | basis[5]
+    temp30 = basis[6] & ~basis[7]
+    temp31 = basis[0] | basis[1]
+    temp32 = basis[0] & basis[1]
+    sel = Sel(basis[2], ~temp32, temp31)
+    temp33 = basis[5] & ~basis[4]
+    temp34 = temp29 & ~temp33
+    temp35 = temp30 & ~temp34
+    temp36 = ~basis[3] & temp35
+    temp37 = sel & temp36
+    lex.hex = InFile(temp37)
+
+    # 011 01 1 1 0 = n
+    # 011 00 1 1 0 = f
+    # 011 10 1 0 0 = t
+    temp38 = temp1 & basis[5]
+    temp39 = ~basis[0] & basis[2]
+    temp40 = temp39 & basis[1]
+    temp41 = temp39 & ~basis[1]
+    temp42 = temp20 & temp40
+    lex.n = temp42 & temp38
+    temp43 = temp18 & temp40
+    lex.f = temp43 & temp38
+    temp44 = ~basis[3] & basis[4]
+    temp45 = temp44 & temp41
+    lex.t = temp45 & temp38
+
+    # 00 10 0000 = space
+    # 00 00 1010 = lf
+    # 00 00 1001 = tab
+    # 00 00 1101 = cr
+
     lex.ws = <0>
     lex.cr = <0>
     lex.lf = <0>
@@ -90,13 +135,22 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
 kernel BracketLocations :: [Lex lex] -> [BasisBits output] {
     rOrLCurly = lex.lCurly | lex.rCurly
     rOrLBracket = lex.lBracket | lex.rBracket
+    colonOrQuote = lex.colon | lex.dQuote
+    colonQuoteOrComma = colonOrQuote | lex.comma
     or = rOrLBracket | rOrLCurly
-    output[0] = or
-    output[1] = or
-    output[2] = or
-    output[3] = or
-    output[4] = or
-    output[5] = or
-    output[6] = or
-    output[7] = or
+    or2 = or | colonQuoteOrComma
+    digitOrHyphen = lex.hyphen | lex.digit
+    number = digitOrHyphen | lex.hex
+    trueOrFalse = lex.t | lex.f
+    tfOrNull = trueOrFalse | lex.n
+    numberOrKeyword = number | tfOrNull
+    or3 = or2 | numberOrKeyword
+    output[0] = or3
+    output[1] = or3
+    output[2] = or3
+    output[3] = or3
+    output[4] = or3
+    output[5] = or3
+    output[6] = or3
+    output[7] = or3
 }
