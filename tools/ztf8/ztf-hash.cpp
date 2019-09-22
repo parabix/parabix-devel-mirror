@@ -91,10 +91,10 @@ void WordMarkKernel::generatePabloMethod() {
 
 class ZTF_HashMarks : public PabloKernel {
 public:
-    ZTF_HashMarks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basisBits, StreamSet * group3_4, StreamSet * group5_8, StreamSet * group9_16)
+    ZTF_HashMarks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basisBits, StreamSet * mark3_4, StreamSet * mark5_8, StreamSet * mark9_16)
     : PabloKernel(kb, "ZTF_HashMarks",
                   {Binding{"basisBits", basisBits}},
-                  {Binding{"group3_4", group3_4}, Binding{"group5_8", group5_8}, Binding{"group9_16", group9_16}}) { }
+                  {Binding{"mark3_4", mark3_4}, Binding{"mark5_8", mark5_8}, Binding{"mark9_16", mark9_16}}) { }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -106,12 +106,12 @@ void ZTF_HashMarks::generatePabloMethod() {
     std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
-    PabloAST * group3_4 = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xC2, 0xC5)), 1), ASCII);
-    PabloAST * group5_8 = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xC6, 0xCD)), 1), ASCII);
-    PabloAST * group9_16 = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xCE, 0xDD)), 1), ASCII);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("group3_4"), pb.getInteger(0)), group3_4);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("group5_8"), pb.getInteger(0)), group5_8);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("group9_16"), pb.getInteger(0)), group9_16);
+    PabloAST * mark3_4 = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xC2, 0xC5)), 1), ASCII, "mark3_4");
+    PabloAST * mark5_8 = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xC6, 0xCD)), 1), ASCII, "mark5_8");
+    PabloAST * mark9_16 = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xCE, 0xDD)), 1), ASCII, "mark9_16");
+    pb.createAssign(pb.createExtract(getOutputStreamVar("mark3_4"), pb.getInteger(0)), mark3_4);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("mark5_8"), pb.getInteger(0)), mark5_8);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("mark9_16"), pb.getInteger(0)), mark9_16);
 }
 
 class ZTF_Symbols : public PabloKernel {
@@ -148,13 +148,13 @@ void ZTF_Symbols::generatePabloMethod() {
     // Filter out ZTF code symbols from word characters.
     wc1 = pb.createAnd(wc1, pb.createNot(ZTF_sym));
     //
-    PabloAST * wordStart = pb.createAnd(pb.createNot(pb.createAdvance(wordChar, 1)), wc1);
+    PabloAST * wordStart = pb.createAnd(pb.createNot(pb.createAdvance(wordChar, 1)), wc1, "wordStart");
     // Nulls, Linefeeds and ZTF_symbols are also treated as symbol starts.
     PabloAST * LF = ccc.compileCC(re::makeByte(0x0A));
     PabloAST * Null = ccc.compileCC(re::makeByte(0x0));
     PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr(LF, Null));
     // The next character after a ZTF symbol or a line feed also starts a new symbol.
-    symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1));
+    symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1), "symStart");
     //
     // runs are the bytes after a start symbol until the next symStart byte.
     pablo::PabloAST * runs = pb.createInFile(pb.createNot(symStart));
@@ -355,7 +355,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("keyOffset", keyOffset);
     // Get the hash of this key.
     Value * const keyPtr = b->getRawInputPointer("hashValues", keyMarkPos);
-    Value * keyHash = b->CreateZExt(b->CreateLoad(keyPtr), sizeTy);
+    Value * keyHash = b->CreateZExt(b->CreateLoad(keyPtr), sizeTy, "keyHash");
     //b->CallPrintInt("keyHash", keyHash);
     // Starting with length 9, the length-based subtables are 16 * 256 = 4K each.
     Value * hashTableBasePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
@@ -551,7 +551,7 @@ void ZTF_ExpansionDecoder::generatePabloMethod() {
     std::unique_ptr<cc::CC_Compiler> ccc;
     ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), basis);
     PabloAST * ASCII_lookahead = pb.createNot(pb.createLookahead(basis[7], 1));
-    PabloAST * const ZTF_Sym = pb.createAnd(ccc->compileCC(re::makeByte(0xC2, 0xDF)), ASCII_lookahead);
+    PabloAST * const ZTF_Sym = pb.createAnd(ccc->compileCC(re::makeByte(0xC2, 0xDF)), ASCII_lookahead, "ZTF_sym");
     Var * lengthVar = getOutputStreamVar("insertBixNum");
     for (unsigned i = 0; i < 4; i++) {
         pb.createAssign(pb.createExtract(lengthVar, pb.getInteger(i)), pb.createAnd(ZTF_Sym, basis[i+1]));
@@ -773,9 +773,9 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("hashSfx", hashSfx);
     Value * symLength = b->CreateAdd(b->CreateURem(b->CreateUDiv(hashPfx, sz_TWO), sz_MAXLENGTH), sz_TWO);
     //b->CallPrintInt("symLength", symLength);
-    Value * hashCode = b->CreateAdd(b->CreateMul(b->CreateURem(hashPfx, sz_TWO), b->getSize(128)), hashSfx);
+    Value * hashCode = b->CreateAdd(b->CreateMul(b->CreateURem(hashPfx, sz_TWO), b->getSize(128)), hashSfx, "hashCode");
     //b->CallPrintInt("hashCode", hashCode);
-    Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(symLength, sz_ONE));
+    Value * symStartPos = b->CreateSub(hashMarkPos, b->CreateSub(symLength, sz_ONE), "symStartPos");
     Value * symOffset = b->CreateSub(symLength, sz_HALF_SYM);
 
     hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(symLength, sz_MINLENGTH), sz_SUBTABLE));
@@ -859,9 +859,9 @@ void LengthGroups::generatePabloMethod() {
     runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
     // Run index codes count from 0 on the 2nd byte of a symbol.
     // So the length is 2 more than the bixnum.
-    PabloAST * group3_4 = pb.createAnd3(bnc.UGE(lengthBixNum, 1), bnc.ULE(lengthBixNum, 2), runFinal);
-    PabloAST * group5_8 = pb.createAnd3(bnc.UGE(lengthBixNum, 3), bnc.ULE(lengthBixNum, 6), runFinal);
-    PabloAST * group9_16 = pb.createAnd3(bnc.UGE(lengthBixNum, 7), bnc.ULE(lengthBixNum, 14), runFinal);
+    PabloAST * group3_4 = pb.createAnd3(bnc.UGE(lengthBixNum, 1), bnc.ULE(lengthBixNum, 2), runFinal, "group3_4");
+    PabloAST * group5_8 = pb.createAnd3(bnc.UGE(lengthBixNum, 3), bnc.ULE(lengthBixNum, 6), runFinal, "group5_8");
+    PabloAST * group9_16 = pb.createAnd3(bnc.UGE(lengthBixNum, 7), bnc.ULE(lengthBixNum, 14), runFinal, "group9_16");
     pb.createAssign(pb.createExtract(getOutputStreamVar("lengthGroup3_4"), pb.getInteger(0)), group3_4);
     pb.createAssign(pb.createExtract(getOutputStreamVar("lengthGroup5_8"), pb.getInteger(0)), group5_8);
     pb.createAssign(pb.createExtract(getOutputStreamVar("lengthGroup9_16"), pb.getInteger(0)), group9_16);
@@ -886,7 +886,6 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     
     StreamSet * WordChars = P->CreateStreamSet(1);
     P->CreateKernelCall<WordMarkKernel>(u8basis, WordChars);
-    
     StreamSet * const symbolRuns = P->CreateStreamSet(1);
     P->CreateKernelCall<ZTF_Symbols>(u8basis, WordChars, symbolRuns);
 
@@ -914,10 +913,8 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     P->CreateKernelCall<LengthGroupCompressionMask>(LengthGroup{3, 4}, lengthGroup3_4, lgthBytes, codeUnitStream, hashBytes, extractionMask3_4);
     P->CreateKernelCall<LengthGroupCompressionMask>(LengthGroup{5, 8}, lengthGroup5_8, lgthBytes, codeUnitStream, hashBytes, extractionMask5_8);
     P->CreateKernelCall<LengthGroupCompressionMask>(LengthGroup{9, 16}, lengthGroup9_16, lgthBytes, codeUnitStream, hashBytes, extractionMask9_16);
-    
     StreamSet * const combinedMask = P->CreateStreamSet(1);
     P->CreateKernelCall<StreamsIntersect>(std::vector<StreamSet *>{extractionMask3_4, extractionMask5_8, extractionMask9_16}, combinedMask);
-
     StreamSet * const encoded = P->CreateStreamSet(8);
     P->CreateKernelCall<ZTF_SymbolEncoder>(u8basis, bixHashes, combinedMask, runIndex, encoded);
     
