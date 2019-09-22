@@ -31,7 +31,7 @@ type Lex = <i1>[16] {
     colon,
     comma,
     dQuote,
-    asciiNameStart,
+    insideDQuote,
     hyphen,
     digit,
     hex,
@@ -73,7 +73,7 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex, Err err] {
     lex.colon = <0>
     lex.comma = <0>
     lex.dQuote = <0>
-    lex.asciiNameStart = <0>
+    lex.insideDQuote = <0>
     lex.hyphen = <0>
     lex.digit = <0>
     lex.hex = <0>
