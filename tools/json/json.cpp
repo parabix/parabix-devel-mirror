@@ -58,8 +58,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
 
-    StreamSet * const Lex = P->CreateStreamSet(16, 1);
-    StreamSet * const LexError = P->CreateStreamSet(2, 1);
+    StreamSet * const Lex = P->CreateStreamSet(17, 1);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         jsonPabloSrc,
@@ -68,8 +67,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
             Binding {"basis", u8basis}
         },
         Bindings { // Output Stream Bindings
-            Binding {"lex", Lex},
-            Binding {"err", LexError, FixedRate(1), Add1()}
+            Binding {"lex", Lex}
         }
     );
 

@@ -5,25 +5,12 @@
 
 type BasisBits = <i1>[8]
 
-# Returns a bitwise identity
-#
-kernel JsonIdentity :: [BasisBits basis] -> [BasisBits output] {
-    output[0] = basis[0]
-    output[1] = basis[1]
-    output[2] = basis[2]
-    output[3] = basis[3]
-    output[4] = basis[4]
-    output[5] = basis[5]
-    output[6] = basis[6]
-    output[7] = basis[7]
-}
-
 type Err = <i1>[2] {
     escapedStr,
     utf8
 }
 
-type Lex = <i1>[16] {
+type Lex = <i1>[17] {
     lCurly,
     rCurly,
     lBracket,
@@ -31,21 +18,23 @@ type Lex = <i1>[16] {
     colon,
     comma,
     dQuote,
-    insideDQuote,
     hyphen,
     digit,
     hex,
-    oddBackslash,
+    n, # first letter of null
+    t, # first letter of true
+    f, # first letter of false
     ws,
     cr,
     lf,
     tab
 }
 
-kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex, Err err] {
-    err[0] = <0>
-    err[1] = <0>
-
+# ClassifyBytes the bytes of a basis stream.
+# See that there is no error at this level as
+# we will validation step afterwards.
+#
+kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     # Brackets
     # 01 1 11 01 1 = {
     # 01 1 11 10 1 = }
@@ -70,14 +59,28 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex, Err err] {
     lex.lBracket = temp10 & temp4
     lex.rBracket = temp10 & temp5
 
+    # 00 1 11 01 0 = :
+    # 00 1 01 10 0 = ,
+    # 00 1 00 01 0 = "
+
+    temp11 = ~basis[7] & ~basis[6]
+    temp12 = basis[5] & temp11
+    temp13 = basis[0] & temp12
+    temp14 = basis[1] & ~basis[2]
+    temp15 = ~basis[1] & basis[2]
+    # colon and quotes
+    temp16 = temp13 & temp14
     lex.colon = <0>
     lex.comma = <0>
     lex.dQuote = <0>
-    lex.insideDQuote = <0>
+
+    # 00 1 01 10 1
     lex.hyphen = <0>
     lex.digit = <0>
     lex.hex = <0>
-    lex.oddBackslash = <0>
+    lex.n = <0>
+    lex.t = <0>
+    lex.f = <0>
     lex.ws = <0>
     lex.cr = <0>
     lex.lf = <0>
