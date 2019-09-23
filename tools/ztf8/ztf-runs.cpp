@@ -20,6 +20,7 @@
 #include <pablo/parse/pablo_parser.h>
 #include <pablo/parse/simple_lexer.h>
 #include <pablo/parse/rd_parser.h>
+#include <re/cc/cc_kernel.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
 #include <kernel/core/kernel_builder.h>
@@ -159,11 +160,12 @@ void ZTF_Run_Length_Decoder::generatePabloMethod() {
 class ZTF_Run_Decompression final: public PabloKernel {
 public:
     ZTF_Run_Decompression(const std::unique_ptr<kernel::KernelBuilder> & b,
-                           StreamSet * runMask, StreamSet * ztf_u8_indexed, StreamSet * u8output)
+                           StreamSet * ztfRunCodes, StreamSet * runMask, StreamSet * ztf_u8_indexed, StreamSet * u8output)
     : PabloKernel(b, "ZTF_Run_Decompression",
-                         {Binding{"runSpreadMask", runMask, FixedRate(1), LookAhead(1)},
-                          Binding{"ztf_u8_indexed", ztf_u8_indexed}},
-                         {Binding{"u8output", u8output}}) {}
+                  {Binding{"ztfRunCodes", ztfRunCodes, FixedRate(1), LookAhead(1)},
+                   Binding{"runSpreadMask", runMask},
+                   Binding{"ztf_u8_indexed", ztf_u8_indexed}},
+                  {Binding{"u8output", u8output}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -172,17 +174,11 @@ protected:
 
 void ZTF_Run_Decompression::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    Var * spreadMask = pb.createExtract(getInputStreamVar("runSpreadMask"), pb.getInteger(0));
+    PabloAST * runStart = getInputStreamSet("ztfRunCodes")[0];
+    PabloAST * spreadMask = getInputStreamSet("runSpreadMask")[0];
     std::vector<PabloAST *> ztf_u8_indexed = getInputStreamSet("ztf_u8_indexed");
-    std::unique_ptr<cc::CC_Compiler> ccc;
-    ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), ztf_u8_indexed);
-    // Create a mask starting at the position prior to inserted data and
-    // including both the inserted positions (zeroes in the spread mask)
-    // as well as the run code words (0xF9-0xFF).
-    PabloAST * inserted = pb.createNot(spreadMask);
-    PabloAST * runCodeCC = ccc->compileCC(re::makeByte(0xF9, 0xFF));
-    PabloAST * runMask = pb.createOr(inserted, runCodeCC);
-    PabloAST * runStart = pb.createAnd(runMask, pb.createNot(pb.createAdvance(runMask, 1)));
+    PabloAST * inserted = pb.createNot(spreadMask, "inserted");
+    PabloAST * runMask = pb.createOr(inserted, runStart, "runMask");
     Var * u8basis = getOutputStreamVar("u8output");
     for (unsigned i = 0; i < 8; i++) {
         PabloAST * bitMove = pb.createAnd(pb.createAdvance(ztf_u8_indexed[i], 1), runStart);
@@ -242,11 +238,14 @@ ztfRunsFunctionType ztfRuns_decompression_gen (CPUDriver & driver) {
     P->CreateKernelCall<S2PKernel>(source, ztfRunsBasis);
     StreamSet * const ztfRunLengths = P->CreateStreamSet(3);
     P->CreateKernelCall<ZTF_Run_Length_Decoder>(ztfRunsBasis, ztfRunLengths);
-    StreamSet * const ztfRunSpreadMask = InsertionSpreadMask(P, ztfRunLengths);
+    StreamSet * const ztfRunSpreadMask = InsertionSpreadMask(P, ztfRunLengths, InsertPosition::After);
     StreamSet * const ztfRuns_u8_Basis = P->CreateStreamSet(8);
     SpreadByMask(P, ztfRunSpreadMask, ztfRunsBasis, ztfRuns_u8_Basis);
+    StreamSet * const ztfRunCodes = P->CreateStreamSet(1);
+    re::CC * const runCodeCC = re::makeByte(0xF9, 0xFF);
+    P->CreateKernelCall<CharacterClassKernelBuilder>("runCodes", std::vector<re::CC *>{runCodeCC}, ztfRuns_u8_Basis, ztfRunCodes);
     StreamSet * const u8basis = P->CreateStreamSet(8);
-    P->CreateKernelCall<ZTF_Run_Decompression>(ztfRunSpreadMask, ztfRuns_u8_Basis, u8basis);
+    P->CreateKernelCall<ZTF_Run_Decompression>(ztfRunCodes, ztfRunSpreadMask, ztfRuns_u8_Basis, u8basis);
     StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(u8basis, u8bytes);
     P->CreateKernelCall<StdOutKernel>(u8bytes);
