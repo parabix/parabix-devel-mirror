@@ -242,6 +242,8 @@ struct BufferNode {
     unsigned LookBehind = 0;
     unsigned CopyBack = 0;
     unsigned LookAhead = 0;
+    unsigned RequiredSpace = 0;
+
     BufferType Type = BufferType::Internal;
     bool ThreadLocal = false;
 
@@ -773,7 +775,8 @@ protected:
 
     const bool                       			mCheckAssertions;
     const bool	  								mPrintDebug;
-    const bool                       			mTrackIndividualConsumedItemCounts;
+    const bool                                  mTraceProcessedProducedItemCounts;
+    const bool                       			mTraceIndividualConsumedItemCounts;
        
     const unsigned								mNumOfThreads;
 
@@ -995,7 +998,8 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 #else
 , mPrintDebug(false)
 #endif
-, mTrackIndividualConsumedItemCounts(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
+, mTraceProcessedProducedItemCounts(codegen::DebugOptionIsSet(codegen::TraceCounts))
+, mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
 #if defined(OVERRIDE_THREAD_NUM)
 , mNumOfThreads(OVERRIDE_THREAD_NUM)
 #else

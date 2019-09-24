@@ -230,8 +230,16 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 
     b->SetInsertPoint(dispatch);
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+
     Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchEndPos);
+
+//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//        Value * const A = b->CreateSub(matchEndPos, matchStart);
+//        Value * const B = b->CreatePtrDiff(endPtr, startPtr);
+//        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
+//    }
+
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());

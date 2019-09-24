@@ -81,11 +81,6 @@ Value * KernelBuilder::getTerminationSignal() {
  * @brief setTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelBuilder::setTerminationSignal(Value * const value) {
-    assert (value);
-    assert (value->getType() == getSizeTy());
-    if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-        CallPrintInt(mKernel->getName() + ": setTerminationSignal", value);
-    }
     Value * const ptr = mKernel->getTerminationSignalPtr();
     if (LLVM_UNLIKELY(ptr == nullptr)) {
         report_fatal_error(mKernel->getName() + " does not have CanTerminateEarly or MustExplicitlyTerminate set.");

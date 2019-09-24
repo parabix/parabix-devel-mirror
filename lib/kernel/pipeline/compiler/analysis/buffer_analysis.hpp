@@ -263,6 +263,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     return G;
 }
 
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -670,6 +671,8 @@ void PipelineCompiler::identifyThreadLocalBuffers(BufferGraph & G) const {
     }
 }
 
+#if 1
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeDataFlow
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -735,11 +738,12 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                     report_fatal_error(msg.str());
                 }
 
+                const Binding & binding = inputRate.Binding;
+                const ProcessingRate & rate = binding.getRate();
+
                 // for each producer of the input ...
                 for (const auto & producer : make_iterator_range(in_edges(inputBuffer, G))) {
                     const BufferRateData & outputRate = G[producer];
-                    const Binding & binding = inputRate.Binding;
-                    const ProcessingRate & rate = binding.getRate();
                     // If the input rate is greedy, base the calculations off the production rate
                     // not the consumption. Note outputRate.Maximum instead of inputRate.Minimum.
                     if (LLVM_UNLIKELY(rate.isGreedy())) {
@@ -762,23 +766,23 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                         upper_absolute = std::min(upper_absolute, max_absolute);
                     }
 
-                    // Fixed rate input streams may potentially truncate the input passed into them.
-                    // Make sure the truncation is taken into account when computing the bounds.
-                    if (LLVM_LIKELY(rate.isFixed())) {
-                        const auto flower_expected = floor(lower_expected);
-                        const auto dlower_expected = lower_expected - flower_expected;
-                        lower_expected = flower_expected;
-
-                        const auto flower_absolute = floor(lower_absolute);
-                        const auto dlower_absolute = lower_absolute - flower_absolute;
-                        lower_absolute = flower_absolute;
-
-                        upper_expected = ceiling(upper_expected + dlower_expected);
-                        upper_absolute = ceiling(upper_absolute + dlower_absolute);
-                    }
-
-
                 }
+
+                // Fixed rate input streams may potentially truncate the input passed into them.
+                // Make sure the truncation is taken into account when computing the bounds.
+                if (LLVM_LIKELY(rate.isFixed())) {
+                    const auto flower_expected = floor(lower_expected);
+                    const auto dlower_expected = lower_expected - flower_expected;
+                    lower_expected = flower_expected;
+
+                    const auto flower_absolute = floor(lower_absolute);
+                    const auto dlower_absolute = lower_absolute - flower_absolute;
+                    lower_absolute = flower_absolute;
+
+                    upper_expected = ceiling(upper_expected + dlower_expected);
+                    upper_absolute = ceiling(upper_absolute + dlower_absolute);
+                }
+
             }
 
             auto mod_one = [](const RateValue & m) -> RateValue {
@@ -893,6 +897,285 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
         }
     }
 }
+
+#else
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeDataFlow
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
+
+    // Since we do not want to create an artifical bottleneck by constructing output buffers that
+    // cannot accommodate the full amount of data we could produce given the expected inputs, the
+    // next loop will resize them accordingly.
+
+    auto div_by_non_zero = [](const RateValue & num, const RateValue & denom) -> RateValue {
+        return  (denom.numerator() == 0) ? num : (num / denom);
+    };
+
+    auto saturating_subtract = [](const RateValue & a, const RateValue & b) -> RateValue {
+        if (a < b) {
+            return RateValue{0};
+        } else {
+            return a - b;
+        }
+    };
+
+    auto check_attribute = [](const AttrId id, const BufferRateData & rateData, RateValue & accum) {
+        const Binding & binding = rateData.Binding;
+        if (LLVM_UNLIKELY(binding.hasAttribute(id))) {
+            const RateValue & rv = rateData.Maximum;
+            const auto k = binding.findAttribute(id).amount();
+            RateValue amount{k * rv.denominator(), rv.numerator()};
+            accum = std::max(accum, amount);
+        }
+    };
+
+    auto clamp = [](const RateValue & n) -> RateValue {
+        return std::max(n, RateValue{0});
+    };
+
+    const auto MAX_RATE = std::numeric_limits<unsigned>::max();
+
+    // Compute how many segments each kernel can process/produce
+    for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+
+
+        RateValue lower_expected{MAX_RATE};
+        RateValue upper_expected{MAX_RATE};
+
+        BufferNode & K = G[kernel];
+        if (LLVM_UNLIKELY(in_degree(kernel, G) == 0)) {
+            // source kernels are executed only once per segment
+            lower_expected = RateValue{1};
+            upper_expected = RateValue{1};
+
+        } else {
+
+            // for each input ...
+            for (const auto & kernelInput : make_iterator_range(in_edges(kernel, G))) {
+                const BufferRateData & inputRate = G[kernelInput];
+                const auto inputBuffer = source(kernelInput, G);
+
+                if (LLVM_UNLIKELY(inputRate.Maximum == RateValue{0})) {
+                    std::string tmp;
+                    raw_string_ostream msg(tmp);
+                    msg << getKernel(kernel)->getName() << "."
+                        << inputRate.Binding.get().getName()
+                        << " may not have an unknown input rate.";
+                    report_fatal_error(msg.str());
+                }
+
+                const Binding & binding = inputRate.Binding;
+                const ProcessingRate & rate = binding.getRate();
+
+                // for each producer of the input ...
+                for (const auto & producer : make_iterator_range(in_edges(inputBuffer, G))) {
+                    const BufferRateData & outputRate = G[producer];
+                    // If the input rate is greedy, base the calculations off the production rate
+                    // not the consumption. Note outputRate.Maximum instead of inputRate.Minimum.
+                    if (LLVM_UNLIKELY(rate.isGreedy())) {
+                        const auto min_expected = outputRate.MinimumExpectedFlow / outputRate.Maximum;
+                        lower_expected = std::min(lower_expected, min_expected);
+                        const auto max_expected = div_by_non_zero(outputRate.MaximumExpectedFlow, outputRate.Maximum);
+                        upper_expected = std::min(upper_expected, max_expected);
+                    } else {
+                        const auto min_expected = outputRate.MinimumExpectedFlow / inputRate.Maximum;
+                        lower_expected = std::min(lower_expected, min_expected);
+                        const auto max_expected = div_by_non_zero(outputRate.MaximumExpectedFlow, inputRate.Minimum);
+                        upper_expected = std::min(upper_expected, max_expected);
+                    }
+                }
+
+                RateValue lookAhead{0};
+                check_attribute(AttrId::LookAhead, inputRate, lookAhead);
+                lower_expected = clamp(saturating_subtract(lower_expected, lookAhead));
+
+                // Fixed rate input streams may potentially truncate the input passed into them.
+                // Make sure the truncation is taken into account when computing the bounds.
+                if (LLVM_LIKELY(rate.isFixed())) {
+                    const auto flower_expected = floor(lower_expected);
+                    const auto dlower_expected = lower_expected - flower_expected;
+                    lower_expected = flower_expected;
+                    upper_expected = ceiling(upper_expected + dlower_expected);
+                }
+
+            }
+
+            auto mod_one = [](const RateValue & m) -> RateValue {
+                return RateValue{m.numerator() % m.denominator(), m.denominator()};
+            };
+
+            auto compute2 = [div_by_non_zero, mod_one](const RateValue & a, const RateValue & b) {
+                if (lcm(a, b) == a) {
+                    return RateValue{0};
+                }
+                return mod_one(div_by_non_zero(a, b));
+            };
+
+            auto compute = [compute2](const RateValue & a, const RateValue & b) {
+                if (LLVM_LIKELY(a >= b)) {
+                    return compute2(a, b);
+                } else {
+                    return compute2(b, a);
+                }
+            };
+
+            RateValue variance{0};
+
+            auto update_variance = [&](const BufferRateData & A, const BufferRateData & B) {
+                const auto a = compute(A.Maximum, B.Minimum);
+                const auto b = compute(B.Maximum, A.Minimum);
+                variance = std::max(variance, std::max(a, b));
+            };
+
+            for (const auto & input : make_iterator_range(in_edges(kernel, G))) {
+                const BufferRateData & inputRate = G[input];
+                const auto producer = in_edge(source(input, G), G);
+                const BufferRateData & producerRate = G[producer];
+                update_variance(producerRate, inputRate);
+            }
+
+            for (const auto & output : make_iterator_range(out_edges(kernel, G))) {
+                const BufferRateData & outputRate = G[output];
+                for (const auto & consumer : make_iterator_range(out_edges(target(output, G), G))) {
+                    const BufferRateData & consumptionRate = G[consumer];
+                    update_variance(consumptionRate, outputRate);
+                }
+            }
+
+            lower_expected = saturating_subtract(lower_expected, variance);
+
+            upper_expected += variance;
+
+            // since we cannot compute a partial stride, adjust the lower and upper
+            // bound accordingly.
+
+            upper_expected = ceiling(upper_expected + mod_one(lower_expected));
+            lower_expected = floor(lower_expected);
+
+            for (const auto & input : make_iterator_range(in_edges(kernel, G))) {
+                BufferRateData & inputRate = G[input];
+                inputRate.MinimumExpectedFlow = lower_expected * inputRate.Minimum;
+                inputRate.MaximumExpectedFlow = upper_expected * inputRate.Maximum;
+            }
+
+        }
+
+        K.Lower = lower_expected;
+        K.Upper = upper_expected;
+
+        for (const auto & output : make_iterator_range(out_edges(kernel, G))) {
+            BufferRateData & outputRate = G[output];
+            outputRate.MinimumExpectedFlow = lower_expected * outputRate.Minimum;
+            outputRate.MaximumExpectedFlow = upper_expected * outputRate.Maximum;
+        }
+    }
+
+    #ifdef PRINT_BUFFER_GRAPH
+    printBufferGraph(G, errs());
+    #endif
+
+    // Determine how much data may run through this straem in one full pipeline loop
+    for (unsigned streamSet = LastStreamSet; streamSet >= FirstStreamSet; --streamSet) {
+
+        RateValue minInput{MAX_RATE};
+        RateValue maxInput{0};
+
+        for (const auto & port : make_iterator_range(out_edges(streamSet, G))) {
+            const BufferRateData & p = G[port];
+            const auto consumer =  target(port, G);
+            const BufferNode & C = G[consumer];
+            RateValue lookAhead{0};
+            check_attribute(AttrId::LookAhead, p, lookAhead);
+            minInput = std::min(minInput, clamp((p.Minimum - lookAhead) * C.Lower));
+            maxInput = std::max(maxInput, p.Maximum * C.Upper);
+        }
+
+        const auto port = in_edge(streamSet, G);
+        const BufferRateData & p = G[port];
+        const auto producer = source(port, G);
+        const BufferNode & P = G[producer];
+
+        RateValue delayed{0};
+        check_attribute(AttrId::Delayed, p, delayed);
+        const auto minOutput = clamp((p.Minimum - delayed) * P.Lower);
+        const auto maxOutput = p.Maximum * P.Upper;
+
+        const auto A = div_by_non_zero(minOutput, maxInput);
+        const auto B = div_by_non_zero(minInput, maxOutput);
+
+        BufferNode & S = G[streamSet];
+        S.Lower = std::min(A, B);
+        S.Upper = std::max(A, B);
+    }
+
+    // Compute how much data each kernel could process/produce per segment
+    for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+
+        BufferNode & K = G[kernel];
+
+        RateValue min{MAX_RATE};
+
+        for (const auto & port : make_iterator_range(out_edges(kernel, G))) {
+            const BufferNode & S = G[target(port, G)];
+            min = std::min(min, S.Lower);
+        }
+        K.Lower *= min;
+
+        for (const auto & input : make_iterator_range(in_edges(kernel, G))) {
+            BufferRateData & inputRate = G[input];
+            inputRate.MinimumExpectedFlow = K.Lower * inputRate.Minimum;
+            inputRate.MaximumExpectedFlow = K.Upper * inputRate.Maximum;
+        }
+
+        for (const auto & output : make_iterator_range(out_edges(kernel, G))) {
+            BufferRateData & outputRate = G[output];
+            outputRate.MinimumExpectedFlow = K.Lower * outputRate.Minimum;
+            outputRate.MaximumExpectedFlow = K.Upper * outputRate.Maximum;
+        }
+    }
+
+
+    // Determine how much data may run through this straem in one full pipeline loop
+    for (unsigned streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        const auto port = in_edge(streamSet, G);
+        const BufferRateData & output = G[port];
+        RateValue add{0};
+        check_attribute(AttrId::Add, output, add);
+        RateValue roundUp{0};
+        const Binding & binding = output.Binding;
+        if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::RoundUpTo))) {
+            const auto & roundUpTo = binding.findAttribute(AttrId::RoundUpTo);
+            RateValue r(roundUpTo.amount());
+            const auto a = mod(output.Minimum, r);
+            const auto b = mod(output.Maximum + add, r);
+            roundUp = std::max(roundUp, std::max(a, b));
+        }
+        RateValue delayed{0};
+        check_attribute(AttrId::Delayed, output, delayed);
+        auto overflow = std::max(add, roundUp) + delayed;
+        auto requiredSpace = output.MaximumExpectedFlow + overflow;
+        for (const auto & consumer_input : make_iterator_range(out_edges(streamSet, G))) {
+            BufferRateData & input = G[consumer_input];
+            RateValue add2{0};
+            check_attribute(AttrId::Add, input, add2);
+            RateValue lookAhead{0};
+            check_attribute(AttrId::LookAhead, input, lookAhead);
+            const auto overflow = std::max(add + add2, lookAhead);
+            requiredSpace = std::max(requiredSpace, input.MaximumExpectedFlow + overflow);
+        }
+        BufferNode & S = G[streamSet];
+        S.RequiredSpace = ceiling(requiredSpace);
+    }
+
+    #ifdef PRINT_BUFFER_GRAPH
+    printBufferGraph(G, errs());
+    #endif
+
+}
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printBufferGraph
@@ -1018,10 +1301,6 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
         out << "\\n(";
         rate_range(pd.MinimumExpectedFlow, pd.MaximumExpectedFlow);
-
-        out << ")\\n(";
-        rate_range(pd.MinimumSpace, pd.MaximumSpace);
-
 
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");

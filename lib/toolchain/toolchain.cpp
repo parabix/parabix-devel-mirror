@@ -31,7 +31,7 @@ static cl::OptionCategory CodeGenOptions("Code Generation Options", "These optio
 static cl::bits<DebugFlags>
 DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
-                        clEnumVal(TraceCounts, "Trace kernel processed and produced item counts."),
+                        clEnumVal(TraceCounts, "Trace kernel processed, consumed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Trace dynamic buffer allocations and deallocations."),
                         clEnumVal(TraceBlockedIO, "Trace kernels prevented from processing any strides "
                                                   "due to insufficient input items / output space."),

@@ -73,9 +73,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     b->CallPrintInt("+++ " + prefix + "_segNo", mSegNo);
     #endif
-    b->setKernel(mPipelineKernel);
-    b->setKernel(mKernel);
-
     loadBufferHandles(b);
     readInitialItemCounts(b);
     readConsumedItemCounts(b);
