@@ -259,6 +259,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * producedPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialProduced), bitBlockPtrTy);
     //b->CallPrintInt("producedPtr", producedPtr);
     b->CreateStore(pendingMask, producedPtr);
+    Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialPos), bitBlockPtrTy);
     b->CreateBr(stridePrologue);
 
     b->SetInsertPoint(stridePrologue);
@@ -268,7 +269,6 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
     Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
     Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
-    Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", stridePos), bitBlockPtrTy);
     b->CreateBr(stridePrecomputation);
 
     // Precompute an index mask for one stride of the symbol marks stream.
