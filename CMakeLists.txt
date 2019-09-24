@@ -119,8 +119,48 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic")
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
 if(SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -fvisibility-inlines-hidden")
 endif()
+
+# no pie disables the generation of position-independent executables, which is a default security feature of newer compiles
+# that prevents addr2line from being able to resolve which line corresponds to the code at run time. This in turn prevents
+# CreateAssert from being able to provide the compilation call stack for each JIT'ed assertion error.
+
+UNSET(HAS_EXECINFO CACHE)
+UNSET(HAS_MACH_VM_TYPES CACHE)
+
+if(NOT CMAKE_CXX_LINK_OPTIONS_NO_PIE)
+  set(CMAKE_CXX_LINK_OPTIONS_NO_PIE "-no-pie")
+endif()
+
+CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_LINK_OPTIONS_NO_PIE COMPILER_SUPPORTS_NO_PIE)
+if (COMPILER_SUPPORTS_NO_PIE)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_LINK_OPTIONS_NO_PIE}")
+
+    # Add assertion debug symbol support checks
+    include(CheckIncludeFileCXX)
+    CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
+    IF (HAS_MACH_VM_TYPES)
+      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
+    ELSE()
+      UNSET(LIBUNWIND_FOUND CACHE)
+      find_package(Libunwind)
+      IF (LIBUNWIND_FOUND)
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
+        include_directories(${LIBUNWIND_INCLUDE_DIR})
+        target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
+      ELSE()
+        CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+        IF (HAS_EXECINFO)
+           SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
+        ENDIF()
+      ENDIF()
+    ENDIF()
+
+else()
+    message(STATUS "No PIE unsupported: cannot provide compilation call stack on assertion failure")
+endif()
+
 
 # Disable RunTime Type Information
 if(MSVC) # using Visual Studio C++
@@ -146,32 +186,19 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     endif()
 endif()
 
-# Release & Debug flags
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls")
-
-# Generate position independent code
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC")
-
-# no pie disables the generation of position-independent executables, which is a default security feature of newer compiles
-# that prevents addr2line from being able to resolve which line corresponds to the code at run time. This in turn prevents
-# CreateAssert from being able to provide the compilation call stack for each JIT'ed assertion error.
-
-CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_LINK_OPTIONS_NO_PIE COMPILER_SUPPORTS_NO_PIE)
-if (COMPILER_SUPPORTS_NO_PIE)
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_LINK_OPTIONS_NO_PIE}")
-endif()
 
 # Use address sanitizer if desiered
 unset(HAS_ADDRESS_SANITIZER)
 if (USE_ADDRESS_SANITIZER)
-    CHECK_INCLUDE_FILE_CXX("sanitizer/asan_interface.h" HAS_ADDRESS_SANITIZER)
-    if (HAS_ADDRESS_SANITIZER)
+    #CHECK_INCLUDE_FILE_CXX("sanitizer/asan_interface.h" HAS_ADDRESS_SANITIZER)
+    #if (HAS_ADDRESS_SANITIZER)
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DHAS_ADDRESS_SANITIZER -fsanitize=address")
-    endif()
+    #endif()
 endif()
 
-
+# Release & Debug flags
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 ###   Functions   ###
 
