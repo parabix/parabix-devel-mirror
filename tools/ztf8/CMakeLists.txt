@@ -46,8 +46,10 @@ parabix_add_executable(
 NAME
     ztf-runs
 SRC
+    ztf-kernel.cpp
     ztf-runs.cpp
 DEPS
+    grep
     pablo
     kernel.basis
     kernel.io
@@ -61,6 +63,7 @@ parabix_add_executable(
 NAME
     ztf-hash
 SRC
+    ztf-kernel.cpp
     ztf-hash.cpp
 DEPS
     grep

@@ -46,6 +46,7 @@
 #include <iostream>
 #include <iomanip>
 #include <kernel/pipeline/pipeline_builder.h>
+#include "ztf-kernel.h"
 
 using namespace pablo;
 using namespace parse;
@@ -61,33 +62,6 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 static cl::opt<bool> DeferredAttribute("deferred", cl::desc("Use Deferred Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
 static cl::opt<bool> DelayedAttribute("delayed", cl::desc("Use Delayed Attribute for decompression"), cl::cat(ztfHashOptions), cl::init(false));
 
-
-class WordMarkKernel : public PabloKernel {
-public:
-    WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
-WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks)
-: PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}}, {Binding{"WordMarks", WordMarks}}) { }
-
-void WordMarkKernel::generatePabloMethod() {
-    pablo::PabloBuilder pb(getEntryScope());
-    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("source"));
-    UCD::UCDCompiler ucdCompiler(ccc);
-    re::Name * word = re::makeName("word", re::Name::Type::UnicodeProperty);
-    word = cast<re::Name>(re::resolveUnicodeNames(word));
-    UCD::UCDCompiler::NameMap nameMap;
-    nameMap.emplace(word, nullptr);
-    ucdCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    auto f = nameMap.find(word);
-    if (f == nameMap.end()) llvm::report_fatal_error("Cannot find word property");
-    PabloAST * wordChar = f->second;
-    pb.createAssign(pb.createExtract(getOutputStreamVar("WordMarks"), pb.getInteger(0)), wordChar);
-}
 
 class ZTF_HashMarks : public PabloKernel {
 public:
@@ -945,7 +919,6 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const ztfHash_u8_Basis = P->CreateStreamSet(8);
     SpreadByMask(P, ztfRunSpreadMask, ztfHashBasis, ztfHash_u8_Basis);
 
-    
     StreamSet * const group3_4marks = P->CreateStreamSet(1);
     StreamSet * const group5_8marks = P->CreateStreamSet(1);
     StreamSet * const group9_16marks = P->CreateStreamSet(1);
@@ -954,6 +927,9 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * WordChars = P->CreateStreamSet(1);
     P->CreateKernelCall<WordMarkKernel>(ztfHash_u8_Basis, WordChars);
 
+    StreamSet * const ztfHash_u8bytes = P->CreateStreamSet(1, 8);
+    P->CreateKernelCall<P2SKernel>(ztfHash_u8_Basis, ztfHash_u8bytes);
+    
     StreamSet * const symbolRuns = P->CreateStreamSet(1);
     P->CreateKernelCall<ZTF_Symbols>(ztfHash_u8_Basis, WordChars, symbolRuns);
 
@@ -978,9 +954,6 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const lgthBytes = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(runIndex, lgthBytes);
     
-    StreamSet * const ztfHash_u8bytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(ztfHash_u8_Basis, ztfHash_u8bytes);
-
     StreamSet * const u8bytes_34 = P->CreateStreamSet(1, 8);
     StreamSet * const u8bytes_58 = P->CreateStreamSet(1, 8);
     StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
