@@ -43,8 +43,10 @@ void SpreadByMask(const std::unique_ptr<ProgramBuilder> & P,
                   StreamExpandOptimization opt = StreamExpandOptimization::None,
                   unsigned expansionFieldWidth = 64);
     
-/*  Given a stream marking positions at which a single item is to be inserted,
-    compute the corresponding mask for SpreadByMask.  */
+/*  Create a spread mask for inserting a single item into a stream for each position
+    in the given insertion mask that is nonzero.   The insertion mask may be
+    a bixnum; in this case the spread mask will have a single insert position
+    for each position at which the bixnum is greater than zero.    */
 
 enum class InsertPosition {Before, After};
 

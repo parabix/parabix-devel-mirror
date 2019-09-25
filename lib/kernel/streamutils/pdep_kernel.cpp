@@ -438,15 +438,16 @@ void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     b->SetInsertPoint(finishedStrides);
 }
 
-std::string InsertString(InsertPosition p) {
-    return p == InsertPosition::Before ? "Before" : "After";
+std::string InsertString(StreamSet * mask, InsertPosition p) {
+    std::string s = std::to_string(mask->getNumElements()) + "x1_";
+    return s + (p == InsertPosition::Before ? "Before" : "After");
 }
 
 class UnitInsertionExtractionMasks : public BlockOrientedKernel {
 public:
     UnitInsertionExtractionMasks(const std::unique_ptr<KernelBuilder> & b,
                                  StreamSet * insertion_mask, StreamSet * stream01, StreamSet * valid01, InsertPosition p = InsertPosition::Before)
-    : BlockOrientedKernel(b, "unitInsertionExtractionMasks" + InsertString(p),
+    : BlockOrientedKernel(b, "unitInsertionExtractionMasks" + InsertString(insertion_mask, p),
         {Binding{"insertion_mask", insertion_mask}},
         {Binding{"stream01", stream01, FixedRate(2)}, Binding{"valid01", valid01, FixedRate(2)}},
         {}, {},
@@ -463,6 +464,9 @@ protected:
 void UnitInsertionExtractionMasks::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     Value * insertion_mask = b->loadInputStreamBlock("insertion_mask", b->getSize(0), b->getSize(0));
+    for (unsigned i = 1; i < getInputStreamSet("insertion_mask")->getNumElements(); i++) {
+        insertion_mask = b->CreateOr(insertion_mask, b->loadInputStreamBlock("insertion_mask", b->getSize(i), b->getSize(0)));
+    }
     Constant * mask01 = nullptr;
     Value * extract_mask_lo = nullptr;
     Value * extract_mask_hi = nullptr;
@@ -521,7 +525,7 @@ class SpreadMaskStep : public pablo::PabloKernel {
 public:
     SpreadMaskStep(const std::unique_ptr<KernelBuilder> & b,
                    StreamSet * bixnum, StreamSet * result, InsertPosition p = InsertPosition::Before) :
-    pablo::PabloKernel(b, "spreadMaskStep_" + std::to_string(bixnum->getNumElements()) + "x1_" + InsertString(p),
+    pablo::PabloKernel(b, "spreadMaskStep_" + InsertString(bixnum, p),
                 {Binding{"bixnum", bixnum, FixedRate(1), LookAhead(1)}},
                 {Binding{"result", result}}), mInsertPos(p) {}
 protected:
@@ -563,12 +567,10 @@ StreamSet * InsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
     if (steps == 1) {
         return UnitInsertionSpreadMask(P, bixNumInsertCount, pos);
     }
-    StreamSet * any_insert = P->CreateStreamSet(1);
-    P->CreateKernelCall<UGT_Kernel>(bixNumInsertCount, 0, any_insert);
     /* Create a spread mask that adds one spread position for any position
        at which there is at least one item to insert.  */
     StreamSet * spread1_mask = P->CreateStreamSet(1);
-    spread1_mask = UnitInsertionSpreadMask(P, any_insert, pos);
+    spread1_mask = UnitInsertionSpreadMask(P, bixNumInsertCount, pos);
     /* Spread out the counts so that there are two positions for each nonzero entry. */
     StreamSet * spread_counts = P->CreateStreamSet(steps);
     SpreadByMask(P, spread1_mask, bixNumInsertCount, spread_counts);
