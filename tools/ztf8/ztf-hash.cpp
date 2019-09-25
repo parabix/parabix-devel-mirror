@@ -129,6 +129,7 @@ void ZTF_Symbols::generatePabloMethod() {
     PabloAST * symStart = pb.createOr3(wordStart, ZTF_prefix, pb.createOr(LF, Null));
     // The next character after a ZTF symbol or a line feed also starts a new symbol.
     symStart = pb.createOr(symStart, pb.createAdvance(pb.createOr(ZTF_sym, LF), 1), "symStart");
+    //symStart = pb.createOr(symStart, pb.createAnd(pb.createAdvance(wordChar, 1), pb.createNot(wc1)));
     //
     // runs are the bytes after a start symbol until the next symStart byte.
     pablo::PabloAST * runs = pb.createInFile(pb.createNot(symStart));
@@ -355,8 +356,12 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     // by the ZTF compression code.  Prepare the compression mask by
     // zeroing out all symbol positions except the last two.
     Value * symIsEqEntry = b->CreateAnd(b->CreateICmpEQ(entry1, sym1), b->CreateICmpEQ(entry2, sym2));
+#ifdef CONFLICT_CHECKING
+    BasicBlock * const conflictKey = b->CreateBasicBlock("conflictKey");
+    b->CreateCondBr(symIsEqEntry, markCompression, conflictKey);
+#else
     b->CreateCondBr(symIsEqEntry, markCompression, nextKey);
-
+#endif
     b->SetInsertPoint(markCompression);
     // Compute a mask of bits to zero out.
     Value * maskLength = b->CreateZExt(b->CreateSub(keyLength, sz_TWO), sizeTy);
@@ -379,7 +384,13 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("updated", updated);
     b->CreateStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr);
     b->CreateBr(nextKey);
-
+#ifdef CONFLICT_CHECKING
+    b->SetInsertPoint(conflictKey);
+    //b->CreateWriteCall(b->getInt32(STDERR_FILENO), symPtr1, keyLength);
+    //b->CallPrintInt("||,  keyHash", keyHash);
+    //b->CallPrintInt("  keyLength", keyLength);
+    b->CreateBr(nextKey);
+#endif
     b->SetInsertPoint(nextKey);
     Value * dropKey = b->CreateResetLowestBit(theKeyWord);
     Value * thisWordDone = b->CreateICmpEQ(dropKey, sz_ZERO);
@@ -467,48 +478,6 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     encoded[0] = pb.createSel(ZTF_prefix, highHashBit, pb.createSel(ZTF_suffix, bixHash[0], basis[0]));
     for (unsigned i = 0; i < 8; i++) {
         pb.createAssign(pb.createExtract(encodedVar, pb.getInteger(i)), encoded[i]);
-    }
-}
-
-
-/*
- This kernel decodes the insertion length for two-byte ZTF code symbols
- in the range 0xC2-0xDF.   The insertion length is the number of zero
- bytes to insert so that, after insertion the zeroes together with the
- encoded symbol can be replaced by the dictionary symbol of the appropriate
- length.
- 
- The following table shows the pattern of the insertion lengths.
- 0xC2, 0xC3   final length 3, insertion length 1
- 0xC4, 0xC5   final length 4, insertion length 2
- 0xC6, 0xC7   final length 5, insertion length 3
- ...
- 0xDE, 0xDF   final length 17, insertion length 15
- 
- As it turns out, the insertion length calculation is very simple for
- the given symbols: simply using bits 1 through 4 of the basis stream.
- */
-
-class ZTF_ExpansionDecoder final: public PabloKernel {
-public:
-    ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const basis, StreamSet * insertBixNum)
-    : PabloKernel(b, "ZTF_ExpansionDecoder", {Binding{"basis", basis, FixedRate(), LookAhead(1)}}, {Binding{"insertBixNum", insertBixNum}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
-void ZTF_ExpansionDecoder::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> basis = getInputStreamSet("basis");
-    std::unique_ptr<cc::CC_Compiler> ccc;
-    ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), basis);
-    PabloAST * ASCII_lookahead = pb.createNot(pb.createLookahead(basis[7], 1));
-    PabloAST * const ZTF_Sym = pb.createAnd(ccc->compileCC(re::makeByte(0xC2, 0xDF)), ASCII_lookahead, "ZTF_sym");
-    Var * lengthVar = getOutputStreamVar("insertBixNum");
-    for (unsigned i = 0; i < 4; i++) {
-        pb.createAssign(pb.createExtract(lengthVar, pb.getInteger(i)), pb.createAnd(ZTF_Sym, basis[i+1]));
     }
 }
 
@@ -890,33 +859,44 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, source);
     StreamSet * const ztfHashBasis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(source, ztfHashBasis);
+
+    StreamSet * byteRunCodes = P->CreateStreamSet(1);
+    StreamSet * dictSymCodes = P->CreateStreamSet(1);
+    P->CreateKernelCall<ZTF_Codes>(ztfHashBasis, byteRunCodes, dictSymCodes);
+
     StreamSet * const ztfInsertionLengths = P->CreateStreamSet(4);
-    P->CreateKernelCall<ZTF_ExpansionDecoder>(ztfHashBasis, ztfInsertionLengths);
+    StreamSet * byteRunStarts = P->CreateStreamSet(1);
+    P->CreateKernelCall<ZTF_ExpansionDecoder>(ztfHashBasis, byteRunCodes, dictSymCodes, ztfInsertionLengths, byteRunStarts);
     StreamSet * const ztfRunSpreadMask = InsertionSpreadMask(P, ztfInsertionLengths);
 
     StreamSet * const ztfHash_u8_Basis = P->CreateStreamSet(8);
     SpreadByMask(P, ztfRunSpreadMask, ztfHashBasis, ztfHash_u8_Basis);
+    StreamSet * byteRunStarts_u8 = P->CreateStreamSet(1);
+    SpreadByMask(P, ztfRunSpreadMask, byteRunStarts, byteRunStarts_u8);
+
+    StreamSet * const byteRunExpandedBasis = P->CreateStreamSet(8);
+    P->CreateKernelCall<ZTF_Byte_Run_Decompression>(byteRunStarts_u8, ztfRunSpreadMask, ztfHash_u8_Basis, byteRunExpandedBasis);
 
     StreamSet * const group3_4marks = P->CreateStreamSet(1);
     StreamSet * const group5_8marks = P->CreateStreamSet(1);
     StreamSet * const group9_16marks = P->CreateStreamSet(1);
-    P->CreateKernelCall<ZTF_HashMarks>(ztfHash_u8_Basis, group3_4marks, group5_8marks, group9_16marks);
+    P->CreateKernelCall<ZTF_HashMarks>(byteRunExpandedBasis, group3_4marks, group5_8marks, group9_16marks);
 
     StreamSet * WordChars = P->CreateStreamSet(1);
-    P->CreateKernelCall<WordMarkKernel>(ztfHash_u8_Basis, WordChars);
+    P->CreateKernelCall<WordMarkKernel>(byteRunExpandedBasis, WordChars);
 
     StreamSet * const ztfHash_u8bytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(ztfHash_u8_Basis, ztfHash_u8bytes);
+    P->CreateKernelCall<P2SKernel>(byteRunExpandedBasis, ztfHash_u8bytes);
     
     StreamSet * const symbolRuns = P->CreateStreamSet(1);
-    P->CreateKernelCall<ZTF_Symbols>(ztfHash_u8_Basis, WordChars, symbolRuns);
+    P->CreateKernelCall<ZTF_Symbols>(byteRunExpandedBasis, WordChars, symbolRuns);
 
     StreamSet * const runIndex = P->CreateStreamSet(4);
     StreamSet * const overflow = P->CreateStreamSet(1);
     P->CreateKernelCall<RunIndex>(symbolRuns, runIndex, overflow);
 
     StreamSet * const bixHashes = P->CreateStreamSet(8);
-    P->CreateKernelCall<BixHash>(ztfHash_u8_Basis, symbolRuns, bixHashes);
+    P->CreateKernelCall<BixHash>(byteRunExpandedBasis, symbolRuns, bixHashes);
     
     StreamSet * const hashBytes = P->CreateStreamSet(1, 8);
     P->CreateKernelCall<P2SKernel>(bixHashes, hashBytes);
