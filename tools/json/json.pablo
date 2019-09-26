@@ -10,7 +10,7 @@ type Err = <i1>[2] {
     utf8
 }
 
-type Lex = <i1>[17] {
+type Lex = <i1>[14] {
     lCurly,
     rCurly,
     lBracket,
@@ -24,10 +24,7 @@ type Lex = <i1>[17] {
     n, # first letter of null
     f, # first letter of false
     t, # first letter of true
-    ws,
-    cr,
-    lf,
-    tab
+    ws
 }
 
 # ClassifyBytes the bytes of a basis stream.
@@ -121,18 +118,26 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     temp45 = temp44 & temp41
     lex.t = temp45 & temp38
 
+    # [ \n\r\t]
     # 00 10 0000 = space
     # 00 00 1010 = lf
     # 00 00 1001 = tab
     # 00 00 1101 = cr
-
-    lex.ws = <0>
-    lex.cr = <0>
-    lex.lf = <0>
-    lex.tab = <0>
+    temp46 = basis[0] & ~basis[1]
+    temp47 = basis[4] | basis[5]
+    temp48 = basis[6] | basis[7]
+    temp49 = temp47 | temp48
+    temp50 = basis[3] & temp46
+    temp51 = ~temp49 & temp50
+    temp52 = basis[2] | basis[3]
+    temp53 = temp31 | temp52
+    temp54 = ~temp48 & temp33
+    temp55 = ~temp53 & temp54
+    temp56 = temp51 | temp55
+    lex.ws = InFile(temp56)
 }
 
-kernel BracketLocations :: [Lex lex] -> [BasisBits output] {
+kernel LexLocations :: [Lex lex] -> [BasisBits output] {
     rOrLCurly = lex.lCurly | lex.rCurly
     rOrLBracket = lex.lBracket | lex.rBracket
     colonOrQuote = lex.colon | lex.dQuote
@@ -145,12 +150,13 @@ kernel BracketLocations :: [Lex lex] -> [BasisBits output] {
     tfOrNull = trueOrFalse | lex.n
     numberOrKeyword = number | tfOrNull
     or3 = or2 | numberOrKeyword
-    output[0] = or3
-    output[1] = or3
-    output[2] = or3
-    output[3] = or3
-    output[4] = or3
-    output[5] = or3
-    output[6] = or3
-    output[7] = or3
+    or4 = or3 | lex.ws
+    output[0] = or4
+    output[1] = or4
+    output[2] = or4
+    output[3] = or4
+    output[4] = or4
+    output[5] = or4
+    output[6] = or4
+    output[7] = or4
 }
