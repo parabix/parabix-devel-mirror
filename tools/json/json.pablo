@@ -10,7 +10,7 @@ type Err = <i1>[2] {
     utf8
 }
 
-type Lex = <i1>[14] {
+type Lex = <i1>[13] {
     lCurly,
     rCurly,
     lBracket,
@@ -20,7 +20,6 @@ type Lex = <i1>[14] {
     dQuote,
     hyphen,
     digit,
-    hex,
     n, # first letter of null
     f, # first letter of false
     t, # first letter of true
@@ -90,19 +89,6 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     temp28 = temp25 & ~temp27
     lex.digit = InFile(temp28)
 
-    # [a-fA-F]
-    temp29 = basis[4] | basis[5]
-    temp30 = basis[6] & ~basis[7]
-    temp31 = basis[0] | basis[1]
-    temp32 = basis[0] & basis[1]
-    sel = Sel(basis[2], ~temp32, temp31)
-    temp33 = basis[5] & ~basis[4]
-    temp34 = temp29 & ~temp33
-    temp35 = temp30 & ~temp34
-    temp36 = ~basis[3] & temp35
-    temp37 = sel & temp36
-    lex.hex = InFile(temp37)
-
     # 011 01 1 1 0 = n
     # 011 00 1 1 0 = f
     # 011 10 1 0 0 = t
@@ -130,7 +116,9 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     temp50 = basis[3] & temp46
     temp51 = ~temp49 & temp50
     temp52 = basis[2] | basis[3]
+    temp31 = basis[0] | basis[1]
     temp53 = temp31 | temp52
+    temp33 = basis[5] & ~basis[4]
     temp54 = ~temp48 & temp33
     temp55 = ~temp53 & temp54
     temp56 = temp51 | temp55
@@ -144,8 +132,7 @@ kernel LexLocations :: [Lex lex] -> [BasisBits output] {
     colonQuoteOrComma = colonOrQuote | lex.comma
     or = rOrLBracket | rOrLCurly
     or2 = or | colonQuoteOrComma
-    digitOrHyphen = lex.hyphen | lex.digit
-    number = digitOrHyphen | lex.hex
+    number = lex.hyphen | lex.digit
     trueOrFalse = lex.t | lex.f
     tfOrNull = trueOrFalse | lex.n
     numberOrKeyword = number | tfOrNull
