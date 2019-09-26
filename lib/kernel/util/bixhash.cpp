@@ -5,30 +5,29 @@
 
 #include <kernel/util/bixhash.h>
 #include <pablo/builder.hpp>
+#include <vector>
+#include <algorithm>
+#include <random>
 
 using namespace llvm;
 using namespace pablo;
 
 namespace kernel {
 
-const unsigned hash_bits = 8;
-
-// Values for selecting bits to mix together in the log2 hash
-// calculation strategy.
-const std::vector<std::vector<unsigned>> bitmix =
-   {{3, 2, 7, 1, 6, 4, 5, 0}, {4, 6, 1, 2, 3, 0, 7, 5},
-    {6, 2, 3, 7, 5, 1, 0, 4}, {5, 7, 0, 3, 1, 4, 2, 6},
-    {2, 1, 0, 7, 6, 5, 4, 3}, {1, 5, 3, 6, 7, 2, 4, 0}};
-
+    
 void BixHash::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     PabloAST * run = getInputStreamSet("run")[0];
-    std::vector<PabloAST *> hash(hash_bits);
+    std::vector<PabloAST *> hash(mHashBits);
     // For every byte we create an in-place hash, in which each bit
     // of the byte is xor'd with one other bit.
-    for (unsigned i = 0; i < hash_bits; i++) {
-        hash[i] = pb.createXor(basis[i], basis[bitmix[0][i]]);
+    std::vector<int> bitmix(mHashBits);
+    std::iota(bitmix.begin(), bitmix.end(), 0);
+    auto random_engine = std::default_random_engine(mSeed);
+    shuffle (bitmix.begin(), bitmix.end(), random_engine);
+    for (unsigned i = 0; i < mHashBits; i++) {
+        hash[i] = pb.createXor(basis[i % basis.size()], basis[bitmix[i] % basis.size()]);
     }
     // In each step, the select stream will mark positions that are
     // to receive bits from prior locations in the symbol.   The
@@ -38,16 +37,16 @@ void BixHash::generatePabloMethod() {
     for (unsigned j = 0; j < mHashSteps; j++) {
         unsigned shft = 1<<j;
         // Select bits from prior positions.
-        unsigned mixIdx = (j + 1) % bitmix.size();
-        for (unsigned i = 0; i < hash_bits; i++) {
-            PabloAST * priorBits = pb.createAdvance(hash[bitmix[mixIdx][i]], shft);
+        shuffle (bitmix.begin(), bitmix.end(), random_engine);
+        for (unsigned i = 0; i < mHashBits; i++) {
+            PabloAST * priorBits = pb.createAdvance(hash[bitmix[i]], shft);
             // Mix in bits from prior positions.
             hash[i] = pb.createXor(hash[i], pb.createAnd(select, priorBits));
         }
         select = pb.createAnd(select, pb.createAdvance(select, shft));
     }
     Var * hashVar = getOutputStreamVar("hashes");
-    for (unsigned i = 0; i < hash_bits; i++) {
+    for (unsigned i = 0; i < mHashBits; i++) {
         pb.createAssign(pb.createExtract(hashVar, pb.getInteger(i)), hash[i]);
     }
 }
