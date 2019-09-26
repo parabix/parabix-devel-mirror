@@ -42,6 +42,22 @@ private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
     LengthGroup mLengthGroup;
 };
+
+class FixedLengthDecompression : public MultiBlockKernel {
+public:
+    FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+                             unsigned length,
+                             StreamSet * keyMarks,
+                             StreamSet * const hashMarks, StreamSet * const byteData,
+                             StreamSet * const hashValues,
+                             StreamSet * const result, unsigned strideBlocks = 8);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+private:
+    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    unsigned mLength;
+};
+
 }
 #endif
 

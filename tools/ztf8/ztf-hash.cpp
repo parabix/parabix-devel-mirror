@@ -229,23 +229,39 @@ void ZTF_ExpansionDecoder::generatePabloMethod() {
 }
 
 
+std::string LengthGroupAnnotation(StreamSet * lengthBixNum, std::vector<LengthGroup> lengthGroups) {
+    unsigned bixNumBits = lengthBixNum->getNumElements();
+    std::string s = std::to_string(bixNumBits) + "x1";
+    for (unsigned i = 0; i < lengthGroups.size(); i++) {
+        s += ":" + std::to_string(lengthGroups[i].lo) + "_" + std::to_string(lengthGroups[i].hi);
+    }
+    return s;
+}
+
 class LengthGroups final: public PabloKernel {
 public:
     LengthGroups(const std::unique_ptr<kernel::KernelBuilder> & b,
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
                  StreamSet * overflow,
-                 StreamSet * lengthGroup3_4,
-                 StreamSet * lengthGroup5_8,
-                 StreamSet * lengthGroup9_16)
-    : PabloKernel(b, "LengthGroups",
-                     {Binding{"symbolRun", symbolRun, FixedRate(), LookAhead(1)},
+                 std::vector<LengthGroup> lengthGroups,
+                 std::vector<StreamSet *> groupStreams)
+    : PabloKernel(b, "LengthGroups" + LengthGroupAnnotation(lengthBixNum, lengthGroups),
+                  {Binding{"symbolRun", symbolRun, FixedRate(), LookAhead(1)},
                       Binding{"lengthBixNum", lengthBixNum},
                       Binding{"overflow", overflow}},
-                     {Binding{"lengthGroup3_4", lengthGroup3_4}, Binding{"lengthGroup5_8", lengthGroup5_8}, Binding{"lengthGroup9_16", lengthGroup9_16}}) {}
+                  {}), mLengthGroups(lengthGroups) {
+        for (unsigned i = 0; i < lengthGroups.size(); i++) {
+            unsigned lo = lengthGroups[i].lo;
+            unsigned hi = lengthGroups[i].hi;
+            std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
+            mOutputStreamSets.emplace_back(groupName, groupStreams[i]);
+        }
+    }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
+    std::vector<LengthGroup> mLengthGroups;
 };
 
 void LengthGroups::generatePabloMethod() {
@@ -258,12 +274,15 @@ void LengthGroups::generatePabloMethod() {
     runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
     // Run index codes count from 0 on the 2nd byte of a symbol.
     // So the length is 2 more than the bixnum.
-    PabloAST * group3_4 = pb.createAnd3(bnc.UGE(lengthBixNum, 1), bnc.ULE(lengthBixNum, 2), runFinal, "group3_4");
-    PabloAST * group5_8 = pb.createAnd3(bnc.UGE(lengthBixNum, 3), bnc.ULE(lengthBixNum, 6), runFinal, "group5_8");
-    PabloAST * group9_16 = pb.createAnd3(bnc.UGE(lengthBixNum, 7), bnc.ULE(lengthBixNum, 14), runFinal, "group9_16");
-    pb.createAssign(pb.createExtract(getOutputStreamVar("lengthGroup3_4"), pb.getInteger(0)), group3_4);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("lengthGroup5_8"), pb.getInteger(0)), group5_8);
-    pb.createAssign(pb.createExtract(getOutputStreamVar("lengthGroup9_16"), pb.getInteger(0)), group9_16);
+    const unsigned offset = 2;
+    std::vector<PabloAST *> groupStreams(mLengthGroups.size());
+    for (unsigned i = 0; i < mLengthGroups.size(); i++) {
+        unsigned lo = mLengthGroups[i].lo;
+        unsigned hi = mLengthGroups[i].hi;
+        std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
+        groupStreams[i] = pb.createAnd3(bnc.UGE(lengthBixNum, lo - offset), bnc.ULE(lengthBixNum, hi - offset), runFinal, groupName);
+        pb.createAssign(pb.createExtract(getOutputStreamVar(groupName), pb.getInteger(0)), groupStreams[i]);
+    }
 }
 
 typedef void (*ztfHashFunctionType)(uint32_t fd);
@@ -304,8 +323,10 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * const lengthGroup3_4 = P->CreateStreamSet(1);
     StreamSet * const lengthGroup5_8 = P->CreateStreamSet(1);
     StreamSet * const lengthGroup9_16 = P->CreateStreamSet(1);
-    P->CreateKernelCall<LengthGroups>(symbolRuns, runIndex, overflow, lengthGroup3_4, lengthGroup5_8, lengthGroup9_16);
-    
+    P->CreateKernelCall<LengthGroups>(symbolRuns, runIndex, overflow,
+                                      std::vector<LengthGroup>{LengthGroup{3, 4}, LengthGroup{5, 8}, LengthGroup{9, 16}},
+                                      std::vector<StreamSet *>{lengthGroup3_4, lengthGroup5_8, lengthGroup9_16});
+
     StreamSet * const extractionMask3_4 = P->CreateStreamSet(1);
     StreamSet * const extractionMask5_8 = P->CreateStreamSet(1);
     StreamSet * const extractionMask9_16 = P->CreateStreamSet(1);
@@ -371,7 +392,9 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const lengthGroup3_4 = P->CreateStreamSet(1);
     StreamSet * const lengthGroup5_8 = P->CreateStreamSet(1);
     StreamSet * const lengthGroup9_16 = P->CreateStreamSet(1);
-    P->CreateKernelCall<LengthGroups>(symbolRuns, runIndex, overflow, lengthGroup3_4, lengthGroup5_8, lengthGroup9_16);
+    P->CreateKernelCall<LengthGroups>(symbolRuns, runIndex, overflow,
+                                      std::vector<LengthGroup>{LengthGroup{3, 4}, LengthGroup{5, 8}, LengthGroup{9, 16}},
+                                      std::vector<StreamSet *>{lengthGroup3_4, lengthGroup5_8, lengthGroup9_16});
     //P->CreateKernelCall<DebugDisplayKernel>("lengthGroup3_4", lengthGroup3_4);
     //P->CreateKernelCall<DebugDisplayKernel>("lengthGroup5_8", lengthGroup5_8);
     //P->CreateKernelCall<DebugDisplayKernel>("lengthGroup9_16", lengthGroup9_16);
