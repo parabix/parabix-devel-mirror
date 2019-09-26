@@ -64,6 +64,7 @@ NAME
     ztf-hash
 SRC
     ztf-kernel.cpp
+    ztf-scan.cpp
     ztf-hash.cpp
 DEPS
     grep
