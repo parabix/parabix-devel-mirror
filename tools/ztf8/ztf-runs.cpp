@@ -37,7 +37,7 @@
 #include <iostream>
 #include <iomanip>
 #include <kernel/pipeline/pipeline_builder.h>
-#include "ztf-kernel.h"
+#include "ztf-logic.h"
 
 using namespace pablo;
 using namespace parse;

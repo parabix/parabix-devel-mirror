@@ -8,10 +8,9 @@
 
 #include <pablo/pablo_kernel.h>
 #include <kernel/core/kernel_builder.h>
+#include "ztf-logic.h"
 
 namespace kernel {
-
-struct LengthGroup {unsigned lo; unsigned hi;};
 
 class LengthGroupCompressionMask : public MultiBlockKernel {
 public:
