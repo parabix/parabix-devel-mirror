@@ -83,6 +83,8 @@ public:
 
     LLVM_READNONE unsigned getFieldWidth() const;
 
+    std::string shapeString();
+
     StreamSet(llvm::LLVMContext & C, const unsigned NumElements, const unsigned FieldWidth) noexcept;
 
 };

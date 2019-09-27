@@ -23,6 +23,10 @@ unsigned StreamSet::getFieldWidth() const {
     return mType->getArrayElementType()->getVectorElementType()->getIntegerBitWidth();
 }
 
+std::string StreamSet::shapeString() {
+    return std::to_string(getNumElements()) + "x" + std::to_string(getFieldWidth());
+}
+
 unsigned Scalar::getFieldWidth() const {
     return mType->getIntegerBitWidth();
 }
