@@ -134,28 +134,28 @@ P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, Strea
 }
 
 void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
-    Value * hi_input[8];
     Value * lo_input[8];
+    Value * hi_input[8];
     unsigned k = 0;
     for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
         const auto m = getInputStreamSet(i)->getNumElements();
         for (unsigned j = 0; j < m; j++) {
             Value * bitBlock = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
             if (k < 8) {
-                hi_input[k] = bitBlock;
+                lo_input[k] = bitBlock;
             } else {
-                lo_input[k-8] = bitBlock;
+                hi_input[k-8] = bitBlock;
             }
             k++;
         }
     }
     assert (k <= 16);
     while (k < 8) {
-        hi_input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
+        lo_input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
     }
     k -= 8;
     while (k < 8) {
-        lo_input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
+        hi_input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
     }
     Value * hi_bytes[8];
     p2s(b, hi_input, hi_bytes);
