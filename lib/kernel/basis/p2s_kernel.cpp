@@ -199,10 +199,18 @@ P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet
 
 }
 
+std::string streamSetShape(const StreamSets & inputStreams) {
+    std::string s;
+    for (auto ss : inputStreams) {
+        s += "_" + ss->shapeString();
+    }
+    return s;
+}
+
 P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                    const StreamSets & inputStreams,
                                                    StreamSet * const outputStream)
-: BlockOrientedKernel(b, "p2sMultipleStreams",
+: BlockOrientedKernel(b, "p2sMultipleStreams" + streamSetShape(inputStreams),
 {},
 {Binding{"byteStream", outputStream}},
 {}, {}, {}) {
