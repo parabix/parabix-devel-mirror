@@ -47,6 +47,7 @@ private:
 class P2S16Kernel final : public BlockOrientedKernel {
 public:
     P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSet * u16bits, StreamSet * u16stream, cc::ByteNumbering endianness = cc::ByteNumbering::LittleEndian);
+    P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSets & inputSets, StreamSet * u16stream, cc::ByteNumbering endianness = cc::ByteNumbering::LittleEndian);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:

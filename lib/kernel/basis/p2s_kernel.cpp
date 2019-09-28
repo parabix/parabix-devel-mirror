@@ -11,6 +11,14 @@ using namespace llvm;
 
 namespace kernel{
 
+std::string streamSetShape(const StreamSets & inputStreams) {
+    std::string s;
+    for (auto ss : inputStreams) {
+        s += "_" + ss->shapeString();
+    }
+    return s;
+}
+
 void p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
@@ -107,18 +115,50 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<
     b->setProducedItemCount("byteStream", unitsGenerated);
 }
 
+
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u16bits, StreamSet * u16stream, cc::ByteNumbering numbering)
+: BlockOrientedKernel(b, "p2s_16" + cc::numberingSuffix(numbering),
+{Binding{"basisBits", u16bits}},
+{Binding{"i16Stream", u16stream}},
+{}, {}, {}), mByteNumbering(numbering) {
+}
+
+P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSets & inputSets, StreamSet * u16stream, cc::ByteNumbering numbering)
+: BlockOrientedKernel(b, "p2s_16" + streamSetShape(inputSets) + cc::numberingSuffix(numbering),
+{},
+{Binding{"i16Stream", u16stream}},
+{}, {}, {}), mByteNumbering(numbering) {
+    for (unsigned i = 0; i < inputSets.size(); i++) {
+        mInputStreamSets.emplace_back("basisBits_" + std::to_string(i), inputSets[i]);
+    }
+}
+
 void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
     Value * hi_input[8];
-    for (unsigned j = 0; j < 8; ++j) {
-        const unsigned idx = j + 8;
-        hi_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
+    Value * lo_input[8];
+    unsigned k = 0;
+    for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
+        const auto m = getInputStreamSet(i)->getNumElements();
+        for (unsigned j = 0; j < m; j++) {
+            Value * bitBlock = b->loadInputStreamBlock("basisBits_" + std::to_string(i), b->getInt32(j));
+            if (k < 8) {
+                hi_input[k] = bitBlock;
+            } else {
+                lo_input[k-8] = bitBlock;
+            }
+            k++;
+        }
+    }
+    assert (k <= 16);
+    while (k < 8) {
+        hi_input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
+    }
+    k -= 8;
+    while (k < 8) {
+        lo_input[k++] = ConstantVector::getNullValue(b->getBitBlockType());
     }
     Value * hi_bytes[8];
     p2s(b, hi_input, hi_bytes);
-    Value * lo_input[8];
-    for (unsigned j = 0; j < 8; ++j) {
-        lo_input[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j));
-    }
     Value * lo_bytes[8];
     p2s(b, lo_input, lo_bytes);
     for (unsigned j = 0; j < 8; ++j) {
@@ -199,14 +239,6 @@ P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet
 
 }
 
-std::string streamSetShape(const StreamSets & inputStreams) {
-    std::string s;
-    for (auto ss : inputStreams) {
-        s += "_" + ss->shapeString();
-    }
-    return s;
-}
-
 P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
                                                    const StreamSets & inputStreams,
                                                    StreamSet * const outputStream)
@@ -217,14 +249,6 @@ P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel:
     for (unsigned i = 0; i < inputStreams.size(); i++) {
         mInputStreamSets.emplace_back("basisBits_" + std::to_string(i), inputStreams[i]);
     }
-}
-
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u16bits, StreamSet * u16stream, cc::ByteNumbering numbering)
-: BlockOrientedKernel(b, "p2s_16" + cc::numberingSuffix(numbering),
-{Binding{"basisBits", u16bits}},
-{Binding{"i16Stream", u16stream}},
-{}, {}, {}), mByteNumbering(numbering) {
-
 }
 
 P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b,
