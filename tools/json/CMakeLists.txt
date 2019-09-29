@@ -10,7 +10,9 @@ NAME
     json
 SRC
     json.cpp
+    json-kernel.cpp
 DEPS
+    grep
     pablo.parse
     kernel.basis
     kernel.io
