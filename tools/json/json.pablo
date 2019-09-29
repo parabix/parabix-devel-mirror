@@ -10,7 +10,7 @@ type Err = <i1>[2] {
     utf8
 }
 
-type Lex = <i1>[13] {
+type Lex = <i1>[14] {
     lCurly,
     rCurly,
     lBracket,
@@ -20,6 +20,7 @@ type Lex = <i1>[13] {
     dQuote,
     hyphen,
     digit,
+    backslash,
     n, # first letter of null
     f, # first letter of false
     t, # first letter of true
@@ -89,6 +90,14 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     temp28 = temp25 & ~temp27
     lex.digit = InFile(temp28)
 
+    # 010 111 00 = \
+    temp29 = temp1 & ~basis[5]
+    temp30 = ~basis[1] & ~basis[0]
+    temp32 = basis[3] & basis[2]
+    temp34 = temp30 & temp32
+    temp35 = basis[4] & temp34
+    lex.backslash = temp29 & temp35
+
     # 011 01 1 1 0 = n
     # 011 00 1 1 0 = f
     # 011 10 1 0 0 = t
@@ -137,7 +146,8 @@ kernel LexLocations :: [Lex lex] -> [BasisBits output] {
     tfOrNull = trueOrFalse | lex.n
     numberOrKeyword = number | tfOrNull
     or3 = or2 | numberOrKeyword
-    or4 = or3 | lex.ws
+    wsOrBs = lex.ws | lex.backslash
+    or4 = or3 | wsOrBs
     output[0] = or4
     output[1] = or4
     output[2] = or4
