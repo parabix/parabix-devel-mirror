@@ -78,18 +78,22 @@ ZTF_DecodeLengths::ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
 
 void ZTF_DecodeLengths::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
+    BixNumCompiler bnc(pb);
     std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
     std::vector<PabloAST *> groupStreams(mLengthGroups.size());
-    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
-    PabloAST * ASCII = ccc.compileCC(re::makeCC(0x0, 0x7F));
-    unsigned const offset = 2;
+    PabloAST * ASCII = bnc.ULT(basis, 0x80);
+    BixNum base = bnc.ZeroExtend(bnc.Create(0xC2), 8);
     for (unsigned i = 0; i < mLengthGroups.size(); i++) {
         unsigned lo = mLengthGroups[i].lo;
         unsigned hi = mLengthGroups[i].hi;
-        PabloAST * prefixCC = ccc.compileCC(re::makeCC(0xC0 + 2*(lo-offset), 0xC0 + 2*(hi-offset) + 1));
+        unsigned extra_hash_bits = mLengthGroups[i].hashBits - 7;  //low 7 bits in suffix
+        unsigned multiplier = 1<<extra_hash_bits;
+        BixNum next_base = bnc.AddModular(base, multiplier * (hi - lo + 1));
+        PabloAST * inGroup = pb.createAnd(bnc.UGE(basis, base), bnc.ULT(basis, next_base));
         std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
-        groupStreams[i] = pb.createAnd(pb.createAdvance(prefixCC, 1), ASCII, groupName);
+        groupStreams[i] = pb.createAnd(pb.createAdvance(inGroup, 1), ASCII, groupName);
         pb.createAssign(pb.createExtract(getOutputStreamVar(groupName), pb.getInteger(0)), groupStreams[i]);
+        base = next_base;
     }
 }
 
@@ -183,17 +187,19 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     // The encoding scheme starts at 0xC2, with the low 6 bit value of 2.
     BixNum base = bnc.ZeroExtend(bnc.Create(2), 6);
     for (unsigned i = 0; i < mLenGroups.size(); i++) {
+        unsigned lo = mLenGroups[i].lo;
+        unsigned hi = mLenGroups[i].hi;
         unsigned extra_hash_bits = mLenGroups[i].hashBits - 7;  //low 7 bits in suffix
         unsigned multiplier = 1<<extra_hash_bits;
-        PabloAST * inGroup = pb.createAnd(bnc.UGE(symLength, mLenGroups[i].lo), bnc.ULE(symLength, mLenGroups[i].hi), "inGroup_" + std::to_string(i));
+        PabloAST * inGroup = pb.createAnd(bnc.UGE(symLength, lo), bnc.ULE(symLength, hi), "inGroup_" + std::to_string(i));
         inGroup = pb.createAnd(inGroup, ZTF_prefix);
-        BixNum lenOffset = bnc.SubModular(symLength, mLenGroups[i].lo);
+        BixNum lenOffset = bnc.SubModular(symLength, lo);
         BixNum lenBase = bnc.AddModular(base, bnc.MulModular(lenOffset, multiplier));
         BixNum value = bnc.AddModular(lenBase, bnc.Truncate(highHash, extra_hash_bits));
         for (unsigned j = 0; j < 6; j++) {
             encoded[j] = pb.createSel(inGroup, value[j], encoded[j], "encoded[" + std::to_string(j) + "]");
         }
-        base = bnc.AddModular(base, multiplier * (mLenGroups[i].hi - mLenGroups[i].lo + 1));
+        base = bnc.AddModular(base, multiplier * (hi - lo + 1));
     }
     for (unsigned i = 0; i < 8; i++) {
         pb.createAssign(pb.createExtract(encodedVar, pb.getInteger(i)), encoded[i]);
