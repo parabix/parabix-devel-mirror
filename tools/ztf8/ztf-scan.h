@@ -17,8 +17,9 @@ public:
     LengthGroupCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
                                LengthGroup lengthGroup,
                                StreamSet * symbolMarks,
-                               StreamSet * symbolLengths,
-                               StreamSet * const byteData, StreamSet * const hashValues, StreamSet * compressionMask, unsigned strideBlocks = 8);
+                               StreamSet * hashValues,
+                               StreamSet * const byteData,
+                               StreamSet * compressionMask, unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
@@ -31,9 +32,8 @@ public:
     LengthGroupDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
                              LengthGroup lengthGroup,
                              StreamSet * keyMarks,
-                             StreamSet * symbolLengths,
+                             StreamSet * hashValues,
                              StreamSet * const hashMarks, StreamSet * const byteData,
-                             StreamSet * const hashValues,
                              StreamSet * const result, unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }

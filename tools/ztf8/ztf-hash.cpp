@@ -89,19 +89,17 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * const bixHashes = P->CreateStreamSet(8);
     P->CreateKernelCall<BixHash>(u8basis, symbolRuns, bixHashes);
     
-    StreamSet * const hashBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(bixHashes, hashBytes);
-    
-    StreamSet * const lgthBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(runIndex, lgthBytes);
-    
+    StreamSet * const hashValues = P->CreateStreamSet(1, 16);
+    std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
+    P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
+
     std::vector<LengthGroup> lenGroups = {LengthGroup{3, 4}, LengthGroup{5, 8}, LengthGroup{9, 16}};
     std::vector<StreamSet *> parsedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     P->CreateKernelCall<LengthSorter>(symbolRuns, runIndex, overflow, lenGroups, parsedMarks);
 
     std::vector<StreamSet *> extractionMasks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     for (unsigned i = 0; i < 3; i++) {
-        P->CreateKernelCall<LengthGroupCompressionMask>(lenGroups[i], parsedMarks[i], lgthBytes, codeUnitStream, hashBytes, extractionMasks[i]);
+        P->CreateKernelCall<LengthGroupCompressionMask>(lenGroups[i], parsedMarks[i], hashValues, codeUnitStream,  extractionMasks[i]);
     }
 
     StreamSet * const combinedMask = P->CreateStreamSet(1);
@@ -158,20 +156,18 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const bixHashes = P->CreateStreamSet(8);
     P->CreateKernelCall<BixHash>(ztfHash_u8_Basis, symbolRuns, bixHashes);
     
-    StreamSet * const hashBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(bixHashes, hashBytes);
+    StreamSet * const hashValues = P->CreateStreamSet(1, 16);
+    std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
+    P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
     
     std::vector<StreamSet *> parsedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     P->CreateKernelCall<LengthSorter>(symbolRuns, runIndex, overflow, lenGroups, parsedMarks);
 
-    StreamSet * const lgthBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(runIndex, lgthBytes);
-    
     StreamSet * u8bytes = ztfHash_u8bytes;
     for (unsigned i = 0; i < 3; i++) {
         StreamSet * input_bytes = u8bytes;
         StreamSet * output_bytes = P->CreateStreamSet(1, 8);
-        P->CreateKernelCall<LengthGroupDecompression>(lenGroups[i], parsedMarks[i], lgthBytes, decodedMarks[i], input_bytes, hashBytes, output_bytes);
+        P->CreateKernelCall<LengthGroupDecompression>(lenGroups[i], parsedMarks[i], hashValues, decodedMarks[i], input_bytes, output_bytes);
         u8bytes = output_bytes;
     }
 
