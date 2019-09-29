@@ -56,11 +56,11 @@ void checkLengthGroup(LengthGroup g) {
     assert((g.lo <= g.hi) && (g.lo > g.hi/2));
 }
 
-const unsigned HashTableEntries = 256;
+const unsigned MAX_HASH_BITS = 8;
 
 unsigned hashTableSize(LengthGroup g) {
     unsigned numSubTables = (g.hi - g.lo + 1);
-    return numSubTables * g.hi * HashTableEntries;
+    return numSubTables * g.hi * (1<<g.hashBits);
 }
 
 std::string lengthGroupStr(LengthGroup lengthGroup) {
@@ -99,8 +99,8 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Constant * sz_TWO = b->getSize(2);
-    Constant * sz_HASH_BITS = b->getSize(8);
-    Constant * sz_HASH_MASK = b->getSize(0xFF);
+    Constant * sz_HASH_BITS = b->getSize(MAX_HASH_BITS);
+    Constant * sz_HASH_MASK = b->getSize((1 << mLengthGroup.hashBits) - 1);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_BLOCKWIDTH = b->getSize(b->getBitBlockWidth());
     Type * sizeTy = b->getSizeTy();
@@ -111,7 +111,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Constant * sz_HALF_SYM = b->getSize(mLengthGroup.hi/2);
     Constant * sz_MINLENGTH = b->getSize(mLengthGroup.lo);
     Constant * sz_MAXLENGTH = b->getSize(mLengthGroup.hi);
-    Constant * sz_SUBTABLE = b->getSize(HashTableEntries * mLengthGroup.hi);
+    Constant * sz_SUBTABLE = b->getSize((1 << mLengthGroup.hashBits) * mLengthGroup.hi);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
@@ -330,8 +330,8 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Constant * sz_TWO = b->getSize(2);
-    Constant * sz_HASH_BITS = b->getSize(8);
-    Constant * sz_HASH_MASK = b->getSize(0xFF);
+    Constant * sz_HASH_BITS = b->getSize(MAX_HASH_BITS);
+    Constant * sz_HASH_MASK = b->getSize((1 << mLengthGroup.hashBits) - 1);
     Type * sizeTy = b->getSizeTy();
 
     Type * halfLengthTy = b->getIntNTy(8 * mLengthGroup.hi/2);
@@ -339,7 +339,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Constant * sz_HALF_SYM = b->getSize(mLengthGroup.hi/2);
     Constant * sz_MINLENGTH = b->getSize(mLengthGroup.lo);
     Constant * sz_MAXLENGTH = b->getSize(mLengthGroup.hi);
-    Constant * sz_SUBTABLE = b->getSize(HashTableEntries * mLengthGroup.hi);
+    Constant * sz_SUBTABLE = b->getSize((1 << mLengthGroup.hashBits) * mLengthGroup.hi);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
@@ -551,7 +551,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
 }
 
 FixedLengthDecompression::FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                                   unsigned length,
+                                                   unsigned length, unsigned hashBits,
                                                    StreamSet * keyMarks,
                                                    StreamSet * const hashMarks, StreamSet * const byteData,
                                                    StreamSet * const hashValues,
@@ -565,8 +565,8 @@ FixedLengthDecompression::FixedLengthDecompression(const std::unique_ptr<kernel:
                    {}, {}, {},
                    {InternalScalar{ArrayType::get(b->getInt8Ty(), length), "pendingOutput"},
                        // Hash table 8 length-based tables with 256 16-byte entries each.
-                       InternalScalar{ArrayType::get(b->getInt8Ty(), HashTableEntries * length), "hashTable"}}),
-mLength(length) {
+                       InternalScalar{ArrayType::get(b->getInt8Ty(), (1 << hashBits) * length), "hashTable"}}),
+    mLength(length), mHashBits(hashBits) {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
     if (DelayedAttribute) {
         mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLength) );

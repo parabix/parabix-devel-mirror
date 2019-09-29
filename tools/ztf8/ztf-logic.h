@@ -11,7 +11,7 @@
 
 namespace kernel {
 
-struct LengthGroup {unsigned lo; unsigned hi;};
+struct LengthGroup {unsigned lo; unsigned hi; unsigned hashBits;};
     
 class WordMarkKernel : public pablo::PabloKernel {
 public:
@@ -60,17 +60,17 @@ protected:
 class ZTF_SymbolEncoder final: public pablo::PabloKernel {
 public:
     ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder> & b,
-                      StreamSet * const basis, StreamSet * bixHash, StreamSet * extractionMask, StreamSet * runIdx, StreamSet * encoded)
-    : pablo::PabloKernel(b, "ZTF_SymbolEncoder",
-                         {Binding{"basis", basis},
-                          Binding{"bixHash", bixHash, FixedRate(), LookAhead(1)},
-                          Binding{"extractionMask", extractionMask},
-                          Binding{"runIdx", runIdx}},
-                         {Binding{"encoded", encoded}}) {}
+                      std::vector<LengthGroup> & lenGroups,
+                      StreamSet * const basis,
+                      StreamSet * bixHash,
+                      StreamSet * extractionMask,
+                      StreamSet * runIdx,
+                      StreamSet * encoded);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
+    std::vector<LengthGroup> & mLenGroups;
 };
 
 /*

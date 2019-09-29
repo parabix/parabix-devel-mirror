@@ -127,43 +127,79 @@ void ZTF_Symbols::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("symbolRuns"), pb.getInteger(0)), runs);
 }
 
+ZTF_SymbolEncoder::ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+                      std::vector<LengthGroup> & lenGroups,
+                      StreamSet * const basis,
+                      StreamSet * bixHash,
+                      StreamSet * extractionMask,
+                      StreamSet * runIdx,
+                      StreamSet * encoded)
+    : pablo::PabloKernel(b, "ZTF_SymbolEncoder" + LengthGroupAnnotation(lenGroups),
+                         {Binding{"basis", basis},
+                             Binding{"bixHash", bixHash, FixedRate(), LookAhead(1)},
+                             Binding{"extractionMask", extractionMask},
+                             Binding{"runIdx", runIdx}},
+                         {Binding{"encoded", encoded}}),
+    mLenGroups(lenGroups) {}
+
+
 void ZTF_SymbolEncoder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     BixNumCompiler bnc(pb);
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     std::vector<PabloAST *> bixHash = getInputStreamSet("bixHash");
     PabloAST * extractionMask = getInputStreamSet("extractionMask")[0];
-    std::vector<PabloAST *> runIdx = getInputStreamSet("runIdx");
+    BixNum runIdx = getInputStreamSet("runIdx");
     std::vector<PabloAST *> encoded(8);
     Var * encodedVar = getOutputStreamVar("encoded");
     //  ZTF symbol prefixes are inserted at the position of the first 1 bit
     //  following a series of 0 bits in the extraction mask.
     PabloAST * ZTF_prefix = pb.createAnd(extractionMask, pb.createAdvance(pb.createNot(extractionMask), 1));
     PabloAST * ZTF_suffix = pb.createAdvance(ZTF_prefix, 1);
-    // Other extracted positions keep their data bits from the basis bit stream.
-    // PabloAST * unencoded = pb.createXor(extractionMask, pb.createOr(ZTF_prefix, ZTF_suffix));
-    // The ZTF prefix is formed by from the prefix base 0xC0 and adding twice
-    // the compression count, plus the high bit of the hash Value.
-    BixNum compCount = bnc.AddModular(runIdx, 1);
-    PabloAST * highHashBit = pb.createLookahead(bixHash[7], 1);
     //
-    // The high bit of the ZTF symbol is 1 for a prefix, 0 for a suffix or the basis[7] value.
-    encoded[7] = pb.createAnd(pb.createOr(ZTF_prefix, basis[7]), pb.createNot(ZTF_suffix));
-    // The second high bit of the ZTF symbol is 1 for a prefix, bixHash[6] for a suffix or the basis[6] value.
-    encoded[6] = pb.createOr(ZTF_prefix, pb.createSel(ZTF_suffix, bixHash[6], basis[6]));
-    // The third high bit of the ZTF symbol is 0 for a prefix, bixHash[5] for a suffix or the basis[5] value.
-    encoded[5] = pb.createAnd(pb.createSel(ZTF_suffix, bixHash[5], basis[5]), pb.createNot(ZTF_prefix));
-    // Bits 1 through 4 are selected from the compressionCount, basis or bixHash.
-    encoded[4] = pb.createSel(ZTF_prefix, compCount[3], pb.createSel(ZTF_suffix, bixHash[4], basis[4]));
-    encoded[3] = pb.createSel(ZTF_prefix, compCount[2], pb.createSel(ZTF_suffix, bixHash[3], basis[3]));
-    encoded[2] = pb.createSel(ZTF_prefix, compCount[1], pb.createSel(ZTF_suffix, bixHash[2], basis[2]));
-    encoded[1] = pb.createSel(ZTF_prefix, compCount[0], pb.createSel(ZTF_suffix, bixHash[1], basis[1]));
-    // The low bit uses the highHashBit in case of a prefix.
-    encoded[0] = pb.createSel(ZTF_prefix, highHashBit, pb.createSel(ZTF_suffix, bixHash[0], basis[0]));
+    // ZTF_suffixes consist of a high 0 bit and the low 7 bits of the hash value.
+    for (unsigned i = 0; i < 7; i++)  {
+        encoded[i] = pb.createSel(ZTF_suffix, bixHash[i], basis[i]);
+    }
+    encoded[7] = pb.createAnd(basis[7], pb.createNot(ZTF_suffix));
+    //
+    // While the low 7 hash bits are at the ZTF_suffix position, the others
+    // are needed at the ZTF_prefix position, requiring lookahead.
+    BixNum highHash(bixHash.size() - 7);
+    for (unsigned i = 0; i < bixHash.size() - 7; i++) {
+        highHash[i] = pb.createLookahead(bixHash[i + 7], 1, "highHash");
+    }
+    //
+    // ZTF prefixes depend on the length group, but always have the high 2 bits set in each case.
+    encoded[7] = pb.createOr(ZTF_prefix, encoded[7]);
+    encoded[6] = pb.createOr(ZTF_prefix, encoded[6]);
+    //
+    // Determine the symbol length at the ZTF_prefix position.
+    // The run index numbers from the second position starting with 0,
+    // so the length is 2 + the runIndex value at the end of the symbol.
+    // At the ZTF_prefix position, the length is the runIndex plus 3.
+    BixNum symLength = bnc.AddFull(runIdx, 3);
+
+    // The encoding scheme starts at 0xC2, with the low 6 bit value of 2.
+    BixNum base = bnc.ZeroExtend(bnc.Create(2), 6);
+    for (unsigned i = 0; i < mLenGroups.size(); i++) {
+        unsigned extra_hash_bits = mLenGroups[i].hashBits - 7;  //low 7 bits in suffix
+        unsigned multiplier = 1<<extra_hash_bits;
+        PabloAST * inGroup = pb.createAnd(bnc.UGE(symLength, mLenGroups[i].lo), bnc.ULE(symLength, mLenGroups[i].hi), "inGroup_" + std::to_string(i));
+        inGroup = pb.createAnd(inGroup, ZTF_prefix);
+        BixNum lenOffset = bnc.SubModular(symLength, mLenGroups[i].lo);
+        BixNum lenBase = bnc.AddModular(base, bnc.MulModular(lenOffset, multiplier));
+        BixNum value = bnc.AddModular(lenBase, bnc.Truncate(highHash, extra_hash_bits));
+        for (unsigned j = 0; j < 6; j++) {
+            encoded[j] = pb.createSel(inGroup, value[j], encoded[j], "encoded[" + std::to_string(j) + "]");
+        }
+        base = bnc.AddModular(base, multiplier * (mLenGroups[i].hi - mLenGroups[i].lo + 1));
+    }
     for (unsigned i = 0; i < 8; i++) {
         pb.createAssign(pb.createExtract(encodedVar, pb.getInteger(i)), encoded[i]);
     }
 }
+
 
 void ZTF_ExpansionDecoder::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());

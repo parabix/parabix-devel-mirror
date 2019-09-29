@@ -62,6 +62,8 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
+std::vector<LengthGroup> lenGroups = {LengthGroup{3, 4, 8}, LengthGroup{5, 8, 8}, LengthGroup{9, 16, 8}};
+
 ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
     auto & b = driver.getBuilder();
@@ -93,7 +95,6 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
     P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
 
-    std::vector<LengthGroup> lenGroups = {LengthGroup{3, 4}, LengthGroup{5, 8}, LengthGroup{9, 16}};
     std::vector<StreamSet *> parsedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     P->CreateKernelCall<LengthSorter>(symbolRuns, runIndex, overflow, lenGroups, parsedMarks);
 
@@ -105,7 +106,7 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * const combinedMask = P->CreateStreamSet(1);
     P->CreateKernelCall<StreamsIntersect>(extractionMasks, combinedMask);
     StreamSet * const encoded = P->CreateStreamSet(8);
-    P->CreateKernelCall<ZTF_SymbolEncoder>(u8basis, bixHashes, combinedMask, runIndex, encoded);
+    P->CreateKernelCall<ZTF_SymbolEncoder>(lenGroups, u8basis, bixHashes, combinedMask, runIndex, encoded);
     
     StreamSet * const ZTF_basis = P->CreateStreamSet(8);
     FilterByMask(P, combinedMask, encoded, ZTF_basis);
@@ -134,7 +135,6 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const ztfHash_u8_Basis = P->CreateStreamSet(8);
     SpreadByMask(P, ztfRunSpreadMask, ztfHashBasis, ztfHash_u8_Basis);
 
-    std::vector<LengthGroup> lenGroups = {LengthGroup{3, 4}, LengthGroup{5, 8}, LengthGroup{9, 16}};
     std::vector<StreamSet *> decodedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     P->CreateKernelCall<ZTF_DecodeLengths>(ztfHash_u8_Basis,
                                            lenGroups,

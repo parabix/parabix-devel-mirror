@@ -46,6 +46,7 @@ class FixedLengthDecompression : public MultiBlockKernel {
 public:
     FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
                              unsigned length,
+                             unsigned hashBits,
                              StreamSet * keyMarks,
                              StreamSet * const hashMarks, StreamSet * const byteData,
                              StreamSet * const hashValues,
@@ -55,6 +56,7 @@ public:
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
     unsigned mLength;
+    unsigned mHashBits;
 };
 
 }
