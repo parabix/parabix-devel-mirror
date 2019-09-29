@@ -164,6 +164,19 @@ PabloAST * BixNumCompiler::EQ(BixNum value, BixNum test) {
     return mPB.createNot(NEQ(value, test));
 }
 
+BixNum BixNumCompiler::Create(unsigned value) {
+    unsigned value_bits = std::log2(value)+1;
+    BixNum v(value_bits);
+    for (unsigned i = 0; i < value_bits; i++) {
+        if ((value & (1<<i)) == 0) {
+            v[i] = mPB.createZeroes();
+        } else {
+            v[i] = mPB.createOnes();
+        }
+    }
+    return v;
+}
+
 BixNum BixNumCompiler::AddModular(BixNum augend, unsigned addend) {
     addend = addend & ((1 << augend.size()) - 1);
     if (addend == 0) return augend;
@@ -240,6 +253,12 @@ BixNum BixNumCompiler::MulModular(BixNum multiplicand, unsigned multiplier) {
         }
     }
     return product;
+}
+
+BixNum BixNumCompiler::AddFull(BixNum augend, unsigned addend) {
+    if (addend == 0) return augend;
+    unsigned long addend_bits = std::log2(addend)+1;
+    return AddModular(ZeroExtend(augend, std::max(augend.size(), addend_bits) + 1), addend);
 }
 
 BixNum BixNumCompiler::AddFull(BixNum augend, BixNum addend) {
