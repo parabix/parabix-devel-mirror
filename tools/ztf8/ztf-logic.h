@@ -32,9 +32,30 @@ protected:
     void generatePabloMethod() override;
 };
 
+/*
+ This kernel decodes the insertion length for two-byte ZTF code symbols.
+ The insertion length is the number of zero bytes to insert so that,
+ after insertion the zeroes together with the encoded symbol can be
+ replaced by the dictionary symbol of the appropriate length.
+*/
+
+class ZTF_ExpansionDecoder final: public pablo::PabloKernel {
+public:
+    ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+                         StreamSet * const basis,
+                         std::vector<LengthGroup> lengthGroups,
+                         StreamSet * insertBixNum);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    std::vector<LengthGroup> mLengthGroups;
+};
+
 class ZTF_DecodeLengths : public pablo::PabloKernel {
 public:
-    ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b, StreamSet * basisBits,
+    ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
+                      StreamSet * basisBits,
                       std::vector<LengthGroup> lengthGroups,
                       std::vector<StreamSet *> & groupStreams);
     bool isCachable() const override { return true; }
@@ -71,36 +92,6 @@ public:
 protected:
     void generatePabloMethod() override;
     std::vector<LengthGroup> & mLenGroups;
-};
-
-/*
- This kernel decodes the insertion length for two-byte ZTF code symbols
- in the range 0xC2-0xDF.   The insertion length is the number of zero
- bytes to insert so that, after insertion the zeroes together with the
- encoded symbol can be replaced by the dictionary symbol of the appropriate
- length.
- 
- The following table shows the pattern of the insertion lengths.
- 0xC2, 0xC3   final length 3, insertion length 1
- 0xC4, 0xC5   final length 4, insertion length 2
- 0xC6, 0xC7   final length 5, insertion length 3
- ...
- 0xDE, 0xDF   final length 17, insertion length 15
- 
- As it turns out, the insertion length calculation is very simple for
- the given symbols: simply using bits 1 through 4 of the basis stream.
- */
-
-class ZTF_ExpansionDecoder final: public pablo::PabloKernel {
-public:
-    ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const basis, StreamSet * insertBixNum)
-    : pablo::PabloKernel(b, "ZTF_ExpansionDecoder",
-                       {Binding{"basis", basis, FixedRate(), LookAhead(1)}},
-                       {Binding{"insertBixNum", insertBixNum}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
 };
 
 class LengthSorter final: public pablo::PabloKernel {

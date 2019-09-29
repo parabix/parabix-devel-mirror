@@ -62,12 +62,50 @@ void ByteRun::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("runMask"), pb.getInteger(0)), matchesprior);
 }
 
+ZTF_ExpansionDecoder::ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                           StreamSet * const basis,
+                                           std::vector<LengthGroup> lengthGroups,
+                                           StreamSet * insertBixNum)
+: pablo::PabloKernel(b, "ZTF_ExpansionDecoder" + LengthGroupAnnotation(lengthGroups),
+                     {Binding{"basis", basis, FixedRate(), LookAhead(1)}},
+                     {Binding{"insertBixNum", insertBixNum}}),
+    mLengthGroups(lengthGroups)  {}
+
+void ZTF_ExpansionDecoder::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    BixNumCompiler bnc(pb);
+    std::vector<PabloAST *> basis = getInputStreamSet("basis");
+    PabloAST * ASCII_lookahead = pb.createNot(pb.createLookahead(basis[7], 1));
+    unsigned base = 0xC2;
+    const unsigned offset = 2;
+    BixNum insertLgth(4, pb.createZeroes());
+    for (unsigned i = 0; i < mLengthGroups.size(); i++) {
+        unsigned lo = mLengthGroups[i].lo;
+        unsigned hi = mLengthGroups[i].hi;
+        unsigned extra_hash_bits = mLengthGroups[i].hashBits - 7;  //low 7 bits in suffix
+        unsigned multiplier = 1<<extra_hash_bits;
+        unsigned next_base = base + multiplier * (hi - lo + 1);
+        PabloAST * inGroup = pb.createAnd3(ASCII_lookahead, bnc.UGE(basis, base), bnc.ULT(basis, next_base));
+        BixNum relative = bnc.HighBits(bnc.SubModular(basis, base), 8 - extra_hash_bits);
+        BixNum toInsert = bnc.AddModular(relative, lo - offset);
+        for (unsigned i = 0; i < 4; i++) {
+            insertLgth[i] = pb.createSel(inGroup, toInsert[i], insertLgth[i], "insertLgth[" + std::to_string(i) + "]");
+        }
+        base = next_base;
+    }
+    Var * lengthVar = getOutputStreamVar("insertBixNum");
+    for (unsigned i = 0; i < 4; i++) {
+        pb.createAssign(pb.createExtract(lengthVar, pb.getInteger(i)), insertLgth[i]);
+    }
+}
+
 ZTF_DecodeLengths::ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
                                      StreamSet * basisBits,
                                      std::vector<LengthGroup> lengthGroups,
                                      std::vector<StreamSet *> & groupStreams)
 : PabloKernel(b, "ZTF_DecodeLengths" + LengthGroupAnnotation(lengthGroups),
-              {Binding{"basisBits", basisBits}}, {}), mLengthGroups(lengthGroups) {
+              {Binding{"basisBits", basisBits}}, {}),
+    mLengthGroups(lengthGroups) {
     for (unsigned i = 0; i < lengthGroups.size(); i++) {
         unsigned lo = lengthGroups[i].lo;
         unsigned hi = lengthGroups[i].hi;
@@ -82,13 +120,13 @@ void ZTF_DecodeLengths::generatePabloMethod() {
     std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
     std::vector<PabloAST *> groupStreams(mLengthGroups.size());
     PabloAST * ASCII = bnc.ULT(basis, 0x80);
-    BixNum base = bnc.ZeroExtend(bnc.Create(0xC2), 8);
+    unsigned base = 0xC2;
     for (unsigned i = 0; i < mLengthGroups.size(); i++) {
         unsigned lo = mLengthGroups[i].lo;
         unsigned hi = mLengthGroups[i].hi;
         unsigned extra_hash_bits = mLengthGroups[i].hashBits - 7;  //low 7 bits in suffix
         unsigned multiplier = 1<<extra_hash_bits;
-        BixNum next_base = bnc.AddModular(base, multiplier * (hi - lo + 1));
+        unsigned next_base = base + multiplier * (hi - lo + 1);
         PabloAST * inGroup = pb.createAnd(bnc.UGE(basis, base), bnc.ULT(basis, next_base));
         std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
         groupStreams[i] = pb.createAnd(pb.createAdvance(inGroup, 1), ASCII, groupName);
@@ -113,7 +151,7 @@ void ZTF_Symbols::generatePabloMethod() {
     wc1 = pb.createOr(wc1, pb.createAnd(prefix4, pb.createLookahead(wordChar, 3)));
     //
     // ZTF Code symbols
-    PabloAST * ZTF_sym = pb.createAnd(pb.createAdvance(prefix2, 1), ASCII);
+    PabloAST * ZTF_sym = pb.createAnd(pb.createAdvance(ccc.compileCC(re::makeCC(0xC2, 0xF7)), 1), ASCII);
     PabloAST * ZTF_prefix = pb.createAnd(prefix2, pb.createNot(pb.createLookahead(basis[7], 1)));
     // Filter out ZTF code symbols from word characters.
     wc1 = pb.createAnd(wc1, pb.createNot(ZTF_sym));
@@ -203,20 +241,6 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     }
     for (unsigned i = 0; i < 8; i++) {
         pb.createAssign(pb.createExtract(encodedVar, pb.getInteger(i)), encoded[i]);
-    }
-}
-
-
-void ZTF_ExpansionDecoder::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> basis = getInputStreamSet("basis");
-    std::unique_ptr<cc::CC_Compiler> ccc;
-    ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), basis);
-    PabloAST * ASCII_lookahead = pb.createNot(pb.createLookahead(basis[7], 1));
-    PabloAST * const ZTF_Sym = pb.createAnd(ccc->compileCC(re::makeByte(0xC2, 0xDF)), ASCII_lookahead, "ZTF_sym");
-    Var * lengthVar = getOutputStreamVar("insertBixNum");
-    for (unsigned i = 0; i < 4; i++) {
-        pb.createAssign(pb.createExtract(lengthVar, pb.getInteger(i)), pb.createAnd(ZTF_Sym, basis[i+1]));
     }
 }
 
