@@ -62,7 +62,8 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
-std::vector<LengthGroup> lenGroups = {LengthGroup{3, 4, 8}, LengthGroup{5, 8, 8}, LengthGroup{9, 16, 8}};
+const unsigned MAX_HASH_BITS = 8;
+std::vector<LengthGroup> lenGroups = {LengthGroup{3, 4, MAX_HASH_BITS}, LengthGroup{5, 8, 8}, LengthGroup{9, 16, 8}};
 
 ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
@@ -88,19 +89,21 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     StreamSet * const overflow = P->CreateStreamSet(1);
     P->CreateKernelCall<RunIndex>(symbolRuns, runIndex, overflow);
 
-    StreamSet * const bixHashes = P->CreateStreamSet(8);
+    StreamSet * const bixHashes = P->CreateStreamSet(MAX_HASH_BITS);
     P->CreateKernelCall<BixHash>(u8basis, symbolRuns, bixHashes);
+    //P->CreateKernelCall<DebugDisplayKernel>("bixHashes", bixHashes);
     
     StreamSet * const hashValues = P->CreateStreamSet(1, 16);
     std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
+    //P->CreateKernelCall<DebugDisplayKernel>("runIndex", runIndex);
     P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
-
+    //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
     std::vector<StreamSet *> parsedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     P->CreateKernelCall<LengthSorter>(symbolRuns, runIndex, overflow, lenGroups, parsedMarks);
 
     std::vector<StreamSet *> extractionMasks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     for (unsigned i = 0; i < lenGroups.size(); i++) {
-        P->CreateKernelCall<LengthGroupCompressionMask>(lenGroups[i], parsedMarks[i], hashValues, codeUnitStream,  extractionMasks[i]);
+        P->CreateKernelCall<LengthGroupCompressionMask>(lenGroups[i], MAX_HASH_BITS, parsedMarks[i], hashValues, codeUnitStream,  extractionMasks[i]);
     }
 
     StreamSet * const combinedMask = P->CreateStreamSet(1);
@@ -153,7 +156,7 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const overflow = P->CreateStreamSet(1);
     P->CreateKernelCall<RunIndex>(symbolRuns, runIndex, overflow);
 
-    StreamSet * const bixHashes = P->CreateStreamSet(8);
+    StreamSet * const bixHashes = P->CreateStreamSet(MAX_HASH_BITS);
     P->CreateKernelCall<BixHash>(ztfHash_u8_Basis, symbolRuns, bixHashes);
     
     StreamSet * const hashValues = P->CreateStreamSet(1, 16);
@@ -167,7 +170,7 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     for (unsigned i = 0; i < lenGroups.size(); i++) {
         StreamSet * input_bytes = u8bytes;
         StreamSet * output_bytes = P->CreateStreamSet(1, 8);
-        P->CreateKernelCall<LengthGroupDecompression>(lenGroups[i], parsedMarks[i], hashValues, decodedMarks[i], input_bytes, output_bytes);
+        P->CreateKernelCall<LengthGroupDecompression>(lenGroups[i], MAX_HASH_BITS, parsedMarks[i], hashValues, decodedMarks[i], input_bytes, output_bytes);
         u8bytes = output_bytes;
     }
 

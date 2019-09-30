@@ -16,6 +16,7 @@ class LengthGroupCompressionMask : public MultiBlockKernel {
 public:
     LengthGroupCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
                                LengthGroup lengthGroup,
+                               unsigned MAX_HASH_BITS,
                                StreamSet * symbolMarks,
                                StreamSet * hashValues,
                                StreamSet * const byteData,
@@ -25,12 +26,14 @@ public:
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
     LengthGroup mLengthGroup;
+    unsigned mMaxHashBits;
 };
 
 class LengthGroupDecompression : public MultiBlockKernel {
 public:
     LengthGroupDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
                              LengthGroup lengthGroup,
+                             unsigned MAX_HASH_BITS,
                              StreamSet * keyMarks,
                              StreamSet * hashValues,
                              StreamSet * const hashMarks, StreamSet * const byteData,
@@ -40,6 +43,7 @@ public:
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
     LengthGroup mLengthGroup;
+    unsigned mMaxHashBits;
 };
 
 class FixedLengthDecompression : public MultiBlockKernel {
@@ -47,6 +51,7 @@ public:
     FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
                              unsigned length,
                              unsigned hashBits,
+                             unsigned MAX_HASH_BITS,
                              StreamSet * keyMarks,
                              StreamSet * const hashMarks, StreamSet * const byteData,
                              StreamSet * const hashValues,
@@ -57,6 +62,7 @@ private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
     unsigned mLength;
     unsigned mHashBits;
+    unsigned mMaxHashBits;
 };
 
 }
