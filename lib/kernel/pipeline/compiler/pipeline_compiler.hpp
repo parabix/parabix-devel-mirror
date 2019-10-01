@@ -59,6 +59,7 @@ using BindingRef = RefWrapper<Binding>;
 using PortType = Kernel::PortType;
 using StreamPort = Kernel::StreamSetPort;
 using AttrId = Attribute::KindId;
+using Rational = KernelBuilder::Rational;
 using RateValue = ProcessingRate::RateValue;
 using RateId = ProcessingRate::KindId;
 using Scalars = PipelineKernel::Scalars;
@@ -536,7 +537,8 @@ protected:
     void writeCopyBackLogic(BuilderRef b);
     void writeLookAheadLogic(BuilderRef b);
     void writeLookBehindLogic(BuilderRef b);
-    enum class CopyMode { CopyBack, LookAhead, LookBehind };
+    void writeLookBehindReflectionLogic(BuilderRef b);
+    enum class CopyMode { CopyBack, LookAhead, LookBehind, LookBehindReflection };
     void copy(BuilderRef b, const CopyMode mode, Value * cond, const unsigned outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy);
 
 
@@ -862,6 +864,7 @@ protected:
     Vec<Value *>                                mInitiallyProducedItemCount; // *before* entering the kernel
     Vec<Value *>                                mInitiallyProducedDeferredItemCount;
     Vec<PHINode *>                              mAlreadyProducedPhi; // entering the segment loop
+    Vec<Value *>                                mAlreadyProducedDelayedPhi;
     Vec<PHINode *>                              mAlreadyProducedDeferredPhi;
     Vec<Value *>                                mFirstOutputStrideLength;
     Vec<Value *>                                mWritableOutputItems;

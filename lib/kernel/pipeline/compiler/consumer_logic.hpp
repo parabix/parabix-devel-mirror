@@ -361,8 +361,6 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, port});
         b->CallPrintInt(prefix + "_consumed", consumed);
-//        Value * const unconsumedDelta = b->CreateSub(mInitiallyProducedItemCount[port], consumed);
-//        b->CallPrintInt(prefix + "_unconsumedΔ", unconsumedDelta);
         #endif
     }
     b->setKernel(mKernel);

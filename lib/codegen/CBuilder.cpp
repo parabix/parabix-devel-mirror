@@ -1178,6 +1178,25 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
+llvm::AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine & Name) {
+
+    auto BB = GetInsertBlock();
+    auto F = BB->getParent();
+    auto & BL = F->getBasicBlockList();
+    if (LLVM_UNLIKELY(BL.empty())) {
+        report_fatal_error("CreateAllocaAtEntryPoint cannot create a value in an empty function");
+    }
+    auto & entryBlock = BL.front();
+    auto const first = entryBlock.getFirstNonPHIOrDbgOrLifetime();
+    const auto & DL = F->getParent()->getDataLayout();
+    const auto addrSize = DL.getAllocaAddrSpace();
+    if (LLVM_UNLIKELY(first == nullptr)) {
+        return new AllocaInst(Ty, addrSize, ArraySize, Name, &entryBlock);
+    } else {
+        return new AllocaInst(Ty, addrSize, ArraySize, Name, first);
+    }
+}
+
 BasicBlock * CBuilder::CreateBasicBlock(const StringRef name, BasicBlock * insertBefore) {
     return BasicBlock::Create(getContext(), name, GetInsertBlock()->getParent(), insertBefore);
 }

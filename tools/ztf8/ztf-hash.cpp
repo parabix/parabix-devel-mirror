@@ -382,10 +382,11 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     StreamSet * const u8bytes_34 = P->CreateStreamSet(1, 8);
     StreamSet * const u8bytes_58 = P->CreateStreamSet(1, 8);
     StreamSet * const u8bytes = P->CreateStreamSet(1, 8);
+    // P->CreateKernelCall<DebugDisplayKernel>("ztfHash_u8bytes", ztfHash_u8bytes);
     P->CreateKernelCall<LengthGroupDecompression>(LengthGroup{3, 4}, lengthGroup3_4, lgthBytes, group3_4marks, ztfHash_u8bytes, hashBytes, u8bytes_34);
     //P->CreateKernelCall<DebugDisplayKernel>("u8bytes_34", u8bytes_34);
     P->CreateKernelCall<LengthGroupDecompression>(LengthGroup{5, 8}, lengthGroup5_8, lgthBytes, group5_8marks, u8bytes_34, hashBytes, u8bytes_58);
-    //P->CreateKernelCall<DebugDisplayKernel>("u8bytes_58", u8bytes_58);
+    // P->CreateKernelCall<DebugDisplayKernel>("u8bytes_58", u8bytes_58);
     P->CreateKernelCall<LengthGroupDecompression>(LengthGroup{9, 16}, lengthGroup9_16, lgthBytes, group9_16marks, u8bytes_58, hashBytes, u8bytes);
     //P->CreateKernelCall<DebugDisplayKernel>("u8bytes", u8bytes);
     //P->CreateKernelCall<LengthGroupDecompression>(LengthGroup{5, 8}, lengthGroup5_8, lgthBytes, hashMarks, ztfHash_u8bytes, hashBytes, u8bytes);

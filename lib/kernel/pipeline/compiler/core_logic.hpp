@@ -111,6 +111,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
    // checkForLastPartialSegment(b, isFinal);
     writeLookBehindLogic(b);
     writeKernelCall(b);
+    writeLookBehindReflectionLogic(b);
     writeCopyBackLogic(b);
     // If the kernel explicitly terminates, it must set its processed/produced item counts.
     // Otherwise, the pipeline will update any countable rates, even upon termination.

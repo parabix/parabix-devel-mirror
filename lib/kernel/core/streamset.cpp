@@ -20,9 +20,9 @@ namespace llvm { class Function; }
 using namespace llvm;
 using IDISA::IDISA_Builder;
 
-using Rational = boost::rational<unsigned>;
-
 namespace kernel {
+
+using Rational = KernelBuilder::Rational;
 
 using BuilderPtr = StreamSetBuffer::BuilderPtr;
 
@@ -44,6 +44,13 @@ LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr & b, Type * type, cons
 
 LLVM_READNONE inline Constant * nullPointerFor(BuilderPtr & b, Value * ptr, const unsigned underflow) {
     return nullPointerFor(b, ptr->getType(), underflow);
+}
+
+LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
+    if (LLVM_LIKELY(isa<ArrayType>(ty))) {
+        ty = ty->getArrayElementType();
+    }
+    return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
 }
 
 LLVM_READNONE inline Value * addUnderflow(BuilderPtr & b, Value * ptr, const unsigned underflow) {
@@ -274,6 +281,10 @@ Value * ExternalBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced 
     unsupported("reserveCapacity", "External");
 }
 
+void ExternalBuffer::linearizeBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */) const {
+    /* do nothing */
+}
+
 // Internal Buffer
 
 Value * InternalBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
@@ -330,23 +341,46 @@ Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fro
 
 // Static Buffer
 
-Type * StaticBuffer::getHandleType(BuilderPtr /* b */) const {
-    return getPointerType();
+Type * StaticBuffer::getHandleType(BuilderPtr b) const {
+    PointerType * const typePtr = getPointerType();
+    FixedArray<Type *, 2> types;
+    types[BaseAddress] = typePtr;
+    auto & C = b->getContext();
+    if (LLVM_UNLIKELY(mLinear)) {
+        types[InitialAddress] = typePtr;
+    } else {
+        Type * const emptyTy = StructType::get(C);
+        types[InitialAddress] = emptyTy;
+    }
+    return StructType::get(C, types);
 }
 
 void StaticBuffer::allocateBuffer(BuilderPtr b) {
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(BaseAddress);
     Value * const handle = getHandle(b);
     assert (handle && "has not been set prior to calling allocateBuffer");
     Constant * size = b->getSize(mCapacity + mUnderflow + mOverflow);
-    Value * const buffer = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
-    b->CreateStore(addUnderflow(b, buffer, mUnderflow), handle);
+    Value * const buffer = addUnderflow(b, b->CreateCacheAlignedMalloc(mType, size, mAddressSpace), mUnderflow);
+    Value * const baseAddressField = b->CreateGEP(handle, indices);
+    b->CreateStore(buffer, baseAddressField);
+    if (mLinear) {
+        indices[1] = b->getInt32(InitialAddress);
+        Value * const logicalBaseField = b->CreateGEP(handle, indices);
+        b->CreateStore(buffer, logicalBaseField);
+    }
 }
 
 void StaticBuffer::releaseBuffer(BuilderPtr b) const {
     Value * const handle = getHandle(b);
-    Value * buffer = b->CreateLoad(handle);
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? InitialAddress : BaseAddress);
+    Value * const addressField = b->CreateGEP(handle, indices);
+    Value * buffer = b->CreateLoad(addressField);
     b->CreateFree(subtractUnderflow(b, buffer, mUnderflow));
-    b->CreateStore(nullPointerFor(b, buffer, mUnderflow), handle);
+    b->CreateStore(nullPointerFor(b, buffer, mUnderflow), addressField);
 }
 
 inline bool isCapacityGuaranteed(const Value * const index, const size_t capacity) {
@@ -375,7 +409,8 @@ void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
 }
 
 Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
-    return b->CreateLoad(getHandle(b));
+    Value * const ptr = b->CreateGEP(getHandle(b), {b->getInt32(0), b->getInt32(BaseAddress)});
+    return b->CreateLoad(ptr);
 }
 
 void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const {
@@ -388,6 +423,47 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
 
 Value * StaticBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
     unsupported("reserveCapacity", "Static");
+}
+
+void StaticBuffer::linearizeBuffer(BuilderPtr b, llvm::Value * const produced, llvm::Value * const consumed) const {
+
+    if (mLinear) {
+
+        Value * const handle = getHandle(b);
+        FixedArray<Value *, 2> indices;
+        indices[0] = b->getInt32(0);
+        indices[1] = b->getInt32(InitialAddress);
+        Value * const I = b->CreateLoad(b->CreateGEP(handle, indices));
+        indices[1] = b->getInt32(BaseAddress);
+        Value * const B = b->CreateLoad(b->CreateGEP(handle, indices));
+
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(I->getType());
+        Value * K = b->CreateSub(b->CreatePtrToInt(I, intPtrTy), b->CreatePtrToInt(B, intPtrTy));
+        const auto itemWidth = getItemWidth(I->getType()->getPointerElementType());
+        K = b->CreateMulRate(K, Rational{8, itemWidth});
+
+        // K is the number of consumed items that have already been "compacted"
+
+        Value * const P = b->CreateSub(produced, K);
+
+        Value * const C = b->CreateSub(consumed, K);
+
+
+        Value * const U = b->CreateSub(P, C); // new/unconsumed items
+
+
+
+
+
+
+
+        // NOTE: for static buffers, it's an error if we cannot copy all of the unconsumed data over the consumed region.
+
+
+
+
+    }
 }
 
 // Dynamic Buffer
@@ -663,6 +739,10 @@ Value * DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Val
     return b->CreateCall(func, { myHandle, produced, consumed, required, overflowItems ? overflowItems : b->getSize(0) });
 }
 
+void DynamicBuffer::linearizeBuffer(BuilderPtr b, llvm::Value * const produced, llvm::Value * const consumed) const {
+
+}
+
 #if 0
 
 // Linear Buffer
@@ -864,7 +944,6 @@ StaticBuffer::StaticBuffer(BuilderPtr b, Type * const type,
             && (underflowSize % b->getBitBlockWidth()) == 0);
     assert ("static buffer capacity must be at least twice its max(underflow, overflow)"
             && (capacity >= (std::max(underflowSize, overflowSize) * 2)));
-    assert ("a linear buffer cannot have an overflow" && (!linear || overflowSize == 0));
 }
 
 DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
@@ -881,7 +960,6 @@ DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
             && (underflowSize % b->getBitBlockWidth()) == 0);
     assert ("dynamic buffer initial capacity must be at least twice its max(underflow, overflow)"
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
-    assert ("a linear buffer cannot have an overflow" && (!linear || overflowSize == 0));
 }
 
 inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,

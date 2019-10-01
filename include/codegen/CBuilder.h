@@ -309,6 +309,8 @@ public:
         return CreateLikelyCondBr(Cond, True, False, 100 - probability);
     }
 
+    llvm::AllocaInst * CreateAllocaAtEntryPoint(llvm::Type * Ty, llvm::Value * ArraySize = nullptr, const llvm::Twine & Name = "");
+
     llvm::BasicBlock * CreateBasicBlock(const llvm::StringRef name = "", llvm::BasicBlock * insertBefore = nullptr);
 
     virtual bool supportsIndirectBr() const;

@@ -561,6 +561,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CallPrintInt(prefix + "_processed'", mProcessedItemCount[i]);
         #endif
     }
+
+
+
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const Binding & output = getOutputBinding(i);
         const ProcessingRate & rate = output.getRate();
@@ -571,10 +574,103 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         } else {
             llvm_unreachable("unexpected output rate");
         }
+
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
         b->CallPrintInt(prefix + "_produced'", mProducedItemCount[i]);
         #endif
+
+        #if 0
+
+        if (mKernelIndex >= 53 && mKernelIndex <= 55) {
+
+            Constant * const MAX = b->getSize(3 * 16);
+            Constant * const CAPACITY = b->getSize(3 * 17);
+            Constant * const MAX_MINUS_1 = b->getSize(3 * 16  - 1);
+            Constant * const LINE_MASK = b->getSize(16 - 1);
+            Constant * const ZERO = b->getSize(0);
+            Constant * const ONE = b->getSize(1);
+            Constant * const THREE = b->getSize(3);
+            Constant * const TEN = b->getInt8(10);
+            Constant * const FIFTEEN = b->getInt8(15);
+            Constant * const NUMERIC = b->getInt8('0');
+            Constant * const ALPHA = b->getInt8('a' - 10);
+
+
+            Value * P = mProducedItemCount[i];
+            Value * I = mAlreadyProducedPhi[i];
+
+            if (output.hasAttribute(AttrId::Delayed)) {
+                Constant * const K = b->getSize(output.findAttribute(AttrId::Delayed).amount());
+                Value * term = b->CreateIsNull(mNumOfLinearStrides);
+                if (mTerminatedExplicitly) {
+                    term = b->CreateOr(term, mTerminatedExplicitly);
+                }
+                I = b->CreateSaturatingSub(I, K);
+                P = b->CreateSelect(term, P, b->CreateSaturatingSub(P, K));
+            }
+
+
+            Value * const length = b->CreateSub(P, I);
+            StreamSetBuffer * const buffer = getOutputBuffer(i);
+
+
+            Value * const chars = b->CreateAllocaAtEntryPoint(b->getInt8Ty(), CAPACITY);
+            b->CreateMemSet(chars, b->getInt8(' '), MAX, 1);
+            b->CreateStore(b->getInt8('\n'), b->CreateGEP(chars, MAX_MINUS_1));
+
+            BasicBlock * const writeCond = b->CreateBasicBlock();
+            BasicBlock * const writeOut = b->CreateBasicBlock();
+            BasicBlock * const writeNext = b->CreateBasicBlock();
+            BasicBlock * const writeExit = b->CreateBasicBlock();
+            BasicBlock * const entryPoint = b->GetInsertBlock();
+            b->CreateBr(writeCond);
+
+            b->SetInsertPoint(writeCond);
+            PHINode * const index = b->CreatePHI(b->getSizeTy(), 2);
+            index->addIncoming(ZERO, entryPoint);
+            Value * const offset = b->CreateAnd(index, LINE_MASK);
+            Value * const offset1 = b->CreateMul(offset, THREE);
+            Value * const offset2 = b->CreateAdd(offset1, ONE);
+
+            Value * const start = buffer->getRawItemPointer(b,  ZERO, b->CreateAdd(I, index));
+            Value * const val = b->CreateLoad(start);
+
+            Value * const val0 = b->CreateAnd(val, FIFTEEN);
+            Value * const val1 = b->CreateLShr(val, 4);
+
+            Value * const A0 = b->CreateAdd(val0, NUMERIC);
+            Value * const A1 = b->CreateAdd(val0, ALPHA);
+            Value * const A = b->CreateSelect(b->CreateICmpULT(val0, TEN), A0, A1);
+            b->CreateStore(A, b->CreateGEP(chars, offset2));
+
+            Value * const B0 = b->CreateAdd(val1, NUMERIC);
+            Value * const B1 = b->CreateAdd(val1, ALPHA);
+            Value * const B = b->CreateSelect(b->CreateICmpULT(val1, TEN), B0, B1);
+            b->CreateStore(B, b->CreateGEP(chars, offset1));
+
+            Value * const nextIndex = b->CreateAdd(index, ONE);
+            Value * const insertLineBreak = b->CreateAnd(b->CreateICmpNE(index, ZERO), b->CreateICmpEQ(offset, ZERO));
+            Value * const notLastChar = b->CreateICmpNE(nextIndex, length);
+            b->CreateCondBr(b->CreateAnd(insertLineBreak, notLastChar), writeOut, writeNext);
+
+            b->SetInsertPoint(writeOut);
+            b->CreateWriteCall(b->getInt32(STDERR_FILENO), chars, MAX);
+            b->CreateBr(writeNext);
+
+            b->SetInsertPoint(writeNext);
+            index->addIncoming(nextIndex, writeNext);
+            b->CreateCondBr(notLastChar, writeCond, writeExit);
+
+            b->SetInsertPoint(writeExit);
+            Value * const endLine1 = b->CreateAdd(offset2, ONE);
+            Value * const endLine2 = b->CreateAdd(endLine1, ONE);
+            b->CreateStore(b->getInt8('\n'), b->CreateGEP(chars, endLine1));
+            b->CreateWriteCall(b->getInt32(STDERR_FILENO), chars, endLine2);
+        }
+
+        #endif
+
     }
 
 }
@@ -712,6 +808,9 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
         Value * const baseAddress = buffer->getBaseAddress(b);
+        #ifdef PRINT_DEBUG_MESSAGES
+        Value * const epoch = buffer->getStreamPackPtr(b, baseAddress, ZERO, ZERO, ZERO);
+        #endif
         BasicBlock * const entry = b->GetInsertBlock();
         b->CreateBr(maskLoop);
 
@@ -730,6 +829,9 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
         DataLayout DL(b->getModule());
         Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
+        #ifdef PRINT_DEBUG_MESSAGES
+        Value * const epochInt = b->CreatePtrToInt(epoch, intPtrTy);
+        #endif
         if (itemWidth > 1) {
             // Since packs are laid out sequentially in memory, it will hopefully be cheaper to zero them out here
             // because they may be within the same cache line.
@@ -740,7 +842,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
             Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_zeroFill_packStart", startInt);
+            b->CallPrintInt(prefix + "_zeroFill_packStart", b->CreateSub(startInt, epochInt));
             b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);
             #endif
             b->CreateMemZero(start, remainingPackBytes, blockWidth / 8);
@@ -762,8 +864,9 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const remainingBlocks = b->CreateSub(BLOCKS_TO_ZERO, blockOffset);
             Constant * const BLOCK_SIZE = b->getSize(blockWidth / 8);
             Value * const remainingBytes = b->CreateMul(remainingBlocks, BLOCK_SIZE);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_zeroFill_bufferStart", startPtr);
+            #ifdef PRINT_DEBUG_MESSAGES            
+            Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
+            b->CallPrintInt(prefix + "_zeroFill_bufferStart", b->CreateSub(startPtrInt, epochInt));
             b->CallPrintInt(prefix + "_zeroFill_remainingBufferBytes", remainingBytes);
             #endif
             b->CreateMemZero(startPtr, remainingBytes, blockWidth / 8);
@@ -807,7 +910,8 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
         if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
             const auto & D = output.findAttribute(AttrId::Delayed);
             Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
-            produced = b->CreateSelect(mHalted, produced, delayed);
+            Value * const terminated = b->CreateIsNotNull(mTerminatedPhi);
+            produced = b->CreateSelect(terminated, produced, delayed);
         }
         produced = truncateBlockSize(b, output, produced);
         mFullyProducedItemCount[i]->addIncoming(produced, mKernelLoopExitPhiCatch);

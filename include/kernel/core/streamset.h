@@ -118,6 +118,8 @@ public:
 
     virtual llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
 
+    virtual void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const = 0;
+
     void setHandle(BuilderPtr b, llvm::Value * const handle) const;
 
 protected:
@@ -182,6 +184,8 @@ public:
 
     llvm::Value * getOverflowAddress(BuilderPtr b) const override;
 
+    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
+
 private:
 
     void assertValidBlockIndex(BuilderPtr b, llvm::Value * blockIndex) const;
@@ -228,6 +232,8 @@ public:
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
+    enum Field { BaseAddress, InitialAddress };
+
     void allocateBuffer(BuilderPtr b) override;
 
     void releaseBuffer(BuilderPtr b) const override;
@@ -245,6 +251,8 @@ public:
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 
     llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+
+    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
 
     size_t getCapacity() const {
         return mCapacity;
@@ -281,6 +289,8 @@ public:
     void releaseBuffer(BuilderPtr b) const override;
 
     llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+
+    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
 
     size_t getInitialCapacity() const {
         return mInitialCapacity;

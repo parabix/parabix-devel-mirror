@@ -163,11 +163,17 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             RateValue underflowSpace{0};
             RateValue overflowSpace{producerRate.MaximumSpace - producerRate.MaximumExpectedFlow};
 
-            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::LookBehind))) {
-                const auto & lookBehind = output.findAttribute(AttrId::LookBehind);
-                const auto amount = lookBehind.amount();
-                underflowSpace = RateValue{itemWidth * amount, blockWidth};
-            }
+            auto updateUnderflow = [&](const Binding & output, const AttrId type) {
+                if (LLVM_UNLIKELY(output.hasAttribute(type))) {
+                    const auto & lookBehind = output.findAttribute(type);
+                    const auto amount = lookBehind.amount();
+                    RateValue LB{itemWidth * amount, blockWidth};
+                    underflowSpace = std::max(underflowSpace, LB);
+                }
+            };
+
+            updateUnderflow(output, AttrId::LookBehind);
+            updateUnderflow(output, AttrId::Delayed);
 
             // TODO: If we have an open system, then the input rate to this pipeline cannot
             // be bounded a priori. During initialization, we could pass a "suggestion"
@@ -208,12 +214,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
                 // If we have a lookbehind attribute, make sure we have enough underflow
                 // space to satisfy the processing rate.
-                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
-                    const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
-                    const auto amount = lookBehind.amount();
-                    RateValue u{itemWidth * amount, blockWidth};
-                    underflowSpace = std::max(underflowSpace, u);
-                }
+                updateUnderflow(output, AttrId::LookBehind);
             }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
@@ -362,10 +363,12 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
     using ReferenceGraph = adjacency_list<vecS, vecS, bidirectionalS>;
 
     using CommonPartialSumRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
+//    using CommonDelayedRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
     using CommonFixedRateChangeMap = flat_map<std::tuple<RateValue, unsigned, unsigned>, unsigned>;
 
     CommonPartialSumRateMap P;
     CommonFixedRateChangeMap F;
+//    CommonDelayedRateMap D;
     SymbolicRateMinGraph M;
 
     flat_set<unsigned> rates;
@@ -393,6 +396,19 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
                 return f->second;
             }
         };
+
+//        auto getDelayedSymbolicRate = [&](const unsigned symRate, const unsigned delay) -> unsigned {
+//            const auto key = std::make_pair(symRate, delay);
+//            const auto f = D.find(key);
+//            if (LLVM_LIKELY(f == D.end())) {
+//                const auto symbolicRate = add_vertex(M);
+//                rateIsBoundedBy(symbolicRate, symRate);
+//                D.emplace(key, symbolicRate);
+//                return symbolicRate;
+//            } else {
+//                return f->second;
+//            }
+//        };
 
         rates.clear();
 
@@ -463,7 +479,12 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
 
                 // TODO: The truncated buffer need not need to be dynamic.
                 if (compatibleFixedRates()) {
-                    inputRate.SymbolicRate = outputRate.SymbolicRate;
+//                    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Delayed))) {
+//                        const auto & delay = binding.findAttribute(AttrId::Delayed);
+//                        inputRate.SymbolicRate = getDelayedSymbolicRate(outputRate.SymbolicRate, delay.amount());
+//                    } else {
+                        inputRate.SymbolicRate = outputRate.SymbolicRate;
+//                    }
                 } else {
                     unsigned la = 0;
                     if (LLVM_UNLIKELY(binding.hasLookahead())) {
@@ -868,7 +889,7 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
 
         for (const auto & output : make_iterator_range(out_edges(kernel, G))) {
             BufferRateData & outputRate = G[output];
-            outputRate.MinimumExpectedFlow = lower_expected * outputRate.Minimum;
+            outputRate.MinimumExpectedFlow = lower_expected * outputRate.Minimum;      
             outputRate.MaximumExpectedFlow = upper_expected * outputRate.Maximum;
             RateValue add{0};
             check_attribute(AttrId::Add, outputRate, add);
@@ -889,7 +910,8 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
             }
             RateValue delayed{0};
             check_attribute(AttrId::Delayed, outputRate, delayed);
-            outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;
+            outputRate.MinimumExpectedFlow -= delayed;
+            outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;            
             const auto f = upper_absolute + delayed + std::max(add + add2, roundUp);
             outputRate.MaximumSpace = f * outputRate.Maximum;
             assert (outputRate.MinimumSpace <= outputRate.MinimumExpectedFlow);

@@ -69,9 +69,9 @@ std::string lengthGroupStr(LengthGroup lengthGroup) {
 
 Binding ByteDataBinding(unsigned max_length, StreamSet * byteData) {
     if (DeferredAttribute) {
-        return Binding{"byteData", byteData, FixedRate(), {Deferred()}};
+        return Binding{"byteData", byteData, FixedRate(), { Deferred() }}; // , Linear()
     } else {
-        return Binding{"byteData", byteData, FixedRate(), LookBehind(max_length)};
+        return Binding{"byteData", byteData, FixedRate(), { LookBehind(max_length) }}; // , Linear()
     }
 }
 
@@ -208,8 +208,8 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("tblEntryPtr", tblEntryPtr);
     Value * tblPtr1 = b->CreateBitCast(tblEntryPtr, halfSymPtrTy);
     Value * tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), halfSymPtrTy);
-    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos), halfSymPtrTy);
-    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), b->CreateAdd(keyStartPos, keyOffset)), halfSymPtrTy);
+    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", keyStartPos), halfSymPtrTy);
+    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->CreateAdd(keyStartPos, keyOffset)), halfSymPtrTy);
     // Check to see if the hash table entry is nonzero (already assigned).
     Value * sym1 = b->CreateLoad(symPtr1);
     Value * sym2 = b->CreateLoad(symPtr2);
@@ -273,7 +273,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     // In the next segment, we may need to access byte data in the last
     // 16 bytes of this segment.
     if (DeferredAttribute) {
-        Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_MAXLENGTH));
+        Value * processed = b->CreateSub(avail, sz_MAXLENGTH);
         b->setProcessedItemCount("byteData", processed);
     }
     // Although we have written the last block mask, we do not include it as
@@ -307,9 +307,8 @@ LengthGroupDecompression::LengthGroupDecompression(const std::unique_ptr<kernel:
                        Binding{"hashValues", hashValues},
                    },
                    {}, {}, {},
-                   {InternalScalar{ArrayType::get(b->getInt8Ty(), lengthGroup.hi), "pendingOutput"},
-                       // Hash table 8 length-based tables with 256 16-byte entries each.
-                       InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(lengthGroup)), "hashTable"}}),
+                   {// Hash table 8 length-based tables with 256 16-byte entries each.
+                    InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(lengthGroup)), "hashTable"}}),
 mLengthGroup(lengthGroup) {
     checkLengthGroup(lengthGroup);
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
@@ -317,6 +316,9 @@ mLengthGroup(lengthGroup) {
         mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLengthGroup.hi) );
     } else {
         mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
+    }
+    if (!DelayedAttribute) {
+        addInternalScalar(ArrayType::get(b->getInt8Ty(), lengthGroup.hi), "pendingOutput");
     }
 }
 
@@ -351,14 +353,18 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
 
     Value * const initialPos = b->getProcessedItemCount("keyMarks");
-    Value * const initialProduced = b->getProducedItemCount("result");
     Value * const avail = b->getAvailableItemCount("keyMarks");
-    // Copy pending output data.
-    b->CreateMemCpy(b->getRawOutputPointer("result", initialProduced), b->getScalarFieldPtr("pendingOutput"), sz_MAXLENGTH, 1);
+
+    if (!DelayedAttribute) {
+        // Copy pending output data.
+        Value * const initialProduced = b->getProducedItemCount("result");
+        b->CreateMemCpy(b->getRawOutputPointer("result", initialProduced), b->getScalarFieldPtr("pendingOutput"), sz_MAXLENGTH, 1);
+    }
+
     // Copy all new input to the output buffer; this will be then
     // overwritten when and as necessary for decompression of ZTF codes.
     Value * toCopy = b->CreateSub(avail, initialPos);
-    b->CreateMemCpy(b->getRawOutputPointer("result", initialPos), b->getRawInputPointer("byteData", initialPos), toCopy, 1);
+    b->CreateMemCpy(b->getRawOutputPointer("result", initialPos), b->getRawInputPointer("byteData", initialPos), toCopy, mStride);
     Value * hashTableBasePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
     //b->CallPrintInt("hashTableBasePtr", hashTableBasePtr);
     b->CreateBr(stridePrologue);
@@ -401,6 +407,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // table if there is not already an entry for that hash code.
     Value * keyWordBasePtr = b->getInputStreamBlockPtr("keyMarks", sz_ZERO, strideBlockOffset);
     keyWordBasePtr = b->CreateBitCast(keyWordBasePtr, sw.pointerTy);
+    //b->CallPrintInt("keyMask", keyMask);
     b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMask, sz_ZERO), keysDone, keyProcessingLoop);
 
     b->SetInsertPoint(keyProcessingLoop);
@@ -435,9 +442,9 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("tblPtr1", tblPtr1);
     Value * tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, keyOffset), halfSymPtrTy);
     //b->CallPrintInt("tblPtr2", tblPtr2);
-    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos), halfSymPtrTy);
+    Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", keyStartPos), halfSymPtrTy);
     //b->CallPrintInt("symPtr1", symPtr1);
-    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->getInt32(0), b->CreateAdd(keyStartPos, keyOffset)), halfSymPtrTy);
+    Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->CreateAdd(keyStartPos, keyOffset)), halfSymPtrTy);
     //b->CallPrintInt("symPtr2", symPtr2);
     // Check to see if the hash table entry is nonzero (already assigned).
     Value * sym1 = b->CreateLoad(symPtr1);
@@ -505,7 +512,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("hashTablePtr", hashTablePtr);
     tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(hashCode, sz_MAXLENGTH));
     // Use two 8-byte loads to get hash and symbol values.
-    //b->CallPrintInt("tblEntryPtr", tblEntryPtr);
+    // b->CallPrintInt("tblEntryPtr", tblEntryPtr);
     tblPtr1 = b->CreateBitCast(tblEntryPtr, halfSymPtrTy);
     //b->CallPrintInt("tblPtr1", tblPtr1);
     tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, symOffset), halfSymPtrTy);
@@ -514,9 +521,16 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     //b->CallPrintInt("entry1", entry1);
     entry2 = b->CreateLoad(tblPtr2);
 
-    symPtr1 = b->CreateBitCast(b->getRawOutputPointer("result", b->getInt32(0), symStartPos), halfSymPtrTy);
-    symPtr2 = b->CreateBitCast(b->getRawOutputPointer("result", b->getInt32(0), b->CreateAdd(symStartPos, symOffset)), halfSymPtrTy);
+    //b->CallPrintInt("symStartPos", symStartPos);
+    symPtr1 = b->CreateBitCast(b->getRawOutputPointer("result", symStartPos), halfSymPtrTy);
+
+    //b->CallPrintInt("symOffset", symOffset);
+    symPtr2 = b->CreateBitCast(b->getRawOutputPointer("result", b->CreateAdd(symStartPos, symOffset)), halfSymPtrTy);
+
+    //b->CallPrintInt("entry1", entry1);
     b->CreateStore(entry1, symPtr1);
+
+    //b->CallPrintInt("entry2", entry2);
     b->CreateStore(entry2, symPtr2);
 
     Value * dropHash = b->CreateResetLowestBit(theHashWord);
@@ -536,16 +550,16 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // If the segment ends in the middle of a 2-byte codeword, we need to
     // make sure that we still have access to the codeword in the next block.
     if (DeferredAttribute) {
-        Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_MAXLENGTH));
+        Value * processed = b->CreateSub(avail, sz_MAXLENGTH);
         b->setProcessedItemCount("byteData", processed);
     }
     // Although we have written the full input stream to output, there may
     // be an incomplete symbol at the end of this block.   Store the
     // data that may be overwritten as pending and set the produced item
     // count to that which is guaranteed to be correct.
-    Value * guaranteedProduced = b->CreateSub(avail, sz_MAXLENGTH);
-    b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_MAXLENGTH, 1);
     if (!DelayedAttribute) {
+        Value * guaranteedProduced = b->CreateSub(avail, sz_MAXLENGTH);
+        b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_MAXLENGTH, 1);
         b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
     }
 }
