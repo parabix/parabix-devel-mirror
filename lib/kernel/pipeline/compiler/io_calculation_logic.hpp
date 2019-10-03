@@ -265,7 +265,7 @@ Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const unsigned
     ConstantInt * copyBack = nullptr;
     const auto size = getCopyBack(getOutputBufferVertex(outputPort));
     if (size) {
-        copyBack = b->getSize(size - 1);
+        copyBack = b->getSize(size);
     }
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -332,7 +332,7 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const unsigned ou
     if (LLVM_LIKELY(useOverflow)) {
         const auto size = getCopyBack(getOutputBufferVertex(outputPort));
         if (size) {
-            copyBack = b->getSize(size - 1);
+            copyBack = b->getSize(size);
         }
     }
     Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);

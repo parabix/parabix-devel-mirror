@@ -995,7 +995,7 @@ void __report_failure_v(const char * name, const char * fmt, const uintptr_t * t
     out.write(buffer, m);
     if (trace == nullptr) {
         out.changeColor(raw_fd_ostream::WHITE, true);
-        out << "No debug symbols loaded.\n";
+        out << "\nNo debug symbols loaded.\n";
     }
     out.resetColor();
     out << "\n\n";

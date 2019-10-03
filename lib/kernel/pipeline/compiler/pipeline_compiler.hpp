@@ -241,6 +241,7 @@ struct BufferNode {
     RateValue Lower{};
     RateValue Upper{};
     unsigned LookBehind = 0;
+    unsigned LookBehindReflection = 0;
     unsigned CopyBack = 0;
     unsigned LookAhead = 0;
     unsigned RequiredSpace = 0;

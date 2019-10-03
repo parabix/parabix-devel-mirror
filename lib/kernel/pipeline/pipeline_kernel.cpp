@@ -177,6 +177,8 @@ void PipelineKernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
     mOutputScalars[i].setRelationship(value);
 }
 
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -186,7 +188,17 @@ PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
                                Bindings && stream_inputs, Bindings && stream_outputs,
                                Bindings && scalar_inputs, Bindings && scalar_outputs)
 : Kernel(b, TypeId::Pipeline,
-         "P" + std::to_string(numOfThreads) + "_" + getStringHash(signature),
+         [] (const std::string & signature, const unsigned numOfThreads) {
+             std::string tmp;
+             tmp.reserve(32);
+             const auto bufferSegments = std::max(numOfThreads > 1 ? numOfThreads + 1 : 1, codegen::BufferSegments);
+             llvm::raw_string_ostream name(tmp);
+             name << 'P' << numOfThreads
+                  << 'B' << bufferSegments
+                  << '_' << Kernel::getStringHash(signature);
+             name.flush();
+             return tmp;
+         } (signature, numOfThreads),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs), {})
 , mNumOfThreads(numOfThreads)

@@ -110,9 +110,146 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopCall);
    // checkForLastPartialSegment(b, isFinal);
     writeLookBehindLogic(b);
-    writeKernelCall(b);
-    writeLookBehindReflectionLogic(b);
+    writeKernelCall(b);    
     writeCopyBackLogic(b);
+
+    #if 0
+
+    auto hexDumpOutput = [&]() {
+
+        for (unsigned i = 0; i < getNumOfStreamOutputs(mKernelIndex); ++i) {
+
+            const Binding & output = getOutputBinding(i);
+
+            Constant * const MAX = b->getSize(3 * 16 + 1);
+            Constant * const CAPACITY = b->getSize(3 * 17);
+            Constant * const MAX_MINUS_1 = b->getSize(3 * 16);
+            Constant * const LINE_MASK = b->getSize(16 - 1);
+            Constant * const ZERO = b->getSize(0);
+            Constant * const ONE = b->getSize(1);
+            Constant * const THREE = b->getSize(3);
+            Constant * const TEN = b->getInt8(10);
+            Constant * const FIFTEEN = b->getInt8(15);
+            Constant * const NUMERIC = b->getInt8('0');
+            Constant * const ALPHA = b->getInt8('a' - 10);
+
+
+            Value * P = mProducedItemCount[i];
+            Value * I = mAlreadyProducedPhi[i];
+
+            if (output.hasAttribute(AttrId::Delayed)) {
+                Constant * const K = b->getSize(output.findAttribute(AttrId::Delayed).amount());
+                Value * term = b->CreateIsNull(mNumOfLinearStrides);
+                if (mTerminatedExplicitly) {
+                    term = b->CreateOr(term, mTerminatedExplicitly);
+                }
+                I = b->CreateSaturatingSub(I, K);
+                P = b->CreateSelect(term, P, b->CreateSaturatingSub(P, K));
+            }
+
+            Value * const length = b->CreateSub(P, I);
+            StreamSetBuffer * const buffer = getOutputBuffer(i);
+
+            Value * const prior = buffer->getRawItemPointer(b,  ZERO, b->CreateSub(I, ONE));
+
+
+            Value * const chars = b->CreateAllocaAtEntryPoint(b->getInt8Ty(), CAPACITY);
+            b->CreateStore(b->getInt8('\n'), b->CreateGEP(chars, MAX_MINUS_1));
+
+            BasicBlock * const writeCond = b->CreateBasicBlock();
+            BasicBlock * const writeOut = b->CreateBasicBlock();
+            BasicBlock * const writeNext = b->CreateBasicBlock();
+            BasicBlock * const writeExit = b->CreateBasicBlock();
+            BasicBlock * const entryPoint = b->GetInsertBlock();
+            b->CreateBr(writeCond);
+
+            b->SetInsertPoint(writeCond);
+            PHINode * const index = b->CreatePHI(b->getSizeTy(), 2);
+            index->addIncoming(ZERO, entryPoint);
+            PHINode * const priorPhi = b->CreatePHI(prior->getType(), 2);
+            priorPhi->addIncoming(prior, entryPoint);
+
+
+            Value * const offset = b->CreateAnd(index, LINE_MASK);
+            Value * const offset1 = b->CreateMul(offset, THREE);
+            Value * const offset2 = b->CreateAdd(offset1, ONE);
+            Value * const offset3 = b->CreateAdd(offset2, ONE);
+
+            Value * const start = buffer->getRawItemPointer(b,  ZERO, b->CreateAdd(I, index));
+
+            DataLayout DL(b->getModule());
+            Type * const intPtrTy = DL.getIntPtrType(start->getType());
+            Value * const startInt = b->CreatePtrToInt(start, intPtrTy);
+            Value * const priorInt = b->CreatePtrToInt(priorPhi, intPtrTy);
+
+            Value * const adjacent = b->CreateICmpEQ(b->CreateSub(startInt, priorInt), ONE);
+            Value * const successor = b->CreateICmpUGT(startInt, priorInt);
+            Value * const delimiter = b->CreateSelect(successor, b->getInt8(']'), b->getInt8('['));
+
+            Value * const D = b->CreateSelect(adjacent, b->getInt8(' '), delimiter);
+            b->CreateStore(D, b->CreateGEP(chars, offset1));
+
+            Value * const val = b->CreateLoad(start);
+
+            Value * const val0 = b->CreateAnd(val, FIFTEEN);
+            Value * const val1 = b->CreateLShr(val, 4);
+
+            Value * const A0 = b->CreateAdd(val0, NUMERIC);
+            Value * const A1 = b->CreateAdd(val0, ALPHA);
+            Value * const A = b->CreateSelect(b->CreateICmpULT(val0, TEN), A0, A1);
+            b->CreateStore(A, b->CreateGEP(chars, offset3));
+
+            Value * const B0 = b->CreateAdd(val1, NUMERIC);
+            Value * const B1 = b->CreateAdd(val1, ALPHA);
+            Value * const B = b->CreateSelect(b->CreateICmpULT(val1, TEN), B0, B1);
+            b->CreateStore(B, b->CreateGEP(chars, offset2));
+
+            Value * const nextIndex = b->CreateAdd(index, ONE);
+            Value * const insertLineBreak = b->CreateAnd(b->CreateICmpNE(index, ZERO), b->CreateICmpEQ(offset, ZERO));
+            Value * const notLastChar = b->CreateICmpNE(nextIndex, length);
+            b->CreateCondBr(b->CreateAnd(insertLineBreak, notLastChar), writeOut, writeNext);
+
+            b->SetInsertPoint(writeOut);
+            b->CreateWriteCall(b->getInt32(STDERR_FILENO), chars, MAX);
+            b->CreateBr(writeNext);
+
+            b->SetInsertPoint(writeNext);
+            index->addIncoming(nextIndex, writeNext);
+            priorPhi->addIncoming(start, writeNext);
+            b->CreateCondBr(notLastChar, writeCond, writeExit);
+
+            b->SetInsertPoint(writeExit);
+            Value * const endLine1 = b->CreateAdd(offset3, ONE);
+            Value * const endLine2 = b->CreateAdd(endLine1, ONE);
+            b->CreateStore(b->getInt8('\n'), b->CreateGEP(chars, endLine1));
+            b->CreateWriteCall(b->getInt32(STDERR_FILENO), chars, endLine2);
+        }
+
+    };
+
+    if (mKernelIndex >= 52 && mKernelIndex <= 54) {
+
+        b->CreateWriteCall(b->getInt32(STDERR_FILENO), b->GetString("PRE REFLECTION\n"), b->getSize(15));
+
+        hexDumpOutput();
+    }
+
+    #endif
+
+
+    writeLookBehindReflectionLogic(b);
+
+    #if 0
+
+    if (mKernelIndex >= 52 && mKernelIndex <= 54) {
+
+        b->CreateWriteCall(b->getInt32(STDERR_FILENO), b->GetString("POST REFLECTION\n"), b->getSize(16));
+
+        hexDumpOutput();
+    }
+
+    #endif
+
     // If the kernel explicitly terminates, it must set its processed/produced item counts.
     // Otherwise, the pipeline will update any countable rates, even upon termination.
     Value * const aborted = b->CreateIsNotNull(mTerminatedExplicitly);

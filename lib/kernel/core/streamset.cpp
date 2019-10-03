@@ -935,15 +935,18 @@ StaticBuffer::StaticBuffer(BuilderPtr b, Type * const type,
                            const bool linear, const unsigned AddressSpace)
 : InternalBuffer(BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
 , mCapacity(capacity / b->getBitBlockWidth()) {
-    assert ("static buffer cannot have 0 capacity" && capacity);
+    #ifndef NDEBUG
+    assert ("static buffer cannot have 0 capacity" && mCapacity);
+    const auto m = b->getBitBlockWidth() / getItemWidth(type);
     assert ("static buffer capacity must be a multiple of bitblock width"
-            && (capacity % b->getBitBlockWidth()) == 0);
+            && (capacity % m) == 0);
     assert ("static buffer overflow must be a multiple of bitblock width"
-            && (overflowSize % b->getBitBlockWidth()) == 0);
+            && (overflowSize % m) == 0);
     assert ("static buffer underflow must be a multiple of bitblock width"
-            && (underflowSize % b->getBitBlockWidth()) == 0);
+            && (underflowSize % m) == 0);
     assert ("static buffer capacity must be at least twice its max(underflow, overflow)"
             && (capacity >= (std::max(underflowSize, overflowSize) * 2)));
+    #endif
 }
 
 DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
@@ -951,15 +954,18 @@ DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
                              const bool linear, const unsigned AddressSpace)
 : InternalBuffer(BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
 , mInitialCapacity(initialCapacity / b->getBitBlockWidth()) {
-    assert ("dynamic buffer cannot have 0 initial capacity" && initialCapacity);
+    #ifndef NDEBUG
+    assert ("dynamic buffer cannot have 0 initial capacity" && mInitialCapacity);
+    const auto m = b->getBitBlockWidth() / getItemWidth(type);
     assert ("dynamic buffer capacity must be a multiple of bitblock width"
-            && (initialCapacity % b->getBitBlockWidth()) == 0);
+            && (initialCapacity % m) == 0);
     assert ("dynamic buffer overflow must be a multiple of bitblock width"
-            && (overflowSize % b->getBitBlockWidth()) == 0);
+            && (overflowSize % m) == 0);
     assert ("dynamic buffer underflow must be a multiple of bitblock width"
-            && (underflowSize % b->getBitBlockWidth()) == 0);
+            && (underflowSize % m) == 0);
     assert ("dynamic buffer initial capacity must be at least twice its max(underflow, overflow)"
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
+    #endif
 }
 
 inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,

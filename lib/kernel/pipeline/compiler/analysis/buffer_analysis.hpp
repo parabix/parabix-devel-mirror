@@ -112,7 +112,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 report_fatal_error(msg.str());
             }
         }
-        const auto itemWidth = getItemWidth(baseType);
 
         // Is this a pipeline I/O buffer?
         assert ((bn.Buffer == nullptr) ^ (bn.Type == BufferType::External));
@@ -155,25 +154,33 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             // TODO: verify no buffer requires this to be linear?
         } else {
 
-            RateValue rounding{producerRate.Maximum};
-            RateValue requiredSpace{producerRate.MaximumExpectedFlow};
-            RateValue copyBackSpace{producerRate.Maximum - producerRate.Minimum};
-            RateValue lookAheadSpace{0};
+            auto roundUpTo = [&](const RateValue & num, const RateValue & dom) {
+                const RateValue m = mod(num, dom);
+                if (LLVM_UNLIKELY(m.numerator() != 0)) {
+                    const auto r = (num - m) + dom;
+                    assert (r.denominator() == 1);
+                    return r.numerator();
+                }
+                assert (num.denominator() == 1);
+                return num.numerator();
+            };
 
-            RateValue underflowSpace{0};
-            RateValue overflowSpace{producerRate.MaximumSpace - producerRate.MaximumExpectedFlow};
 
-            auto updateUnderflow = [&](const Binding & output, const AttrId type) {
+            auto maxOf = [&](const Binding & output, const AttrId type, RateValue & value) {
                 if (LLVM_UNLIKELY(output.hasAttribute(type))) {
-                    const auto & lookBehind = output.findAttribute(type);
-                    const auto amount = lookBehind.amount();
-                    RateValue LB{itemWidth * amount, blockWidth};
-                    underflowSpace = std::max(underflowSpace, LB);
+                    const auto & attr = output.findAttribute(type);
+                    value = std::max(value, RateValue{attr.amount(), blockWidth} );
                 }
             };
 
-            updateUnderflow(output, AttrId::LookBehind);
-            updateUnderflow(output, AttrId::Delayed);
+            // RateValue rounding{producerRate.Maximum};
+            RateValue requiredSpace{producerRate.MaximumExpectedFlow};
+            RateValue copyBackSpace{producerRate.Maximum - producerRate.Minimum};
+            RateValue lookAheadSpace{0};
+            RateValue lookBehindSpace{0};
+            maxOf(output, AttrId::LookBehind, lookBehindSpace);
+            RateValue reflectionSpace{0};
+            maxOf(output, AttrId::Delayed, reflectionSpace);
 
             // TODO: If we have an open system, then the input rate to this pipeline cannot
             // be bounded a priori. During initialization, we could pass a "suggestion"
@@ -186,13 +193,10 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const BufferRateData & consumerRate = G[ce];
                 const Binding & input = consumerRate.Binding;
 
-                rounding = lcm(rounding, consumerRate.Maximum);
+                // rounding = lcm(rounding, consumerRate.Maximum);
                 const auto S = producerRate.MaximumExpectedFlow + consumerRate.MaximumExpectedFlow;
                 const auto D = gcd(producerRate.MaximumExpectedFlow, consumerRate.MaximumExpectedFlow);
                 requiredSpace = std::max(requiredSpace, S - D);
-
-                const auto diff = consumerRate.MaximumSpace - consumerRate.MaximumExpectedFlow;
-                overflowSpace = std::max(overflowSpace, diff);
 
                 // Get output overflow size
                 RateValue lookAhead{consumerRate.Maximum - consumerRate.Minimum};
@@ -214,35 +218,30 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
                 // If we have a lookbehind attribute, make sure we have enough underflow
                 // space to satisfy the processing rate.
-                updateUnderflow(output, AttrId::LookBehind);
+                maxOf(input, AttrId::LookBehind, lookBehindSpace);
             }
 
+            lookBehindSpace = std::max(lookBehindSpace, reflectionSpace);
+
             // calculate overflow (copyback) and fascimile (copyforward) space
-            rounding = lcm(rounding, RateValue{blockWidth});
+            const RateValue BLOCK_WIDTH{blockWidth};
+            const auto overflowSpace = std::max(copyBackSpace, lookAheadSpace);
+            const auto overflowSize = roundUpTo(overflowSpace, BLOCK_WIDTH);
 
-            auto round_up = [&](RateValue & r) {
-                const RateValue m = mod(r, rounding);
-                if (LLVM_UNLIKELY(m.numerator() != 0)) {
-                    r = (r - m) + rounding;
-                }
-            };
+            const auto underflowSize = roundUpTo(lookBehindSpace, BLOCK_WIDTH);
 
-            round_up(copyBackSpace);
-            overflowSpace = std::max(overflowSpace, copyBackSpace);
-            round_up(lookAheadSpace);
-            overflowSpace = std::max(overflowSpace, lookAheadSpace);
-            round_up(overflowSpace);
-            const auto overflowSize = ceiling(overflowSpace);
-            round_up(underflowSpace);
-            const auto underflowSize = ceiling(underflowSpace);
             const auto minRequiredSize = std::max(underflowSize, overflowSize) * 2;
-            round_up(requiredSpace);
-            const auto requiredSize = std::max(ceiling(requiredSpace), minRequiredSize);
+            const auto requiredSize = std::max(roundUpTo(requiredSpace, BLOCK_WIDTH), minRequiredSize);
             const auto bufferSize = requiredSize * numOfSegments;
+            assert (bufferSize);
 
-            bn.LookBehind = underflowSize;
-            bn.CopyBack = ceiling(copyBackSpace);
-            bn.LookAhead = ceiling(lookAheadSpace);
+            const auto itemWidth = getItemWidth(baseType);
+            const RateValue BLOCK_SIZE{blockWidth, itemWidth};
+
+            bn.LookBehind = roundUpTo(lookBehindSpace, BLOCK_SIZE);
+            bn.LookBehindReflection = roundUpTo(reflectionSpace, BLOCK_SIZE);
+            bn.CopyBack = roundUpTo(copyBackSpace, BLOCK_SIZE);
+            bn.LookAhead = roundUpTo(lookAheadSpace, BLOCK_SIZE);
 
             const unsigned addressSpace = 0U;
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
@@ -909,8 +908,8 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 roundUp = std::max(roundUp, std::max(a, b));
             }
             RateValue delayed{0};
-            check_attribute(AttrId::Delayed, outputRate, delayed);
-            outputRate.MinimumExpectedFlow -= delayed;
+            check_attribute(AttrId::Delayed, outputRate, delayed);            
+            outputRate.MinimumExpectedFlow = saturating_subtract(outputRate.MinimumExpectedFlow, delayed);
             outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;            
             const auto f = upper_absolute + delayed + std::max(add + add2, roundUp);
             outputRate.MaximumSpace = f * outputRate.Maximum;

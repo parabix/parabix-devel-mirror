@@ -46,7 +46,7 @@ parabix_add_executable(
 NAME
     ztf-runs
 SRC
-    ztf-kernel.cpp
+    ztf-logic.cpp
     ztf-runs.cpp
 DEPS
     grep
@@ -63,7 +63,7 @@ parabix_add_executable(
 NAME
     ztf-hash
 SRC
-    ztf-kernel.cpp
+    ztf-logic.cpp
     ztf-scan.cpp
     ztf-hash.cpp
 DEPS

@@ -12,11 +12,12 @@
 namespace pablo {
 
 using BixNum = std::vector<PabloAST *>;
-    
-    
+
+
 class BixNumCompiler {
 public:
     BixNumCompiler(PabloBuilder & pb) : mPB(pb) {}
+    BixNum Create(unsigned val);
     PabloAST * EQ(BixNum value, unsigned test);
     PabloAST * EQ(BixNum value, BixNum test);
     PabloAST * NEQ(BixNum value, unsigned test);
@@ -42,6 +43,7 @@ public:
     BixNum MulModular(BixNum multiplicand, unsigned multiplier);
     //
     // Full arithmetic operations
+    BixNum AddFull(BixNum augend, unsigned addend);
     BixNum AddFull(BixNum augend, BixNum addend);
     BixNum MulFull(BixNum multiplicand, unsigned multiplier);
 
@@ -76,9 +78,6 @@ protected:
                              unsigned outputBitsToSet);
 };
 
-
-    
-    
 //
 // A compiler that implements parallel bitwise table lookup for fixed tables.
 //
@@ -119,11 +118,7 @@ private:
                              unsigned partitionBase,
                              PabloAST * partitionSelect,
                              unsigned outputBitsToSet) override;
-
 };
-
 }
-
-
 #endif
 

@@ -230,7 +230,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
             Value * const produced = mAlreadyProducedPhi[i];
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Constant * const underflow = b->getSize(bn.LookBehind);
-            Value * needsCopy = b->CreateICmpULT(producedOffset, underflow);
+            Value * const needsCopy = b->CreateICmpULT(producedOffset, underflow);
             copy(b, CopyMode::LookBehind, needsCopy, i, bn.Buffer, bn.LookBehind);
         }
     }
@@ -244,19 +244,14 @@ void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto bufferVertex = getOutputBufferVertex(i);
         const BufferNode & bn = mBufferGraph[bufferVertex];
-        if (bn.LookBehind) {
-            const BufferRateData & outputRate = mBufferGraph[in_edge(bufferVertex, mBufferGraph)];
-            const Binding & output = outputRate.Binding;
-            if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
-
-                const StreamSetBuffer * const buffer = bn.Buffer;
-                Value * const capacity = buffer->getCapacity(b);
-                Value * const produced = mAlreadyProducedPhi[i];
-                Value * const producedOffset = b->CreateURem(produced, capacity);
-                Constant * const underflow = b->getSize(bn.LookBehind);
-                Value * needsCopy = b->CreateICmpULT(producedOffset, underflow);
-                copy(b, CopyMode::LookBehindReflection, needsCopy, i, bn.Buffer, bn.LookBehind);
-            }
+        if (bn.LookBehindReflection) {
+            const StreamSetBuffer * const buffer = bn.Buffer;
+            Value * const capacity = buffer->getCapacity(b);
+            Value * const produced = mAlreadyProducedPhi[i];
+            Constant * const reflection = b->getSize(bn.LookBehindReflection);
+            Value * const producedOffset = b->CreateURem(produced, capacity);
+            Value * const needsCopy = b->CreateICmpULT(producedOffset, reflection);
+            copy(b, CopyMode::LookBehindReflection, needsCopy, i, bn.Buffer, bn.LookBehindReflection);
         }
     }
 }
@@ -370,42 +365,34 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 
     b->SetInsertPoint(copyStart);
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    b->CallPrintInt(prefix + std::to_string(itemsToCopy), cond);
-    #endif
-
     startCycleCounter(b, CycleCounter::BEFORE_COPY);
 
     const auto itemWidth = getItemWidth(buffer->getBaseType());
-    const auto blockWidth = b->getBitBlockWidth();
-    assert ((itemsToCopy % blockWidth) == 0);
     Value * const numOfStreams = buffer->getStreamSetCount(b);
-    Value * const overflowSize = b->getSize(ceiling(Rational{itemsToCopy * itemWidth, 8}));
-    Value * const bytesToCopy = b->CreateMul(overflowSize, numOfStreams);
-    Value * source = nullptr;
-    Value * target = nullptr;
+    Value * const bytesPerSteam = b->getSize(itemsToCopy * itemWidth / 8);
+    Value * const bytesToCopy = b->CreateMul(bytesPerSteam, numOfStreams);
 
-    if (mode == CopyMode::LookAhead) {
-        source = buffer->getBaseAddress(b);
-        target = buffer->getOverflowAddress(b);
-    } else  {
-        source = buffer->getOverflowAddress(b);
-        target = buffer->getBaseAddress(b);
-        if (mode == CopyMode::LookBehind || mode == CopyMode::LookBehindReflection) {
-            DataLayout DL(b->getModule());
-            Type * const intPtrTy = DL.getIntPtrType(source->getType());
-            Value * offset = b->CreateNeg(b->CreateZExt(bytesToCopy, intPtrTy));
-            PointerType * const int8PtrTy = b->getInt8PtrTy();
-            source = b->CreatePointerCast(source, int8PtrTy);
-            source = b->CreateGEP(source, offset);
-            target = b->CreatePointerCast(target, int8PtrTy);
-            target = b->CreateGEP(target, offset);
-            if (LLVM_UNLIKELY(mode == CopyMode::LookBehindReflection)) {
-                std::swap(target, source);
-            }
-        }
+    #ifdef PRINT_DEBUG_MESSAGES
+    b->CallPrintInt(prefix + std::to_string(itemsToCopy) + "_bytesToCopy", bytesToCopy);
+    #endif
+
+    Value * source = buffer->getOverflowAddress(b);
+    Value * target = buffer->getBaseAddress(b);
+    if (mode == CopyMode::LookBehind || mode == CopyMode::LookBehindReflection) {
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(source->getType());
+        Value * const offset = b->CreateNeg(b->CreateZExt(bytesToCopy, intPtrTy));
+        PointerType * const int8PtrTy = b->getInt8PtrTy();
+        source = b->CreatePointerCast(source, int8PtrTy);
+        source = b->CreateGEP(source, offset);
+        target = b->CreatePointerCast(target, int8PtrTy);
+        target = b->CreateGEP(target, offset);
+    }
+    if (mode == CopyMode::LookAhead || mode == CopyMode::LookBehindReflection) {
+        std::swap(target, source);
     }
 
+    const auto blockWidth = b->getBitBlockWidth();
     b->CreateMemCpy(target, source, bytesToCopy, blockWidth / 8);
 
     updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
