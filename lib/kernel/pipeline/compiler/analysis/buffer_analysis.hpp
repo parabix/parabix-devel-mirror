@@ -173,9 +173,15 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
             };
 
-            // RateValue rounding{producerRate.Maximum};
-            RateValue requiredSpace{producerRate.MaximumExpectedFlow};
+            const RateValue BLOCK_WIDTH{blockWidth};
+            RateValue requiredSpace{producerRate.MaximumSpace};
             RateValue copyBackSpace{producerRate.Maximum - producerRate.Minimum};
+
+            RateValue requiredSizeFactor{BLOCK_WIDTH};
+            if (producerRate.Maximum == producerRate.Minimum) {
+                requiredSizeFactor = lcm(BLOCK_WIDTH, producerRate.Maximum);
+            }
+
             RateValue lookAheadSpace{0};
             RateValue lookBehindSpace{0};
             maxOf(output, AttrId::LookBehind, lookBehindSpace);
@@ -191,13 +197,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bool linear = requiresLinearAccess(output);
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
-                const Binding & input = consumerRate.Binding;
-
-                // rounding = lcm(rounding, consumerRate.Maximum);
-                const auto S = producerRate.MaximumExpectedFlow + consumerRate.MaximumExpectedFlow;
-                const auto D = gcd(producerRate.MaximumExpectedFlow, consumerRate.MaximumExpectedFlow);
-                requiredSpace = std::max(requiredSpace, S - D);
-
+                const Binding & input = consumerRate.Binding;                              
+                requiredSpace = std::max(requiredSpace, producerRate.MaximumSpace);
+                if (consumerRate.Maximum == consumerRate.Minimum) {
+                    requiredSizeFactor = lcm(requiredSizeFactor, consumerRate.Maximum);
+                }
                 // Get output overflow size
                 RateValue lookAhead{consumerRate.Maximum - consumerRate.Minimum};
                 if (LLVM_UNLIKELY(input.hasLookahead())) {
@@ -224,16 +228,13 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             lookBehindSpace = std::max(lookBehindSpace, reflectionSpace);
 
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const RateValue BLOCK_WIDTH{blockWidth};
             const auto overflowSpace = std::max(copyBackSpace, lookAheadSpace);
             const auto overflowSize = roundUpTo(overflowSpace, BLOCK_WIDTH);
-
             const auto underflowSize = roundUpTo(lookBehindSpace, BLOCK_WIDTH);
-
-            const auto minRequiredSize = std::max(underflowSize, overflowSize) * 2;
-            const auto requiredSize = std::max(roundUpTo(requiredSpace, BLOCK_WIDTH), minRequiredSize);
+            const Rational minRequiredSize{std::max(underflowSize, overflowSize) * 2};
+            assert (requiredSizeFactor >= BLOCK_WIDTH);
+            const auto requiredSize = roundUpTo(std::max(requiredSpace, minRequiredSize), requiredSizeFactor);
             const auto bufferSize = requiredSize * numOfSegments;
-            assert (bufferSize);
 
             const auto itemWidth = getItemWidth(baseType);
             const RateValue BLOCK_SIZE{blockWidth, itemWidth};
@@ -890,6 +891,10 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
             BufferRateData & outputRate = G[output];
             outputRate.MinimumExpectedFlow = lower_expected * outputRate.Minimum;      
             outputRate.MaximumExpectedFlow = upper_expected * outputRate.Maximum;
+            RateValue delayed{0};
+            check_attribute(AttrId::Delayed, outputRate, delayed);
+            outputRate.MinimumExpectedFlow = saturating_subtract(outputRate.MinimumExpectedFlow, delayed);
+
             RateValue add{0};
             check_attribute(AttrId::Add, outputRate, add);
             const auto buffer = target(output, G);
@@ -907,12 +912,8 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 const auto b = mod(outputRate.Maximum + add, r);
                 roundUp = std::max(roundUp, std::max(a, b));
             }
-            RateValue delayed{0};
-            check_attribute(AttrId::Delayed, outputRate, delayed);            
-            outputRate.MinimumExpectedFlow = saturating_subtract(outputRate.MinimumExpectedFlow, delayed);
             outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;            
-            const auto f = upper_absolute + delayed + std::max(add + add2, roundUp);
-            outputRate.MaximumSpace = f * outputRate.Maximum;
+            outputRate.MaximumSpace = upper_absolute * outputRate.Maximum + std::max(add + add2, roundUp);
             assert (outputRate.MinimumSpace <= outputRate.MinimumExpectedFlow);
             assert (outputRate.MaximumSpace >= outputRate.MaximumExpectedFlow);
         }
@@ -1320,9 +1321,10 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         if (binding.hasAttribute(AttrId::ZeroExtended)) {
             out << " [Z]";
         }
-        out << "\\n(";
+        out << "\\n(EXP:";
         rate_range(pd.MinimumExpectedFlow, pd.MaximumExpectedFlow);
-
+        out << ")\\n(SPC:";
+        rate_range(pd.MinimumSpace, pd.MaximumSpace);
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
         out << ")\\n" << name << "\"];\n";

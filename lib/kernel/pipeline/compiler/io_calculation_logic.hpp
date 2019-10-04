@@ -763,10 +763,19 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     numOfStrides->addIncoming(initialStrideCount, popCountEntry);
     PHINode * const nextRequiredItems = b->CreatePHI(sizeTy, 2);
     nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
+
     Value * const strideIndex = b->CreateSub(numOfStrides, STEP);
     Value * const ptr = b->CreateGEP(baseAddress, strideIndex);
     Value * const requiredItems = b->CreateLoad(ptr);
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);
+
+    // NOTE: popcount streams are produced with a 1 element lookbehind window.
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        const Binding & binding = getInputBinding(ref.Number);
+        b->CreateAssert(b->CreateOr(b->CreateICmpUGE(numOfStrides, STEP), hasEnough),
+                        binding.getName() + ": attempting to read invalid popcount entry");
+    }
+
     nextRequiredItems->addIncoming(requiredItems, popCountLoop);
     numOfStrides->addIncoming(strideIndex, popCountLoop);
     b->CreateCondBr(hasEnough, popCountLoopExit, popCountLoop);

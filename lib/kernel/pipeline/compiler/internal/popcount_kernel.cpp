@@ -211,6 +211,8 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 
 }
 
+// TODO: is a lookbehind window of 1 sufficient here?
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -219,7 +221,7 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor)}}
 // output stream
-,{Binding{OUTPUT_STREAM, output, FixedRate(), Add1()}}
+,{Binding{OUTPUT_STREAM, output, FixedRate(), { Add1(), LookBehind(1) } }}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
@@ -238,8 +240,8 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor)}}
 // output stream
-,{Binding{POSITIVE_STREAM, positive, FixedRate(), Add1()}
- ,Binding{NEGATIVE_STREAM, negative, FixedRate(), Add1()}}
+,{Binding{POSITIVE_STREAM, positive, FixedRate(), { Add1(), LookBehind(1) }}
+ ,Binding{NEGATIVE_STREAM, negative, FixedRate(), { Add1(), LookBehind(1) }}}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar

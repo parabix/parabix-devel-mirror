@@ -239,7 +239,7 @@ BixNum BixNumCompiler::MulModular(BixNum multiplicand, unsigned multiplier) {
     if (multiplier == 0) {
         return {mPB.createZeroes()};
     }
-    unsigned multiplier_bits = std::log2(multiplier)+1;
+    unsigned multiplier_bits = std::log2(multiplier) + 1;
     BixNum product(multiplicand.size(), mPB.createZeroes());
     for (unsigned i = 0; i < multiplier_bits; i++) {
         if ((multiplier & (1 << i)) != 0) {
@@ -249,7 +249,6 @@ BixNum BixNumCompiler::MulModular(BixNum multiplicand, unsigned multiplier) {
                 carry = mPB.createMajority3(product[j + i], multiplicand[j], carry);
                 product[j + i] = tmp;
             }
-            product[multiplicand.size() + i] = carry;
         }
     }
     return product;

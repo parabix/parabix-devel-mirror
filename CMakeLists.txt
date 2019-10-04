@@ -129,39 +129,6 @@ endif()
 UNSET(HAS_EXECINFO CACHE)
 UNSET(HAS_MACH_VM_TYPES CACHE)
 
-if(NOT CMAKE_CXX_LINK_OPTIONS_NO_PIE)
-  set(CMAKE_CXX_LINK_OPTIONS_NO_PIE "-no-pie")
-endif()
-
-CHECK_CXX_COMPILER_FLAG(CMAKE_CXX_LINK_OPTIONS_NO_PIE COMPILER_SUPPORTS_NO_PIE)
-if (COMPILER_SUPPORTS_NO_PIE)
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} ${CMAKE_CXX_LINK_OPTIONS_NO_PIE}")
-
-    # Add assertion debug symbol support checks
-    include(CheckIncludeFileCXX)
-    CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
-    IF (HAS_MACH_VM_TYPES)
-      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
-    ELSE()
-      UNSET(LIBUNWIND_FOUND CACHE)
-      find_package(Libunwind)
-      IF (LIBUNWIND_FOUND)
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
-        include_directories(${LIBUNWIND_INCLUDE_DIR})
-        target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
-      ELSE()
-        CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
-        IF (HAS_EXECINFO)
-           SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
-        ENDIF()
-      ENDIF()
-    ENDIF()
-
-else()
-    message(STATUS "No PIE unsupported: cannot provide compilation call stack on assertion failure")
-endif()
-
-
 # Disable RunTime Type Information
 if(MSVC) # using Visual Studio C++
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
@@ -196,10 +163,6 @@ if (USE_ADDRESS_SANITIZER)
     #endif()
 endif()
 
-# Release & Debug flags
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -g -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
-
 ###   Functions   ###
 
 # Sets the output name for a given target.
@@ -211,6 +174,35 @@ function(parabix_set_library_name NAME)
 endfunction(parabix_set_library_name)
 
 include(CMakeParseArguments)
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT BUILD_SHARED_LIBS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
+
+    # Add assertion debug symbol support checks
+    include(CheckIncludeFileCXX)
+    CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
+    IF (HAS_MACH_VM_TYPES)
+      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
+    ELSE()
+      UNSET(LIBUNWIND_FOUND CACHE)
+      find_package(Libunwind)
+      IF (LIBUNWIND_FOUND)
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
+        include_directories(${LIBUNWIND_INCLUDE_DIR})
+        target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
+      ELSE()
+        CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+        IF (HAS_EXECINFO)
+           SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
+        ENDIF()
+      ENDIF()
+    ENDIF()
+endif()
+
+# Release & Debug flags
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+
 
 function(parabix_add_module)
     cmake_parse_arguments(

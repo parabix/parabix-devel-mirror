@@ -679,24 +679,6 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             continue;
         }
         const auto itemWidth = getItemWidth(buffer->getBaseType());
-        // Determine the maximum lookahead dependency on this stream and zero fill
-        // the appropriate number of additional blocks.
-        unsigned maximumLookahead = 0;
-        RateValue strideLength{0};
-        const auto bufferVertex = getOutputBufferVertex(i);
-        for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-            const BufferRateData & rd = mBufferGraph[e];
-            const Binding & input = rd.Binding;
-            strideLength = std::max(strideLength, rd.Maximum);
-            if (LLVM_UNLIKELY(input.hasLookahead())) {
-                maximumLookahead = std::max(maximumLookahead, input.getLookahead());
-            }
-        }
-
-        const RateValue itemWidthFactor{itemWidth, blockWidth};
-        const auto numOfBlocks = ceiling(strideLength * itemWidthFactor);
-        const auto numOfLookaheadBlocks = ceiling(RateValue{maximumLookahead} * itemWidthFactor);
-        const auto blocksToZero = numOfBlocks + numOfLookaheadBlocks;
 
         const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
         Value * const produced = mFinalProducedPhi[i];
@@ -763,17 +745,34 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
         b->SetInsertPoint(maskExit);
         // Zero out any blocks we could potentially touch
+
+        RateValue strideLength{0};
+        const auto bufferVertex = getOutputBufferVertex(i);
+        for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+            const BufferRateData & rd = mBufferGraph[e];
+            const Binding & input = rd.Binding;
+
+            RateValue R{rd.Maximum};
+            if (LLVM_UNLIKELY(input.hasLookahead())) {
+                R += input.getLookahead();
+            }
+            strideLength = std::max(strideLength, R);
+        }
+
+        const auto blocksToZero = ceiling(strideLength * RateValue{1, blockWidth});
+
         if (blocksToZero > 1) {
-            Value * const nextStrideBlockIndex = b->CreateAdd(blockIndex, ONE);
-            Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, nextStrideBlockIndex);
-            Constant * const NUM_OF_BLOCKS = b->getSize(numOfBlocks);
-            Constant * const BLOCKS_TO_ZERO = b->getSize(blocksToZero);
-            Value * const blockOffset = b->CreateURem(nextStrideBlockIndex, NUM_OF_BLOCKS);
-            Value * const remainingBlocks = b->CreateSub(BLOCKS_TO_ZERO, blockOffset);
-            Constant * const BLOCK_SIZE = b->getSize(blockWidth / 8);
-            Value * const remainingBytes = b->CreateMul(remainingBlocks, BLOCK_SIZE);
-            #ifdef PRINT_DEBUG_MESSAGES            
+            Value * const nextBlockIndex = b->CreateAdd(blockIndex, ONE);
+            Value * const nextOffset = buffer->modByCapacity(b, nextBlockIndex);
+            Value * const startPtr = buffer->StreamSetBuffer::getStreamBlockPtr(b, baseAddress, ZERO, nextOffset);
             Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
+            Constant * const BLOCKS_TO_ZERO = b->getSize(blocksToZero);
+            Value * const endOffset = b->CreateRoundUp(nextOffset, BLOCKS_TO_ZERO);
+            Value * const endPtr = buffer->StreamSetBuffer::getStreamBlockPtr(b, baseAddress, ZERO, endOffset);
+            Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
+            Value * const remainingBytes = b->CreateSub(endPtrInt, startPtrInt);
+            #ifdef PRINT_DEBUG_MESSAGES            
+
             b->CallPrintInt(prefix + "_zeroFill_bufferStart", b->CreateSub(startPtrInt, epochInt));
             b->CallPrintInt(prefix + "_zeroFill_remainingBufferBytes", remainingBytes);
             #endif
