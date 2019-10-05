@@ -324,7 +324,7 @@ LengthGroupDecompression::LengthGroupDecompression(const std::unique_ptr<kernel:
         mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
     }
     if (!DelayedAttribute) {
-        addInternalScalar(ArrayType::get(b->getInt8Ty(), lengthGroup.hi), "pendingOutput");
+        addInternalScalar(ArrayType::get(b->getInt8Ty(), encodingScheme.byLength[groupNo].hi), "pendingOutput");
     }
 }
 
