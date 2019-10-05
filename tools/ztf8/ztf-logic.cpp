@@ -15,6 +15,7 @@
 #include <re/unicode/re_name_resolve.h>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace pablo;
 using namespace kernel;
@@ -24,6 +25,14 @@ LengthGroupInfo EncodingInfo::getLengthGroupInfo(unsigned lgth) {
     for (unsigned i = 0; i < byLength.size(); i++) {
         if ((byLength[i].lo <= lgth)  && (byLength[i].hi >= lgth)) return byLength[i];
     }
+}
+
+unsigned EncodingInfo::maxBytes() {
+    unsigned enc_bytes = 0;
+    for (auto g : byLength) {
+        if (g.encoding_bytes > enc_bytes) enc_bytes = g.encoding_bytes;
+    }
+    return enc_bytes;
 }
 
 std::string LengthGroupAnnotation(std::vector<LengthGroupInfo> lengthGroups) {
@@ -73,7 +82,7 @@ ZTF_ExpansionDecoder::ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelB
                                            StreamSet * const basis,
                                            StreamSet * insertBixNum)
 : pablo::PabloKernel(b, "ZTF_ExpansionDecoder" + LengthGroupAnnotation(encodingScheme.byLength),
-                     {Binding{"basis", basis, FixedRate(), LookAhead(1)}},
+                     {Binding{"basis", basis, FixedRate(), LookAhead(encodingScheme.maxBytes() - 1)}},
                      {Binding{"insertBixNum", insertBixNum}}),
     mEncodingScheme(encodingScheme)  {}
 
@@ -82,22 +91,26 @@ void ZTF_ExpansionDecoder::generatePabloMethod() {
     BixNumCompiler bnc(pb);
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     PabloAST * ASCII_lookahead = pb.createNot(pb.createLookahead(basis[7], 1));
-    unsigned base = 0xC2;
-    const unsigned offset = 2;
+    for (unsigned i = 2; i < mEncodingScheme.maxBytes(); i++) {
+        ASCII_lookahead = pb.createAnd(ASCII_lookahead, pb.createLookahead(basis[7], pb.getInteger(i)));
+    }
     BixNum insertLgth(4, pb.createZeroes());
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
-        unsigned lo = mEncodingScheme.byLength[i].lo;
-        unsigned hi = mEncodingScheme.byLength[i].hi;
-        unsigned extra_hash_bits = mEncodingScheme.byLength[i].hash_bits - 7;  //low 7 bits in suffix
-        unsigned multiplier = 1<<extra_hash_bits;
+        LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
+        unsigned lo = groupInfo.lo;
+        unsigned hi = groupInfo.hi;
+        unsigned suffix_bits_avail = (groupInfo.encoding_bytes - 1) * 7;
+        unsigned hash_ext_bits = groupInfo.hash_bits + groupInfo.length_extension_bits;
+        unsigned excess_bits = suffix_bits_avail < hash_ext_bits ? hash_ext_bits - suffix_bits_avail : 0;
+        unsigned multiplier = 1<<excess_bits;
+        unsigned base = groupInfo.prefix_base;
         unsigned next_base = base + multiplier * (hi - lo + 1);
         PabloAST * inGroup = pb.createAnd3(ASCII_lookahead, bnc.UGE(basis, base), bnc.ULT(basis, next_base));
-        BixNum relative = bnc.HighBits(bnc.SubModular(basis, base), 8 - extra_hash_bits);
-        BixNum toInsert = bnc.AddModular(relative, lo - offset);
+        BixNum relative = bnc.HighBits(bnc.SubModular(basis, base), 8 - excess_bits);
+        BixNum toInsert = bnc.AddModular(relative, lo - groupInfo.encoding_bytes);
         for (unsigned i = 0; i < 4; i++) {
             insertLgth[i] = pb.createSel(inGroup, toInsert[i], insertLgth[i], "insertLgth[" + std::to_string(i) + "]");
         }
-        base = next_base;
     }
     Var * lengthVar = getOutputStreamVar("insertBixNum");
     for (unsigned i = 0; i < 4; i++) {
@@ -119,19 +132,24 @@ void ZTF_DecodeLengths::generatePabloMethod() {
     std::vector<PabloAST *> basis = getInputStreamSet("basisBits");
     std::vector<PabloAST *> groupStreams(mEncodingScheme.byLength.size());
     PabloAST * ASCII = bnc.ULT(basis, 0x80);
-    unsigned base = 0xC2;
     Var * groupStreamVar = getOutputStreamVar("groupStreams");
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
-        unsigned lo = mEncodingScheme.byLength[i].lo;
-        unsigned hi = mEncodingScheme.byLength[i].hi;
-        unsigned extra_hash_bits = mEncodingScheme.byLength[i].hash_bits - 7;  //low 7 bits in suffix
-        unsigned multiplier = 1<<extra_hash_bits;
+        LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
+        unsigned lo = groupInfo.lo;
+        unsigned hi = groupInfo.hi;
+        unsigned suffix_bits_avail = (groupInfo.encoding_bytes - 1) * 7;
+        unsigned hash_ext_bits = groupInfo.hash_bits + groupInfo.length_extension_bits;
+        unsigned excess_bits = suffix_bits_avail < hash_ext_bits ? hash_ext_bits - suffix_bits_avail : 0;
+        unsigned multiplier = 1<<excess_bits;
+        unsigned base = groupInfo.prefix_base;
         unsigned next_base = base + multiplier * (hi - lo + 1);
         PabloAST * inGroup = pb.createAnd(bnc.UGE(basis, base), bnc.ULT(basis, next_base));
         std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
-        groupStreams[i] = pb.createAnd(pb.createAdvance(inGroup, 1), ASCII, groupName);
+        groupStreams[i] = pb.createAnd(pb.createAdvance(inGroup, 1), ASCII);
+        for (unsigned i = 2; i < mEncodingScheme.maxBytes(); i++) {
+            groupStreams[i] = pb.createAnd(pb.createAdvance(groupStreams[i], 1), ASCII);
+        }
         pb.createAssign(pb.createExtract(groupStreamVar, pb.getInteger(i)), groupStreams[i]);
-        base = next_base;
     }
 }
 
@@ -178,7 +196,7 @@ ZTF_SymbolEncoder::ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder
                       StreamSet * encoded)
     : pablo::PabloKernel(b, "ZTF_SymbolEncoder" + LengthGroupAnnotation(encodingScheme.byLength),
                          {Binding{"basis", basis},
-                             Binding{"bixHash", bixHash, FixedRate(), LookAhead(1)},
+                             Binding{"bixHash", bixHash, FixedRate(), LookAhead(encodingScheme.maxBytes() - 1)},
                              Binding{"extractionMask", extractionMask},
                              Binding{"runIdx", runIdx}},
                          {Binding{"encoded", encoded}}),
@@ -215,29 +233,30 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     // ZTF prefixes depend on the length group, but always have the high 2 bits set in each case.
     encoded[7] = pb.createOr(ZTF_prefix, encoded[7]);
     encoded[6] = pb.createOr(ZTF_prefix, encoded[6]);
-    //
-    // Determine the symbol length at the ZTF_prefix position.
-    // The run index numbers from the second position starting with 0,
-    // so the length is 2 + the runIndex value at the end of the symbol.
-    // At the ZTF_prefix position, the length is the runIndex plus 3.
-    BixNum symLength = bnc.AddFull(runIdx, 3);
 
-    // The encoding scheme starts at 0xC2, with the low 6 bit value of 2.
-    BixNum base = bnc.ZeroExtend(bnc.Create(2), 6);
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
-        unsigned lo = mEncodingScheme.byLength[i].lo;
-        unsigned hi = mEncodingScheme.byLength[i].hi;
-        unsigned extra_hash_bits = mEncodingScheme.byLength[i].hash_bits - 7;  //low 7 bits in suffix
-        unsigned multiplier = 1<<extra_hash_bits;
+        LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
+        // Determine the symbol length at the ZTF_prefix position.
+        // The run index counts from the second position of the run starting with 0,
+        // so the length is 2 + the runIndex value at the end of the symbol.
+        // At the ZTF_prefix position, the runIndex is lower by the number of
+        // suffix bytes.
+        BixNum symLength = bnc.AddFull(runIdx, groupInfo.encoding_bytes + 1);
+        unsigned lo = groupInfo.lo;
+        unsigned hi = groupInfo.hi;
+        unsigned suffix_bits_avail = (groupInfo.encoding_bytes - 1) * 7;
+        unsigned hash_ext_bits = groupInfo.hash_bits + groupInfo.length_extension_bits;
+        unsigned excess_bits = suffix_bits_avail < hash_ext_bits ? hash_ext_bits - suffix_bits_avail : 0;
+        unsigned multiplier = 1<<excess_bits;
+        BixNum base = bnc.ZeroExtend(bnc.Create(groupInfo.prefix_base & 0x3F), 6); // only low 6 bits needed
         PabloAST * inGroup = pb.createAnd(bnc.UGE(symLength, lo), bnc.ULE(symLength, hi), "inGroup_" + std::to_string(i));
         inGroup = pb.createAnd(inGroup, ZTF_prefix);
         BixNum lenOffset = bnc.SubModular(symLength, lo);
         BixNum lenBase = bnc.AddModular(base, bnc.MulModular(lenOffset, multiplier));
-        BixNum value = bnc.AddModular(lenBase, bnc.Truncate(highHash, extra_hash_bits));
+        BixNum value = bnc.AddModular(lenBase, bnc.Truncate(highHash, excess_bits));
         for (unsigned j = 0; j < 6; j++) {
             encoded[j] = pb.createSel(inGroup, value[j], encoded[j], "encoded[" + std::to_string(j) + "]");
         }
-        base = bnc.AddModular(base, multiplier * (hi - lo + 1));
     }
     for (unsigned i = 0; i < 8; i++) {
         pb.createAssign(pb.createExtract(encodedVar, pb.getInteger(i)), encoded[i]);
@@ -246,8 +265,7 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
 
 void ZTF_SymbolEnds::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    PabloAST * run = getInputStreamSet("symbolRun")[0];
-    std::vector<PabloAST *> lengthBixNum = getInputStreamSet("lengthBixNum");
+    PabloAST * run = getInputStreamSet("symbolRuns")[0];
     PabloAST * overflow = getInputStreamSet("overflow")[0];
     PabloAST * runFinal = pb.createAnd(run, pb.createNot(pb.createLookahead(run, 1)));
     runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
@@ -279,8 +297,9 @@ void LengthSorter::generatePabloMethod() {
     std::vector<PabloAST *> groupStreams(mEncodingScheme.byLength.size());
     Var * groupStreamVar = getOutputStreamVar("groupStreams");
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
-        unsigned lo = mEncodingScheme.byLength[i].lo;
-        unsigned hi = mEncodingScheme.byLength[i].hi;
+        LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
+        unsigned lo = groupInfo.lo;
+        unsigned hi = groupInfo.hi;
         std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
         groupStreams[i] = pb.createAnd3(bnc.UGE(lengthBixNum, lo - offset), bnc.ULE(lengthBixNum, hi - offset), runFinal, groupName);
         pb.createAssign(pb.createExtract(groupStreamVar, pb.getInteger(i)), groupStreams[i]);

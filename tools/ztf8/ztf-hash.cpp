@@ -64,8 +64,8 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
 EncodingInfo encodingScheme1(8,
-                             {{3, 4, 2, 0xC2, 8, 2}, {5, 8, 2, 0xC6, 8, 2},
-                                 {9, 16, 2, 0xCE, 8, 2}});
+                             {{3, 4, 2, 0xC2, 8, 0}, {5, 8, 2, 0xC6, 8, 0},
+                                 {9, 16, 2, 0xCE, 8, 0}});
 
 
 ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
@@ -183,6 +183,7 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
         P->CreateKernelCall<StreamSelect>(groupParsed, Select(parsedMarks, {i}));
         StreamSet * groupDecoded = P->CreateStreamSet(1);
         P->CreateKernelCall<StreamSelect>(groupDecoded, Select(decodedMarks, {i}));
+        //P->CreateKernelCall<DebugDisplayKernel>("decodedMarks", decodedMarks);
         StreamSet * input_bytes = u8bytes;
         StreamSet * output_bytes = P->CreateStreamSet(1, 8);
         P->CreateKernelCall<LengthGroupDecompression>(encodingScheme1, i, groupParsed, hashValues, groupDecoded, input_bytes, output_bytes);
