@@ -11,8 +11,27 @@
 
 namespace kernel {
 
-struct LengthGroup {unsigned lo; unsigned hi; unsigned hashBits;};
+struct LengthGroup {unsigned lo; unsigned hi;};
     
+struct LengthGroupInfo {
+    unsigned lo;                    //  the low bound of the length group
+    unsigned hi;                    //  the high bound of the length group
+    unsigned encoding_bytes;        //  the number of bytes for encoding this group
+    unsigned prefix_base;           //  the base value of encoded prefix bytes
+    unsigned hash_bits;             //  number of bits used for hash codes
+    unsigned length_extension_bits; //  number of bits used for length extension
+};
+
+class EncodingInfo {
+public:
+    EncodingInfo(unsigned maxHashBits, std::vector<LengthGroupInfo> lengthGroups) :
+        MAX_HASH_BITS(maxHashBits), byLength(lengthGroups) {}
+    unsigned MAX_HASH_BITS;
+    std::vector<LengthGroupInfo> byLength;
+public:
+    LengthGroupInfo getLengthGroupInfo(unsigned lgth);
+};
+
 class WordMarkKernel : public pablo::PabloKernel {
 public:
     WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks);
@@ -42,36 +61,55 @@ protected:
 class ZTF_ExpansionDecoder final: public pablo::PabloKernel {
 public:
     ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+                         EncodingInfo & encodingScheme,
                          StreamSet * const basis,
-                         std::vector<LengthGroup> lengthGroups,
                          StreamSet * insertBixNum);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
-    std::vector<LengthGroup> mLengthGroups;
+    EncodingInfo & mEncodingScheme;
 };
 
 class ZTF_DecodeLengths : public pablo::PabloKernel {
 public:
     ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
+                      EncodingInfo & encodingScheme,
                       StreamSet * basisBits,
-                      std::vector<LengthGroup> lengthGroups,
-                      std::vector<StreamSet *> & groupStreams);
+                      StreamSet * groupStreams);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
-    std::vector<LengthGroup> mLengthGroups;
+    EncodingInfo & mEncodingScheme;
 };
 
+// Parse encodable ZTF words or symbols from plaintext or ciphertext.
+// The result is a stream symbolRuns marking symbol continuation bits
+// with 1 bits.   Each 0 bit represents a start of a new symbol.
 class ZTF_Symbols : public pablo::PabloKernel {
 public:
-    ZTF_Symbols(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basisBits, StreamSet * wordChar, StreamSet * symbolRuns)
+    ZTF_Symbols(const std::unique_ptr<KernelBuilder> & kb,
+                StreamSet * basisBits, StreamSet * wordChar, StreamSet * symbolRuns)
     : pablo::PabloKernel(kb, "ZTF_Symbols",
                          {Binding{"basisBits", basisBits, FixedRate(1), LookAhead(1)},
-                          Binding{"wordChar", wordChar, FixedRate(1), LookAhead(3)}},
+                             Binding{"wordChar", wordChar, FixedRate(1), LookAhead(3)}},
                          {Binding{"symbolRuns", symbolRuns}}) { }
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+// Given parsed symbol runs, produce a stream marking end positions only.
+class ZTF_SymbolEnds : public pablo::PabloKernel {
+public:
+    ZTF_SymbolEnds(const std::unique_ptr<KernelBuilder> & kb,
+                   StreamSet * symbolRuns, StreamSet * overflow, StreamSet * symbolEnds)
+    : pablo::PabloKernel(kb, "ZTF_SymbolEnds",
+                         {Binding{"symbolRuns", symbolRuns, FixedRate(1), LookAhead(1)},
+                          Binding{"overflow", overflow}},
+                         {Binding{"symbolEnds", symbolEnds}}) { }
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -81,7 +119,7 @@ protected:
 class ZTF_SymbolEncoder final: public pablo::PabloKernel {
 public:
     ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder> & b,
-                      std::vector<LengthGroup> & lenGroups,
+                      EncodingInfo & encodingScheme,
                       StreamSet * const basis,
                       StreamSet * bixHash,
                       StreamSet * extractionMask,
@@ -91,21 +129,21 @@ public:
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
-    std::vector<LengthGroup> & mLenGroups;
+    EncodingInfo & mEncodingScheme;
 };
 
 class LengthSorter final: public pablo::PabloKernel {
 public:
     LengthSorter(const std::unique_ptr<kernel::KernelBuilder> & b,
+                 EncodingInfo & encodingScheme,
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
                  StreamSet * overflow,
-                 std::vector<LengthGroup> lengthGroups,
-                 std::vector<StreamSet *> & groupStreams);
+                 StreamSet * groupStreams);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
-    std::vector<LengthGroup> mLengthGroups;
+    EncodingInfo & mEncodingScheme;
 };
 }
 #endif
