@@ -35,6 +35,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
+    Constant * const NEG_ONE = ConstantExpr::getNeg(ONE);
     IntegerType * const sizeTy = b->getSizeTy();
 
     const Binding & input = getInputStreamSetBinding(INPUT);
@@ -65,7 +66,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 
     if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
         Value * const array = b->getRawOutputPointer(OUTPUT_STREAM, position);
-        Value * const count = b->getScalarField(CURRENT_COUNT);
+        Value * const count = b->CreateLoad(b->CreateGEP(array, NEG_ONE));
         if (LLVM_LIKELY(mType == PopCountType::POSITIVE)) {
             positiveArray = array;
             initialPositiveCount = count;
@@ -75,9 +76,9 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
         }
     } else { // if (mType == PopCountType::BOTH) {
         positiveArray = b->getRawOutputPointer(POSITIVE_STREAM, position);
-        initialPositiveCount = b->getScalarField(POSITIVE_COUNT);
+        initialPositiveCount = b->CreateLoad(b->CreateGEP(positiveArray, NEG_ONE));
         negativeArray = b->getRawOutputPointer(NEGATIVE_STREAM, position);
-        initialNegativeCount = b->getScalarField(NEGATIVE_COUNT);
+        initialNegativeCount = b->CreateLoad(b->CreateGEP(negativeArray, NEG_ONE));
     }
 
     BasicBlock * const entry = b->GetInsertBlock();
@@ -201,14 +202,6 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
     b->CreateCondBr(done, popCountLoop, popCountExit);
 
     b->SetInsertPoint(popCountExit);
-    if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
-        Value * const count = (mType == PopCountType::POSITIVE) ? positivePartialSum : negativePartialSum;
-        b->setScalarField(CURRENT_COUNT, count);
-    } else { // if (mType == PopCountType::BOTH) {
-        b->setScalarField(POSITIVE_COUNT, positivePartialSum);
-        b->setScalarField(NEGATIVE_COUNT, negativePartialSum);
-    }
-
 }
 
 // TODO: is a lookbehind window of 1 sufficient here?
@@ -219,13 +212,13 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const output)
     : MultiBlockKernel(b, "PopCount" + std::string{type == PopCountType::POSITIVE ? "P" : "N"} + std::to_string(stepFactor)
 // input streams
-,{Binding{INPUT, input, FixedRate(stepFactor)}}
+,{Binding{INPUT, input, FixedRate(stepFactor), Add1() }}
 // output stream
-,{Binding{OUTPUT_STREAM, output, FixedRate(), { Add1(), LookBehind(1) } }}
+,{Binding{OUTPUT_STREAM, output, FixedRate(), LookBehind(1) }}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
-{InternalScalar{b->getSizeTy(), CURRENT_COUNT}})
+{})
 , mType(type) {
     // a block of input becomes a single integer of output
     setStride(1);
@@ -238,15 +231,14 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const positive, StreamSet * const negative)
 : MultiBlockKernel(b, ".PopCountB" + std::to_string(stepFactor)
 // input streams
-,{Binding{INPUT, input, FixedRate(stepFactor)}}
+,{Binding{INPUT, input, FixedRate(stepFactor), Add1() }}
 // output stream
-,{Binding{POSITIVE_STREAM, positive, FixedRate(), { Add1(), LookBehind(1) }}
- ,Binding{NEGATIVE_STREAM, negative, FixedRate(), { Add1(), LookBehind(1) }}}
+,{Binding{POSITIVE_STREAM, positive, FixedRate(), LookBehind(1) }
+ ,Binding{NEGATIVE_STREAM, negative, FixedRate(), LookBehind(1) }}
 // unnused I/O scalars
 ,{} ,{},
 // internal scalar
-{InternalScalar{b->getSizeTy(), POSITIVE_COUNT}
-,InternalScalar{b->getSizeTy(), NEGATIVE_COUNT}})
+{})
 , mType(type) {
     // a block of input becomes a single integer of output
     setStride(1);

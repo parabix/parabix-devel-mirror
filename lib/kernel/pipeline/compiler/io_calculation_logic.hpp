@@ -748,12 +748,12 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     Value * const baseAddress = buffer->getRawItemPointer(b, ZERO, baseOffset);
     BasicBlock * const popCountEntry = b->GetInsertBlock();
     Value * const initialStrideCount = b->CreateMul(mNumOfLinearStrides, STEP);
-    Value * enterLoop = b->CreateICmpNE(initialStrideCount, ZERO);
     if (peekableItemCount) {
-        Value * const mustUseOverflow = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
-        enterLoop = b->CreateAnd(enterLoop, mustUseOverflow);
+        Value * const hasNonOverflowStride = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
+        b->CreateLikelyCondBr(hasNonOverflowStride, popCountLoop, popCountLoopExit);
+    } else {
+        b->CreateBr(popCountLoop);
     }
-    b->CreateLikelyCondBr(enterLoop, popCountLoop, popCountLoopExit);
 
     // TODO: replace this with a parallel icmp check and bitscan? binary search with initial
     // check on the rightmost entry?
@@ -774,6 +774,9 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
         const Binding & binding = getInputBinding(ref.Number);
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(numOfStrides, STEP), hasEnough),
                         binding.getName() + ": attempting to read invalid popcount entry");
+        b->CreateAssert(b->CreateICmpULE(initialItemCount, requiredItems),
+                        binding.getName() + ": partial sum is not non-decreasing "
+                                            "(prior %d > current %d)", initialItemCount, requiredItems);
     }
 
     nextRequiredItems->addIncoming(requiredItems, popCountLoop);
@@ -798,6 +801,11 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
         Value * const canPeekIntoOverflow = b->CreateICmpULE(nextRequiredItemsPhi, peekableItemCount);
         Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
         finalNumOfStrides = b->CreateSelect(useOverflow, b->CreateAdd(numOfStridesPhi, ONE), numOfStridesPhi);
+    }
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        const Binding & binding = getInputBinding(ref.Number);
+        b->CreateAssert(b->CreateICmpNE(finalNumOfStrides, MAX_INT),
+                        binding.getName() + ": attempting to use sentinal popcount entry");
     }
     return finalNumOfStrides;
 }

@@ -23,8 +23,11 @@ using namespace llvm;
 
 LengthGroupInfo EncodingInfo::getLengthGroupInfo(unsigned lgth) {
     for (unsigned i = 0; i < byLength.size(); i++) {
-        if ((byLength[i].lo <= lgth)  && (byLength[i].hi >= lgth)) return byLength[i];
+        if ((byLength[i].lo <= lgth)  && (byLength[i].hi >= lgth)) {
+            return byLength[i];
+        }
     }
+    llvm_unreachable("failed to locate length group info");
 }
 
 unsigned EncodingInfo::maxBytes() {
@@ -35,7 +38,7 @@ unsigned EncodingInfo::maxBytes() {
     return enc_bytes;
 }
 
-std::string LengthGroupAnnotation(std::vector<LengthGroupInfo> lengthGroups) {
+std::string LengthGroupAnnotation(const std::vector<LengthGroupInfo> & lengthGroups) {
     std::string s;
     for (unsigned i = 0; i < lengthGroups.size(); i++) {
         s += ":" + std::to_string(lengthGroups[i].lo) + "_" + std::to_string(lengthGroups[i].hi);
@@ -144,7 +147,7 @@ void ZTF_DecodeLengths::generatePabloMethod() {
         unsigned base = groupInfo.prefix_base;
         unsigned next_base = base + multiplier * (hi - lo + 1);
         PabloAST * inGroup = pb.createAnd(bnc.UGE(basis, base), bnc.ULT(basis, next_base));
-        std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
+        // std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
         groupStreams[i] = pb.createAnd(pb.createAdvance(inGroup, 1), ASCII);
         for (unsigned i = 2; i < mEncodingScheme.maxBytes(); i++) {
             groupStreams[i] = pb.createAnd(pb.createAdvance(groupStreams[i], 1), ASCII);

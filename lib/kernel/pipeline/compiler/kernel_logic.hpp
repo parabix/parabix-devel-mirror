@@ -852,8 +852,14 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const unsigned inputPo
     if (LLVM_LIKELY(lookAhead == nullptr)) {
         return itemCount;
     }
+    Value * const closed = isClosed(b, inputPort);
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        const Binding & binding = getInputBinding(inputPort);
+        b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
+                        binding.getName() + ": look ahead exceeds item count");
+    }
     Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
-    return b->CreateSelect(isClosed(b, inputPort), itemCount, reducedItemCount);
+    return b->CreateSelect(closed, itemCount, reducedItemCount);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

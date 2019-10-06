@@ -62,8 +62,8 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     const unsigned numFields = b->getBitBlockWidth() / mFieldWidth;
 
     Constant * const ZERO = b->getSize(0);
-    Constant * bwConst = ConstantInt::get(sizeTy, b->getBitBlockWidth());
-    Constant * fwConst = ConstantInt::get(sizeTy, mFieldWidth);
+    Constant * BLOCK_WIDTH = ConstantInt::get(sizeTy, b->getBitBlockWidth());
+    Constant * FIELD_WIDTH = ConstantInt::get(sizeTy, mFieldWidth);
     Constant * fwSplat = ConstantVector::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth));
     Constant * fw_sub1Splat = ConstantVector::getSplat(numFields, ConstantInt::get(fieldWidthTy, mFieldWidth - 1));
 
@@ -71,7 +71,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     BasicBlock * expandLoop = b->CreateBasicBlock("expandLoop");
     BasicBlock * expansionDone = b->CreateBasicBlock("expansionDone");
     Value * processedSourceItems = b->getProcessedItemCount("source");
-    Value * initialSourceOffset = b->CreateURem(processedSourceItems, bwConst);
+    Value * initialSourceOffset = b->CreateURem(processedSourceItems, BLOCK_WIDTH);
 
     Value * const streamBase = b->getScalarField("base");
     SmallVector<Value *, 16> pendingData(mSelectedStreamCount);
@@ -90,10 +90,12 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     SmallVector<PHINode *, 16> pendingDataPhi(mSelectedStreamCount);
     blockNoPhi->addIncoming(ZERO, entry);
     pendingOffsetPhi->addIncoming(initialSourceOffset, entry);
+
     for (unsigned i = 0; i < mSelectedStreamCount; i++) {
         pendingDataPhi[i] = b->CreatePHI(b->getBitBlockType(), incomingCount);
         pendingDataPhi[i]->addIncoming(pendingData[i], entry);
     }
+
     Value * deposit_mask = b->loadInputStreamBlock("marker", ZERO, blockNoPhi);
     Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
@@ -101,6 +103,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
         BasicBlock * expandLoopContinue = b->CreateBasicBlock("expandLoopContinue");
         BasicBlock * nullMarkers = b->CreateBasicBlock("nullMarkers");
         b->CreateCondBr(b->bitblock_any(deposit_mask), expandLoopContinue, nullMarkers);
+
         b->SetInsertPoint(nullMarkers);
         Constant * zeroes = b->allZeroes();
         for (unsigned i = 0; i < mSelectedStreamCount; i++) {
@@ -112,6 +115,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
             pendingDataPhi[i]->addIncoming(pendingDataPhi[i], nullMarkers);
         }
         b->CreateCondBr(moreToDo, expandLoop, expansionDone);
+
         b->SetInsertPoint(expandLoopContinue);
     }
     // Calculate the field values and offsets we need for assembling a
@@ -119,15 +123,15 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // A = b->simd_srlv(fw, b->mvmd_dsll(fw, source, pending, field_offset_lo), bit_offset);
     // B = b->simd_sllv(fw, b->mvmd_dsll(fw, source, pending, field_offset_hi), shift_fwd);
     // all_source_bits = simd_or(A, B);
-    Value * pendingOffset = b->CreateURem(pendingOffsetPhi, bwConst);
+    Value * pendingOffset = b->CreateURem(pendingOffsetPhi, BLOCK_WIDTH);
     // Value * pendingItems = b->CreateURem(b->CreateSub(bwConst, pendingOffset), bwConst);
-    Value * pendingItems = b->CreateSub(bwConst, pendingOffset);
+    Value * pendingItems = b->CreateSub(BLOCK_WIDTH, pendingOffset);
 
-    Value * field_offset_lo = b->CreateCeilUDiv(pendingItems, fwConst);
-    Value * bit_offset = b->simd_fill(mFieldWidth, b->CreateURem(pendingOffset, fwConst));
+    Value * field_offset_lo = b->CreateCeilUDiv(pendingItems, FIELD_WIDTH);
+    Value * bit_offset = b->simd_fill(mFieldWidth, b->CreateURem(pendingOffset, FIELD_WIDTH));
     // Carefully avoid a shift by the full fieldwith (which gives a poison value).
     // field_offset_lo + 1 unless the bit_offset is 0, in which case it is just field_offset_lo.
-    Value * field_offset_hi =  b->CreateUDiv(pendingItems, fwConst);
+    Value * field_offset_hi =  b->CreateUDiv(pendingItems, FIELD_WIDTH);
     // fw - bit_offset, unless bit_offset is 0, in which case, the shift_fwd is 0.
     Value * shift_fwd = b->CreateURem(b->CreateSub(fwSplat, bit_offset), fwSplat);
 
@@ -152,7 +156,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     // has been saved in the kernel state, determine the next full block number
     // for loading source streams.
     Value * const newPendingOffset = b->CreateAdd(pendingOffsetPhi, blockPopCount);
-    Value * const srcBlockNo = b->CreateUDiv(newPendingOffset, bwConst);
+    Value * const srcBlockNo = b->CreateUDiv(newPendingOffset, BLOCK_WIDTH);
 
     // Now load and process source streams.
     SmallVector<Value *, 16> sourceData(mSelectedStreamCount);
