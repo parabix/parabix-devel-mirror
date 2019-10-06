@@ -166,6 +166,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * producedPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialProduced), bitBlockPtrTy);
     b->CreateStore(pendingMask, producedPtr);
     Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialPos), bitBlockPtrTy);
+    Value * hashTableBasePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
     b->CreateBr(stridePrologue);
 
     b->SetInsertPoint(stridePrologue);
@@ -233,7 +234,6 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     // Get the hash of this key.
     Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
     //b->CallPrintInt("keyHash", keyHash);
-    Value * hashTableBasePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
     Value * hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(keyLength, lg.LO), lg.SUBTABLE_SIZE));
     Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, lg.HI));
     // Use two 8-byte loads to get hash and symbol values.
@@ -243,18 +243,18 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * symPtr1 = b->CreateBitCast(b->getRawInputPointer("byteData", keyStartPos), lg.halfSymPtrTy);
     Value * symPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->CreateAdd(keyStartPos, keyOffset)), lg.halfSymPtrTy);
     // Check to see if the hash table entry is nonzero (already assigned).
-    Value * sym1 = b->CreateLoad(symPtr1);
-    Value * sym2 = b->CreateLoad(symPtr2);
-    Value * entry1 = b->CreateLoad(tblPtr1);
-    Value * entry2 = b->CreateLoad(tblPtr2);
+    Value * sym1 = b->CreateAlignedLoad(symPtr1, 1);
+    Value * sym2 = b->CreateAlignedLoad(symPtr2, 1);
+    Value * entry1 = b->CreateMonitoredScalarFieldLoad("hashTable", tblPtr1);
+    Value * entry2 = b->CreateMonitoredScalarFieldLoad("hashTable", tblPtr2);
     Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), Constant::getNullValue(lg.halfLengthTy));
     b->CreateCondBr(isEmptyEntry, storeKey, checkKey);
 
     b->SetInsertPoint(storeKey);
     // We have a new symbol that allows future occurrences of the symbol to
     // be compressed using the hash code.
-    b->CreateStore(sym1, tblPtr1);
-    b->CreateStore(sym2, tblPtr2);
+    b->CreateMonitoredScalarFieldStore("hashTable", sym1, tblPtr1);
+    b->CreateMonitoredScalarFieldStore("hashTable", sym2, tblPtr2);
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(checkKey);
@@ -283,11 +283,11 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     //b->CallPrintInt("mask", mask);
     Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), sizeTy->getPointerTo());
 
-    Value * initialMask = b->CreateLoad(keyBasePtr);
+    Value * initialMask = b->CreateAlignedLoad(keyBasePtr, 1);
     //b->CallPrintInt("initialMask", initialMask);
     Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
     //b->CallPrintInt("updated", updated);
-    b->CreateStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr);
+    b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(nextKey);
@@ -473,19 +473,18 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     DEBUG_PRINT("sym1", sym1);
     Value * sym2 = b->CreateLoad(symPtr2);
     DEBUG_PRINT("sym2", sym2);
-    Value * entry1 = b->CreateLoad(tblPtr1);
+    Value * entry1 = b->CreateMonitoredScalarFieldLoad("hashTable", tblPtr1);
     DEBUG_PRINT("entry1", entry1);
-    Value * entry2 = b->CreateLoad(tblPtr2);
+    Value * entry2 = b->CreateMonitoredScalarFieldLoad("hashTable", tblPtr2);
     DEBUG_PRINT("entry2", entry2);
     Value * isEmptyEntry = b->CreateIsNull(b->CreateOr(entry1, entry2));
-
     b->CreateCondBr(isEmptyEntry, storeKey, nextKey);
     b->SetInsertPoint(storeKey);
     // We have a new symbols that allows future occurrences of the symbol to
     // be compressed using the hash code.
     //b->CreateWriteCall(b->getInt32(STDERR_FILENO), symPtr1, keyLength);
-    b->CreateStore(sym1, tblPtr1);
-    b->CreateStore(sym2, tblPtr2);
+    b->CreateMonitoredScalarFieldStore("hashTable", sym1, tblPtr1);
+    b->CreateMonitoredScalarFieldStore("hashTable", sym2, tblPtr2);
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(nextKey);
@@ -542,16 +541,16 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // b->CallPrintInt("tblEntryPtr", tblEntryPtr);
     tblPtr1 = b->CreateBitCast(tblEntryPtr, lg.halfSymPtrTy);
     tblPtr2 = b->CreateBitCast(b->CreateGEP(tblEntryPtr, symOffset), lg.halfSymPtrTy);
-    entry1 = b->CreateLoad(tblPtr1);
-    entry2 = b->CreateLoad(tblPtr2);
+    entry1 = b->CreateAlignedLoad(tblPtr1, 1);
+    entry2 = b->CreateAlignedLoad(tblPtr2, 1);
     DEBUG_PRINT("symStartPos", symStartPos);
     symPtr1 = b->CreateBitCast(b->getRawOutputPointer("result", symStartPos), lg.halfSymPtrTy);
     DEBUG_PRINT("symOffset", symOffset);
     symPtr2 = b->CreateBitCast(b->getRawOutputPointer("result", b->CreateAdd(symStartPos, symOffset)), lg.halfSymPtrTy);
     DEBUG_PRINT("entry1", entry1);
-    b->CreateStore(entry1, symPtr1);
+    b->CreateAlignedStore(entry1, symPtr1, 1);
     DEBUG_PRINT("entry2", entry2);
-    b->CreateStore(entry2, symPtr2);
+    b->CreateAlignedStore(entry2, symPtr2, 1);
     b->CreateBr(nextHash);
     b->SetInsertPoint(nextHash);
     Value * dropHash = b->CreateResetLowestBit(theHashWord);
