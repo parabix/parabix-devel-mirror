@@ -157,3 +157,17 @@ kernel LexLocations :: [Lex lex] -> [BasisBits output] {
     output[6] = or4
     output[7] = or4
 }
+
+type StringSpan = <i1>[1]
+
+kernel SpanLocations :: [StringSpan span] -> [BasisBits output] {
+    s = span[0]
+    output[0] = s
+    output[1] = ~s
+    output[2] = ~s
+    output[3] = ~s
+    output[4] = s
+    output[5] = ~s
+    output[6] = s
+    output[7] = s
+}

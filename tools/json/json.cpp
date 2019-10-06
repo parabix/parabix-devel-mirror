@@ -31,6 +31,7 @@
 #include <iostream>
 #include <iomanip>
 #include <kernel/pipeline/pipeline_builder.h>
+#include "json-kernel.h"
 
 using namespace pablo;
 using namespace pablo::parse;
@@ -58,7 +59,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
 
-    StreamSet * const Lex = P->CreateStreamSet(14, 1);
+    StreamSet * const Lex = P->CreateStreamSet(14);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         jsonPabloSrc,
@@ -73,6 +74,9 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
 
     // TODO:
     // 1. Find string span (without backslashes)
+    StreamSet * const stringSpan = P->CreateStreamSet(1);
+    P->CreateKernelCall<JSONStringSpan>(Lex, stringSpan);
+
     // 2. Mark keywords (true, false, null)
     // 3. Validate strings
     // 4. Validate numbers
@@ -85,9 +89,9 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
         jsonPabloSrc,
-        "LexLocations",
+        "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"lex", Lex}
+            Binding {"span", stringSpan},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}

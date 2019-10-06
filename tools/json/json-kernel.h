@@ -11,13 +11,18 @@
 
 namespace kernel {
 
-class JSONMarker : public pablo::PabloKernel {
+/*
+    Given the JSON lex for characters backslash and double quotes,
+    this kernel returns the span of a JSON string, based on paper
+    Parsing Gigabytes of JSON per Second (Daniel Lemire and Geoff Langdale)
+*/
+class JSONStringSpan : public pablo::PabloKernel {
 public:
-    JSONMarker(const std::unique_ptr<KernelBuilder> & b, StreamSet * const lex, StreamSet * marker, StreamSet * callouts, StreamSet * err)
+    JSONStringSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const lex, StreamSet * span)
     : pablo::PabloKernel(b,
                          "jsonMarker",
                          {Binding{"lex", lex}},
-                         {Binding{"marker", marker}, Binding{"callouts", callouts}, Binding{"err", err}}) {}
+                         {Binding{"span", span}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
