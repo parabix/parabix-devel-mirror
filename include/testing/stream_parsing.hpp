@@ -43,10 +43,14 @@ struct Node {
 
     Node(ClassTypeId id) : id(id) {}
 
+    virtual ~Node() = 0;
+
     ClassTypeId getClassTypeId() const noexcept { return id; }
 private:
     ClassTypeId id;
 };
+
+inline Node::~Node() { }
 
 #define AST_NODE_TYPE(T) \
     static bool classof(const Node * t) { return t->getClassTypeId() == ClassTypeId::T; } \
@@ -55,24 +59,27 @@ private:
 struct Digit : public Node {
     AST_NODE_TYPE(DIGIT);
     explicit Digit(uint8_t value) : Node(ClassTypeId::DIGIT), value(value) {}
-    uint8_t value;
+    ~Digit() override = default;
+    const uint8_t value;
 };
 
 struct Rep : public Node {
     AST_NODE_TYPE(REP);
-    Rep(std::unique_ptr<Node> value, uint32_t count) 
+    explicit Rep(std::unique_ptr<Node> && value, uint32_t count)
     : Node(ClassTypeId::REP), value(std::move(value)), count(count)
     {}
-    std::unique_ptr<Node> value;
-    uint32_t              count;
+    ~Rep() override = default;
+    const std::unique_ptr<Node> value;
+    const uint32_t              count;
 };
 
 struct Group : public Node {
     AST_NODE_TYPE(GROUP);
-    Group(std::vector<std::unique_ptr<Node>> value)
+    explicit Group(std::vector<std::unique_ptr<Node>> && value)
     : Node(ClassTypeId::GROUP), value(std::move(value))
-    {}
-    std::vector<std::unique_ptr<Node>> value;
+    {}    
+    ~Group() override = default;
+    const std::vector<std::unique_ptr<Node>> value;
 };
 
 /**
@@ -108,31 +115,38 @@ struct Token {
 
     Token(ClassTypeId id) : id(id) {}
 
+    virtual ~Token()  = 0;
+
     ClassTypeId getClassTypeId() const noexcept { return id; }
 private:
     ClassTypeId id;
 };
 
+inline Token::~Token() { }
+
 #define TOKEN_CLASS_TYPE(T) \
     static bool classof(const Token * t) { return t->getClassTypeId() == ClassTypeId::T; } \
-    static bool classof(const void *) { return false; } \
+    static bool classof(const void *) { return false; }
 
 struct Val : public Token {
-    TOKEN_CLASS_TYPE(VAL);
+    TOKEN_CLASS_TYPE(VAL)
     explicit Val(uint8_t v) : Token(ClassTypeId::VAL), value(v) {}
-    uint8_t value;
+    ~Val() override = default;
+    const uint8_t value;
 };
 
 struct Char : public Token {
-    TOKEN_CLASS_TYPE(CHAR);
+    TOKEN_CLASS_TYPE(CHAR)
     explicit Char(char c) : Token(ClassTypeId::CHAR), value(c) {}
-    char value;
+    ~Char() override = default;
+    const char value;
 };
 
 struct Number : public Token {
-    TOKEN_CLASS_TYPE(NUM);
+    TOKEN_CLASS_TYPE(NUM)
     explicit Number(uint32_t n) : Token(ClassTypeId::NUM), value(n) {}
-    uint32_t value;
+    ~Number() override = default;
+    const uint32_t value;
 };
 
 inline bool isControlChar(char c) noexcept {
@@ -312,7 +326,8 @@ private:
     void parseExpression(std::vector<std::unique_ptr<ast::Node>> & accumList) {
         auto token = mTokenizer.emit();
         assertNotEOF(token);
-        if (auto ch = llvm::unique_dyn_cast<Char>(token)) {
+        if (llvm::isa<Char>(token)) {
+            auto ch = llvm::cast<Char>(std::move(token));
             switch (ch->value) {
             case '(':
                 parseGroup(accumList);
@@ -323,7 +338,8 @@ private:
             default:
                 llvm::report_fatal_error("stream parse error: unexpected token '" + std::string(1, ch->value) + "'");
             }
-        } else if (auto val = llvm::unique_dyn_cast<Val>(token)) {
+        } else if (llvm::isa<Val>(token)) {
+            auto val = llvm::cast<Val>(std::move(token));
             accumList.emplace_back(new ast::Digit(val->value));
         } else {
             llvm::report_fatal_error("stream parse error: unexpected token type");
