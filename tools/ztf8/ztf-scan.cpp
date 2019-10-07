@@ -90,7 +90,7 @@ struct LengthGroupParameters {
         HI(b->getSize(groupInfo.hi)),
         // All subtables are sized the same.
         SUBTABLE_SIZE(b->getSize((1 << groupInfo.hash_bits) * groupInfo.hi)),
-        HASH_BITS(b->getSize(encodingScheme.MAX_HASH_BITS)),
+        HASH_BITS(b->getSize(groupInfo.hash_bits)),
         HASH_MASK(b->getSize((1 << groupInfo.hash_bits) - 1)),
         ENC_BYTES(b->getSize(groupInfo.encoding_bytes)),
         MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1)),
@@ -105,7 +105,7 @@ unsigned hashTableSize(LengthGroupInfo g) {
 }
 
 std::string lengthGroupStr(LengthGroupInfo g) {
-    return std::to_string(g.lo) + "-" + std::to_string(g.hi);
+    return std::to_string(g.prefix_base) + "-" + std::to_string(g.lo) + "-" + std::to_string(g.hi) + "-" + std::to_string(g.hash_bits);
 }
 
 Binding ByteDataBinding(unsigned max_length, StreamSet * byteData) {
