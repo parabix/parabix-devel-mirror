@@ -30,6 +30,35 @@ void KernelBuilder::setScalarField(const StringRef fieldName, Value * const valu
     CreateStore(value, getScalarFieldPtr(fieldName));
 }
 
+LoadInst * KernelBuilder::CreateMonitoredScalarFieldLoad(const StringRef fieldName, Value * internalPtr) {
+    DataLayout DL(getModule());
+    Value * scalarPtr = getScalarFieldPtr(fieldName);
+    Value * scalarEndPtr = CreateGEP(scalarPtr, getInt32(1));
+    Value * internalEndPtr = CreateGEP(internalPtr, getInt32(1));
+    Value * scalarAddr = CreatePtrToInt(scalarPtr, getSizeTy());
+    Value * scalarEndAddr = CreatePtrToInt(scalarEndPtr, getSizeTy());
+    Value * internalAddr = CreatePtrToInt(internalPtr, getSizeTy());
+    Value * internalEndAddr = CreatePtrToInt(internalEndPtr, getSizeTy());
+    Value * inBounds = CreateAnd(CreateICmpULE(scalarAddr, internalAddr), CreateICmpUGE(scalarEndAddr, internalEndAddr));
+    __CreateAssert(inBounds, "Access (%x," PRId64 " %x)" PRId64 " to scalar " + fieldName + " out of bounds (%x," PRId64 " %x)" PRId64 ").",
+                   {internalAddr, internalEndAddr, scalarAddr, scalarEndAddr});
+    return CreateLoad(internalPtr);
+}
+
+StoreInst * KernelBuilder::CreateMonitoredScalarFieldStore(const StringRef fieldName, Value * toStore, Value * internalPtr) {
+    DataLayout DL(getModule());
+    Value * scalarPtr = getScalarFieldPtr(fieldName);
+    Value * scalarEndPtr = CreateGEP(scalarPtr, getInt32(1));
+    Value * scalarAddr = CreatePtrToInt(scalarPtr, getSizeTy());
+    Value * scalarEndAddr = CreatePtrToInt(scalarEndPtr, getSizeTy());
+    Value * internalAddr = CreatePtrToInt(internalPtr, getSizeTy());
+    Value * internalEndAddr = CreateAdd(internalAddr, getSize(DL.getTypeAllocSize(toStore->getType())));
+    Value * inBounds = CreateAnd(CreateICmpULE(scalarAddr, internalAddr), CreateICmpUGE(scalarEndAddr, internalEndAddr));
+    __CreateAssert(inBounds, "Store (%x," PRId64 " %x)" PRId64 " to scalar " + fieldName + " out of bounds (%x," PRId64 " %x)" PRId64 ").",
+                   {internalAddr, internalEndAddr, scalarAddr, scalarEndAddr});
+    return CreateStore(toStore, internalPtr);
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getProcessedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */

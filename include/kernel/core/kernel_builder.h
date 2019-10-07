@@ -27,6 +27,10 @@ public:
 
     llvm::Value * getScalarField(const llvm::StringRef fieldName);
 
+    llvm::LoadInst * CreateMonitoredScalarFieldLoad(const llvm::StringRef fieldName, llvm::Value * ptr);
+
+    llvm::StoreInst * CreateMonitoredScalarFieldStore(const llvm::StringRef fieldName, llvm::Value * toStore, llvm::Value * ptr);
+
     // Set the value of a scalar field for the current instance.
     void setScalarField(const llvm::StringRef fieldName, llvm::Value * value);
 
