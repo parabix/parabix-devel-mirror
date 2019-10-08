@@ -39,7 +39,7 @@ struct ScanWordParameters {
     Constant * const ix_MAXBIT;
     Constant * WORDS_PER_BLOCK;
     Constant * WORDS_PER_STRIDE;
-    
+
     ScanWordParameters(const std::unique_ptr<KernelBuilder> & b, unsigned stride) :
 #ifdef PREFER_NARROW_SCANWIDTH
         width(std::max(BITS_PER_BYTE, stride/SIZE_T_BITS)),
@@ -76,6 +76,7 @@ struct LengthGroupParameters {
     Constant * ENC_BYTES;
     Constant * MAX_INDEX;
     Constant * PREFIX_BASE;
+    Constant * EXTENSION_MASK;
 
     LengthGroupParameters(const std::unique_ptr<KernelBuilder> & b, EncodingInfo encodingScheme, unsigned groupNo) :
         groupInfo(encodingScheme.byLength[groupNo]),
@@ -94,7 +95,8 @@ struct LengthGroupParameters {
         HASH_MASK(b->getSize((1 << groupInfo.hash_bits) - 1)),
         ENC_BYTES(b->getSize(groupInfo.encoding_bytes)),
         MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1)),
-        PREFIX_BASE(b->getSize(groupInfo.prefix_base)) {
+        PREFIX_BASE(b->getSize(groupInfo.prefix_base)),
+        EXTENSION_MASK(b->getSize((1 << groupInfo.length_extension_bits) - 1)) {
             assert(groupInfo.hi <= (1 << (boost::intrusive::detail::floor_log2(groupInfo.lo) + 1)));
         }
 };
@@ -661,18 +663,19 @@ mEncodingScheme(encodingScheme), mLength(length)  {
 void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
     ScanWordParameters sw(b, mStride);
     LengthGroupParameters lg(b, mEncodingScheme, mEncodingScheme.getLengthGroupNo(mLength));
-    
+
     Constant * sz_STRIDE = b->getSize(mStride);
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Constant * sz_COMPRESSION_MASK = b->getSize((1 << (mLength - lg.groupInfo.encoding_bytes)) - 1);
-    
+    Constant * sz_MARK_OFFSET = b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1));
+
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_BLOCKWIDTH = b->getSize(b->getBitBlockWidth());
     Type * sizeTy = b->getSizeTy();
     Type * bitBlockPtrTy = b->getBitBlockType()->getPointerTo();
-    
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
     BasicBlock * const stridePrecomputation = b->CreateBasicBlock("stridePrecomputation");
@@ -686,7 +689,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
     BasicBlock * const updatePending = b->CreateBasicBlock("updatePending");
     BasicBlock * const compressionMaskDone = b->CreateBasicBlock("compressionMaskDone");
-    
+
     Value * const initialPos = b->getProcessedItemCount("symbolMarks");
     Value * const avail = b->getAvailableItemCount("symbolMarks");
     Value * const initialProduced = b->getProducedItemCount("compressionMask");
@@ -696,7 +699,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialPos), bitBlockPtrTy);
     Value * hashTablePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
     b->CreateBr(stridePrologue);
-    
+
     b->SetInsertPoint(stridePrologue);
     // Set up the loop variables as PHI nodes at the beginning of each stride.
     PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
@@ -705,7 +708,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
     Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
     b->CreateBr(stridePrecomputation);
-    
+
     // Precompute an index mask for one stride of the symbol marks stream.
     b->SetInsertPoint(stridePrecomputation);
     PHINode * const keyMaskAccum = b->CreatePHI(sizeTy, 2);
@@ -724,7 +727,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     blockNo->addIncoming(nextBlockNo, stridePrecomputation);
     // Default initial compression mask is all ones (no zeroes => no compression).
     b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
-    
+
     b->SetInsertPoint(strideMasksReady);
     // Iterate through key symbols and update the hash table as appropriate.
     // As symbols are encountered, the hash value is retrieved from the
@@ -741,7 +744,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * keyWordBasePtr = b->getInputStreamBlockPtr("symbolMarks", sz_ZERO, strideBlockOffset);
     keyWordBasePtr = b->CreateBitCast(keyWordBasePtr, sw.pointerTy);
     b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMask, sz_ZERO), keysDone, keyProcessingLoop);
-    
+
     b->SetInsertPoint(keyProcessingLoop);
     PHINode * const keyMaskPhi = b->CreatePHI(sizeTy, 2);
     keyMaskPhi->addIncoming(keyMask, strideMasksReady);
@@ -754,29 +757,29 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * keyMarkPosInWord = b->CreateCountForwardZeroes(theKeyWord);
     Value * keyMarkPos = b->CreateAdd(keyWordPos, keyMarkPosInWord, "keyEndPos");
     Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
-    Value * keyStartPos = b->CreateSub(keyMarkPos, b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1)), "keyStartPos");
+    Value * keyStartPos = b->CreateSub(keyMarkPos, sz_MARK_OFFSET, "keyStartPos");
     Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
-    
+
     Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, lg.HI));
     Value * symPtr = b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos);
     // Check to see if the hash table entry is nonzero (already assigned).
     std::vector<Value *> sym = loadSymbol(b, symPtr, mLength);
     std::vector<Value *> entry = loadSymbol(b, tblEntryPtr, mLength);
     b->CreateCondBr(isNullSymbol(b, entry), storeKey, nextKey);
-    
+
     b->SetInsertPoint(storeKey);
     // We have a new symbol that allows future occurrences of the symbol to
     // be compressed using the hash code.
     storeSymbol(b, sym, tblEntryPtr, mLength);
     b->CreateBr(nextKey);
-    
+
     b->SetInsertPoint(checkKey);
     // If the symbol is equal to the stored entry, it will be replace
     // by the ZTF compression code.  Prepare the compression mask by
     // zeroing out all symbol positions except the last two.
     Value * symIsEqEntry = compareSymbols(b, sym, entry);
     b->CreateCondBr(symIsEqEntry, markCompression, nextKey);
-    
+
     b->SetInsertPoint(markCompression);
     // Determine a base position from which both the keyStart and the keyEnd
     // are accessible within SIZE_T_BITS - 8, and which will not overflow
@@ -789,14 +792,14 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * mask = b->CreateShl(sz_COMPRESSION_MASK, bitOffset);
     //b->CallPrintInt("mask", mask);
     Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), sizeTy->getPointerTo());
-    
+
     Value * initialMask = b->CreateAlignedLoad(keyBasePtr, 1);
     //b->CallPrintInt("initialMask", initialMask);
     Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
     //b->CallPrintInt("updated", updated);
     b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
     b->CreateBr(nextKey);
-    
+
     b->SetInsertPoint(nextKey);
     Value * dropKey = b->CreateResetLowestBit(theKeyWord);
     Value * thisWordDone = b->CreateICmpEQ(dropKey, sz_ZERO);
@@ -806,11 +809,11 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     keyMaskPhi->addIncoming(nextKeyMask, currentBB);
     keyWordPhi->addIncoming(dropKey, currentBB);
     b->CreateCondBr(b->CreateICmpNE(nextKeyMask, sz_ZERO), keyProcessingLoop, keysDone);
-    
+
     b->SetInsertPoint(keysDone);
     strideNo->addIncoming(nextStrideNo, keysDone);
     b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), stridePrologue, stridesDone);
-    
+
     b->SetInsertPoint(stridesDone);
     // In the next segment, we may need to access byte data in the last
     // 16 bytes of this segment.
@@ -862,16 +865,17 @@ mEncodingScheme(encodingScheme), mLength(length)  {
 }
 
 void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
-    
+
     ScanWordParameters sw(b, mStride);
     LengthGroupParameters lg(b, mEncodingScheme, mEncodingScheme.getLengthGroupNo(mLength));
-    
+
     Constant * sz_STRIDE = b->getSize(mStride);
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Type * sizeTy = b->getSizeTy();
-    
+    Constant * sz_MARK_OFFSET = b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1));
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
     BasicBlock * const stridePrecomputation = b->CreateBasicBlock("stridePrecomputation");
@@ -883,7 +887,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     BasicBlock * const hashProcessingLoop = b->CreateBasicBlock("hashProcessingLoop");
     BasicBlock * const hashesDone = b->CreateBasicBlock("hashesDone");
     BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
-    
+
     Value * const initialPos = b->getProcessedItemCount("keyMarks");
     Value * const avail = b->getAvailableItemCount("keyMarks");
     if (!DelayedAttribute) {
@@ -897,7 +901,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     b->CreateMemCpy(b->getRawOutputPointer("result", initialPos), b->getRawInputPointer("byteData", initialPos), toCopy, 1);
     Value * hashTablePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
     b->CreateBr(stridePrologue);
-    
+
     b->SetInsertPoint(stridePrologue);
     // Set up the loop variables as PHI nodes at the beginning of each stride.
     PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
@@ -929,7 +933,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     hashMaskAccum->addIncoming(hashMask, stridePrecomputation);
     blockNo->addIncoming(nextBlockNo, stridePrecomputation);
     b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
-    
+
     b->SetInsertPoint(strideMasksReady);
     // First iterate through the new keys and update the hash table as
     // appropriate.   Each key is hashed, and is entered into the hash
@@ -937,7 +941,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value * keyWordBasePtr = b->getInputStreamBlockPtr("keyMarks", sz_ZERO, strideBlockOffset);
     keyWordBasePtr = b->CreateBitCast(keyWordBasePtr, sw.pointerTy);
     b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMask, sz_ZERO), keysDone, keyProcessingLoop);
-    
+
     b->SetInsertPoint(keyProcessingLoop);
     PHINode * const keyMaskPhi = b->CreatePHI(sizeTy, 2);
     keyMaskPhi->addIncoming(keyMask, strideMasksReady);
@@ -950,7 +954,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value * keyMarkPosInWord = b->CreateCountForwardZeroes(theKeyWord);
     Value * keyMarkPos = b->CreateAdd(keyWordPos, keyMarkPosInWord, "keyMarkPos");
     Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
-    Value * keyStartPos = b->CreateSub(keyMarkPos, b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1)), "keyStartPos");
+    Value * keyStartPos = b->CreateSub(keyMarkPos, sz_MARK_OFFSET, "keyStartPos");
     // Get the hash of this key.
     Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
     Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, lg.HI));
@@ -963,7 +967,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     sym = loadSymbol(b, symPtr, mLength);
     storeSymbol(b, sym, tblEntryPtr, mLength);
     b->CreateBr(nextKey);
-    
+
     b->SetInsertPoint(nextKey);
     Value * dropKey = b->CreateResetLowestBit(theKeyWord);
     Value * thisWordDone = b->CreateICmpEQ(dropKey, sz_ZERO);
@@ -973,12 +977,12 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     keyMaskPhi->addIncoming(nextKeyMask, currentBB);
     keyWordPhi->addIncoming(dropKey, currentBB);
     b->CreateCondBr(b->CreateICmpNE(nextKeyMask, sz_ZERO), keyProcessingLoop, keysDone);
-    
+
     b->SetInsertPoint(keysDone);
     Value * hashWordBasePtr = b->getInputStreamBlockPtr("hashMarks", sz_ZERO, strideBlockOffset);
     hashWordBasePtr = b->CreateBitCast(hashWordBasePtr, sw.pointerTy);
     b->CreateUnlikelyCondBr(b->CreateICmpEQ(hashMask, sz_ZERO), hashesDone, hashProcessingLoop);
-    
+
     b->SetInsertPoint(hashProcessingLoop);
     PHINode * const hashMaskPhi = b->CreatePHI(sizeTy, 2);
     hashMaskPhi->addIncoming(hashMask, keysDone);
@@ -991,7 +995,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Value * hashPosInWord = b->CreateCountForwardZeroes(theHashWord);
     Value * hashMarkPos = b->CreateAdd(hashWordPos, hashPosInWord, "hashMarkPos");
     Value * hashPfxPos = b->CreateSub(hashMarkPos, lg.MAX_INDEX);
-    
+
     Value * const hashPfx = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("byteData", hashPfxPos)), sizeTy);
     // Build up a single encoded value from the ZTF code sequence.
     Value * encodedVal = b->CreateSub(hashPfx, lg.PREFIX_BASE, "encodedVal");
@@ -1002,14 +1006,14 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
         encodedVal = b->CreateOr(b->CreateShl(encodedVal, lg.SUFFIX_BITS), b->CreateAnd(suffixByte, lg.SUFFIX_MASK), "encodedVal");
     }
     Value * hashCode = b->CreateAnd(encodedVal, lg.HASH_MASK, "hashCode");
-    Value * symStartPos = b->CreateSub(hashMarkPos, b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1)), "symStartPos");
+    Value * symStartPos = b->CreateSub(hashMarkPos, sz_MARK_OFFSET, "symStartPos");
     //b->CallPrintInt("hashCode", hashCode);
     //b->CallPrintInt("symStartPos", symStartPos);
     tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(hashCode, lg.HI));
     std::vector<Value *> dictSym = loadSymbol(b, tblEntryPtr, mLength);
     Value * destPtr = b->getRawOutputPointer("result", b->getInt32(0), symStartPos);
     storeSymbol(b, dictSym, destPtr, mLength);
-    
+
     Value * dropHash = b->CreateResetLowestBit(theHashWord);
     Value * hashMaskDone = b->CreateICmpEQ(dropHash, sz_ZERO);
     // There may be more hashs in the hash mask.
@@ -1018,11 +1022,11 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     hashMaskPhi->addIncoming(nextHashMask, hashBB);
     hashWordPhi->addIncoming(dropHash, hashBB);
     b->CreateCondBr(b->CreateICmpNE(nextHashMask, sz_ZERO), hashProcessingLoop, hashesDone);
-    
+
     b->SetInsertPoint(hashesDone);
     strideNo->addIncoming(nextStrideNo, hashesDone);
     b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), stridePrologue, stridesDone);
-    
+
     b->SetInsertPoint(stridesDone);
     // If the segment ends in the middle of a 2-byte codeword, we need to
     // make sure that we still have access to the codeword in the next block.
