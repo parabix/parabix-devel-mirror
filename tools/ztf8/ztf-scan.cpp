@@ -128,10 +128,15 @@ LengthGroupCompressionMask::LengthGroupCompressionMask(const std::unique_ptr<ker
                    {Binding{"symbolMarks", symbolMarks},
                        Binding{"hashValues", hashValues},
                        ByteDataBinding(encodingScheme.byLength[groupNo].hi, byteData)},
-                   {Binding{"compressionMask", compressionMask, BoundedRate(0,1)}}, {}, {},
+                   {}, {}, {},
                    {InternalScalar{b->getBitBlockType(), "pendingMaskInverted"},
                        InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(encodingScheme.byLength[groupNo])), "hashTable"}}),
-    mEncodingScheme(encodingScheme), mGroupNo(groupNo) {
+mEncodingScheme(encodingScheme), mGroupNo(groupNo) {
+    if (DelayedAttribute) {
+        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.byLength[groupNo].hi));
+    } else {
+        mOutputStreamSets.emplace_back("compressionMask", compressionMask, BoundedRate(0,1));
+    }
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
 }
 
