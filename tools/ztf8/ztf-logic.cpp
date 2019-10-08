@@ -21,10 +21,10 @@ using namespace pablo;
 using namespace kernel;
 using namespace llvm;
 
-LengthGroupInfo EncodingInfo::getLengthGroupInfo(unsigned lgth) {
+unsigned EncodingInfo::getLengthGroupNo(unsigned lgth) {
     for (unsigned i = 0; i < byLength.size(); i++) {
         if ((byLength[i].lo <= lgth)  && (byLength[i].hi >= lgth)) {
-            return byLength[i];
+            return i;
         }
     }
     llvm_unreachable("failed to locate length group info");

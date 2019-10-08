@@ -29,7 +29,7 @@ public:
     unsigned MAX_HASH_BITS;
     std::vector<LengthGroupInfo> byLength;
 public:
-    LengthGroupInfo getLengthGroupInfo(unsigned lgth);
+    unsigned getLengthGroupNo(unsigned lgth);
     unsigned maxBytes();
 };
 

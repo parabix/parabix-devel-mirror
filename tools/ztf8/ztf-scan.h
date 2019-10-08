@@ -60,8 +60,8 @@ public:
     bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    EncodingInfo mEncodingScheme;
     unsigned mLength;
-    LengthGroupInfo mLengthGroupInfo;
 };
 
 class FixedLengthDecompression : public MultiBlockKernel {
@@ -70,15 +70,15 @@ public:
                              EncodingInfo encodingScheme,
                              unsigned length,
                              StreamSet * keyMarks,
-                             StreamSet * const hashMarks, StreamSet * const byteData,
                              StreamSet * const hashValues,
+                             StreamSet * const hashMarks, StreamSet * const byteData,
                              StreamSet * const result, unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    EncodingInfo mEncodingScheme;
     unsigned mLength;
-    LengthGroupInfo mLengthGroupInfo;
 };
 
 }
