@@ -4,15 +4,6 @@
 
 parabix_add_executable(
 NAME
-    ztf8-study
-SRC
-    ztf8-study.cpp
-DEPS
-    grep
-)
-
-parabix_add_executable(
-NAME
     matchprior
 SRC
     matchprior.cpp
@@ -76,24 +67,3 @@ DEPS
     kernel.util
     toolchain
 )
-
-parabix_add_executable(
-NAME
-    ztf-hash-fixed
-SRC
-    ztf-logic.cpp
-    ztf-scan-fixed.cpp
-    ztf-hash-fixed.cpp
-DEPS
-    grep
-    pablo
-    kernel.basis
-    kernel.io
-    kernel.pipeline
-    kernel.streamutils
-    kernel.util
-    toolchain
-)
-
-
-
