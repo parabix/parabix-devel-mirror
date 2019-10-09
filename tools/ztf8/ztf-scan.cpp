@@ -240,7 +240,6 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * keyOffset = b->CreateSub(keyLength, lg.HALF_LENGTH);
     // Get the hash of this key.
     Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
-    //b->CallPrintInt("keyHash", keyHash);
     Value * hashTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(keyLength, lg.LO), lg.SUBTABLE_SIZE));
     Value * tblEntryPtr = b->CreateGEP(hashTablePtr, b->CreateMul(keyHash, lg.HI));
     // Use two 8-byte loads to get hash and symbol values.
@@ -630,7 +629,7 @@ Value * compareSymbols (const std::unique_ptr<KernelBuilder> & b, std::vector<Va
     if (sym1.size() == 1) {
         return b->CreateICmpEQ(sym1[0], sym2[0]);
     }
-    return b->CreateAnd(b->CreateICmpEQ(sym1[0], sym2[0]), b->CreateICmpEQ(sym1[1], sym2[2]));
+    return b->CreateAnd(b->CreateICmpEQ(sym1[0], sym2[0]), b->CreateICmpEQ(sym1[1], sym2[1]));
 }
 
 Value * isNullSymbol (const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> sym) {
@@ -770,7 +769,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     // Check to see if the hash table entry is nonzero (already assigned).
     std::vector<Value *> sym = loadSymbol(b, symPtr, mLength);
     std::vector<Value *> entry = loadSymbol(b, tblEntryPtr, mLength);
-    b->CreateCondBr(isNullSymbol(b, entry), storeKey, nextKey);
+    b->CreateCondBr(isNullSymbol(b, entry), storeKey, checkKey);
 
     b->SetInsertPoint(storeKey);
     // We have a new symbol that allows future occurrences of the symbol to
@@ -793,7 +792,6 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * markBase = b->CreateSub(keyMarkPos, b->CreateURem(keyMarkPos, sz_BITS));
     Value * keyBase = b->CreateSelect(b->CreateICmpULT(startBase, markBase), startBase, markBase);
     Value * bitOffset = b->CreateSub(keyStartPos, keyBase);
-    //b->CallPrintInt("bitOffset", bitOffset);
     Value * mask = b->CreateShl(sz_COMPRESSION_MASK, bitOffset);
     //b->CallPrintInt("mask", mask);
     Value * const keyBasePtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", keyBase), sizeTy->getPointerTo());
