@@ -73,9 +73,9 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     );
 
     // TODO:
-    // 1. Find string span (without backslashes)
-    StreamSet * const stringSpan = P->CreateStreamSet(1);
-    P->CreateKernelCall<JSONStringSpan>(Lex, stringSpan);
+    // 1. Find string marker (without backslashes)
+    StreamSet * const stringMarker = P->CreateStreamSet(1);
+    P->CreateKernelCall<JSONStringMarker>(Lex, stringMarker);
 
     // 2. Mark keywords (true, false, null)
     // 3. Validate strings
@@ -91,7 +91,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         jsonPabloSrc,
         "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"span", stringSpan},
+            Binding {"span", stringMarker},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}

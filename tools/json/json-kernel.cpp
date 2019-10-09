@@ -43,7 +43,7 @@ PabloAST * partialAdd(PabloBuilder & pb, PabloAST * a, PabloAST * b) {
     return output;
 }
 
-void JSONStringSpan::generatePabloMethod() {
+void JSONStringMarker::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> lex = getInputStreamSet("lex");
     Var * const span = getOutputStreamVar("span");
@@ -77,11 +77,10 @@ void JSONStringSpan::generatePabloMethod() {
     PabloAST * OD = pb.createOr(OD1, OD2);
 
     // There is a bug on the quotes
-    // PabloAST * Q = lex[Lex::dQuote];
-    // PabloAST * QEq = pb.createAnd(Q, pb.createNot(OD));
-    // PabloAST * FinalSpan = 
+    PabloAST * Q = lex[Lex::dQuote];
+    PabloAST * QEq = pb.createAnd(Q, pb.createNot(OD));
 
-    pb.createAssign(pb.createExtract(span, pb.getInteger(0)), OD);
+    pb.createAssign(pb.createExtract(span, pb.getInteger(0)), QEq);
 }
 
 void ValidateJSONString::generatePabloMethod() {
