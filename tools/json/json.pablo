@@ -70,11 +70,11 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     temp17 = basis[3] & basis[4]
     lex.colon = temp17 & temp16
     temp18 = ~basis[3] & ~basis[4]
-    lex.comma = temp18 & temp16
-    # double quote
+    lex.dQuote = temp18 & temp16
+    # comma
     temp19 = temp13 & temp15
     temp20 = basis[3] & ~basis[4]
-    lex.dQuote = temp19 & temp20
+    lex.comma = temp19 & temp20
 
     # 00 1 01 10 1 = -
     temp21 = temp12 & temp20
