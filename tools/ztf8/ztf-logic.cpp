@@ -30,7 +30,17 @@ unsigned EncodingInfo::getLengthGroupNo(unsigned lgth) {
     llvm_unreachable("failed to locate length group info");
 }
 
-unsigned EncodingInfo::maxBytes() {
+unsigned EncodingInfo::maxSymbolLength() {
+    unsigned maxSoFar = 0;
+    for (unsigned i = 0; i < byLength.size(); i++) {
+        if (byLength[i].hi >=  maxSoFar) {
+            maxSoFar = byLength[i].hi;
+        }
+    }
+    return maxSoFar;
+}
+
+unsigned EncodingInfo::maxEncodingBytes() {
     unsigned enc_bytes = 0;
     for (auto g : byLength) {
         if (g.encoding_bytes > enc_bytes) enc_bytes = g.encoding_bytes;
@@ -85,7 +95,7 @@ ZTF_ExpansionDecoder::ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelB
                                            StreamSet * const basis,
                                            StreamSet * insertBixNum)
 : pablo::PabloKernel(b, "ZTF_ExpansionDecoder" + LengthGroupAnnotation(encodingScheme.byLength),
-                     {Binding{"basis", basis, FixedRate(), LookAhead(encodingScheme.maxBytes() - 1)}},
+                     {Binding{"basis", basis, FixedRate(), LookAhead(encodingScheme.maxEncodingBytes() - 1)}},
                      {Binding{"insertBixNum", insertBixNum}}),
     mEncodingScheme(encodingScheme)  {}
 
@@ -94,7 +104,7 @@ void ZTF_ExpansionDecoder::generatePabloMethod() {
     BixNumCompiler bnc(pb);
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     PabloAST * ASCII_lookahead = pb.createNot(pb.createLookahead(basis[7], 1));
-    for (unsigned i = 2; i < mEncodingScheme.maxBytes(); i++) {
+    for (unsigned i = 2; i < mEncodingScheme.maxEncodingBytes(); i++) {
         ASCII_lookahead = pb.createAnd(ASCII_lookahead, pb.createNot(pb.createLookahead(basis[7], pb.getInteger(i))));
     }
     BixNum insertLgth(4, pb.createZeroes());
@@ -149,7 +159,7 @@ void ZTF_DecodeLengths::generatePabloMethod() {
         PabloAST * inGroup = pb.createAnd(bnc.UGE(basis, base), bnc.ULT(basis, next_base));
         // std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
         groupStreams[i] = pb.createAnd(pb.createAdvance(inGroup, 1), ASCII);
-        for (unsigned i = 2; i < mEncodingScheme.maxBytes(); i++) {
+        for (unsigned i = 2; i < mEncodingScheme.maxEncodingBytes(); i++) {
             groupStreams[i] = pb.createAnd(pb.createAdvance(groupStreams[i], 1), ASCII);
         }
         pb.createAssign(pb.createExtract(groupStreamVar, pb.getInteger(i)), groupStreams[i]);
@@ -200,7 +210,7 @@ ZTF_SymbolEncoder::ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder
                       StreamSet * encoded)
     : pablo::PabloKernel(b, "ZTF_SymbolEncoder" + LengthGroupAnnotation(encodingScheme.byLength),
                          {Binding{"basis", basis},
-                             Binding{"bixHash", bixHash, FixedRate(), LookAhead(encodingScheme.maxBytes() - 1)},
+                             Binding{"bixHash", bixHash, FixedRate(), LookAhead(encodingScheme.maxEncodingBytes() - 1)},
                              Binding{"extractionMask", extractionMask},
                              Binding{"runIdx", runIdx}},
                          {Binding{"encoded", encoded}}),
@@ -223,7 +233,7 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     encoded[7] = pb.createOr(ZTF_prefix, basis[7]);
     encoded[6] = pb.createOr(ZTF_prefix, basis[6]);
     // There may be more than one suffix.  Number them in reverse order.
-    std::vector<PabloAST *> ZTF_suffix(mEncodingScheme.maxBytes() - 1, pb.createZeroes());
+    std::vector<PabloAST *> ZTF_suffix(mEncodingScheme.maxEncodingBytes() - 1, pb.createZeroes());
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
         LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
         unsigned suffix_bytes = groupInfo.encoding_bytes - 1;
@@ -259,7 +269,7 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     encoded[7] = pb.createAnd(encoded[7], pb.createNot(ZTF_suffix[0]));
     //
     // Other suffix positions receive higher numbered bits.
-    for (unsigned i = 1; i < mEncodingScheme.maxBytes() - 1; i++) {
+    for (unsigned i = 1; i < mEncodingScheme.maxEncodingBytes() - 1; i++) {
         for (unsigned j = 0; j < 7; j++)  {
             encoded[j] = pb.createSel(ZTF_suffix[i], pb.createLookahead(bixHash[j + 7 * i], i), encoded[j]);
         }

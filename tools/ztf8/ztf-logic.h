@@ -30,7 +30,8 @@ public:
     std::vector<LengthGroupInfo> byLength;
 public:
     unsigned getLengthGroupNo(unsigned lgth);
-    unsigned maxBytes();
+    unsigned maxSymbolLength();
+    unsigned maxEncodingBytes();
 };
 
 class WordMarkKernel : public pablo::PabloKernel {

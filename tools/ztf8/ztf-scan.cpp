@@ -26,6 +26,7 @@ using namespace llvm;
 
 static cl::opt<bool> DeferredAttribute("deferred", cl::desc("Use Deferred attribute instead of Lookbehind for source data"), cl::init(false));
 static cl::opt<bool> DelayedAttribute("delayed", cl::desc("Use Delayed Attribute instead of BoundedRate for output"), cl::init(true));
+static cl::opt<bool> PrefixCheck("prefix-check-mode", cl::desc("Use experimental prefix check mode"), cl::init(false));
 
 const unsigned BITS_PER_BYTE = 8;
 const unsigned SIZE_T_BITS = sizeof(size_t) * BITS_PER_BYTE;
@@ -124,7 +125,10 @@ LengthGroupCompressionMask::LengthGroupCompressionMask(const std::unique_ptr<ker
                                                        StreamSet * symbolMarks,
                                                        StreamSet * hashValues,
                                                        StreamSet * const byteData, StreamSet * compressionMask, unsigned strideBlocks)
-: MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupStr(encodingScheme.byLength[groupNo]) + (DeferredAttribute ? "deferred" : "lookBehind") + (DelayedAttribute ? "_delayed" : "_bounded"),
+: MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupStr(encodingScheme.byLength[groupNo]) +
+                   (DeferredAttribute ? "deferred" : "lookBehind") +
+                   (DelayedAttribute ? "_delayed" : "_bounded") +
+                   (PrefixCheck ? "_prefix" : ""),
                    {Binding{"symbolMarks", symbolMarks},
                        Binding{"hashValues", hashValues},
                        ByteDataBinding(encodingScheme.byLength[groupNo].hi, byteData)},
@@ -133,7 +137,7 @@ LengthGroupCompressionMask::LengthGroupCompressionMask(const std::unique_ptr<ker
                        InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(encodingScheme.byLength[groupNo])), "hashTable"}}),
 mEncodingScheme(encodingScheme), mGroupNo(groupNo) {
     if (DelayedAttribute) {
-        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.byLength[groupNo].hi));
+        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.maxSymbolLength()));
     } else {
         mOutputStreamSets.emplace_back("compressionMask", compressionMask, BoundedRate(0,1));
     }
@@ -157,8 +161,8 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     BasicBlock * const stridePrecomputation = b->CreateBasicBlock("stridePrecomputation");
     BasicBlock * const strideMasksReady = b->CreateBasicBlock("strideMasksReady");
     BasicBlock * const keyProcessingLoop = b->CreateBasicBlock("keyProcessingLoop");
+    BasicBlock * const tryStore = b->CreateBasicBlock("tryStore");
     BasicBlock * const storeKey = b->CreateBasicBlock("storeKey");
-    BasicBlock * const checkKey = b->CreateBasicBlock("checkKey");
     BasicBlock * const markCompression = b->CreateBasicBlock("markCompression");
     BasicBlock * const nextKey = b->CreateBasicBlock("nextKey");
     BasicBlock * const keysDone = b->CreateBasicBlock("keysDone");
@@ -233,7 +237,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * keyMarkPosInWord = b->CreateCountForwardZeroes(theKeyWord);
     Value * keyMarkPos = b->CreateAdd(keyWordPos, keyMarkPosInWord, "keyEndPos");
     /* Determine the key length. */
-    Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
+    Value * hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
     Value * keyLength = b->CreateAdd(b->CreateLShr(hashValue, lg.MAX_HASH_BITS), lg.ENC_BYTES, "keyLength");
     Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, lg.MAX_INDEX), "keyStartPos");
     // keyOffset for accessing the final half of an entry.
@@ -253,30 +257,52 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * sym2 = b->CreateAlignedLoad(symPtr2, 1);
     Value * entry1 = b->CreateMonitoredScalarFieldLoad("hashTable", tblPtr1);
     Value * entry2 = b->CreateMonitoredScalarFieldLoad("hashTable", tblPtr2);
-    Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), Constant::getNullValue(lg.halfLengthTy));
-    b->CreateCondBr(isEmptyEntry, storeKey, checkKey);
-
-    b->SetInsertPoint(storeKey);
-    // We have a new symbol that allows future occurrences of the symbol to
-    // be compressed using the hash code.
-    b->CreateMonitoredScalarFieldStore("hashTable", sym1, tblPtr1);
-    b->CreateMonitoredScalarFieldStore("hashTable", sym2, tblPtr2);
-    b->CreateBr(nextKey);
-
-    b->SetInsertPoint(checkKey);
-    // If the symbol is equal to the stored entry, it will be replace
-    // by the ZTF compression code.  Prepare the compression mask by
-    // zeroing out all symbol positions except the last two.
     Value * symIsEqEntry = b->CreateAnd(b->CreateICmpEQ(entry1, sym1), b->CreateICmpEQ(entry2, sym2));
-    b->CreateCondBr(symIsEqEntry, markCompression, nextKey);
+    Value * maskLength = nullptr;
+    if (PrefixCheck) {
+        BasicBlock * const tryPrefix = b->CreateBasicBlock("tryPrefix");
+        BasicBlock * const havePrefix = b->CreateBasicBlock("havePrefix");
+        b->CreateCondBr(symIsEqEntry, markCompression, tryPrefix);
 
-    b->SetInsertPoint(markCompression);
-    //b->CallPrintInt("keyHash", keyHash);
-    //b->CallPrintInt("keyStartPos", keyStartPos);
+        b->SetInsertPoint(tryPrefix);
+        // We can try an immediate prefix if the last byte of the symbol is
+        // an ASCII non-word character and the the length is greater than the
+        // length group minimum.
+        Value * lastByte = b->CreateTrunc(sym2, b->getInt8Ty());
+        Value * x20_2F = b->CreateAnd(b->CreateICmpUGE(lastByte, b->getInt8(0x20)), b->CreateICmpULE(lastByte, b->getInt8(0x2F)));
+        b->CreateCondBr(b->CreateAnd(b->CreateICmpUGT(keyLength, lg.LO), x20_2F), havePrefix, tryStore);
+
+        b->SetInsertPoint(havePrefix);
+        Value * pfxEndPos = b->CreateSub(keyMarkPos, sz_ONE);
+        Value * pfxHashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", pfxEndPos)), sizeTy);
+        Value * pfxLength = b->CreateSub(keyLength, sz_ONE);
+        Value * pfxOffset = b->CreateSub(pfxLength, lg.HALF_LENGTH);
+        Value * pfxHash = b->CreateAnd(pfxHashValue, lg.HASH_MASK, "pfxHash");
+        Value * pfxTablePtr = b->CreateGEP(hashTableBasePtr, b->CreateMul(b->CreateSub(pfxLength, lg.LO), lg.SUBTABLE_SIZE));
+        Value * pfxEntryPtr = b->CreateGEP(pfxTablePtr, b->CreateMul(pfxHash, lg.HI));
+        Value * pfxPtr1 = b->CreateBitCast(pfxEntryPtr, lg.halfSymPtrTy);
+        Value * pfxPtr2 = b->CreateBitCast(b->CreateGEP(pfxEntryPtr, pfxOffset), lg.halfSymPtrTy);
+        Value * pfx1 = b->CreateMonitoredScalarFieldLoad("hashTable", pfxPtr1);
+        Value * pfx2 = b->CreateMonitoredScalarFieldLoad("hashTable", pfxPtr2);
+        // Only the second half of the symbol needs to be loaded.
+        Value * symPfxPtr2 = b->CreateBitCast(b->getRawInputPointer("byteData", b->CreateAdd(keyStartPos, pfxOffset)), lg.halfSymPtrTy);
+        Value * pfxSym2 = b->CreateAlignedLoad(symPfxPtr2, 1);
+        symIsEqEntry = b->CreateAnd(b->CreateICmpEQ(pfx1, sym1), b->CreateICmpEQ(pfx2, pfxSym2));
+        b->CreateCondBr(symIsEqEntry, markCompression, tryStore);
+
+        b->SetInsertPoint(markCompression);
+        PHINode * const compressLengthPhi = b->CreatePHI(sizeTy, 2);
+        compressLengthPhi->addIncoming(keyLength, keyProcessingLoop);
+        compressLengthPhi->addIncoming(pfxLength, havePrefix);
+        maskLength = b->CreateZExt(b->CreateSub(compressLengthPhi, lg.ENC_BYTES), sizeTy);
+    } else {
+        b->CreateCondBr(symIsEqEntry, markCompression, tryStore);
+        b->SetInsertPoint(markCompression);
+        maskLength = b->CreateZExt(b->CreateSub(keyLength, lg.ENC_BYTES), sizeTy);
+    }
     // Compute a mask of bits, with zeroes marking positions to eliminate.
     // The entire symbols will be replaced, but we need to keep the required
     // number of positions for the encoded ZTF sequence.
-    Value * maskLength = b->CreateZExt(b->CreateSub(keyLength, lg.ENC_BYTES), sizeTy);
     Value * mask = b->CreateSub(b->CreateShl(sz_ONE, maskLength), sz_ONE);
     // Determine a base position from which both the keyStart and the keyEnd
     // are accessible within SIZE_T_BITS - 8, and which will not overflow
@@ -296,6 +322,17 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
     //b->CallPrintInt("updated", updated);
     b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
+    b->CreateBr(nextKey);
+
+    b->SetInsertPoint(tryStore);
+    Value * isEmptyEntry = b->CreateICmpEQ(b->CreateOr(entry1, entry2), Constant::getNullValue(lg.halfLengthTy));
+    b->CreateCondBr(isEmptyEntry, storeKey, nextKey);
+
+    b->SetInsertPoint(storeKey);
+    // We have a new symbol that allows future occurrences of the symbol to
+    // be compressed using the hash code.
+    b->CreateMonitoredScalarFieldStore("hashTable", sym1, tblPtr1);
+    b->CreateMonitoredScalarFieldStore("hashTable", sym2, tblPtr2);
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(nextKey);
@@ -355,7 +392,7 @@ LengthGroupDecompression::LengthGroupDecompression(const std::unique_ptr<kernel:
     mEncodingScheme(encodingScheme), mGroupNo(groupNo) {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
     if (DelayedAttribute) {
-        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(encodingScheme.byLength[groupNo].hi) );
+        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
     } else {
         mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
     }
@@ -658,7 +695,7 @@ FixedLengthCompressionMask::FixedLengthCompressionMask(const std::unique_ptr<ker
 mEncodingScheme(encodingScheme), mLength(length)  {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
     if (DelayedAttribute) {
-        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(mLength) );
+        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
     } else {
         mOutputStreamSets.emplace_back("compressionMask", compressionMask, BoundedRate(0,1));
     }
@@ -861,7 +898,7 @@ FixedLengthDecompression::FixedLengthDecompression(const std::unique_ptr<kernel:
 mEncodingScheme(encodingScheme), mLength(length)  {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
     if (DelayedAttribute) {
-        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(mLength) );
+        mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
     } else {
         mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
     }
