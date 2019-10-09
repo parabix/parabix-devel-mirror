@@ -218,7 +218,7 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     Var * encodedVar = getOutputStreamVar("encoded");
     //  ZTF symbol prefixes are inserted at the position of the first 1 bit
     //  following a series of 0 bits in the extraction mask.
-    PabloAST * ZTF_prefix = pb.createAnd(extractionMask, pb.createAdvance(pb.createNot(extractionMask), 1));
+    PabloAST * ZTF_prefix = pb.createAnd(extractionMask, pb.createAdvance(pb.createNot(extractionMask), 1), "ZTF_prefix");
     // ZTF prefixes depend on the length group, but always have the high 2 bits set in each case.
     encoded[7] = pb.createOr(ZTF_prefix, basis[7]);
     encoded[6] = pb.createOr(ZTF_prefix, basis[6]);
@@ -227,22 +227,20 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
         LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
         unsigned suffix_bytes = groupInfo.encoding_bytes - 1;
-        // Determine the symbol length at the ZTF_prefix position.
         // The run index counts from the second position of the run starting with 0,
         // so the length is 2 + the runIndex value at the end of the symbol.
-        // At the ZTF_prefix position, the runIndex is lower by the number of
-        // suffix bytes.
-        BixNum symLength = bnc.AddFull(runIdx, groupInfo.encoding_bytes + 1);
+        // At the ZTF_prefix position, the offset is higher by the byte length - 1.
+        unsigned offset = groupInfo.encoding_bytes + 1;
         unsigned lo = groupInfo.lo;
         unsigned hi = groupInfo.hi;
+        PabloAST * inGroup = pb.createAnd(bnc.UGE(runIdx, lo - offset), bnc.ULE(runIdx, hi - offset));
+        inGroup = pb.createAnd(inGroup, ZTF_prefix, "inGroup" + std::to_string(lo) + "_" + std::to_string(hi));
         unsigned suffix_bits_avail = (groupInfo.encoding_bytes - 1) * 7;
         unsigned hash_ext_bits = groupInfo.hash_bits + groupInfo.length_extension_bits;
         unsigned excess_bits = suffix_bits_avail < hash_ext_bits ? hash_ext_bits - suffix_bits_avail : 0;
         unsigned multiplier = 1<<excess_bits;
         BixNum base = bnc.ZeroExtend(bnc.Create(groupInfo.prefix_base & 0x3F), 6); // only low 6 bits needed
-        PabloAST * inGroup = pb.createAnd(bnc.UGE(symLength, lo), bnc.ULE(symLength, hi));
-        inGroup = pb.createAnd(inGroup, ZTF_prefix, "inGroup" + std::to_string(lo) + "_" + std::to_string(hi));
-        BixNum lenOffset = bnc.SubModular(symLength, lo);
+        BixNum lenOffset = bnc.SubModular(runIdx, lo - offset);
         BixNum value = bnc.AddModular(base, bnc.MulModular(lenOffset, multiplier));
         for (unsigned j = 0; j < excess_bits; j++) {
             value[j] = pb.createLookahead(bixHash[j + suffix_bits_avail], groupInfo.encoding_bytes - 1);
@@ -281,6 +279,46 @@ void ZTF_SymbolEnds::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("symbolEnds"), pb.getInteger(0)), runFinal);
 }
 
+std::string LengthSelectorSuffix(EncodingInfo & encodingScheme, unsigned groupNo, StreamSet * bixNum) {
+    auto g = encodingScheme.byLength[groupNo];
+    auto elems = bixNum->getNumElements();
+    return std::to_string(g.lo) + "_" + std::to_string(g.hi) + "_" + std::to_string(elems);
+}
+
+LengthGroupSelector::LengthGroupSelector(const std::unique_ptr<kernel::KernelBuilder> & b,
+                           EncodingInfo & encodingScheme,
+                           unsigned groupNo,
+                           StreamSet * symbolRun,
+                           StreamSet * const lengthBixNum,
+                           StreamSet * overflow,
+                           StreamSet * selected)
+: PabloKernel(b, "LengthGroupSelector" + LengthSelectorSuffix(encodingScheme, groupNo, lengthBixNum),
+              {Binding{"symbolRun", symbolRun, FixedRate(), LookAhead(1)},
+                  Binding{"lengthBixNum", lengthBixNum},
+                  Binding{"overflow", overflow}},
+              {Binding{"selected", selected}}), mEncodingScheme(encodingScheme), mGroupNo(groupNo) { }
+
+void LengthGroupSelector::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    BixNumCompiler bnc(pb);
+    PabloAST * run = getInputStreamSet("symbolRun")[0];
+    std::vector<PabloAST *> lengthBixNum = getInputStreamSet("lengthBixNum");
+    PabloAST * overflow = getInputStreamSet("overflow")[0];
+    PabloAST * runFinal = pb.createAnd(run, pb.createNot(pb.createLookahead(run, 1)));
+    runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
+    Var * groupStreamVar = getOutputStreamVar("selected");
+    LengthGroupInfo groupInfo = mEncodingScheme.byLength[mGroupNo];
+    // Run index codes count from 0 on the 2nd byte of a symbol.
+    // So the length is 2 more than the bixnum.
+    unsigned offset = 2;
+    unsigned lo = groupInfo.lo;
+    unsigned hi = groupInfo.hi;
+    std::string groupName = "lengthGroup" + std::to_string(lo) +  "_" + std::to_string(hi);
+    PabloAST * groupStream = pb.createAnd3(bnc.UGE(lengthBixNum, lo - offset), bnc.ULE(lengthBixNum, hi - offset), runFinal, groupName);
+    pb.createAssign(pb.createExtract(groupStreamVar, pb.getInteger(0)), groupStream);
+}
+
+
 LengthSorter::LengthSorter(const std::unique_ptr<kernel::KernelBuilder> & b,
                            EncodingInfo & encodingScheme,
                            StreamSet * symbolRun, StreamSet * const lengthBixNum,
@@ -300,12 +338,12 @@ void LengthSorter::generatePabloMethod() {
     PabloAST * overflow = getInputStreamSet("overflow")[0];
     PabloAST * runFinal = pb.createAnd(run, pb.createNot(pb.createLookahead(run, 1)));
     runFinal = pb.createAnd(runFinal, pb.createNot(overflow));
-    // Run index codes count from 0 on the 2nd byte of a symbol.
-    // So the length is 2 more than the bixnum.
-    const unsigned offset = 2;
     std::vector<PabloAST *> groupStreams(mEncodingScheme.byLength.size());
     Var * groupStreamVar = getOutputStreamVar("groupStreams");
     for (unsigned i = 0; i < mEncodingScheme.byLength.size(); i++) {
+        // Run index codes count from 0 on the 2nd byte of a symbol.
+        // So the length is 2 more than the bixnum.
+        unsigned offset = 2;
         LengthGroupInfo groupInfo = mEncodingScheme.byLength[i];
         unsigned lo = groupInfo.lo;
         unsigned hi = groupInfo.hi;

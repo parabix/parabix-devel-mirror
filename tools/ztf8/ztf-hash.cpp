@@ -64,9 +64,8 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
 EncodingInfo encodingScheme1(9,
-                             {{3, 3, 2, 0xC0, 9, 0}, {4, 4, 2, 0xC8, 9, 0}, {5, 8, 2, 0xD0, 8, 0},
-                                 {9, 16, 2, 0xE0, 8, 0}});
-
+                              {{3, 3, 2, 0xC0, 9, 0}, {4, 4, 2, 0xC8, 9, 0}, {5, 8, 2, 0xD0, 8, 0},
+                                  {9, 16, 2, 0xE0, 8, 0}});
 ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
     auto & b = driver.getBuilder();
@@ -101,18 +100,12 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
     //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
 
-    StreamSet * parsedMarks = P->CreateStreamSet(encodingScheme1.byLength.size());
-    //std::vector<StreamSet *> parsedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
-    P->CreateKernelCall<LengthSorter>(encodingScheme1, symbolRuns, runIndex, overflow, parsedMarks);
-
-    //std::vector<StreamSet *> extractionMasks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
     std::vector<StreamSet *> extractionMasks;
     for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
         StreamSet * groupMarks = P->CreateStreamSet(1);
-        P->CreateKernelCall<StreamSelect>(groupMarks, Select(parsedMarks, {i}));
-        //P->CreateKernelCall<LengthGroupCompressionMask>(encodingScheme1, grp, parsedMarks[i], hashValues, codeUnitStream,  extractionMasks[i]);
+        P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks);
         StreamSet * extractionMask = P->CreateStreamSet(1);
-        if (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi) {
+        if (false && (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi)) {
             P->CreateKernelCall<FixedLengthCompressionMask>(encodingScheme1, encodingScheme1.byLength[i].lo, groupMarks, hashValues, codeUnitStream,  extractionMask);
         } else {
             P->CreateKernelCall<LengthGroupCompressionMask>(encodingScheme1, i, groupMarks, hashValues, codeUnitStream,  extractionMask);
@@ -175,23 +168,19 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
     std::vector<StreamSet *> combinedHashData = {bixHashes, runIndex};
     P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
 
-    StreamSet * parsedMarks = P->CreateStreamSet(encodingScheme1.byLength.size());
-    //std::vector<StreamSet *> parsedMarks = {P->CreateStreamSet(1), P->CreateStreamSet(1), P->CreateStreamSet(1)};
-    P->CreateKernelCall<LengthSorter>(encodingScheme1, symbolRuns, runIndex, overflow, parsedMarks);
-    //P->CreateKernelCall<DebugDisplayKernel>("parsedMarks", parsedMarks);
     StreamSet * u8bytes = ztfHash_u8bytes;
     for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
-        StreamSet * groupParsed = P->CreateStreamSet(1);
-        P->CreateKernelCall<StreamSelect>(groupParsed, Select(parsedMarks, {i}));
+        StreamSet * groupMarks = P->CreateStreamSet(1);
+        P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks);
         StreamSet * groupDecoded = P->CreateStreamSet(1);
         P->CreateKernelCall<StreamSelect>(groupDecoded, Select(decodedMarks, {i}));
         //P->CreateKernelCall<DebugDisplayKernel>("decodedMarks", decodedMarks);
         StreamSet * input_bytes = u8bytes;
         StreamSet * output_bytes = P->CreateStreamSet(1, 8);
         if (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi) {
-            P->CreateKernelCall<FixedLengthDecompression>(encodingScheme1, encodingScheme1.byLength[i].lo, groupParsed, hashValues, groupDecoded, input_bytes, output_bytes);
+            P->CreateKernelCall<FixedLengthDecompression>(encodingScheme1, encodingScheme1.byLength[i].lo, groupMarks, hashValues, groupDecoded, input_bytes, output_bytes);
         } else {
-            P->CreateKernelCall<LengthGroupDecompression>(encodingScheme1, i, groupParsed, hashValues, groupDecoded, input_bytes, output_bytes);
+            P->CreateKernelCall<LengthGroupDecompression>(encodingScheme1, i, groupMarks, hashValues, groupDecoded, input_bytes, output_bytes);
         }
         u8bytes = output_bytes;
     }

@@ -133,6 +133,22 @@ protected:
     EncodingInfo & mEncodingScheme;
 };
 
+class LengthGroupSelector final: public pablo::PabloKernel {
+public:
+    LengthGroupSelector(const std::unique_ptr<kernel::KernelBuilder> & b,
+                 EncodingInfo & encodingScheme,
+                    unsigned groupNo,
+                 StreamSet * symbolRun, StreamSet * const lengthBixNum,
+                 StreamSet * overflow,
+                 StreamSet * selected);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    EncodingInfo & mEncodingScheme;
+    unsigned mGroupNo;
+};
+
 class LengthSorter final: public pablo::PabloKernel {
 public:
     LengthSorter(const std::unique_ptr<kernel::KernelBuilder> & b,
