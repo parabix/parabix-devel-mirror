@@ -175,6 +175,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             const RateValue BLOCK_WIDTH{blockWidth};
             RateValue requiredSpace{producerRate.MaximumSpace};
+
             RateValue copyBackSpace{producerRate.Maximum - producerRate.Minimum};
 
             RateValue requiredSizeFactor{BLOCK_WIDTH};
@@ -194,10 +195,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             bool dynamic = output.hasAttribute(AttrId::Deferred);
 
+            RateValue minConsumptionSpace{producerRate.MinimumSpace};
+
             bool linear = requiresLinearAccess(output);
             for (const auto ce : make_iterator_range(out_edges(i, G))) {
                 const BufferRateData & consumerRate = G[ce];
-                const Binding & input = consumerRate.Binding;                              
+                const Binding & input = consumerRate.Binding;
                 requiredSpace = std::max(requiredSpace, producerRate.MaximumSpace);
                 if (consumerRate.Maximum == consumerRate.Minimum) {
                     requiredSizeFactor = lcm(requiredSizeFactor, consumerRate.Maximum);
@@ -208,6 +211,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     lookAhead += input.getLookahead();
                 }
                 lookAheadSpace = std::max(lookAheadSpace, lookAhead);
+
+                minConsumptionSpace = std::min(minConsumptionSpace, consumerRate.MinimumSpace);
 
                 // Are all symbolic consumption rates the same as its production rate?
                 if (consumerRate.SymbolicRate != producerRate.SymbolicRate) {
@@ -225,9 +230,20 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 maxOf(input, AttrId::LookBehind, lookBehindSpace);
             }
 
+            // If the minimum consumption space is less than the minimum production space,
+            // there is an implicit delay in the dataflow that impede (or outright block)
+            // progress once the buffer is full.
+
+            // TODO: this requires a bit more work and analysis if we want to reduce
+            // splitting a segment across two iterations.
+
+            requiredSpace += (producerRate.MinimumSpace - minConsumptionSpace);
+
             lookBehindSpace = std::max(lookBehindSpace, reflectionSpace);
 
             // calculate overflow (copyback) and fascimile (copyforward) space
+
+
             const auto overflowSpace = std::max(copyBackSpace, lookAheadSpace);
             const auto overflowSize = roundUpTo(overflowSpace, BLOCK_WIDTH);
             const auto underflowSize = roundUpTo(lookBehindSpace, BLOCK_WIDTH);
@@ -728,7 +744,7 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
     const auto MAX_RATE = std::numeric_limits<unsigned>::max();
 
     // Compute how much data each kernel could process/produce per segment
-    for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
 
 
         RateValue lower_absolute{MAX_RATE};
@@ -889,11 +905,8 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
 
         for (const auto & output : make_iterator_range(out_edges(kernel, G))) {
             BufferRateData & outputRate = G[output];
-            outputRate.MinimumExpectedFlow = lower_expected * outputRate.Minimum;      
+            outputRate.MinimumExpectedFlow = lower_expected * outputRate.Minimum;
             outputRate.MaximumExpectedFlow = upper_expected * outputRate.Maximum;
-            RateValue delayed{0};
-            check_attribute(AttrId::Delayed, outputRate, delayed);
-            outputRate.MinimumExpectedFlow = saturating_subtract(outputRate.MinimumExpectedFlow, delayed);
 
             RateValue add{0};
             check_attribute(AttrId::Add, outputRate, add);
@@ -912,12 +925,17 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 const auto b = mod(outputRate.Maximum + add, r);
                 roundUp = std::max(roundUp, std::max(a, b));
             }
-            outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;            
+            outputRate.MinimumSpace = lower_absolute * outputRate.Minimum;
+            RateValue delayed{0};
+            check_attribute(AttrId::Delayed, outputRate, delayed);
+            outputRate.MinimumSpace = saturating_subtract(outputRate.MinimumSpace, delayed);
+
             outputRate.MaximumSpace = upper_absolute * outputRate.Maximum + std::max(add + add2, roundUp);
             assert (outputRate.MinimumSpace <= outputRate.MinimumExpectedFlow);
             assert (outputRate.MaximumSpace >= outputRate.MaximumExpectedFlow);
         }
     }
+
 }
 
 #else

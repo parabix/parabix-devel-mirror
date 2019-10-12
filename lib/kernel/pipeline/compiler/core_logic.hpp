@@ -110,7 +110,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopCall);
    // checkForLastPartialSegment(b, isFinal);
     writeLookBehindLogic(b);
-    writeKernelCall(b);    
+    writeKernelCall(b);
     writeCopyBackLogic(b);
 
     #if 0
