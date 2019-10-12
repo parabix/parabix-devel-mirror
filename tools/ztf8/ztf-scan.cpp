@@ -21,7 +21,7 @@
 #define DEBUG_PRINT(title,value)
 #endif
 
-#if 1
+#if 0
 #define CHECK_COMPRESSION_DECOMPRESSION_STORE
 #endif
 
