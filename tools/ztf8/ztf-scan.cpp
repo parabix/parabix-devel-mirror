@@ -21,6 +21,10 @@
 #define DEBUG_PRINT(title,value)
 #endif
 
+#if 1
+#define CHECK_COMPRESSION_DECOMPRESSION_STORE
+#endif
+
 using namespace kernel;
 using namespace llvm;
 
@@ -73,10 +77,12 @@ struct LengthGroupParameters {
     // All subtables are sized the same.
     Constant * SUBTABLE_SIZE;
     Constant * HASH_BITS;
+    Constant * EXTENDED_BITS;
     Constant * HASH_MASK;
     Constant * ENC_BYTES;
     Constant * MAX_INDEX;
     Constant * PREFIX_BASE;
+    Constant * LENGTH_MASK;
     Constant * EXTENSION_MASK;
 
     LengthGroupParameters(const std::unique_ptr<KernelBuilder> & b, EncodingInfo encodingScheme, unsigned groupNo) :
@@ -93,10 +99,12 @@ struct LengthGroupParameters {
         // All subtables are sized the same.
         SUBTABLE_SIZE(b->getSize((1 << groupInfo.hash_bits) * groupInfo.hi)),
         HASH_BITS(b->getSize(groupInfo.hash_bits)),
+        EXTENDED_BITS(b->getSize(std::max(groupInfo.hash_bits + groupInfo.length_extension_bits, (groupInfo.encoding_bytes -1 ) * 7))),
         HASH_MASK(b->getSize((1 << groupInfo.hash_bits) - 1)),
         ENC_BYTES(b->getSize(groupInfo.encoding_bytes)),
         MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1)),
         PREFIX_BASE(b->getSize(groupInfo.prefix_base)),
+        LENGTH_MASK(b->getSize(2 * groupHalfLength - 1)),
         EXTENSION_MASK(b->getSize((1 << groupInfo.length_extension_bits) - 1)) {
             assert(groupInfo.hi <= (1 << (boost::intrusive::detail::floor_log2(groupInfo.lo) + 1)));
         }
@@ -151,6 +159,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
+    Constant * sz_TWO = b->getSize(2);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_BLOCKWIDTH = b->getSize(b->getBitBlockWidth());
     Type * sizeTy = b->getSizeTy();
@@ -238,8 +247,8 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * keyMarkPos = b->CreateAdd(keyWordPos, keyMarkPosInWord, "keyEndPos");
     /* Determine the key length. */
     Value * hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
-    Value * keyLength = b->CreateAdd(b->CreateLShr(hashValue, lg.MAX_HASH_BITS), lg.ENC_BYTES, "keyLength");
-    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, lg.MAX_INDEX), "keyStartPos");
+    Value * keyLength = b->CreateAdd(b->CreateLShr(hashValue, lg.MAX_HASH_BITS), sz_TWO, "keyLength");
+    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, sz_ONE), "keyStartPos");
     // keyOffset for accessing the final half of an entry.
     Value * keyOffset = b->CreateSub(keyLength, lg.HALF_LENGTH);
     // Get the hash of this key.
@@ -298,7 +307,7 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     } else {
         b->CreateCondBr(symIsEqEntry, markCompression, tryStore);
         b->SetInsertPoint(markCompression);
-        maskLength = b->CreateZExt(b->CreateSub(keyLength, lg.ENC_BYTES), sizeTy);
+        maskLength = b->CreateZExt(b->CreateSub(keyLength, lg.ENC_BYTES, "maskLength"), sizeTy);
     }
     // Compute a mask of bits, with zeroes marking positions to eliminate.
     // The entire symbols will be replaced, but we need to keep the required
@@ -329,6 +338,11 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     b->CreateCondBr(isEmptyEntry, storeKey, nextKey);
 
     b->SetInsertPoint(storeKey);
+#ifdef CHECK_COMPRESSION_DECOMPRESSION_STORE
+    b->CallPrintInt("hashCode", keyHash);
+    b->CallPrintInt("keyStartPos", keyStartPos);
+    b->CallPrintInt("keyLength", keyLength);
+#endif
     // We have a new symbol that allows future occurrences of the symbol to
     // be compressed using the hash code.
     b->CreateMonitoredScalarFieldStore("hashTable", sym1, tblPtr1);
@@ -409,6 +423,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
+    Constant * sz_TWO = b->getSize(2);
     Type * sizeTy = b->getSizeTy();
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -496,8 +511,8 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     DEBUG_PRINT("keyMarkPos", keyMarkPos);
     /* Determine the key length. */
     Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
-    Value * keyLength = b->CreateAdd(b->CreateLShr(hashValue, lg.MAX_HASH_BITS), lg.ENC_BYTES, "keyLength");
-    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, lg.MAX_INDEX), "keyStartPos");
+    Value * keyLength = b->CreateAdd(b->CreateLShr(hashValue, lg.MAX_HASH_BITS), sz_TWO, "keyLength");
+    Value * keyStartPos = b->CreateSub(keyMarkPos, b->CreateSub(keyLength, sz_ONE), "keyStartPos");
     DEBUG_PRINT("keyLength", keyLength);
     // keyOffset for accessing the final half of an entry.
     Value * keyOffset = b->CreateSub(keyLength, lg.HALF_LENGTH);
@@ -528,6 +543,11 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     // We have a new symbols that allows future occurrences of the symbol to
     // be compressed using the hash code.
     //b->CreateWriteCall(b->getInt32(STDERR_FILENO), symPtr1, keyLength);
+#ifdef CHECK_COMPRESSION_DECOMPRESSION_STORE
+    b->CallPrintInt("hashCode", keyHash);
+    b->CallPrintInt("keyStartPos", keyStartPos);
+    b->CallPrintInt("keyLength", keyLength);
+#endif
     b->CreateMonitoredScalarFieldStore("hashTable", sym1, tblPtr1);
     b->CreateMonitoredScalarFieldStore("hashTable", sym2, tblPtr2);
     b->CreateBr(nextKey);
@@ -571,7 +591,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
         Value * suffixByte = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("byteData", curPos)), sizeTy);
         encodedVal = b->CreateOr(b->CreateShl(encodedVal, lg.SUFFIX_BITS), b->CreateAnd(suffixByte, lg.SUFFIX_MASK), "encodedVal");
     }
-    Value * symLength = b->CreateAdd(b->CreateLShr(encodedVal, lg.HASH_BITS), lg.LO, "symLength");
+    Value * symLength = b->CreateAdd(b->CreateLShr(encodedVal, lg.EXTENDED_BITS), lg.LO, "symLength");
     Value * validLength = b->CreateAnd(b->CreateICmpUGE(symLength, lg.LO), b->CreateICmpULE(symLength, lg.HI));
     DEBUG_PRINT("symLength", symLength);
     b->CreateCondBr(validLength, lookupSym, nextHash);
@@ -710,7 +730,7 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Constant * sz_COMPRESSION_MASK = b->getSize((1 << (mLength - lg.groupInfo.encoding_bytes)) - 1);
-    Constant * sz_MARK_OFFSET = b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1));
+    Constant * sz_MARK_OFFSET = b->getSize(mLength - 1);
 
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Constant * sz_BLOCKWIDTH = b->getSize(b->getBitBlockWidth());
@@ -914,7 +934,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<Ker
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Type * sizeTy = b->getSizeTy();
-    Constant * sz_MARK_OFFSET = b->getSize(mLength - (lg.groupInfo.encoding_bytes - 1));
+    Constant * sz_MARK_OFFSET = b->getSize(mLength - 1);
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
