@@ -92,7 +92,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     );
 
     // 4. Mark keywords (true, false, null)
-    StreamSet * const keywordSpan = P->CreateStreamSet(3);
+    StreamSet * const keywordSpan = P->CreateStreamSet(1);
     P->CreateKernelCall<JSONKeywordSpan>(u8basis, lexStream, stringSpan, keywordSpan);
 
     // 5. Validate numbers
@@ -108,7 +108,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         jsonPabloSrc,
         "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"span", stringSpan},
+            Binding {"span", keywordSpan},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}

@@ -85,7 +85,39 @@ void JSONKeywordSpan::generatePabloMethod() {
     PabloAST * strSpan = getInputStreamSet("strSpan")[0];
     Var * const kwMarker = getOutputStreamVar("kwSpan");
 
+    // null
+    PabloAST * U = ccc.compileCC(re::makeByte(0x75));
+    PabloAST * L = ccc.compileCC(re::makeByte(0x6C));
+    // true
+    PabloAST * R = ccc.compileCC(re::makeByte(0x72));
+    PabloAST * E = ccc.compileCC(re::makeByte(0x65));
+    // false
+    PabloAST * A = ccc.compileCC(re::makeByte(0x61));
+    PabloAST * S = ccc.compileCC(re::makeByte(0x73));
 
+    PabloAST * notStrSpan = pb.createNot(strSpan);
+    PabloAST * N = pb.createAnd(notStrSpan, lex[Lex::n]);
+    PabloAST * advNU = pb.createAnd(U, pb.createAdvance(N, 1));
+    PabloAST * advNUL = pb.createAnd(L, pb.createAdvance(advNU, 1));
+    PabloAST * advNULL = pb.createAnd(L, pb.createAdvance(advNUL, 1));
+    PabloAST * seqNULL = pb.createIntrinsicCall(Intrinsic::InclusiveSpan, {N, advNULL});
+
+    PabloAST * T = pb.createAnd(notStrSpan, lex[Lex::t]);
+    PabloAST * advTR = pb.createAnd(R, pb.createAdvance(T, 1));
+    PabloAST * advTRU = pb.createAnd(U, pb.createAdvance(advTR, 1));
+    PabloAST * advTRUE = pb.createAnd(E, pb.createAdvance(advTRU, 1));
+    PabloAST * seqTRUE = pb.createIntrinsicCall(Intrinsic::InclusiveSpan, {T, advTRUE});
+
+    PabloAST * F = pb.createAnd(notStrSpan, lex[Lex::f]);
+    PabloAST * advFA = pb.createAnd(A, pb.createAdvance(F, 1));
+    PabloAST * advFAL = pb.createAnd(L, pb.createAdvance(advFA, 1));
+    PabloAST * advFALS = pb.createAnd(S, pb.createAdvance(advFAL, 1));
+    PabloAST * advFALSE = pb.createAnd(E, pb.createAdvance(advFALS, 1));
+    PabloAST * seqFALSE = pb.createIntrinsicCall(Intrinsic::InclusiveSpan, {F, advFALSE});
+
+    pb.createAssign(pb.createExtract(kwMarker, pb.getInteger(0)), seqFALSE);
+    // pb.createAssign(pb.createExtract(kwMarker, pb.getInteger(1)), seqNULL);
+    // pb.createAssign(pb.createExtract(kwMarker, pb.getInteger(2)), seqNULL);
 }
 
 void ValidateJSONString::generatePabloMethod() {
