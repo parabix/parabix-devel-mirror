@@ -21,11 +21,24 @@ namespace kernel {
 */
 class JSONStringMarker : public pablo::PabloKernel {
 public:
-    JSONStringMarker(const std::unique_ptr<KernelBuilder> & b, StreamSet * const lex, StreamSet * span)
+    JSONStringMarker(const std::unique_ptr<KernelBuilder> & b, StreamSet * const lex, StreamSet * strMarker)
     : pablo::PabloKernel(b,
-                         "jsonMarker",
+                         "jsonStrMarker",
                          {Binding{"lex", lex}},
-                         {Binding{"span", span}}) {}
+                         {Binding{"marker", strMarker}}) {}
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
+class JSONKeywordSpan : public pablo::PabloKernel {
+public:
+    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const basis, StreamSet * const lex, StreamSet * kwSpan)
+    : pablo::PabloKernel(b,
+                         "jsonKeywordSpan",
+                         {Binding{"basis", basis}, Binding{"lex", lex}},
+                         {Binding{"kwSpan", kwSpan}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

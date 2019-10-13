@@ -37,16 +37,10 @@ enum Lex {
     ws
 };
 
-PabloAST * partialAdd(PabloBuilder & pb, PabloAST * a, PabloAST * b) {
-    PabloAST * output;
-
-    return output;
-}
-
 void JSONStringMarker::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> lex = getInputStreamSet("lex");
-    Var * const span = getOutputStreamVar("span");
+    Var * const strMarker = getOutputStreamVar("marker");
 
     // keeping the names as the ones in paper PGJS (Lemire)
     PabloAST * B = lex[Lex::backslash];
@@ -80,7 +74,15 @@ void JSONStringMarker::generatePabloMethod() {
     PabloAST * Q = lex[Lex::dQuote];
     PabloAST * QEq = pb.createAnd(Q, pb.createNot(OD));
 
-    pb.createAssign(pb.createExtract(span, pb.getInteger(0)), QEq);
+    pb.createAssign(pb.createExtract(strMarker, pb.getInteger(0)), QEq);
+}
+
+void JSONKeywordSpan::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::vector<PabloAST *> basis = getInputStreamSet("basis");
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
+    std::vector<PabloAST *> lex = getInputStreamSet("lex");
+    Var * const strMarker = getOutputStreamVar("marker");
 }
 
 void ValidateJSONString::generatePabloMethod() {
