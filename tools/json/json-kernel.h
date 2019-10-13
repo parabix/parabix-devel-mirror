@@ -34,10 +34,10 @@ protected:
 
 class JSONKeywordSpan : public pablo::PabloKernel {
 public:
-    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const basis, StreamSet * const lex, StreamSet * kwSpan)
+    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const basis, StreamSet * const lex, StreamSet * const strSpan, StreamSet * kwSpan)
     : pablo::PabloKernel(b,
                          "jsonKeywordSpan",
-                         {Binding{"basis", basis}, Binding{"lex", lex}},
+                         {Binding{"basis", basis}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
                          {Binding{"kwSpan", kwSpan}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }

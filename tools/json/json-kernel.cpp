@@ -82,7 +82,10 @@ void JSONKeywordSpan::generatePabloMethod() {
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     std::vector<PabloAST *> lex = getInputStreamSet("lex");
-    Var * const strMarker = getOutputStreamVar("marker");
+    PabloAST * strSpan = getInputStreamSet("strSpan")[0];
+    Var * const kwMarker = getOutputStreamVar("kwSpan");
+
+
 }
 
 void ValidateJSONString::generatePabloMethod() {

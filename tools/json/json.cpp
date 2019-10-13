@@ -59,6 +59,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
 
+    // 1. Lexical analysis on basis stream
     StreamSet * const lexStream = P->CreateStreamSet(14);
     P->CreateKernelCall<PabloSourceKernel>(
         parser,
@@ -72,20 +73,34 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         }
     );
 
-    // TODO:
-    // 1. Find string marker (without backslashes)
+    // 2. Find string marker (without backslashes)
     StreamSet * const stringMarker = P->CreateStreamSet(1);
     P->CreateKernelCall<JSONStringMarker>(lexStream, stringMarker);
 
-    // 2. Mark keywords (true, false, null)
+    // 3. Make string span
+    StreamSet * const stringSpan = P->CreateStreamSet(1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        jsonPabloSrc,
+        "JSONStringSpan",
+        Bindings { // Input Stream Bindings
+            Binding {"marker", stringMarker},
+        },
+        Bindings { // Output Stream Bindings
+            Binding {"span", stringSpan}
+        }
+    );
+
+    // 4. Mark keywords (true, false, null)
     StreamSet * const keywordSpan = P->CreateStreamSet(3);
-    P->CreateKernelCall<JSONKeywordSpan>(u8basis, lexStream, keywordSpan);
-    // 3. Validate numbers
-    // 4. Validate strings
-    // 5. Validate objects
-    // 6. Validate arrays
-    // 7. Validate rest of the output (check for extraneous chars)
-    // 8. Output whether or not it is valid
+    P->CreateKernelCall<JSONKeywordSpan>(u8basis, lexStream, stringSpan, keywordSpan);
+
+    // 5. Validate numbers
+    // 6. Validate strings
+    // 7. Validate objects
+    // 8. Validate arrays
+    // 9. Validate rest of the output (check for extraneous chars)
+    // 10. Output whether or not it is valid
 
     StreamSet * const outputStream = P->CreateStreamSet(8);
     P->CreateKernelCall<PabloSourceKernel>(
@@ -93,7 +108,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         jsonPabloSrc,
         "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"span", stringMarker},
+            Binding {"span", stringSpan},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}
