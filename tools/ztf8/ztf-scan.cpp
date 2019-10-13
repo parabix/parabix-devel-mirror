@@ -4,6 +4,7 @@
  *  icgrep is a trademark of International Characters.
  */
 
+#include "ztf-scan.h"
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
@@ -13,7 +14,7 @@
 #include <llvm/ADT/StringRef.h>
 #include <llvm/Support/raw_ostream.h>
 #include <boost/intrusive/detail/math.hpp>
-#include "ztf-scan.h"
+#include <sstream>
 
 #if 0
 #define DEBUG_PRINT(title,value) b->CallPrintInt(title, value)
@@ -115,8 +116,17 @@ unsigned hashTableSize(LengthGroupInfo g) {
     return numSubTables * g.hi * (1<<g.hash_bits);
 }
 
-std::string lengthGroupStr(LengthGroupInfo g) {
-    return std::to_string(g.prefix_base) + "-" + std::to_string(g.lo) + "-" + std::to_string(g.hi) + "-" + std::to_string(g.hash_bits);
+std::string lengthRangeSuffix(EncodingInfo encodingScheme, unsigned lo, unsigned hi) {
+    std::stringstream suffix;
+    suffix << encodingScheme.uniqueSuffix() << "_" << lo << "_" << hi;
+    if (DeferredAttribute) suffix << "deferred";
+    if (DelayedAttribute) suffix << "_delayed";
+    return suffix.str();
+}
+
+std::string lengthGroupSuffix(EncodingInfo encodingScheme, unsigned groupNo) {
+    LengthGroupInfo g = encodingScheme.byLength[groupNo];
+    return lengthRangeSuffix(encodingScheme, g.lo, g.hi);
 }
 
 Binding ByteDataBinding(unsigned max_length, StreamSet * byteData) {
@@ -173,10 +183,7 @@ LengthGroupCompressionMask::LengthGroupCompressionMask(const std::unique_ptr<ker
                                                        StreamSet * symbolMarks,
                                                        StreamSet * hashValues,
                                                        StreamSet * const byteData, StreamSet * compressionMask, unsigned strideBlocks)
-: MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupStr(encodingScheme.byLength[groupNo]) +
-                   (DeferredAttribute ? "deferred" : "lookBehind") +
-                   (DelayedAttribute ? "_delayed" : "_bounded") +
-                   (PrefixCheck ? "_prefix" : ""),
+: MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupSuffix(encodingScheme, groupNo) + (PrefixCheck ? "_prefix" : ""),
                    {Binding{"symbolMarks", symbolMarks},
                        Binding{"hashValues", hashValues},
                        ByteDataBinding(encodingScheme.byLength[groupNo].hi, byteData)},
@@ -459,7 +466,7 @@ LengthGroupDecompression::LengthGroupDecompression(const std::unique_ptr<kernel:
                                                    StreamSet * hashValues,
                                                    StreamSet * const hashMarks, StreamSet * const byteData,
                                                    StreamSet * const result, unsigned strideBlocks)
-: MultiBlockKernel(b, "LengthGroupDecompression" + lengthGroupStr(encodingScheme.byLength[groupNo]) + (DeferredAttribute ? "deferred" : "lookBehind") + (DelayedAttribute ? "_delayed" : "_bounded"),
+: MultiBlockKernel(b, "LengthGroupDecompression" + lengthGroupSuffix(encodingScheme, groupNo),
                    {Binding{"keyMarks", keyMarks},
                        Binding{"hashValues", hashValues},
                        Binding{"hashMarks", hashMarks},
@@ -853,7 +860,7 @@ FixedLengthCompressionMask::FixedLengthCompressionMask(const std::unique_ptr<ker
                                                        StreamSet * hashValues,
                                                        StreamSet * const byteData,
                                                        StreamSet * compressionMask, unsigned strideBlocks)
-: MultiBlockKernel(b, "FixedLengthCompressionMask" + std::to_string(length) +  (DeferredAttribute ? "deferred" : "lookBehind") + (DelayedAttribute ? "_delayed" : "_bounded"),
+: MultiBlockKernel(b, "FixedLengthCompressionMask" + lengthRangeSuffix(encodingScheme, length, length + symbolMarks->getNumElements() - 1),
                    {Binding{"symbolMarks", symbolMarks},
                        Binding{"hashValues", hashValues},
                        ByteDataBinding(length, byteData)},
@@ -1103,27 +1110,29 @@ void generateHashProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
 
 FixedLengthDecompression::FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
                                                    EncodingInfo encodingScheme,
-                                                   unsigned length,
+                                                   unsigned lo,
                                                    StreamSet * keyMarks,
                                                    StreamSet * const hashValues,
                                                    StreamSet * const hashMarks, StreamSet * const byteData,
                                                    StreamSet * const result, unsigned strideBlocks)
-: MultiBlockKernel(b, "FixedLengthDecompression" + std::to_string(length) + (DeferredAttribute ? "deferred" : "lookBehind") + (DelayedAttribute ? "_delayed" : "_bounded"),
+: MultiBlockKernel(b, "FixedLengthDecompression" + lengthRangeSuffix(encodingScheme, lo, lo + keyMarks->getNumElements() - 1),
                    {Binding{"keyMarks", keyMarks},
                        Binding{"hashMarks", hashMarks},
-                       ByteDataBinding(length, byteData),
+                       ByteDataBinding(lo, byteData),
                        Binding{"hashValues", hashValues},
                    },
-                   {}, {}, {},
-                   {InternalScalar{ArrayType::get(b->getInt8Ty(), length), "pendingOutput"},
-                       // Hash table
-                       InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(encodingScheme, length)), "hashTable"}}),
-mEncodingScheme(encodingScheme), mLength(length)  {
+                   {}, {}, {}, {}),
+mEncodingScheme(encodingScheme), mLength(lo)  {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
     if (DelayedAttribute) {
         mOutputStreamSets.emplace_back("result", result, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
     } else {
         mOutputStreamSets.emplace_back("result", result, BoundedRate(0,1));
+    }
+    mInternalScalars.emplace_back(ArrayType::get(b->getInt8Ty(), lo + keyMarks->getNumElements() - 1), "pendingOutput");
+    for (unsigned i = 0; i < keyMarks->getNumElements(); i++) {
+        unsigned lgth = lo + i;
+        mInternalScalars.emplace_back(ArrayType::get(b->getInt8Ty(), hashTableSize(encodingScheme, lgth)), "hashTable");
     }
 }
 

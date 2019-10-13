@@ -16,6 +16,7 @@
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
 #include <llvm/Support/raw_ostream.h>
+#include <sstream>
 
 using namespace pablo;
 using namespace kernel;
@@ -48,12 +49,14 @@ unsigned EncodingInfo::maxEncodingBytes() {
     return enc_bytes;
 }
 
-std::string LengthGroupAnnotation(const std::vector<LengthGroupInfo> & lengthGroups) {
-    std::string s;
-    for (unsigned i = 0; i < lengthGroups.size(); i++) {
-        s += ":" + std::to_string(lengthGroups[i].lo) + "_" + std::to_string(lengthGroups[i].hi);
+std::string EncodingInfo::uniqueSuffix() {
+    std::stringstream s;
+    for (auto g : byLength) {
+        s << "_" << g.lo << "_" << g.hi << ":" << g.encoding_bytes;
+        s << "@" << std::hex << g.prefix_base << std::dec;
+        s << ":" << g.hash_bits << ":" << g.length_extension_bits;
     }
-    return s;
+    return s.str();
 }
 
 WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks)
@@ -94,7 +97,7 @@ ZTF_ExpansionDecoder::ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelB
                                            EncodingInfo & encodingScheme,
                                            StreamSet * const basis,
                                            StreamSet * insertBixNum)
-: pablo::PabloKernel(b, "ZTF_ExpansionDecoder" + LengthGroupAnnotation(encodingScheme.byLength),
+: pablo::PabloKernel(b, "ZTF_ExpansionDecoder" + encodingScheme.uniqueSuffix(),
                      {Binding{"basis", basis, FixedRate(), LookAhead(encodingScheme.maxEncodingBytes() - 1)}},
                      {Binding{"insertBixNum", insertBixNum}}),
     mEncodingScheme(encodingScheme)  {}
@@ -135,7 +138,7 @@ ZTF_DecodeLengths::ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
                                      EncodingInfo & encodingScheme,
                                      StreamSet * basisBits,
                                      StreamSet * groupStreams)
-: PabloKernel(b, "ZTF_DecodeLengths" + LengthGroupAnnotation(encodingScheme.byLength),
+: PabloKernel(b, "ZTF_DecodeLengths" + encodingScheme.uniqueSuffix(),
               {Binding{"basisBits", basisBits}}, {Binding{"groupStreams", groupStreams}}),
     mEncodingScheme(encodingScheme) { }
 
@@ -208,7 +211,7 @@ ZTF_SymbolEncoder::ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder
                       StreamSet * extractionMask,
                       StreamSet * runIdx,
                       StreamSet * encoded)
-    : pablo::PabloKernel(b, "ZTF_SymbolEncoder" + LengthGroupAnnotation(encodingScheme.byLength),
+    : pablo::PabloKernel(b, "ZTF_SymbolEncoder" + encodingScheme.uniqueSuffix(),
                          {Binding{"basis", basis},
                              Binding{"bixHash", bixHash, FixedRate(), LookAhead(encodingScheme.maxEncodingBytes() - 1)},
                              Binding{"extractionMask", extractionMask},
@@ -295,7 +298,7 @@ void ZTF_SymbolEnds::generatePabloMethod() {
 std::string LengthSelectorSuffix(EncodingInfo & encodingScheme, unsigned groupNo, StreamSet * bixNum) {
     auto g = encodingScheme.byLength[groupNo];
     auto elems = bixNum->getNumElements();
-    return std::to_string(g.lo) + "_" + std::to_string(g.hi) + "_" + std::to_string(elems);
+    return encodingScheme.uniqueSuffix() + ":" + std::to_string(g.lo) + "_" + std::to_string(g.hi) + "_" + std::to_string(elems);
 }
 
 LengthGroupSelector::LengthGroupSelector(const std::unique_ptr<kernel::KernelBuilder> & b,
@@ -337,7 +340,7 @@ LengthSorter::LengthSorter(const std::unique_ptr<kernel::KernelBuilder> & b,
                            StreamSet * symbolRun, StreamSet * const lengthBixNum,
                            StreamSet * overflow,
                            StreamSet * groupStreams)
-: PabloKernel(b, "LengthSorter" + std::to_string(lengthBixNum->getNumElements()) + LengthGroupAnnotation(encodingScheme.byLength),
+: PabloKernel(b, "LengthSorter" + std::to_string(lengthBixNum->getNumElements()) + "x1:" + encodingScheme.uniqueSuffix(),
               {Binding{"symbolRun", symbolRun, FixedRate(), LookAhead(1)},
                   Binding{"lengthBixNum", lengthBixNum},
                   Binding{"overflow", overflow}},

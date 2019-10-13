@@ -32,6 +32,7 @@ public:
     unsigned getLengthGroupNo(unsigned lgth);
     unsigned maxSymbolLength();
     unsigned maxEncodingBytes();
+    std::string uniqueSuffix();
 };
 
 class WordMarkKernel : public pablo::PabloKernel {
