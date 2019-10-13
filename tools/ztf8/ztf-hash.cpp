@@ -64,7 +64,7 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 typedef void (*ztfHashFunctionType)(uint32_t fd);
 
 EncodingInfo encodingScheme1(8,
-                             {{3, 4, 2, 0xC0, 8, 0}, {5, 8, 2, 0xC8, 8, 0}, {9, 16, 2, 0xD0, 8, 0}});
+                             {{3, 3, 2, 0xC0, 8, 0}, {4, 4, 2, 0xC4, 8, 0}, {5, 8, 2, 0xC8, 8, 0}, {9, 16, 2, 0xD0, 8, 0}});
 ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
 
     auto & b = driver.getBuilder();
