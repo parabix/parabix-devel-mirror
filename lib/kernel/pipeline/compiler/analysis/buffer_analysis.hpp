@@ -230,6 +230,13 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 maxOf(input, AttrId::LookBehind, lookBehindSpace);
             }
 
+            lookBehindSpace = std::max(lookBehindSpace, reflectionSpace);
+
+            // calculate overflow (copyback) and fascimile (copyforward) space
+
+
+            const auto overflowSpace = std::max(copyBackSpace, lookAheadSpace);
+
             // If the minimum consumption space is less than the minimum production space,
             // there is an implicit delay in the dataflow that impede (or outright block)
             // progress once the buffer is full.
@@ -237,14 +244,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             // TODO: this requires a bit more work and analysis if we want to reduce
             // splitting a segment across two iterations.
 
-            requiredSpace += (producerRate.MinimumSpace - minConsumptionSpace);
+            const auto delay = producerRate.MaximumSpace - minConsumptionSpace;
+            if (LLVM_UNLIKELY(delay > overflowSpace)) {
+                requiredSpace += delay - overflowSpace;
+            }
 
-            lookBehindSpace = std::max(lookBehindSpace, reflectionSpace);
-
-            // calculate overflow (copyback) and fascimile (copyforward) space
-
-
-            const auto overflowSpace = std::max(copyBackSpace, lookAheadSpace);
             const auto overflowSize = roundUpTo(overflowSpace, BLOCK_WIDTH);
             const auto underflowSize = roundUpTo(lookBehindSpace, BLOCK_WIDTH);
             const Rational minRequiredSize{std::max(underflowSize, overflowSize) * 2};

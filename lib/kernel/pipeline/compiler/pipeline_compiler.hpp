@@ -30,8 +30,6 @@
 
 // #define DISABLE_ZERO_EXTEND
 
-// #define ENABLE_DEBUG_CHECKS
-
 // #define OVERRIDE_THREAD_NUM 3
 
 // #define DISABLE_INPUT_ZEROING
@@ -992,11 +990,7 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P)
 : mPipelineKernel(pipelineKernel)
-#if defined(ENABLE_DEBUG_CHECKS) || !defined(NDEBUG)
-, mCheckAssertions(true)
-#else
 , mCheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
-#endif
 #if defined(PRINT_DEBUG_MESSAGES)
 , mPrintDebug(true)
 #else

@@ -859,7 +859,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const unsigned inputPo
                         binding.getName() + ": look ahead exceeds item count");
     }
     Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
-    return b->CreateSelect(closed, itemCount, reducedItemCount);
+    return reducedItemCount; // b->CreateSelect(closed, itemCount, reducedItemCount);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
