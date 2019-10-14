@@ -254,7 +254,8 @@ void ZTF_SymbolEncoder::generatePabloMethod() {
         BixNum base = bnc.ZeroExtend(bnc.Create(groupInfo.prefix_base & 0x3F), 6); // only low 6 bits needed
         BixNum lenOffset = bnc.SubModular(bnc.ZeroExtend(runIdx, 6), lo - offset);
         BixNum value = bnc.AddModular(base, bnc.MulModular(lenOffset, multiplier));
-        for (unsigned j = 0; j < excess_bits; j++) {
+        // Cannot handle length-extension bits yet.
+        for (unsigned j = 0; j < excess_bits - groupInfo.length_extension_bits; j++) {
             value[j] = pb.createLookahead(bixHash[j + suffix_bits_avail], groupInfo.encoding_bytes - 1);
         }
         for (unsigned j = 0; j < 6; j++) {
