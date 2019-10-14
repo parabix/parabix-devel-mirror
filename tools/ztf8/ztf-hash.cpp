@@ -105,7 +105,8 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
         P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks);
         StreamSet * extractionMask = P->CreateStreamSet(1);
         if (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi) {
-            P->CreateKernelCall<FixedLengthCompressionMask>(encodingScheme1, encodingScheme1.byLength[i].lo, groupMarks, hashValues, codeUnitStream,  extractionMask);
+            std::vector<StreamSet *> keyMarks = {groupMarks};
+            P->CreateKernelCall<FixedLengthCompressionMask>(encodingScheme1, encodingScheme1.byLength[i].lo, codeUnitStream, hashValues, keyMarks, extractionMask);
         } else {
             P->CreateKernelCall<LengthGroupCompressionMask>(encodingScheme1, i, groupMarks, hashValues, codeUnitStream,  extractionMask);
         }

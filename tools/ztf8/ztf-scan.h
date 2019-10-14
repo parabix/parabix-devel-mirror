@@ -51,17 +51,19 @@ class FixedLengthCompressionMask : public MultiBlockKernel {
 public:
     FixedLengthCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
                                EncodingInfo encodingScheme,
-                                                       unsigned length,
-                                                       StreamSet * symbolMarks,
-                                                       StreamSet * hashValues,
-                                                       StreamSet * const byteData,
+                               unsigned length,
+                               StreamSet * const byteData,
+                               StreamSet * hashValues,
+                               std::vector<StreamSet *> symbolMarks,
                                StreamSet * compressionMask, unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
     EncodingInfo mEncodingScheme;
-    unsigned mLength;
+    unsigned mLo;
+    unsigned mHi;
+    size_t mSubTableSize;
 };
 
 class FixedLengthDecompression : public MultiBlockKernel {
