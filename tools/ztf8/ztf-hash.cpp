@@ -177,7 +177,9 @@ ztfHashFunctionType ztfHash_decompression_gen (CPUDriver & driver) {
         StreamSet * input_bytes = u8bytes;
         StreamSet * output_bytes = P->CreateStreamSet(1, 8);
         if (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi) {
-            P->CreateKernelCall<FixedLengthDecompression>(encodingScheme1, encodingScheme1.byLength[i].lo, groupMarks, hashValues, groupDecoded, input_bytes, output_bytes);
+            std::vector<StreamSet *> keyMarks = {groupMarks};
+            std::vector<StreamSet *> hashMarks = {groupDecoded};
+            P->CreateKernelCall<FixedLengthDecompression>(encodingScheme1, encodingScheme1.byLength[i].lo, input_bytes, hashValues, keyMarks, hashMarks, output_bytes);
         } else {
             P->CreateKernelCall<LengthGroupDecompression>(encodingScheme1, i, groupMarks, hashValues, groupDecoded, input_bytes, output_bytes);
         }
