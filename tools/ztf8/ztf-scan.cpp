@@ -83,6 +83,7 @@ struct LengthGroupParameters {
     Constant * ENC_BYTES;
     Constant * MAX_INDEX;
     Constant * PREFIX_BASE;
+    Constant * PREFIX_LENGTH_OFFSET;
     Constant * LENGTH_MASK;
     Constant * EXTENSION_MASK;
 
@@ -105,6 +106,7 @@ struct LengthGroupParameters {
         ENC_BYTES(b->getSize(groupInfo.encoding_bytes)),
         MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1)),
         PREFIX_BASE(b->getSize(groupInfo.prefix_base)),
+        PREFIX_LENGTH_OFFSET(b->getSize(encodingScheme.prefixLengthOffset(groupInfo.lo))),
         LENGTH_MASK(b->getSize(2 * groupHalfLength - 1)),
         EXTENSION_MASK(b->getSize((1 << groupInfo.length_extension_bits) - 1)) {
             assert(groupInfo.hi <= (1 << (boost::intrusive::detail::floor_log2(groupInfo.lo) + 1)));
@@ -177,13 +179,16 @@ std::vector<Value *> initializeCompressionMasks(const std::unique_ptr<KernelBuil
     return keyMasks;
 }
 
-LengthGroupCompressionMask::LengthGroupCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                                       EncodingInfo encodingScheme,
-                                                       unsigned groupNo,
-                                                       StreamSet * symbolMarks,
-                                                       StreamSet * hashValues,
-                                                       StreamSet * const byteData, StreamSet * compressionMask, unsigned strideBlocks)
-: MultiBlockKernel(b, "LengthGroupCompressionMask" + lengthGroupSuffix(encodingScheme, groupNo) + (PrefixCheck ? "_prefix" : ""),
+LengthGroupCompression::LengthGroupCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                               EncodingInfo encodingScheme,
+                                               unsigned groupNo,
+                                               StreamSet * symbolMarks,
+                                               StreamSet * hashValues,
+                                               StreamSet * const byteData,
+                                               StreamSet * compressionMask,
+                                               StreamSet * encodedBytes,
+                                               unsigned strideBlocks)
+: MultiBlockKernel(b, "LengthGroupCompression" + lengthGroupSuffix(encodingScheme, groupNo) + (PrefixCheck ? "_prefix" : ""),
                    {Binding{"symbolMarks", symbolMarks},
                        Binding{"hashValues", hashValues},
                        ByteDataBinding(encodingScheme.byLength[groupNo].hi, byteData)},
@@ -192,16 +197,20 @@ LengthGroupCompressionMask::LengthGroupCompressionMask(const std::unique_ptr<ker
                        InternalScalar{ArrayType::get(b->getInt8Ty(), hashTableSize(encodingScheme.byLength[groupNo])), "hashTable"}}),
 mEncodingScheme(encodingScheme), mGroupNo(groupNo) {
     if (DelayedAttribute) {
-        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.maxSymbolLength()));
+        mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
+        mOutputStreamSets.emplace_back("encodedBytes", encodedBytes, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
     } else {
         mOutputStreamSets.emplace_back("compressionMask", compressionMask, BoundedRate(0,1));
+        mOutputStreamSets.emplace_back("encodedBytes", encodedBytes, BoundedRate(0,1));
+        addInternalScalar(ArrayType::get(b->getInt8Ty(), encodingScheme.byLength[groupNo].hi), "pendingOutput");
     }
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
 }
 
-void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void LengthGroupCompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
     ScanWordParameters sw(b, mStride);
     LengthGroupParameters lg(b, mEncodingScheme, mGroupNo);
+    Constant * sz_DELAYED = b->getSize(mEncodingScheme.maxSymbolLength());
     Constant * sz_STRIDE = b->getSize(mStride);
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
@@ -233,6 +242,15 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     b->CreateStore(pendingMask, producedPtr);
     Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialPos), bitBlockPtrTy);
     Value * hashTableBasePtr = b->CreateBitCast(b->getScalarFieldPtr("hashTable"), b->getInt8PtrTy());
+    if (!DelayedAttribute) {
+        // Copy pending output data.
+        Value * const initialProduced = b->getProducedItemCount("result");
+        b->CreateMemCpy(b->getRawOutputPointer("encodedBytes", initialProduced), b->getScalarFieldPtr("pendingOutput"), sz_DELAYED, 1);
+    }
+    // Copy all new input to the output buffer; this will be then
+    // overwritten when and as necessary for decompression of ZTF codes.
+    Value * toCopy = b->CreateMul(numOfStrides, sz_STRIDE);
+    b->CreateMemCpy(b->getRawOutputPointer("encodedBytes", initialPos), b->getRawInputPointer("byteData", initialPos), toCopy, 1);
     b->CreateBr(stridePrologue);
 
     b->SetInsertPoint(stridePrologue);
@@ -360,6 +378,19 @@ void LengthGroupCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
     //b->CallPrintInt("updated", updated);
     b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
+    Value * curPos = keyMarkPos;
+    Value * curHash = keyHash;  // Add hash extension bits later.
+    // Write the suffixes.
+    for (unsigned i = 0; i < lg.groupInfo.encoding_bytes - 1; i++) {
+        Value * ZTF_suffix = b->CreateTrunc(b->CreateAnd(curHash, lg.SUFFIX_MASK, "ZTF_suffix"), b->getInt8Ty());
+        b->CreateStore(ZTF_suffix, b->getRawOutputPointer("encodedBytes", curPos));
+        curPos = b->CreateSub(curPos, sz_ONE);
+        curHash = b->CreateLShr(curHash, lg.SUFFIX_BITS);
+    }
+    // Now prepare the prefix - PREFIX_BASE + ... + remaining hash bits.
+    Value * lgthBase = b->CreateShl(b->CreateSub(keyLength, lg.LO), lg.PREFIX_LENGTH_OFFSET);
+    Value * ZTF_prefix = b->CreateAdd(b->CreateAdd(lg.PREFIX_BASE, lgthBase), curHash, "ZTF_prefix");
+    b->CreateStore(b->CreateTrunc(ZTF_prefix, b->getInt8Ty()), b->getRawOutputPointer("encodedBytes", curPos));
     b->CreateBr(nextKey);
 
     b->SetInsertPoint(tryStore);
@@ -788,6 +819,7 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
 
     unsigned maskCount = keyMasks.size();
     Constant * sz_ZERO = b->getSize(0);
+    Constant * sz_ONE = b->getSize(1);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Type * sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < maskCount; i++) {
@@ -851,6 +883,18 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         Value * updated = b->CreateAnd(initialMask, b->CreateNot(mask));
         //b->CallPrintInt("updated", updated);
         b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
+        Value * curPos = keyMarkPos;
+        Value * curHash = keyHash;  // Add hash extension bits later.
+        // Write the suffixes.
+        for (unsigned i = 0; i < lg.groupInfo.encoding_bytes - 1; i++) {
+            Value * ZTF_suffix = b->CreateTrunc(b->CreateAnd(curHash, lg.SUFFIX_MASK, "ZTF_suffix"), b->getInt8Ty());
+            b->CreateStore(ZTF_suffix, b->getRawOutputPointer("encodedBytes", curPos));
+            curPos = b->CreateSub(curPos, sz_ONE);
+            curHash = b->CreateLShr(curHash, lg.SUFFIX_BITS);
+        }
+        // Now prepare the prefix - PREFIX_BASE + ... + remaining hash bits.
+        Value * ZTF_prefix = b->CreateTrunc(b->CreateAdd(lg.PREFIX_BASE, curHash, "ZTF_prefix"), b->getInt8Ty());
+        b->CreateStore(ZTF_prefix, b->getRawOutputPointer("encodedBytes", curPos));
         b->CreateBr(nextKey);
 
         b->SetInsertPoint(tryStore);
@@ -880,14 +924,16 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
     }
 }
 
-FixedLengthCompressionMask::FixedLengthCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
-                                                       EncodingInfo encodingScheme,
-                                                       unsigned lo,
-                                                       StreamSet * const byteData,
-                                                       StreamSet * hashValues,
-                                                       std::vector<StreamSet *> symbolMarks,
-                                                       StreamSet * compressionMask, unsigned strideBlocks)
-: MultiBlockKernel(b, "FixedLengthCompressionMask" + lengthRangeSuffix(encodingScheme, lo, lo + symbolMarks.size() - 1),
+FixedLengthCompression::FixedLengthCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+                                               EncodingInfo encodingScheme,
+                                               unsigned lo,
+                                               StreamSet * const byteData,
+                                               StreamSet * hashValues,
+                                               std::vector<StreamSet *> symbolMarks,
+                                               StreamSet * compressionMask,
+                                               StreamSet * encodedBytes,
+                                               unsigned strideBlocks)
+: MultiBlockKernel(b, "FixedLengthCompression" + lengthRangeSuffix(encodingScheme, lo, lo + symbolMarks.size() - 1),
                    {ByteDataBinding(lo, byteData), Binding{"hashValues", hashValues}}, {}, {}, {}, {}),
 mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + symbolMarks.size() - 1)  {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
@@ -896,8 +942,11 @@ mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + symbolMarks.size() - 1)  {
     }
     if (DelayedAttribute) {
         mOutputStreamSets.emplace_back("compressionMask", compressionMask, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
+        mOutputStreamSets.emplace_back("encodedBytes", encodedBytes, FixedRate(), Delayed(encodingScheme.maxSymbolLength()) );
     } else {
         mOutputStreamSets.emplace_back("compressionMask", compressionMask, BoundedRate(0,1));
+        mOutputStreamSets.emplace_back("encodedBytes", encodedBytes, BoundedRate(0,1));
+        addInternalScalar(ArrayType::get(b->getInt8Ty(), mHi), "pendingOutput");
     }
     mInternalScalars.emplace_back(b->getBitBlockType(), "pendingMaskInverted");
     mSubTableSize = 0;
@@ -910,10 +959,11 @@ mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + symbolMarks.size() - 1)  {
     mInternalScalars.emplace_back(ArrayType::get(subTableType, mHi - mLo + 1), "hashTable");
 }
 
-void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void FixedLengthCompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
     ScanWordParameters sw(b, mStride);
     unsigned numOfMasks = mHi - mLo + 1;
 
+    Constant * sz_DELAYED = b->getSize(mEncodingScheme.maxSymbolLength());
     Constant * sz_STRIDE = b->getSize(mStride);
     Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
     Constant * sz_ZERO = b->getSize(0);
@@ -938,6 +988,15 @@ void FixedLengthCompressionMask::generateMultiBlockLogic(const std::unique_ptr<K
     Value * producedPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialProduced), bitBlockPtrTy);
     b->CreateStore(pendingMask, producedPtr);
     Value * compressMaskPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", initialPos), bitBlockPtrTy);
+    if (!DelayedAttribute) {
+        // Copy pending output data.
+        Value * const initialProduced = b->getProducedItemCount("result");
+        b->CreateMemCpy(b->getRawOutputPointer("encodedBytes", initialProduced), b->getScalarFieldPtr("pendingOutput"), sz_DELAYED, 1);
+    }
+    // Copy all new input to the output buffer; this will be then
+    // overwritten when and as necessary for decompression of ZTF codes.
+    Value * toCopy = b->CreateMul(numOfStrides, sz_STRIDE);
+    b->CreateMemCpy(b->getRawOutputPointer("encodedBytes", initialPos), b->getRawInputPointer("byteData", initialPos), toCopy, 1);
     b->CreateBr(stridePrologue);
 
     b->SetInsertPoint(stridePrologue);

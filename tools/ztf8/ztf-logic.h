@@ -32,6 +32,7 @@ public:
     unsigned getLengthGroupNo(unsigned lgth);
     unsigned maxSymbolLength();
     unsigned maxEncodingBytes();
+    unsigned prefixLengthOffset(unsigned lgth);
     std::string uniqueSuffix();
 };
 

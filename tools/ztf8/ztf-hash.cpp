@@ -99,24 +99,28 @@ ztfHashFunctionType ztfHash_compression_gen (CPUDriver & driver) {
     P->CreateKernelCall<P2S16Kernel>(combinedHashData, hashValues);
     //P->CreateKernelCall<DebugDisplayKernel>("hashValues", hashValues);
 
+    StreamSet * u8bytes = codeUnitStream;
     std::vector<StreamSet *> extractionMasks;
     for (unsigned i = 0; i < encodingScheme1.byLength.size(); i++) {
         StreamSet * groupMarks = P->CreateStreamSet(1);
         P->CreateKernelCall<LengthGroupSelector>(encodingScheme1, i, symbolRuns, runIndex, overflow, groupMarks);
         StreamSet * extractionMask = P->CreateStreamSet(1);
+        StreamSet * input_bytes = u8bytes;
+        StreamSet * output_bytes = P->CreateStreamSet(1, 8);
         if (encodingScheme1.byLength[i].lo == encodingScheme1.byLength[i].hi) {
             std::vector<StreamSet *> keyMarks = {groupMarks};
-            P->CreateKernelCall<FixedLengthCompressionMask>(encodingScheme1, encodingScheme1.byLength[i].lo, codeUnitStream, hashValues, keyMarks, extractionMask);
+            P->CreateKernelCall<FixedLengthCompression>(encodingScheme1, encodingScheme1.byLength[i].lo, input_bytes, hashValues, keyMarks, extractionMask, output_bytes);
         } else {
-            P->CreateKernelCall<LengthGroupCompressionMask>(encodingScheme1, i, groupMarks, hashValues, codeUnitStream,  extractionMask);
+            P->CreateKernelCall<LengthGroupCompression>(encodingScheme1, i, groupMarks, hashValues, input_bytes,  extractionMask, output_bytes);
         }
         extractionMasks.push_back(extractionMask);
+        u8bytes = output_bytes;
     }
 
     StreamSet * const combinedMask = P->CreateStreamSet(1);
     P->CreateKernelCall<StreamsIntersect>(extractionMasks, combinedMask);
     StreamSet * const encoded = P->CreateStreamSet(8);
-    P->CreateKernelCall<ZTF_SymbolEncoder>(encodingScheme1, u8basis, bixHashes, combinedMask, runIndex, encoded);
+    P->CreateKernelCall<S2PKernel>(u8bytes, encoded);
 
     StreamSet * const ZTF_basis = P->CreateStreamSet(8);
     FilterByMask(P, combinedMask, encoded, ZTF_basis);

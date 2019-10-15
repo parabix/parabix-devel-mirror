@@ -12,15 +12,17 @@
 
 namespace kernel {
 
-class LengthGroupCompressionMask : public MultiBlockKernel {
+class LengthGroupCompression : public MultiBlockKernel {
 public:
-    LengthGroupCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
-                               EncodingInfo encodingScheme,
-                               unsigned groupNo,
-                               StreamSet * symbolMarks,
-                               StreamSet * hashValues,
-                               StreamSet * const byteData,
-                               StreamSet * compressionMask, unsigned strideBlocks = 8);
+    LengthGroupCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+                           EncodingInfo encodingScheme,
+                           unsigned groupNo,
+                           StreamSet * symbolMarks,
+                           StreamSet * hashValues,
+                           StreamSet * const byteData,
+                           StreamSet * compressionMask,
+                           StreamSet * encodedBytes,
+                           unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
@@ -36,8 +38,10 @@ public:
                              unsigned groupNo,
                              StreamSet * keyMarks,
                              StreamSet * hashValues,
-                             StreamSet * const hashMarks, StreamSet * const byteData,
-                             StreamSet * const result, unsigned strideBlocks = 8);
+                             StreamSet * const hashMarks,
+                             StreamSet * const byteData,
+                             StreamSet * const result,
+                             unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
@@ -45,17 +49,18 @@ private:
     EncodingInfo mEncodingScheme;
     unsigned mGroupNo;
 };
-    
-    
-class FixedLengthCompressionMask : public MultiBlockKernel {
+
+class FixedLengthCompression : public MultiBlockKernel {
 public:
-    FixedLengthCompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
-                               EncodingInfo encodingScheme,
-                               unsigned length,
-                               StreamSet * const byteData,
-                               StreamSet * hashValues,
-                               std::vector<StreamSet *> symbolMarks,
-                               StreamSet * compressionMask, unsigned strideBlocks = 8);
+    FixedLengthCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+                           EncodingInfo encodingScheme,
+                           unsigned length,
+                           StreamSet * const byteData,
+                           StreamSet * hashValues,
+                           std::vector<StreamSet *> symbolMarks,
+                           StreamSet * compressionMask,
+                           StreamSet * encodedBytes,
+                           unsigned strideBlocks = 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
@@ -85,7 +90,5 @@ private:
     unsigned mHi;
     size_t mSubTableSize;
 };
-
 }
 #endif
-

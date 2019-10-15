@@ -59,6 +59,14 @@ std::string EncodingInfo::uniqueSuffix() {
     return s.str();
 }
 
+unsigned EncodingInfo::prefixLengthOffset(unsigned lgth) {
+    unsigned groupNo = getLengthGroupNo(lgth);
+    auto g = byLength[groupNo];
+    unsigned suffix_bits_avail = (g.encoding_bytes - 1) * 7;
+    unsigned hash_ext_bits = g.hash_bits + g.length_extension_bits;
+    return suffix_bits_avail < hash_ext_bits ? hash_ext_bits - suffix_bits_avail : 0;
+}
+
 WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks)
 : PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}}, {Binding{"WordMarks", WordMarks}}) { }
 
