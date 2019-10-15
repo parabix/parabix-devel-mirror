@@ -147,11 +147,14 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const unsigned i
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
     Value * const processed = mAlreadyProcessedPhi[inputPort];
-    ConstantInt * lookAhead = nullptr;
+    Value * lookAhead = nullptr;
     if (LLVM_LIKELY(useOverflow)) {
         const auto size = getLookAhead(getInputBufferVertex(inputPort));
         if (size) {
-            lookAhead = b->getSize(size);
+            Value * const closed = isClosed(b, inputPort);
+            ConstantInt * const ZERO = b->getSize(0);
+            ConstantInt * const SIZE = b->getSize(size);
+            lookAhead = b->CreateSelect(closed, ZERO, SIZE);
         }
     }
     const Binding & input = getInputBinding(inputPort);
