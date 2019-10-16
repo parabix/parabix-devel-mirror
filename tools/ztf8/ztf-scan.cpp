@@ -818,13 +818,14 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
                                 BasicBlock * keysDone) {
 
     unsigned maskCount = keyMasks.size();
+    unsigned maxLength = lo + maskCount - 1;
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Constant * sz_BITS = b->getSize(SIZE_T_BITS);
     Type * sizeTy = b->getSizeTy();
-    for (unsigned i = 0; i < maskCount; i++) {
-        unsigned length = lo + i;
+    for (unsigned length = lo; length <= maxLength; length++) {
         LengthGroupParameters lg(b, encodingScheme, encodingScheme.getLengthGroupNo(length));
+        Constant * LGTH_IDX = b->getInt32(length - lo);
         Constant * sz_COMPRESSION_MASK = b->getSize((1 << (length - lg.groupInfo.encoding_bytes)) - 1);
         Constant * sz_MARK_OFFSET = b->getSize(length - 1);
         BasicBlock * entryBlock = b->GetInsertBlock();
@@ -834,20 +835,21 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         BasicBlock * const storeKey = b->CreateBasicBlock("storeKey");
         BasicBlock * const nextKey = b->CreateBasicBlock("nextKey");
         BasicBlock * loopExit;
-        if (i == maskCount - 1) {
+        if (length == maxLength) {
             loopExit = keysDone;
         } else {
             // when this key is done, process the next key.
             loopExit = b->CreateBasicBlock("loopExit");
         }
         Value * hashTablePtr = b->getScalarFieldPtr("hashTable");
-        Value * keyWordBasePtr = b->getInputStreamBlockPtr("symbolMarks" + (i > 0 ? std::to_string(i) : ""), sz_ZERO, strideBlockOffset);
+        Value * extensionMapPtr = b->getScalarFieldPtr("prefixMapTable");
+        Value * keyWordBasePtr = b->getInputStreamBlockPtr("symbolMarks" + (length > lo ? std::to_string(length-lo) : ""), sz_ZERO, strideBlockOffset);
         keyWordBasePtr = b->CreateBitCast(keyWordBasePtr, sw.pointerTy);
-        b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMasks[i], sz_ZERO), loopExit, keyProcessingLoop);
+        b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMasks[length-lo], sz_ZERO), loopExit, keyProcessingLoop);
 
         b->SetInsertPoint(keyProcessingLoop);
         PHINode * const keyMaskPhi = b->CreatePHI(sizeTy, 2);
-        keyMaskPhi->addIncoming(keyMasks[i], entryBlock);
+        keyMaskPhi->addIncoming(keyMasks[length-lo], entryBlock);
         PHINode * const keyWordPhi = b->CreatePHI(sizeTy, 2);
         keyWordPhi->addIncoming(sz_ZERO, entryBlock);
         Value * keyWordIdx = b->CreateCountForwardZeroes(keyMaskPhi, "keyWordIdx");
@@ -859,15 +861,52 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         Value * const hashValue = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", keyMarkPos)), sizeTy);
         Value * keyStartPos = b->CreateSub(keyMarkPos, sz_MARK_OFFSET, "keyStartPos");
         Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
-        Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), b->getInt32(i), b->CreateMul(keyHash, lg.HI)});
+        Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), LGTH_IDX, b->CreateMul(keyHash, lg.HI)});
         Value * symPtr = b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos);
         // Check to see if the hash table entry is nonzero (already assigned).
         std::vector<Value *> sym = loadSymbol(b, symPtr, length);
         std::vector<Value *> entry = MonitoredScalarLoadSymbol(b, "hashTable", tblEntryPtr, length);
         Value * symIsEqEntry = compareSymbols(b, sym, entry);
-        b->CreateCondBr(symIsEqEntry, markCompression, tryStore);
+        Value * curHash = keyHash;
+        if (length == maxLength) {
+            b->CreateCondBr(symIsEqEntry, markCompression, tryStore);
+            b->SetInsertPoint(markCompression);
+        } else {
+            BasicBlock * const tryExtension = b->CreateBasicBlock("tryExtension");
+            BasicBlock * const checkExtension = b->CreateBasicBlock("checkExtension");
+            b->CreateCondBr(symIsEqEntry, markCompression, tryExtension);
 
-        b->SetInsertPoint(markCompression);
+            b->SetInsertPoint(tryExtension);
+            // Check for an extension entry of which the current key is a prefix.
+            // First load the extensionMap entry for the current hash value and check it.
+            Value * extensionMapEntry = b->CreateGEP(extensionMapPtr, {b->getInt32(0), LGTH_IDX, keyHash});
+            Value * extensionHash = b->CreateZExt(b->CreateMonitoredScalarFieldLoad("prefixMapTable", extensionMapEntry), sizeTy);
+            b->CreateCondBr(b->CreateIsNull(extensionHash), tryStore, checkExtension);
+
+            b->SetInsertPoint(checkExtension);
+            // The extension entry is in the hash table for the next highest length.
+            LengthGroupParameters eg(b, encodingScheme, encodingScheme.getLengthGroupNo(length+1));
+            Value * extEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), b->getInt32(length - lo + 1), b->CreateMul(extensionHash, eg.HI)});
+            std::vector<Value *> extEntry = MonitoredScalarLoadSymbol(b, "hashTable", extEntryPtr, length);
+#if 0
+            BasicBlock * const printExtension = b->CreateBasicBlock("printExtension");
+            b->CreateCondBr(compareSymbols(b, sym, extEntry), printExtension, tryStore);
+            b->SetInsertPoint(printExtension);
+            b->CallPrintInt("extensionHash_" + std::to_string(length + 1) , extensionHash);
+            b->CallPrintInt("keyHash", keyHash);
+            b->CreateBr(markCompression);
+#else
+            b->CreateCondBr(compareSymbols(b, sym, extEntry), markCompression, tryStore);
+#endif
+            b->SetInsertPoint(markCompression);
+            PHINode * const encodingHash = b->CreatePHI(sizeTy, 2);
+            encodingHash->addIncoming(keyHash, keyProcessingLoop);
+            encodingHash->addIncoming(extensionHash, checkExtension);
+            PHINode * const extensionVal = b->CreatePHI(sizeTy, 2);
+            extensionVal->addIncoming(sz_ZERO, keyProcessingLoop);
+            extensionVal->addIncoming(sz_ONE, checkExtension);
+            curHash = b->CreateAdd(encodingHash, b->CreateShl(extensionVal, lg.HASH_BITS));
+        }
         // Determine a base position from which both the keyStart and the keyEnd
         // are accessible within SIZE_T_BITS - 8, and which will not overflow
         // the buffer.
@@ -884,7 +923,6 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         //b->CallPrintInt("updated", updated);
         b->CreateAlignedStore(b->CreateAnd(updated, b->CreateNot(mask)), keyBasePtr, 1);
         Value * curPos = keyMarkPos;
-        Value * curHash = keyHash;  // Add hash extension bits later.
         // Write the suffixes.
         for (unsigned i = 0; i < lg.groupInfo.encoding_bytes - 1; i++) {
             Value * ZTF_suffix = b->CreateTrunc(b->CreateAnd(curHash, lg.SUFFIX_MASK, "ZTF_suffix"), b->getInt8Ty());
@@ -909,6 +947,18 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         b->CallPrintInt("keyStartPos", keyStartPos);
         b->CallPrintInt("keyLength", lg.HI);
 #endif
+        // Now store a prefixMap entry, if possible.
+        if (length > lo) {
+            BasicBlock * const storePrefix = b->CreateBasicBlock("storePrefix");
+            Value * priorPos =  b->CreateSub(keyMarkPos, sz_ONE);
+            Value * prefixHash = b->CreateZExt(b->CreateLoad(b->getRawInputPointer("hashValues", priorPos)), sizeTy);
+            prefixHash = b->CreateAnd(prefixHash, lg.HASH_MASK, "prefixHash");
+            Value * extensionMapEntry = b->CreateGEP(extensionMapPtr, {b->getInt32(0), b->getInt32(length-lo-1), prefixHash});
+            Value * storedHash = b->CreateMonitoredScalarFieldLoad("prefixMapTable", extensionMapEntry);
+            b->CreateCondBr(b->CreateIsNull(storedHash), storePrefix, nextKey);
+            b->SetInsertPoint(storePrefix);
+            b->CreateMonitoredScalarFieldStore("prefixMapTable", b->CreateTrunc(keyHash, b->getInt16Ty()), extensionMapEntry);
+        }
         b->CreateBr(nextKey);
 
         b->SetInsertPoint(nextKey);
@@ -957,6 +1007,8 @@ mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + symbolMarks.size() - 1)  {
     }
     Type * subTableType = ArrayType::get(b->getInt8Ty(), mSubTableSize);
     mInternalScalars.emplace_back(ArrayType::get(subTableType, mHi - mLo + 1), "hashTable");
+    Type * prefixMapTableType  = ArrayType::get(b->getInt16Ty(), 1 << encodingScheme.MAX_HASH_BITS);
+    mInternalScalars.emplace_back(ArrayType::get(prefixMapTableType, mHi - mLo + 1), "prefixMapTable");
 }
 
 void FixedLengthCompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
@@ -1059,31 +1111,32 @@ void generateDecompKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
                                 BasicBlock * keysDone) {
 
     unsigned maskCount = keyMasks.size();
+    unsigned maxLength = lo + maskCount - 1;
     Constant * sz_ZERO = b->getSize(0);
     Type * sizeTy = b->getSizeTy();
-    for (unsigned i = 0; i < maskCount; i++) {
-        unsigned length = lo + i;
+    for (unsigned length = lo; length <= maxLength; length++) {
         LengthGroupParameters lg(b, encodingScheme, encodingScheme.getLengthGroupNo(length));
+        Constant * LGTH_IDX = b->getInt32(length - lo);
         Constant * sz_MARK_OFFSET = b->getSize(length - 1);
         BasicBlock * entryBlock = b->GetInsertBlock();
         BasicBlock * const keyProcessingLoop = b->CreateBasicBlock("keyProcessingLoop");
         BasicBlock * const storeKey = b->CreateBasicBlock("storeKey");
         BasicBlock * const nextKey = b->CreateBasicBlock("nextKey");
         BasicBlock * loopExit;
-        if (i == maskCount - 1) {
+        if (length == maxLength) {
             loopExit = keysDone;
         } else {
             // when this key is done, process the next key.
             loopExit = b->CreateBasicBlock("loopExit");
         }
-        Value * keyWordBasePtr = b->getInputStreamBlockPtr("keyMarks" + std::to_string(i), sz_ZERO, strideBlockOffset);
+        Value * keyWordBasePtr = b->getInputStreamBlockPtr("keyMarks" + std::to_string(length-lo), sz_ZERO, strideBlockOffset);
         keyWordBasePtr = b->CreateBitCast(keyWordBasePtr, sw.pointerTy);
         Value * hashTablePtr = b->getScalarFieldPtr("hashTable");
-        b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMasks[i], sz_ZERO), loopExit, keyProcessingLoop);
+        b->CreateUnlikelyCondBr(b->CreateICmpEQ(keyMasks[length-lo], sz_ZERO), loopExit, keyProcessingLoop);
 
         b->SetInsertPoint(keyProcessingLoop);
         PHINode * const keyMaskPhi = b->CreatePHI(sizeTy, 2);
-        keyMaskPhi->addIncoming(keyMasks[i], entryBlock);
+        keyMaskPhi->addIncoming(keyMasks[length-lo], entryBlock);
         PHINode * const keyWordPhi = b->CreatePHI(sizeTy, 2);
         keyWordPhi->addIncoming(sz_ZERO, entryBlock);
         Value * keyWordIdx = b->CreateCountForwardZeroes(keyMaskPhi, "keyWordIdx");
@@ -1096,7 +1149,7 @@ void generateDecompKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         Value * keyStartPos = b->CreateSub(keyMarkPos, sz_MARK_OFFSET, "keyStartPos");
         Value * keyHash = b->CreateAnd(hashValue, lg.HASH_MASK, "keyHash");
 
-        Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), b->getInt32(i), b->CreateMul(keyHash, lg.HI)});
+        Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), LGTH_IDX, b->CreateMul(keyHash, lg.HI)});
         Value * symPtr = b->getRawInputPointer("byteData", b->getInt32(0), keyStartPos);
         // Check to see if the hash table entry is nonzero (already assigned).
         std::vector<Value *> sym = loadSymbol(b, symPtr, length);
@@ -1137,31 +1190,32 @@ void generateHashProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
                                  BasicBlock * hashesDone) {
 
     unsigned maskCount = hashMasks.size();
+    unsigned maxLength = lo + maskCount - 1;
     Constant * sz_ZERO = b->getSize(0);
     Constant * sz_ONE = b->getSize(1);
     Type * sizeTy = b->getSizeTy();
 
-    for (unsigned i = 0; i < maskCount; i++) {
-        unsigned length = lo + i;
+    for (unsigned length = lo; length <= maxLength; length++) {
         LengthGroupParameters lg(b, encodingScheme, encodingScheme.getLengthGroupNo(length));
+        Constant * LGTH_IDX = b->getInt32(length - lo);
         Constant * sz_MARK_OFFSET = b->getSize(length - 1);
         BasicBlock * entryBlock = b->GetInsertBlock();
         BasicBlock * const hashProcessingLoop = b->CreateBasicBlock("hashProcessingLoop");
         BasicBlock * loopExit;
-        if (i == maskCount - 1) {
+        if (length == maxLength) {
             loopExit = hashesDone;
         } else {
             // when this key is done, process the next key.
             loopExit = b->CreateBasicBlock("loopExit");
         }
         Value * hashTablePtr = b->getScalarFieldPtr("hashTable");
-        Value * hashWordBasePtr = b->getInputStreamBlockPtr("hashMarks" + std::to_string(i), sz_ZERO, strideBlockOffset);
+        Value * hashWordBasePtr = b->getInputStreamBlockPtr("hashMarks" + std::to_string(length-lo), sz_ZERO, strideBlockOffset);
         hashWordBasePtr = b->CreateBitCast(hashWordBasePtr, sw.pointerTy);
-        b->CreateUnlikelyCondBr(b->CreateICmpEQ(hashMasks[i], sz_ZERO), loopExit, hashProcessingLoop);
+        b->CreateUnlikelyCondBr(b->CreateICmpEQ(hashMasks[length-lo], sz_ZERO), loopExit, hashProcessingLoop);
 
         b->SetInsertPoint(hashProcessingLoop);
         PHINode * const hashMaskPhi = b->CreatePHI(sizeTy, 2);
-        hashMaskPhi->addIncoming(hashMasks[i], entryBlock);
+        hashMaskPhi->addIncoming(hashMasks[length-lo], entryBlock);
         PHINode * const hashWordPhi = b->CreatePHI(sizeTy, 2);
         hashWordPhi->addIncoming(sz_ZERO, entryBlock);
         Value * hashWordIdx = b->CreateCountForwardZeroes(hashMaskPhi, "hashWordIdx");
@@ -1186,8 +1240,20 @@ void generateHashProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
         Value * symStartPos = b->CreateSub(hashMarkPos, sz_MARK_OFFSET, "symStartPos");
         //b->CallPrintInt("hashCode", hashCode);
         //b->CallPrintInt("symStartPos", symStartPos);
-        Value * tableNo = b->CreateAdd(b->getSize(i), extensionCode, "tableNo");
-        Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), tableNo, b->CreateMul(hashCode, lg.HI)});
+        Value * tableNo = b->CreateAdd(LGTH_IDX, extensionCode, "tableNo");
+#if 0
+        BasicBlock * const printExtension = b->CreateBasicBlock("printExtension");
+        BasicBlock * const continueDecode = b->CreateBasicBlock("continueDecode");
+        b->CreateCondBr(b->CreateIsNull(extensionCode), continueDecode, printExtension);
+        b->SetInsertPoint(printExtension);
+        b->CallPrintInt("hashPfx", hashPfx);
+        b->CallPrintInt("hashCode", hashCode);
+        b->CallPrintInt("lg.HI", lg.HI);
+        b->CallPrintInt("tableNo", tableNo);
+        b->CreateBr(continueDecode);
+        b->SetInsertPoint(continueDecode);
+#endif
+        Value * tblEntryPtr = b->CreateGEP(hashTablePtr, {b->getInt32(0), tableNo, b->CreateMul(hashCode, b->CreateAdd(lg.HI, extensionCode))});
         std::vector<Value *> dictSym = MonitoredScalarLoadSymbol(b, "hashTable", tblEntryPtr, length);
         Value * destPtr = b->getRawOutputPointer("result", b->getInt32(0), symStartPos);
         storeSymbol(b, dictSym, destPtr, length);
