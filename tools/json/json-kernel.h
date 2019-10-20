@@ -32,13 +32,32 @@ protected:
     void generatePabloMethod() override;
 };
 
+/*
+   Marks keywords letters such as l', 'a', 's', 'r', 'u', 'e',
+   joining it at the end with 'n', 't' and 'f'
+*/
+class JSONKeywordMarker : public pablo::PabloKernel {
+public:
+    JSONKeywordMarker(const std::unique_ptr<KernelBuilder> & b,
+                      StreamSet * const basis, StreamSet * const lex, StreamSet * const strSpan,
+                      StreamSet * kwMarker, StreamSet * kwLex)
+    : pablo::PabloKernel(b,
+                         "jsonKeywordMarker",
+                         {Binding{"basis", basis}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
+                         {Binding{"kwMarker", kwMarker}, Binding{"kwLex", kwLex}}) {}
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
 class JSONKeywordSpan : public pablo::PabloKernel {
 public:
-    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const basis, StreamSet * const lex, StreamSet * const strSpan, StreamSet * kwSpan)
+    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const kwMarker, StreamSet * const kwLex, StreamSet * kwSpan, StreamSet * kwErr)
     : pablo::PabloKernel(b,
                          "jsonKeywordSpan",
-                         {Binding{"basis", basis}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
-                         {Binding{"kwSpan", kwSpan}}) {}
+                         {Binding{"kwLex", kwLex}, Binding{"kwMarker", kwMarker, FixedRate(1), LookAhead(4)}},
+                         {Binding{"kwSpan", kwSpan}, Binding{"kwErr", kwErr}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
