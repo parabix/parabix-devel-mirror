@@ -191,6 +191,26 @@ void JSONKeywordSpan::generatePabloMethod() {
     pb.createAssign(pb.createExtract(kwErr, pb.getInteger(0)), err);
 }
 
+void JSONNumberMarker::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    std::vector<PabloAST *> basis = getInputStreamSet("basis");
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
+    std::vector<PabloAST *> lex = getInputStreamSet("lex");
+    PabloAST * strSpan = getInputStreamSet("strSpan")[0];
+    Var * const nbrMarker = getOutputStreamVar("nbrMarker");
+    Var * const nbrLex = getOutputStreamVar("nbrLex");
+
+    PabloAST * _0_9 = ccc.compileCC(re::makeByte(0x30, 0x39));
+    PabloAST * eE = pb.createOr(ccc.compileCC(re::makeByte(0x45)), ccc.compileCC(re::makeByte(0x65)));
+    PabloAST * dot = ccc.compileCC(re::makeByte(0x2E));
+
+    PabloAST * notStrSpan = pb.createNot(strSpan);
+    PabloAST * hyphen = pb.createAnd(notStrSpan, lex[Lex::hyphen]);
+    PabloAST * digit = pb.createAnd(notStrSpan, lex[Lex::digit]);
+
+    pb.createAssign(pb.createExtract(nbrMarker, pb.getInteger(0)), digit);
+}
+
 void ValidateJSONString::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> lex = getInputStreamSet("lex");

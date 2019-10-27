@@ -53,7 +53,9 @@ protected:
 
 class JSONKeywordSpan : public pablo::PabloKernel {
 public:
-    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const kwMarker, StreamSet * const kwLex, StreamSet * kwSpan, StreamSet * kwErr)
+    JSONKeywordSpan(const std::unique_ptr<KernelBuilder> & b,
+                    StreamSet * const kwMarker, StreamSet * const kwLex,
+                    StreamSet * kwSpan, StreamSet * kwErr)
     : pablo::PabloKernel(b,
                          "jsonKeywordSpan",
                          {Binding{"kwLex", kwLex}, Binding{"kwMarker", kwMarker, FixedRate(1), LookAhead(4)}},
@@ -64,9 +66,31 @@ protected:
     void generatePabloMethod() override;
 };
 
+/*
+   Marks symbols used in numbers such as 'e', 'E', '.'
+   joining it at the end if they match expression:
+   \-?(0|[1-9][0-9]*)(.[0-9]+)?([Ee][+-]?[0-9]+)?
+*/
+class JSONNumberMarker : public pablo::PabloKernel {
+public:
+    JSONNumberMarker(const std::unique_ptr<KernelBuilder> & b,
+                     StreamSet * const basis, StreamSet * const lex, StreamSet * const strSpan,
+                     StreamSet * nbrMarker, StreamSet * nbrLex)
+    : pablo::PabloKernel(b,
+                         "jsonNumberMarker",
+                         {Binding{"basis", basis}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
+                         {Binding{"nbrMarker", nbrMarker}, Binding{"nbrLex", nbrLex}}) {}
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
 class ValidateJSONString : public pablo::PabloKernel {
 public:
-    ValidateJSONString(const std::unique_ptr<KernelBuilder> & b, StreamSet * const lex, StreamSet * strCallouts, StreamSet * err)
+    ValidateJSONString(const std::unique_ptr<KernelBuilder> & b,
+                       StreamSet * const lex,
+                       StreamSet * strCallouts, StreamSet * err)
     : pablo::PabloKernel(b,
                          "validateJSONString",
                          {Binding{"lex", lex}},
