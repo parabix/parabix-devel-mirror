@@ -63,7 +63,8 @@ bool matchesEmptyString(const RE * re) {
         return matchesEmptyString(g->getRE());
     } else if (const Name * n = dyn_cast<Name>(re)) {
         return matchesEmptyString(n->getDefinition());
-    }
+    } else if (const Capture * c = dyn_cast<Capture>(re)) {
+        return matchesEmptyString(n->getCapturedRE());
     return false; // otherwise
 }
 
@@ -382,51 +383,17 @@ int minMatchLength(const RE * re) {
             case Name::Type::Unicode:
             case Name::Type::UnicodeProperty:
                 return 1;
-            case Name::Type::Capture:
-            case Name::Type::Reference:
-                return minMatchLength(n->getDefinition());
             default:
                 return 0;
         }
+    } else if (const Capture * c = dyn_cast<Capture>(re)) {
+        return minMatchLength(c->getCapturedRE());
+    } else if (const Reference * r = dyn_cast<Reference>(re)) {
+        return minMatchLength(r->getCapture());
     }
     return 0; // otherwise
 }
     
-//If a regular expression contains unit and not byteLength bounded repetition type, we select a different pipeline to utilize the log2 technique.
-bool unitBoundedRep(const RE * re) {
-    if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (const RE * re : *alt) {
-            if (unitBoundedRep(re)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-	for (const RE * re : *seq) {
-	    if (unitBoundedRep(re)) {
-		return true;
-	    }
-	}
-        return false;
-    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-	if (rep->getLB() == 0 && rep->getUB() == Rep::UNBOUNDED_REP) {
-	    return false;
-	} else {
-	    return (!isByteLength(rep->getRE()) && isUnicodeUnitLength(rep->getRE()));
-	}
-    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        return unitBoundedRep(diff->getLH()) || unitBoundedRep(diff->getRH());
-    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return unitBoundedRep(e->getLH()) || unitBoundedRep(e->getRH());
-    } else if (const Name * n = dyn_cast<Name>(re)) {
-	if (n->getType() == Name::Type::Capture || n->getType() == Name::Type::Reference) {
-            return unitBoundedRep(n->getDefinition());
-        }
-        return false;
-    }
-    return false; // otherwise
-  
-}
 
 //Cases that not include bounded repetition, assertion, start and end type can suit for local language compile pipeline. 
 bool isTypeForLocal(const RE * re) {
@@ -634,28 +601,18 @@ bool DefiniteLengthBackReferencesOnly(const RE * re) {
         // a variable length element is encounterd, the list of available_captures
         // is cleared.
         //
-        std::set<const Name *> available_captures;
+        std::set<const Capture *> available_captures;
         for (const RE * e : *seq) {
-            if (const Name * n = dyn_cast<Name>(e)) {
-                auto T = n->getType();
-                auto defn = n->getDefinition();
-                if (T == Name::Type::Reference) {
-                    if (available_captures.find(cast<Name>(defn)) == available_captures.end()) {
-                        // Capture is not available.
-                        return false;
-                    } else {
-                        continue;
-                    }
+            if (const Reference * r = dyn_cast<Reference>(e)) {
+                auto capture = r->getCapture();
+                if (available_captures.find(cast<Capture>(capture)) == available_captures.end()) {
+                    // Capture is not available.
+                    return false;
                 } else {
-                    if (!DefiniteLengthBackReferencesOnly(defn)) return false;
-                    if (isFixedLength(defn)) {
-                        if (T == Name::Type::Capture) {
-                            available_captures.emplace(n);
-                        }
-                    } else {
-                        available_captures.clear();
-                    }
+                    continue;
                 }
+            } else if (const Capture * c = dyn_cast<Capture>(e)) {
+                available_captures.emplace(c);
             }
             if (!DefiniteLengthBackReferencesOnly(e)) return false;
             if (!isFixedLength(e)) available_captures.clear();
@@ -672,8 +629,11 @@ bool DefiniteLengthBackReferencesOnly(const RE * re) {
     } else if (const Group * g = dyn_cast<Group>(re)) {
         return DefiniteLengthBackReferencesOnly(g->getRE());
     } else if (const Name * n = dyn_cast<Name>(re)) {
-        if (n->getType() == Name::Type::Reference) return false;
         return DefiniteLengthBackReferencesOnly(n->getDefinition());
+    } else if (const Capture * c = dyn_cast<Capture>(re)) {
+        return DefiniteLengthBackReferencesOnly(c->getCapturedRE());
+    } else if (const Reference * r = dyn_cast<Reference>(re)) {
+        return false;
     }
     return true; // otherwise = CC, Any, Start, End, Range
 }

@@ -41,8 +41,6 @@ RE * CC_multiplexer::transformName(Name * name) {
         RE * xfrm = transform(name->getDefinition());
         if (name->getType() == Name::Type::ZeroWidth)
             return makeZeroWidth(name->getName(), xfrm);
-        else if (name->getType() == Name::Type::Capture)
-            return makeCapture(name->getName(), xfrm);
         else
             return makeName(name->getName(), xfrm);
     }

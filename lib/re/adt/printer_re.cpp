@@ -54,9 +54,15 @@ const std::string Printer_RE::PrintRE(const RE * re) {
         }
         retVal += re_name->getName();
         retVal += "\" ";
-        if (re_name->getType() == Name::Type::Capture) {
-            retVal += "=(" + PrintRE(re_name->getDefinition()) + ")";
-        }
+    } else if (const Capture * c = dyn_cast<const Capture>(re)) {
+        retVal = "Capture \"";
+        retVal += c->getName();
+        retVal += "\" ";
+        retVal += "=(" + PrintRE(c->getCapturedRE()) + ")";
+    } else if (const Reference * r = dyn_cast<const Reference>(re)) {
+        retVal = "Ref \"";
+        retVal += r->getName();
+        retVal += "\" ";
     } else if (const Range* rg = dyn_cast<const Range>(re)) {
         retVal = "Range (";
         retVal += PrintRE(rg->getLo());

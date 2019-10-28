@@ -36,6 +36,8 @@ void RE_Inspector::inspect(RE * const re) {
         INSPECT(End);
         INSPECT(Intersect);
         INSPECT(Name);
+        INSPECT(Capture);
+        INSPECT(Reference);
         INSPECT(Group);
         INSPECT(Rep);
         INSPECT(Seq);
@@ -50,16 +52,20 @@ void RE_Inspector::inspectName(Name * nm) {
     if (d) inspect(d);
 }
 
-void RE_Inspector::inspectCC(CC * cc) {
+void RE_Inspector::inspectCapture(Capture * c) {
+    inspect(c->getCapturedRE());
+}
 
+void RE_Inspector::inspectReference(Reference * r) {
+}
+
+void RE_Inspector::inspectCC(CC * cc) {
 }
 
 void RE_Inspector::inspectStart(Start * s) {
-
 }
 
 void RE_Inspector::inspectEnd(End * e) {
-
 }
 
 void RE_Inspector::inspectSeq(Seq * seq) {

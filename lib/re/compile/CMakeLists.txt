@@ -11,6 +11,7 @@ SRC
     collect_ccs.cpp
     exclude_CC.cpp
     memoization.cpp
+    name_lookaheads.cpp
     re_analysis.cpp
     re_compiler.cpp
     re_contextual_simplification.cpp

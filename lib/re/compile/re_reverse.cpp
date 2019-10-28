@@ -28,41 +28,37 @@ using namespace llvm;
 
 namespace re {
     
-using CaptureMap = std::map<std::string, Name *>;
+using CaptureMap = std::map<std::string, RE *>;
 
 class ReverseTransformer : public RE_Transformer {
 public:
     ReverseTransformer() : RE_Transformer("Reverse") {}
-    RE * transformName(Name * n) override {
-        Name::Type nType = n ->getType();
-        if (nType == Name::Type::Capture) {
-            std::string cname = n->getName();
-            auto f = mCaptureMap.find(cname);
-            if (f != mCaptureMap.end()) {
-                return makeReference(f->second->getName(), f->second);
-            }
-            else {
-                std::string newName = "\\" + std::to_string(mCaptureMap.size() + 1);
-                Name * capture = makeCapture(newName, transform(n->getDefinition()));
-                mCaptureMap.emplace(cname, capture);
-                return capture;
-            }
+    RE * transformCapture(Capture * c) override {
+        std::string cname = c->getName();
+        auto f = mCaptureMap.find(cname);
+        if (f != mCaptureMap.end()) {
+            return makeReference(cast<Capture>(f->second)->getName(), f->second);
         }
-        if (nType == Name::Type::Reference) {
-            Name * referent = cast<Name>(n->getDefinition());
-            std::string cname = referent->getName();
-            auto f = mCaptureMap.find(cname);
-            if (f != mCaptureMap.end()) {
-                return makeReference(f->second->getName(), f->second);
-            }
-            else {
-                std::string newName = "\\" + std::to_string(mCaptureMap.size() + 1);
-                Name * capture = makeCapture(newName, transform(referent->getDefinition()));
-                mCaptureMap.emplace(cname, capture);
-                return capture;
-            }
+        else {
+            std::string newName = "\\" + std::to_string(mCaptureMap.size() + 1);
+            RE * capture = makeCapture(newName, transform(c->getCapturedRE()));
+            mCaptureMap.emplace(cname, capture);
+            return capture;
         }
-        return n;
+    }
+    RE * transformReference(Reference * r) override {
+        std::string cname = r->getName();
+        auto referent = r->getCapture();
+        auto f = mCaptureMap.find(cname);
+        if (f != mCaptureMap.end()) {
+            return makeReference(cast<Capture>(f->second)->getName(), f->second);
+        }
+        else {
+            std::string newName = "\\" + std::to_string(mCaptureMap.size() + 1);
+            RE * capture = makeCapture(newName, transform(cast<Capture>(referent)->getCapturedRE()));
+            mCaptureMap.emplace(cname, capture);
+            return capture;
+        }
     }
     RE * transformSeq (Seq * seq) override {
         std::vector<RE*> list;

@@ -31,11 +31,8 @@ RE * CC_Remover::transformCC(CC * cc) {
 
 RE * CC_Remover::transformName(Name * n) {
     switch (n->getType()) {
-        case Name::Type::Reference:
         case Name::Type::ZeroWidth:
             return n;
-        case Name::Type::Capture:
-            return makeCapture(n->getName(), transform(n->getDefinition()));
         default:
             RE * defn = n->getDefinition();
             if (const CC * cc0 = dyn_cast<CC>(defn)) {

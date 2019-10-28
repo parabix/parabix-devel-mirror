@@ -21,18 +21,7 @@
 #include <re/parse/GLOB_parser.h>
 #include <re/parse/Prosite_parser.h>
 #include <re/parse/fixed_string_parser.h>
-#include <re/adt/re_name.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_any.h>
-#include <re/adt/re_end.h>
-#include <re/adt/re_rep.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_start.h>
-#include <re/adt/re_range.h>
-#include <re/adt/re_diff.h>
-#include <re/adt/re_intersect.h>
-#include <re/adt/re_group.h>
-#include <re/adt/re_assertion.h>
+#include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
 
 using namespace llvm;
@@ -258,18 +247,16 @@ RE * RE_Parser::parse_capture_body() {
     RE * captured = parse_alt();
     mCaptureGroupCount++;
     std::string captureName = "\\" + std::to_string(mCaptureGroupCount);
-    Name * const capture  = makeCapture(captureName, captured);
-    auto key = std::make_pair("", captureName);
-    mNameMap.insert(std::make_pair(std::move(key), capture));
+    RE * const capture  = makeCapture(captureName, captured);
+    mCaptureMap.emplace(captureName, capture);
     return capture;
 }
     
 RE * RE_Parser::parse_back_reference() {
     mCursor++;
     std::string backref = std::string(mCursor.pos()-2, mCursor.pos());
-    auto key = std::make_pair("", backref);
-    auto f = mNameMap.find(key);
-    if (f != mNameMap.end()) {
+    auto f = mCaptureMap.find(backref);
+    if (f != mCaptureMap.end()) {
         return makeReference(backref, f->second);
     }
     else {

@@ -7,6 +7,7 @@
 #ifndef RE_H
 #define RE_H
 
+#include <string>
 #include <vector>
 #include <util/slab_allocator.h>
 
@@ -30,6 +31,8 @@ public:
         , End
         , Intersect
         , Name
+        , Capture
+        , Reference
         , Group
         , Rep
         , Seq
@@ -56,6 +59,15 @@ protected:
     }
     const ClassTypeId mClassTypeId;
     static Allocator mAllocator;
+    using length_t = std::string::size_type;
+    inline const char * replicateString(const char * string, const length_t length) {
+        if (string && (length > 0)) {
+            char * allocated = reinterpret_cast<char*>(mAllocator.allocate(length));
+            std::memcpy(allocated, string, length);
+            return allocated;
+        }
+        return nullptr;
+    }
 };
 
 }

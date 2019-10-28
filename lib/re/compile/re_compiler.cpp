@@ -91,6 +91,12 @@ inline MarkerType RE_Compiler::compile(RE * const re, PabloBuilder & pb) {
 MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder & pb) {
     if (isa<Name>(re)) {
         return compileName(cast<Name>(re), marker, pb);
+    } else if (Capture * c = dyn_cast<Capture>(re)) {
+        return process(c->getCapturedRE(), marker, pb);
+    } else if (Reference * r = dyn_cast<Reference>(re)) {
+        llvm::report_fatal_error("back references not supported in icgrep.");
+    } else if (isa<Seq>(re)) {
+        return compileSeq(cast<Seq>(re), marker, pb);
     } else if (isa<Seq>(re)) {
         return compileSeq(cast<Seq>(re), marker, pb);
     } else if (isa<Alt>(re)) {
@@ -159,11 +165,6 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
 }
 
 inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker, PabloBuilder & pb) {
-    if (name->getType() == Name::Type::Capture) {
-        return process(name->getDefinition(), marker, pb);
-    } else if (name->getType() == Name::Type::Reference) {
-        llvm::report_fatal_error("back references not supported in icgrep.");
-    }
     const auto & nameString = name->getName();
     MarkerType nameMarker = compileName(name, pb);
     if (isByteLength(name)) {
@@ -297,6 +298,28 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
             }
             MarkerType fbyte = AdvanceMarker(marker, FinalPostPositionUnit, pb);
             return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
+        }
+    } else if (Name * name = dyn_cast<Name>(asserted)) {
+        // Lookahead assertion of an externally compiled name; use a
+        // pablo lookahead operation.
+        const auto & nameString = name->getFullName();
+        const auto f = mExternalNameMap.find(nameString);
+        if (f != mExternalNameMap.end()) {
+            RE * defn = name->getDefinition();
+            auto lengths = getLengthRange(defn, &mIndexingAlphabet);
+            if (lengths.first == lengths.second) {
+                PabloAST * nameMarker = f->second;
+                unsigned ahead = lengths.first;
+                if (markerPos(marker) != FinalMatchUnit) {
+                    marker = AdvanceMarker(marker, FinalPostPositionUnit, pb);
+                    ahead -= 1;
+                }
+                if (ahead > 0) {
+                    nameMarker = pb.createLookahead(nameMarker, ahead, nameString + "_ahead");
+                }
+                PabloAST * matched = pb.createAnd(markerVar(marker), nameMarker);
+                return makeMarker(markerPos(marker), matched);
+            }
         }
     }
     UnsupportedRE("Unsupported lookahead assertion:" + Printer_RE::PrintRE(a));

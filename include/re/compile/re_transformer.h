@@ -31,6 +31,8 @@ protected:
     virtual ~RE_Transformer() {}
     RE * transform(RE * r);
     virtual RE * transformName(Name * n);
+    virtual RE * transformCapture(Capture * c);
+    virtual RE * transformReference(Reference * r);
     virtual RE * transformStart(Start * s);
     virtual RE * transformEnd(End * e);
     virtual RE * transformCC(CC * cc);

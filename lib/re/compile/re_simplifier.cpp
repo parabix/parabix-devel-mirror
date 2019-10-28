@@ -10,6 +10,7 @@
 #include <re/adt/adt.h>
 #include <re/compile/re_inspector.h>
 #include <re/compile/re_transformer.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
@@ -67,30 +68,32 @@ using ReferenceSet = boost::container::flat_set<std::string>;
 struct ReferenceCollector  final : public RE_Inspector {
     ReferenceCollector(ReferenceSet & references)
     : RE_Inspector(InspectionMode::IgnoreNonUnique), mReferences(references) {}
-    
-    void inspectName(Name * n) final {
-        if (n->getType() == Name::Type::Reference) {
-            mReferences.insert(n->getName());
-        }
+
+    void inspectReference(Reference * r) override {
+        auto name = r -> getName();
+        mReferences.insert(r->getName());
     }
-    
+
 private:
     ReferenceSet & mReferences;
 };
 
-struct UnneededCaptureRemoval final : public RE_Transformer {
+struct UnneededCaptureRemoval  : public RE_Transformer {
     UnneededCaptureRemoval(ReferenceSet & references)
     : RE_Transformer("UnneededCaptureRemoval"), mReferences(references) {}
     
-    RE * transformName(Name * n) final {
-        if (n->getType() == Name::Type::Capture) {
-            if (mReferences.count(n->getName()) == 0) {
-                return n->getDefinition();
-            }
+    RE * transformCapture(Capture * c) override {
+        auto name = c->getName();
+        auto x = c->getCapturedRE();
+        auto t = transform(x);
+        if (mReferences.count(c->getName()) == 0) {
+            return t;
+        } else if (t != x) {
+            return makeCapture(name, t);
         }
-        return n;
+        return c;
     }
-    
+
 private:
     ReferenceSet & mReferences;
 };

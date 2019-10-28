@@ -278,12 +278,16 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     } else if (Name * n = dyn_cast<Name>(re)) {
         RE * def = n->getDefinition();
         ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
+        return submatch;
+    } else if (Capture * c = dyn_cast<Capture>(re)) {
+        RE * def = c->getCapturedRE();
+        ContextMatchCursor submatch = ctxt_match(def, kind, cursor);
+        return submatch;
+    } else if (Reference * r = dyn_cast<Reference>(re)) {
+        RE * capture = r->getCapture();
+        ContextMatchCursor submatch = ctxt_match(capture, kind, cursor);
         if (isEmptySet(submatch.rslt)) return submatch;
-        if (n->getType() == Name::Type::Reference) {
-            return ContextMatchCursor{submatch.ctxt, re};
-        } else {
-            return submatch;
-        }
+        return ContextMatchCursor{submatch.ctxt, re};
     } else if (Alt * alt = dyn_cast<Alt>(re)) {
         ContextMatchCursor bestSoFar = ContextMatchCursor{cursor.ctxt, makeAlt()};
         for (RE * a: *alt) {

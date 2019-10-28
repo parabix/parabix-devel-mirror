@@ -11,6 +11,7 @@
 #include <re/adt/re_alt.h>
 #include <re/adt/validation.h>
 #include <re/compile/exclude_CC.h>
+#include <re/compile/name_lookaheads.h>
 #include <re/compile/re_analysis.h>
 #include <re/compile/re_contextual_simplification.h>
 #include <re/compile/re_minimizer.h>
@@ -71,6 +72,7 @@ RE * regular_expression_passes(RE * re) {
     }
     r = resolveDiffs(r);
     r = resolveAnchors(r, makeAlt());
+    r = name_lookaheads(r);
     if (!DefiniteLengthBackReferencesOnly(r)) {
         llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");
     }

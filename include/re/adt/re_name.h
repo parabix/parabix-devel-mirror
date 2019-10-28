@@ -11,6 +11,7 @@ namespace UCD {
 
 namespace re {
 
+using length_t = std::string::size_type;
 class Name : public RE {
 public:
     static inline bool classof(const RE * re) {
@@ -19,12 +20,9 @@ public:
     static inline bool classof(const void *) {
         return false;
     }
-    using length_t = std::string::size_type;
     enum class Type {
         Unicode
         , UnicodeProperty
-        , Capture
-        , Reference
         , ZeroWidth
         , Unknown
     };
@@ -41,8 +39,6 @@ public:
     virtual ~Name() {}
 protected:
     friend Name * makeName(const std::string & name, RE * cc);
-    friend Name * makeCapture(const std::string & name, RE * captured);
-    friend Name * makeReference(const std::string & name, RE * captureName);
     friend Name * makeZeroWidth(const std::string & name, RE * zerowidth);
     friend Name * makeName(CC * const cc);
     friend Name * makeName(const std::string &, Type, RE *);
@@ -56,14 +52,6 @@ protected:
     , mType(type)
     , mDefinition(defn) {
 
-    }
-    inline const char * replicateString(const char * string, const length_t length) {
-        if (string && (length > 0)) {
-            char * allocated = reinterpret_cast<char*>(mAllocator.allocate(length));
-            std::memcpy(allocated, string, length);
-            return allocated;
-        }
-        return nullptr;
     }
 
 private:
@@ -164,17 +152,8 @@ inline Name * makeName(CC * const cc) {
     return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Unicode, cc);
 }
 
-inline Name * makeCapture(const std::string & name, RE * captured) {
-    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Capture, captured);
-}
-    
-inline Name * makeReference(const std::string & name, RE * captureName) {
-    return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::Reference, captureName);
-}
-
 inline Name * makeZeroWidth(const std::string & name, RE * zerowidth = NULL) {
     return new Name(nullptr, 0, name.c_str(), name.length(), Name::Type::ZeroWidth, zerowidth);
-}
 }
 
 template <typename To, typename FromTy> bool defined(FromTy * e) {
@@ -195,5 +174,53 @@ template <typename To, typename FromTy> To * defCast(FromTy * e) {
     return nullptr;
 }
 
+class Capture : public RE {
+public:
+    std::string getName() const {
+        return std::string(mName, mNameLength);
+    }
+    RE * getCapturedRE() const {return mCapturedRE;}
+    static Capture * Create(std::string name, RE * captured) {
+        return new Capture(name.c_str(), name.length(), captured);
+    }
+    RE_SUBTYPE(Capture)
+private:
+    Capture(const char * name, const length_t nameLength, RE * captured): RE(ClassTypeId::Capture)
+    , mNameLength(nameLength)
+    , mName(replicateString(name, nameLength))
+    , mCapturedRE(captured) {}
+    const length_t mNameLength;
+    const char * const mName;
+    RE * mCapturedRE;
+};
 
+inline RE * makeCapture(std::string name, RE * captured) {
+    return Capture::Create(name, captured);
+}
+
+class Reference : public RE {
+public:
+    std::string getName() const  {
+        return std::string(mName, mNameLength);
+    }
+    RE * getCapture() const {return mCapture;}
+    static Reference * Create(std::string name, RE * capture) {
+        return new Reference(name.c_str(), name.length(), capture);
+    }
+    RE_SUBTYPE(Reference)
+private:
+    Reference(const char * name, const length_t nameLength, RE * capture): RE(ClassTypeId::Reference)
+    , mNameLength(nameLength)
+    , mName(replicateString(name, nameLength))
+    , mCapture(capture) {}
+    const length_t mNameLength;
+    const char * const mName;
+    RE * mCapture;
+};
+
+inline RE * makeReference(std::string name, RE * capture){
+    return Reference::Create(name, capture);
+}
+
+}
 #endif // RE_NAME_H

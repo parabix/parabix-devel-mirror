@@ -64,6 +64,30 @@ static bool lessThan(const Name * const lh, const Name * const rh) {
     }
 }
 
+static bool lessThan(const Capture * const lh, const Capture * const rh) {
+    if (lh->getName() != rh->getName()) {
+        return lh->getName() < rh->getName();
+    } else if (lh->getCapturedRE() == nullptr) {
+        return rh->getCapturedRE() != nullptr;
+    } else if (rh->getCapturedRE() == nullptr) {
+        return false;
+    } else {
+        return compare(lh->getCapturedRE(), rh->getCapturedRE());
+    }
+}
+
+static bool lessThan(const Reference * const lh, const Reference * const rh) {
+    if (lh->getName() != rh->getName()) {
+        return lh->getName() < rh->getName();
+    } else if (lh->getCapture() == nullptr) {
+        return rh->getCapture() != nullptr;
+    } else if (rh->getCapture() == nullptr) {
+        return false;
+    } else {
+        return compare(lh->getCapture(), rh->getCapture());
+    }
+}
+
 static bool lessThan(const Assertion * const lh, const Assertion * const rh) {
     if (lh->getKind() != rh->getKind()) {
         return lh->getKind() < rh->getKind();
@@ -151,6 +175,10 @@ static bool compare(const RE * const lh, const RE * const rh) {
             return *cast<CC>(lh) < *cast<CC>(rh);
         case Type::Name:
             return lessThan(cast<Name>(lh), cast<Name>(rh));
+        case Type::Capture:
+            return lessThan(cast<Capture>(lh), cast<Capture>(rh));
+        case Type::Reference:
+            return lessThan(cast<Reference>(lh), cast<Reference>(rh));
         case Type::Group:
             return lessThan(cast<Group>(lh), cast<Group>(rh));
         case Type::Range:

@@ -54,6 +54,8 @@ RE * replaceCC(RE * re, CC * toReplace, RE * replacement) {
     } else if (Intersect * e = dyn_cast<Intersect>(re)) {
         re = makeIntersect(replaceCC(e->getLH(), toReplace, replacement),
                            replaceCC(e->getRH(), toReplace, replacement));
+    } else if (Capture * c = dyn_cast<Capture>(re)) {
+        re = makeCapture(c->getName(), replaceCC(c->getCapturedRE(), toReplace, replacement));
     } else if (Group * g = dyn_cast<Group>(re)) {
         re = makeGroup(g->getMode(), replaceCC(g->getRE(), toReplace, replacement), g->getSense());
     }

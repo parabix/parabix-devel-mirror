@@ -16,5 +16,6 @@ class RE;
 class Name; class Start; class End;   class CC; 
 class Seq;  class Alt;   class Rep;   class Intersect; 
 class Diff; class Range; class Group; class Assertion;
+class Capture; class Reference;
 
 }

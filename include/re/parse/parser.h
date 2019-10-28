@@ -11,7 +11,7 @@
 #include <set>
 #include <re/adt/re_cc.h>
 
-namespace re { class Name; }
+namespace re { class Name; class Capture;}
 
 namespace re {
 
@@ -260,6 +260,7 @@ protected:
     unsigned                    mCaptureGroupCount;
     RE_Syntax                   mReSyntax;
     NameMap                     mNameMap;
+    std::map<std::string, re::RE *> mCaptureMap;
 };
 
 }

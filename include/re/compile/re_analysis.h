@@ -29,8 +29,6 @@ bool isFixedLength(const RE * re);
 
 int minMatchLength(const RE * re);
 
-bool unitBoundedRep(const RE * re);
-
 bool isTypeForLocal(const RE * re);
     
 bool hasAssertion(const RE * re);

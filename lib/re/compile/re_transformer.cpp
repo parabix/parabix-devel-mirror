@@ -48,6 +48,8 @@ RE * RE_Transformer::transform(RE * const from) { assert (from);
         TRANSFORM(End);
         TRANSFORM(Intersect);
         TRANSFORM(Name);
+        TRANSFORM(Capture);
+        TRANSFORM(Reference);
         TRANSFORM(Group);
         TRANSFORM(Rep);
         TRANSFORM(Seq);
@@ -81,6 +83,17 @@ RE * RE_Transformer::transformName(Name * nm) {
     RE * t = transform(defn);
     if (t == defn) return nm;
     return t;
+}
+
+RE * RE_Transformer::transformCapture(Capture * c) {
+    RE * const captured = c->getCapturedRE();
+    RE * t = transform(captured);
+    if (t == captured) return c;
+    return makeCapture(c->getName(), t);
+}
+
+RE * RE_Transformer::transformReference(Reference * r) {
+    return r;
 }
 
 RE * RE_Transformer::transformCC(CC * cc) {

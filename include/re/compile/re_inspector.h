@@ -22,6 +22,8 @@ protected:
     virtual ~RE_Inspector() {}
     void inspect(RE * r);
     virtual void inspectName(Name * n);
+    virtual void inspectCapture(Capture * c);
+    virtual void inspectReference(Reference * r);
     virtual void inspectStart(Start * s);
     virtual void inspectEnd(End * e);
     virtual void inspectCC(CC * cc);
