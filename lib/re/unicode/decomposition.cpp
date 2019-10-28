@@ -12,7 +12,7 @@
 #include <codecvt>
 #include <llvm/Support/Casting.h>
 #include <re/adt/adt.h>
-#include <re/compile/re_transformer.h>
+#include <re/transforms/re_transformer.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/PropertyAliases.h>
 #include <unicode/data/PropertyObjects.h>

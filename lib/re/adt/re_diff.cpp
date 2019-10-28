@@ -4,22 +4,17 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/adt/re_diff.h>
-
-#include <re/adt/nullable.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_empty_set.h>
-#include <re/adt/validation.h>
-#include <llvm/Support/Casting.h>
+#include <re/adt/adt.h>
 
 using namespace llvm;
 
 namespace re {
 
 RE * makeDiff(RE * lh, RE * rh) {
+    if (lh == rh) return makeEmptySet();
     if (isEmptySeq(lh)) {
-        if (isNullable(rh)) return makeEmptySet();
-        if (validateAssertionFree(rh)) return lh; // EmptySeq()
+        if (isa<Rep>(rh) && (cast<Rep>(rh)->getLB() == 0)) return makeEmptySet();
+        if (isa<CC>(rh) || isa<Seq>(rh)) return lh;
     } else if (LLVM_UNLIKELY(isEmptySet(rh))) {
         return lh;
     } else if (LLVM_UNLIKELY(isEmptySet(lh))) {

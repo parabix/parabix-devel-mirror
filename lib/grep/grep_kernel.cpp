@@ -25,7 +25,7 @@
 #include <re/adt/re_name.h>
 #include <re/alphabet/alphabet.h>
 #include <re/toolchain/toolchain.h>
-#include <re/compile/re_reverse.h>
+#include <re/transforms/re_reverse.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/multiplex_CCs.h>

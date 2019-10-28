@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <re/alphabet/alphabet.h>
+#include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <re/adt/re_re.h>
 
 #include <re/adt/re_alt.h>

@@ -6,11 +6,8 @@
 
 #include <re/adt/re_range.h>
 
-#include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <re/adt/re_cc.h>
-#include <re/adt/re_name.h>
+#include <re/adt/adt.h>
 
 using namespace llvm;
 

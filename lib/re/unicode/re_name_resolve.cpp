@@ -4,8 +4,8 @@
 #include <llvm/Support/ErrorHandling.h>
 #include <re/adt/adt.h>
 #include <re/alphabet/alphabet.h>
-#include <re/compile/re_analysis.h>
-#include <re/compile/re_transformer.h>
+#include <re/analysis/re_analysis.h>
+#include <re/transforms/re_transformer.h>
 #include <re/unicode/resolve_properties.h>
 
 

@@ -4,28 +4,22 @@
  *  icgrep is a trademark of International Characters.
  */
 
-#include <re/adt/re_intersect.h>
-
-#include <re/adt/re_cc.h>
-#include <re/adt/re_name.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_empty_set.h>
-#include <re/adt/nullable.h>
-#include <llvm/Support/Casting.h>
+#include <re/adt/adt.h>
 
 using namespace llvm;
 
 namespace re {
 
 RE * makeIntersect(RE * lh, RE * rh) {
+    if (lh == rh) return lh;
     if (isEmptySet(lh)) return lh;
     if (isEmptySet(rh)) return rh;
     if (isEmptySeq(lh)) {
-        if (isNullable(rh)) return lh;
+        if (isa<Rep>(rh) && (cast<Rep>(rh)->getLB() == 0)) return lh;
         else return makeEmptySet();
     }
     if (isEmptySeq(rh)) {
-        if (isNullable(lh)) return rh;
+        if (isa<Rep>(lh) && (cast<Rep>(lh)->getLB() == 0)) return rh;
         else return makeEmptySet();
     }
     if (defined<CC>(lh) && defined<CC>(rh)) {

@@ -2,7 +2,7 @@
 
 #include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
-#include <re/compile/re_transformer.h>
+#include <re/transforms/re_transformer.h>
 #include <re/unicode/re_name_resolve.h>
 
 #include <vector>                  // for vector, allocator

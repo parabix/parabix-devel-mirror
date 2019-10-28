@@ -2,7 +2,7 @@
 
 #include <vector>                      // for vector, allocator
 #include <re/adt/adt.h>
-#include <re/compile/re_transformer.h>
+#include <re/transforms/re_transformer.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/data/CaseFolding.h>
 #include <llvm/Support/Casting.h>      // for dyn_cast, isa

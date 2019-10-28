@@ -14,7 +14,7 @@
 #include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
 #include <re/alphabet/alphabet.h>
-#include <re/compile/re_transformer.h>
+#include <re/transforms/re_transformer.h>
 #include <re/unicode/decomposition.h>
 #include <unicode/core/unicode_set.h>
 #include "unicode/data/PropertyAliases.h"

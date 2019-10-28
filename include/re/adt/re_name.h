@@ -2,6 +2,7 @@
 #define RE_NAME_H
 
 #include <llvm/Support/Casting.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <re/adt/re_cc.h>
 #include <re/adt/re_re.h>
 
@@ -172,6 +173,11 @@ template <typename To, typename FromTy> To * defCast(FromTy * e) {
         if (def) return defCast<To, FromTy>(def);
     }
     return nullptr;
+}
+
+[[ noreturn ]]
+inline void UndefinedNameError(const re::Name * n) {
+    llvm::report_fatal_error("Error: Undefined name in regular expression: \"" + n->getName() + "\".");
 }
 
 class Capture : public RE {

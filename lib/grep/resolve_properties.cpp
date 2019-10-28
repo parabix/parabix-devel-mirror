@@ -9,10 +9,9 @@
 #include <string>
 #include <grep/grep_engine.h>
 #include <llvm/Support/Casting.h>
-#include <re/adt/re_re.h>
-#include <re/adt/re_name.h>
+#include <re/adt/adt.h>
 #include <re/parse/parser.h>
-#include <re/compile/re_analysis.h>
+#include <re/analysis/re_analysis.h>
 #include <re/unicode/re_name_resolve.h>
 #include <re/unicode/resolve_properties.h>
 #include <kernel/pipeline/driver/cpudriver.h>

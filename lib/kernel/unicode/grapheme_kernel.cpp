@@ -6,12 +6,12 @@
 #include <kernel/unicode/grapheme_kernel.h>
 
 #include <re/toolchain/toolchain.h>
-#include <re/adt/re_name.h>
+#include <re/adt/adt.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
 #include <re/compile/re_compiler.h>
-#include <re/compile/re_name_gather.h>
-#include <re/compile/to_utf8.h>
+#include <re/analysis/re_name_gather.h>
+#include <re/transforms/to_utf8.h>
 #include <re/ucd/ucd_compiler.hpp>
 #include <re/unicode/grapheme_clusters.h>
 #include <re/unicode/re_name_resolve.h>

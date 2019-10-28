@@ -7,7 +7,6 @@ parabix_add_module(
 NAME
     re.adt
 SRC
-    nullable.cpp
     printer_re.cpp
     re_assertion.cpp
     re_cc.cpp
@@ -17,8 +16,8 @@ SRC
     re_range.cpp
     re_re.cpp
     re_rep.cpp
+    memoization.cpp
     re_utility.cpp
-    validation.cpp
 DEPS
     re.alphabet
     re.toolchain

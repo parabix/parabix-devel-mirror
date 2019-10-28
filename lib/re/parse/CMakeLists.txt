@@ -16,5 +16,6 @@ SRC
     Prosite_parser.cpp
 DEPS
     re.adt
+    re.analysis
     ${Boost_LIBRARIES}
 )

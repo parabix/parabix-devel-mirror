@@ -4,8 +4,6 @@
  *  icgrep is a trademark of International Characters.
  */
 
-
-
 #include <re/compile/re_compiler.h>
 
 #include <llvm/ADT/STLExtras.h>         // for make_unique
@@ -15,25 +13,13 @@
 #include <pablo/pe_ones.h>              // for Ones
 #include <pablo/pe_var.h>               // for Var
 #include <pablo/pe_zeroes.h>            // for Zeroes
-#include <re/adt/printer_re.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/re_any.h>
-#include <re/adt/re_assertion.h>        // for Assertion, Assertion::Sense, Asse...
-#include <re/adt/re_cc.h>               // for makeCC
-#include <re/adt/re_diff.h>             // for Diff
-#include <re/adt/re_end.h>
-#include <re/adt/re_intersect.h>        // for Intersect
-#include <re/adt/re_name.h>             // for Name, Name::Type, Name::Type::Zer...
-#include <re/adt/re_rep.h>              // for Rep, Rep::::UNBOUNDED_REP
-#include <re/adt/re_seq.h>              // for Seq
-#include <re/adt/re_start.h>
-#include <re/alphabet/alphabet.h>
+#include <re/adt/adt.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/multiplex_CCs.h>
 #include <re/cc/cc_compiler.h>
-#include <re/compile/to_utf8.h>
-#include <re/compile/re_analysis.h>     // for isByteLength, isUnicodeUnitLength
-#include <re/compile/re_local.h>
+#include <re/transforms/to_utf8.h>
+#include <re/analysis/re_analysis.h>     // for isByteLength, isUnicodeUnitLength
+#include <re/analysis/re_local.h>
 #include <re/toolchain/toolchain.h>
 #include <re/ucd/ucd_compiler.hpp>
 
@@ -259,7 +245,7 @@ MarkerType RE_Compiler::compileAlt(Alt * const alt, const MarkerType base, Pablo
 
 MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker, PabloBuilder & pb) {
     RE * asserted = a->getAsserted();
-    if (a->getKind() == Assertion::Kind::Lookbehind) {
+    if (a->getKind() == Assertion::Kind::LookBehind) {
         MarkerType lookback = compile(asserted, pb);
         AlignMarkers(marker, lookback, pb);
         PabloAST * lb = markerVar(lookback);

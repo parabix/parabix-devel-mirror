@@ -6,13 +6,8 @@
 
 #include <re/adt/re_rep.h>
 
-#include <re/adt/re_assertion.h>
-#include <re/adt/re_seq.h>
-#include <re/adt/re_empty_set.h>
-#include <re/adt/re_alt.h>
-#include <re/adt/nullable.h>
-#include <llvm/Support/Casting.h>
-#include <llvm/Support/ErrorHandling.h>
+#include <re/adt/adt.h>
+#include <re/analysis/nullable.h>
 
 using namespace llvm;
 
@@ -42,12 +37,6 @@ RE * makeRep(RE * re, int lb, const int ub) {
         // Repeated match of empty string: just match once.
         return re;
     }
-    if (isNullable(re)) {
-        if (ub == 1) {
-            return re;
-        }
-        lb = 0;
-    }    
     if (Rep * rep = dyn_cast<Rep>(re)) {
         int l = rep->getLB();
         int u = rep->getUB();

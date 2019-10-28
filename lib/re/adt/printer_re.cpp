@@ -72,11 +72,11 @@ const std::string Printer_RE::PrintRE(const RE * re) {
     } else if (const Assertion * a = dyn_cast<const Assertion>(re)) {
         retVal = (a->getSense() == Assertion::Sense::Positive) ? "" : "Negative";
         switch (a->getKind()) {
-            case Assertion::Kind::Lookahead:
-                retVal += "Lookahead";
+            case Assertion::Kind::LookAhead:
+                retVal += "LookAhead";
                 break;
-            case Assertion::Kind::Lookbehind:
-                retVal += "Lookbehind";
+            case Assertion::Kind::LookBehind:
+                retVal += "LookBehind";
                 break;
             case Assertion::Kind::Boundary:
                 retVal += "Boundary";
