@@ -78,7 +78,7 @@ public:
                      StreamSet * nbrMarker, StreamSet * nbrLex)
     : pablo::PabloKernel(b,
                          "jsonNumberMarker",
-                         {Binding{"basis", basis}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
+                         {Binding{"basis", basis, FixedRate(1), LookAhead(1)}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
                          {Binding{"nbrMarker", nbrMarker}, Binding{"nbrLex", nbrLex}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }

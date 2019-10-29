@@ -200,15 +200,24 @@ void JSONNumberMarker::generatePabloMethod() {
     Var * const nbrMarker = getOutputStreamVar("nbrMarker");
     Var * const nbrLex = getOutputStreamVar("nbrLex");
 
-    PabloAST * _0_9 = ccc.compileCC(re::makeByte(0x30, 0x39));
-    PabloAST * eE = pb.createOr(ccc.compileCC(re::makeByte(0x45)), ccc.compileCC(re::makeByte(0x65)));
-    PabloAST * dot = ccc.compileCC(re::makeByte(0x2E));
+    PabloAST * alleE = pb.createOr(ccc.compileCC(re::makeByte(0x45)), ccc.compileCC(re::makeByte(0x65)));
+    PabloAST * allDot = ccc.compileCC(re::makeByte(0x2E));
+    PabloAST * allPlusMinus = pb.createOr(lex[Lex::hyphen], ccc.compileCC(re::makeByte(0x2B)));
 
     PabloAST * notStrSpan = pb.createNot(strSpan);
     PabloAST * hyphen = pb.createAnd(notStrSpan, lex[Lex::hyphen]);
     PabloAST * digit = pb.createAnd(notStrSpan, lex[Lex::digit]);
+    PabloAST * eE = pb.createAnd(notStrSpan, alleE);
+    PabloAST * dot = pb.createAnd(notStrSpan, allDot);
+    PabloAST * plusMinus = pb.createAnd(notStrSpan, allPlusMinus);
 
-    pb.createAssign(pb.createExtract(nbrMarker, pb.getInteger(0)), digit);
+    PabloAST * nondigit = pb.createNot(digit);
+    PabloAST * nonDigitNorEe = pb.createAnd(nondigit, pb.createNot(eE));
+    PabloAST * advHyphen = pb.createAnd(hyphen, pb.createAdvance(nonDigitNorEe, 1));
+    PabloAST * advHyphenDigit = pb.createAnd(digit, pb.createAdvance(advHyphen, 1));
+    // PabloAST * beginNeg = pb.createLookahead(advHyphenDigit, 1);
+
+    pb.createAssign(pb.createExtract(nbrMarker, pb.getInteger(0)), advHyphenDigit);
 }
 
 void ValidateJSONString::generatePabloMethod() {

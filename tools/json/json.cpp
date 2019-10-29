@@ -59,6 +59,19 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
 
+    StreamSet * const u8index = P->CreateStreamSet(1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        jsonPabloSrc,
+        "UTF8_index_8x1",
+        Bindings { // Input Stream Bindings
+            Binding {"source", u8basis}
+        },
+        Bindings { // Output Stream Bindings
+            Binding {"u8index", u8index}
+        }
+    );
+
     // 1. Lexical analysis on basis stream
     StreamSet * const lexStream = P->CreateStreamSet(14);
     P->CreateKernelCall<PabloSourceKernel>(
