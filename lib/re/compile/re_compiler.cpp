@@ -34,7 +34,7 @@ using namespace llvm;
 
 namespace re {
 
-    
+
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
     mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, basis_set));
@@ -73,7 +73,7 @@ inline MarkerType RE_Compiler::compile(RE * const re, PabloAST * const cursors, 
 inline MarkerType RE_Compiler::compile(RE * const re, PabloBuilder & pb) {
     return process(re, makeMarker(InitialPostPositionUnit, pb.createOnes()), pb);
 }
-    
+
 MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder & pb) {
     if (isa<Name>(re)) {
         return compileName(cast<Name>(re), marker, pb);
@@ -126,7 +126,7 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         }
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
     } else if (a == &cc::Unicode) {
-        MarkerType m = compile(UTF8_Transformer().transformRE(cc), pb);
+        MarkerType m = compile(toUTF8(cc), pb);
         if (isByteLength(cc)) {
             if (marker.pos == FinalMatchUnit) {
                 nextPos = pb.createAdvance(nextPos, 1);
@@ -359,7 +359,7 @@ MarkerType RE_Compiler::compileRep(Rep * const rep, MarkerType marker, PabloBuil
    Given a stream |repeated_j| marking positions associated with |j| consecutive matches to an item
    of length |match_length| compute a stream marking |repeat_count| consecutive occurrences of such items.
 */
-    
+
 PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const int j, const int repeat_count, const int match_length, PabloAST * const indexStream, PabloBuilder & pb) {
     if (j == repeat_count) {
         return repeated_j;
@@ -388,7 +388,7 @@ PabloAST * RE_Compiler::consecutive_matches(PabloAST * const repeated_j, const i
 inline PabloAST * RE_Compiler::reachable(PabloAST *  const repeated, const int length, const int repeat_count, PabloAST * const indexStream, PabloBuilder & pb) {
     if (repeat_count == 0) {
         return repeated;
-    }    
+    }
     const int total_length = repeat_count * length;
     PabloAST * const v2 = pb.createIndexedAdvance(repeated, indexStream, 1);
     PabloAST * reachable = pb.createOr(repeated, v2, "within1");
@@ -414,7 +414,7 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
     //
     // A bounded repetition with an upper bound of at least 2.
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
-        // Check for a regular expression that satisfies on of the special conditions that 
+        // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
         auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
         if (lengths.first == lengths.second) {
@@ -469,7 +469,7 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
     mCompiledName = nestedMap.getParent();
     return makeMarker(m1.pos, m);
 }
-    
+
 MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, MarkerType marker, const int ifGroupSize,  PabloBuilder & pb) {
     if (LLVM_UNLIKELY(ub == 0)) {
         return marker;
@@ -477,7 +477,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
     //
     // A bounded repetition with an upper bound of at least 2.
     if ((ub > 1) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
-        // Check for a regular expression that satisfies on of the special conditions that 
+        // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
         auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
         // TODO: handle fixed lengths > 1
@@ -645,7 +645,7 @@ pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
     return markerVar(m);
 }
 
-    
+
 LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
 }

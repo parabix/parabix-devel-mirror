@@ -16,7 +16,7 @@ using namespace llvm;
 
 namespace re {
 
-class DiffResolver : public RE_Transformer {
+class DiffResolver final : public RE_Transformer {
 public:
     DiffResolver() : RE_Transformer("DiffResolver") {}
     RE * transformDiff(Diff * d) override {

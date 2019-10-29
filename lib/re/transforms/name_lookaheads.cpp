@@ -14,14 +14,14 @@
 using namespace llvm;
 
 namespace re {
- 
-class LookAheadNamer : public RE_Transformer {
+
+class LookAheadNamer final : public RE_Transformer {
 public:
     LookAheadNamer() : RE_Transformer("LookAheadNamer") {}
     RE * transformAssertion (Assertion * a) override;
 private:
 };
-    
+
 RE * LookAheadNamer::transformAssertion (Assertion * a) {
     RE * x0 = a->getAsserted();
     RE * x = transform(x0);
@@ -34,7 +34,7 @@ RE * LookAheadNamer::transformAssertion (Assertion * a) {
         return makeAssertion(x, a->getKind(), a->getSense());
     }
 }
-    
+
 RE * name_lookaheads(RE * re) {
     return LookAheadNamer().transformRE(re);
 }

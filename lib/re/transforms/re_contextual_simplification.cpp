@@ -17,8 +17,8 @@
 
 using namespace llvm;
 namespace re {
-    
-class GCB_Any_Free_Validator: public RE_Validator {
+
+class GCB_Any_Free_Validator final : public RE_Validator {
 public:
     GCB_Any_Free_Validator() : RE_Validator(""), mAnySeen(false), mGCBseen(false) {}
     bool validateName(const Name * n) override {
@@ -26,7 +26,7 @@ public:
         if (nm == ".") {
             if (mGCBseen) return false;
             mAnySeen = true;
-        } 
+        }
         if (nm == "\\b{g}") {
             if (mAnySeen) return false;
             mGCBseen = true;
@@ -42,7 +42,7 @@ bool has_GCB_Any(RE * r) {
     return !GCB_Any_Free_Validator().validateRE(r);
 }
 
-struct NonEmptyValidator : public RE_Validator {
+struct NonEmptyValidator final : public RE_Validator {
     NonEmptyValidator() : RE_Validator() {}
     bool validateStart(const Start *) override {return false;}
     bool validateEnd(const End *) override {return false;}
@@ -59,7 +59,7 @@ struct NonEmptyValidator : public RE_Validator {
         return false;
     }
 };
-   
+
 bool nonEmpty(const RE * r) {
     return NonEmptyValidator().validateRE(r);
 }
@@ -165,13 +165,13 @@ public:
     // following item is nullable.
     RE_Context followingCCorNull();
     RE * currentItem();
-    
+
 private:
     RE_Context * parentContext;
     Seq * contextSeq;
     unsigned contextPos;
 };
-    
+
 RE_Context RE_Context::priorContext() {
     if (contextPos == 0) {
         if (parentContext) {
@@ -316,7 +316,7 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
         } else {
             return ContextMatchCursor{working.ctxt, seq};
         }
-        
+
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         int lb = rep->getLB();
         int ub = rep->getUB();
@@ -368,8 +368,8 @@ ContextMatchCursor ctxt_match(RE * re, Assertion::Kind kind, ContextMatchCursor 
     }
     return ContextMatchCursor{cursor.ctxt, re};
 }
-    
-class ContextualAssertionSimplifier : public RE_Transformer {
+
+class ContextualAssertionSimplifier final : public RE_Transformer {
 public:
     ContextualAssertionSimplifier() :
         RE_Transformer("ContextualAssertionSimplifier", NameTransformationMode::TransformDefinition),
@@ -390,7 +390,7 @@ public:
         if (changeSeen) return makeSeq(t.begin(), t.end());
         return s;
     }
-    
+
     RE * transformRep(Rep * r) override {
         RE * repeated = r->getRE();
         // The repeated subexpression can be transformed, but only with an
@@ -399,7 +399,7 @@ public:
         if (t == repeated) return r;
         return makeRep(t, r->getLB(), r->getUB());
     }
-    
+
     RE * transformStart(Start * s) override {
         RE * prior = mContext.priorContext().currentItem();
         if (prior) {
@@ -411,7 +411,7 @@ public:
         }
         return s;
     }
-    
+
     RE * transformEnd(End * e) override {
         RE * following = mContext.followingContext().currentItem();
         if (following) {
@@ -423,7 +423,7 @@ public:
         }
         return e;
     }
-    
+
     RE * transformAssertion(Assertion * a) override {
         RE * asserted = a->getAsserted();
         Assertion::Kind k = a->getKind();
@@ -442,12 +442,12 @@ public:
         ContextMatchCursor x = ctxt_match(asserted, k, ContextMatchCursor{ctxt, makeSeq()});
         return makeAssertion(x.rslt, k, s);
     }
-    
+
     private:
         RE_Context mContext;
 };
-    
-    
+
+
 RE * simplifyAssertions(RE * r) {
     // If a regular expression has an Any and a GCB, it is unlikely
     // to be of much use to eliminate assertions and possibly very

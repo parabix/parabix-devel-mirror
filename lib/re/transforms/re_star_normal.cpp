@@ -1,28 +1,38 @@
 #include <re/transforms/re_star_normal.h>
-
+#include <re/transforms/re_transformer.h>
 #include <re/adt/adt.h>
 #include <re/analysis/nullable.h>
-#include <re/analysis/re_analysis.h>
+#include <llvm/ADT/SmallVector.h>
 
 using namespace llvm;
 
 namespace re {
 
-inline RE * star_rule(RE * re) {
+class RE_Star_Normal final : public RE_Transformer {
+public:
+    RE_Star_Normal() : RE_Transformer("StarNormal") {}
+    RE * transformRep(Rep * rep) override;
+private:
+    RE * star_rule(RE * re);
+private:
+    SmallVector<RE *, 16> mList;
+};
+
+inline RE * RE_Star_Normal::star_rule(RE * re) {
     if (Seq * seq = dyn_cast<Seq>(re)) {
         if (isNullable(re)) {
-            std::vector<RE *> list;
-            list.reserve(seq->size());
+            mList.clear();
+            mList.reserve(seq->size());
             for (RE * r : *seq) {
                 if (Rep * rep = dyn_cast<Rep>(r)) {
                     if (rep->getLB() == 0) {
-                        list.push_back(rep->getRE());
+                        mList.push_back(rep->getRE());
                     }
                 } else if (!isEmptySeq(r)) {
-                    list.push_back(r);
+                    mList.push_back(r);
                 }
             }
-            return makeAlt(list.begin(), list.end());
+            return makeAlt(mList.begin(), mList.end());
         }
     }
     return re;
@@ -36,6 +46,10 @@ RE * RE_Star_Normal::transformRep(Rep * rep) {
     }
     if (e == e0) return rep;
     return makeRep(e, rep->getLB(), rep->getUB());
+}
+
+RE * convertToStarNormalForm(RE * re) {
+    return RE_Star_Normal().transformRE(re);
 }
 
 }

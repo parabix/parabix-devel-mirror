@@ -62,9 +62,10 @@ RE * excludeUnicodeLineBreak(RE * r) {
 
 RE * regular_expression_passes(RE * re) {
     //Optimization passes to simplify the AST.
-    RE * r = removeNullablePrefix(re);
+    RE * r = re;
+    r = removeNullablePrefix(r);
     r = removeNullableSuffix(r);
-    r = RE_Star_Normal().transformRE(r);
+    r = convertToStarNormalForm(r);
     if (codegen::OptLevel > 1) {
         r = minimizeRE(r);
     } else {

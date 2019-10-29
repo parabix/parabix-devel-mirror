@@ -5,7 +5,7 @@
  */
 
 #include <re/transforms/to_utf8.h>
-
+#include <re/transforms/re_transformer.h>
 #include <re/adt/adt.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/utf/UTF.h>
@@ -13,7 +13,12 @@
 using namespace llvm;
 
 namespace re {
-    
+class UTF8_Transformer : public RE_Transformer {
+public:
+    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer(".ToUTF8", m) {}
+    RE * transformCC(CC * cc) override;
+};
+
 static RE * rangeCodeUnits(codepoint_t lo, codepoint_t hi, unsigned index, const unsigned lgth){
     const codepoint_t hunit = UTF<8>::nthCodeUnit(hi, index);
     const codepoint_t lunit = UTF<8>::nthCodeUnit(lo, index);
@@ -58,6 +63,11 @@ RE * UTF8_Transformer::transformCC(CC * cc) {
         alt.push_back(rangeToUTF8(lo_codepoint(i), hi_codepoint(i)));
     }
     return makeAlt(alt.begin(), alt.end());
+}
+
+RE * toUTF8(RE * r, bool convertName) {
+    const auto mode = convertName ? NameTransformationMode::TransformDefinition : NameTransformationMode::None;
+    return UTF8_Transformer(mode).transformRE(r);
 }
 
 }

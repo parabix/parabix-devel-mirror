@@ -7,19 +7,11 @@
 #ifndef TO_UTF8_H
 #define TO_UTF8_H
 
-#include <re/adt/re_re.h>
-#include <re/transforms/re_transformer.h>
-
 namespace re {
-class CC;
+class RE;
 
-class UTF8_Transformer : public RE_Transformer {
-public:
-    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer(".ToUTF8", m) {}
-    RE * transformCC(CC * cc) override;
-};
+RE * toUTF8(RE * r, bool convertName = false);
 
-inline RE * toUTF8(RE * r, bool convertName = false) {
-    return UTF8_Transformer(convertName ? NameTransformationMode::TransformDefinition : NameTransformationMode::None ).transformRE(r);}
 }
+
 #endif // TO_UTF8_H

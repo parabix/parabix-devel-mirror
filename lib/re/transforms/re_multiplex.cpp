@@ -10,16 +10,16 @@
 using namespace llvm;
 
 namespace re {
-  
 
-class CC_multiplexer : public RE_Transformer {
+
+class CC_multiplexer final : public RE_Transformer {
 public:
-    CC_multiplexer(cc::MultiplexedAlphabet * mpx) :
+    CC_multiplexer(const cc::MultiplexedAlphabet * mpx) :
         RE_Transformer("Multiplex_" + mpx->getName()), mMultiplexedAlphabet(mpx) {}
     RE * transformCC(CC *) override;
     RE * transformName(Name *) override;
 private:
-    cc::MultiplexedAlphabet * mMultiplexedAlphabet;
+    const cc::MultiplexedAlphabet * const mMultiplexedAlphabet;
 };
 
 RE * CC_multiplexer::transformCC(CC * cc) {
@@ -40,8 +40,8 @@ RE * CC_multiplexer::transformName(Name * name) {
     return name;
 }
 
-RE * transformCCs(cc::MultiplexedAlphabet * mpx, RE * re) {
+RE * transformCCs(const cc::MultiplexedAlphabet * const mpx, RE * re) {
     return CC_multiplexer(mpx).transformRE(re);
-} 
+}
 
 }
