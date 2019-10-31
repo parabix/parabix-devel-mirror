@@ -1,7 +1,7 @@
 #include <re/transforms/re_minimizer.h>
 
 #include <re/adt/adt.h>
-#include <re/transforms/re_transformer.h>
+#include <re/transforms/re_memoizing_transformer.h>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <llvm/ADT/SmallVector.h>
@@ -14,34 +14,37 @@ namespace re {
 using Set = flat_set<RE *>;
 using Map = flat_map<RE *, RE *>;
 using List = std::vector<RE *>;
+using Combiner = SmallVector<RE *, 16>;
 
-struct RE_Minimizer : public RE_Transformer {
+struct RE_Minimizer final : public RE_MemoizingTransformer {
 
     RE * transformAlt(Alt * alt) override {
         Set set;
+        Combiner pendingSet;
         set.reserve(alt->size());
-        assert ("combine list must be empty!" && mCombine.empty());
+        assert ("combine list must be empty!" && pendingSet.empty());
         for (RE * item : *alt) {
             // since transform will memorize every item/innerItem, set insert is sufficient here
             item = transform(item);
-            if (LLVM_UNLIKELY(isa<Alt>(item))) {                
+            if (LLVM_UNLIKELY(isa<Alt>(item))) {
                 for (RE * const innerItem : *cast<Alt>(item)) {
                     set.insert(innerItem);
                 }
             } else if (CC * const cc = extractCC(item)) {
-                combineCC(cc);
+                combineCC(cc, pendingSet);
             } else {
                 set.insert(item);
             }
         }
         // insert any CC objects into the alternation
-        for (auto cc : mCombine) {
+        for (auto cc : pendingSet) {
+            // transform(cc) for memoization.
             set.insert(transform(cc));
         }
-        mCombine.clear();
+        pendingSet.clear();
         // Pablo CSE may identify common prefixes but cannot identify common suffixes.
-        extractCommonSuffixes(set);
-        extractCommonPrefixes(set);
+        extractCommonSuffixes(set, pendingSet);
+        extractCommonPrefixes(set, pendingSet);
         if (unchanged(alt, set)) {
             return alt;
         } else {
@@ -50,6 +53,7 @@ struct RE_Minimizer : public RE_Transformer {
     }
 
     RE * transformSeq(Seq * seq) override {
+
         List list;
         list.reserve(seq->size());
         for (RE * item : *seq) {
@@ -97,33 +101,33 @@ struct RE_Minimizer : public RE_Transformer {
         return nm;
     }
 
-    RE_Minimizer() : RE_Transformer("minimizer", NameTransformationMode::TransformDefinition) { }
+    RE_Minimizer() : RE_MemoizingTransformer("Minimizer", NameTransformationMode::TransformDefinition) { }
 
 protected:
 
-    void extractCommonPrefixes(Set & alts) {
+    void extractCommonPrefixes(Set & alts, Combiner & pendingSet) {
         if (LLVM_LIKELY(alts.size() > 1)) {
             SmallVector<RE *, 8> optimized;
             for (auto i = alts.begin(); i != alts.end(); ) {
-                assert ("combine list must be empty!" && mCombine.empty());
+                assert ("combine list must be empty!" && pendingSet.empty());
                 RE * const head = headOf(*i);
                 for (auto j = i + 1; j != alts.end(); ) {
                     if (LLVM_UNLIKELY(head == headOf(*j))) {
-                        mCombine.push_back(*j);
+                        pendingSet.push_back(*j);
                         j = alts.erase(j);
                     } else {
                         ++j;
                     }
                 }
-                if (LLVM_LIKELY(mCombine.empty())) {
+                if (LLVM_LIKELY(pendingSet.empty())) {
                     ++i;
                 } else {
-                    mCombine.push_back(*i);
+                    pendingSet.push_back(*i);
                     i = alts.erase(i);
                     Set tailSet;
-                    tailSet.reserve(mCombine.size());
+                    tailSet.reserve(pendingSet.size());
                     bool nullable = false;
-                    for (RE * const re : mCombine) {
+                    for (RE * const re : pendingSet) {
                         if (LLVM_LIKELY(isa<Seq>(re))) {
                             Seq * const seq = cast<Seq>(re);
                             if (LLVM_LIKELY(seq->size() > 1)) {
@@ -141,7 +145,7 @@ protected:
                         }
                         nullable = true;
                     }
-                    mCombine.clear();
+                    pendingSet.clear();
                     if (LLVM_UNLIKELY(nullable)) {
                         tailSet.insert(transform(makeSeq()));
                     }
@@ -150,32 +154,32 @@ protected:
                 }
             }
             alts.insert(optimized.begin(), optimized.end());
-        }        
+        }
     }
 
-    void extractCommonSuffixes(Set & alts) {
+    void extractCommonSuffixes(Set & alts, Combiner & pendingSet) {
         if (LLVM_LIKELY(alts.size() > 1)) {
             SmallVector<RE *, 8> optimized;
             for (auto i = alts.begin(); i != alts.end(); ) {
-                assert ("combine list must be empty!" && mCombine.empty());
+                assert ("combine list must be empty!" && pendingSet.empty());
                 RE * const last = lastOf(*i);
                 for (auto j = i + 1; j != alts.end(); ) {
                     if (LLVM_UNLIKELY(last == lastOf(*j))) {
-                        mCombine.push_back(*j);
+                        pendingSet.push_back(*j);
                         j = alts.erase(j);
                     } else {
                         ++j;
                     }
                 }
-                if (LLVM_LIKELY(mCombine.empty())) {
+                if (LLVM_LIKELY(pendingSet.empty())) {
                     ++i;
                 } else {
-                    mCombine.push_back(*i);
+                    pendingSet.push_back(*i);
                     i = alts.erase(i);
                     Set initSet;
-                    initSet.reserve(mCombine.size());
+                    initSet.reserve(pendingSet.size());
                     bool nullable = false;
-                    for (RE * const re : mCombine) {
+                    for (RE * const re : pendingSet) {
                         if (LLVM_LIKELY(isa<Seq>(re))) {
                             Seq * const seq = cast<Seq>(re);
                             if (LLVM_LIKELY(seq->size() > 1)) {
@@ -193,7 +197,7 @@ protected:
                         }
                         nullable = true;
                     }
-                    mCombine.clear();
+                    pendingSet.clear();
                     if (LLVM_UNLIKELY(nullable)) {
                         initSet.insert(transform(makeSeq()));
                     }
@@ -202,7 +206,7 @@ protected:
                 }
             }
             alts.insert(optimized.begin(), optimized.end());
-        }        
+        }
     }
 
     static CC * extractCC(RE * const re) {
@@ -217,14 +221,14 @@ protected:
         return nullptr;
     }
 
-    void combineCC(CC * const cc) {
-        for (RE *& existing : mCombine) {
+    void combineCC(CC * const cc, Combiner & pendingSet) {
+        for (RE *& existing : pendingSet) {
             if (LLVM_LIKELY(cast<CC>(existing)->getAlphabet() == cc->getAlphabet())) {
                 existing = makeCC(cast<CC>(existing), cc);
                 return;
             }
         }
-        mCombine.push_back(cc);
+        pendingSet.push_back(cc);
     }
 
     static RE * combineTwoReps(Rep * const r1, Rep * const r2) {
@@ -298,9 +302,7 @@ protected:
         return true;
     }
 
-    SmallVector<RE *, 16> mCombine;
 };
-
 
 RE * minimizeRE(RE * re) {
     return RE_Minimizer().transformRE(re);

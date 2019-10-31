@@ -9,8 +9,7 @@
 #include <boost/container/flat_set.hpp>
 #include <re/adt/adt.h>
 #include <re/analysis/re_inspector.h>
-#include <re/transforms/re_transformer.h>
-#include <llvm/Support/raw_ostream.h>
+#include <re/transforms/re_memoizing_transformer.h>
 
 using namespace llvm;
 
@@ -19,7 +18,7 @@ namespace re {
 using Set = boost::container::flat_set<RE *>;
 using List = std::vector<RE *>;
 
-struct RE_Simplifier final : public RE_Transformer {
+struct RE_Simplifier final : public RE_MemoizingTransformer {
 
     RE * transformAlt(Alt * alt) override {
         Set set;
@@ -55,7 +54,7 @@ struct RE_Simplifier final : public RE_Transformer {
         return nm;
     }
 
-    RE_Simplifier() : RE_Transformer("Simplifier", NameTransformationMode::TransformDefinition) { }
+    RE_Simplifier() : RE_MemoizingTransformer("Simplifier", NameTransformationMode::TransformDefinition) { }
 
 };
 
@@ -81,7 +80,7 @@ private:
 struct UnneededCaptureRemoval  : public RE_Transformer {
     UnneededCaptureRemoval(ReferenceSet & references)
     : RE_Transformer("UnneededCaptureRemoval"), mReferences(references) {}
-    
+
     RE * transformCapture(Capture * c) override {
         auto name = c->getName();
         auto x = c->getCapturedRE();

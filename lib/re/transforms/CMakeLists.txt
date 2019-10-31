@@ -16,6 +16,7 @@ SRC
     re_reverse.cpp
     re_simplifier.cpp
     re_star_normal.cpp
+    re_memoizing_transformer.cpp
     re_transformer.cpp
     remove_nullable.cpp
     replaceCC.cpp

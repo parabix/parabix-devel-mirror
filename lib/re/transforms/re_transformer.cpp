@@ -20,7 +20,7 @@ RE * RE_Transformer::transformRE(RE * re) {
     RE * initialRE = re;
     RE * finalRE = transform(re);
     bool ShowRE = PrintOptionIsSet(ShowAllREs) && !mTransformationName.empty();
-    if (PrintOptionIsSet(ShowREs) && (initialRE != finalRE)) { 
+    if (PrintOptionIsSet(ShowREs) && (initialRE != finalRE)) {
         ShowRE |= !mTransformationName.empty() && (mTransformationName[0] != '.');
     }
     if (ShowRE)  {
@@ -53,17 +53,6 @@ RE * RE_Transformer::transform(RE * const from) { assert (from);
     }
     #undef TRANSFORM
     assert (to);
-
-    // Do we already have a memoized version of the transformed RE?
-    if (from != to) {
-        const auto f = mMap.find(to);
-        if (LLVM_LIKELY(f == mMap.end())) {
-            mMap.emplace(to, to);
-        } else {
-            to = f->second;
-        }
-    }
-
     return to;
 }
 
@@ -104,7 +93,7 @@ RE * RE_Transformer::transformEnd(End * e) {
 }
 
 RE * RE_Transformer::transformSeq(Seq * seq) {
-    std::vector<RE *> elems;
+    SmallVector<RE *, 16> elems;
     elems.reserve(seq->size());
     bool any_changed = false;
     for (RE * e : *seq) {
@@ -117,7 +106,7 @@ RE * RE_Transformer::transformSeq(Seq * seq) {
 }
 
 RE * RE_Transformer::transformAlt(Alt * alt) {
-    std::vector<RE *> elems;
+    SmallVector<RE *, 16> elems;
     elems.reserve(alt->size());
     bool any_changed = false;
     for (RE * e : *alt) {

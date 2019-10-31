@@ -6,10 +6,8 @@
 
 #pragma once
 
-#include <map>
 #include <string>
 #include <re/adt/adt_forward_decl.h>
-#include <re/adt/memoization.h>
 
 namespace re {
 
@@ -26,7 +24,7 @@ protected:
     : mTransformationName(std::move(transformationName)), mNameTransform(m) {}
 
     virtual ~RE_Transformer() {}
-    RE * transform(RE * r);
+    virtual RE * transform(RE * r);
     virtual RE * transformName(Name * n);
     virtual RE * transformCapture(Capture * c);
     virtual RE * transformReference(Reference * r);
@@ -44,7 +42,6 @@ protected:
 private:
     const std::string mTransformationName;
     const NameTransformationMode mNameTransform;
-    std::map<RE *, RE *, MemoizerComparator> mMap;
 };
 
 }
