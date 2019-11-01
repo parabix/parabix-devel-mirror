@@ -342,7 +342,7 @@ set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${QA_DIR}
-  COMMAND python greptest.py --random_flag_count=2 ${BIN_DIR}/icgrep)
+  COMMAND python greptest.py --random_flag_count=2 --tests_per_grepcase=2 ${BIN_DIR}/icgrep)
 
 add_test(
   NAME proptest
@@ -388,7 +388,7 @@ SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}
-    COMMAND python greptest.py --random_flag_count=2 "${BIN_DIR}/icgrep")
+    COMMAND python greptest.py --random_flag_count=2 --tests_per_grepcase=2 "${BIN_DIR}/icgrep")
 
 add_custom_target (proptest
     WORKING_DIRECTORY ${QA_DIR}
