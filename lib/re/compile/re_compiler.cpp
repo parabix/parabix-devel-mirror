@@ -239,7 +239,7 @@ MarkerType RE_Compiler::compileAlt(Alt * const alt, const MarkerType base, Pablo
     if (isa<Zeroes>(accum[FinalPostPositionUnit])) {
         return makeMarker(InitialPostPositionUnit, combine);
     }
-    combine = pb.createOr(pb.createMatchStar(combine, u8NonFinal(pb)), accum[FinalPostPositionUnit], "alt");
+    combine = pb.createOr(pb.createOr(pb.createAnd(combine, u8Final(pb)), pb.createScanThru(pb.createAnd(u8NonFinal(pb), combine), u8NonFinal(pb))), accum[FinalPostPositionUnit], "alt");
     return makeMarker(FinalPostPositionUnit, combine);
 }
 
@@ -608,7 +608,7 @@ inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosi
             marker.pos = InitialPostPositionUnit;
         }
         if (newpos == FinalPostPositionUnit) {
-            marker.stream =  pb.createMatchStar(marker.stream, u8NonFinal(pb), "fpp");
+            marker.stream = pb.createOr(pb.createAnd(marker.stream, u8Final(pb)), pb.createScanThru(pb.createAnd(u8NonFinal(pb), marker.stream), u8NonFinal(pb), "fpp"));
             marker.pos = FinalPostPositionUnit;
         }
     }
