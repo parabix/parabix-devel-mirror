@@ -3,16 +3,19 @@
 #include <re/adt/adt.h>
 #include <re/transforms/re_memoizing_transformer.h>
 #include <boost/container/flat_set.hpp>
-#include <boost/container/flat_map.hpp>
+#include <boost/container/small_vector.hpp>
+
 #include <llvm/ADT/SmallVector.h>
 
 using namespace llvm;
 using namespace boost::container;
 
+template <typename T, unsigned N>
+using small_flat_set = flat_set<T, std::less<T>, small_vector<T, N>>;
+
 namespace re {
 
-using Set = flat_set<RE *>;
-using Map = flat_map<RE *, RE *>;
+using Set = small_flat_set<RE *, 16>;
 using List = std::vector<RE *>;
 using Combiner = SmallVector<RE *, 16>;
 
@@ -24,15 +27,18 @@ struct RE_Minimizer final : public RE_MemoizingTransformer {
         set.reserve(alt->size());
         assert ("combine list must be empty!" && pendingSet.empty());
         for (RE * item : *alt) {
-            // since transform will memorize every item/innerItem, set insert is sufficient here
+            // since transform will memorize every item/nestedItem, set insert is sufficient here
             item = transform(item);
             if (LLVM_UNLIKELY(isa<Alt>(item))) {
-                for (RE * const innerItem : *cast<Alt>(item)) {
-                    set.insert(innerItem);
+                const Alt & nestedAlt = *cast<Alt>(item);
+                set.reserve(set.capacity() + nestedAlt.size());
+                for (RE * const nestedItem : nestedAlt) {
+                    assert ("nested Alts should already be flattened!" && !isa<Alt>(nestedItem));
+                    if (LLVM_LIKELY(!foundCCToInsertIntoPendingSet(item, pendingSet))) {
+                        set.insert(nestedItem);
+                    }
                 }
-            } else if (CC * const cc = extractCC(item)) {
-                combineCC(cc, pendingSet);
-            } else {
+            } else if (!foundCCToInsertIntoPendingSet(item, pendingSet)) {
                 set.insert(item);
             }
         }
@@ -94,11 +100,6 @@ struct RE_Minimizer final : public RE_MemoizingTransformer {
         } else {
             return makeSeq(list.begin(), list.end());
         }
-    }
-
-    RE * transformName(Name * nm) override {
-        nm->setDefinition(transform(nm->getDefinition()));
-        return nm;
     }
 
     RE_Minimizer() : RE_MemoizingTransformer("Minimizer", NameTransformationMode::TransformDefinition) { }
@@ -209,19 +210,21 @@ protected:
         }
     }
 
-    static CC * extractCC(RE * const re) {
+    static bool foundCCToInsertIntoPendingSet(RE * const re, Combiner & pendingSet) {
         if (isa<CC>(re)) {
-            return cast<CC>(re);
+            combineCC(cast<CC>(re), pendingSet);
+            return true;
         } else if (isa<Name>(re)) {
             RE * const def = cast<Name>(re)->getDefinition();
             if (LLVM_LIKELY(isa<CC>(def))) {
-                return cast<CC>(def);
+                combineCC(cast<CC>(def), pendingSet);
+                return true;
             }
         }
-        return nullptr;
+        return false;
     }
 
-    void combineCC(CC * const cc, Combiner & pendingSet) {
+    static void combineCC(CC * const cc, Combiner & pendingSet) {
         for (RE *& existing : pendingSet) {
             if (LLVM_LIKELY(cast<CC>(existing)->getAlphabet() == cc->getAlphabet())) {
                 existing = makeCC(cast<CC>(existing), cc);

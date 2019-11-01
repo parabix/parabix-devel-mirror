@@ -92,24 +92,24 @@ struct LengthGroupParameters {
         MAX_HASH_BITS(b->getSize(encodingScheme.MAX_HASH_BITS)),
         SUFFIX_BITS(b->getSize(7)),
         SUFFIX_MASK(b->getSize(0x7F)),
-        groupHalfLength(1 << boost::intrusive::detail::floor_log2(groupInfo.lo)),
-        halfLengthTy(b->getIntNTy(8 * groupHalfLength)),
+        groupHalfLength(1UL << boost::intrusive::detail::floor_log2(groupInfo.lo)),
+        halfLengthTy(b->getIntNTy(8U * groupHalfLength)),
         halfSymPtrTy(halfLengthTy->getPointerTo()),
         HALF_LENGTH(b->getSize(groupHalfLength)),
         LO(b->getSize(groupInfo.lo)),
         HI(b->getSize(groupInfo.hi)),
         // All subtables are sized the same.
-        SUBTABLE_SIZE(b->getSize((1 << groupInfo.hash_bits) * groupInfo.hi)),
+        SUBTABLE_SIZE(b->getSize((1UL << groupInfo.hash_bits) * groupInfo.hi)),
         HASH_BITS(b->getSize(groupInfo.hash_bits)),
-        EXTENDED_BITS(b->getSize(std::max(groupInfo.hash_bits + groupInfo.length_extension_bits, (groupInfo.encoding_bytes -1 ) * 7))),
-        HASH_MASK(b->getSize((1 << groupInfo.hash_bits) - 1)),
+        EXTENDED_BITS(b->getSize(std::max((groupInfo.hash_bits + groupInfo.length_extension_bits), ((groupInfo.encoding_bytes - 1U) * 7U)))),
+        HASH_MASK(b->getSize((1UL << groupInfo.hash_bits) - 1UL)),
         ENC_BYTES(b->getSize(groupInfo.encoding_bytes)),
-        MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1)),
+        MAX_INDEX(b->getSize(groupInfo.encoding_bytes - 1UL)),
         PREFIX_BASE(b->getSize(groupInfo.prefix_base)),
         PREFIX_LENGTH_OFFSET(b->getSize(encodingScheme.prefixLengthOffset(groupInfo.lo))),
-        LENGTH_MASK(b->getSize(2 * groupHalfLength - 1)),
-        EXTENSION_MASK(b->getSize((1 << groupInfo.length_extension_bits) - 1)) {
-            assert(groupInfo.hi <= (1 << (boost::intrusive::detail::floor_log2(groupInfo.lo) + 1)));
+        LENGTH_MASK(b->getSize(2UL * groupHalfLength - 1UL)),
+        EXTENSION_MASK(b->getSize((1UL << groupInfo.length_extension_bits) - 1UL)) {
+            assert(groupInfo.hi <= (1UL << (boost::intrusive::detail::floor_log2(groupInfo.lo) + 1UL)));
         }
 };
 

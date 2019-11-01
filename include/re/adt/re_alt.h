@@ -30,7 +30,8 @@ protected:
     friend Alt * makeAlt();
     template<typename iterator> friend RE * makeAlt(iterator, iterator);
     Alt() : RE(ClassTypeId::Alt), std::vector<RE*, ProxyAllocator<RE *>>(mAllocator) {}
-    Alt(iterator begin, iterator end)
+    template<typename iterator>
+    Alt(const iterator begin, const iterator end)
     : RE(ClassTypeId::Alt), std::vector<RE*, ProxyAllocator<RE *>>(begin, end, mAllocator) { }
 };
 
@@ -47,15 +48,14 @@ protected:
 inline Alt * makeAlt() {
     return new Alt();
 }
-    
+
 template<typename iterator>
-RE * makeAlt(iterator begin, iterator end) {
-    Alt * newAlt = makeAlt();
+RE * makeAlt(const iterator begin, const iterator end) {
     if (LLVM_UNLIKELY(begin == end)) {
-        return newAlt;
+        return new Alt();
     }
 
-    llvm::SmallVector<CC *, 2> CCs(0); // CCs with possibly different alphabets
+    llvm::SmallVector<CC *, 2> CCs; // CCs with possibly different alphabets
     auto combineCC = [&CCs] (CC * cc) {
         for (CC *& existing : CCs) {
             if (LLVM_LIKELY(existing->getAlphabet() == cc->getAlphabet())) {
@@ -66,56 +66,61 @@ RE * makeAlt(iterator begin, iterator end) {
         CCs.push_back(cc);
     };
 
-    bool nullable = false;
-    RE * nullableSeq = nullptr;
+    RE * nullableRE = nullptr;
+    llvm::SmallVector<RE *, 32> newAlt;
+    newAlt.reserve(std::distance(begin, end));
     for (auto i = begin; i != end; ++i) {
-        if (CC * cc = llvm::dyn_cast<CC>(*i)) {
-            combineCC(cc);
-        } else if (const Alt * alt = llvm::dyn_cast<Alt>(*i)) {
+        if (llvm::isa<CC>(*i)) {
+            combineCC(llvm::cast<CC>(*i));
+        } else if (llvm::isa<Alt>(*i)) {
             // We have an Alt to embed within the alt.  We extract the individual
             // elements to include within the new alt.   Note that recursive flattening
             // is not required, if the elements themselves were created with makeAlt.
-            for (RE * a : *alt) {
-                if (CC * cc = llvm::dyn_cast<CC>(a)) {
-                    combineCC(cc);
-                } else if (isEmptySeq(a) && !nullable) {
-                    nullable = true;
-                    nullableSeq = a;
+            const Alt & nestedAlt = *llvm::cast<Alt>(*i);
+            newAlt.reserve(newAlt.capacity() + nestedAlt.size());
+            for (RE * a : nestedAlt) {
+                if (llvm::isa<CC>(a)) {
+                    combineCC(llvm::cast<CC>(a));
+                } else if (LLVM_UNLIKELY(isEmptySeq(a))) {
+                    if (nullableRE == nullptr) {
+                        nullableRE = a;
+                    }
                 } else {
-                    newAlt->push_back(a);
+                    newAlt.push_back(a);
                 }
             }
         } else if (const Rep * rep = llvm::dyn_cast<Rep>(*i)) {
             if (rep->getLB() == 0) {
-                if (nullable) {
+                if (nullableRE == nullptr) {
                     // Already have a nullable case.
-                    newAlt->push_back(makeRep(rep->getRE(), 1, rep->getUB()));
-                }
-                else {
+                    newAlt.push_back(makeRep(rep->getRE(), 1, rep->getUB()));
+                } else {
                     // This will be the nullable case.
-                    nullableSeq = *i;
-                    nullable = true;
+                    nullableRE = *i;
                 }
             } else {
-                newAlt->push_back(*i);
+                newAlt.push_back(*i);
             }
         } else if (isEmptySeq(*i)) {
-            if (!nullable) {
-                nullable = true;
-                nullableSeq = *i;
+            if (nullableRE == nullptr) {
+                nullableRE = *i;
             }
         } else {
-            newAlt->push_back(*i);
+            newAlt.push_back(*i);
         }
     }
-    newAlt->insert(newAlt->end(), CCs.begin(), CCs.end());
-    if (nullable) {
-        if (nullableSeq == nullptr) {
-            nullableSeq = makeSeq();
-        }
-        newAlt->push_back(nullableSeq);
+
+    newAlt.insert(newAlt.end(), CCs.begin(), CCs.end());
+
+    if (nullableRE) {
+        newAlt.push_back(nullableRE);
     }
-    return newAlt->size() == 1 ? newAlt->front() : newAlt;
+
+    if (LLVM_UNLIKELY(newAlt.size() == 1)) {
+        return newAlt.front();
+    } else {
+        return new Alt(newAlt.begin(), newAlt.end());
+    }
 }
 
 inline RE * makeAlt(std::initializer_list<RE *> list) {

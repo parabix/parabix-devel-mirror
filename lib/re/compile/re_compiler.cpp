@@ -79,7 +79,7 @@ MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder &
         return compileName(cast<Name>(re), marker, pb);
     } else if (Capture * c = dyn_cast<Capture>(re)) {
         return process(c->getCapturedRE(), marker, pb);
-    } else if (Reference * r = dyn_cast<Reference>(re)) {
+    } else if (LLVM_UNLIKELY(isa<Reference>(re))) {
         llvm::report_fatal_error("back references not supported in icgrep.");
     } else if (isa<Seq>(re)) {
         return compileSeq(cast<Seq>(re), marker, pb);

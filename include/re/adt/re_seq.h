@@ -30,7 +30,8 @@ protected:
     friend Seq * makeSeq();
     template<typename iterator> friend RE * makeSeq(const iterator, const iterator);
     Seq() : RE(ClassTypeId::Seq), std::vector<RE*, ProxyAllocator<RE *>>(mAllocator) {}
-    Seq(iterator begin, iterator end)
+    template<typename iterator>
+    Seq(const iterator begin, const iterator end)
     : RE(ClassTypeId::Seq), std::vector<RE*, ProxyAllocator<RE *>>(begin, end, mAllocator) { }
 };
 
@@ -40,23 +41,27 @@ inline Seq * makeSeq() {
 
 template<typename iterator>
 inline RE * makeSeq(const iterator begin, const iterator end) {
-    Seq * seq = makeSeq();
+    if (LLVM_UNLIKELY(begin == end)) {
+        return new Seq();
+    }
+    llvm::SmallVector<RE *, 32> newSeq;
+    newSeq.reserve(std::distance(begin, end));
     for (auto i = begin; i != end; ++i) {
         RE * const item = *i;
         if (LLVM_UNLIKELY(isEmptySet(item))) {
             return item;
         } else if (LLVM_UNLIKELY(llvm::isa<Seq>(item))) {
-            for (RE * const innerItem : *llvm::cast<Seq>(item)) {
-                seq->push_back(innerItem);
-            }
+            const Seq & nestedSeq = *llvm::cast<Seq>(item);
+            newSeq.reserve(newSeq.capacity() + nestedSeq.size());
+            newSeq.insert(newSeq.end(), nestedSeq.begin(), nestedSeq.end());
         } else {
-            seq->push_back(item);
+            newSeq.push_back(item);
         }
     }
-    if (seq->size() == 1) {
-        return seq->front();
+    if (newSeq.size() == 1) {
+        return newSeq.front();
     }
-    return seq;
+    return new Seq(newSeq.begin(), newSeq.end());
 }
 
 inline RE * makeSeq(std::initializer_list<RE *> list) {
@@ -68,7 +73,7 @@ inline bool isEmptySeq(RE * s) {
 }
 
 inline RE * u32string2re(std::u32string s) {
-    std::vector<RE *> ccs;
+    llvm::SmallVector<RE *, 32> ccs;
     for (auto c : s) {
         ccs.push_back(makeCC(UCD::UnicodeSet(c)));
     }

@@ -431,7 +431,7 @@ Value * StaticBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */
 }
 
 void StaticBuffer::linearizeBuffer(BuilderPtr b, llvm::Value * const produced, llvm::Value * const consumed) const {
-
+#if 0
     if (mLinear) {
 
         Value * const handle = getHandle(b);
@@ -469,6 +469,7 @@ void StaticBuffer::linearizeBuffer(BuilderPtr b, llvm::Value * const produced, l
 
 
     }
+#endif
 }
 
 // Dynamic Buffer
@@ -650,7 +651,7 @@ Value * DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Val
             Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
             requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
         }
-        Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);        
+        Value * newBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
         newBuffer = addUnderflow(b, newBuffer, mUnderflow);
 
         indices[1] = b->getInt32(BaseAddress);

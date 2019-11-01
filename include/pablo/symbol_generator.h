@@ -23,7 +23,7 @@ class SymbolGenerator {
     friend class PabloKernel;
     using Allocator = PabloAST::Allocator;
 public:
-    using IntTy = int64_t;
+    using IntTy = uint64_t;
     String * makeString(const llvm::StringRef prefix) noexcept;
     Integer * getInteger(const IntTy value, unsigned intWidth = 64) noexcept;
     ~SymbolGenerator() { }

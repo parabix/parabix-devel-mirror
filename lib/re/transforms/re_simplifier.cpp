@@ -7,15 +7,21 @@
 #include <re/transforms/re_simplifier.h>
 
 #include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
 #include <re/adt/adt.h>
 #include <re/analysis/re_inspector.h>
 #include <re/transforms/re_memoizing_transformer.h>
+
+using namespace boost::container;
+
+template <typename T, unsigned N>
+using small_flat_set = flat_set<T, std::less<T>, small_vector<T, N>>;
 
 using namespace llvm;
 
 namespace re {
 
-using Set = boost::container::flat_set<RE *>;
+using Set = small_flat_set<RE *, 16>;
 using List = std::vector<RE *>;
 
 struct RE_Simplifier final : public RE_MemoizingTransformer {
@@ -26,9 +32,9 @@ struct RE_Simplifier final : public RE_MemoizingTransformer {
         for (RE * item : *alt) {
             item = transform(item);
             if (LLVM_UNLIKELY(isa<Alt>(item))) {
-                for (RE * innerAlt : *cast<Alt>(item)) {
-                    set.insert(innerAlt);
-                }
+                const Alt & alt = *cast<Alt>(item);
+                set.reserve(set.capacity() + alt.size());
+                set.insert(alt.begin(), alt.end());
             }  else {
                 set.insert(item);
             }

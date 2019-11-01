@@ -1,7 +1,6 @@
 #include <re/analysis/re_analysis.h>
 
 #include <limits.h>
-#include <set>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Support/raw_ostream.h>
 #include <re/adt/adt.h>
@@ -11,11 +10,17 @@
 #include <re/transforms/to_utf8.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/utf/UTF.h>
+#include <boost/container/flat_set.hpp>
+#include <boost/container/small_vector.hpp>
+
+using namespace boost::container;
+template <typename T, unsigned N>
+using small_flat_set = flat_set<T, std::less<T>, small_vector<T, N>>;
 
 using namespace llvm;
 
 namespace re {
-    
+
 bool matchesEmptyString(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {
@@ -339,7 +344,7 @@ bool isFixedLength(const RE * re) {
     return true; // otherwise = CC, Any, Start, End, Range, Assertion
 }
 
-   
+
 int minMatchLength(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         int minAltLength = INT_MAX;
@@ -382,9 +387,9 @@ int minMatchLength(const RE * re) {
     }
     return 0; // otherwise
 }
-    
 
-//Cases that not include bounded repetition, assertion, start and end type can suit for local language compile pipeline. 
+
+//Cases that not include bounded repetition, assertion, start and end type can suit for local language compile pipeline.
 bool isTypeForLocal(const RE * re) {
     if (const Name * n = dyn_cast<Name>(re)) {
         return isTypeForLocal(n->getDefinition());
@@ -453,9 +458,9 @@ bool hasAssertion(const RE * re) {
 }
 
 struct ByteTestComplexity {
-    
+
     void gatherTests(RE * re);
-    
+
     UCD::UnicodeSet equalityTests;
     UCD::UnicodeSet lessThanTests;
     unsigned testCount;
@@ -537,7 +542,7 @@ bool hasTriCCwithinLimit(RE * r, unsigned byteCClimit, RE * & prefixRE, RE * & s
     return false;
 }
 
-    
+
 bool hasEndAnchor(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {
@@ -559,7 +564,7 @@ bool hasEndAnchor(const RE * re) {
     }
     return false; // otherwise
 }
-    
+
 //
 //  Back Reference Analysis
 //
@@ -586,11 +591,11 @@ bool DefiniteLengthBackReferencesOnly(const RE * re) {
         // a variable length element is encounterd, the list of available_captures
         // is cleared.
         //
-        std::set<const Capture *> available_captures;
+        small_flat_set<const Capture *, 8> available_captures;
         for (const RE * e : *seq) {
             if (const Reference * r = dyn_cast<Reference>(e)) {
                 auto capture = r->getCapture();
-                if (available_captures.find(cast<Capture>(capture)) == available_captures.end()) {
+                if (available_captures.count(cast<Capture>(capture)) == 0) {
                     // Capture is not available.
                     return false;
                 } else {
@@ -617,7 +622,7 @@ bool DefiniteLengthBackReferencesOnly(const RE * re) {
         return DefiniteLengthBackReferencesOnly(n->getDefinition());
     } else if (const Capture * c = dyn_cast<Capture>(re)) {
         return DefiniteLengthBackReferencesOnly(c->getCapturedRE());
-    } else if (const Reference * r = dyn_cast<Reference>(re)) {
+    } else if (isa<Reference>(re)) {
         return false;
     }
     return true; // otherwise = CC, Any, Start, End, Range
