@@ -2,20 +2,16 @@
 
 #include <re/adt/adt.h>
 #include <re/transforms/re_memoizing_transformer.h>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/small_vector.hpp>
+#include <util/small_flat_set.hpp>
 
 #include <llvm/ADT/SmallVector.h>
 
 using namespace llvm;
-using namespace boost::container;
 
-template <typename T, unsigned N>
-using small_flat_set = flat_set<T, std::less<T>, small_vector<T, N>>;
 
 namespace re {
 
-using Set = small_flat_set<RE *, 16>;
+using Set = SmallFlatSet<RE *, 16>;
 using List = std::vector<RE *>;
 using Combiner = SmallVector<RE *, 16>;
 

@@ -6,22 +6,17 @@
 
 #include <re/transforms/re_simplifier.h>
 
-#include <boost/container/flat_set.hpp>
-#include <boost/container/small_vector.hpp>
 #include <re/adt/adt.h>
 #include <re/analysis/re_inspector.h>
 #include <re/transforms/re_memoizing_transformer.h>
 
-using namespace boost::container;
-
-template <typename T, unsigned N>
-using small_flat_set = flat_set<T, std::less<T>, small_vector<T, N>>;
+#include <util/small_flat_set.hpp>
 
 using namespace llvm;
 
 namespace re {
 
-using Set = small_flat_set<RE *, 16>;
+using Set = SmallFlatSet<RE *, 16>;
 using List = std::vector<RE *>;
 
 struct RE_Simplifier final : public RE_MemoizingTransformer {
