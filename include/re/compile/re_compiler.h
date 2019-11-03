@@ -125,7 +125,6 @@ private:
     MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, int ifGroupSize,  pablo::PabloBuilder & pb);
 
     MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
-    MarkerType compileAny(const MarkerType m, pablo::PabloBuilder & pb);
     MarkerType compileStart(MarkerType marker, pablo::PabloBuilder & pb);
     MarkerType compileEnd(MarkerType marker, pablo::PabloBuilder & pb);
 

@@ -89,8 +89,6 @@ MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder &
         return compileRep(cast<Rep>(re), marker, pb);
     } else if (isa<Assertion>(re)) {
         return compileAssertion(cast<Assertion>(re), marker, pb);
-    } else if (isa<Any>(re)) {
-        return compileAny(marker, pb);
     } else if (isa<Diff>(re)) {
         return compileDiff(cast<Diff>(re), marker, pb);
     } else if (isa<Intersect>(re)) {
@@ -105,11 +103,6 @@ MarkerType RE_Compiler::process(RE * const re, MarkerType marker, PabloBuilder &
     } else {
         UnsupportedRE("RE Compiler failed to process " + Printer_RE::PrintRE(re));
     }
-}
-
-inline MarkerType RE_Compiler::compileAny(const MarkerType m, PabloBuilder & pb) {
-    PabloAST * const nextFinalByte = markerVar(AdvanceMarker(m, FinalPostPositionUnit, pb));
-    return makeMarker(FinalMatchUnit, nextFinalByte);
 }
 
 MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder & pb) {
