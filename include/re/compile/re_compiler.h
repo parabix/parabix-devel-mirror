@@ -146,7 +146,6 @@ private:
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     cc::CC_Compiler &                               mCCCompiler;
     const cc::Alphabet &                            mIndexingAlphabet;
-    pablo::PabloAST *                               mLineBreak;
     re::Name *                                      mNonFinalName;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;

@@ -26,8 +26,6 @@
 namespace pablo { class PabloAST; }
 namespace pablo { class Var; }
 namespace pablo { class PabloKernel; }
-namespace re { class Alt; }
-namespace re { class RE; }
 
 using namespace pablo;
 using namespace llvm;
@@ -589,16 +587,16 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
 }
 
 inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuilder & pb) {
-    PabloAST * const sol = pb.createNot(pb.createAdvance(pb.createNot(mLineBreak), 1));
+    PabloAST * const SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
     MarkerType m = AdvanceMarker(marker, InitialPostPositionUnit, pb);
-    return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(m), sol, "sol"));
+    return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(m), SOT, "SOT"));
 }
 
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
-    PabloAST * const nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-    PabloAST * unterminatedLineAtEOF = pb.createAtEOF(pb.createAdvance(pb.createNot(mLineBreak), 1), "unterminatedLineAtEOF");
-    PabloAST * const atEOL = pb.createAnd(pb.createOr(mLineBreak, unterminatedLineAtEOF), nextPos, "eol");
-    return makeMarker(FinalPostPositionUnit, atEOL);
+    PabloAST * const nextPos = markerVar(AdvanceMarker(marker, InitialPostPositionUnit, pb));
+    PabloAST * endOfText = pb.createAtEOF(pb.createAdvance(pb.createOnes(), 1), "EOT");
+    PabloAST * const EOT_match = pb.createAnd(endOfText, nextPos, "EOT_match");
+    return makeMarker(InitialPostPositionUnit, EOT_match);
 }
 
 inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosition newpos, PabloBuilder & pb) {
@@ -656,12 +654,10 @@ RE_Compiler::RE_Compiler(PabloBlock * scope,
 : mEntryScope(scope)
 , mCCCompiler(ccCompiler)
 , mIndexingAlphabet(indexingAlphabet)
-, mLineBreak(nullptr)
 , mWhileTest(nullptr)
 , mStarDepth(0)
 , mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
-    mLineBreak = pb.createZeroes();  // default so "^/$" matches start/end of text only
     mNonFinalName = makeName("u8NonFinal", makeAlt({makeByte(0xC2, 0xF4),
                                makeSeq({makeByte(0xE0, 0xF4), makeByte(0x80, 0xBF)}),
                                makeSeq({makeByte(0xF0, 0xF4), makeByte(0x80, 0xBF), makeByte(0x80, 0xBF)})}));
