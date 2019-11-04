@@ -10,12 +10,8 @@
 #include <re/transforms/to_utf8.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/utf/UTF.h>
-#include <boost/container/flat_set.hpp>
-#include <boost/container/small_vector.hpp>
 
-using namespace boost::container;
-template <typename T, unsigned N>
-using small_flat_set = flat_set<T, std::less<T>, small_vector<T, N>>;
+#include <util/small_flat_set.hpp>
 
 using namespace llvm;
 
@@ -591,7 +587,7 @@ bool DefiniteLengthBackReferencesOnly(const RE * re) {
         // a variable length element is encounterd, the list of available_captures
         // is cleared.
         //
-        small_flat_set<const Capture *, 8> available_captures;
+        SmallFlatSet<const Capture *, 8> available_captures;
         for (const RE * e : *seq) {
             if (const Reference * r = dyn_cast<Reference>(e)) {
                 auto capture = r->getCapture();

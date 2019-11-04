@@ -77,7 +77,7 @@ inline std::string Name::getName() const {
 }
 
 inline std::string Name::getFullName() const {
-    if (hasNamespace()) return getNamespace() + "=" + getName();
+    if (hasNamespace()) return getNamespace() + ":" + getName();
     else return getName();
 }
 
