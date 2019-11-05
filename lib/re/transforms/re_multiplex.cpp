@@ -33,9 +33,9 @@ RE * CC_multiplexer::transformName(Name * name) {
     if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
         RE * xfrm = transform(name->getDefinition());
         if (name->getType() == Name::Type::ZeroWidth)
-            return makeZeroWidth(name->getName(), xfrm);
+            return makeZeroWidth(name->getFullName(), xfrm);
         else
-            return makeName(name->getName(), xfrm);
+            return makeName(name->getFullName(), xfrm);
     }
     return name;
 }
