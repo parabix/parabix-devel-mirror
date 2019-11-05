@@ -73,7 +73,7 @@ RE * regular_expression_passes(RE * re) {
     }
     r = resolveDiffs(r);
     r = resolveAnchors(r, makeAlt());
-    r = name_lookaheads(r);
+    //r = name_lookaheads(r);
     if (!DefiniteLengthBackReferencesOnly(r)) {
         llvm::report_fatal_error("Future back reference support: references must be within a fixed distance from a fixed-length capture.");
     }
