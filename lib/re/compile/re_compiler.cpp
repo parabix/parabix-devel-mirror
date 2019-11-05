@@ -136,7 +136,9 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         }
         unsigned i = 0;
         while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
-        if (i == mAlphabets.size()) llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, indexingAlphabet = " + mIndexingAlphabet.getName());
+        if (i == mAlphabets.size()) {
+            llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, indexingAlphabet = " + mIndexingAlphabet.getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
+        }
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
 }
@@ -256,49 +258,58 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
             return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), boundaryCond, "boundary"));
         }
         else UnsupportedRE("Unsupported boundary assertion");
-    } else if (isByteLength(asserted)) {
+    }
+    // Lookahead assertions.
+    auto lengths = getLengthRange(asserted, &mIndexingAlphabet);
+    if (lengths.second == 0) {
         MarkerType lookahead = compile(asserted, pb);
-        if (LLVM_LIKELY(markerPos(lookahead) == FinalMatchUnit)) {
-            PabloAST * la = markerVar(lookahead);
-            if (a->getSense() == Assertion::Sense::Negative) {
-                la = pb.createNot(la);
-            }
-            MarkerType fbyte = AdvanceMarker(marker, InitialPostPositionUnit, pb);
-            return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
+        AlignMarkers(marker, lookahead, pb);
+        PabloAST * la = markerVar(lookahead);
+        if (a->getSense() == Assertion::Sense::Negative) {
+            la = pb.createNot(la);
         }
-    } else if (isUnicodeUnitLength(asserted)) {
-        MarkerType lookahead = compile(asserted, pb);
-        if (LLVM_LIKELY(markerPos(lookahead) == FinalMatchUnit)) {
-            PabloAST * la = markerVar(lookahead);
-            if (a->getSense() == Assertion::Sense::Negative) {
-                la = pb.createNot(la);
-            }
-            MarkerType fbyte = AdvanceMarker(marker, FinalPostPositionUnit, pb);
-            return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
-        }
-    } else if (Name * name = dyn_cast<Name>(asserted)) {
-        // Lookahead assertion of an externally compiled name; use a
-        // pablo lookahead operation.
-        const auto & nameString = name->getFullName();
+        return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), la, "lookahead"));
+    }
+    if (((lengths.first == lengths.second) && isa<Name>(asserted))) {
+        const auto & nameString = cast<Name>(asserted)->getFullName();
         const auto f = mExternalNameMap.find(nameString);
         if (f != mExternalNameMap.end()) {
-            RE * defn = name->getDefinition();
-            auto lengths = getLengthRange(defn, &mIndexingAlphabet);
-            if (lengths.first == lengths.second) {
-                PabloAST * nameMarker = f->second;
-                unsigned ahead = lengths.first;
-                if (markerPos(marker) != FinalMatchUnit) {
-                    marker = AdvanceMarker(marker, FinalPostPositionUnit, pb);
-                    ahead -= 1;
-                }
-                if (ahead > 0) {
-                    nameMarker = pb.createLookahead(nameMarker, ahead, nameString + "_ahead");
-                }
-                PabloAST * matched = pb.createAnd(markerVar(marker), nameMarker);
-                return makeMarker(markerPos(marker), matched);
+            PabloAST * nameMarker = f->second;
+            unsigned ahead = lengths.first;
+            if (markerPos(marker) != FinalMatchUnit) {
+                marker = AdvanceMarker(marker, FinalPostPositionUnit, pb);
+                ahead -= 1;
             }
+            if (ahead > 0) {
+                nameMarker = pb.createLookahead(nameMarker, ahead, nameString + "_ahead");
+            }
+            if (a->getSense() == Assertion::Sense::Negative) {
+                nameMarker = pb.createNot(nameMarker);
+            }
+            PabloAST * matched = pb.createAnd(markerVar(marker), nameMarker);
+            return makeMarker(markerPos(marker), matched);
         }
     }
+    MarkerType lookahead = compile(asserted, pb);
+    if (LLVM_LIKELY((lengths.second == 1) && (markerPos(lookahead) == FinalMatchUnit))) {
+        MarkerType lookahead = compile(asserted, pb);
+        PabloAST * la = markerVar(lookahead);
+        if (a->getSense() == Assertion::Sense::Negative) {
+            la = pb.createNot(la);
+        }
+        MarkerType fbyte = AdvanceMarker(marker, InitialPostPositionUnit, pb);
+        return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
+    }
+    lengths = getLengthRange(asserted, &cc::Unicode);
+    if (LLVM_LIKELY((lengths.second == 1) && (markerPos(lookahead) == FinalMatchUnit))) {
+        PabloAST * la = markerVar(lookahead);
+        if (a->getSense() == Assertion::Sense::Negative) {
+            la = pb.createNot(la);
+        }
+        MarkerType fbyte = AdvanceMarker(marker, FinalPostPositionUnit, pb);
+        return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
+    }
+    llvm::errs() << "lengths.second = " << lengths.second << "\n";
     UnsupportedRE("Unsupported lookahead assertion:" + Printer_RE::PrintRE(a));
 }
 
