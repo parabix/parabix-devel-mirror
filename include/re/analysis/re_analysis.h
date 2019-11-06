@@ -29,6 +29,10 @@ bool isFixedLength(const RE * re);
 
 int minMatchLength(const RE * re);
 
+/* Validate that the given RE can be compiled in UTF-8 mode
+   without variable advances. */
+bool validateFixedUTF8(const RE * r);
+
 bool isTypeForLocal(const RE * re);
     
 bool hasAssertion(const RE * re);

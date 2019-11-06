@@ -15,7 +15,7 @@ using namespace llvm;
 namespace re {
 class UTF8_Transformer : public RE_Transformer {
 public:
-    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer(".ToUTF8", m) {}
+    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer("ToUTF8", m) {}
     RE * transformCC(CC * cc) override;
 };
 

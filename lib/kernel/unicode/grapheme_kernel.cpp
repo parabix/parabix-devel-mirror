@@ -22,11 +22,11 @@ using namespace kernel;
 using namespace pablo;
 
 
-GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet *BasisBits, StreamSet * RequiredStreams, StreamSet * GCB_stream)
+GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet *BasisBits, StreamSet * u8index, StreamSet * GCB_stream)
 : PabloKernel(iBuilder, re::AnnotateWithREflags("gcb"),
 // inputs
 {Binding{"basis", BasisBits},
- Binding{"nonFinal", RequiredStreams, FixedRate(), ZeroExtended()}},
+ Binding{"u8index", u8index, FixedRate(), ZeroExtended()}},
 // output
 {Binding{"\\b{g}", GCB_stream, FixedRate(), Add1()}}) {
 
@@ -47,7 +47,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     // GCB rule shouldn't have any regex names so using re::resolveUnicodeNames is good enough.
     GCB = resolveUnicodeNames(GCB);
     unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    re_compiler.addPrecompiled("UTF8_nonfinal", pb.createExtract(getInputStreamVar("nonFinal"), pb.getInteger(0)));
+    re_compiler.addPrecompiled("UTF8_index", pb.createExtract(getInputStreamVar("u8index"), pb.getInteger(0)));
     PabloAST * const gcb = re_compiler.compile(GCB);
     Var * const breaks = getOutputStreamVar("\\b{g}");
     pb.createAssign(pb.createExtract(breaks, pb.getInteger(0)), gcb);

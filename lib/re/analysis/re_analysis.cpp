@@ -6,6 +6,7 @@
 #include <re/adt/adt.h>
 #include <re/adt/printer_re.h>
 #include <re/cc/multiplex_CCs.h>
+#include <re/analysis/validation.h>
 #include <re/transforms/remove_nullable.h>
 #include <re/transforms/to_utf8.h>
 #include <unicode/core/unicode_set.h>
@@ -417,6 +418,32 @@ bool isTypeForLocal(const RE * re) {
         return false;
     }
     return true; // otherwise
+}
+
+struct FixedUTF8Validator : public RE_Validator {
+    FixedUTF8Validator() : RE_Validator("FixedUTF8Validator") {}
+
+    bool validateCC(const CC * cc) override {
+        auto alphabet = cc->getAlphabet();
+        if (const cc::MultiplexedAlphabet * a = dyn_cast<cc::MultiplexedAlphabet>(alphabet)) {
+            alphabet = a->getSourceAlphabet();
+        }
+        if (alphabet == &cc::Unicode) {
+            auto min_lgth = UTF<8>::encoded_length(lo_codepoint(cc->front()));
+            auto max_lgth = UTF<8>::encoded_length(lo_codepoint(cc->back()));
+            return min_lgth == max_lgth;
+        }
+        return (alphabet == &cc::UTF8) || (alphabet == &cc::Byte);
+    }
+
+    bool validateName(const Name * name) override {
+        RE * defn = name->getDefinition();
+        return (name != nullptr) && validate(defn);
+    }
+};
+
+bool validateFixedUTF8(const RE * r) {
+    return FixedUTF8Validator().validateRE(r);
 }
 
 bool hasAssertion(const RE * re) {

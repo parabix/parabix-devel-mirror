@@ -186,6 +186,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::Name * anchorName = re::makeName("UTF8_LB", re::Name::Type::Unicode);
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
+        setComponent(mExternalComponents, Component::UTF8index);
     }
 
     mREs = REs;
@@ -201,17 +202,22 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
 
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (hasGraphemeClusterBoundary(mREs[i])) {
+            setComponent(mExternalComponents, Component::UTF8index);
             setComponent(mExternalComponents, Component::GraphemeClusterBoundary);
             break;
         }
     }
 
+    for (unsigned i = 0; i < mREs.size(); ++i) {
+        if (!validateFixedUTF8(mREs[i])) {
+            setComponent(mExternalComponents, Component::UTF8index);
+            break;
+        }
+    }
     // Conversion to UTF-8 indexing
     // Converting an RE to its UTF-8 equivalent allows efficient direct matching
     // of bytes without transformation to Unicode.
-    if (UnicodeIndexing) {
-        setComponent(mExternalComponents, Component::UTF8index);
-    } else {
+    if (!UnicodeIndexing && !hasComponent(mExternalComponents, Component::UTF8index)) {
         for (unsigned i = 0; i < mREs.size(); ++i) {
             mREs[i] = toUTF8(mREs[i]);
         }
@@ -254,10 +260,15 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
             return;  // skip transposition and set mPrefixRE, mSuffixRE
+        } else {
+            setComponent(mExternalComponents, Component::S2P);
         }
+    } else {
+        setComponent(mExternalComponents, Component::S2P);
     }
-    setComponent(mExternalComponents, Component::S2P);
-    setComponent(mExternalComponents, Component::UTF8index);
+    if (!mUnicodeProperties.empty()) {
+        setComponent(mExternalComponents, Component::UTF8index);
+    }
 }
 
 StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, StreamSet * ByteStream) {
@@ -820,11 +831,15 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
+    StreamSet * u8index = E->CreateStreamSet();
+    E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
+
     StreamSet * MatchResults = E->CreateStreamSet();
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
     options->setRE(matchingRE);
     options->setSource(BasisBits);
     options->setResults(MatchResults);
+    options->addExternal("UTF8_index", u8index);
     E->CreateKernelCall<ICGrepKernel>(std::move(options));
     StreamSet * MatchingRecords = E->CreateStreamSet();
     E->CreateKernelCall<MatchedLinesKernel>(MatchResults, RecordBreakStream, MatchingRecords);
@@ -894,10 +909,12 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKin
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
     const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
-
     StreamSet * BasisBits = E->CreateStreamSet(8);
     E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
     E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
+
+    StreamSet * u8index = E->CreateStreamSet();
+    E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
 
     StreamSet * resultsSoFar = RecordBreakStream;
     bool initialInclude = signedREs[0].first == re::PatternKind::Include;
@@ -907,6 +924,7 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKin
         options->setRE(signedREs[0].second);
         options->setSource(BasisBits);
         options->setResults(MatchResults);
+        options->addExternal("UTF8_index", u8index);
         E->CreateKernelCall<ICGrepKernel>(std::move(options));
         resultsSoFar = MatchResults;
     }
@@ -918,6 +936,7 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKin
         options->setResults(MatchResults);
         bool isExclude = signedREs[i].first == re::PatternKind::Exclude;
         options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
+        options->addExternal("UTF8_index", u8index);
         E->CreateKernelCall<ICGrepKernel>(std::move(options));
         resultsSoFar = MatchResults;
     }
