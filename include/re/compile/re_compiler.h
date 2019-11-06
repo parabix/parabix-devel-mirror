@@ -145,7 +145,6 @@ private:
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     cc::CC_Compiler &                               mCCCompiler;
     const cc::Alphabet &                            mIndexingAlphabet;
-    re::Name *                                      mNonFinalName;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
     NameMap *                                       mCompiledName;

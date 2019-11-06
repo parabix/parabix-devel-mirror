@@ -10,8 +10,9 @@ namespace re {
     
     
 void gatherUnicodeProperties (RE * re, std::set<Name *> & nameSet) {
-    if (isa<Name>(re)) {
-        if (cast<Name>(re)->getType() == Name::Type::UnicodeProperty) {
+    if (Name * name = dyn_cast<Name>(re)) {
+        RE * defn = name->getDefinition();
+        if (defn && isa<CC>(defn) && (cast<CC>(defn)->getAlphabet() == &cc::Unicode)) {
             nameSet.emplace(cast<Name>(re));
         }
     } else if (isa<Seq>(re)) {

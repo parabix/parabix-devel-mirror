@@ -630,21 +630,11 @@ pablo::PabloAST * RE_Compiler::u8Final(pablo::PabloBuilder & pb) {
     if (f!= mExternalNameMap.end()) {
         return f->second;
     }
-    return pb.createNot(u8NonFinal(pb));
+    llvm::report_fatal_error("UTF8_index not found");
 }
 
 pablo::PabloAST * RE_Compiler::u8NonFinal(pablo::PabloBuilder & pb) {
-    MarkerType m;
-    auto f = mExternalNameMap.find("UTF8_index");
-    if (f!= mExternalNameMap.end()) {
-        return pb.createInFile(pb.createNot(f->second));
-    }
-    if (LLVM_LIKELY(mCompiledName->get(mNonFinalName, m))) {
-        return markerVar(m);
-    }
-    m = compile(mNonFinalName->getDefinition(), pb);
-    mCompiledName->add(mNonFinalName, m);
-    return markerVar(m);
+    return pb.createInFile(pb.createNot(u8Final(pb)));
 }
 
 
@@ -662,9 +652,6 @@ RE_Compiler::RE_Compiler(PabloBlock * scope,
 , mStarDepth(0)
 , mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
-    mNonFinalName = makeName("u8NonFinal", makeAlt({makeByte(0xC2, 0xF4),
-                               makeSeq({makeByte(0xE0, 0xF4), makeByte(0x80, 0xBF)}),
-                               makeSeq({makeByte(0xF0, 0xF4), makeByte(0x80, 0xBF), makeByte(0x80, 0xBF)})}));
 }
 
 } // end of namespace re
