@@ -95,10 +95,11 @@ void StreamSetBuffer::setHandle(BuilderPtr b, Value * const handle) const {
 }
 
 void StreamSetBuffer::assertValidStreamIndex(BuilderPtr b, Value * streamIndex) const {
-    if (isa<Constant>(streamIndex) || LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Value * const count = getStreamSetCount(b);
-        Value * const withinSet = b->CreateICmpULT(b->CreateZExtOrTrunc(streamIndex, count->getType()), count);
-        b->CreateAssert(withinSet, "out-of-bounds stream access: " + std::to_string(cast<ConstantInt>(streamIndex)->getSExtValue()));
+        Value * const index = b->CreateZExtOrTrunc(streamIndex, count->getType());
+        Value * const withinSet = b->CreateICmpULT(index, count);
+        b->CreateAssert(withinSet, "out-of-bounds stream access: %i of %i", index, count);
     }
 }
 
