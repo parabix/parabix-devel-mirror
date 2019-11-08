@@ -45,7 +45,7 @@ StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuild
 + "_" + std::to_string(source->getNumElements())
 + ":" + std::to_string(expanded->getNumElements()),
 // input stream sets
-{Binding{"marker", mask, FixedRate(), Principal()},
+{Binding{"marker", mask, FixedRate()},
 Binding{"source", source, PopcountOf("marker")}},
 // output stream set
 {Binding{"output", expanded}},
