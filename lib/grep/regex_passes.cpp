@@ -13,6 +13,7 @@
 #include <re/transforms/exclude_CC.h>
 #include <re/transforms/name_lookaheads.h>
 #include <re/analysis/re_analysis.h>
+#include <re/transforms/assertion_transformations.h>
 #include <re/transforms/re_contextual_simplification.h>
 #include <re/transforms/re_minimizer.h>
 #include <re/transforms/re_simplifier.h>
@@ -47,6 +48,7 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
     } else {
         r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     }
+    r = expandBoundaryAssertions(r);
     r = simplifyAssertions(r);
     //r = lookaheadPromotion(r);
     return r;

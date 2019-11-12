@@ -10,7 +10,7 @@ namespace re {
 
 class RE;
 
-RE * expandBoundaryAssertion(RE * r);
+RE * expandBoundaryAssertions(RE * r);
     
 RE * lookaheadPromotion(RE * r);
 

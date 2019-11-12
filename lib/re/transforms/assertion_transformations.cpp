@@ -14,25 +14,31 @@ using namespace llvm;
 
 namespace re {
 
-RE * expandBoundaryAssertion (RE * re) {
-    if (Assertion * a = dyn_cast<Assertion>(re)) {
+struct ExpandBoundaryAssertions : public RE_Transformer {
+    ExpandBoundaryAssertions() : RE_Transformer("ExpandBoundaryAssertions") {}
+    RE * transformAssertion(Assertion * a) override {
+        RE * a0 = a->getAsserted();
+        RE * a1 = transform(a0);
         if (a->getKind() == Assertion::Kind::Boundary) {
-            RE * asserted = a->getAsserted();
-            RE * behindP = makeAssertion(asserted, Assertion::Kind::LookBehind, Assertion::Sense::Positive);
-            RE * behindN = makeAssertion(asserted, Assertion::Kind::LookBehind, Assertion::Sense::Negative);
-            RE * aheadP = makeAssertion(asserted, Assertion::Kind::LookAhead, Assertion::Sense::Positive);
-            RE * aheadN = makeAssertion(asserted, Assertion::Kind::LookAhead, Assertion::Sense::Negative);
+            RE * behindP = makeAssertion(a1, Assertion::Kind::LookBehind, Assertion::Sense::Positive);
+            RE * behindN = makeAssertion(a1, Assertion::Kind::LookBehind, Assertion::Sense::Negative);
+            RE * aheadP = makeAssertion(a1, Assertion::Kind::LookAhead, Assertion::Sense::Positive);
+            RE * aheadN = makeAssertion(a1, Assertion::Kind::LookAhead, Assertion::Sense::Negative);
             if (a->getSense() == Assertion::Sense::Positive) {
                 return makeAlt({makeSeq({behindP, aheadN}), makeSeq({behindN, aheadP})});
             } else {
                 return makeAlt({makeSeq({behindP, aheadP}), makeSeq({behindN, aheadN})});
             }
         }
+        if (a0 == a1) return a;
+        return makeAssertion(a1, a->getKind(), a->getSense());
     }
-    return re;
+};
+
+RE * expandBoundaryAssertions (RE * r) {
+    return ExpandBoundaryAssertions().transformRE(r);
 }
-    
-    
+
 struct FinalLookaheadPromotion : public RE_Transformer {
     FinalLookaheadPromotion() : RE_Transformer("FinalLookaheadPromotion") {}
     RE * transformSeq(Seq * s) override {
