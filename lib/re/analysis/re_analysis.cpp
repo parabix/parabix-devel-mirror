@@ -308,12 +308,9 @@ std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexAlph
         }
         return std::make_pair(0, INT_MAX);
     } else if (const Name * n = dyn_cast<Name>(re)) {
-        switch (n->getType()) {
-            case Name::Type::Unknown:
-                return std::make_pair(0, INT_MAX);
-            default:
-                return getLengthRange(n->getDefinition(), indexAlphabet);
-        }
+        RE * defn = n->getDefinition();
+        if (defn) return getLengthRange(defn, indexAlphabet);
+        return std::make_pair(0, INT_MAX);
     }
     return std::make_pair(1, 1);
 }
