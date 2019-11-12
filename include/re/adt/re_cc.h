@@ -150,6 +150,10 @@ inline bool intersects(const CC * a, const CC * b) {
     return (*a).intersects(*b);
 }
 
+inline bool subset(const CC * a, const CC * b) {
+    return (*a).subset(*b);
+}
+
 inline CC * makeByte(const codepoint_t codepoint) {
     return new CC(codepoint, &cc::Byte);
 }

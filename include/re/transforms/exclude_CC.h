@@ -15,7 +15,7 @@ namespace re {
        matches to any character within the given character class cc.
        (However, do not transform assertions, so that lookahead or lookbehind
         may still require matches to cc.  */
-    RE * exclude_CC(RE * r, CC * cc);
+    RE * exclude_CC(RE * r, CC * cc, bool processAsserted = false);
 }
 
 #endif // EXCLUDE_CC_H
