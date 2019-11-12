@@ -207,11 +207,14 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             break;
         }
     }
-
-    for (unsigned i = 0; i < mREs.size(); ++i) {
-        if (!validateFixedUTF8(mREs[i])) {
-            setComponent(mExternalComponents, Component::UTF8index);
-            break;
+    if (UnicodeIndexing) {
+        setComponent(mExternalComponents, Component::UTF8index);
+    } else {
+        for (unsigned i = 0; i < mREs.size(); ++i) {
+            if (!validateFixedUTF8(mREs[i])) {
+                setComponent(mExternalComponents, Component::UTF8index);
+                break;
+            }
         }
     }
     // Conversion to UTF-8 indexing
