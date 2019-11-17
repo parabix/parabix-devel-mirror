@@ -19,6 +19,9 @@ struct CC_Remover : public RE_Transformer {
     CC_Remover(CC * toExclude, bool processAsserted) : RE_Transformer("Exclude"),
        mExcludedCC(toExclude), mProcessAsserted(processAsserted) {}
     RE * transformCC (CC * cc) override {
+        if (cc->getAlphabet() != mExcludedCC->getAlphabet()) {
+            return cc;
+        }
         if (subset(cc, mExcludedCC)) return makeAlt();
         if (intersects(mExcludedCC, cc)) return subtractCC(cc, mExcludedCC);
         else return cc;
@@ -28,8 +31,7 @@ struct CC_Remover : public RE_Transformer {
         if (!defn) return name;
         RE * d = transform(defn);
         if (d == defn) return name;
-        std::string cc_name = name->getName() + "--" + mExcludedCC->canonicalName();
-        return makeName(cc_name, name->getType(), d);
+        return d;
     }
     RE * transformAssertion (Assertion * a) override {
         if (!mProcessAsserted) return a;

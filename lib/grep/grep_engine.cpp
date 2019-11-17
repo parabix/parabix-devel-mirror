@@ -203,7 +203,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
 
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (hasGraphemeClusterBoundary(mREs[i])) {
-            setComponent(mExternalComponents, Component::UTF8index);
+            UnicodeIndexing = true;
             setComponent(mExternalComponents, Component::GraphemeClusterBoundary);
             break;
         }

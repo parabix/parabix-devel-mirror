@@ -856,8 +856,7 @@ Unterminated</datafile>
 <grepcase regexp="(?:\p{greek}\p{greek}\p{greek})" datafile="upper_lower_greek" greplines="1 2 3"/>
 
 <grepcase regexp="\p{name=/AIRPLANE/}" datafile="../All_good" flags="-c -enable-object-cache=0 -thread-num=2" greplines="9958 126660 126661 126662 126663 126664 126665 126666"/>
-<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines" greplines="224 225 226 227 228"/>
-<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" flags="-c -Unicode-lines=0" greplines="224 225 226 227 228 229"/>
+<grepcase regexp="\xc4[\x80-\x85]" datafile="../All_good" greplines="224 225 226 227 228 229"/>
 <grepcase regexp="[\N{GREEK CAPITAL LETTER ALPHA}-\N{Greek capital letter UPSILON with DIALYTIKA}]" datafile="../All_good" greplines="881 882 883 884 885 886 887 888 889 890 891 892 893 894 895 896 897 898 899 900 901 902 903 904 905 906 907"/>
 
 <datafile id = "Unterminated7">7</datafile>

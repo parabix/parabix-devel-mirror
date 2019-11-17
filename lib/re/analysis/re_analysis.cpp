@@ -99,60 +99,6 @@ const CC* matchableCodepoints(const RE * re) {
     return makeCC(); // otherwise = Start, End, Assertion
 }
 
-bool isRequireNonFinal(const RE * re, bool checkByteLength) {
-    if (checkByteLength) {
-        bool allCcByteLength = isAllCcByteLength(re);
-        if (allCcByteLength) {
-            return false;
-        }
-    }
-
-    if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (unsigned i = 0; i < alt->size(); i++) {
-            if (isRequireNonFinal((*alt)[i], false)) {
-                return true;
-            }
-        }
-        return false;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        if (seq->size() == 0) {
-            return false;
-        } else if (seq->size() == 1) {
-            return isRequireNonFinal((*seq)[0], false);
-        }
-    } else if (dyn_cast<Name>(re)) {
-        return false;
-    } else if (dyn_cast<CC>(re)) {
-        return false;
-    }
-    return true;
-}
-
-bool isAllCcByteLength(const RE * re) {
-    if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (const RE * re : *alt) {
-            if (!isAllCcByteLength(re)) {
-                return false;
-            }
-        }
-        return true;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        for (const RE * e : *seq) {
-            if (!isAllCcByteLength(e)) return false;
-        }
-        return true;
-    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-        return isAllCcByteLength(rep->getRE());
-    }  else if (const Name * n = dyn_cast<Name>(re)) {
-        if (n->getType() == Name::Type::ZeroWidth) {
-            return false;
-        }
-        return isAllCcByteLength(n->getDefinition());
-    } else {
-        return isByteLength(re);
-    }
-}
-
 bool isByteLength(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {
@@ -173,9 +119,9 @@ bool isByteLength(const RE * re) {
     } else if (const Rep * rep = dyn_cast<Rep>(re)) {
         return (rep->getLB() == 1) && (rep->getUB() == 1) && isByteLength(rep->getRE());
     } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        return isByteLength(diff->getLH()) && isByteLength(diff->getRH());
+        return isByteLength(diff->getLH());
     } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return isByteLength(e->getLH()) && isByteLength(e->getRH());
+        return isByteLength(e->getLH()) || isByteLength(e->getRH());
     } else if (const CC * cc = dyn_cast<CC>(re)) {
         if (cc->empty()) return false;
         const cc::Alphabet * a = cc->getAlphabet();
@@ -427,7 +373,7 @@ struct FixedUTF8Validator : public RE_Validator {
         }
         if (alphabet == &cc::Unicode) {
             auto min_lgth = UTF<8>::encoded_length(lo_codepoint(cc->front()));
-            auto max_lgth = UTF<8>::encoded_length(lo_codepoint(cc->back()));
+            auto max_lgth = UTF<8>::encoded_length(hi_codepoint(cc->back()));
             return min_lgth == max_lgth;
         }
         return (alphabet == &cc::UTF8) || (alphabet == &cc::Byte);
