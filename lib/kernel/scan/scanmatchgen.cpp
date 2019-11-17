@@ -135,6 +135,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "matchMask");
     Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "breakMask");
     Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
+
     matchMaskAccum->addIncoming(matchMask, stridePrecomputation);
     breakMaskAccum->addIncoming(breakMask, stridePrecomputation);
     blockNo->addIncoming(nextBlockNo, stridePrecomputation);

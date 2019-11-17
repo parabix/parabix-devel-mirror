@@ -313,12 +313,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
                 const BufferRateData & producerBr = G[e];
                 ub = std::max(lb, producerBr.Maximum);
             } else {
-
-                auto strideLength = kernel->getStride();
-                if (LLVM_UNLIKELY(i == PipelineInput || i == PipelineOutput)) {
-                    strideLength = boost::lcm(codegen::SegmentSize, strideLength);
-                }
-
+                const auto strideLength = kernel->getStride();
                 if (LLVM_UNLIKELY(rate.isRelative())) {
                     const Binding & ref = getBinding(getReference(i, port));
                     const ProcessingRate & refRate = ref.getRate();
@@ -393,7 +388,10 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
 
     flat_set<unsigned> rates;
 
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+    const auto first = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
+    const auto last = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
+
+    for (auto kernel = first; kernel <= last; ++kernel) {
 
         auto rateIsBoundedBy = [&](const unsigned a, const unsigned b) {
             // maintain a transitive closure of the rates
@@ -747,8 +745,11 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
 
     const auto MAX_RATE = std::numeric_limits<unsigned>::max();
 
+    const auto first = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
+    const auto last = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
+
     // Compute how much data each kernel could process/produce per segment
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+    for (auto kernel = first; kernel <= last; ++kernel) {
 
 
         RateValue lower_absolute{MAX_RATE};

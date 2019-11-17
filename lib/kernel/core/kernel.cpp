@@ -1,4 +1,4 @@
-/*
+﻿/*
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
@@ -39,7 +39,6 @@ using RateId = ProcessingRate::KindId;
 using StreamPort = Kernel::StreamSetPort;
 using PortType = Kernel::PortType;
 
-
 // TODO: make "namespaced" internal scalars that are automatically grouped into cache-aligned structs
 // within the kernel state to hide the complexity from the user?
 
@@ -67,7 +66,7 @@ inline StructType * nullIfEmpty(StructType * type) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::setHandle(const std::unique_ptr<KernelBuilder> & b, Value * const handle) const {
+void Kernel::setHandle(BuilderRef b, Value * const handle) const {
     assert ("handle cannot be null!" && handle);
     assert ("handle must be a pointer!" && handle->getType()->isPointerTy());
     assert ("handle must be a kernel state object!" && (handle->getType()->getPointerElementType() == mSharedStateType));
@@ -98,7 +97,7 @@ inline void reset(Vec & vec, const unsigned n) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
+void Kernel::addKernelDeclarations(BuilderRef b) {
     addInitializeDeclaration(b);
     addInitializeThreadLocalDeclaration(b);
     addDoSegmentDeclaration(b);
@@ -110,7 +109,7 @@ void Kernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
+void Kernel::generateKernel(BuilderRef b) {
     if (LLVM_UNLIKELY(mIsGenerated)) return;
     b->setKernel(this);
     b->setModule(mModule);
@@ -127,20 +126,20 @@ void Kernel::generateKernel(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInitializeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::addInitializeDeclaration(BuilderRef b) const {
     const auto name = getName() + INITIALIZE_SUFFIX;
     Module * const m = b->getModule();
     Function * initFunc = m->getFunction(name);
     if (LLVM_LIKELY(initFunc == nullptr)) {
 
-        SmallVector<Type *, 32> params;
+        InitArgTypes params;
         if (LLVM_LIKELY(isStateful())) {
             params.push_back(mSharedStateType->getPointerTo());
         }
         for (const Binding & binding : mInputScalars) {
             params.push_back(binding.getType());
         }
-
+        addFamilyInitializationArgTypes(b, params);
         FunctionType * const initType = FunctionType::get(b->getSizeTy(), params, false);
         initFunc = Function::Create(initType, GlobalValue::ExternalLinkage, name, m);
         initFunc->setCallingConv(CallingConv::C);
@@ -161,7 +160,6 @@ Function * Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder>
         for (const Binding & binding : mInputScalars) {
             setNextArgName(binding.getName());
         }
-        assert (arg == initFunc->arg_end());
     }
     return initFunc;
 }
@@ -169,12 +167,13 @@ Function * Kernel::addInitializeDeclaration(const std::unique_ptr<KernelBuilder>
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateInitializeMethod(BuilderRef b) {
     mCurrentMethod = getInitializeFunction(b);
     b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
     auto arg = mCurrentMethod->arg_begin();
+    const auto arg_end = mCurrentMethod->arg_end();
     auto nextArg = [&]() {
-        assert (arg != mCurrentMethod->arg_end());
+        assert (arg != arg_end);
         Value * const v = &*arg;
         std::advance(arg, 1);
         return v;
@@ -187,12 +186,12 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
             b->CreateMProtect(mSharedHandle, CBuilder::Protect::WRITE);
         }
     }
-    initializeScalarMap(b, true);
+    initializeScalarMap(b, InitializeScalarMapOptions::SkipThreadLocal);
     for (const auto & binding : mInputScalars) {
         b->setScalarField(binding.getName(), nextArg());
     }
-    assert (arg == mCurrentMethod->arg_end());
-
+    bindFamilyInitializationArguments(b, arg, arg_end);
+    assert (arg == arg_end);
     const auto numOfOutputs = mOutputStreamSets.size();
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const Binding & output = mOutputStreamSets[i];
@@ -219,21 +218,20 @@ inline void Kernel::callGenerateInitializeMethod(const std::unique_ptr<KernelBui
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInitializeThreadLocalDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::addInitializeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::addInitializeThreadLocalDeclaration(BuilderRef b) const {
     Function * func = nullptr;
     if (hasThreadLocal()) {
         const auto name = getName() + INITIALIZE_THREAD_LOCAL_SUFFIX;
         Module * const m = b->getModule();
-        Function * func = m->getFunction(name);
+        func = m->getFunction(name);
         if (LLVM_LIKELY(func == nullptr)) {
 
-            SmallVector<Type *, 2> params;
+            SmallVector<Type *, 1> params;
             if (LLVM_LIKELY(isStateful())) {
                 params.push_back(mSharedStateType->getPointerTo());
             }
-            params.push_back(mThreadLocalStateType->getPointerTo());
-
-            FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
+            PointerType * const retTy = mThreadLocalStateType->getPointerTo();
+            FunctionType * const funcType = FunctionType::get(retTy, params, false);
             func = Function::Create(funcType, GlobalValue::ExternalLinkage, name, m);
             func->setCallingConv(CallingConv::C);
 //            if (LLVM_LIKELY(!codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -250,10 +248,9 @@ Function * Kernel::addInitializeThreadLocalDeclaration(const std::unique_ptr<Ker
             if (LLVM_LIKELY(isStateful())) {
                 setNextArgName("shared");
             }
-            setNextArgName("thread_local");
             assert (arg == func->arg_end());
-
         }
+        assert (func);
     }
     return func;
 }
@@ -261,7 +258,7 @@ Function * Kernel::addInitializeThreadLocalDeclaration(const std::unique_ptr<Ker
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateInitializeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::callGenerateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateInitializeThreadLocalMethod(BuilderRef b) {
     if (hasThreadLocal()) {
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = getInitializeThreadLocalFunction(b);
@@ -276,10 +273,19 @@ inline void Kernel::callGenerateInitializeThreadLocalMethod(const std::unique_pt
         if (LLVM_LIKELY(isStateful())) {
             setHandle(b, nextArg());
         }
-        mThreadLocalHandle = nextArg();
-        initializeScalarMap(b);
+        Value * instance = nullptr;
+        Constant * const size = ConstantExpr::getSizeOf(mThreadLocalStateType);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+            instance = b->CreateAlignedMalloc(size, b->getPageSize());
+            b->CreateMProtect(instance, size, CBuilder::Protect::READ);
+        } else {
+            instance = b->CreateAlignedMalloc(size, b->getCacheAlignment());
+        }
+        mThreadLocalHandle = b->CreatePointerCast(instance, mThreadLocalStateType->getPointerTo());
+        initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
         generateInitializeThreadLocalMethod(b);
-        b->CreateRetVoid();
+        Value * const retVal = mThreadLocalHandle;
+        b->CreateRet(retVal);
         mSharedHandle = nullptr;
         mThreadLocalHandle = nullptr;
         mCurrentMethod = nullptr;
@@ -293,7 +299,7 @@ inline void Kernel::callGenerateInitializeThreadLocalMethod(const std::unique_pt
  *
  * Base kernel properties are those that the pipeline requires access to and must be in a fixed memory location.
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b) {
+void Kernel::addBaseKernelProperties(BuilderRef b) {
 
     // TODO: if a stream has an Expandable or ManagedBuffer attribute or is produced at an Unknown rate,
     // the pipeline ought to pass the stream as a DynamicBuffer. This will require some coordination between
@@ -396,7 +402,7 @@ bool Kernel::canSetTerminateSignal() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addDoSegmentDeclaration
  ** ------------------------------------------------------------------------------------------------------------ */
-Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
 
     const auto name = getName() + DO_SEGMENT_SUFFIX;
     Module * const m = b->getModule();
@@ -470,7 +476,7 @@ Function * Kernel::addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getDoSegmentFields
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuilder> & b) const {
+std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
 
     IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const sizePtrTy = sizeTy->getPointerTo();
@@ -545,7 +551,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(const std::unique_ptr<KernelBuild
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateDoSegmentMethod(BuilderRef b) {
 
     assert (mInputStreamSets.size() == mStreamSetInputBuffers.size());
     assert (mOutputStreamSets.size() == mStreamSetOutputBuffers.size());
@@ -606,7 +612,7 @@ inline void Kernel::callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuil
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setDoSegmentProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, const ArrayRef<Value *> args) {
+void Kernel::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *> args) {
 
     auto arg = args.begin();
     auto nextArg = [&]() {
@@ -617,9 +623,11 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     };
     if (LLVM_LIKELY(isStateful())) {
         setHandle(b, nextArg());
+        assert (mSharedHandle->getType()->getPointerElementType() == mSharedStateType);
     }
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         mThreadLocalHandle = nextArg();
+        assert (mThreadLocalHandle->getType()->getPointerElementType() == mThreadLocalStateType);
     }
     mExternalSegNo = nullptr;
     if (hasAttribute(AttrId::InternallySynchronized)) {
@@ -637,7 +645,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle, CBuilder::Protect::WRITE);
     }
-    initializeScalarMap(b);
+    initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
 
     // NOTE: the disadvantage of passing the stream pointers as a parameter is that it becomes more difficult
     // to access a stream set from a LLVM function call. We could create a stream-set aware function creation
@@ -810,7 +818,7 @@ void Kernel::setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, co
  * Reverse of the setDoSegmentProperties operation; used by the PipelineKernel when constructing internal threads
  * to simplify passing of the state data.
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b) const {
+std::vector<Value *> Kernel::getDoSegmentProperties(BuilderRef b) const {
 
     std::vector<Value *> props;
     if (LLVM_LIKELY(isStateful())) {
@@ -901,15 +909,14 @@ std::vector<Value *> Kernel::getDoSegmentProperties(const std::unique_ptr<Kernel
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addFinalizeThreadLocalDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::addFinalizeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::addFinalizeThreadLocalDeclaration(BuilderRef b) const {
     Function * func = nullptr;
     if (hasThreadLocal()) {
 
         const auto name = getName() + FINALIZE_THREAD_LOCAL_SUFFIX;
         Module * const m = b->getModule();
-        Function * doSegment = m->getFunction(name);
-        if (LLVM_LIKELY(doSegment == nullptr)) {
-
+        func = m->getFunction(name);
+        if (LLVM_LIKELY(func == nullptr)) {
             SmallVector<Type *, 2> params;
             if (LLVM_LIKELY(isStateful())) {
                 params.push_back(mSharedStateType->getPointerTo());
@@ -944,7 +951,7 @@ Function * Kernel::addFinalizeThreadLocalDeclaration(const std::unique_ptr<Kerne
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateFinalizeThreadLocalMethod(BuilderRef b) {
     if (hasThreadLocal()) {
         mCurrentMethod = getFinalizeThreadLocalFunction(b);
         b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
@@ -959,7 +966,7 @@ inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<
             setHandle(b, nextArg());
         }
         mThreadLocalHandle = nextArg();
-        initializeScalarMap(b);
+        initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
         generateFinalizeThreadLocalMethod(b);
         b->CreateRetVoid();
         mSharedHandle = nullptr;
@@ -972,7 +979,7 @@ inline void Kernel::callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addFinalizeDeclaration
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::addFinalizeDeclaration(BuilderRef b) const {
 
     const auto name = getName() + FINALIZE_SUFFIX;
     Module * const m = b->getModule();
@@ -1017,7 +1024,7 @@ Function * Kernel::addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> &
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::callGenerateFinalizeMethod(BuilderRef b) {
 
     b->setKernel(this);
     mCurrentMethod = getFinalizeFunction(b);
@@ -1027,7 +1034,7 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
         setHandle(b, &*(args++));
         assert (args == mCurrentMethod->arg_end());
     }
-    initializeScalarMap(b, true);
+    initializeScalarMap(b, InitializeScalarMapOptions::SkipThreadLocal);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle,CBuilder::Protect::WRITE);
     }
@@ -1062,7 +1069,7 @@ inline void Kernel::callGenerateFinalizeMethod(const std::unique_ptr<KernelBuild
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Value *> Kernel::getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) {
+std::vector<Value *> Kernel::getFinalOutputScalars(BuilderRef b) {
     const auto n = mOutputScalars.size();
     std::vector<Value *> outputs(n);
     for (unsigned i = 0; i < n; ++i) {
@@ -1074,7 +1081,7 @@ std::vector<Value *> Kernel::getFinalOutputScalars(const std::unique_ptr<KernelB
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getCacheName
  ** ------------------------------------------------------------------------------------------------------------- */
-std::string Kernel::getCacheName(const std::unique_ptr<KernelBuilder> & b) const {
+std::string Kernel::getCacheName(BuilderRef b) const {
     std::stringstream cacheName;
     cacheName << getName() << '_' << b->getBuilderUniqueName();
     return cacheName.str();
@@ -1092,7 +1099,7 @@ Module * Kernel::setModule(Module * const module) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeModule
  ** ------------------------------------------------------------------------------------------------------------- */
-Module * Kernel::makeModule(const std::unique_ptr<KernelBuilder> & b) {
+Module * Kernel::makeModule(BuilderRef b) {
     Module * m = new Module(getCacheName(b), b->getContext());
     m->setTargetTriple(b->getModule()->getTargetTriple());
     m->setDataLayout(b->getModule()->getDataLayout());
@@ -1103,67 +1110,69 @@ Module * Kernel::makeModule(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializeFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getInitializeFunction(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::getInitializeFunction(BuilderRef b, const bool alwayReturnDeclaration) const {
     const Module * const module = b->getModule();
     Function * f = module->getFunction(getName() + INITIALIZE_SUFFIX);
-//    if (LLVM_UNLIKELY(f == nullptr)) {
-//        f = addInitializeDeclaration(b);
-//    }
+    if (LLVM_UNLIKELY(f == nullptr && alwayReturnDeclaration)) {
+        f = addInitializeDeclaration(b);
+    }
     return f;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializeThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getInitializeThreadLocalFunction(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::getInitializeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration) const {
+    assert (hasThreadLocal());
     const Module * const module = b->getModule();
     Function * f = module->getFunction(getName() + INITIALIZE_THREAD_LOCAL_SUFFIX);
-//    if (LLVM_UNLIKELY(f == nullptr)) {
-//        f = addInitializeThreadLocalDeclaration(b);
-//    }
+    if (LLVM_UNLIKELY(f == nullptr && alwayReturnDeclaration)) {
+        f = addInitializeThreadLocalDeclaration(b);
+    }
     return f;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getDoSegmentFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getDoSegmentFunction(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::getDoSegmentFunction(BuilderRef b, const bool alwayReturnDeclaration) const {
     const Module * const module = b->getModule();
     Function * f = module->getFunction(getName() + DO_SEGMENT_SUFFIX);
-//    if (LLVM_UNLIKELY(f == nullptr)) {
-//        f = addDoSegmentDeclaration(b);
-//    }
+    if (LLVM_UNLIKELY(f == nullptr && alwayReturnDeclaration)) {
+        f = addDoSegmentDeclaration(b);
+    }
     return f;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFinalizeThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getFinalizeThreadLocalFunction(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::getFinalizeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration) const {
+    assert (hasThreadLocal());
     const Module * const module = b->getModule();
     Function * f = module->getFunction(getName() + FINALIZE_THREAD_LOCAL_SUFFIX);
-//    if (LLVM_UNLIKELY(f == nullptr)) {
-//        f = addFinalizeThreadLocalDeclaration(b);
-//    }
+    if (LLVM_UNLIKELY(f == nullptr && alwayReturnDeclaration)) {
+        f = addFinalizeThreadLocalDeclaration(b);
+    }
     return f;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getTerminateFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::getFinalizeFunction(const std::unique_ptr<KernelBuilder> & b) const {
+Function * Kernel::getFinalizeFunction(BuilderRef b, const bool alwayReturnDeclaration) const {
     const Module * const module = b->getModule();
     Function * f = module->getFunction(getName() + FINALIZE_SUFFIX);
-//    if (LLVM_UNLIKELY(f == nullptr)) {
-//        f = addFinalizeDeclaration(b);
-//    }
+    if (LLVM_UNLIKELY(f == nullptr && alwayReturnDeclaration)) {
+        f = addFinalizeDeclaration(b);
+    }
     return f;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
+void Kernel::prepareKernel(BuilderRef b) {
     if (LLVM_UNLIKELY(mStride == 0)) {
         report_fatal_error(getName() + ": stride cannot be 0");
     }
@@ -1178,7 +1187,7 @@ void Kernel::prepareKernel(const std::unique_ptr<KernelBuilder> & b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareCachedKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
+void Kernel::prepareCachedKernel(BuilderRef b) {
     if (LLVM_UNLIKELY(mSharedStateType != nullptr)) {
         llvm_unreachable("Cannot call prepareCachedKernel after constructing kernel state type");
     }
@@ -1193,7 +1202,7 @@ void Kernel::prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b) {
  *
  * Default kernel signature: generate the IR and emit as byte code.
  ** ------------------------------------------------------------------------------------------------------------- */
-std::string Kernel::makeSignature(const std::unique_ptr<KernelBuilder> & b) const {
+std::string Kernel::makeSignature(BuilderRef b) const {
     if (LLVM_UNLIKELY(hasSignature())) {
         // TODO: make this branch report an error instead.
         const_cast<Kernel *>(this)->generateKernel(b);
@@ -1236,7 +1245,7 @@ std::string Kernel::getStringHash(const StringRef str) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) const {
+Value * Kernel::createInstance(BuilderRef b) const {
     if (isStateful()) {
         Constant * const size = ConstantExpr::getSizeOf(mSharedStateType);
         Value * handle = nullptr;
@@ -1252,30 +1261,10 @@ Value * Kernel::createInstance(const std::unique_ptr<KernelBuilder> & b) const {
     return nullptr;
 }
 
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief createThreadLocalInstance
- ** ------------------------------------------------------------------------------------------------------------- */
-llvm::Value * Kernel::createThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b) const {
-    if (hasThreadLocal()) {
-        Constant * const size = ConstantExpr::getSizeOf(mThreadLocalStateType);
-        Value * handle = nullptr;
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-            handle = b->CreateAlignedMalloc(size, b->getPageSize());
-            b->CreateMProtect(handle, size, CBuilder::Protect::READ);
-        } else {
-            handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
-        }
-        return b->CreatePointerCast(handle, mThreadLocalStateType->getPointerTo());
-    }
-    llvm_unreachable("createThreadLocalInstance should not be called a kernel without thread-local space");
-    return nullptr;
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<Value *> args) {
+void Kernel::initializeInstance(BuilderRef b, llvm::ArrayRef<Value *> args) {
     assert (args.size() == getNumOfScalarInputs() + 1);
     assert (args[0] && "cannot initialize before creation");
     assert (args[0]->getType()->getPointerElementType() == mSharedStateType);
@@ -1287,17 +1276,24 @@ void Kernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeThreadLocalInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, ArrayRef<Value *> args) {
-    assert (args.size() == (isStateful() ? 2 : 1));
-    b->setKernel(this);
-    Function * const init = getInitializeThreadLocalFunction(b);
-    b->CreateCall(init, args);
+Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle) {
+    Value * instance = nullptr;
+    if (hasThreadLocal()) {
+        b->setKernel(this);
+        Function * const init = getInitializeThreadLocalFunction(b);
+        if (handle) {
+            instance = b->CreateCall(init, handle);
+        } else {
+            instance = b->CreateCall(init);
+        }
+    }
+    return instance;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalizeThreadLocalInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::finalizeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<Value *> args) const {
+void Kernel::finalizeThreadLocalInstance(BuilderRef b, llvm::ArrayRef<Value *> args) const {
     assert (args.size() == (isStateful() ? 2 : 1));
     b->setKernel(this);
     Function * const init = getFinalizeThreadLocalFunction(b); assert (init);
@@ -1307,7 +1303,7 @@ void Kernel::finalizeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalizeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value * const handle) const {
+Value * Kernel::finalizeInstance(BuilderRef b, Value * const handle) const {
     Value * result = nullptr;
     Function * const termFunc = getFinalizeFunction(b);
     if (LLVM_LIKELY(isStateful())) {
@@ -1325,156 +1321,70 @@ Value * Kernel::finalizeInstance(const std::unique_ptr<KernelBuilder> & b, Value
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOrDeclareMainFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method) {
+Function * Kernel::addOrDeclareMainFunction(BuilderRef, const MainMethodGenerationType) {
+    report_fatal_error("Cannot generate a main method for " + mKernelName + ".");
+}
 
-    b->setKernel(this);
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addFamilyInitializationArgTypes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::addFamilyInitializationArgTypes(BuilderRef /* b */, InitArgTypes & /* argTypes */) const {
 
-    addKernelDeclarations(b);
+}
 
-    unsigned suppliedArgs = 1;
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief recursivelyConstructFamilyKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::recursivelyConstructFamilyKernels(BuilderRef /* b */, InitArgs & /* args */, const ParamMap & /* params */) const {
+    if (LLVM_UNLIKELY(containsKernelFamilies())) {
+        report_fatal_error("recursivelyConstructFamilyKernels should have been overridden for " + mKernelName + ".");
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief bindFamilyInitializationArguments
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::bindFamilyInitializationArguments(BuilderRef /* b */, ArgIterator & /* arg */, const ArgIterator & /* arg_end */) const {
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructFamilyKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * Kernel::constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const ParamMap & params) const {
+
+    #warning TODO: need to test for termination on init call
+
+    Value * handle = nullptr;
+    InitArgs initArgs;
     if (LLVM_LIKELY(isStateful())) {
-        ++suppliedArgs;
+        handle = createInstance(b);
+        initArgs.push_back(handle);
+        hostArgs.push_back(handle);
     }
-    if (LLVM_UNLIKELY(hasThreadLocal())) {
-        ++suppliedArgs;
+    for (const Binding & input : mInputScalars) {
+        const auto f = params.find(cast<Scalar>(input.getRelationship()));
+        if (LLVM_UNLIKELY(f == params.end())) {
+            SmallVector<char, 512> tmp;
+            raw_svector_ostream out(tmp);
+            out << "Could not find paramater for " << getName() << ':' << input.getName()
+                << " from the provided program parameters (i.e., unknown input scalar.)";
+            report_fatal_error(out.str());
+        }
+        initArgs.push_back(f->second); assert (initArgs.back());
     }
-    if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
-        ++suppliedArgs;
+    recursivelyConstructFamilyKernels(b, initArgs, params);
+    Function * const init = getInitializeFunction(b);
+    b->CreateCall(init, initArgs);
+    if (hasThreadLocal()) {
+        hostArgs.push_back(getInitializeThreadLocalFunction(b));
     }
-
-    Module * const m = b->getModule();
-    Function * const doSegment = getDoSegmentFunction(b);
-    assert (doSegment->arg_size() >= suppliedArgs);
-    const auto numOfDoSegArgs = doSegment->arg_size() - suppliedArgs;
-    Function * const terminate = getFinalizeFunction(b);
-
-    // maintain consistency with the Kernel interface by passing first the stream sets
-    // and then the scalars.
-    std::vector<Type *> params;
-    params.reserve(numOfDoSegArgs + getNumOfScalarInputs());
-
-    // The initial params of doSegment are its shared handle, thread-local handle and numOfStrides.
-    // (assuming the kernel has both handles). The remaining are the stream set params
-    auto doSegParam = doSegment->arg_begin();
-    std::advance(doSegParam, suppliedArgs);
-    const auto doSegEnd = doSegment->arg_end();
-    while (doSegParam != doSegEnd) {
-        params.push_back(doSegParam->getType());
-        std::advance(doSegParam, 1);
+    hostArgs.push_back(getDoSegmentFunction(b));
+    if (hasThreadLocal()) {
+        hostArgs.push_back(getFinalizeThreadLocalFunction(b));
     }
-
-    for (const auto & input : getInputScalarBindings()) {
-        if (!input.hasAttribute(AttrId::Family)) {
-            params.push_back(input.getType());
-        }
-    }
-
-    const auto numOfInitArgs = params.size() - numOfDoSegArgs;
-
-    // get the finalize method output type and set its return type as this function's return type
-    FunctionType * const mainFunctionType = FunctionType::get(terminate->getReturnType(), params, false);
-
-    const auto linkageType = (method == AddInternal) ? Function::InternalLinkage : Function::ExternalLinkage;
-
-    Function * const main = Function::Create(mainFunctionType, linkageType, getName() + "_main", m);
-    main->setCallingConv(CallingConv::C);
-
-    if (method != DeclareExternal) {
-
-        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", main));
-        auto arg = main->arg_begin();
-        auto nextArg = [&]() {
-            assert (arg != main->arg_end());
-            Value * const v = &*arg;
-            std::advance(arg, 1);
-            return v;
-        };
-
-
-        Value * sharedHandle = nullptr;
-        Value * threadLocalHandle = nullptr;
-        if (isStateful()) {
-            sharedHandle = createInstance(b);
-        }
-        if (hasThreadLocal()) {
-            threadLocalHandle = createThreadLocalInstance(b);
-        }
-        SmallVector<Value *, 16> segmentArgs(doSegment->arg_size());
-        unsigned index = 0;
-        if (isStateful()) {
-            segmentArgs[index++] = sharedHandle;
-        }
-        if (hasThreadLocal()) {
-            segmentArgs[index++] = threadLocalHandle;
-        }
-        if (hasAttribute(AttrId::InternallySynchronized)) {
-            segmentArgs[index++] = b->getSize(0);
-        }
-        segmentArgs[index++] = b->getSize(0);  // numOfStrides -> isFinal = True
-        for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
-            segmentArgs[index + i] = nextArg();
-        }
-        if (isStateful()) {
-            SmallVector<Value *, 16> args(numOfInitArgs + 1);
-            args[0] = sharedHandle;
-            for (unsigned i = 0; i < numOfInitArgs; ++i) {
-                args[i + 1] = nextArg();
-            }
-            initializeInstance(b, args);
-        }
-        assert (arg == main->arg_end());
-        if (hasThreadLocal()) {
-            SmallVector<Value *, 2> initArgs;
-            if (LLVM_LIKELY(isStateful())) {
-                initArgs.push_back(sharedHandle);
-            }
-            initArgs.push_back(threadLocalHandle);
-            initializeThreadLocalInstance(b, initArgs);
-        }
-
-        #ifdef NDEBUG
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        #endif
-            BasicBlock * const handleCatch = b->CreateBasicBlock("");
-            BasicBlock * const handleDeallocation = b->CreateBasicBlock("");
-
-            IntegerType * const int32Ty = b->getInt32Ty();
-            PointerType * const int8PtrTy = b->getInt8PtrTy();
-            LLVMContext & C = b->getContext();
-            StructType * const caughtResultType = StructType::get(C, { int8PtrTy, int32Ty });
-            Function * const personalityFn = b->getDefaultPersonalityFunction();
-            main->setPersonalityFn(personalityFn);
-
-            b->CreateInvoke(doSegment, handleDeallocation, handleCatch, segmentArgs);
-
-            b->SetInsertPoint(handleCatch);
-            LandingPadInst * const caughtResult = b->CreateLandingPad(caughtResultType, 0);
-            caughtResult->addClause(ConstantPointerNull::get(int8PtrTy));
-            b->CreateCall(b->getBeginCatch(), {b->CreateExtractValue(caughtResult, 0)});
-            b->CreateCall(b->getEndCatch());
-            b->CreateBr(handleDeallocation);
-
-            b->SetInsertPoint(handleDeallocation);
-        #ifdef NDEBUG
-        } else {
-            b->CreateCall(doSegment, segmentArgs);
-        }
-        #endif
-        if (hasThreadLocal()) {
-            SmallVector<Value *, 2> args;
-            if (LLVM_LIKELY(isStateful())) {
-                args.push_back(sharedHandle);
-            }
-            args.push_back(threadLocalHandle);
-            finalizeThreadLocalInstance(b, args);
-        }
-        if (isStateful()) {
-            // call and return the final output value(s)
-            b->CreateRet(finalizeInstance(b, sharedHandle));
-        }
-    }
-
-    return main;
+    hostArgs.push_back(getFinalizeFunction(b));
+    return handle;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1518,7 +1428,7 @@ bool Kernel::requiresOverflow(const Binding & binding) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructStateTypes
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void Kernel::constructStateTypes(const std::unique_ptr<KernelBuilder> & b) {
+inline void Kernel::constructStateTypes(BuilderRef b) {
     mSharedStateType = mModule->getTypeByName(getName() + SHARED_SUFFIX);
     mThreadLocalStateType = mModule->getTypeByName(getName() + THREAD_LOCAL_SUFFIX);
     if (LLVM_LIKELY(mSharedStateType == nullptr && mThreadLocalStateType == nullptr)) {
@@ -1556,12 +1466,13 @@ inline void Kernel::constructStateTypes(const std::unique_ptr<KernelBuilder> & b
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeScalarMap
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const bool skipThreadLocal) const {
+void Kernel::initializeScalarMap(BuilderRef b, const InitializeScalarMapOptions options) const {
     mScalarValueMap.clear();
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
     unsigned sharedIndex = 0;
     bool noDuplicateFieldNames = true;
+
     for (const auto & binding : mInputScalars) {
         indices[1] = b->getInt32(sharedIndex++);
         assert (mSharedHandle);
@@ -1588,16 +1499,14 @@ void Kernel::initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const
                 scalar = b->CreateGEP(mSharedHandle, indices);
                 break;
             case ScalarType::ThreadLocal:
-                if (skipThreadLocal) continue;
-                assert (hasThreadLocal());
+                if (options == InitializeScalarMapOptions::SkipThreadLocal) continue;
                 assert (mThreadLocalHandle);
                 indices[1] = b->getInt32(threadLocalIndex++);
                 scalar = b->CreateGEP(mThreadLocalHandle, indices);
                 break;
             case ScalarType::NonPersistent:
-                // TODO: make CreateAllocaAtEntry function?
-                scalar = b->CreateAlloca(binding.getValueType());
-                b->CreateStore(ConstantAggregateZero::get(binding.getValueType()), scalar);
+                scalar = b->CreateAllocaAtEntryPoint(binding.getValueType());
+                b->CreateStore(Constant::getNullValue(binding.getValueType()), scalar);
                 break;
             default: llvm_unreachable("I/O scalars cannot be internal");
         }
@@ -1653,11 +1562,11 @@ unsigned Kernel::getSharedScalarIndex(KernelBuilder * /* b */, const llvm::Strin
     }
 
 
-    std::string tmp;
-    raw_string_ostream out(tmp);
+    SmallVector<char, 1024> tmp;
+    raw_svector_ostream out(tmp);
     out << "Kernel " << getName() <<
            " does not contain an input, output or "
-           "internal scalar  named " << name;
+           "internal scalar  named \"" << name << "\"";
     report_fatal_error(out.str());
 }
 
@@ -1671,7 +1580,16 @@ Value * Kernel::getScalarValuePtr(KernelBuilder * /* b */, const StringRef name)
         const auto f = mScalarValueMap.find(name);
         if (LLVM_UNLIKELY(f == mScalarValueMap.end())) {
             assert (false);
-            report_fatal_error(getName() + " does not contain scalar: " + name);
+            SmallVector<char, 1024> tmp;
+            raw_svector_ostream out(tmp);
+            out << getName() << " does not contain scalar: " << name << "\n"
+                "currently contains:";
+            char spacer = ' ';
+            for (const auto & entry : mScalarValueMap) {
+                out << spacer << entry.getKey();
+                spacer = ',';
+            }
+            report_fatal_error(out.str());
         }
         return f->second;
     }
@@ -1814,7 +1732,7 @@ void Kernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void SegmentOrientedKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+void SegmentOrientedKernel::generateKernelMethod(BuilderRef b) {
     generateDoSegmentMethod(b);
 }
 
@@ -1868,7 +1786,7 @@ std::string Kernel::getDefaultFamilyName() const {
 }
 
 // CONSTRUCTOR
-Kernel::Kernel(const std::unique_ptr<KernelBuilder> & b,
+Kernel::Kernel(BuilderRef b,
                const TypeId typeId,
                std::string && kernelName,
                Bindings &&stream_inputs,
@@ -1890,7 +1808,7 @@ Kernel::Kernel(const std::unique_ptr<KernelBuilder> & b,
 Kernel::~Kernel() { }
 
 // CONSTRUCTOR
-SegmentOrientedKernel::SegmentOrientedKernel(const std::unique_ptr<KernelBuilder> & b,
+SegmentOrientedKernel::SegmentOrientedKernel(BuilderRef b,
                                              std::string && kernelName,
                                              Bindings &&stream_inputs,
                                              Bindings &&stream_outputs,

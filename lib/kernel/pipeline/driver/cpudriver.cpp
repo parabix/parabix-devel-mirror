@@ -142,7 +142,6 @@ inline void CPUDriver::preparePassManager() {
     initializeCore(*Registry);
     initializeCodeGen(*Registry);
     initializeLowerIntrinsicsPass(*Registry);
-
     if (LLVM_UNLIKELY(codegen::ShowUnoptimizedIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
             if (!codegen::ShowUnoptimizedIROption.empty()) {

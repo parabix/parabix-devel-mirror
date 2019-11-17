@@ -50,7 +50,7 @@ Scalar * BaseDriver::CreateConstant(not_null<llvm::Constant *> value) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeCache
+ * @brief addKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void BaseDriver::addKernel(not_null<Kernel *> kernel) {
 

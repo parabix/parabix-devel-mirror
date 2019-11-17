@@ -36,7 +36,6 @@
 
 // #define DISABLE_OUTPUT_ZEROING
 
-
 using namespace boost;
 using namespace boost::math;
 using namespace boost::adaptors;
@@ -64,7 +63,9 @@ using Scalars = PipelineKernel::Scalars;
 using Kernels = PipelineKernel::Kernels;
 using CallBinding = PipelineKernel::CallBinding;
 using CallRef = RefWrapper<CallBinding>;
-using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+using BuilderRef = Kernel::BuilderRef;
+using ArgIterator = Kernel::ArgIterator;
+using InitArgTypes = Kernel::InitArgTypes;
 
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
@@ -174,15 +175,21 @@ struct Relationships : public RelationshipGraph {
     }
 
     template <typename T>
+    inline Vertex set(T key, Vertex v) {
+        RelationshipNode k(key);
+        return __set(k, v);
+    }
+
+    template <typename T>
     inline Vertex find(T key) {
         RelationshipNode k(key);
         return __find(k);
     }
 
     template <typename T>
-    inline Vertex addOrFind(T key) {
+    inline Vertex addOrFind(T key, const bool permitAdd = true) {
         RelationshipNode k(key);
-        return __addOrFind(k);
+        return __addOrFind(k, permitAdd);
     }
 
     RelationshipGraph & Graph() {
@@ -200,6 +207,18 @@ private:
         return v;
     }
 
+    BOOST_NOINLINE Vertex __set(const RelationshipNode & key, const Vertex v) {
+        auto f = mMap.find(key.Kernel);
+        if (LLVM_UNLIKELY(f == mMap.end())) {
+            mMap.emplace(key.Kernel, v);
+        } else {
+            f->second = v;
+        }
+        assert ((*this)[v] == key);
+        assert (__find(key) == v);
+        return v;
+    }
+
     BOOST_NOINLINE Vertex __find(const RelationshipNode & key) const {
         const auto f = mMap.find(key.Kernel);
         if (LLVM_LIKELY(f != mMap.end())) {
@@ -210,14 +229,17 @@ private:
         llvm_unreachable("could not find node in relationship graph");
     }
 
-    BOOST_NOINLINE Vertex __addOrFind(const RelationshipNode & key) {
+    BOOST_NOINLINE Vertex __addOrFind(const RelationshipNode & key, const bool permitAdd) {
         const auto f = mMap.find(key.Kernel);
         if (f != mMap.end()) {
             const auto v = f->second;
             assert ((*this)[v] == key);
             return v;
         }
-        return __add(key);
+        if (LLVM_LIKELY(permitAdd)) {
+            return __add(key);
+        }
+        llvm_unreachable("could not find node in relationship graph");
     }
 
     flat_map<const void *, Vertex> mMap;
@@ -436,6 +458,8 @@ const static std::string STATISTICS_STRIDES_PER_SEGMENT_SUFFIX = ".SSPS";
 const static std::string STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX = ".SPIC";
 const static std::string STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX = ".SUIC";
 
+const static std::string FAMILY_PREFIX = "F";
+
 class PipelineCompiler {
 
     template <typename T, unsigned n = 16>
@@ -455,8 +479,6 @@ public:
     void generateFinalizeMethod(BuilderRef b);
     void generateFinalizeThreadLocalMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b);
-
-protected:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P);
 
@@ -526,7 +548,6 @@ protected:
     void prepareLocalZeroExtendSpace(BuilderRef b);
 
     void writeKernelCall(BuilderRef b);
-    void addInternallySynchronizedArg(BuilderRef b, ArgVec & args);
     Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ArgVec &args);
 
     void exitRegionSpan(BuilderRef b);
@@ -612,10 +633,6 @@ protected:
     void identifyThreadLocalBuffers(BufferGraph & G) const;
     void computeDataFlow(BufferGraph & G) const;
 
-    LLVM_READNONE bool isOpenSystem() const {
-        return out_degree(PipelineInput, mBufferGraph) != 0 || in_degree(PipelineOutput, mBufferGraph) != 0;
-    }
-
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
     void constructBuffers(BuilderRef b);
@@ -632,7 +649,6 @@ protected:
 
     unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
     bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
-
 
 // cycle counter functions
 
@@ -694,6 +710,7 @@ protected:
     void determineEvaluationOrderOfKernelIO();
     TerminationGraph makeTerminationGraph();
     PipelineIOGraph makePipelineIOGraph() const;
+    LLVM_READNONE bool isOpenSystem() const;
     bool isPipelineInput(const unsigned inputPort) const;
     bool isPipelineOutput(const unsigned outputPort) const;
 
@@ -716,6 +733,16 @@ protected:
     void initializeExceptionRethrow(BuilderRef b);
     Value * invokeKernelOrRethrow(BuilderRef b, Value * const function, ArrayRef<Value *> args);
 
+// family functions
+
+    static void addFamilyInitializationArgTypes(BuilderRef b, const Kernel * const kernel, InitArgTypes & argTypes);
+    void addFamilyKernelProperties(BuilderRef b, const unsigned index) const;
+    void bindFamilyInitializationArguments(BuilderRef b, ArgIterator & arg, const ArgIterator & arg_end) const;
+
+// thread local functions
+
+    Value * getThreadLocalHandlePtr(BuilderRef b, const unsigned kernelIndex) const;
+
 // misc. functions
 
     Value * getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string &suffix) const;
@@ -725,7 +752,6 @@ protected:
     Value * getFinalizeThreadLocalFunction(BuilderRef b) const;
     Value * getFinalizeFunction(BuilderRef b) const;
 
-    LLVM_READNONE std::string makeFamilyPrefix(const unsigned kernelIndex) const;
     LLVM_READNONE std::string makeKernelName(const unsigned kernelIndex) const;
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const Binding & binding) const;
     LLVM_READNONE std::string makeBufferName(const unsigned kernelIndex, const StreamPort port) const;
@@ -760,6 +786,9 @@ protected:
     LLVM_READNONE const Binding & getBinding(const unsigned kernel, const StreamPort port) const;
     LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
 
+    LLVM_READNONE bool isExternallySynchronized() const {
+        return mPipelineKernel->hasAttribute(AttrId::InternallySynchronized);
+    }
 
     void printBufferGraph(const BufferGraph & G, raw_ostream & out) const;
 
@@ -778,7 +807,7 @@ protected:
     const bool	  								mPrintDebug;
     const bool                                  mTraceProcessedProducedItemCounts;
     const bool                       			mTraceIndividualConsumedItemCounts;
-       
+
     const unsigned								mNumOfThreads;
 
     unsigned                                    mKernelIndex = 0;
@@ -1028,18 +1057,6 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeFamilyPrefix
- ** ------------------------------------------------------------------------------------------------------------- */
-inline LLVM_READNONE std::string PipelineCompiler::makeFamilyPrefix(const unsigned kernelIndex) const {
-    const Kernel * k = getKernel(kernelIndex);
-    const Kernels & K = mPipelineKernel->getKernels();
-    const auto f = std::find(K.begin(), K.end(), k);
-    assert (f != K.end());
-    const auto i = std::distance(K.begin(), f);
-    return "F" + std::to_string(i);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernelName
  ** ------------------------------------------------------------------------------------------------------------- */
 inline LLVM_READNONE std::string PipelineCompiler::makeKernelName(const unsigned kernelIndex) const {
@@ -1121,5 +1138,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
 #include "pipeline_logic.hpp"
 #include "scalar_logic.hpp"
 #include "synchronization_logic.hpp"
+#include "kernel_family_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

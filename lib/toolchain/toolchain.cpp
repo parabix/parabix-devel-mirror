@@ -99,7 +99,7 @@ static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum),
                                           cl::desc("Number of threads used for segment pipeline parallel (relative to number of cores if 0 or negative"), cl::value_desc("integer"));
 #else
 static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
-                                          cl::desc("Number of threads used for segment pipeline parallel", cl::value_desc("positive integer"));
+                                          cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
 #endif
 
 static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),

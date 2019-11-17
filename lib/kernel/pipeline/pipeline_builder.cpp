@@ -70,13 +70,15 @@ inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename gra
 
 void enumerateProducerBindings(const VertexType type, const Vertex producerVertex, const Bindings & bindings, Graph & G, Map & M, const Kernels & K) {
     const auto n = bindings.size();
+
+
     for (unsigned i = 0; i < n; ++i) {
         Relationship * const rel = getRelationship(bindings[i]);
         if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
         const auto f = M.find(rel);
         if (LLVM_UNLIKELY(f != M.end())) {
-            std::string tmp;
-            raw_string_ostream out(tmp);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
             const auto existingProducer = target(out_edge(f->second, G), G);
             out << "Both " << K[existingProducer]->getName() <<
                    " and " << K[producerVertex]->getName() <<
@@ -94,11 +96,12 @@ void enumerateConsumerBindings(const VertexType type, const Vertex consumerVerte
     const auto n = array.size();
     for (unsigned i = 0; i < n; ++i) {
         Relationship * const rel = getRelationship(array[i]);
+        assert ("relationship cannot be null!" && rel);
         if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
         const auto f = M.find(rel);
         if (LLVM_UNLIKELY(f == M.end())) {
-            std::string tmp;
-            raw_string_ostream out(tmp);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
             if (consumerVertex < K.size()) {
                 const Kernel * const consumer = K[consumerVertex];
                 const Binding & input = ((type == VertexType::Scalar)
@@ -217,6 +220,7 @@ Kernel * PipelineBuilder::makeKernel() {
     Graph G(pipelineOutput + 1);
     Map M;
 
+
     enumerateProducerBindings(VertexType::Scalar, pipelineInput, mInputScalars, G, M, mKernels);
     enumerateProducerBindings(VertexType::StreamSet, pipelineInput, mInputStreamSets, G, M, mKernels);
     for (unsigned i = 0; i < numOfKernels; ++i) {
@@ -277,35 +281,8 @@ Kernel * PipelineBuilder::makeKernel() {
     }
     out.flush();
 
-    const auto & b = mDriver.getBuilder();
-    Type * const voidPtrTy = b->getVoidPtrTy();
-    Constant * const voidPtrVal = Constant::getNullValue(voidPtrTy);
-
-    auto addInputScalar = [&](std::string name) {
-        mInputScalars.emplace_back(name, CreateConstant(voidPtrVal), FixedRate(1), Family());
-    };
-
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        Kernel * const k = mKernels[i];
-        if (k->hasFamilyName()) {
-            const std::string prefix = "F" + std::to_string(i);
-            if (LLVM_LIKELY(k->isStateful())) {
-                addInputScalar(prefix);
-            }
-            addInputScalar(prefix + INITIALIZE_FUNCTION_POINTER_SUFFIX);
-            if (k->hasThreadLocal()) {
-                addInputScalar(prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
-            }
-            addInputScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
-            if (k->hasThreadLocal()) {
-                addInputScalar(prefix + FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
-            }
-            addInputScalar(prefix + FINALIZE_FUNCTION_POINTER_SUFFIX);
-        }
-    }
-
     PipelineKernel * const pipeline =
-        new PipelineKernel(b, std::move(signature), mNumOfThreads,
+        new PipelineKernel(mDriver, std::move(signature), mNumOfThreads,
                            std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));

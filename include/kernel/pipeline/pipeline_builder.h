@@ -26,6 +26,10 @@ public:
         return initializeKernel(new KernelType(mDriver.getBuilder(), std::forward<Args>(args) ...));
     }
 
+    Kernel * AddKernelCall(Kernel * kernel) {
+        return initializeKernel(kernel);
+    }
+
     std::shared_ptr<OptimizationBranchBuilder>
         CreateOptimizationBranch(Relationship * const condition,
                                  Bindings && stream_inputs = {}, Bindings && stream_outputs = {},
@@ -72,6 +76,8 @@ public:
 
     virtual ~PipelineBuilder() {}
 
+    virtual Kernel * makeKernel();
+
 protected:
 
 
@@ -81,8 +87,6 @@ protected:
     PipelineBuilder(Internal, BaseDriver & driver,
                     Bindings stream_inputs, Bindings stream_outputs,
                     Bindings scalar_inputs, Bindings scalar_outputs);
-
-    virtual Kernel * makeKernel();
 
     Kernel * initializeKernel(Kernel * const kernel);
 

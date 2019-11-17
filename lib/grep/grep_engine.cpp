@@ -62,6 +62,7 @@
 using namespace llvm;
 using namespace cc;
 using namespace kernel;
+
 namespace grep {
 
 static cl::opt<int> Threads("t", cl::desc("Total number of threads."), cl::init(2));
@@ -881,7 +882,7 @@ InternalMultiSearchEngine::InternalMultiSearchEngine(BaseDriver &driver) :
     mMainMethod(nullptr),
     mNumOfThreads(1) {}
 
-void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKind, re::RE *>> signedREs) {
+void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) {
     auto & idb = mGrepDriver.getBuilder();
 
     re::CC * breakCC = nullptr;
@@ -889,14 +890,6 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKin
         breakCC = re::makeByte(0x0);
     } else {// if (mGrepRecordBreak == GrepRecordBreakKind::LF)
         breakCC = re::makeByte(0x0A);
-    }
-
-    for (unsigned i = 0; i < signedREs.size(); i++) {
-        re::RE * r = resolveCaseInsensitiveMode(signedREs[i].second, mCaseInsensitive);
-        r = regular_expression_passes(r);
-        r = re::exclude_CC(r, breakCC);
-        r = resolveAnchors(r, breakCC);
-        signedREs[i].second = toUTF8(r);
     }
 
     auto E = mGrepDriver.makePipeline({Binding{idb->getInt8PtrTy(), "buffer"},
@@ -920,29 +913,32 @@ void InternalMultiSearchEngine::grepCodeGen(std::vector<std::pair<re::PatternKin
     E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
 
     StreamSet * resultsSoFar = RecordBreakStream;
-    bool initialInclude = signedREs[0].first == re::PatternKind::Include;
-    if (initialInclude) {
-        StreamSet * MatchResults = E->CreateStreamSet();
-        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-        options->setRE(signedREs[0].second);
+
+    const auto n = patterns.size();
+
+    for (unsigned i = 0; i < n; i++) {
+        StreamSet * const MatchResults = E->CreateStreamSet();
+
+        auto options = make_unique<GrepKernelOptions>();
+
+        auto r = resolveCaseInsensitiveMode(patterns[i].second, mCaseInsensitive);
+        r = regular_expression_passes(r);
+        r = re::exclude_CC(r, breakCC);
+        r = resolveAnchors(r, breakCC);
+        r = toUTF8(r);
+
+        options->setRE(r);
         options->setSource(BasisBits);
         options->setResults(MatchResults);
+        const auto isExclude = patterns[i].first == re::PatternKind::Exclude;
+        if (i != 0 || !isExclude) {
+            options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
+        }
         options->addExternal("UTF8_index", u8index);
         E->CreateKernelCall<ICGrepKernel>(std::move(options));
         resultsSoFar = MatchResults;
     }
-    for (unsigned i = static_cast<unsigned>(initialInclude); i < signedREs.size(); i++) {
-        StreamSet * MatchResults = E->CreateStreamSet();
-        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-        options->setRE(signedREs[i].second);
-        options->setSource(BasisBits);
-        options->setResults(MatchResults);
-        bool isExclude = signedREs[i].first == re::PatternKind::Exclude;
-        options->setCombiningStream(isExclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultsSoFar);
-        options->addExternal("UTF8_index", u8index);
-        E->CreateKernelCall<ICGrepKernel>(std::move(options));
-        resultsSoFar = MatchResults;
-    }
+
     if (MatchCoordinateBlocks > 0) {
         StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
         E->CreateKernelCall<MatchCoordinatesKernel>(resultsSoFar, RecordBreakStream, MatchCoords, MatchCoordinateBlocks);

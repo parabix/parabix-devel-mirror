@@ -47,14 +47,13 @@
 //  The UTF16fieldDepositMask kernel produces this deposit mask
 //  within 64-bit fields.
 
-using namespace kernel;
 
-class UTF16fieldDepositMask final : public BlockOrientedKernel {
+class UTF16fieldDepositMask final : public kernel::BlockOrientedKernel {
 public:
-    UTF16fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u16fieldMask, StreamSet * extractionMask, unsigned depositFieldWidth = sizeof(size_t) * 8);
+    UTF16fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, kernel::StreamSet * u32basis, kernel::StreamSet * u16fieldMask, kernel::StreamSet * extractionMask, unsigned depositFieldWidth = sizeof(size_t) * 8);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateFinalBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const remainingBytes) override;
     const unsigned mDepositFieldWidth;
 };
 
@@ -65,7 +64,7 @@ private:
 //
 class UTF16_InitialMask : public pablo::PabloKernel {
 public:
-    UTF16_InitialMask(const std::unique_ptr<KernelBuilder> & kb, StreamSet * u16final, StreamSet * u16initial);
+    UTF16_InitialMask(const std::unique_ptr<kernel::KernelBuilder> & kb, kernel::StreamSet * u16final, kernel::StreamSet * u16initial);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -78,7 +77,7 @@ protected:
 // planes, determined by subtracting 1 from the Unicode plane number.
 class UTF16_SupplementaryBasis : public pablo::PabloKernel {
 public:
-    UTF16_SupplementaryBasis(const std::unique_ptr<KernelBuilder> & kb, StreamSet * u32basis, StreamSet * u16_SMP_basis);
+    UTF16_SupplementaryBasis(const std::unique_ptr<kernel::KernelBuilder> & kb, kernel::StreamSet * u32basis, kernel::StreamSet * u16_SMP_basis);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -91,9 +90,9 @@ protected:
 //
 class UTF16assembly : public pablo::PabloKernel {
 public:
-    UTF16assembly(const std::unique_ptr<KernelBuilder> & kb,
-                 StreamSet * SMPbits4_0, StreamSet * u16bits15_10, StreamSet * u16bits9_0, StreamSet * u16final,
-                 StreamSet * u16basis);
+    UTF16assembly(const std::unique_ptr<kernel::KernelBuilder> & kb,
+                 kernel::StreamSet * SMPbits4_0, kernel::StreamSet * u16bits15_10, kernel::StreamSet * u16bits9_0, kernel::StreamSet * u16final,
+                 kernel::StreamSet * u16basis);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

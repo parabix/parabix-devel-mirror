@@ -20,7 +20,6 @@
 
 namespace kernel { class KernelBuilder; }
 namespace kernel { class ProgramBuilder; }
-using namespace kernel;
 
 /*  An input file may contain a final line without a line terminator.
     Line break kernels can add logic to produce a mark one past EOF
@@ -42,12 +41,12 @@ enum class NullCharMode {Data, Break, Abort};
 
 class UnixLinesKernelBuilder final : public pablo::PabloKernel {
 public:
-    UnixLinesKernelBuilder(const std::unique_ptr<KernelBuilder> & b,
-                           StreamSet * Source,
-                           StreamSet * UnixLineEnds,
+    UnixLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
+                           kernel::StreamSet * Source,
+                           kernel::StreamSet * UnixLineEnds,
                            UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
                            NullCharMode nullMode = NullCharMode::Data,
-                           Scalar * signalNullObject = nullptr);
+                           kernel::Scalar * signalNullObject = nullptr);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -56,19 +55,19 @@ protected:
     NullCharMode mNullMode;
 };
 
-void UnicodeLinesLogic(const std::unique_ptr<ProgramBuilder> & P,
-                       StreamSet * Basis,
-                       StreamSet * LineEnds,
-                       StreamSet * u8index,
+void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
+                       kernel::StreamSet * Basis,
+                       kernel::StreamSet * LineEnds,
+                       kernel::StreamSet * u8index,
                        UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
                        NullCharMode nullMode = NullCharMode::Data,
-                       Scalar * signalNullObject = nullptr);
+                       kernel::Scalar * signalNullObject = nullptr);
 
 class NullDelimiterKernel final : public pablo::PabloKernel {
 public:
-    NullDelimiterKernel(const std::unique_ptr<KernelBuilder> & b,
-                        StreamSet * Source,
-                        StreamSet * NullDelimiters,
+    NullDelimiterKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+                        kernel::StreamSet * Source,
+                        kernel::StreamSet * NullDelimiters,
                         UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }

@@ -5,9 +5,6 @@
 
 namespace kernel {
 
-
-
-
 // NOTE: the following is a workaround for an LLVM bug for 32-bit VMs on 64-bit architectures.
 // When calculating the address of a local stack allocated object, the size of a pointer is
 // 32-bits but when performing the same GEP on a pointer returned by "malloc" or passed as a
@@ -64,7 +61,7 @@ inline void PipelineCompiler::generateImplicitKernels(BuilderRef b) {
         Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
         if (LLVM_LIKELY(kernel->getModule())) continue;
         kernel->setModule(mPipelineKernel->getModule());
-        if (kernel->getInitializeFunction(b)) {
+        if (kernel->getInitializeFunction(b, false)) {
             kernel->prepareCachedKernel(b);
         } else {
             kernel->prepareKernel(b);
@@ -84,7 +81,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // Non-family kernels can be contained within the shared state but family ones
     // must be allocated dynamically.
 
-    if (!isOpenSystem()) {
+    if (LLVM_LIKELY(!isExternallySynchronized())) {
         mPipelineKernel->addInternalScalar(b->getSizeTy(), CURRENT_LOGICAL_SEGMENT_NUMBER);
     }
     Type * const localStateType = getThreadLocalStateType(b);
@@ -104,6 +101,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addCycleCounterProperties(b, i);
         addProducedItemCountDeltaProperties(b, i);
         addUnconsumedItemCountProperties(b, i);
+        addFamilyKernelProperties(b, i);
     }
 
     b->setKernel(mPipelineKernel);
@@ -124,9 +122,6 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     if (requiresSynchronization(kernelIndex)) {
         const auto prefix = makeKernelName(kernelIndex);
         mPipelineKernel->addInternalScalar(sizeTy, prefix + LOGICAL_SEGMENT_SUFFIX);
-        if (kernel->hasAttribute(AttrId::InternallySynchronized)) {
-            mPipelineKernel->addInternalScalar(sizeTy, prefix + ITERATION_COUNT_SUFFIX);
-        }
     }
 
     // TODO: if an kernel I/O stream is a pipeline I/O and the kernel processes it at the
@@ -152,16 +147,28 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mPipelineKernel->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
-    if (kernel->hasThreadLocal()) {
-        const auto prefix = makeKernelName(kernelIndex);
-        mPipelineKernel->addThreadLocalScalar(kernel->getThreadLocalStateType(), prefix + KERNEL_THREAD_LOCAL_SUFFIX);
+    const auto prefix = makeKernelName(kernelIndex);
+
+    if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
+        // perform a sanity check whether the main function can be properly constructed
+        // for this kernel.
+        if (LLVM_UNLIKELY(mPipelineKernel->hasFamilyName() && !isExternallySynchronized())) {
+            SmallVector<char, 512> tmp;
+            raw_svector_ostream out(tmp);
+            out << "nested pipeline " << mPipelineKernel->getName()
+                << " has no family name but "
+                << kernel->getName() << " has a family name that will not be "
+                << " properly handled in the main function.";
+        }
+    } else if (LLVM_LIKELY(kernel->isStateful())) {
+        PointerType * const handlePtrTy = kernel->getSharedStateType()->getPointerTo(0);
+        mPipelineKernel->addInternalScalar(handlePtrTy, prefix);
     }
 
-    if (LLVM_LIKELY(kernel->isStateful() && !kernel->hasFamilyName())) {
-        // if this is a family kernel, it's handle will be passed into the kernel
-        // methods rather than stored within the pipeline state
-        PointerType * const handlePtrTy = kernel->getSharedStateType()->getPointerTo(0);
-        mPipelineKernel->addInternalScalar(handlePtrTy, makeKernelName(kernelIndex));
+    if (kernel->hasThreadLocal()) {
+        // we cannot statically allocate a "family" thread local object.
+        Type * const localStateTy = kernel->getThreadLocalStateType()->getPointerTo(0);
+        mPipelineKernel->addThreadLocalScalar(localStateTy, prefix + KERNEL_THREAD_LOCAL_SUFFIX);
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
@@ -241,9 +248,22 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 
     ArgVec args;
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+
+        // Family kernels must be initialized in the "main" method.
+        if (LLVM_UNLIKELY(getKernel(i)->hasFamilyName())) {
+            continue;
+        }
+
         setActiveKernel(b, i);
         initializeStridesPerSegment(b);
         args.clear();
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto debugName = "Init: " + mPipelineKernel->getName() + "." + makeKernelName(i);
+        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        b->CallPrintInt(debugName, b->getSize(0));
+        #endif
         if (LLVM_LIKELY(mKernel->isStateful())) {
             args.push_back(mKernel->getHandle());
         }
@@ -255,7 +275,8 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             assert (mScalarGraph[e].Type == PortType::Input);
             assert (expected++ == mScalarGraph[e].Number);
             const auto scalar = source(e, mScalarGraph);
-            args.push_back(getScalar(b, scalar));
+            Value * const scalarValue = getScalar(b, scalar);
+            args.push_back(scalarValue);
         }
         b->setKernel(mKernel);
         Value * const f = getInitializeFunction(b);
@@ -358,13 +379,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     for (unsigned i = 0; i < threads; ++i) {
 
         if (mPipelineKernel->hasThreadLocal()) {
-            threadLocal[i] = mPipelineKernel->createThreadLocalInstance(b);
-            SmallVector<Value *, 2> args;
-            if (LLVM_UNLIKELY(mPipelineKernel->isStateful())) {
-                args.push_back(initialSharedState);
-            }
-            args.push_back(threadLocal[i]);
-            mPipelineKernel->initializeThreadLocalInstance(b, args);
+            threadLocal[i] = mPipelineKernel->initializeThreadLocalInstance(b, initialSharedState);
             assert (isFromCurrentFunction(b, threadLocal[i]));
             mPipelineKernel->setThreadLocalHandle(threadLocal[i]);
         }
@@ -465,8 +480,10 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     b->setKernel(mPipelineKernel);
     mSegNo = nullptr;
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        Value * const segNo = b->getScalarField(makeKernelName(i) + LOGICAL_SEGMENT_SUFFIX);
-        mSegNo = b->CreateUMax(mSegNo, segNo);
+        if (requiresSynchronization(i)) {
+            Value * const segNo = b->getScalarField(makeKernelName(i) + LOGICAL_SEGMENT_SUFFIX);
+            mSegNo = b->CreateUMax(mSegNo, segNo);
+        }
     }
     printOptionalCycleCounter(b);
     printOptionalBlockingIOStatistics(b);
@@ -620,16 +637,12 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
             const Kernel * const kernel = getKernel(i);
             if (kernel->hasThreadLocal()) {
                 setActiveKernel(b, i);
-                SmallVector<Value *, 2> args;
-                if (LLVM_LIKELY(kernel->isStateful())) {
-                    args.push_back(kernel->getHandle());
-                }
-                args.push_back(mPipelineKernel->getScalarValuePtr(b.get(), makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
                 Value * const f = getInitializeThreadLocalFunction(b);
                 if (LLVM_UNLIKELY(f == nullptr)) {
                     report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
                 }
-                b->CreateCall(f, args);
+                Value * const handle = b->CreateCall(f, kernel->getHandle());
+                b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
             }
         }
     }
@@ -657,7 +670,7 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
                 if (LLVM_LIKELY(kernel->isStateful())) {
                     args.push_back(kernel->getHandle());
                 }
-                args.push_back(mPipelineKernel->getScalarValuePtr(b.get(), makeKernelName(i) + KERNEL_THREAD_LOCAL_SUFFIX));
+                args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, i)));
                 Value * const f = getFinalizeThreadLocalFunction(b);
                 if (LLVM_UNLIKELY(f == nullptr)) {
                     report_fatal_error(mKernel->getName() + " does not to have an finalize method for its threadlocal state");

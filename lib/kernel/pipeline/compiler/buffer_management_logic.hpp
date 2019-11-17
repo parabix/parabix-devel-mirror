@@ -81,13 +81,10 @@ inline void PipelineCompiler::releaseBuffers(BuilderRef b) {
 
     b->setKernel(mPipelineKernel);
 
-    const auto firstBuffer = PipelineOutput + 1;
-    const auto lastBuffer = num_vertices(mBufferGraph);
-    for (auto i = firstBuffer; i != lastBuffer; ++i) {
+    for (auto i = FirstStreamSet; i != LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
         if (LLVM_LIKELY(bn.Type == BufferType::Internal)) {
             bn.Buffer->releaseBuffer(b);
-
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
                 if (isa<DynamicBuffer>(bn.Buffer)) {
 
@@ -101,7 +98,6 @@ inline void PipelineCompiler::releaseBuffers(BuilderRef b) {
                     b->CreateFree(b->CreateLoad(b->CreateGEP(traceData, {ZERO, ZERO})));
                 }
             }
-
         }
     }
 }
@@ -219,7 +215,7 @@ BufferType PipelineCompiler::getOutputBufferType(const unsigned outputPort) cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeLookBehindLogic
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {   
+void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto bufferVertex = getOutputBufferVertex(i);

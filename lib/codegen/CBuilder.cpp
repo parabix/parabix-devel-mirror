@@ -1188,6 +1188,7 @@ llvm::AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySi
     }
     auto & entryBlock = BL.front();
     auto const first = entryBlock.getFirstNonPHIOrDbgOrLifetime();
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
     const auto & DL = F->getParent()->getDataLayout();
     const auto addrSize = DL.getAllocaAddrSpace();
     if (LLVM_UNLIKELY(first == nullptr)) {
@@ -1195,6 +1196,13 @@ llvm::AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySi
     } else {
         return new AllocaInst(Ty, addrSize, ArraySize, Name, first);
     }
+    #else
+    if (LLVM_UNLIKELY(first == nullptr)) {
+        return new AllocaInst(Ty, ArraySize, Name, &entryBlock);
+    } else {
+        return new AllocaInst(Ty, ArraySize, Name, first);
+    }
+    #endif
 }
 
 BasicBlock * CBuilder::CreateBasicBlock(const StringRef name, BasicBlock * insertBefore) {
@@ -1737,6 +1745,9 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                 Instruction & inst = *i;
                 if (LLVM_UNLIKELY(isa<CallInst>(inst))) {
                     CallInst & ci = cast<CallInst>(inst);
+
+
+
                     // if we're using address sanitizer, try to determine whether we're
                     // rechecking the same address
 //                    #ifdef HAS_ADDRESS_SANITIZER

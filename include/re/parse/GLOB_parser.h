@@ -37,9 +37,11 @@ namespace re {
 
 
 enum class PatternKind {Include, Exclude};
-std::vector<std::pair<PatternKind, RE *>> parseGitIgnoreFile(boost::filesystem::path dirpath,
-                                                             std::string ignoreFileName,
-                                                             std::vector<std::pair<PatternKind, RE *>> REs);
+using PatternType = std::pair<PatternKind, RE *>;
+using PatternVector = std::vector<PatternType>;
+
+PatternVector parseGitIgnoreFile(boost::filesystem::path dirpath,
+                                                             std::string ignoreFileName);
 
 }
 #endif

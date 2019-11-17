@@ -77,7 +77,7 @@ struct Group : public Node {
     AST_NODE_TYPE(GROUP);
     explicit Group(std::vector<std::unique_ptr<Node>> && value)
     : Node(ClassTypeId::GROUP), value(std::move(value))
-    {}    
+    {}
     ~Group() override = default;
     const std::vector<std::unique_ptr<Node>> value;
 };
@@ -197,7 +197,7 @@ struct BinaryConverter {
 /**
  * `Tokenizer` wraps a C-style string allowing for sequential emission of
  * tokens from said string.
- * 
+ *
  * Template Arguments:
  *  - `Converter`: either `HexConverter` or `BinaryConveter`, used to convert
  *    non control characters to values.
@@ -213,7 +213,7 @@ public:
     {}
 
     /**
-     * Tells this `Tokenizer` that the next call to `emit` should produce a 
+     * Tells this `Tokenizer` that the next call to `emit` should produce a
      * `Number` token. The effect only lasts for a single call to `emit` as
      * the state will revert back to normal once the `Number` token has been
      * emitted.
@@ -286,7 +286,7 @@ private:
 
 /**
  * `Parser` converts a C-style string to an abstract syntax tree.
- * 
+ *
  * Template Arguments:
  *  - `Converter`: either `HexConverter` or `BinaryConverter`, passed to the
  *    parser's internal `Tokenizer`.

@@ -15,6 +15,7 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <unicode/data/PropertyObjectTable.h>
+#include <llvm/ADT/STLExtras.h>
 
 using namespace llvm;
 
@@ -31,32 +32,32 @@ std::string canonicalize_value_name(const std::string & prop_or_val) {
     }
     return s.str();
 }
-    
+
 PropertyObject * getPropertyObject(property_t property_code) {
     return property_object_table[property_code];
 }
 
 
 const std::string & PropertyObject::GetPropertyValueGrepString() {
-    llvm::report_fatal_error("Property Value Grep String unsupported.");
+    report_fatal_error("Property Value Grep String unsupported.");
 }
 
 const UnicodeSet PropertyObject::GetCodepointSet(const std::string &) {
-    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
+    report_fatal_error("Property " + UCD::property_full_name[the_property] + " unsupported.");
 }
 
 const std::string PropertyObject::GetStringValue(codepoint_t cp) const {
-    llvm::report_fatal_error("GetStringValue unsupported");
+    report_fatal_error("GetStringValue unsupported");
 }
 
 const UnicodeSet EnumeratedPropertyObject::GetCodepointSet(const std::string & value_spec) {
     const int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val < 0) {
-        llvm::report_fatal_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
+        report_fatal_error("Enumerated Property " + UCD::property_full_name[the_property] + ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
-    
+
 const UnicodeSet PropertyObject::GetReflexiveSet() const {
     return UnicodeSet();
 }
@@ -143,20 +144,20 @@ PropertyObject::iterator ExtensionPropertyObject::begin() const {
     if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
         return obj->begin();
     }
-    llvm::report_fatal_error("Iterators unsupported for this type of PropertyObject.");
+    report_fatal_error("Iterators unsupported for this type of PropertyObject.");
 }
 
 PropertyObject::iterator ExtensionPropertyObject::end() const {
     if (const auto * obj = dyn_cast<EnumeratedPropertyObject>(property_object_table[base_property])) {
         return obj->end();
     }
-    llvm::report_fatal_error("Iterators unsupported for this type of PropertyObject.");
+    report_fatal_error("Iterators unsupported for this type of PropertyObject.");
 }
 
 const UnicodeSet ExtensionPropertyObject::GetCodepointSet(const std::string & value_spec) {
     int property_enum_val = GetPropertyValueEnumCode(value_spec);
     if (property_enum_val == -1) {
-        llvm::report_fatal_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
+        report_fatal_error("Extension Property " + UCD::property_full_name[the_property] +  ": unknown value: " + value_spec);
     }
     return GetCodepointSet(property_enum_val);
 }
@@ -179,7 +180,7 @@ const UnicodeSet BinaryPropertyObject::GetCodepointSet(const std::string & value
     if (value_spec.length() != 0) {
         auto valit = Binary_ns::aliases_only_map.find(canonicalize_value_name(value_spec));
         if (valit == Binary_ns::aliases_only_map.end()) {
-            llvm::report_fatal_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
+            report_fatal_error("Binary Property " + UCD::property_full_name[the_property] +  ": bad value: " + value_spec);
         }
         property_enum_val = valit->second;
     }
@@ -191,11 +192,11 @@ const UnicodeSet & BinaryPropertyObject::GetCodepointSet(const int property_enum
         return mY;
     }
     if (mN.get() == nullptr) {
-        mN = llvm::make_unique<UnicodeSet>(~mY);
+        mN = make_unique<UnicodeSet>(~mY);
     }
     return *mN;
 }
-    
+
 const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
     if (mPropertyValueGrepString.empty()) {
         std::stringstream buffer;
@@ -206,7 +207,7 @@ const std::string & BinaryPropertyObject::GetPropertyValueGrepString() {
     }
     return mPropertyValueGrepString;
 }
-    
+
 const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & cp) {
     size_t lgth = s.length();
     cp = 0;
@@ -225,7 +226,7 @@ const unsigned firstCodepointLengthAndVal(const std::string & s, codepoint_t & c
     if ((s0 >= 0xF0) && (s0 <= 0xF4)) return 4;
     return 0;
 }
-    
+
 
 const UnicodeSet NumericPropertyObject::GetCodepointSet(const std::string & value_spec) {
     if (value_spec == "NaN") {
@@ -276,7 +277,7 @@ const UnicodeSet StringPropertyObject::GetCodepointSet(const std::string & value
         return result_set;
     }
 }
-    
+
 const UnicodeSet StringPropertyObject::GetReflexiveSet() const {
     return mSelfCodepointSet;
 }
@@ -345,11 +346,11 @@ const std::string StringOverridePropertyObject::GetStringValue(codepoint_t cp) c
 }
 
 const std::string & ObsoletePropertyObject::GetPropertyValueGrepString() {
-    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+    report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
 }
 
 const UnicodeSet ObsoletePropertyObject::GetCodepointSet(const std::string &) {
-    llvm::report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
+    report_fatal_error("Property " + UCD::property_full_name[the_property] + " is obsolete.");
 }
 
 

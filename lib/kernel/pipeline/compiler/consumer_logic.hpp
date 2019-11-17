@@ -301,7 +301,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
             continue;
         }
         const BufferRateData & rd = mBufferGraph[e];
-        assert (rd.Port.Type == PortType::Output);
+        assert (rd.Port.Type == PortType::Output || kernel == PipelineInput);
         const auto name = makeBufferName(kernel, rd.Port) + CONSUMED_ITEM_COUNT_SUFFIX;
 
         Type * countTy = sizeTy;

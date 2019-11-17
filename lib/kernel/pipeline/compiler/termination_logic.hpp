@@ -120,6 +120,9 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
     Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
     b->setKernel(mKernel);
     Value * signal = b->CreateLoad(ptr, true);
+
+
+
     mTerminationSignals[mKernelIndex] = signal;
     mTerminatedInitially = signal;
     return hasKernelTerminated(b, mKernelIndex);
@@ -130,7 +133,7 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const unsigned kernel, const bool normally) const {
     // any pipeline input streams are considered produced by the P_{in} vertex.
-    if (LLVM_UNLIKELY(kernel == PipelineInput)) {
+    if (LLVM_UNLIKELY(kernel == PipelineInput || kernel == PipelineOutput)) {
         return mPipelineKernel->isFinal();
     } else {
         Value * const terminated = mTerminationSignals[kernel];

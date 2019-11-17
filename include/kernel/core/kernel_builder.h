@@ -11,6 +11,7 @@ class Kernel;
 class KernelBuilder : public virtual IDISA::IDISA_Builder {
     friend class Kernel;
     friend class MultiBlockKernel;
+    friend class PipelineKernel;
     friend class PipelineGenerator;
 public:
 

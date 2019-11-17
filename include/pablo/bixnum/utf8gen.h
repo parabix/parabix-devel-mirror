@@ -49,14 +49,12 @@
 //  The UTF8fieldDepositMask kernel produces this deposit mask
 //  within 64-bit fields.
 
-using namespace kernel;
-
-class UTF8fieldDepositMask final : public BlockOrientedKernel {
+class UTF8fieldDepositMask final : public kernel::BlockOrientedKernel {
 public:
-    UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth = sizeof(size_t) * 8);
+    UTF8fieldDepositMask(const std::unique_ptr<kernel::KernelBuilder> & b, kernel::StreamSet * u32basis, kernel::StreamSet * u8fieldMask, kernel::StreamSet * u8unitCounts, unsigned depositFieldWidth = sizeof(size_t) * 8);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
+    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateFinalBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const remainingBytes) override;
     const unsigned mDepositFieldWidth;
 };
 
@@ -67,7 +65,7 @@ private:
 //
 class UTF8_DepositMasks : public pablo::PabloKernel {
 public:
-    UTF8_DepositMasks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * u8final, StreamSet * u8initial, StreamSet * u8mask12_17, StreamSet * u8mask6_11);
+    UTF8_DepositMasks(const std::unique_ptr<kernel::KernelBuilder> & kb, kernel::StreamSet * u8final, kernel::StreamSet * u8initial, kernel::StreamSet * u8mask12_17, kernel::StreamSet * u8mask6_11);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -80,10 +78,10 @@ protected:
 //
 class UTF8assembly : public pablo::PabloKernel {
 public:
-    UTF8assembly(const std::unique_ptr<KernelBuilder> & kb,
-                 StreamSet * deposit18_20, StreamSet * deposit12_17, StreamSet * deposit6_11, StreamSet * deposit0_5,
-                 StreamSet * u8initial, StreamSet * u8final, StreamSet * u8mask6_11, StreamSet * u8mask12_17,
-                 StreamSet * u8basis);
+    UTF8assembly(const std::unique_ptr<kernel::KernelBuilder> & kb,
+                 kernel::StreamSet * deposit18_20, kernel::StreamSet * deposit12_17, kernel::StreamSet * deposit6_11, kernel::StreamSet * deposit0_5,
+                 kernel::StreamSet * u8initial, kernel::StreamSet * u8final, kernel::StreamSet * u8mask6_11, kernel::StreamSet * u8mask12_17,
+                 kernel::StreamSet * u8basis);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

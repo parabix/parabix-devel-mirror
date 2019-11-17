@@ -24,7 +24,7 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
     if (LLVM_LIKELY(mKernel->isStateful())) {
         Value * handle = nullptr;
         if (mKernel->hasFamilyName()) {
-            handle = b->getScalarField(makeFamilyPrefix(index));
+            handle = b->getScalarField(makeKernelName(index));
             handle = b->CreateBitCast(handle, mKernel->getSharedStateType()->getPointerTo());
         } else {
             handle = b->getScalarField(makeKernelName(index));
@@ -61,15 +61,11 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
         if (LLVM_LIKELY(rate.isFixed())) {
 
             // create a stack entry for this buffer at the start of the pipeline
-            const auto ip = b->saveIP();
-            b->SetInsertPoint(mPipelineEntryBranch);
             PointerType * const int8PtrTy = b->getInt8PtrTy();
-            AllocaInst * const bufferStorage = b->CreateAlloca(int8PtrTy, nullptr, "TruncatedInputBuffer");
-            b->CreateStore(ConstantPointerNull::get(int8PtrTy), bufferStorage);
-            b->restoreIP(ip);
+            AllocaInst * const bufferStorage = b->CreateAllocaAtEntryPoint(int8PtrTy);
+            Instruction * const nextNode = bufferStorage->getNextNode(); assert (nextNode);
+            new StoreInst(ConstantPointerNull::get(int8PtrTy), bufferStorage, nextNode);
             mTruncatedInputBuffer.push_back(bufferStorage);
-
-
 
             const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
             const StreamSetBuffer * const buffer = getInputBuffer(i);
@@ -299,62 +295,6 @@ void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
     }
 }
 
-#if 0
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief checkForLastPartialSegment
- *
- * If this kernel is internally synchronized, determine whether there are any more segments.
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::checkForLastPartialSegment(BuilderRef b, Value * isFinal) {
-    assert (b->getKernel() == mKernel);
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    mLastPartialSegment = nullptr;
-    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
-        mLastPartialSegment = isFinal ? isFinal : b->getFalse();
-        for (const auto i : mPortEvaluationOrder) {
-            if (i < numOfInputs) {
-                mLastPartialSegment = b->CreateOr(mLastPartialSegment, noMoreInputData(b, i));
-            } else {
-                mLastPartialSegment = b->CreateOr(mLastPartialSegment, noMoreOutputData(b, i - numOfInputs));
-            }
-        }
-        assert (mLastPartialSegment);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief noMoreInputData
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::noMoreInputData(BuilderRef b, const unsigned inputPort) {
-    const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
-    Value * const available = getLocallyAvailableItemCount(b, inputPort);
-    Value * const pending = b->CreateAdd(mAlreadyProcessedPhi[inputPort], mLinearInputItemsPhi[inputPort]);
-    Value * const accessible = buffer->getLinearlyAccessibleItems(b, pending, available);
-    Value * const strideLength = getInputStrideLength(b, inputPort);
-    Value * const required = addLookahead(b, inputPort, strideLength);
-    return b->CreateICmpULE(required, accessible);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief noMoreOutputData
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::noMoreOutputData(BuilderRef b, const unsigned outputPort) {
-    // TODO: not right for popcount rates. will have to branch (to account for # of ref items)
-    // then check with the ref rate's pending offset.
-    const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
-    if (isa<DynamicBuffer>(buffer)) {
-        return b->getFalse();
-    }
-    Value * const consumed = mConsumedItemCount[outputPort]; assert (consumed);
-    Value * const pending = b->CreateAdd(mAlreadyProducedPhi[outputPort], mLinearOutputItemsPhi[outputPort]);
-    Value * const writable = buffer->getLinearlyWritableItems(b, pending, consumed);
-    Value * const required = getOutputStrideLength(b, outputPort);
-    return b->CreateICmpULE(required, writable);
-}
-
-#endif
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeKernelCall
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -376,38 +316,14 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
     }
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
-        b->setKernel(mPipelineKernel);
-        const auto prefix = makeKernelName(mKernelIndex);
-        Value * const threadLocal = b->getScalarFieldPtr(prefix + KERNEL_THREAD_LOCAL_SUFFIX);
-        b->setKernel(mKernel);
-        args.push_back(threadLocal);
+        args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
     }
 
-
-
-    // If a kernel is internally synchronized, pass the iteration
-    // count. Note: this is not the same as the pipeline's logical
-    // segment number since unless we can prove that a kernel,
-    // regardless of buffer state, will be called only once per
-    // segment, we can only state the iteration count is >= the
-    // segment number.
-
-    // We may hit the same kernel with both threads simultaneously
-    // before the first has finished updating?
-
-    // Can we pass in the outer pipeline's synch num for this kernel
-    // and increment it early? We'd need to pass in a temp one until
-    // we know this is the last iteration of the segment.
-
-    // That requires being able to know apriori what our resulting
-    // state will be after completion for the input positions. We
-    // can rely on the kernel itself to handle output synchronization.
-
-//    if (mLastPartialSegment) {
-//        Value * const iterationPtr = b->getScalarFieldPtr(makeKernelName(mKernelIndex) + ITERATION_COUNT_SUFFIX);
-//        Value * const iterationCount = b->CreateAtomicFetchAndAdd(b->getSize(1), iterationPtr);
-//        args.push_back(iterationCount);
-//    }
+    // If a kernel is internally synchronized, pass the segno to
+    // allow the kernel to initialize its current "position"
+    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
+        args.push_back(mSegNo);
+    }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
 
     if (mFixedRateFactorPhi) {
@@ -584,18 +500,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief addInternallySynchronizedArg
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addInternallySynchronizedArg(BuilderRef b, ArgVec & args) {
-    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
-        Value * const iterationPtr = b->getScalarFieldPtr(makeKernelName(mKernelIndex) + ITERATION_COUNT_SUFFIX);
-        Value * const iterationCount = b->CreateAtomicFetchAndAdd(b->getSize(1), iterationPtr);
-        args.push_back(iterationCount);
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addItemCountArg
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
@@ -608,11 +512,8 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
     }
     Value * ptr = nullptr;
     if (addressable || isAddressable(binding)) {
-        if (mNumOfAddressableItemCount == mAddressableItemCountPtr.size()) {
-            BasicBlock * const bb = b->GetInsertBlock();
-            b->SetInsertPoint(mPipelineEntryBranch);
-            AllocaInst * const aic = b->CreateAlloca(b->getSizeTy(), nullptr, "AddressableItemCount");
-            b->SetInsertPoint(bb);
+        if (LLVM_UNLIKELY(mNumOfAddressableItemCount == mAddressableItemCountPtr.size())) {
+            auto aic = b->CreateAllocaAtEntryPoint(b->getSizeTy());
             mAddressableItemCountPtr.push_back(aic);
         }
         ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
@@ -676,6 +577,20 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetBuffer * const buffer = getOutputBuffer(i);
         if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
+            // If this stream is either controlled by this kernel or is an external
+            // stream, any clearing of data is the responsibility of the owner.
+            // Simply ignore any external buffers for the purpose of zeroing out
+            // unnecessary data.
+
+            // NOTE: this does open up the potential for unexpected behaviour if
+            // an external stream is produced by this kernel but also read before
+            // leaving a nested pipeline since it will not be cleared until after
+            // it's left. This could leave unexpected data in the stream for
+            // the inner consumer and/or mean the data that the inner consumer
+            // processes will be inconsistent with the data the outer kernel sees.
+            // If this becomes an issue, it can be easily resolved by checking whether
+            // the stream has a local consumer and zero-ing it knowing that the outer
+            // kernel will do the same but will leave the stream in the same state.
             continue;
         }
         const auto itemWidth = getItemWidth(buffer->getBaseType());
@@ -771,8 +686,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endPtr = buffer->StreamSetBuffer::getStreamBlockPtr(b, baseAddress, ZERO, endOffset);
             Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
             Value * const remainingBytes = b->CreateSub(endPtrInt, startPtrInt);
-            #ifdef PRINT_DEBUG_MESSAGES            
-
+            #ifdef PRINT_DEBUG_MESSAGES
             b->CallPrintInt(prefix + "_zeroFill_bufferStart", b->CreateSub(startPtrInt, epochInt));
             b->CallPrintInt(prefix + "_zeroFill_remainingBufferBytes", remainingBytes);
             #endif
@@ -898,7 +812,7 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string & suffix) const {
-    const auto prefix = makeFamilyPrefix(mKernelIndex);
+    const auto prefix = makeKernelName(mKernelIndex);
     b->setKernel(mPipelineKernel);
     Value * const funcPtr = b->getScalarField(prefix + suffix);
     if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -913,9 +827,7 @@ Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const 
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
     Function * const init = mKernel->getInitializeFunction(b);
-    if (mKernel->hasFamilyName()) {
-        return getFunctionFromKernelState(b, init->getType(), INITIALIZE_FUNCTION_POINTER_SUFFIX);
-    }
+    assert (!mKernel->hasFamilyName());
     return init;
 }
 
@@ -945,11 +857,11 @@ Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
  * @brief getInitializationThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) const {
-    Function * const init = mKernel->getFinalizeThreadLocalFunction(b);
+    Function * const finalize = mKernel->getFinalizeThreadLocalFunction(b);
     if (mKernel->hasFamilyName()) {
-        return getFunctionFromKernelState(b, init->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+        return getFunctionFromKernelState(b, finalize->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
-    return init;
+    return finalize;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1031,6 +943,16 @@ void PipelineCompiler::phiOutItemCounts(BuilderRef b,
     if (fixedRateFactor) {
         mFixedRateFactorPhi->addIncoming(fixedRateFactor, exitBlock);
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getThreadLocalHandlePtr
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getThreadLocalHandlePtr(BuilderRef b, const unsigned kernelIndex) const {
+    assert ("getThreadLocalHandlePtr should not have been called" && getKernel(kernelIndex)->hasThreadLocal());
+    const auto prefix = makeKernelName(kernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX;
+    Value * const handlePtr = mPipelineKernel->getScalarValuePtr(b.get(), prefix); assert (handlePtr);
+    return handlePtr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

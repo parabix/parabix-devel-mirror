@@ -114,17 +114,17 @@ protected:
 
     // Transpose to basis bit streams, if required otherwise return the source byte stream.
     kernel::StreamSet * getBasis(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
-    
+
     // Initial grep set-up.
     // Implement any required checking/processing of null characters, determine the
     // line break stream and the U8 index stream (if required).
     void grepPrologue(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * SourceStream);
     // Prepare external property and GCB streams, if required.
-    void prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream);
-    void addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, std::unique_ptr<GrepKernelOptions> & options, re::RE * regexp, StreamSet * indexMask = nullptr);
+    void prepareExternalStreams(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * SourceStream);
+    void addExternalStreams(const std::unique_ptr<kernel::ProgramBuilder> & P, std::unique_ptr<kernel::GrepKernelOptions> & options, re::RE * regexp, kernel::StreamSet * indexMask = nullptr);
     void U8indexedGrep(const std::unique_ptr<kernel::ProgramBuilder> &P, re::RE * re, kernel::StreamSet * Source, kernel::StreamSet * Results);
     void UnicodeIndexedGrep(const std::unique_ptr<kernel::ProgramBuilder> &P, re::RE * re, kernel::StreamSet * Source, kernel::StreamSet * Results);
-    StreamSet * grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
+    kernel::StreamSet * grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
     virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
@@ -166,10 +166,10 @@ protected:
     std::string mFileSuffix;
     Component mExternalComponents;
     Component mInternalComponents;
-    std::map<std::string, StreamSet *> mPropertyStreamMap;
-    StreamSet * mLineBreakStream;
-    StreamSet * mU8index;
-    StreamSet * mGCB_stream;
+    std::map<std::string, kernel::StreamSet *> mPropertyStreamMap;
+    kernel::StreamSet * mLineBreakStream;
+    kernel::StreamSet * mU8index;
+    kernel::StreamSet * mGCB_stream;
     pthread_t mEngineThread;
 };
 
@@ -268,7 +268,7 @@ public:
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
-    void grepCodeGen(std::vector<std::pair<re::PatternKind, re::RE *>> REs);
+    void grepCodeGen(const re::PatternVector & patterns);
 
     void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
 

@@ -12,24 +12,15 @@
 #include <util/not_null.h>
 #include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
+#include <llvm/ADT/DenseMap.h>
+#include <llvm/IR/Function.h>
 #include <llvm/Support/Compiler.h>
 #include <memory>
 #include <string>
 #include <vector>
 
-namespace llvm { class AllocaInst; }
-namespace llvm { class BasicBlock; }
-namespace llvm { class CallInst; }
-namespace llvm { class Constant; }
-namespace llvm { class Function; }
-namespace llvm { class IntegerType; }
 namespace llvm { class IndirectBrInst; }
-namespace llvm { class Module; }
 namespace llvm { class PHINode; }
-namespace llvm { class StructType; }
-namespace llvm { class LoadInst; }
-namespace llvm { class Type; }
-namespace llvm { class Value; }
 
 class BaseDriver;
 
@@ -50,6 +41,10 @@ class Kernel : public AttributeSet {
     friend class OptimizationBranchCompiler;
     friend class BaseDriver;
 public:
+
+    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+
+    using ArgIterator = llvm::Function::arg_iterator;
 
     enum class TypeId {
         SegmentOriented
@@ -83,13 +78,19 @@ public:
             return mName;
         }
 
-        explicit InternalScalar(llvm::Type * const valueType, const llvm::StringRef name)
-        : InternalScalar(ScalarType::Internal, valueType, name) {
+        const unsigned getGroup() const {
+            return mGroup;
+        }
+
+        explicit InternalScalar(llvm::Type * const valueType,
+                                const llvm::StringRef name, const unsigned group = 1)
+        : InternalScalar(ScalarType::Internal, valueType, name, group) {
 
         }
 
-        explicit InternalScalar(const ScalarType scalarType, llvm::Type * const valueType, const llvm::StringRef name)
-        : mScalarType(scalarType), mValueType(valueType), mName(name.str()) {
+        explicit InternalScalar(const ScalarType scalarType, llvm::Type * const valueType,
+                                const llvm::StringRef name, const unsigned group = 1)
+        : mScalarType(scalarType), mValueType(valueType), mName(name.str()), mGroup(group) {
 
         }
 
@@ -97,6 +98,7 @@ public:
         const ScalarType        mScalarType;
         llvm::Type * const      mValueType;
         const std::string       mName;
+        const unsigned          mGroup;
     };
 
     using InternalScalars = std::vector<InternalScalar>;
@@ -168,6 +170,10 @@ public:
         return false;
     }
 
+    LLVM_READNONE virtual bool containsKernelFamilies() const {
+        return false;
+    }
+
     LLVM_READNONE virtual const std::string getFamilyName() const {
         if (hasFamilyName()) {
             return getDefaultFamilyName();
@@ -176,7 +182,7 @@ public:
         }
     }
 
-    virtual std::string makeSignature(const std::unique_ptr<KernelBuilder> & b) const;
+    virtual std::string makeSignature(BuilderRef b) const;
 
     virtual bool hasSignature() const { return true; }
 
@@ -347,23 +353,23 @@ public:
         return mOutputScalars.size();
     }
 
-    void addInternalScalar(llvm::Type * type, const llvm::StringRef name) {
-        mInternalScalars.emplace_back(ScalarType::Internal, type, name);
+    void addInternalScalar(llvm::Type * type, const llvm::StringRef name, const unsigned group = 1) {
+        mInternalScalars.emplace_back(ScalarType::Internal, type, name, group);
     }
 
     void addNonPersistentScalar(llvm::Type * type, const llvm::StringRef name) {
-        mInternalScalars.emplace_back(ScalarType::NonPersistent, type, name);
+        mInternalScalars.emplace_back(ScalarType::NonPersistent, type, name, 0);
     }
 
-    void addThreadLocalScalar(llvm::Type * type, const llvm::StringRef name) {
-        mInternalScalars.emplace_back(ScalarType::ThreadLocal, type, name);
+    void addThreadLocalScalar(llvm::Type * type, const llvm::StringRef name, const unsigned group = 1) {
+        mInternalScalars.emplace_back(ScalarType::ThreadLocal, type, name, group);
     }
 
     llvm::Value * getHandle() const {
         return mSharedHandle;
     }
 
-    void setHandle(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const handle) const;
+    void setHandle(BuilderRef b, llvm::Value * const handle) const;
 
     llvm::Value * getThreadLocalHandle() const {
         return mThreadLocalHandle;
@@ -396,31 +402,28 @@ public:
         }
     }
 
-    llvm::Module * makeModule(const std::unique_ptr<KernelBuilder> & b);
+    llvm::Module * makeModule(BuilderRef b);
 
     // Add ExternalLinkage method declarations for the kernel to a given client module.
-    virtual void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b);
+    virtual void addKernelDeclarations(BuilderRef b);
 
-    llvm::Value * createInstance(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Value * createInstance(BuilderRef b) const;
 
-    virtual void initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<llvm::Value *> args);
+    void initializeInstance(BuilderRef b, llvm::ArrayRef<llvm::Value *> args);
 
-    llvm::Value * finalizeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const handle) const;
+    llvm::Value * finalizeInstance(BuilderRef b, llvm::Value * const handle) const;
 
+    llvm::Value * initializeThreadLocalInstance(BuilderRef b, llvm::Value * handle);
 
-    llvm::Value * createThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b) const;
+    void finalizeThreadLocalInstance(BuilderRef b, llvm::ArrayRef<llvm::Value *> args) const;
 
-    void initializeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<llvm::Value *> args);
+    void generateKernel(BuilderRef b);
 
-    void finalizeThreadLocalInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<llvm::Value *> args) const;
+    void prepareKernel(BuilderRef b);
 
-    void generateKernel(const std::unique_ptr<KernelBuilder> & b);
+    void prepareCachedKernel(BuilderRef b);
 
-    void prepareKernel(const std::unique_ptr<KernelBuilder> & b);
-
-    void prepareCachedKernel(const std::unique_ptr<KernelBuilder> & b);
-
-    LLVM_READNONE std::string getCacheName(const std::unique_ptr<KernelBuilder> & b) const;
+    LLVM_READNONE std::string getCacheName(BuilderRef b) const;
 
     LLVM_READNONE StreamSetPort getStreamPort(const llvm::StringRef name) const;
 
@@ -448,7 +451,15 @@ public:
         , AddExternal
     };
 
-    llvm::Function * addOrDeclareMainFunction(const std::unique_ptr<kernel::KernelBuilder> & b, const MainMethodGenerationType method);
+    virtual llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method);
+
+    using InitArgs = llvm::SmallVector<llvm::Value *, 32>;
+
+    using InitArgTypes = llvm::SmallVector<llvm::Type *, 32>;
+
+    using ParamMap = llvm::DenseMap<Scalar *, llvm::Value *>;
+
+    llvm::Value * constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const ParamMap & params) const;
 
     virtual bool hasStaticMain() const { return true; }
 
@@ -460,21 +471,21 @@ protected:
 
     LLVM_READNONE std::string getDefaultFamilyName() const;
 
-    virtual void addInternalProperties(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void addInternalProperties(BuilderRef) { }
 
-    virtual void linkExternalMethods(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void linkExternalMethods(BuilderRef) { }
 
-    virtual void generateInitializeMethod(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void generateInitializeMethod(BuilderRef) { }
 
-    virtual void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void generateInitializeThreadLocalMethod(BuilderRef) { }
 
-    virtual void generateKernelMethod(const std::unique_ptr<KernelBuilder> &) = 0;
+    virtual void generateKernelMethod(BuilderRef) = 0;
 
-    virtual void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void generateFinalizeThreadLocalMethod(BuilderRef) { }
 
-    virtual void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void generateFinalizeMethod(BuilderRef) { }
 
-    virtual void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> &) { }
+    virtual void addAdditionalFunctions(BuilderRef) { }
 
     virtual void setInputStreamSetAt(const unsigned i, StreamSet * value);
 
@@ -484,7 +495,7 @@ protected:
 
     virtual void setOutputScalarAt(const unsigned i, Scalar * value);
 
-    virtual std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b);
+    virtual std::vector<llvm::Value *> getFinalOutputScalars(BuilderRef b);
 
     LLVM_READNONE const BindingMapEntry & getBinding(const BindingType type, const llvm::StringRef name) const;
 
@@ -556,8 +567,14 @@ protected:
         return mIsFinal;
     }
 
+    virtual void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const;
+
+    virtual void bindFamilyInitializationArguments(BuilderRef b, ArgIterator & arg, const ArgIterator & arg_end) const;
+
+    virtual void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const;
+
     // Constructor
-    Kernel(const std::unique_ptr<KernelBuilder> & b,
+    Kernel(BuilderRef b,
            const TypeId typeId, std::string && kernelName,
            Bindings &&stream_inputs, Bindings &&stream_outputs,
            Bindings &&scalar_inputs, Bindings &&scalar_outputs,
@@ -565,47 +582,52 @@ protected:
 
 private:
 
-    llvm::Function * addInitializeDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addInitializeDeclaration(BuilderRef b) const;
 
-    void callGenerateInitializeMethod(const std::unique_ptr<KernelBuilder> & b);
+    void callGenerateInitializeMethod(BuilderRef b);
 
-    llvm::Function * addInitializeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addInitializeThreadLocalDeclaration(BuilderRef b) const;
 
-    void callGenerateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b);
+    void callGenerateInitializeThreadLocalMethod(BuilderRef b);
 
-    llvm::Function * addDoSegmentDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addDoSegmentDeclaration(BuilderRef b) const;
 
-    std::vector<llvm::Type *> getDoSegmentFields(const std::unique_ptr<KernelBuilder> & b) const;
+    std::vector<llvm::Type *> getDoSegmentFields(BuilderRef b) const;
 
-    void callGenerateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b);
+    void callGenerateDoSegmentMethod(BuilderRef b);
 
-    void setDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b, const llvm::ArrayRef<llvm::Value *> args);
+    void setDoSegmentProperties(BuilderRef b, const llvm::ArrayRef<llvm::Value *> args);
 
-    std::vector<llvm::Value *> getDoSegmentProperties(const std::unique_ptr<KernelBuilder> & b) const;
+    std::vector<llvm::Value *> getDoSegmentProperties(BuilderRef b) const;
 
-    llvm::Function * addFinalizeThreadLocalDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addFinalizeThreadLocalDeclaration(BuilderRef b) const;
 
-    void callGenerateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b);
+    void callGenerateFinalizeThreadLocalMethod(BuilderRef b);
 
-    llvm::Function * addFinalizeDeclaration(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * addFinalizeDeclaration(BuilderRef b) const;
 
-    void callGenerateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b);
+    void callGenerateFinalizeMethod(BuilderRef b);
 
-    void addBaseKernelProperties(const std::unique_ptr<KernelBuilder> & b);
+    void addBaseKernelProperties(BuilderRef b);
 
-    llvm::Function * getInitializeFunction(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * getInitializeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
-    llvm::Function * getInitializeThreadLocalFunction(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * getInitializeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
-    llvm::Function * getDoSegmentFunction(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * getDoSegmentFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
-    llvm::Function * getFinalizeThreadLocalFunction(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * getFinalizeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
-    llvm::Function * getFinalizeFunction(const std::unique_ptr<KernelBuilder> & b) const;
+    llvm::Function * getFinalizeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
-    void constructStateTypes(const std::unique_ptr<KernelBuilder> & b);
+    void constructStateTypes(BuilderRef b);
 
-    void initializeScalarMap(const std::unique_ptr<KernelBuilder> & b, const bool skipThreadLocal = false) const;
+    enum class InitializeScalarMapOptions {
+        SkipThreadLocal
+        , IncludeThreadLocal
+    };
+
+    void initializeScalarMap(BuilderRef b, const InitializeScalarMapOptions options) const;
 
     unsigned getSharedScalarIndex(KernelBuilder * b, const llvm::StringRef name) const;
 
@@ -683,7 +705,7 @@ public:
 
 protected:
 
-    SegmentOrientedKernel(const std::unique_ptr<KernelBuilder> & b,
+    SegmentOrientedKernel(BuilderRef b,
                           std::string && kernelName,
                           Bindings &&stream_inputs,
                           Bindings &&stream_outputs,
@@ -692,11 +714,11 @@ protected:
                           InternalScalars && internal_scalars);
 public:
 
-    virtual void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) = 0;
+    virtual void generateDoSegmentMethod(BuilderRef b) = 0;
 
 protected:
 
-    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateKernelMethod(BuilderRef b) final;
 
 };
 
@@ -713,7 +735,7 @@ public:
 
 protected:
 
-    MultiBlockKernel(const std::unique_ptr<KernelBuilder> & b,
+    MultiBlockKernel(BuilderRef b,
                      std::string && kernelName,
                      Bindings && stream_inputs,
                      Bindings && stream_outputs,
@@ -721,11 +743,11 @@ protected:
                      Bindings && scalar_outputs,
                      InternalScalars && internal_scalars);
 
-    virtual void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) = 0;
+    virtual void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) = 0;
 
 private:
 
-    MultiBlockKernel(const std::unique_ptr<KernelBuilder> & b,
+    MultiBlockKernel(BuilderRef b,
                      const TypeId kernelTypId,
                      std::string && kernelName,
                      Bindings && stream_inputs,
@@ -736,7 +758,7 @@ private:
 
 private:
 
-    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateKernelMethod(BuilderRef b) final;
 
 };
 
@@ -752,11 +774,11 @@ public:
 
 protected:
 
-    void CreateDoBlockMethodCall(const std::unique_ptr<KernelBuilder> & b);
+    void CreateDoBlockMethodCall(BuilderRef b);
 
     // Each kernel builder subtype must provide its own logic for generating
     // doBlock calls.
-    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) = 0;
+    virtual void generateDoBlockMethod(BuilderRef b) = 0;
 
     // Each kernel builder subtypre must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
@@ -765,9 +787,9 @@ protected:
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
-    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingItems);
+    virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingItems);
 
-    BlockOrientedKernel(const std::unique_ptr<KernelBuilder> & b,
+    BlockOrientedKernel(BuilderRef b,
                         std::string && kernelName,
                         Bindings && stream_inputs,
                         Bindings && stream_outputs,
@@ -775,21 +797,21 @@ protected:
                         Bindings && scalar_outputs,
                         InternalScalars && internal_scalars);
 
-    llvm::Value * getRemainingItems(const std::unique_ptr<KernelBuilder> & b);
+    llvm::Value * getRemainingItems(BuilderRef b);
 
 private:
 
     void annotateInputBindingsWithPopCountArrayAttributes();
 
-    void incrementCountableItemCounts(const std::unique_ptr<KernelBuilder> & b);
+    void incrementCountableItemCounts(BuilderRef b);
 
-    llvm::Value * getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b, const ProcessingRate & rate);
+    llvm::Value * getPopCountRateItemCount(BuilderRef b, const ProcessingRate & rate);
 
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 
-    void writeDoBlockMethod(const std::unique_ptr<KernelBuilder> & b);
+    void writeDoBlockMethod(BuilderRef b);
 
-    void writeFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingItems);
+    void writeFinalBlockMethod(BuilderRef b, llvm::Value * remainingItems);
 
 private:
 

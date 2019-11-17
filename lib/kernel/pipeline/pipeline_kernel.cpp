@@ -2,6 +2,7 @@
 #include "compiler/pipeline_compiler.hpp"
 #include <llvm/IR/Function.h>
 
+
 // NOTE: the pipeline kernel is primarily a proxy for the pipeline compiler. Ideally, by making some kernels
 // a "family", the pipeline kernel will be compiled once for the lifetime of a program. Thus we can avoid even
 // constructing any data structures for the pipeline in normal usage.
@@ -11,7 +12,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PipelineKernel::addInternalProperties(BuilderRef b) {
     mCompiler = llvm::make_unique<PipelineCompiler>(b, this);
     mCompiler->generateImplicitKernels(b);
     mCompiler->addPipelineKernelProperties(b);
@@ -20,7 +21,7 @@ void PipelineKernel::addInternalProperties(const std::unique_ptr<kernel::KernelB
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::addKernelDeclarations(BuilderRef b) {
     for (Kernel * kernel : mKernels) {
         kernel->addKernelDeclarations(b);
     }
@@ -31,85 +32,51 @@ void PipelineKernel::addKernelDeclarations(const std::unique_ptr<KernelBuilder> 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initializeInstance
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::initializeInstance(const std::unique_ptr<KernelBuilder> & b, ArrayRef<Value *> args) {
-    assert (args[0] && "cannot initialize before creation");
-    assert (args[0]->getType()->getPointerElementType() == mSharedStateType);
-    b->setKernel(this);
-    SmallVector<Value *, 64> initArgs(args.begin(), args.end());
-
-    // TODO: move this logic into the main function creation
-
-    // append the kernel pointers for any kernel belonging to a family
-    for (Kernel * kernel : mKernels) {
-        if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
-            PointerType * const voidPtrTy = b->getVoidPtrTy();
-            if (LLVM_LIKELY(kernel->isStateful())) {
-                Value * const handle = kernel->createInstance(b);
-                initArgs.push_back(b->CreatePointerCast(handle, voidPtrTy));
-            }
-            initArgs.push_back(b->CreatePointerCast(kernel->getInitializeFunction(b), voidPtrTy));
-            if (kernel->hasThreadLocal()) {
-                initArgs.push_back(b->CreatePointerCast(kernel->getInitializeThreadLocalFunction(b), voidPtrTy));
-            }
-            initArgs.push_back(b->CreatePointerCast(kernel->getDoSegmentFunction(b), voidPtrTy));
-            if (kernel->hasThreadLocal()) {
-                initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeThreadLocalFunction(b), voidPtrTy));
-            }
-            initArgs.push_back(b->CreatePointerCast(kernel->getFinalizeFunction(b), voidPtrTy));
-        }
-    }
-
-    b->CreateCall(getInitializeFunction(b), initArgs);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::generateInitializeMethod(BuilderRef b) {
     mCompiler->generateInitializeMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::generateInitializeThreadLocalMethod(BuilderRef b) {
     mCompiler->generateInitializeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::generateKernelMethod(BuilderRef b) {
     mCompiler->generateKernelMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::generateFinalizeMethod(BuilderRef b) {
     mCompiler->generateFinalizeMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::generateFinalizeThreadLocalMethod(BuilderRef b) {
     mCompiler->generateFinalizeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFinalOutputScalars
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Value *> PipelineKernel::getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) {
+std::vector<Value *> PipelineKernel::getFinalOutputScalars(BuilderRef b) {
     return mCompiler->getFinalOutputScalars(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief linkExternalMethods
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::linkExternalMethods(BuilderRef b) {
     for (const auto & k : mKernels) {
         k->linkExternalMethods(b);
     }
@@ -121,22 +88,23 @@ void PipelineKernel::linkExternalMethods(const std::unique_ptr<KernelBuilder> & 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addAdditionalFunctions
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) {
+void PipelineKernel::addAdditionalFunctions(BuilderRef b) {
     if (hasStaticMain()) {
         addOrDeclareMainFunction(b, AddExternal);
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasStaticMain
+ * @brief containsKernelFamilies
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineKernel::hasStaticMain() const {
+bool PipelineKernel::containsKernelFamilies() const {
     for (Kernel * k : mKernels) {
         if (k->hasFamilyName()) {
-            return false;
+            return true;
         }
+        assert (!k->containsKernelFamilies());
     }
-    return true;
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -149,45 +117,228 @@ const std::string PipelineKernel::getName() const {
     return mKernelName;
 }
 
+#define JOIN3(X,Y,Z) BOOST_JOIN(X,BOOST_JOIN(Y,Z))
+
+#define REPLACE_INTERNAL_KERNEL_BINDINGS(BindingType) \
+    const auto * const from = JOIN3(m, BindingType, s)[i].getRelationship(); \
+    for (auto * K : mKernels) { \
+        const auto & B = K->JOIN3(get, BindingType, Bindings)(); \
+        for (unsigned j = 0; j < B.size(); ++j) { \
+            if (LLVM_UNLIKELY(B[j].getRelationship() == from)) { \
+                K->JOIN3(set, BindingType, At)(j, value); } } } \
+    JOIN3(m, BindingType, s)[i].setRelationship(value);
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInputStreamSetAt
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::setInputStreamSetAt(const unsigned i, StreamSet * const value) {
-    mInputStreamSets[i].setRelationship(value);
+    REPLACE_INTERNAL_KERNEL_BINDINGS(InputStreamSet);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setOutputStreamSetAt
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::setOutputStreamSetAt(const unsigned i, StreamSet * const value) {
-    mOutputStreamSets[i].setRelationship(value);
+    REPLACE_INTERNAL_KERNEL_BINDINGS(OutputStreamSet);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setInputScalarAt
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::setInputScalarAt(const unsigned i, Scalar * const value) {
-    mInputScalars[i].setRelationship(value);
+    REPLACE_INTERNAL_KERNEL_BINDINGS(InputScalar);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief setOutputScalarAt
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
-    mOutputScalars[i].setRelationship(value);
+    REPLACE_INTERNAL_KERNEL_BINDINGS(OutputScalar);
 }
 
+#undef JOIN3
+#undef REPLACE_INTERNAL_KERNEL_BINDINGS
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOrDeclareMainFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Function * PipelineKernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) {
+
+    b->setKernel(this);
+
+    addKernelDeclarations(b);
+
+    unsigned suppliedArgs = 1;
+    if (LLVM_LIKELY(isStateful())) {
+        ++suppliedArgs;
+    }
+    if (LLVM_UNLIKELY(hasThreadLocal())) {
+        ++suppliedArgs;
+    }
+
+    Module * const m = b->getModule();
+    Function * const doSegment = getDoSegmentFunction(b);
+    assert (doSegment->arg_size() >= suppliedArgs);
+    const auto numOfDoSegArgs = doSegment->arg_size() - suppliedArgs;
+    Function * const terminate = getFinalizeFunction(b);
+
+    // maintain consistency with the Kernel interface by passing first the stream sets
+    // and then the scalars.
+    SmallVector<Type *, 32> params;
+    params.reserve(numOfDoSegArgs + getNumOfScalarInputs());
+
+    // The initial params of doSegment are its shared handle, thread-local handle and numOfStrides.
+    // (assuming the kernel has both handles). The remaining are the stream set params
+    auto doSegParam = doSegment->arg_begin();
+    std::advance(doSegParam, suppliedArgs);
+    const auto doSegEnd = doSegment->arg_end();
+    while (doSegParam != doSegEnd) {
+        params.push_back(doSegParam->getType());
+        std::advance(doSegParam, 1);
+    }
+    for (const auto & input : getInputScalarBindings()) {
+        params.push_back(input.getType());
+    }
+
+    // get the finalize method output type and set its return type as this function's return type
+    FunctionType * const mainFunctionType = FunctionType::get(terminate->getReturnType(), params, false);
+
+    const auto linkageType = (method == AddInternal) ? Function::InternalLinkage : Function::ExternalLinkage;
+
+    Function * const main = Function::Create(mainFunctionType, linkageType, getName() + "_main", m);
+    main->setCallingConv(CallingConv::C);
+
+    // declaration only; exit
+    if (method == DeclareExternal) {
+        return main;
+    }
+
+    if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
+        report_fatal_error("main cannot be externally synchronized");
+    }
+
+    b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", main));
+    auto arg = main->arg_begin();
+    auto nextArg = [&]() {
+        assert (arg != main->arg_end());
+        Value * const v = &*arg;
+        std::advance(arg, 1);
+        return v;
+    };
+
+    SmallVector<Value *, 16> segmentArgs(doSegment->arg_size());
+    segmentArgs[suppliedArgs - 1] = b->getSize(0);  // numOfStrides -> isFinal = True
+    for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
+        segmentArgs[suppliedArgs + i] = nextArg();
+    }
+    ParamMap paramMap;
+    for (const auto & input : getInputScalarBindings()) {
+        paramMap.insert(std::make_pair(cast<Scalar>(input.getRelationship()), nextArg()));
+    }
+    assert (arg == main->arg_end());
+
+    Value * sharedHandle = nullptr;
+    {
+        InitArgs args;
+        sharedHandle = constructFamilyKernels(b, args, paramMap);
+    }
+    Value * threadLocalHandle = nullptr;
+    if (LLVM_UNLIKELY(hasThreadLocal())) {
+        threadLocalHandle = initializeThreadLocalInstance(b, sharedHandle);
+    }
+    if (LLVM_LIKELY(isStateful())) {
+        segmentArgs[0] = sharedHandle;
+    }
+    if (hasThreadLocal()) {
+        segmentArgs[suppliedArgs - 2] = threadLocalHandle;
+    }
+
+    #ifdef NDEBUG
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+    #endif
+        BasicBlock * const handleCatch = b->CreateBasicBlock("");
+        BasicBlock * const handleDeallocation = b->CreateBasicBlock("");
+
+        IntegerType * const int32Ty = b->getInt32Ty();
+        PointerType * const int8PtrTy = b->getInt8PtrTy();
+        LLVMContext & C = b->getContext();
+        StructType * const caughtResultType = StructType::get(C, { int8PtrTy, int32Ty });
+        Function * const personalityFn = b->getDefaultPersonalityFunction();
+        main->setPersonalityFn(personalityFn);
+
+        b->CreateInvoke(doSegment, handleDeallocation, handleCatch, segmentArgs);
+
+        b->SetInsertPoint(handleCatch);
+        LandingPadInst * const caughtResult = b->CreateLandingPad(caughtResultType, 0);
+        caughtResult->addClause(ConstantPointerNull::get(int8PtrTy));
+        b->CreateCall(b->getBeginCatch(), {b->CreateExtractValue(caughtResult, 0)});
+        b->CreateCall(b->getEndCatch());
+        b->CreateBr(handleDeallocation);
+
+        b->SetInsertPoint(handleDeallocation);
+    #ifdef NDEBUG
+    } else {
+        b->CreateCall(doSegment, segmentArgs);
+    }
+    #endif
+    if (hasThreadLocal()) {
+        SmallVector<Value *, 2> args;
+        if (LLVM_LIKELY(isStateful())) {
+            args.push_back(sharedHandle);
+        }
+        args.push_back(threadLocalHandle);
+        finalizeThreadLocalInstance(b, args);
+    }
+    if (isStateful()) {
+        // call and return the final output value(s)
+        b->CreateRet(finalizeInstance(b, sharedHandle));
+    }
+    return main;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addFamilyInitializationArgTypes
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const {
+    const auto n = mKernels.size();
+    for (unsigned i = 0; i != n; ++i) {
+        const Kernel * const kernel = mKernels[i];
+        if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
+            PipelineCompiler::addFamilyInitializationArgTypes(b, kernel, argTypes);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief bindFamilyInitializationArguments
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::bindFamilyInitializationArguments(BuilderRef b, ArgIterator & arg, const ArgIterator & arg_end) const {
+    mCompiler->bindFamilyInitializationArguments(b, arg, arg_end);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief recursivelyConstructFamilyKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const {
+    for (const Kernel * const kernel : mKernels) {
+        if (LLVM_UNLIKELY(kernel->hasFamilyName())) {
+            kernel->constructFamilyKernels(b, args, params);
+        } else if (LLVM_UNLIKELY(kernel->containsKernelFamilies())) {
+            InitArgs nestedArgs;
+            kernel->constructFamilyKernels(b, nestedArgs, params);
+        }
+    }
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
+PipelineKernel::PipelineKernel(BaseDriver & driver,
                                std::string && signature, const unsigned numOfThreads,
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
                                Bindings && scalar_inputs, Bindings && scalar_outputs)
-: Kernel(b, TypeId::Pipeline,
+: Kernel(driver.getBuilder(), TypeId::Pipeline,
          [] (const std::string & signature, const unsigned numOfThreads) {
              std::string tmp;
              tmp.reserve(32);
@@ -205,10 +356,7 @@ PipelineKernel::PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
 , mSignature(std::move(signature)) {
-    // If this is an open system, mark it as internally synchronized.
-    if (getNumOfStreamInputs() > 0 || getNumOfStreamOutputs() > 0) {
-        addAttribute(InternallySynchronized());
-    }
+
 }
 
 

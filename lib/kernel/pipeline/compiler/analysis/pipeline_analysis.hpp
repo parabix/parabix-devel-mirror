@@ -22,7 +22,7 @@ namespace kernel {
 template <typename Graph>
 void printGraph(const Graph & G, raw_ostream & out, const StringRef name = "G") {
 
-    out << "digraph " << name << " {\n";
+    out << "digraph \"" << name << "\" {\n";
     for (auto v : make_iterator_range(vertices(G))) {
         out << "v" << v << " [label=\"" << v << "\"];\n";
     }
@@ -122,6 +122,10 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                     out << "<Unknown Relationship>: ";
                 }
                 rn.Relationship->getType()->print(errs());
+
+                errs() << " ";
+                errs().write_hex(reinterpret_cast<uintptr_t>(rn.Relationship));
+
                 break;
         }
         out << "\"];\n";
@@ -203,7 +207,7 @@ void addProducerRelationships(const PortType portType, const unsigned producer, 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addConsumerRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-void addConsumerRelationships(const PortType portType, const unsigned consumer, const Bindings & array, Relationships & G) {
+void addConsumerRelationships(const PortType portType, const unsigned consumer, const Bindings & array, Relationships & G, const bool addRelationship) {
     const auto n = array.size();
     if (LLVM_UNLIKELY(n == 0)) {
         return;
@@ -214,13 +218,15 @@ void addConsumerRelationships(const PortType portType, const unsigned consumer, 
             assert (isa<StreamSet>(item.getRelationship()));
             const auto binding = G.add(&item);
             add_edge(binding, consumer, RelationshipType{portType, i}, G);
-            const auto relationship = G.find(item.getRelationship());
+            const auto rel = item.getRelationship();
+            const auto relationship = G.addOrFind(rel, addRelationship);
             add_edge(relationship, binding, RelationshipType{portType, i}, G);
         }
     } else if (isa<Scalar>(array[0].getRelationship())) {
         for (unsigned i = 0; i < n; ++i) {
             assert (isa<Scalar>(array[i].getRelationship()));
-            const auto relationship = G.addOrFind(array[i].getRelationship());
+            const auto rel = array[i].getRelationship();
+            const auto relationship = G.addOrFind(rel, addRelationship);
             add_edge(relationship, consumer, RelationshipType{portType, i}, G);
         }
     }
@@ -281,8 +287,6 @@ inline void addReferenceRelationships(const PortType portType, const unsigned in
  * @brief makePipelineGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel) {
-
-    const auto construction_error_msg = "error constructing internal pipeline graph";
 
     using Vertices = Vec<unsigned, 64>;
 
@@ -347,11 +351,6 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     const auto numOfCallees = callees.size();
     const auto numOfScalars = scalars.size();
 
-    if (LLVM_UNLIKELY(G[kernels[0]].Kernel != pipelineKernel ||
-                      G[kernels[numOfKernels - 1]].Kernel != pipelineKernel)) {
-        report_fatal_error(construction_error_msg);
-    }
-
     const auto n = numOfKernels + numOfBindings + numOfStreamSets;
     const auto m = numOfKernels + numOfCallees + numOfScalars;
 
@@ -371,23 +370,52 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     SmallVector<unsigned, 256> subsitution(num_vertices(G), -1U);
 
-    for (unsigned i = 0; i < numOfKernels; ++i) {
-        subsitution[kernels[i]] = i;
-    }
+    // Since we know by construction the first kernel vertex of G must be
+    // the vertex that represents the pipeline input, select it.
+    subsitution[kernels[0]] = P.PipelineInput;
+    assert (G[kernels[0]].Kernel == pipelineKernel);
 
-    assert (subsitution[kernels[0]] == P.PipelineInput);
-    assert (subsitution[kernels[numOfKernels - 1]] == P.PipelineOutput);
+    // We cannot be sure which kernel represents the pipeline output
+    // but do know that the only kernel other 0 that is mapped to the
+    // the pipelineKernel must refer to it. Find the output.
+
+    unsigned pipelineOutput = 0;
+    for (auto i = numOfKernels - 1U; i > 0U; --i) {
+        const auto k = kernels[i];
+        if (LLVM_LIKELY(G[k].Kernel == pipelineKernel)) {
+            assert (subsitution[k] == -1U);
+            subsitution[k] = P.PipelineOutput;
+            pipelineOutput = i;
+        }
+    }
+    assert (pipelineOutput > 0);
+
+    // Now fill in all of the remaining kernels subsitute position
+    auto kernelIndex = P.FirstKernel;
+    for (auto i = 1U; i != numOfKernels; ++i) {
+        if (LLVM_UNLIKELY(i == pipelineOutput)) continue;
+        const auto k = kernels[i];
+        assert (subsitution[k] == -1U);
+        assert (G[k].Kernel != pipelineKernel);
+        assert (kernelIndex <= P.LastKernel);
+        subsitution[k] = kernelIndex++;
+    }
+    assert (kernelIndex == P.PipelineOutput);
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {
+        assert (subsitution[streamSets[i]] == -1U);
         subsitution[streamSets[i]] = P.FirstStreamSet + i;
     }
     for (unsigned i = 0; i < numOfBindings; ++i) {
+        assert (subsitution[bindings[i]] == -1U);
         subsitution[bindings[i]] = P.FirstBinding  + i;
     }
     for (unsigned i = 0; i < numOfCallees; ++i) {
+        assert (subsitution[callees[i]] == -1U);
         subsitution[callees[i]] = P.FirstCall + i;
     }
     for (unsigned i = 0; i < numOfScalars; ++i) {
+        assert (subsitution[scalars[i]] == -1U);
         subsitution[scalars[i]] = P.FirstScalar + i;
     }
 
@@ -411,9 +439,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
                 const auto i = source(e, G);
                 if (G[i].Type == type) {
                     const auto u = subsitution[i];
-                    if (LLVM_UNLIKELY(u >= num_vertices(H))) {
-                        report_fatal_error(construction_error_msg);
-                    }
+                    assert (u < num_vertices(H));
                     temp.emplace_back(G[e], u);
                 }
             }
@@ -433,9 +459,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
                 const auto i = target(e, G);
                 if (G[i].Type == type) {
                     const auto w = subsitution[i];
-                    if (LLVM_UNLIKELY(w >= num_vertices(H))) {
-                        report_fatal_error(construction_error_msg);
-                    }
+                    assert (w < num_vertices(H));
                     temp.emplace_back(G[e], w);
                 }
             }
@@ -489,7 +513,6 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
     Kernels kernels(pipelineKernel->getKernels());
 
     const auto p_in = add_vertex(RelationshipNode(pipelineKernel), G);
-    addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputStreamSetBindings(), G);
     const auto n = kernels.size();
     SmallVector<Relationships::Vertex, 64> vertex(n);
     for (unsigned i = 0; i < n; ++i) {
@@ -502,37 +525,47 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
             report_fatal_error(msg.str());
         }
         vertex[i] = G.add(K);
-        addProducerRelationships(PortType::Output, vertex[i], K->getOutputStreamSetBindings(), G);
+    }
+    const auto p_out = add_vertex(RelationshipNode(pipelineKernel), G);
+    addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputStreamSetBindings(), G);
+    addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputStreamSetBindings(), G, true);
+
+    for (unsigned i = 0; i < n; ++i) {
+        addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), G);
     }
     for (unsigned i = 0; i < n; ++i) {
-        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), G);
+        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), G, false);
     }
+
     for (unsigned i = 0; i < n; ++i) {
         addReferenceRelationships(PortType::Input, vertex[i], kernels[i]->getInputStreamSetBindings(), G);
+    }
+    for (unsigned i = 0; i < n; ++i) {
         addReferenceRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), G);
     }
 
     addPopCountKernels(b, kernels, G, internalKernels, internalBindings);
     // addRegionSelectorKernels(b, kernels, G, internalKernels, internalBindings);
-    const auto p_out = add_vertex(RelationshipNode(pipelineKernel), G);
-    addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputStreamSetBindings(), G);
 
     addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputScalarBindings(), G);
+    addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputScalarBindings(), G, true);
     for (unsigned i = 0; i < n; ++i) {
         addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputScalarBindings(), G);
     }
+
     for (unsigned i = 0; i < n; ++i) {
-        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputScalarBindings(), G);
+        addConsumerRelationships(PortType::Input, vertex[i], kernels[i]->getInputScalarBindings(), G, true);
     }
+
     for (const CallBinding & C : pipelineKernel->getCallBindings()) {
         addConsumerRelationships(PortType::Input, C, G);
     }
-    addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputScalarBindings(), G);
+
+
 
     // Pipeline optimizations
     combineDuplicateKernels(b, kernels, G);
     removeUnusedKernels(pipelineKernel, p_in, p_out, kernels, G);
-
 
     return G;
 }
@@ -808,7 +841,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
         internalKernels.emplace_back(popCountKernel);
 
         const auto k = G.add(popCountKernel);
-        addConsumerRelationships(PortType::Input, k, popCountKernel->getInputStreamSetBindings(), G);
+        addConsumerRelationships(PortType::Input, k, popCountKernel->getInputStreamSetBindings(), G, false);
         addProducerRelationships(PortType::Output, k, popCountKernel->getOutputStreamSetBindings(), G);
 
         // subsitute the popcount relationships
@@ -1406,7 +1439,6 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 
     // TODO: add additional constraints on input ports to indicate the ones
     // likely to have fewest number of strides?
-
     mPortEvaluationOrder.clear();
     if (LLVM_UNLIKELY(!lexical_ordering(G, mPortEvaluationOrder))) {
         report_fatal_error(mKernel->getName() + " has cyclic port dependencies.");
@@ -1435,6 +1467,13 @@ PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
         add_edge(producer, PipelineOutput, pr.Port.Number, G);
     }
     return G;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isOpenSystem
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::isOpenSystem() const {
+    return out_degree(PipelineInput, mPipelineIOGraph) != 0 || in_degree(PipelineOutput, mPipelineIOGraph) != 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

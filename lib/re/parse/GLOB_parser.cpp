@@ -53,7 +53,7 @@ const codepoint_t FILE_PATH_SEPARATOR = '\\';
 #else
 const codepoint_t FILE_PATH_SEPARATOR = '/';
 #endif
-    
+
 //
 // GLOB metacharacters:
 //  ? stands for any one character, except as below
@@ -68,16 +68,16 @@ const codepoint_t FILE_PATH_SEPARATOR = '/';
 static RE * makeAnyFileCC() {
     return makeComplement(makeCC(makeCC(NUL), makeCC(FILE_PATH_SEPARATOR)));
 }
-    
+
 //  Allowing PATH separator for /**/ in GLOB_kind == GIT mode.
 static RE * makeAnyPathCC() {
     return makeComplement(makeCC(NUL));
 }
-    
+
 static RE * makeAnyButDot() {
     return makeComplement(makeCC(makeCC(makeCC(NUL), makeCC(FILE_PATH_SEPARATOR)), makeCC('.')));
 }
-    
+
 RE * FileGLOB_Parser::parse_next_item() {
     if (mCursor.noMore()) return nullptr;
     if (accept('?')) {
@@ -200,8 +200,8 @@ RE * FileGLOB_Parser::range_extend(RE * char_expr1) {
 //
 namespace fs = boost::filesystem;
 
-std::vector<std::pair<PatternKind, RE *>> parseGitIgnoreFile(fs::path dirpath, std::string ignoreFileName, std::vector<std::pair<PatternKind, RE *>> REs) {
-    std::vector<std::pair<PatternKind, RE *>> ignoreREs = REs;
+PatternVector parseGitIgnoreFile(fs::path dirpath, std::string ignoreFileName) {
+    PatternVector ignoreREs;
     fs::path ignoreFilePath = dirpath/ignoreFileName;
     std::ifstream ignoreFile(ignoreFilePath.string());
     if (ignoreFile.is_open()) {

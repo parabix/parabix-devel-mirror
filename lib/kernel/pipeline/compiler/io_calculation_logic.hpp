@@ -4,6 +4,10 @@
 #include "pipeline_compiler.hpp"
 #include <llvm/Support/ErrorHandling.h>
 
+#warning add in assertions to prove whether all countable rate pipeline I/O was satisfied in the single iteration
+// Is it sufficient to verify symbolic rate of the pipeline matches the rate of the I/O?
+
+
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -35,6 +39,9 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             mBoundedKernel = true;
         }
         mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
+    }
+    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
+        mBoundedKernel = false;
     }
 
     // When tracing blocking I/O, test all I/O streams but do not execute the
@@ -128,7 +135,9 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const unsigned 
     const Binding & input = getInputBinding(inputPort);
     const ProcessingRate & rate = input.getRate();
     Value * sufficientInput = nullptr;
-    if (LLVM_UNLIKELY(rate.isGreedy())) {
+    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
+        sufficientInput = b->getTrue();
+    } else if (LLVM_UNLIKELY(rate.isGreedy())) {
         sufficientInput = b->CreateICmpUGE(accessible, required);
     } else {
         Value * const hasEnough = b->CreateICmpUGE(accessible, required);
@@ -248,9 +257,15 @@ void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b, const
             #ifdef PRINT_DEBUG_MESSAGES
             b->CallPrintInt(prefix + "_required", required);
             #endif
-            Value * const hasEnough = b->CreateICmpULE(required, writable, prefix + "_hasEnough");
+            Value * hasEnough = b->CreateICmpULE(required, writable, prefix + "_hasEnough");
+            const auto isOutput = isPipelineOutput(outputPort);
+            if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized) || isOutput)) {
+                hasEnough = b->getTrue();
+            } else {
+                hasEnough = b->CreateICmpULE(required, writable, prefix + "_hasEnough");
+            }
             BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasOutputSpace", mKernelLoopCall);
-            Value * const halting = isPipelineOutput(outputPort) ? b->getTrue() : mHalted;
+            Value * const halting = isOutput ? hasEnough : mHalted;
             branchToTargetOrLoopExit(b, StreamPort(PortType::Output, outputPort), hasEnough, target, halting);
         }
         mWritableOutputItems[outputPort] = writable;
@@ -946,7 +961,6 @@ void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b, Value * halting) 
     mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
     mHaltingPhi->addIncoming(halting, exitBlock);
-
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         mUpdatedProcessedPhi[i]->addIncoming(mAlreadyProcessedPhi[i], exitBlock);

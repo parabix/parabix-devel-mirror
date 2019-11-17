@@ -56,7 +56,9 @@ public:
 
     bool hasSignature() const final { return true; }
 
-    std::string makeSignature(const std::unique_ptr<KernelBuilder> &) const final {
+    bool containsKernelFamilies() const;
+
+    std::string makeSignature(BuilderRef) const final {
         return mSignature;
     }
 
@@ -74,36 +76,38 @@ public:
 
     virtual ~PipelineKernel();
 
-    bool hasStaticMain() const final;
+    bool hasStaticMain() const final {
+        return !containsKernelFamilies();
+    }
+
+    llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) final;
 
 protected:
 
-    PipelineKernel(const std::unique_ptr<KernelBuilder> & b,
+    PipelineKernel(BaseDriver & driver,
                    std::string && signature,
                    const unsigned numOfThreads,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);
 
-    void linkExternalMethods(const std::unique_ptr<KernelBuilder> & b) final;
+    void linkExternalMethods(BuilderRef b) final;
 
-    void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
+    void addKernelDeclarations(BuilderRef b) final;
 
-    void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateInitializeMethod(BuilderRef b) final;
 
-    void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateInitializeThreadLocalMethod(BuilderRef b) final;
 
-    void initializeInstance(const std::unique_ptr<KernelBuilder> & b, llvm::ArrayRef<llvm::Value *> args) final;
+    void generateKernelMethod(BuilderRef b) final;
 
-    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateFinalizeMethod(BuilderRef b) final;
 
-    void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateFinalizeThreadLocalMethod(BuilderRef b) final;
 
-    void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void addAdditionalFunctions(BuilderRef b) final;
 
-    void addAdditionalFunctions(const std::unique_ptr<KernelBuilder> & b) final;
-
-    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+    void addInternalProperties(BuilderRef b) final;
 
     void setInputStreamSetAt(const unsigned i, StreamSet * const value) final;
 
@@ -113,7 +117,13 @@ protected:
 
     void setOutputScalarAt(const unsigned i, Scalar * const value) final;
 
-    std::vector<llvm::Value *> getFinalOutputScalars(const std::unique_ptr<KernelBuilder> & b) final;
+    std::vector<llvm::Value *> getFinalOutputScalars(BuilderRef b) final;
+
+    void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const final;
+
+    void bindFamilyInitializationArguments(BuilderRef b, ArgIterator & arg, const ArgIterator & arg_end) const final;
+
+    void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const final;
 
 protected:
 
