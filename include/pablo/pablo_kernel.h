@@ -141,7 +141,7 @@ public:
 
 protected:
 
-    PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & builder,
+    PabloKernel(BuilderRef builder,
                 std::string && kernelName,
                 std::vector<kernel::Binding> stream_inputs = {},
                 std::vector<kernel::Binding> stream_outputs = {},
@@ -171,21 +171,21 @@ protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
+    void addInternalProperties(BuilderRef iBuilder) final;
 
 private:
 
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) final;
+    void generateDoBlockMethod(BuilderRef iBuilder) final;
 
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) final;
+    void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) final;
 
-    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) final;
+    void generateFinalizeMethod(BuilderRef iBuilder) final;
 
     #if 0
-    void beginConditionalRegion(const std::unique_ptr<KernelBuilder> & b) final;
+    void beginConditionalRegion(BuilderRef b) final;
     #endif
 
 private:

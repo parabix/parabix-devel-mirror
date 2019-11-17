@@ -16,7 +16,7 @@ namespace kernel {
 * Should NOT be used directly. Use either `AssertEQ` or `AssertNE` instead.
  */
 class StreamEquivalenceKernel : public MultiBlockKernel {
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 public:
     enum class Mode { EQ, NE };
 

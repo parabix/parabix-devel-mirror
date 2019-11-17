@@ -16,7 +16,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+void UntilNkernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) {
 
 /*
    Strategy:  first form an index consisting of one bit per packsize input positions,
@@ -178,7 +178,7 @@ void UntilNkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> 
 
 }
 
-UntilNkernel::UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * maxCount, StreamSet * AllMatches, StreamSet * Matches)
+UntilNkernel::UntilNkernel(BuilderRef b, Scalar * maxCount, StreamSet * AllMatches, StreamSet * Matches)
 : MultiBlockKernel(b, "UntilN",
 // inputs
 {Binding{"bits", AllMatches}},

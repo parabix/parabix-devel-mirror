@@ -15,7 +15,7 @@ namespace kernel {
 
 class CharacterClassKernelBuilder final : public pablo::PabloKernel {
 public:    
-    CharacterClassKernelBuilder(const std::unique_ptr<KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream, Scalar * signalNullObject = nullptr);
+    CharacterClassKernelBuilder(BuilderRef b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream, Scalar * signalNullObject = nullptr);
 protected:
     void generatePabloMethod() override;
     Bindings makeInputScalarBindings(Scalar * signalNullObject);

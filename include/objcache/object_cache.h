@@ -12,14 +12,13 @@
 #include <llvm/ADT/StringRef.h>
 #include <boost/container/flat_map.hpp>
 #include <util/not_null.h>
+#include <kernel/core/kernel.h>
 #include <string>
 
 namespace llvm { class Module; }
 namespace llvm { class MemoryBuffer; }
 namespace llvm { class MemoryBufferRef; }
 namespace llvm { class LLVMContext; }
-namespace kernel { class Kernel; }
-namespace kernel { class KernelBuilder; }
 
 // The ParabixObjectCache is a two-level cache compatible with the requirements
 // of the LLVM ExecutionEngine as well as the Parabix Kernel builder infrastructure.
@@ -38,10 +37,11 @@ class ParabixObjectCache final : public llvm::ObjectCache {
     using Map = boost::container::flat_map<K, V>;
     using ModuleCache = Map<std::string, std::pair<llvm::Module *, std::unique_ptr<llvm::MemoryBuffer>>>;
     using Instance = std::unique_ptr<ParabixObjectCache>;
+    using BuilderRef = kernel::Kernel::BuilderRef;
 public:
     using Path = llvm::SmallString<128>;
 
-    static bool checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, not_null<kernel::Kernel *> kernel) noexcept;
+    static bool checkForCachedKernel(BuilderRef b, not_null<kernel::Kernel *> kernel) noexcept;
 
     static void initializeCacheSystems() noexcept;
 
@@ -49,7 +49,7 @@ public:
         return mInstance.get();
     }
 
-    bool loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel);
+    bool loadCachedObjectFile(BuilderRef idb, kernel::Kernel * const kernel);
 
     void notifyObjectCompiled(const llvm::Module * M, llvm::MemoryBufferRef Obj) override;
 

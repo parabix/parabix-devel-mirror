@@ -94,14 +94,14 @@ extern "C" {
 
 class WordCountKernel final: public pablo::PabloKernel {
 public:
-    WordCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable);
+    WordCountKernel(BuilderRef b, StreamSet * const countable);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-WordCountKernel::WordCountKernel (const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable)
+WordCountKernel::WordCountKernel (BuilderRef b, StreamSet * const countable)
 : PabloKernel(b, "wc_" + wc_modes,
     {Binding{"countable", countable}},
     {},

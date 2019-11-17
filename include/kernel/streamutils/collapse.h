@@ -18,12 +18,12 @@ namespace kernel {
  */
 class CollapseStreamSet : public BlockOrientedKernel {
 public:
-    CollapseStreamSet(const std::unique_ptr<KernelBuilder> & iBuilder, StreamSet * input, StreamSet * output);
+    CollapseStreamSet(BuilderRef iBuilder, StreamSet * input, StreamSet * output);
 
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
 };
 
 namespace streamutils {

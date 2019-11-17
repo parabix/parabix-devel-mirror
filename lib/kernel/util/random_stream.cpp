@@ -11,13 +11,13 @@
 using namespace kernel;
 using namespace llvm;
 
-void RandomStreamKernel::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void RandomStreamKernel::generateInitializeMethod(BuilderRef b) {
     b->CreateSRandCall(b->getInt32(mSeed));
 }
 
 /* Generate the next segment of random values.   Input requirement:
    the output buffer has a full segment of space available. */
-void RandomStreamKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void RandomStreamKernel::generateDoSegmentMethod(BuilderRef b) {
     const size_t randIntSize = 32;  // from standard C rand function
     const size_t segmentItems = codegen::SegmentSize * codegen::BlockSize;
     //
@@ -95,7 +95,7 @@ void RandomStreamKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
     b->setProducedItemCount("randomValues", finalProducedPHI);
 }
 
-RandomStreamKernel::RandomStreamKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned seed, unsigned valueWidth, size_t streamLength)
+RandomStreamKernel::RandomStreamKernel(BuilderRef b, unsigned seed, unsigned valueWidth, size_t streamLength)
 : SegmentOrientedKernel(b, "rand" + std::to_string(valueWidth) + "_" + std::to_string(seed) + "_" + std::to_string(streamLength),
 // input
 {},

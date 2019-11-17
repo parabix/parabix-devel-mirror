@@ -15,11 +15,11 @@ namespace kernel {
 
 class editdScanKernel : public BlockOrientedKernel {
 public:
-    editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * matchResults);
+    editdScanKernel(BuilderRef b, StreamSet * matchResults);
 
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
-    llvm::Function * generateScanWordRoutine(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) const;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
+    llvm::Function * generateScanWordRoutine(BuilderRef iBuilder) const;
 
     unsigned mNumElements;
     unsigned mScanwordBitWidth;

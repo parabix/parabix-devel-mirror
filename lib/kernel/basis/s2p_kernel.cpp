@@ -16,8 +16,10 @@ using namespace llvm;
 
 namespace kernel {
 
+using BuilderRef = Kernel::BuilderRef;
+
 const int PACK_LANES = 2;
-void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
+void s2p_step(BuilderRef iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
     Value * t0 = nullptr;
     Value * t1 = nullptr;
     if ((iBuilder->getBitBlockWidth() == 256) && (PACK_LANES == 2)) {
@@ -36,7 +38,7 @@ void s2p_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * s0, Value
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
-void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
+void s2p(BuilderRef iBuilder, Value * input[], Value * output[]) {
     // Little-endian bit number is used for variables.
     Value * bit66442200[4];
     Value * bit77553311[4];
@@ -64,7 +66,7 @@ void s2p(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value
 
 /* Alternative transposition model, but small field width packs are problematic. */
 #if 0
-void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[], Value * output[]) {
+void s2p_ideal(BuilderRef iBuilder, Value * input[], Value * output[]) {
     Value * hi_nybble[4];
     Value * lo_nybble[4];
     for (unsigned i = 0; i<4; i++) {
@@ -94,7 +96,7 @@ void s2p_ideal(const std::unique_ptr<KernelBuilder> & iBuilder, Value * input[],
 }
 #endif
 
-void S2PKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
+void S2PKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
     Module * m = kb->getModule();
     DataLayout DL(m);
     IntegerType * const intPtrTy = DL.getIntPtrType(kb->getContext());
@@ -189,7 +191,7 @@ Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
     }
 }
 
-S2PKernel::S2PKernel(const std::unique_ptr<KernelBuilder> & b,
+S2PKernel::S2PKernel(BuilderRef b,
                      StreamSet * const codeUnitStream,
                      StreamSet * const BasisBits,
                      Scalar * signalNullObject)
@@ -219,7 +221,7 @@ inline std::string makeMultiS2PName(const StreamSets & outputStreams, const bool
     return buffer;
 }
 
-S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+S2PMultipleStreamsKernel::S2PMultipleStreamsKernel(BuilderRef b,
         StreamSet * codeUnitStream,
         const StreamSets & outputStreams,
         const bool aligned)
@@ -233,7 +235,7 @@ mAligned(aligned) {
     }
 }
 
-void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b, Value *const numOfBlocks) {
+void S2PMultipleStreamsKernel::generateMultiBlockLogic(BuilderRef b, Value *const numOfBlocks) {
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * processBlock = b->CreateBasicBlock("processBlock");
     BasicBlock * s2pDone = b->CreateBasicBlock("s2pDone");
@@ -274,12 +276,12 @@ void S2PMultipleStreamsKernel::generateMultiBlockLogic(const std::unique_ptr<Ker
 }
 
 
-S2P_21Kernel::S2P_21Kernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
+S2P_21Kernel::S2P_21Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
 : MultiBlockKernel(b, "s2p_21",
 {Binding{"codeUnitStream", codeUnitStream, FixedRate(), Principal()}},
     {Binding{"basisBits", BasisBits}}, {}, {}, {})  {}
 
-void S2P_21Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, Value * const numOfBlocks) {
+void S2P_21Kernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("s2p21_loop");
     BasicBlock * s2pDone = kb->CreateBasicBlock("s2p21_done");
@@ -351,7 +353,7 @@ void S2P_PabloKernel::generatePabloMethod() {
     }
 }
 
-S2P_PabloKernel::S2P_PabloKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
+S2P_PabloKernel::S2P_PabloKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits)
 : PabloKernel(b, "s2p_pablo" + std::to_string(codeUnitStream->getFieldWidth()),
 // input
 {Binding{"codeUnitStream", codeUnitStream}},

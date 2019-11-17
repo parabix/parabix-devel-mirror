@@ -38,7 +38,7 @@ public:
 
 class WordMarkKernel : public pablo::PabloKernel {
 public:
-    WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks);
+    WordMarkKernel(BuilderRef kb, StreamSet * BasisBits, StreamSet * WordMarks);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -47,7 +47,7 @@ protected:
 
 class ByteRun final: public pablo::PabloKernel {
 public:
-    ByteRun(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const basis, StreamSet * excluded, StreamSet * runMask)
+    ByteRun(BuilderRef b, StreamSet * const basis, StreamSet * excluded, StreamSet * runMask)
     : pablo::PabloKernel(b, "byteRun", {Binding{"basis", basis}, Binding{"excluded", excluded}}, {Binding{"runMask", runMask}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
@@ -64,7 +64,7 @@ protected:
 
 class ZTF_ExpansionDecoder final: public pablo::PabloKernel {
 public:
-    ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+    ZTF_ExpansionDecoder(BuilderRef b,
                          EncodingInfo & encodingScheme,
                          StreamSet * const basis,
                          StreamSet * insertBixNum);
@@ -77,7 +77,7 @@ protected:
 
 class ZTF_DecodeLengths : public pablo::PabloKernel {
 public:
-    ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
+    ZTF_DecodeLengths(BuilderRef b,
                       EncodingInfo & encodingScheme,
                       StreamSet * basisBits,
                       StreamSet * groupStreams);
@@ -93,7 +93,7 @@ protected:
 // with 1 bits.   Each 0 bit represents a start of a new symbol.
 class ZTF_Symbols : public pablo::PabloKernel {
 public:
-    ZTF_Symbols(const std::unique_ptr<KernelBuilder> & kb,
+    ZTF_Symbols(BuilderRef kb,
                 StreamSet * basisBits, StreamSet * wordChar, StreamSet * symbolRuns)
     : pablo::PabloKernel(kb, "ZTF_Symbols",
                          {Binding{"basisBits", basisBits, FixedRate(1), LookAhead(1)},
@@ -108,7 +108,7 @@ protected:
 // Given parsed symbol runs, produce a stream marking end positions only.
 class ZTF_SymbolEnds : public pablo::PabloKernel {
 public:
-    ZTF_SymbolEnds(const std::unique_ptr<KernelBuilder> & kb,
+    ZTF_SymbolEnds(BuilderRef kb,
                    StreamSet * symbolRuns, StreamSet * overflow, StreamSet * symbolEnds)
     : pablo::PabloKernel(kb, "ZTF_SymbolEnds",
                          {Binding{"symbolRuns", symbolRuns, FixedRate(1), LookAhead(1)},
@@ -122,7 +122,7 @@ protected:
 
 class ZTF_SymbolEncoder final: public pablo::PabloKernel {
 public:
-    ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+    ZTF_SymbolEncoder(BuilderRef b,
                       EncodingInfo & encodingScheme,
                       StreamSet * const basis,
                       StreamSet * bixHash,
@@ -138,7 +138,7 @@ protected:
 
 class LengthGroupSelector final: public pablo::PabloKernel {
 public:
-    LengthGroupSelector(const std::unique_ptr<kernel::KernelBuilder> & b,
+    LengthGroupSelector(BuilderRef b,
                  EncodingInfo & encodingScheme,
                     unsigned groupNo,
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
@@ -154,7 +154,7 @@ protected:
 
 class LengthSorter final: public pablo::PabloKernel {
 public:
-    LengthSorter(const std::unique_ptr<kernel::KernelBuilder> & b,
+    LengthSorter(BuilderRef b,
                  EncodingInfo & encodingScheme,
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
                  StreamSet * overflow,

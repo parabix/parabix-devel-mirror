@@ -38,7 +38,7 @@ namespace kernel {
 // relying on the MultiBlockKernel builder to only copy the correct number
 // of bytes to the actual output stream.
 
-void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &b, Value * const numOfStrides) {
+void expand3_4Kernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
 
     BasicBlock * expand2_3entry = b->GetInsertBlock();
     BasicBlock * expand_3_4_loop = b->CreateBasicBlock("expand_3_4_loop");
@@ -121,106 +121,106 @@ void expand3_4Kernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
 //                             hqfedc      bits to move 2 positions right
 //                                   ba    bits to move 12 positions left
 //    xwvuts|  nlkjzy|  barqpm|  hgfedc    Target
-inline Value * radix64Kernel::processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * bytepack) const {
+inline Value * radix64Kernel::processPackData(BuilderRef b, llvm::Value * bytepack) const {
 
-    Value * step_right_6 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x00C00000));
-    Value * right_6_result = iBuilder->simd_srli(32, iBuilder->simd_and(bytepack, step_right_6), 6);
+    Value * step_right_6 = b->simd_fill(32, ConstantInt::get(b->getInt32Ty(), 0x00C00000));
+    Value * right_6_result = b->simd_srli(32, b->simd_and(bytepack, step_right_6), 6);
 
-    Value * step_left_8 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x003F0000));
-    Value * left_8_result = iBuilder->simd_slli(32, iBuilder->simd_and(bytepack, step_left_8), 8);
-    Value * mid = iBuilder->simd_or(right_6_result, left_8_result);
+    Value * step_left_8 = b->simd_fill(32, ConstantInt::get(b->getInt32Ty(), 0x003F0000));
+    Value * left_8_result = b->simd_slli(32, b->simd_and(bytepack, step_left_8), 8);
+    Value * mid = b->simd_or(right_6_result, left_8_result);
 
-    Value * step_right_4 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x0000F000));
-    Value * right_4_result = iBuilder->simd_srli(32, iBuilder->simd_and(bytepack, step_right_4), 4);
-    mid = iBuilder->simd_or(mid, right_4_result);
+    Value * step_right_4 = b->simd_fill(32, ConstantInt::get(b->getInt32Ty(), 0x0000F000));
+    Value * right_4_result = b->simd_srli(32, b->simd_and(bytepack, step_right_4), 4);
+    mid = b->simd_or(mid, right_4_result);
 
-    Value * step_left_10 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x00000F00));
-    Value * left_10_result = iBuilder->simd_slli(32, iBuilder->simd_and(bytepack, step_left_10), 10);
-    mid = iBuilder->simd_or(mid, left_10_result);
+    Value * step_left_10 = b->simd_fill(32, ConstantInt::get(b->getInt32Ty(), 0x00000F00));
+    Value * left_10_result = b->simd_slli(32, b->simd_and(bytepack, step_left_10), 10);
+    mid = b->simd_or(mid, left_10_result);
 
-    Value * step_right_2 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x000000FC));
-    Value * right_2_result = iBuilder->simd_srli(32, iBuilder->simd_and(bytepack, step_right_2), 2);
-    mid = iBuilder->simd_or(mid, right_2_result);
+    Value * step_right_2 = b->simd_fill(32, ConstantInt::get(b->getInt32Ty(), 0x000000FC));
+    Value * right_2_result = b->simd_srli(32, b->simd_and(bytepack, step_right_2), 2);
+    mid = b->simd_or(mid, right_2_result);
 
-    Value * step_left_12 = iBuilder->simd_fill(32, ConstantInt::get(iBuilder->getInt32Ty(), 0x00000003));
-    Value * left_12_result = iBuilder->simd_slli(32, iBuilder->simd_and(bytepack, step_left_12), 12);
-    mid = iBuilder->simd_or(mid, left_12_result);
+    Value * step_left_12 = b->simd_fill(32, ConstantInt::get(b->getInt32Ty(), 0x00000003));
+    Value * left_12_result = b->simd_slli(32, b->simd_and(bytepack, step_left_12), 12);
+    mid = b->simd_or(mid, left_12_result);
 
-    return iBuilder->bitCast(mid);
+    return b->bitCast(mid);
 }
 
-void radix64Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void radix64Kernel::generateDoBlockMethod(BuilderRef b) {
     for (unsigned i = 0; i < 8; i++) {
-        Value * bytepack = iBuilder->loadInputStreamPack("expandedStream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        Value * radix64pack = processPackData(iBuilder, bytepack);
-        iBuilder->storeOutputStreamPack("radix64stream", iBuilder->getInt32(0), iBuilder->getInt32(i), radix64pack);
+        Value * bytepack = b->loadInputStreamPack("expandedStream", b->getInt32(0), b->getInt32(i));
+        Value * radix64pack = processPackData(b, bytepack);
+        b->storeOutputStreamPack("radix64stream", b->getInt32(0), b->getInt32(i), radix64pack);
     }
 }
 
-void radix64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, Value * remainingBytes) {
+void radix64Kernel::generateFinalBlockMethod(BuilderRef b, Value * remainingBytes) {
 
-    BasicBlock * entry = iBuilder->GetInsertBlock();
-    BasicBlock * radix64_loop = iBuilder->CreateBasicBlock("radix64_loop");
-    BasicBlock * fbExit = iBuilder->CreateBasicBlock("fbExit");
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * radix64_loop = b->CreateBasicBlock("radix64_loop");
+    BasicBlock * fbExit = b->CreateBasicBlock("fbExit");
 
-    const unsigned PACK_SIZE = iBuilder->getStride()/8;
-    Constant * packSize = iBuilder->getSize(PACK_SIZE);
+    const unsigned PACK_SIZE = b->getStride()/8;
+    Constant * packSize = b->getSize(PACK_SIZE);
 
     // Enter the loop only if there is at least one byte remaining to process.
-    iBuilder->CreateCondBr(iBuilder->CreateICmpEQ(remainingBytes, iBuilder->getSize(0)), fbExit, radix64_loop);
+    b->CreateCondBr(b->CreateICmpEQ(remainingBytes, b->getSize(0)), fbExit, radix64_loop);
 
-    iBuilder->SetInsertPoint(radix64_loop);
-    PHINode * idx = iBuilder->CreatePHI(iBuilder->getInt32Ty(), 2);
-    PHINode * loopRemain = iBuilder->CreatePHI(iBuilder->getSizeTy(), 2);
-    idx->addIncoming(ConstantInt::getNullValue(iBuilder->getInt32Ty()), entry);
+    b->SetInsertPoint(radix64_loop);
+    PHINode * idx = b->CreatePHI(b->getInt32Ty(), 2);
+    PHINode * loopRemain = b->CreatePHI(b->getSizeTy(), 2);
+    idx->addIncoming(ConstantInt::getNullValue(b->getInt32Ty()), entry);
     loopRemain->addIncoming(remainingBytes, entry);
 
-    Value * bytepack = iBuilder->loadInputStreamPack("expandedStream", iBuilder->getInt32(0), idx);
-    Value * radix64pack = processPackData(iBuilder, bytepack);
-    iBuilder->storeOutputStreamPack("radix64stream", iBuilder->getInt32(0), idx, radix64pack);
+    Value * bytepack = b->loadInputStreamPack("expandedStream", b->getInt32(0), idx);
+    Value * radix64pack = processPackData(b, bytepack);
+    b->storeOutputStreamPack("radix64stream", b->getInt32(0), idx, radix64pack);
 
-    Value* nextIdx = iBuilder->CreateAdd(idx, ConstantInt::get(iBuilder->getInt32Ty(), 1));
+    Value* nextIdx = b->CreateAdd(idx, ConstantInt::get(b->getInt32Ty(), 1));
     idx->addIncoming(nextIdx, radix64_loop);
-    Value* remainAfterLoop = iBuilder->CreateSub(loopRemain, packSize);
+    Value* remainAfterLoop = b->CreateSub(loopRemain, packSize);
     loopRemain->addIncoming(remainAfterLoop, radix64_loop);
 
-    Value* continueLoop = iBuilder->CreateICmpSGT(remainAfterLoop, iBuilder->getSize(0));
+    Value* continueLoop = b->CreateICmpSGT(remainAfterLoop, b->getSize(0));
 
-    iBuilder->CreateCondBr(continueLoop, radix64_loop, fbExit);
+    b->CreateCondBr(continueLoop, radix64_loop, fbExit);
 
-    iBuilder->SetInsertPoint(fbExit);
+    b->SetInsertPoint(fbExit);
 }
 
-inline llvm::Value* base64Kernel::processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* bytepack) const {
-    Value * mask_gt_25 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(25)));
-    Value * mask_gt_51 = iBuilder->simd_ugt(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(51)));
-    Value * mask_eq_62 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(62)));
-    Value * mask_eq_63 = iBuilder->simd_eq(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8(63)));
+inline llvm::Value* base64Kernel::processPackData(BuilderRef b, llvm::Value* bytepack) const {
+    Value * mask_gt_25 = b->simd_ugt(8, bytepack, b->simd_fill(8, b->getInt8(25)));
+    Value * mask_gt_51 = b->simd_ugt(8, bytepack, b->simd_fill(8, b->getInt8(51)));
+    Value * mask_eq_62 = b->simd_eq(8, bytepack, b->simd_fill(8, b->getInt8(62)));
+    Value * mask_eq_63 = b->simd_eq(8, bytepack, b->simd_fill(8, b->getInt8(63)));
     // Strategy:
     // 1. add ord('A') = 65 to all radix64 values, this sets the correct values for entries 0 to 25.
     // 2. add ord('a') - ord('A') - (26 - 0) = 6 to all values >25, this sets the correct values for entries 0 to 51
     // 3. subtract ord('a') - ord('0') + (52 - 26) = 75 to all values > 51, this sets the correct values for entries 0 to 61
     // 4. subtract ord('0') - ord('+') + (62 - 52) = 15 for all values = 62
     // 4. add ord('/') - ord('0') - (63 - 52) = 3 for all values = 63
-    Value * t0_25 = iBuilder->simd_add(8, bytepack, iBuilder->simd_fill(8, iBuilder->getInt8('A')));
-    Value * t0_51 = iBuilder->simd_add(8, t0_25, iBuilder->simd_and(mask_gt_25, iBuilder->simd_fill(8, iBuilder->getInt8(6))));
-    Value * t0_61 = iBuilder->simd_sub(8, t0_51, iBuilder->simd_and(mask_gt_51, iBuilder->simd_fill(8, iBuilder->getInt8(75))));
-    Value * t0_62 = iBuilder->simd_sub(8, t0_61, iBuilder->simd_and(mask_eq_62, iBuilder->simd_fill(8, iBuilder->getInt8(15))));
-    return iBuilder->bitCast(iBuilder->simd_sub(8, t0_62, iBuilder->simd_and(mask_eq_63, iBuilder->simd_fill(8, iBuilder->getInt8(12)))));
+    Value * t0_25 = b->simd_add(8, bytepack, b->simd_fill(8, b->getInt8('A')));
+    Value * t0_51 = b->simd_add(8, t0_25, b->simd_and(mask_gt_25, b->simd_fill(8, b->getInt8(6))));
+    Value * t0_61 = b->simd_sub(8, t0_51, b->simd_and(mask_gt_51, b->simd_fill(8, b->getInt8(75))));
+    Value * t0_62 = b->simd_sub(8, t0_61, b->simd_and(mask_eq_62, b->simd_fill(8, b->getInt8(15))));
+    return b->bitCast(b->simd_sub(8, t0_62, b->simd_and(mask_eq_63, b->simd_fill(8, b->getInt8(12)))));
 }
 
-void base64Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void base64Kernel::generateDoBlockMethod(BuilderRef b) {
     for (unsigned i = 0; i < 8; i++) {
-        Value * bytepack = iBuilder->loadInputStreamPack("radix64stream", iBuilder->getInt32(0), iBuilder->getInt32(i));
-        Value * base64pack = processPackData(iBuilder, bytepack);
-        iBuilder->storeOutputStreamPack("base64stream", iBuilder->getInt32(0), iBuilder->getInt32(i), base64pack);
+        Value * bytepack = b->loadInputStreamPack("radix64stream", b->getInt32(0), b->getInt32(i));
+        Value * base64pack = processPackData(b, bytepack);
+        b->storeOutputStreamPack("base64stream", b->getInt32(0), b->getInt32(i), base64pack);
     }
 }
 
 // Special processing for the base 64 format.   The output must always contain a multiple
 // of 4 bytes.   When the number of radix 64 values is not a multiple of 4
 // number of radix 64 values
-void base64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * remainingBytes) {
+void base64Kernel::generateFinalBlockMethod(BuilderRef b, Value * remainingBytes) {
 
     BasicBlock * entry = b->GetInsertBlock();
     BasicBlock * base64_loop = b->CreateBasicBlock("base64_loop");
@@ -272,7 +272,7 @@ void base64Kernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder>
     b->SetInsertPoint(fbExit);
 }
 
-expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *input, StreamSet *expandedOutput)
+expand3_4Kernel::expand3_4Kernel(BuilderRef b, StreamSet *input, StreamSet *expandedOutput)
 : MultiBlockKernel(b, "expand3_4",
 {Binding{"sourceStream", input, FixedRate(3)}},
 {Binding{"expand34Stream", expandedOutput, FixedRate(4)}},
@@ -280,14 +280,14 @@ expand3_4Kernel::expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & 
 
 }
 
-radix64Kernel::radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * input, StreamSet * output)
+radix64Kernel::radix64Kernel(BuilderRef b, StreamSet * input, StreamSet * output)
 : BlockOrientedKernel(b, "radix64",
             {Binding{"expandedStream", input}},
             {Binding{"radix64stream", output}},
             {}, {}, {}) {
 }
 
-base64Kernel::base64Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * input, StreamSet * output)
+base64Kernel::base64Kernel(BuilderRef b, StreamSet * input, StreamSet * output)
 : BlockOrientedKernel(b, "base64",
 {Binding{"radix64stream", input}},
 {Binding{"base64stream", output, FixedRate(1), RoundUpTo(4)}},

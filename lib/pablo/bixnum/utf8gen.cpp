@@ -18,7 +18,7 @@ using namespace pablo;
 using namespace kernel;
 using namespace llvm;
 
-UTF8fieldDepositMask::UTF8fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth)
+UTF8fieldDepositMask::UTF8fieldDepositMask(BuilderRef b, StreamSet * u32basis, StreamSet * u8fieldMask, StreamSet * u8unitCounts, unsigned depositFieldWidth)
 : BlockOrientedKernel(b, "u8depositMask",
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u8fieldMask, FixedRate(4)},
@@ -27,7 +27,7 @@ Binding{"extractionMask", u8unitCounts, FixedRate(4)}},
 {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}})
 , mDepositFieldWidth(depositFieldWidth) {}
 
-void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void UTF8fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     // If any of bits 16 through 20 are 1, a four-byte UTF-8 sequence is required.
     Value * u8len4 = b->loadInputStreamBlock("basis", b->getSize(16), b->getSize(0));
@@ -74,7 +74,7 @@ void UTF8fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBui
         b->storeOutputStreamBlock("extractionMask", b->getSize(0), b->getSize(j), extraction_mask[j]);
     }
 }
-void UTF8fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
+void UTF8fieldDepositMask::generateFinalBlockMethod(BuilderRef b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
@@ -87,7 +87,7 @@ void UTF8fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<Kernel
 // of each UTF-8 sequence, this kernel computes the deposit masks
 // u8initial, u8mask12_17, and u8mask6_11.
 //
-UTF8_DepositMasks::UTF8_DepositMasks (const std::unique_ptr<KernelBuilder> & iBuilder, StreamSet * u8final, StreamSet * u8initial, StreamSet * u8mask12_17, StreamSet * u8mask6_11)
+UTF8_DepositMasks::UTF8_DepositMasks (BuilderRef iBuilder, StreamSet * u8final, StreamSet * u8initial, StreamSet * u8mask12_17, StreamSet * u8mask6_11)
 : PabloKernel(iBuilder, "UTF8_DepositMasks",
               {Binding{"u8final", u8final, FixedRate(1), LookAhead(2)}},
               {Binding{"u8initial", u8initial},
@@ -117,7 +117,7 @@ void UTF8_DepositMasks::generatePabloMethod() {
 // bits bits 18-20, 11-17, 6-11 and 0-5, as weil as the marker streams u8initial,
 // u8final, u8prefix3 and u8prefix4.
 //
-UTF8assembly::UTF8assembly (const std::unique_ptr<KernelBuilder> & b,
+UTF8assembly::UTF8assembly (BuilderRef b,
                             StreamSet * deposit18_20, StreamSet * deposit12_17, StreamSet * deposit6_11, StreamSet * deposit0_5,
                             StreamSet * u8initial, StreamSet * u8final, StreamSet * u8mask6_11, StreamSet * u8mask12_17,
                             StreamSet * u8basis)

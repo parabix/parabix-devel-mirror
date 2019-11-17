@@ -47,14 +47,14 @@ using namespace kernel;
 
 class MatchPriorKernel final: public pablo::PabloKernel {
 public:
-    MatchPriorKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable, Scalar * countResult);
+    MatchPriorKernel(BuilderRef b, StreamSet * const countable, Scalar * countResult);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-MatchPriorKernel::MatchPriorKernel (const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const countable, Scalar * countResult)
+MatchPriorKernel::MatchPriorKernel (BuilderRef b, StreamSet * const countable, Scalar * countResult)
     : pablo::PabloKernel(b, "matchprior_" + std::to_string(priorDistance),
     {Binding{"countable", countable}},
     {},

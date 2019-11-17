@@ -36,6 +36,8 @@ static cl::opt<bool> PrefixCheck("prefix-check-mode", cl::desc("Use experimental
 const unsigned BITS_PER_BYTE = 8;
 const unsigned SIZE_T_BITS = sizeof(size_t) * BITS_PER_BYTE;
 
+using BuilderRef = Kernel::BuilderRef;
+
 struct ScanWordParameters {
     unsigned width;
     unsigned indexWidth;
@@ -46,7 +48,7 @@ struct ScanWordParameters {
     Constant * WORDS_PER_BLOCK;
     Constant * WORDS_PER_STRIDE;
 
-    ScanWordParameters(const std::unique_ptr<KernelBuilder> & b, unsigned stride) :
+    ScanWordParameters(BuilderRef b, unsigned stride) :
 #ifdef PREFER_NARROW_SCANWIDTH
         width(std::max(BITS_PER_BYTE, stride/SIZE_T_BITS)),
 #else
@@ -87,7 +89,7 @@ struct LengthGroupParameters {
     Constant * LENGTH_MASK;
     Constant * EXTENSION_MASK;
 
-    LengthGroupParameters(const std::unique_ptr<KernelBuilder> & b, EncodingInfo encodingScheme, unsigned groupNo) :
+    LengthGroupParameters(BuilderRef b, EncodingInfo encodingScheme, unsigned groupNo) :
         groupInfo(encodingScheme.byLength[groupNo]),
         MAX_HASH_BITS(b->getSize(encodingScheme.MAX_HASH_BITS)),
         SUFFIX_BITS(b->getSize(7)),
@@ -139,7 +141,7 @@ Binding ByteDataBinding(unsigned max_length, StreamSet * byteData) {
     }
 }
 
-std::vector<Value *> initializeCompressionMasks(const std::unique_ptr<KernelBuilder> & b,
+std::vector<Value *> initializeCompressionMasks(BuilderRef b,
                                                 ScanWordParameters & sw,
                                                 Constant * sz_BLOCKS_PER_STRIDE,
                                                 unsigned maskCount,
@@ -179,7 +181,7 @@ std::vector<Value *> initializeCompressionMasks(const std::unique_ptr<KernelBuil
     return keyMasks;
 }
 
-LengthGroupCompression::LengthGroupCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+LengthGroupCompression::LengthGroupCompression(BuilderRef b,
                                                EncodingInfo encodingScheme,
                                                unsigned groupNo,
                                                StreamSet * symbolMarks,
@@ -207,7 +209,7 @@ mEncodingScheme(encodingScheme), mGroupNo(groupNo) {
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
 }
 
-void LengthGroupCompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void LengthGroupCompression::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     ScanWordParameters sw(b, mStride);
     LengthGroupParameters lg(b, mEncodingScheme, mGroupNo);
     Constant * sz_DELAYED = b->getSize(mEncodingScheme.maxSymbolLength());
@@ -445,7 +447,7 @@ void LengthGroupCompression::generateMultiBlockLogic(const std::unique_ptr<Kerne
     b->SetInsertPoint(compressionMaskDone);
 }
 
-void initializeDecompressionMasks(const std::unique_ptr<KernelBuilder> & b,
+void initializeDecompressionMasks(BuilderRef b,
                                   ScanWordParameters & sw,
                                   Constant * sz_BLOCKS_PER_STRIDE,
                                   unsigned maskCount,
@@ -490,7 +492,7 @@ void initializeDecompressionMasks(const std::unique_ptr<KernelBuilder> & b,
 }
 
 
-LengthGroupDecompression::LengthGroupDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+LengthGroupDecompression::LengthGroupDecompression(BuilderRef b,
                                                    EncodingInfo encodingScheme,
                                                    unsigned groupNo,
                                                    StreamSet * keyMarks,
@@ -519,7 +521,7 @@ LengthGroupDecompression::LengthGroupDecompression(const std::unique_ptr<kernel:
     }
 }
 
-void LengthGroupDecompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void LengthGroupDecompression::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
 
     ScanWordParameters sw(b, mStride);
     LengthGroupParameters lg(b, mEncodingScheme, mGroupNo);
@@ -741,7 +743,7 @@ unsigned hashTableSize(EncodingInfo info, unsigned lgth) {
 //
 // Length-based symbol operations - for symbol length known at LLVM compile time.
 //
-std::vector<Value *> MonitoredScalarLoadSymbol(const std::unique_ptr<KernelBuilder> & b, std::string scalarName, Value * sourcePtr, unsigned length) {
+std::vector<Value *> MonitoredScalarLoadSymbol(BuilderRef b, std::string scalarName, Value * sourcePtr, unsigned length) {
     unsigned load_length = 1 << boost::intrusive::detail::floor_log2(length);
     //b->CallPrintInt("sourcePtr" + std::to_string(length), sourcePtr);
     Type * loadPtrTy = b->getIntNTy(load_length * 8)->getPointerTo();
@@ -755,7 +757,7 @@ std::vector<Value *> MonitoredScalarLoadSymbol(const std::unique_ptr<KernelBuild
     return std::vector<Value *>{load1, load2};
 }
 
-std::vector<Value *> loadSymbol(const std::unique_ptr<KernelBuilder> & b, Value * sourcePtr, unsigned length) {
+std::vector<Value *> loadSymbol(BuilderRef b, Value * sourcePtr, unsigned length) {
     unsigned load_length = 1 << boost::intrusive::detail::floor_log2(length);
     Type * loadPtrTy = b->getIntNTy(load_length * 8)->getPointerTo();
     Value * load1 = b->CreateAlignedLoad(b->CreateBitCast(sourcePtr, loadPtrTy), 1);
@@ -768,7 +770,7 @@ std::vector<Value *> loadSymbol(const std::unique_ptr<KernelBuilder> & b, Value 
     return std::vector<Value *>{load1, load2};
 }
 
-void MonitoredScalarStoreSymbol(const std::unique_ptr<KernelBuilder> & b, std::string scalarName, std::vector<Value *> toStore, Value * ptr, unsigned length) {
+void MonitoredScalarStoreSymbol(BuilderRef b, std::string scalarName, std::vector<Value *> toStore, Value * ptr, unsigned length) {
     unsigned store_length = 1 << boost::intrusive::detail::floor_log2(length);
     //b->CallPrintInt("ptr" + std::to_string(length), ptr);
     Type * storePtrTy = b->getIntNTy(store_length * 8)->getPointerTo();
@@ -781,7 +783,7 @@ void MonitoredScalarStoreSymbol(const std::unique_ptr<KernelBuilder> & b, std::s
     b->CreateMonitoredScalarFieldStore(scalarName, toStore[1], b->CreateBitCast(ptr2, storePtrTy));
 }
 
-void storeSymbol(const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> toStore, Value * ptr, unsigned length) {
+void storeSymbol(BuilderRef b, std::vector<Value *> toStore, Value * ptr, unsigned length) {
     unsigned store_length = 1 << boost::intrusive::detail::floor_log2(length);
     Type * storePtrTy = b->getIntNTy(store_length * 8)->getPointerTo();
     b->CreateAlignedStore(toStore[0], b->CreateBitCast(ptr, storePtrTy), 1);
@@ -793,14 +795,14 @@ void storeSymbol(const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> 
     b->CreateAlignedStore(toStore[1], b->CreateBitCast(ptr2, storePtrTy), 1);
 }
 
-Value * compareSymbols (const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> sym1, std::vector<Value *> sym2) {
+Value * compareSymbols (BuilderRef b, std::vector<Value *> sym1, std::vector<Value *> sym2) {
     if (sym1.size() == 1) {
         return b->CreateICmpEQ(sym1[0], sym2[0]);
     }
     return b->CreateAnd(b->CreateICmpEQ(sym1[0], sym2[0]), b->CreateICmpEQ(sym1[1], sym2[1]));
 }
 
-Value * isNullSymbol (const std::unique_ptr<KernelBuilder> & b, std::vector<Value *> sym) {
+Value * isNullSymbol (BuilderRef b, std::vector<Value *> sym) {
     Constant * symNull = Constant::getNullValue(sym[0]->getType());
     if (sym.size() == 1) {
         return b->CreateICmpEQ(sym[0], symNull);
@@ -808,7 +810,7 @@ Value * isNullSymbol (const std::unique_ptr<KernelBuilder> & b, std::vector<Valu
     return b->CreateICmpEQ(b->CreateOr(sym[0], sym[1]), symNull);
 }
 
-void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
+void generateKeyProcessingLoops(BuilderRef b,
                                 ScanWordParameters & sw,
                                 EncodingInfo & encodingScheme,
                                 unsigned lo,
@@ -974,7 +976,7 @@ void generateKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
     }
 }
 
-FixedLengthCompression::FixedLengthCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+FixedLengthCompression::FixedLengthCompression(BuilderRef b,
                                                EncodingInfo encodingScheme,
                                                unsigned lo,
                                                StreamSet * const byteData,
@@ -1011,7 +1013,7 @@ mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + symbolMarks.size() - 1)  {
     mInternalScalars.emplace_back(ArrayType::get(prefixMapTableType, mHi - mLo + 1), "prefixMapTable");
 }
 
-void FixedLengthCompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void FixedLengthCompression::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     ScanWordParameters sw(b, mStride);
     unsigned numOfMasks = mHi - mLo + 1;
 
@@ -1101,7 +1103,7 @@ void FixedLengthCompression::generateMultiBlockLogic(const std::unique_ptr<Kerne
     b->SetInsertPoint(compressionMaskDone);
 }
 
-void generateDecompKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
+void generateDecompKeyProcessingLoops(BuilderRef b,
                                 ScanWordParameters & sw,
                                 EncodingInfo & encodingScheme,
                                 unsigned lo,
@@ -1180,7 +1182,7 @@ void generateDecompKeyProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
     }
 }
 
-void generateHashProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
+void generateHashProcessingLoops(BuilderRef b,
                                  ScanWordParameters & sw,
                                  EncodingInfo & encodingScheme,
                                  unsigned lo,
@@ -1271,7 +1273,7 @@ void generateHashProcessingLoops(const std::unique_ptr<KernelBuilder> & b,
     }
 }
 
-FixedLengthDecompression::FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+FixedLengthDecompression::FixedLengthDecompression(BuilderRef b,
                                                    EncodingInfo encodingScheme,
                                                    unsigned lo,
                                                    StreamSet * const byteData,
@@ -1306,7 +1308,7 @@ mEncodingScheme(encodingScheme), mLo(lo), mHi(lo + keyMarks.size() - 1)  {
     mInternalScalars.emplace_back(ArrayType::get(subTableType, mHi - mLo + 1), "hashTable");
 }
 
-void FixedLengthDecompression::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void FixedLengthDecompression::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
 
     ScanWordParameters sw(b, mStride);
     Constant * sz_DELAYED = b->getSize(mEncodingScheme.maxSymbolLength());

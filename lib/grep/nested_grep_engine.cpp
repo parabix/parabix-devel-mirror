@@ -16,8 +16,6 @@
 using namespace kernel;
 using namespace llvm;
 
-using BuilderRef = const std::unique_ptr<KernelBuilder> &;
-
 namespace grep {
 
 class CopyBreaksToMatches final : public MultiBlockKernel {

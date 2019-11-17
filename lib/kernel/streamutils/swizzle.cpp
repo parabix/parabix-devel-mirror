@@ -74,7 +74,7 @@ inline Bindings makeSwizzledOutputs(const std::vector<StreamSet *> & outputs, co
     return bindings;
 }
 
-SwizzleGenerator::SwizzleGenerator(const std::unique_ptr<kernel::KernelBuilder> & b,
+SwizzleGenerator::SwizzleGenerator(BuilderRef b,
                                    const std::vector<StreamSet *> & inputs,
                                    const std::vector<StreamSet *> & outputs,
                                    const unsigned fieldWidth)
@@ -87,7 +87,7 @@ makeSwizzledOutputs(outputs, fieldWidth),
 
 }
 
-void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void SwizzleGenerator::generateDoBlockMethod(BuilderRef b) {
 
     // We may need a few passes depending on the swizzle factor
 
@@ -139,7 +139,7 @@ void SwizzleGenerator::generateDoBlockMethod(const std::unique_ptr<kernel::Kerne
 }
 
 
-SwizzleByGather::SwizzleByGather(const std::unique_ptr<KernelBuilder> & b)
+SwizzleByGather::SwizzleByGather(BuilderRef b)
 : BlockOrientedKernel(b, "swizzleByGather", {}, {}, {}, {}, {}){
     for (unsigned i = 0; i < 2; i++) {
         mInputStreamSets.push_back(Binding{b->getStreamSetTy(4, 1), "inputGroup" + std::to_string(i)});
@@ -149,7 +149,7 @@ SwizzleByGather::SwizzleByGather(const std::unique_ptr<KernelBuilder> & b)
     }
 }
 
-void SwizzleByGather::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &b) {
+void SwizzleByGather::generateDoBlockMethod(BuilderRef b) {
     Value* outputStreamPtr = b->getOutputStreamBlockPtr("outputGroup0", b->getSize(0));
 
     for (unsigned i = 0; i < 2; i++) {

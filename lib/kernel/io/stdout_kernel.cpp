@@ -16,7 +16,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void StdOutKernel::generateDoSegmentMethod(BuilderRef b) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
     Value * length = b->getAccessibleItemCount("codeUnitBuffer");
@@ -31,7 +31,7 @@ void StdOutKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> 
     b->CreateWriteCall(stdOutFd, codeUnitBuffer, length);
 }
 
-StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *codeUnitBuffer)
+StdOutKernel::StdOutKernel(BuilderRef b, StreamSet *codeUnitBuffer)
 : SegmentOrientedKernel(b, "stdout" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
 {Binding{"codeUnitBuffer", codeUnitBuffer}}
@@ -42,7 +42,7 @@ StdOutKernel::StdOutKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Str
     addAttribute(SideEffecting());
 }
 
-void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void FileSink::generateInitializeMethod(BuilderRef b) {
     BasicBlock * const nonNullFileName = b->CreateBasicBlock("nonNullFileName");
     BasicBlock * const nonEmptyFileName = b->CreateBasicBlock("nonEmptyFileName");
     BasicBlock * const setTerminationOnFailure = b->CreateBasicBlock("setTerminationOnFailure");
@@ -97,7 +97,7 @@ void FileSink::generateInitializeMethod(const std::unique_ptr<kernel::KernelBuil
     b->setScalarField("fileDescriptor", fileDescriptorPhi);
 }
 
-void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void FileSink::generateDoSegmentMethod(BuilderRef b) {
     Value * codeUnitBuffer = b->getInputStreamBlockPtr("codeUnitBuffer", b->getInt32(0));
     codeUnitBuffer = b->CreatePointerCast(codeUnitBuffer, b->getInt8PtrTy());
     Value * bytesToDo = b->getAccessibleItemCount("codeUnitBuffer");
@@ -110,7 +110,7 @@ void FileSink::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b)
     b->CreateWriteCall(fileDescriptor, codeUnitBuffer, bytesToDo);
 }
 
-void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void FileSink::generateFinalizeMethod(BuilderRef b) {
     BasicBlock * const hasTemporaryFile = b->CreateBasicBlock("hasTemporaryFile");
     BasicBlock * const exit = b->CreateBasicBlock("exit");
     Value * const fileDescriptor = b->getScalarField("fileDescriptor");
@@ -127,7 +127,7 @@ void FileSink::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) 
     b->SetInsertPoint(exit);
 }
 
-FileSink::FileSink(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * outputFileName, StreamSet * codeUnitBuffer)
+FileSink::FileSink(BuilderRef b, Scalar * outputFileName, StreamSet * codeUnitBuffer)
 : SegmentOrientedKernel(b, "filesink" + std::to_string(codeUnitBuffer->getFieldWidth()),
 // input
 {Binding{"codeUnitBuffer", codeUnitBuffer}},

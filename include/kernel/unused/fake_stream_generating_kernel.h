@@ -10,12 +10,12 @@ namespace kernel {
 
     class FakeStreamGeneratingKernel final : public SegmentOrientedKernel {
     public:
-        FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * refStream, StreamSet * outputStream);
-        FakeStreamGeneratingKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * refStream, const StreamSets & outputStreams);
+        FakeStreamGeneratingKernel(BuilderRef b, StreamSet * refStream, StreamSet * outputStream);
+        FakeStreamGeneratingKernel(BuilderRef b, StreamSet * refStream, const StreamSets & outputStreams);
         bool isCachable() const override { return true; }
         bool hasSignature() const override { return false; }
     protected:
-        void generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> &) final;
+        void generateDoSegmentMethod(BuilderRef) final;
     };
 }
 

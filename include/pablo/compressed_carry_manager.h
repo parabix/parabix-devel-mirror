@@ -13,9 +13,8 @@ namespace pablo {
 
 class CompressedCarryManager final : public CarryManager {
 
-    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
-
 public:
+
     CompressedCarryManager() noexcept;
 
     void initializeCodeGen(BuilderRef b) override;

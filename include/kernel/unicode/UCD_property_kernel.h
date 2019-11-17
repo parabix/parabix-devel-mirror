@@ -13,7 +13,7 @@ namespace kernel {
     
 class UnicodePropertyKernelBuilder : public pablo::PabloKernel {
 public:
-    UnicodePropertyKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & kb, re::Name * property_value_name, StreamSet * BasisBits, StreamSet * property);
+    UnicodePropertyKernelBuilder(BuilderRef kb, re::Name * property_value_name, StreamSet * BasisBits, StreamSet * property);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

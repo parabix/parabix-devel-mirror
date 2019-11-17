@@ -67,7 +67,7 @@ unsigned EncodingInfo::prefixLengthOffset(unsigned lgth) {
     return suffix_bits_avail < hash_ext_bits ? hash_ext_bits - suffix_bits_avail : 0;
 }
 
-WordMarkKernel::WordMarkKernel(const std::unique_ptr<KernelBuilder> & kb, StreamSet * BasisBits, StreamSet * WordMarks)
+WordMarkKernel::WordMarkKernel(BuilderRef kb, StreamSet * BasisBits, StreamSet * WordMarks)
 : PabloKernel(kb, "WordMarks", {Binding{"source", BasisBits}}, {Binding{"WordMarks", WordMarks}}) { }
 
 void WordMarkKernel::generatePabloMethod() {
@@ -101,7 +101,7 @@ void ByteRun::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("runMask"), pb.getInteger(0)), matchesprior);
 }
 
-ZTF_ExpansionDecoder::ZTF_ExpansionDecoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+ZTF_ExpansionDecoder::ZTF_ExpansionDecoder(BuilderRef b,
                                            EncodingInfo & encodingScheme,
                                            StreamSet * const basis,
                                            StreamSet * insertBixNum)
@@ -142,7 +142,7 @@ void ZTF_ExpansionDecoder::generatePabloMethod() {
     }
 }
 
-ZTF_DecodeLengths::ZTF_DecodeLengths(const std::unique_ptr<KernelBuilder> & b,
+ZTF_DecodeLengths::ZTF_DecodeLengths(BuilderRef b,
                                      EncodingInfo & encodingScheme,
                                      StreamSet * basisBits,
                                      StreamSet * groupStreams)
@@ -212,7 +212,7 @@ void ZTF_Symbols::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("symbolRuns"), pb.getInteger(0)), runs);
 }
 
-ZTF_SymbolEncoder::ZTF_SymbolEncoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+ZTF_SymbolEncoder::ZTF_SymbolEncoder(BuilderRef b,
                       EncodingInfo & encodingScheme,
                       StreamSet * const basis,
                       StreamSet * bixHash,
@@ -310,7 +310,7 @@ std::string LengthSelectorSuffix(EncodingInfo & encodingScheme, unsigned groupNo
     return encodingScheme.uniqueSuffix() + ":" + std::to_string(g.lo) + "_" + std::to_string(g.hi) + "_" + std::to_string(elems);
 }
 
-LengthGroupSelector::LengthGroupSelector(const std::unique_ptr<kernel::KernelBuilder> & b,
+LengthGroupSelector::LengthGroupSelector(BuilderRef b,
                            EncodingInfo & encodingScheme,
                            unsigned groupNo,
                            StreamSet * symbolRun,
@@ -344,7 +344,7 @@ void LengthGroupSelector::generatePabloMethod() {
 }
 
 
-LengthSorter::LengthSorter(const std::unique_ptr<kernel::KernelBuilder> & b,
+LengthSorter::LengthSorter(BuilderRef b,
                            EncodingInfo & encodingScheme,
                            StreamSet * symbolRun, StreamSet * const lengthBixNum,
                            StreamSet * overflow,

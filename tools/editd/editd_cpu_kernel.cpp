@@ -11,7 +11,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void editdCPUKernel::bitblock_advance_ci_co(const std::unique_ptr<kernel::KernelBuilder> & idb,
+void editdCPUKernel::bitblock_advance_ci_co(BuilderRef idb,
                                             Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx,
                                             std::vector<std::vector<Value *>> & adv,
                                             std::vector<std::vector<int>> & calculated, int i, int j) const {
@@ -31,7 +31,7 @@ void editdCPUKernel::reset_to_zero(std::vector<std::vector<int>> & calculated){
     }
 }
 
-void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) {
+void editdCPUKernel::generateDoBlockMethod(BuilderRef idb) {
 
     Type * const int32ty = idb->getInt32Ty();
     Type * const int8ty = idb->getInt8Ty();
@@ -89,12 +89,12 @@ void editdCPUKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelB
     }
 }
 
-void editdCPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, Value * remainingBytes) {
+void editdCPUKernel::generateFinalBlockMethod(BuilderRef idb, Value * remainingBytes) {
     idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
     CreateDoBlockMethodCall(idb);
 }
 
-editdCPUKernel::editdCPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+editdCPUKernel::editdCPUKernel(BuilderRef b,
                                const unsigned patternLen, const unsigned groupSize,
                                Scalar * const pattStream,
                                StreamSet * const CCStream, StreamSet * const ResultStream)

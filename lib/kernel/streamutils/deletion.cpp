@@ -21,6 +21,8 @@ inline size_t ceil_udiv(const size_t n, const size_t m) {
 
 namespace kernel {
 
+using BuilderRef = Kernel::BuilderRef;
+
 void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
                   StreamSet * mask, StreamSet * inputs, StreamSet * outputs,
                   unsigned streamOffset,
@@ -31,7 +33,7 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
     P->CreateKernelCall<StreamCompressKernel>(mask, compressed, outputs, extractionFieldWidth);
 }
 
-inline std::vector<Value *> parallel_prefix_deletion_masks(const std::unique_ptr<KernelBuilder> & kb, const unsigned fw, Value * del_mask) {
+inline std::vector<Value *> parallel_prefix_deletion_masks(BuilderRef kb, const unsigned fw, Value * del_mask) {
     Value * m = kb->simd_not(del_mask);
     Value * mk = kb->simd_slli(fw, del_mask, 1);
     std::vector<Value *> move_masks;
@@ -48,7 +50,7 @@ inline std::vector<Value *> parallel_prefix_deletion_masks(const std::unique_ptr
     return move_masks;
 }
 
-inline Value * apply_parallel_prefix_deletion(const std::unique_ptr<KernelBuilder> & kb, const unsigned fw, Value * del_mask, const std::vector<Value *> & mv, Value * strm) {
+inline Value * apply_parallel_prefix_deletion(BuilderRef kb, const unsigned fw, Value * del_mask, const std::vector<Value *> & mv, Value * strm) {
     Value * s = kb->simd_and(strm, kb->simd_not(del_mask));
     for (unsigned i = 0; i < mv.size(); i++) {
         unsigned shift = 1 << i;
@@ -62,7 +64,7 @@ inline Value * apply_parallel_prefix_deletion(const std::unique_ptr<KernelBuilde
 // Kernel inputs: stream_count data streams plus one del_mask stream
 // Outputs: the deleted streams, plus a partial sum popcount
 
-void DeletionKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
+void DeletionKernel::generateDoBlockMethod(BuilderRef kb) {
     Value * delMask = kb->loadInputStreamBlock("delMaskSet", kb->getInt32(0));
     const auto move_masks = parallel_prefix_deletion_masks(kb, mDeletionFieldWidth, delMask);
     for (unsigned j = 0; j < mStreamCount; ++j) {
@@ -74,7 +76,7 @@ void DeletionKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
     kb->storeOutputStreamBlock("unitCounts", kb->getInt32(0), kb->bitCast(unitCount));
 }
 
-void DeletionKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & kb, Value * remainingBytes) {
+void DeletionKernel::generateFinalBlockMethod(BuilderRef kb, Value * remainingBytes) {
     IntegerType * vecTy = kb->getIntNTy(kb->getBitBlockWidth());
     Value * remaining = kb->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = kb->bitCast(kb->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
@@ -89,7 +91,7 @@ void DeletionKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilde
     kb->storeOutputStreamBlock("unitCounts", kb->getInt32(0), kb->bitCast(unitCount));
 }
 
-DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned fieldWidth, const unsigned streamCount)
+DeletionKernel::DeletionKernel(BuilderRef b, const unsigned fieldWidth, const unsigned streamCount)
 : BlockOrientedKernel(b, "del" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
 {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
   Binding{b->getStreamSetTy(), "delMaskSet"}},
@@ -100,7 +102,7 @@ DeletionKernel::DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 , mStreamCount(streamCount) {
 }
 
-void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * done = kb->CreateBasicBlock("done");
@@ -156,7 +158,7 @@ void FieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
     kb->SetInsertPoint(done);
 }
 
-FieldCompressKernel::FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+FieldCompressKernel::FieldCompressKernel(BuilderRef b,
                                          StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
                                          Scalar * inputBase, unsigned fieldWidth)
 : MultiBlockKernel(b, "fieldCompress" + std::to_string(fieldWidth) + "_" +
@@ -175,7 +177,7 @@ Binding{"inputStreamSet", inputStreamSet, FixedRate(), ZeroExtended()}},
 
 }
 
-void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+void PEXTFieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {
     Type * fieldTy = kb->getIntNTy(mPEXTWidth);
     Type * fieldPtrTy = PointerType::get(fieldTy, 0);
     Constant * PEXT_func = nullptr;
@@ -217,7 +219,7 @@ void PEXTFieldCompressKernel::generateMultiBlockLogic(const std::unique_ptr<Kern
     kb->SetInsertPoint(done);
 }
 
-PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned fieldWidth, const unsigned streamCount)
+PEXTFieldCompressKernel::PEXTFieldCompressKernel(BuilderRef b, const unsigned fieldWidth, const unsigned streamCount)
 : MultiBlockKernel(b, "PEXTfieldCompress" + std::to_string(fieldWidth) + "_" + std::to_string(streamCount),
                    {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
                        Binding{b->getStreamSetTy(), "extractionMask"}},
@@ -228,7 +230,7 @@ PEXTFieldCompressKernel::PEXTFieldCompressKernel(const std::unique_ptr<kernel::K
     if ((fieldWidth != 32) && (fieldWidth != 64)) llvm::report_fatal_error("Unsupported PEXT width for PEXTFieldCompressKernel");
 }
 
-StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+StreamCompressKernel::StreamCompressKernel(BuilderRef b
                                            , StreamSet * extractionMask
                                            , StreamSet * source
                                            , StreamSet * compressedOutput
@@ -245,7 +247,7 @@ StreamCompressKernel::StreamCompressKernel(const std::unique_ptr<kernel::KernelB
     }
 }
 
-void StreamCompressKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
+void StreamCompressKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfBlocks) {
     IntegerType * const fwTy = b->getIntNTy(mCompressedFieldWidth);
     IntegerType * const sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth() / mCompressedFieldWidth;
@@ -447,7 +449,7 @@ Bindings makeSwizzledDeleteByPEXTOutputBindings(const std::vector<StreamSet *> &
     return outputs;
 }
 
-SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+SwizzledDeleteByPEXTkernel::SwizzledDeleteByPEXTkernel(BuilderRef b,
                                                        StreamSet * selectors, StreamSet * inputStreamSet,
                                                        const std::vector<StreamSet *> & outputStreamSets,
                                                        const unsigned PEXTWidth)
@@ -475,7 +477,7 @@ makeSwizzledDeleteByPEXTOutputBindings(outputStreamSets, PEXTWidth),
     }
 }
 
-void SwizzledDeleteByPEXTkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
+void SwizzledDeleteByPEXTkernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfBlocks) {
     // We use delMask to apply the same PEXT delete operation to each stream in the input stream set
 
     BasicBlock * const entry = b->GetInsertBlock();
@@ -618,7 +620,7 @@ Returns:
     output (vector of Value*): Swizzled, PEXTed version of strms. See example above.
 */
 
-SwizzledDeleteByPEXTkernel::SwizzleSets SwizzledDeleteByPEXTkernel::makeSwizzleSets(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const selectors, Value * const strideIndex) {
+SwizzledDeleteByPEXTkernel::SwizzleSets SwizzledDeleteByPEXTkernel::makeSwizzleSets(BuilderRef b, llvm::Value * const selectors, Value * const strideIndex) {
 
     Constant * pext = nullptr;
     if (mPEXTWidth == 64) {
@@ -681,12 +683,12 @@ SwizzledDeleteByPEXTkernel::SwizzleSets SwizzledDeleteByPEXTkernel::makeSwizzleS
 // Kernel inputs: stream_count data streams plus one del_mask stream
 // Outputs: swizzles containing the swizzled deleted streams, plus a partial sum popcount
 
-void DeleteByPEXTkernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
+void DeleteByPEXTkernel::generateDoBlockMethod(BuilderRef kb) {
     Value * delMask = kb->loadInputStreamBlock("delMaskSet", kb->getInt32(0));
     generateProcessingLoop(kb, delMask);
 }
 
-void DeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> &kb, Value * remainingBytes) {
+void DeleteByPEXTkernel::generateFinalBlockMethod(BuilderRef kb, Value * remainingBytes) {
     IntegerType * vecTy = kb->getIntNTy(kb->getBitBlockWidth());
     Value * remaining = kb->CreateZExt(remainingBytes, vecTy);
     Value * EOF_del = kb->bitCast(kb->CreateShl(Constant::getAllOnesValue(vecTy), remaining));
@@ -694,7 +696,7 @@ void DeleteByPEXTkernel::generateFinalBlockMethod(const std::unique_ptr<KernelBu
     generateProcessingLoop(kb, delMask);
 }
 
-void DeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<KernelBuilder> & kb, Value * delMask) {
+void DeleteByPEXTkernel::generateProcessingLoop(BuilderRef kb, Value * delMask) {
     Constant * PEXT_func = nullptr;
     if (mPEXTWidth == 64) {
         PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_64);
@@ -722,7 +724,7 @@ void DeleteByPEXTkernel::generateProcessingLoop(const std::unique_ptr<KernelBuil
     kb->storeOutputStreamBlock("deletionCounts", kb->getInt32(0), kb->bitCast(delCount));
 }
 
-DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, unsigned PEXT_width)
+DeleteByPEXTkernel::DeleteByPEXTkernel(BuilderRef b, unsigned fw, unsigned streamCount, unsigned PEXT_width)
 : BlockOrientedKernel(b, "PEXTdel" + std::to_string(fw) + "_" + std::to_string(streamCount) + "_" + std::to_string(PEXT_width),
               {Binding{b->getStreamSetTy(streamCount), "inputStreamSet"},
                   Binding{b->getStreamSetTy(), "delMaskSet"}},
@@ -752,7 +754,7 @@ DeleteByPEXTkernel::DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuild
 // Note: that both input streams and output streams are stored in swizzled form.
 //
 
-SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned bitStreamCount, unsigned fieldWidth)
+SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(BuilderRef b, unsigned bitStreamCount, unsigned fieldWidth)
 : BlockOrientedKernel(b, "swizzled_compress" + std::to_string(fieldWidth) + "_" + std::to_string(bitStreamCount),
                      {Binding{b->getStreamSetTy(), "countsPerStride"}}, {}, {}, {}, {})
 , mBitStreamCount(bitStreamCount)
@@ -772,7 +774,7 @@ SwizzledBitstreamCompressByCount::SwizzledBitstreamCompressByCount(const std::un
     addInternalScalar(b->getSizeTy(), "pendingOffset");
 }
 
-void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
+void SwizzledBitstreamCompressByCount::generateDoBlockMethod(BuilderRef kb) {
 
     Value * countsPerStridePtr = kb->getInputStreamBlockPtr("countsPerStride", kb->getInt32(0));
     Value * countStreamPtr = kb->CreatePointerCast(countsPerStridePtr, kb->getIntNTy(mFieldWidth)->getPointerTo());
@@ -830,7 +832,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(const std::unique_p
 //    kb->setProducedItemCount("outputSwizzle0", produced);
 }
 
-void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & kb, Value * /* remainingBytes */) {
+void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(BuilderRef kb, Value * /* remainingBytes */) {
     CreateDoBlockMethodCall(kb);
     Constant * blockOffsetMask = kb->getSize(kb->getBitBlockWidth() - 1);
     Constant * outputIndexShift = kb->getSize(std::log2(mFieldWidth));

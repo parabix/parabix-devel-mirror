@@ -23,6 +23,8 @@
 
 using namespace llvm;
 
+using BuilderRef = pablo::CarryManager::BuilderRef;
+
 namespace pablo {
 
 inline static unsigned ceil_log2(const unsigned v) {
@@ -60,8 +62,6 @@ inline static bool isNonAdvanceCarryGeneratingStatement(const Statement * const 
         return isa<CarryProducingStatement>(stmt) && !isa<Advance>(stmt) && !isa<IndexedAdvance>(stmt);
     }
 }
-
-using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 
 #define LONG_ADVANCE_BREAKPOINT 64
 

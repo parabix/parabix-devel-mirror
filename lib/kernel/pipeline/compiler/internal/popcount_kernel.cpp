@@ -30,7 +30,7 @@ inline static unsigned floor_log2(const unsigned v) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiBlockLogic
  ** ------------------------------------------------------------------------------------------------------------- */
-void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) {
 
 
     Constant * const ZERO = b->getSize(0);
@@ -209,7 +209,7 @@ void PopCountKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const output)
+PopCountKernel::PopCountKernel(BuilderRef b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const output)
     : MultiBlockKernel(b, "PopCount" + std::string{type == PopCountType::POSITIVE ? "P" : "N"} + std::to_string(stepFactor)
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor), Add1() }}
@@ -228,7 +228,7 @@ PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PopCountKernel::PopCountKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const positive, StreamSet * const negative)
+PopCountKernel::PopCountKernel(BuilderRef b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const positive, StreamSet * const negative)
 : MultiBlockKernel(b, ".PopCountB" + std::to_string(stepFactor)
 // input streams
 ,{Binding{INPUT, input, FixedRate(stepFactor), Add1() }}

@@ -19,7 +19,7 @@ Bindings RunIndexOutputBindings(StreamSet * runIndex, StreamSet * overflow) {
     return {Binding{"runIndex", runIndex}, Binding{"overflow", overflow}};
 }
     
-RunIndex::RunIndex(const std::unique_ptr<kernel::KernelBuilder> & b,
+RunIndex::RunIndex(BuilderRef b,
                    StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow)
     : PabloKernel(b, "RunIndex-" + std::to_string(runIndex->getNumElements()) + (overflow == nullptr ? "" : "overflow"),
            // input

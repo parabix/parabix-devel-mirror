@@ -9,7 +9,7 @@ using namespace pablo;
 
 namespace kernel {
 
-AddSentinel::AddSentinel(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * input, StreamSet * output)
+AddSentinel::AddSentinel(BuilderRef kb, StreamSet * input, StreamSet * output)
 : PabloKernel(kb, "AddSentinel" + std::to_string(input->getNumElements()) + "x" + std::to_string(input->getFieldWidth()),
 {Binding{"input", input}},
 {Binding{"output", output, FixedRate(), Add1()}}) {

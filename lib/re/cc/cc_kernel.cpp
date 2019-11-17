@@ -20,7 +20,7 @@ using namespace llvm;
 // ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream
 
 CharacterClassKernelBuilder::CharacterClassKernelBuilder(
-        const std::unique_ptr<kernel::KernelBuilder> & b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * sourceStream, StreamSet * ccStream, Scalar * signalNullObject)
+        BuilderRef b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * sourceStream, StreamSet * ccStream, Scalar * signalNullObject)
 : PabloKernel(b, ccSetName + std::to_string(sourceStream->getNumElements()) + "x" + std::to_string(sourceStream->getFieldWidth())
                            + (signalNullObject ? "_abort_on_null" : ""),
 // input

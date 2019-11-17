@@ -19,7 +19,7 @@ using namespace pablo;
 using namespace kernel;
 using namespace llvm;
 
-UTF16_SupplementaryBasis::UTF16_SupplementaryBasis (const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u16_SMP_basis)
+UTF16_SupplementaryBasis::UTF16_SupplementaryBasis (BuilderRef b, StreamSet * u32basis, StreamSet * u16_SMP_basis)
 : PabloKernel(b, "UTF16_SupplementaryBasis",
 {Binding{"basis", u32basis}},
 {Binding{"u16_SMP_basis", u16_SMP_basis}}) {}
@@ -38,7 +38,7 @@ void UTF16_SupplementaryBasis::generatePabloMethod() {
     }
 }
 
-UTF16fieldDepositMask::UTF16fieldDepositMask(const std::unique_ptr<KernelBuilder> & b, StreamSet * u32basis, StreamSet * u16fieldMask, StreamSet * extractionMask, unsigned depositFieldWidth)
+UTF16fieldDepositMask::UTF16fieldDepositMask(BuilderRef b, StreamSet * u32basis, StreamSet * u16fieldMask, StreamSet * extractionMask, unsigned depositFieldWidth)
 : BlockOrientedKernel(b, "u16depositMask",
 {Binding{"basis", u32basis}},
 {Binding{"fieldDepositMask", u16fieldMask, FixedRate(2)},
@@ -47,7 +47,7 @@ UTF16fieldDepositMask::UTF16fieldDepositMask(const std::unique_ptr<KernelBuilder
 {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}})
 , mDepositFieldWidth(depositFieldWidth) {}
 
-void UTF16fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void UTF16fieldDepositMask::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     // If any of bits 16 through 20 are 1, a UTF-16 surrogate pair sequence is required.
     Value * aboveBMP = b->loadInputStreamBlock("basis", b->getSize(16), b->getSize(0));
@@ -72,7 +72,7 @@ void UTF16fieldDepositMask::generateDoBlockMethod(const std::unique_ptr<KernelBu
     }
 }
 
-void UTF16fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
+void UTF16fieldDepositMask::generateFinalBlockMethod(BuilderRef b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
@@ -84,7 +84,7 @@ void UTF16fieldDepositMask::generateFinalBlockMethod(const std::unique_ptr<Kerne
 // of each UTF-16 sequence, this kernel computes the stream marking initial
 // positions of each UTF-16 sequence.
 //
-UTF16_InitialMask::UTF16_InitialMask (const std::unique_ptr<KernelBuilder> & iBuilder, StreamSet * u16final, StreamSet * u16initial)
+UTF16_InitialMask::UTF16_InitialMask (BuilderRef iBuilder, StreamSet * u16final, StreamSet * u16initial)
 : PabloKernel(iBuilder, "UTF16_DepositMasks",
               {Binding{"u16final", u16final}},
               {Binding{"u16initial", u16initial}}) {}
@@ -101,7 +101,7 @@ void UTF16_InitialMask::generatePabloMethod() {
 // bits: SMPbits4_0, u16bits15_10, u16bits9_0, as well as the mask_lo stream
 // (having bits set at all but surrogate1 positions).
 //
-UTF16assembly::UTF16assembly (const std::unique_ptr<KernelBuilder> & b,
+UTF16assembly::UTF16assembly (BuilderRef b,
                             StreamSet * SMPbits4_0, StreamSet * u16bits15_10, StreamSet * u16bits9_0, StreamSet * u16final,
                             StreamSet * u16basis)
 : PabloKernel(b, "UTF16assembly",

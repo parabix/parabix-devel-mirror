@@ -13,7 +13,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void CCScanKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void CCScanKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     auto savePoint = iBuilder->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(iBuilder);
     iBuilder->restoreIP(savePoint);
@@ -40,7 +40,7 @@ void CCScanKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & 
     iBuilder->setScalarField("BlockNo", iBuilder->CreateAdd(blockNo, iBuilder->getSize(1)));
 }
 
-Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBuilder> & iBuilder) const {
+Function * CCScanKernel::generateScanWordRoutine(BuilderRef iBuilder) const {
 
     IntegerType * T = iBuilder->getIntNTy(mScanwordBitWidth);
 
@@ -95,7 +95,7 @@ Function * CCScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBui
 
 }
 
-CCScanKernel::CCScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned streamNum)
+CCScanKernel::CCScanKernel(BuilderRef b, unsigned streamNum)
 : BlockOrientedKernel(b, "CCScan",
               {Binding{b->getStreamSetTy(streamNum), "matchResults"}},
               {}, {}, {}, {InternalScalar{b->getSizeTy(), "BlockNo"}}),

@@ -13,7 +13,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> &b, Value * const numOfStrides) {
+void ErrorMonitorKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
 
     const auto numErrorStreams = getInputStreamSet("errorStream")->getNumElements();
     const auto blockWidth = b->getBitBlockWidth();
@@ -110,7 +110,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(const std::unique_ptr<kernel::K
     b->SetInsertPoint(exitBB);
 }
 
-ErrorMonitorKernel::ErrorMonitorKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+ErrorMonitorKernel::ErrorMonitorKernel(BuilderRef b,
                                        StreamSet * error,
                                        ErrorMonitorKernel::IOStreamBindings bindings)
 : MultiBlockKernel(b, "ErrorMonitorKernel" + std::to_string(error->getNumElements()),

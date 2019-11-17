@@ -8,7 +8,7 @@ namespace kernel {
 // Extend an input stream by one position with adding a 1 bit.
 class AddSentinel final : public pablo::PabloKernel {
 public:
-    AddSentinel(const std::unique_ptr<KernelBuilder> & b,
+    AddSentinel(BuilderRef b,
                StreamSet * const input, StreamSet * const output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }

@@ -57,7 +57,7 @@ Bindings makeOutputBreakBindings(UnterminatedLineAtEOF eofMode, StreamSet * lb) 
     return {Binding{"LB", lb}};
 }
 
-UnixLinesKernelBuilder::UnixLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
+UnixLinesKernelBuilder::UnixLinesKernelBuilder(BuilderRef b,
                                                StreamSet * Basis,
                                                StreamSet * LineEnds,
                                                UnterminatedLineAtEOF eofMode,
@@ -104,7 +104,7 @@ void UnixLinesKernelBuilder::generatePabloMethod() {
 
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:
-    LineFeedKernelBuilder(const std::unique_ptr<KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream);
+    LineFeedKernelBuilder(BuilderRef b, StreamSet * Basis, StreamSet * LineFeedStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -113,7 +113,7 @@ protected:
     unsigned mStreamFieldWidth;
 };
 
-LineFeedKernelBuilder::LineFeedKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * Basis, StreamSet * LineFeedStream)
+LineFeedKernelBuilder::LineFeedKernelBuilder(BuilderRef b, StreamSet * Basis, StreamSet * LineFeedStream)
 : PabloKernel(b, "lf" + sourceShape(Basis),
               // input
 {Binding{"basis", Basis}},
@@ -140,7 +140,7 @@ void LineFeedKernelBuilder::generatePabloMethod() {
 
 class UnicodeLinesKernelBuilder final : public pablo::PabloKernel {
 public:
-    UnicodeLinesKernelBuilder(const std::unique_ptr<KernelBuilder> & b,
+    UnicodeLinesKernelBuilder(BuilderRef b,
                               StreamSet * Basis,
                               StreamSet * LF,
                               StreamSet * UnicodeLB,
@@ -156,7 +156,7 @@ protected:
     NullCharMode mNullMode;
 };
 
-UnicodeLinesKernelBuilder::UnicodeLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
+UnicodeLinesKernelBuilder::UnicodeLinesKernelBuilder(BuilderRef b,
                                                      StreamSet * Basis,
                                                      StreamSet * LF,
                                                      StreamSet * LineEnds,
@@ -307,7 +307,7 @@ void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
     }
 }
 
-NullDelimiterKernel::NullDelimiterKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+NullDelimiterKernel::NullDelimiterKernel(BuilderRef b,
                                          StreamSet * Source,
                                          StreamSet * Terminators,
                                          UnterminatedLineAtEOF eofMode)

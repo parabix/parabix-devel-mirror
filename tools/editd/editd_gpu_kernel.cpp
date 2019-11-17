@@ -10,7 +10,9 @@ using namespace llvm;
 
 namespace kernel {
 
-void bitblock_advance_ci_co(const std::unique_ptr<KernelBuilder> & iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){
+using BuilderRef = Kernel::BuilderRef;
+
+void bitblock_advance_ci_co(BuilderRef iBuilder, Value * val, unsigned shift, Value * stideCarryArr, unsigned carryIdx, std::vector<std::vector<Value *>> & adv, std::vector<std::vector<int>> & calculated, int i, int j){
     if (!calculated[i][j]) {
         Value * ptr = iBuilder->CreateGEP(stideCarryArr, {iBuilder->getInt32(0), iBuilder->getInt32(carryIdx)});
         Value * ci = iBuilder->CreateLoad(ptr);
@@ -27,7 +29,7 @@ void reset_to_zero(std::vector<std::vector<int>> & calculated){
     }
 }
 
-void editdGPUKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & idb) {
+void editdGPUKernel::generateDoBlockMethod(BuilderRef idb) {
 
     IntegerType * const int32ty = idb->getInt32Ty();
     IntegerType * const int8ty = idb->getInt8Ty();
@@ -92,12 +94,12 @@ void editdGPUKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
     }
 }
 
-void editdGPUKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, Value * remainingBytes) {
+void editdGPUKernel::generateFinalBlockMethod(BuilderRef idb, Value * remainingBytes) {
     idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
     CreateDoBlockMethodCall(idb);
 }
 
-editdGPUKernel::editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize) :
+editdGPUKernel::editdGPUKernel(BuilderRef b, unsigned dist, unsigned pattLen, unsigned groupSize) :
 BlockOrientedKernel(b, "editd_gpu",
 {Binding{b->getStreamSetTy(4), "CCStream"}},
 {Binding{b->getStreamSetTy(dist + 1), "ResultStream"}},

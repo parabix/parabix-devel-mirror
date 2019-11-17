@@ -15,11 +15,11 @@ namespace kernel {
 
 class HexToBinary final : public kernel::BlockOrientedKernel {
 public:
-    HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * hexStream, StreamSet * binStream);
+    HexToBinary(BuilderRef b, StreamSet * hexStream, StreamSet * binStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateDoBlockMethod(BuilderRef b) override;
 };
 
 //
@@ -29,12 +29,12 @@ protected:
 
 class BinaryToHex final : public kernel::BlockOrientedKernel {
 public:
-    BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * binStream, StreamSet * hexStream);
+    BinaryToHex(BuilderRef b, StreamSet * binStream, StreamSet * hexStream);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
-    void generateFinalBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const remainingBits) override;
+    void generateDoBlockMethod(BuilderRef b) override;
+    void generateFinalBlockMethod(BuilderRef b, llvm::Value * const remainingBits) override;
 };
 
 }

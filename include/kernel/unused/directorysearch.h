@@ -9,7 +9,7 @@ namespace kernel {
 
 class DirectorySearch final : public SegmentOrientedKernel {
 public:
-    DirectorySearch(const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
+    DirectorySearch(BuilderRef iBuilder,
                     Scalar * const rootPath,
                     StreamSet * const directoryNameStream, StreamSet * const fileDirectoryStream, StreamSet * const fileNameStream,
                     const unsigned filesPerSegment = 1024, const bool recursive = true, const bool includeHidden = false);
@@ -18,16 +18,16 @@ public:
 
     bool hasSignature() const override { return false; }
 
-    void linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void linkExternalMethods(BuilderRef b) override;
 
-    void generateInitializeMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateInitializeMethod(BuilderRef b) override;
 
-    void generateDoSegmentMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateDoSegmentMethod(BuilderRef b) override;
 
-    void generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & b) override;
+    void generateFinalizeMethod(BuilderRef b) override;
 private:
 
-    void addToOutputStream(const std::unique_ptr<kernel::KernelBuilder> & b, llvm::Value * const name, llvm::Value * const nameLength, llvm::StringRef field, llvm::Value * const consumed);
+    void addToOutputStream(BuilderRef b, llvm::Value * const name, llvm::Value * const nameLength, llvm::StringRef field, llvm::Value * const consumed);
 
 private:
     const bool mRecursive;

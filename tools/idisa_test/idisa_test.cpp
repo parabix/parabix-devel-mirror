@@ -44,24 +44,24 @@ static cl::opt<int> Immediate("i", cl::desc("Immediate value for mvmd_dslli"), c
 
 class ShiftLimitKernel : public BlockOrientedKernel {
 public:
-    ShiftLimitKernel(const std::unique_ptr<KernelBuilder> & b, unsigned fw, unsigned limit, StreamSet * input, StreamSet * output);
+    ShiftLimitKernel(BuilderRef b, unsigned fw, unsigned limit, StreamSet * input, StreamSet * output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) override;
+    void generateDoBlockMethod(BuilderRef kb) override;
 private:
     const unsigned mTestFw;
     const unsigned mShiftLimit;
 };
 
-ShiftLimitKernel::ShiftLimitKernel(const std::unique_ptr<KernelBuilder> & b, unsigned fw, unsigned limit, StreamSet *input, StreamSet *output)
+ShiftLimitKernel::ShiftLimitKernel(BuilderRef b, unsigned fw, unsigned limit, StreamSet *input, StreamSet *output)
 : BlockOrientedKernel(b, "shiftLimit" + std::to_string(fw) + "_" + std::to_string(limit),
                               {Binding{"shiftOperand", input}},
                               {Binding{"limitedShift", output}},
                               {}, {}, {}),
 mTestFw(fw), mShiftLimit(limit) {}
 
-void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
+void ShiftLimitKernel::generateDoBlockMethod(BuilderRef kb) {
     Type * fwTy = kb->getIntNTy(mTestFw);
     Constant * const ZeroConst = kb->getSize(0);
     Value * shiftOperand = kb->loadInputStreamBlock("shiftOperand", ZeroConst);
@@ -72,19 +72,19 @@ void ShiftLimitKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder
 
 class IdisaBinaryOpTestKernel : public MultiBlockKernel {
 public:
-    IdisaBinaryOpTestKernel(const std::unique_ptr<KernelBuilder> &b, std::string idisa_op, unsigned fw, unsigned imm,
+    IdisaBinaryOpTestKernel(BuilderRef b, std::string idisa_op, unsigned fw, unsigned imm,
                             StreamSet * Operand1, StreamSet * Operand2, StreamSet * result);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const std::string mIdisaOperation;
     const unsigned mTestFw;
     const unsigned mImmediateShift;
 };
 
-IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm,
+IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(BuilderRef b, std::string idisa_op, unsigned fw, unsigned imm,
                                                  StreamSet *Operand1, StreamSet *Operand2, StreamSet *result)
 : MultiBlockKernel(b, idisa_op + std::to_string(fw) + "_test",
      {Binding{"operand1", Operand1}, Binding{"operand2", Operand2}},
@@ -92,7 +92,7 @@ IdisaBinaryOpTestKernel::IdisaBinaryOpTestKernel(const std::unique_ptr<KernelBui
      {}, {}, {}),
 mIdisaOperation(std::move(idisa_op)), mTestFw(fw), mImmediateShift(imm) {}
 
-void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+void IdisaBinaryOpTestKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {
     BasicBlock * entry = kb->GetInsertBlock();
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * done = kb->CreateBasicBlock("done");
@@ -177,20 +177,20 @@ void IdisaBinaryOpTestKernel::generateMultiBlockLogic(const std::unique_ptr<Kern
 
 class IdisaBinaryOpCheckKernel : public BlockOrientedKernel {
 public:
-    IdisaBinaryOpCheckKernel(const std::unique_ptr<KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm,
+    IdisaBinaryOpCheckKernel(BuilderRef b, std::string idisa_op, unsigned fw, unsigned imm,
                              StreamSet * Operand1, StreamSet * Operand2, StreamSet * result,
                              StreamSet * expected, Scalar * failures);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) override;
+    void generateDoBlockMethod(BuilderRef kb) override;
 private:
     const std::string mIdisaOperation;
     const unsigned mTestFw;
     const unsigned mImmediateShift;
 };
 
-IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<KernelBuilder> & b, std::string idisa_op, unsigned fw, unsigned imm,
+IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(BuilderRef b, std::string idisa_op, unsigned fw, unsigned imm,
                                                    StreamSet *Operand1, StreamSet *Operand2, StreamSet *result,
                                                    StreamSet *expected, Scalar *failures)
 : BlockOrientedKernel(b, idisa_op + std::to_string(fw) + "_check" + std::to_string(QuietMode),
@@ -201,7 +201,7 @@ IdisaBinaryOpCheckKernel::IdisaBinaryOpCheckKernel(const std::unique_ptr<KernelB
                            {}, {Binding{"totalFailures", failures}}, {}),
 mIdisaOperation(idisa_op), mTestFw(fw), mImmediateShift(imm) {}
 
-void IdisaBinaryOpCheckKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & kb) {
+void IdisaBinaryOpCheckKernel::generateDoBlockMethod(BuilderRef kb) {
     Type * fwTy = kb->getIntNTy(mTestFw);
     BasicBlock * reportFailure = kb->CreateBasicBlock("reportFailure");
     BasicBlock * continueTest = kb->CreateBasicBlock("continueTest");

@@ -16,12 +16,12 @@ namespace kernel {
 class editdGPUKernel : public BlockOrientedKernel {
 public:
 
-    editdGPUKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned dist, unsigned pattLen, unsigned groupSize);
+    editdGPUKernel(BuilderRef b, unsigned dist, unsigned pattLen, unsigned groupSize);
 
 
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & idb) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & idb, llvm::Value * remainingBytes) override;
+    void generateDoBlockMethod(BuilderRef idb) override;
+    void generateFinalBlockMethod(BuilderRef idb, llvm::Value * remainingBytes) override;
     unsigned mEditDistance;
     unsigned mPatternLen;
     unsigned mGroupSize;

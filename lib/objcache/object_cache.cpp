@@ -86,7 +86,7 @@ const MDString * getSignature(const llvm::Module * const M) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadCachedObjectFile
  ** ------------------------------------------------------------------------------------------------------------- */
-bool ParabixObjectCache::loadCachedObjectFile(const std::unique_ptr<kernel::KernelBuilder> & idb, kernel::Kernel * const kernel) {
+bool ParabixObjectCache::loadCachedObjectFile(BuilderRef idb, kernel::Kernel * const kernel) {
     if (LLVM_LIKELY(kernel->isCachable())) {
         assert (kernel->getModule() == nullptr);
         const auto moduleId = kernel->getCacheName(idb);
@@ -239,7 +239,7 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForCachedKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-bool ParabixObjectCache::checkForCachedKernel(const std::unique_ptr<kernel::KernelBuilder> & b, not_null<kernel::Kernel *> kernel) noexcept {
+bool ParabixObjectCache::checkForCachedKernel(BuilderRef b, not_null<kernel::Kernel *> kernel) noexcept {
     return mInstance.get() && mInstance->loadCachedObjectFile(b, kernel);
 }
 

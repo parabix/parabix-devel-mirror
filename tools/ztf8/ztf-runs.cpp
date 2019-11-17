@@ -52,7 +52,7 @@ static cl::alias DecompressionAlias("decompress", cl::desc("Alias for -d"), cl::
 
 class ZTF_CompressionMask final: public PabloKernel {
 public:
-    ZTF_CompressionMask(const std::unique_ptr<kernel::KernelBuilder> & b,
+    ZTF_CompressionMask(BuilderRef b,
                   StreamSet * runMask, StreamSet * runIndex, StreamSet * compressionMask)
     : PabloKernel(b, "ZTF_CompressionMask",
                          {Binding{"runMask", runMask, FixedRate(1), LookAhead(1)},
@@ -77,7 +77,7 @@ void ZTF_CompressionMask::generatePabloMethod() {
 
 class ZTF_Run_Replacement final: public PabloKernel {
 public:
-    ZTF_Run_Replacement(const std::unique_ptr<kernel::KernelBuilder> & b,
+    ZTF_Run_Replacement(BuilderRef b,
                         StreamSet * basis, StreamSet * runIndex, StreamSet * output)
     : PabloKernel(b, "ZTF_Run_Replacement",
                          {Binding{"basis", basis}, Binding{"runIndex", runIndex}},
@@ -108,7 +108,7 @@ void ZTF_Run_Replacement::generatePabloMethod() {
 
 class ZTF_Run_Length_Decoder final: public PabloKernel {
 public:
-    ZTF_Run_Length_Decoder(const std::unique_ptr<kernel::KernelBuilder> & b,
+    ZTF_Run_Length_Decoder(BuilderRef b,
                         StreamSet * ztf_basis, StreamSet * runLengths)
     : PabloKernel(b, "ZTF_Run_Length_Decoder",
                          {Binding{"basis", ztf_basis}},
@@ -136,7 +136,7 @@ void ZTF_Run_Length_Decoder::generatePabloMethod() {
 
 class ZTF_Run_Decompression final: public PabloKernel {
 public:
-    ZTF_Run_Decompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+    ZTF_Run_Decompression(BuilderRef b,
                            StreamSet * ztfRunCodes, StreamSet * runMask, StreamSet * ztf_u8_indexed, StreamSet * u8output)
     : PabloKernel(b, "ZTF_Run_Decompression",
                   {Binding{"ztfRunCodes", ztfRunCodes, FixedRate(1), LookAhead(1)},

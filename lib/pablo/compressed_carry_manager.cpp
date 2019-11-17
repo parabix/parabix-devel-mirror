@@ -26,6 +26,8 @@
 
 using namespace llvm;
 
+using BuilderRef = pablo::CompressedCarryManager::BuilderRef;
+
 namespace pablo {
 
 /* Local Helper Functions */
@@ -64,7 +66,7 @@ static inline unsigned ceil_udiv(const unsigned x, const unsigned y) {
 }
 
 
-static Value * castToSummaryType(const std::unique_ptr<kernel::KernelBuilder> & b, Value * carryOut, Type * summaryTy) {
+static Value * castToSummaryType(BuilderRef b, Value * carryOut, Type * summaryTy) {
     if (!(carryOut->getType()->isIntegerTy() || carryOut->getType() == b->getBitBlockType())) {
         assert (false);
     }
@@ -108,7 +110,7 @@ static int32_t analyseSummarySize(int32_t blockWidth, const PabloBlock * const s
 }
 
 
-static Type * toSummaryType(const std::unique_ptr<kernel::KernelBuilder> & b, int32_t summarySize) {
+static Type * toSummaryType(BuilderRef b, int32_t summarySize) {
     switch (summarySize) {
     case 8:
         return b->getInt8Ty();
@@ -121,7 +123,7 @@ static Type * toSummaryType(const std::unique_ptr<kernel::KernelBuilder> & b, in
 }
 
 
-static Value * compressImplicitSummary(const std::unique_ptr<kernel::KernelBuilder> & b, Value * summary) {
+static Value * compressImplicitSummary(BuilderRef b, Value * summary) {
     if (summary->getType() == b->getBitBlockType()) {
         summary = b->CreateBitCast(summary, b->getIntNTy(b->getBitBlockWidth()));
     }

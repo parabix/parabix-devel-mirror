@@ -66,7 +66,7 @@ using SelectOperationList = std::vector<SelectOperation>;
  */
 class StreamSelect : public BlockOrientedKernel {
 public:
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 
     StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation);
     StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList operations);
@@ -103,7 +103,7 @@ private:
  */
 class IStreamSelect : public MultiBlockKernel {
 public:
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 
     IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation);
 

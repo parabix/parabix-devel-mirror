@@ -13,7 +13,7 @@ using namespace llvm;
 
 namespace kernel {
 
-    BitStreamPDEPKernel::BitStreamPDEPKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned numberOfStream, std::string name)
+    BitStreamPDEPKernel::BitStreamPDEPKernel(BuilderRef b, const unsigned numberOfStream, std::string name)
             : MultiBlockKernel(b, std::move(name),
 // input stream sets
                                {Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
@@ -26,7 +26,7 @@ namespace kernel {
 
     }
 
-    void BitStreamPDEPKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfBlocks) {
+    void BitStreamPDEPKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
         BasicBlock * const entry = b->GetInsertBlock();
         BasicBlock * const processBlock = b->CreateBasicBlock("processBlock");
         BasicBlock * const finishedStrides = b->CreateBasicBlock("finishedStrides");

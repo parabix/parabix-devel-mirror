@@ -33,13 +33,13 @@ using RateValue = ProcessingRate::RateValue;
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void MultiBlockKernel::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+void MultiBlockKernel::generateKernelMethod(BuilderRef b) {
     generateMultiBlockLogic(b, b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides));
 }
 
 // MULTI-BLOCK KERNEL CONSTRUCTOR
 MultiBlockKernel::MultiBlockKernel(
-    const std::unique_ptr<KernelBuilder> &b,
+    BuilderRef b,
     std::string && kernelName,
     Bindings && stream_inputs,
     Bindings && stream_outputs,
@@ -57,7 +57,7 @@ MultiBlockKernel::MultiBlockKernel(
 
 }
 
-MultiBlockKernel::MultiBlockKernel(const std::unique_ptr<KernelBuilder> &b,
+MultiBlockKernel::MultiBlockKernel(BuilderRef b,
     const TypeId typeId,
     std::string && kernelName,
     Bindings && stream_inputs,

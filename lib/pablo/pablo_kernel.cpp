@@ -137,7 +137,7 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
     return value;
 }
 
-void PabloKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloKernel::addInternalProperties(BuilderRef b) {
     mSizeTy = b->getSizeTy();
     mStreamTy = b->getStreamTy();
     mSymbolTable.reset(new SymbolGenerator(b->getContext(), mAllocator));
@@ -170,7 +170,7 @@ void PabloKernel::addInternalProperties(const std::unique_ptr<kernel::KernelBuil
     mStreamTy = nullptr;
 }
 
-void PabloKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void PabloKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     mSizeTy = iBuilder->getSizeTy();
     mStreamTy = iBuilder->getStreamTy();
     mPabloCompiler->compile(iBuilder);
@@ -179,12 +179,12 @@ void PabloKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & i
 }
 
 #if 0
-void PabloKernel::beginConditionalRegion(const std::unique_ptr<KernelBuilder> & b) {
+void PabloKernel::beginConditionalRegion(BuilderRef b) {
     mPabloCompiler->clearCarryData(b);
 }
 #endif
 
-void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
+void PabloKernel::generateFinalBlockMethod(BuilderRef b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFbit", b->bitblock_set_bit(remainingBytes));
@@ -192,7 +192,7 @@ void PabloKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> 
     CreateDoBlockMethodCall(b);
 }
 
-void PabloKernel::generateFinalizeMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) {
+void PabloKernel::generateFinalizeMethod(BuilderRef iBuilder) {
     mPabloCompiler->releaseKernelData(iBuilder);
 
     if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
@@ -282,7 +282,7 @@ static inline std::string && annotateKernelNameWithPabloDebugFlags(std::string &
     return std::move(name);
 }
 
-PabloKernel::PabloKernel(const std::unique_ptr<KernelBuilder> & b,
+PabloKernel::PabloKernel(BuilderRef b,
                          std::string && kernelName,
                          std::vector<Binding> stream_inputs,
                          std::vector<Binding> stream_outputs,

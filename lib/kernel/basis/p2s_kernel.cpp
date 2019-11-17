@@ -11,6 +11,8 @@ using namespace llvm;
 
 namespace kernel{
 
+using BuilderRef = Kernel::BuilderRef;
+
 std::string streamSetShape(const StreamSets & inputStreams) {
     std::string s;
     for (auto ss : inputStreams) {
@@ -19,14 +21,14 @@ std::string streamSetShape(const StreamSets & inputStreams) {
     return s;
 }
 
-void p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
+void p2s_step(BuilderRef iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
 
-inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[]) {
+inline void p2s(BuilderRef iBuilder, Value * p[], Value * s[]) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
@@ -46,7 +48,7 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
     }
 }
 
-void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void P2SKernel::generateDoBlockMethod(BuilderRef b) {
     const auto numOfStreams = getInputStreamSet("basisBits")->getNumElements();
     Value * p_bitblock[8];
     // todo: generalize this to the nearest pow 2?
@@ -66,7 +68,7 @@ void P2SKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) 
 }
 
 
-void P2SMultipleStreamsKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> &b) {
+void P2SMultipleStreamsKernel::generateDoBlockMethod(BuilderRef b) {
     Value * input[8];
     unsigned k = 0;
     for (unsigned i = 0; i < getNumOfStreamInputs(); ++i) {
@@ -87,7 +89,7 @@ void P2SMultipleStreamsKernel::generateDoBlockMethod(const std::unique_ptr<kerne
     }
 }
 
-void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void P2SKernelWithCompressedOutput::generateDoBlockMethod(BuilderRef b) {
     IntegerType * i32 = b->getInt32Ty();
     PointerType * bitBlockPtrTy = PointerType::get(b->getBitBlockType(), 0);
     unsigned const unitsPerRegister = b->getBitBlockWidth()/8;
@@ -116,14 +118,14 @@ void P2SKernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<
 }
 
 
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u16bits, StreamSet * u16stream, cc::ByteNumbering numbering)
+P2S16Kernel::P2S16Kernel(BuilderRef b, StreamSet *u16bits, StreamSet * u16stream, cc::ByteNumbering numbering)
 : BlockOrientedKernel(b, "p2s_16" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", u16bits}},
 {Binding{"i16Stream", u16stream}},
 {}, {}, {}), mByteNumbering(numbering) {
 }
 
-P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSets & inputSets, StreamSet * u16stream, cc::ByteNumbering numbering)
+P2S16Kernel::P2S16Kernel(BuilderRef b, StreamSets & inputSets, StreamSet * u16stream, cc::ByteNumbering numbering)
 : BlockOrientedKernel(b, "p2s_16" + streamSetShape(inputSets) + cc::numberingSuffix(numbering),
 {},
 {Binding{"i16Stream", u16stream}},
@@ -133,7 +135,7 @@ P2S16Kernel::P2S16Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, Strea
     }
 }
 
-void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void P2S16Kernel::generateDoBlockMethod(BuilderRef b) {
     Value * lo_input[8];
     Value * hi_input[8];
     unsigned k = 0;
@@ -175,7 +177,7 @@ void P2S16Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     }
 }
 
-void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void P2S16KernelWithCompressedOutput::generateDoBlockMethod(BuilderRef b) {
     IntegerType * i32Ty = b->getInt32Ty();
     PointerType * int16PtrTy = b->getInt16Ty()->getPointerTo();
     PointerType * bitBlockPtrTy = b->getBitBlockType()->getPointerTo();
@@ -231,7 +233,7 @@ void P2S16KernelWithCompressedOutput::generateDoBlockMethod(const std::unique_pt
     b->setProducedItemCount("i16Stream", i16UnitsFinal);
 }
 
-P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * basisBits, StreamSet * byteStream)
+P2SKernel::P2SKernel(BuilderRef b, StreamSet * basisBits, StreamSet * byteStream)
 : BlockOrientedKernel(b, "p2s_" + std::to_string(basisBits->getNumElements()),
 {Binding{"basisBits", basisBits}},
 {Binding{"byteStream", byteStream}},
@@ -239,7 +241,7 @@ P2SKernel::P2SKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet
 
 }
 
-P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(BuilderRef b,
                                                    const StreamSets & inputStreams,
                                                    StreamSet * const outputStream)
 : BlockOrientedKernel(b, "p2sMultipleStreams" + streamSetShape(inputStreams),
@@ -251,7 +253,7 @@ P2SMultipleStreamsKernel::P2SMultipleStreamsKernel(const std::unique_ptr<kernel:
     }
 }
 
-P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(const std::unique_ptr<kernel::KernelBuilder> & b,
+P2S16KernelWithCompressedOutput::P2S16KernelWithCompressedOutput(BuilderRef b,
                                                                  StreamSet * basisBits, StreamSet * extractionMask, StreamSet * i16Stream, cc::ByteNumbering numbering)
 : BlockOrientedKernel(b, "p2s_16_compress" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", basisBits},
@@ -263,10 +265,10 @@ Binding{"extractionMask", extractionMask}},
 
 
 
-void P2S21Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void P2S21Kernel::generateDoBlockMethod(BuilderRef b) {
     Value * zeroes = b->allZeroes();
     Value * bits23_16[8];
-    
+
     for (unsigned j = 0; j < 5; ++j) {
         const unsigned idx = j + 16;
         bits23_16[j] = b->loadInputStreamBlock("basisBits", b->getInt32(idx));
@@ -276,7 +278,7 @@ void P2S21Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     bits23_16[7] = zeroes;
     Value * byte2[8];
     p2s(b, bits23_16, byte2);
-    
+
     Value * bits15_8[8];
     for (unsigned j = 0; j < 8; ++j) {
         const unsigned idx = j + 8;
@@ -284,14 +286,14 @@ void P2S21Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     }
     Value * byte1[8];
     p2s(b, bits15_8, byte1);
-    
+
     Value * bits7_0[8];
     for (unsigned j = 0; j < 8; ++j) {
         bits7_0[j] = b->loadInputStreamBlock("basisBits", b->getInt32(j));
     }
     Value * byte0[8];
     p2s(b, bits7_0, byte0);
-    
+
     for (unsigned j = 0; j < 8; ++j) {
         Value * quadbyte32[4];
         if (mByteNumbering == cc::ByteNumbering::BigEndian) {
@@ -319,7 +321,7 @@ void P2S21Kernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     }
 }
 
-P2S21Kernel::P2S21Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet *u21bits, StreamSet *u32stream, cc::ByteNumbering numbering)
+P2S21Kernel::P2S21Kernel(BuilderRef b, StreamSet *u21bits, StreamSet *u32stream, cc::ByteNumbering numbering)
 : BlockOrientedKernel(b, "p2s_21" + cc::numberingSuffix(numbering),
 {Binding{"basisBits", u21bits}},
 {Binding{"u32stream", u32stream}},

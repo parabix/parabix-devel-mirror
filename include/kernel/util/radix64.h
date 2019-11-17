@@ -20,33 +20,33 @@ namespace kernel {
 
 class expand3_4Kernel final : public MultiBlockKernel {
 public:
-    expand3_4Kernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * input, StreamSet * expandedOutput);
+    expand3_4Kernel(BuilderRef b, StreamSet * input, StreamSet * expandedOutput);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &iBuilder, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 };
 
 class radix64Kernel final : public BlockOrientedKernel {
 public:
-    radix64Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * output);
+    radix64Kernel(BuilderRef, StreamSet * input, StreamSet * output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
-    llvm::Value * processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
+    virtual void generateDoBlockMethod(BuilderRef b) override;
+    virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingBytes) override;
+    llvm::Value * processPackData(BuilderRef b, llvm::Value* packData) const;
 };
 
 class base64Kernel final : public BlockOrientedKernel {
 public:
-    base64Kernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * input, StreamSet * output);
+    base64Kernel(BuilderRef, StreamSet * input, StreamSet * output);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    virtual void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    virtual void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * remainingBytes) override;
-    llvm::Value* processPackData(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value* packData) const;
+    virtual void generateDoBlockMethod(BuilderRef b) override;
+    virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingBytes) override;
+    llvm::Value* processPackData(BuilderRef b, llvm::Value* packData) const;
 };
 
 }

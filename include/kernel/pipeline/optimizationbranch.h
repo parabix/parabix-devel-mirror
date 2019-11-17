@@ -37,7 +37,7 @@ public:
 
 protected:
 
-    OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
+    OptimizationBranch(BuilderRef b,
                        std::string && signature,
                        not_null<Relationship *> condition,
                        Kernel * const nonZeroKernel,
@@ -47,19 +47,19 @@ protected:
                        Bindings && scalar_inputs,
                        Bindings && scalar_outputs);
 
-    void addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) final;
+    void addInternalProperties(BuilderRef b) final;
 
-    void addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) final;
+    void addKernelDeclarations(BuilderRef b) final;
 
-    void generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateInitializeMethod(BuilderRef b) final;
 
-    void generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateInitializeThreadLocalMethod(BuilderRef b) final;
 
-    void generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateKernelMethod(BuilderRef b) final;
 
-    void generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateFinalizeThreadLocalMethod(BuilderRef b) final;
 
-    void generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) final;
+    void generateFinalizeMethod(BuilderRef b) final;
 
 private:
 

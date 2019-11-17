@@ -17,7 +17,7 @@ namespace kernel {
  */
 class SingleStreamScanKernelTemplate : public MultiBlockKernel {
 public:
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 
     SingleStreamScanKernelTemplate(BuilderRef b, std::string && name, StreamSet * scan);
 

@@ -23,7 +23,7 @@ namespace kernel {
  */
 class XmlLineBreakKernel : public pablo::PabloKernel {
 public:
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 
     XmlLineBreakKernel(BuilderRef b, StreamSet * basis, StreamSet * out)
     : PabloKernel(b, "XmlLineBreakKernel", {{"basis", basis}}, {{"out", out, FixedRate(), Add1()}})

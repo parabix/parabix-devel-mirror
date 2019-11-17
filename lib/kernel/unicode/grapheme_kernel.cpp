@@ -22,7 +22,7 @@ using namespace kernel;
 using namespace pablo;
 
 
-GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet *BasisBits, StreamSet * u8index, StreamSet * GCB_stream)
+GraphemeClusterBreakKernel::GraphemeClusterBreakKernel(BuilderRef iBuilder, StreamSet *BasisBits, StreamSet * u8index, StreamSet * GCB_stream)
 : PabloKernel(iBuilder, re::AnnotateWithREflags("gcb"),
 // inputs
 {Binding{"basis", BasisBits},

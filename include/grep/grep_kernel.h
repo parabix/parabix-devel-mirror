@@ -16,7 +16,7 @@ namespace kernel {
 
 class UTF8_index : public pablo::PabloKernel {
 public:
-    UTF8_index(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8index);
+    UTF8_index(BuilderRef kb, StreamSet * Source, StreamSet * u8index);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -74,9 +74,9 @@ private:
 
 class ICGrepKernel : public pablo::PabloKernel {
 public:
-    ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder,
+    ICGrepKernel(BuilderRef iBuilder,
                  std::unique_ptr<GrepKernelOptions> options);
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const override;
+    std::string makeSignature(BuilderRef) const override;
     bool isCachable() const override { return true; }
     bool hasFamilyName() const override { return true; }
 protected:
@@ -96,9 +96,9 @@ protected:
 class ByteBitGrepKernel : public ByteBitGrepSignature, public pablo::PabloKernel {
     using Externals = std::vector<std::pair<std::string, StreamSet *>>;
 public:
-    ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, re::RE * const prefix, re::RE * const suffix, StreamSet * const Source, StreamSet * const MatchResults,
+    ByteBitGrepKernel(BuilderRef iBuilder, re::RE * const prefix, re::RE * const suffix, StreamSet * const Source, StreamSet * const MatchResults,
                       const Externals externals = {});
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const override;
+    std::string makeSignature(BuilderRef) const override;
     bool isCachable() const override { return true; }
     bool hasFamilyName() const override { return true; }
 private:
@@ -109,7 +109,7 @@ protected:
 
 class MatchedLinesKernel : public pablo::PabloKernel {
 public:
-    MatchedLinesKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
+    MatchedLinesKernel(BuilderRef builder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -118,14 +118,14 @@ protected:
 
 class InvertMatchesKernel : public BlockOrientedKernel {
 public:
-    InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
+    InvertMatchesKernel(BuilderRef b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
 };
 
 class PopcountKernel : public pablo::PabloKernel {
 public:
-    PopcountKernel(const std::unique_ptr<kernel::KernelBuilder> & builder, StreamSet * const toCount, Scalar * countResult);
+    PopcountKernel(BuilderRef builder, StreamSet * const toCount, Scalar * countResult);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -134,9 +134,9 @@ protected:
 
 class AbortOnNull final : public MultiBlockKernel {
 public:
-    AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject);
+    AbortOnNull(BuilderRef, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject);
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 
 };
 
@@ -149,7 +149,7 @@ private:
 
 class ContextSpan final : public pablo::PabloKernel {
 public:
-    ContextSpan(const std::unique_ptr<KernelBuilder> & b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after);
+    ContextSpan(BuilderRef b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

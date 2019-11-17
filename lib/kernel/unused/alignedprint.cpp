@@ -10,14 +10,14 @@ using namespace llvm;
 
 namespace kernel {
 
-inline void ap_p2s_step(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
+inline void ap_p2s_step(BuilderRef iBuilder, Value * p0, Value * p1, Value * hi_mask, unsigned shift, Value * &s1, Value * &s0) {
     Value * t0 = iBuilder->simd_if(1, hi_mask, p0, iBuilder->simd_srli(16, p1, shift));
     Value * t1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, p0, shift), p1);
     s1 = iBuilder->esimd_mergeh(8, t1, t0);
     s0 = iBuilder->esimd_mergel(8, t1, t0);
 }
 
-inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Value * s[]) {
+inline void p2s(BuilderRef iBuilder, Value * p[], Value * s[]) {
     Value * bit00004444[2];
     Value * bit22226666[2];
     Value * bit11115555[2];
@@ -37,7 +37,7 @@ inline void p2s(const std::unique_ptr<KernelBuilder> & iBuilder, Value * p[], Va
     }
 }
 
-void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void PrintableBits::generateDoBlockMethod(BuilderRef iBuilder) {
     // Load current block
     Value * bitStrmVal = iBuilder->loadInputStreamBlock("bitStream", iBuilder->getInt32(0));
 
@@ -84,7 +84,7 @@ void PrintableBits::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &
     }
 }
 
-void SelectStream::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
+void SelectStream::generateDoBlockMethod(BuilderRefiBuilder) {
     if (mStreamIndex >= mSizeInputStreamSet)
         llvm::report_fatal_error("Stream index out of bounds.\n");
 
@@ -93,7 +93,7 @@ void SelectStream::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &i
     iBuilder->storeOutputStreamBlock("bitStream", iBuilder->getInt32(0), bitStrmVal);
 }
 
-void ExpandOrSelectStreams::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
+void ExpandOrSelectStreams::generateDoBlockMethod(BuilderRefiBuilder) {
 
     for (unsigned i = 0; i < mSizeOutputStreamSet; i++) {
         if (i < mSizeInputStreamSet) {
@@ -106,7 +106,7 @@ void ExpandOrSelectStreams::generateDoBlockMethod(const std::unique_ptr<KernelBu
 
 }
 
-void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> &iBuilder) {
+void PrintStreamSet::generateDoBlockMethod(BuilderRefiBuilder) {
 
     /*
     00110001 is the Unicode codepoint for '1' and 00101110 is the codepoint for '.'.
@@ -267,22 +267,22 @@ void PrintStreamSet::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> 
 
 }
 
-PrintableBits::PrintableBits(const std::unique_ptr<kernel::KernelBuilder> & builder)
+PrintableBits::PrintableBits(BuilderRef builder)
 : BlockOrientedKernel(b, "PrintableBits", {Binding{builder->getStreamSetTy(1), "bitStream"}}, {Binding{builder->getStreamSetTy(1, 8), "byteStream"}}, {}, {}, {}) {
 
 }
 
-SelectStream::SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex)
+SelectStream::SelectStream(BuilderRef builder, unsigned sizeInputStreamSet, unsigned streamIndex)
 : BlockOrientedKernel(b, "SelectStream", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(1, 1), "bitStream"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mStreamIndex(streamIndex) {
 
 }
 
-ExpandOrSelectStreams::ExpandOrSelectStreams(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet)
+ExpandOrSelectStreams::ExpandOrSelectStreams(BuilderRef builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet)
 : BlockOrientedKernel(b, "ExpandOrSelectStreams", {Binding{builder->getStreamSetTy(sizeInputStreamSet), "bitStreams"}}, {Binding{builder->getStreamSetTy(sizeOutputStreamSet), "outputbitStreams"}}, {}, {}, {}), mSizeInputStreamSet(sizeInputStreamSet), mSizeOutputStreamSet(sizeOutputStreamSet) {
 
 }
 
-PrintStreamSet::PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & builder, std::vector<std::string> && names, const unsigned minWidth)
+PrintStreamSet::PrintStreamSet(BuilderRef builder, std::vector<std::string> && names, const unsigned minWidth)
 : BlockOrientedKernel(b, "PrintableStreamSet", {}, {}, {}, {}, {})
 , mNames(names)
 , mNameWidth(0) {

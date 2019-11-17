@@ -9,7 +9,7 @@ using namespace llvm;
 
 namespace kernel {
 
-    BitStreamGatherPDEPKernel::BitStreamGatherPDEPKernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned numberOfStream, std::string name)
+    BitStreamGatherPDEPKernel::BitStreamGatherPDEPKernel(BuilderRef b, const unsigned numberOfStream, std::string name)
             : MultiBlockKernel(b, std::move(name),
 // input stream sets
                                {Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
@@ -22,7 +22,7 @@ namespace kernel {
 
     }
 
-    void BitStreamGatherPDEPKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfBlocks) {
+    void BitStreamGatherPDEPKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
         BasicBlock * const entry = b->GetInsertBlock();
         BasicBlock * const processBlock = b->CreateBasicBlock("processBlock");
         BasicBlock * const finishedStrides = b->CreateBasicBlock("finishedStrides");
@@ -198,7 +198,7 @@ namespace kernel {
         b->SetInsertPoint(finishedStrides);
     }
 
-    llvm::Value* BitStreamGatherPDEPKernel::fill_address(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned field_count, Value * a) {
+    llvm::Value* BitStreamGatherPDEPKernel::fill_address(BuilderRef b, unsigned fw, unsigned field_count, Value * a) {
         Type * singleFieldVecTy = VectorType::get(b->getIntNTy(fw), 1);
         Value * aVec = b->CreateBitCast(a, singleFieldVecTy);
         return b->CreateShuffleVector(aVec, UndefValue::get(singleFieldVecTy), Constant::getNullValue(VectorType::get(b->getInt32Ty(), field_count)));

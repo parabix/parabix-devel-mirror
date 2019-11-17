@@ -55,7 +55,7 @@ private:
  * 
  */
 class LineSpanFilterKernel : public MultiBlockKernel {
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 public:
     LineSpanFilterKernel(BuilderRef b, StreamSet * lineNumbers, StreamSet * spans, StreamSet * output);
 protected:

@@ -49,7 +49,7 @@ const auto FINAL_BLOCK_SUFFIX = "_FinalBlock";
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiBlockLogic
  ** ------------------------------------------------------------------------------------------------------------- */
-void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfBlocks) {
+void BlockOrientedKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
 
     if (LLVM_UNLIKELY(mStride != b->getBitBlockWidth())) {
         report_fatal_error(getName() + ": the Stride (" + std::to_string(mStride) + ") of BlockOrientedKernel "
@@ -140,7 +140,7 @@ void BlockOrientedKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBu
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief incrementCountableItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<KernelBuilder> & b) {
+void BlockOrientedKernel::incrementCountableItemCounts(BuilderRef b) {
     // Update the processed item counts
     for (const Binding & input : getInputStreamSetBindings()) {
         if (isCountable(input)) {
@@ -176,7 +176,7 @@ void BlockOrientedKernel::incrementCountableItemCounts(const std::unique_ptr<Ker
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getPopCountRateItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * BlockOrientedKernel::getPopCountRateItemCount(const std::unique_ptr<KernelBuilder> & b,
+Value * BlockOrientedKernel::getPopCountRateItemCount(BuilderRef b,
                                                       const ProcessingRate & rate) {
     assert (rate.isPopCount() || rate.isNegatedPopCount());
     const auto refPort = getStreamPort(rate.getReference());
@@ -197,7 +197,7 @@ Value * BlockOrientedKernel::getPopCountRateItemCount(const std::unique_ptr<Kern
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getRemainingItems
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * BlockOrientedKernel::getRemainingItems(const std::unique_ptr<KernelBuilder> & b) {
+Value * BlockOrientedKernel::getRemainingItems(BuilderRef b) {
     const auto count = mInputStreamSets.size();
     assert (count > 0);
     for (unsigned i = 0; i < count; i++) {
@@ -211,7 +211,7 @@ Value * BlockOrientedKernel::getRemainingItems(const std::unique_ptr<KernelBuild
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeDoBlockMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+inline void BlockOrientedKernel::writeDoBlockMethod(BuilderRef b) {
 
     Value * const self = getHandle();
     Function * const cp = mCurrentMethod;
@@ -262,7 +262,7 @@ inline void BlockOrientedKernel::writeDoBlockMethod(const std::unique_ptr<Kernel
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeFinalBlockMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * remainingItems) {
+inline void BlockOrientedKernel::writeFinalBlockMethod(BuilderRef b, Value * remainingItems) {
 
     Value * const self = getHandle();
     Function * const cp = mCurrentMethod;
@@ -318,7 +318,7 @@ inline void BlockOrientedKernel::writeFinalBlockMethod(const std::unique_ptr<Ker
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalBlockMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void BlockOrientedKernel::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * /* remainingItems */) {
+void BlockOrientedKernel::generateFinalBlockMethod(BuilderRef b, Value * /* remainingItems */) {
     //  The default finalBlock method simply dispatches to the doBlock routine.
     CreateDoBlockMethodCall(b);
 }
@@ -326,7 +326,7 @@ void BlockOrientedKernel::generateFinalBlockMethod(const std::unique_ptr<KernelB
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief CreateDoBlockMethodCall
  ** ------------------------------------------------------------------------------------------------------------- */
-void BlockOrientedKernel::CreateDoBlockMethodCall(const std::unique_ptr<KernelBuilder> & b) {
+void BlockOrientedKernel::CreateDoBlockMethodCall(BuilderRef b) {
     if (b->supportsIndirectBr()) {
         BasicBlock * const bb = b->CreateBasicBlock("resume");
         mStrideLoopBranch->addDestination(bb);
@@ -401,7 +401,7 @@ void BlockOrientedKernel::annotateInputBindingsWithPopCountArrayAttributes() {
 
 // CONSTRUCTOR
 BlockOrientedKernel::BlockOrientedKernel(
-    const std::unique_ptr<KernelBuilder> & b,
+    BuilderRef b,
     std::string && kernelName,
     Bindings && stream_inputs,
     Bindings && stream_outputs,

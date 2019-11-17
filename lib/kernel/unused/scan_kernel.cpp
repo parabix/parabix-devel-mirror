@@ -203,7 +203,7 @@ ScanKernel::ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceS
 }
 
 
-static Value * collapseVector(const std::unique_ptr<KernelBuilder> & b, Value * const vec) {
+static Value * collapseVector(BuilderRef b, Value * const vec) {
     assert (vec->getType()->isVectorTy());
     uint32_t count = vec->getType()->getVectorNumElements();
     Value * accum = b->CreateExtractElement(vec, (uint64_t) 0);
@@ -213,7 +213,7 @@ static Value * collapseVector(const std::unique_ptr<KernelBuilder> & b, Value * 
     return accum;
 }
 
-static Value * vectorFromRepeating(const std::unique_ptr<KernelBuilder> & b, Value * const value, size_t count) {
+static Value * vectorFromRepeating(BuilderRef b, Value * const value, size_t count) {
     Value * vec = Constant::getNullValue(VectorType::get(value->getType(), count));
     for (size_t i = 0; i < count; ++i) {
         vec = b->CreateInsertElement(vec, value, i);

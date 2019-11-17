@@ -27,7 +27,7 @@ namespace testing {
 
 namespace tc {
 
-using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+using BuilderRef = kernel::Kernel::BuilderRef;
 
 using ProgramBuilderRef = const std::unique_ptr<kernel::ProgramBuilder> &;
 

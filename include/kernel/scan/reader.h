@@ -80,7 +80,7 @@ namespace kernel {
  */
 class ScanReader : public MultiBlockKernel {
 public:
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
     ScanReader(BuilderRef b,
         StreamSet * source,
         StreamSet * scanIndices,

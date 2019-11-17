@@ -14,7 +14,7 @@ namespace kernel {
 
 class LengthGroupCompression : public MultiBlockKernel {
 public:
-    LengthGroupCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+    LengthGroupCompression(BuilderRef b,
                            EncodingInfo encodingScheme,
                            unsigned groupNo,
                            StreamSet * symbolMarks,
@@ -26,14 +26,14 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
     EncodingInfo mEncodingScheme;
     unsigned mGroupNo;
 };
 
 class LengthGroupDecompression : public MultiBlockKernel {
 public:
-    LengthGroupDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+    LengthGroupDecompression(BuilderRef b,
                              EncodingInfo encodingScheme,
                              unsigned groupNo,
                              StreamSet * keyMarks,
@@ -45,14 +45,14 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
     EncodingInfo mEncodingScheme;
     unsigned mGroupNo;
 };
 
 class FixedLengthCompression : public MultiBlockKernel {
 public:
-    FixedLengthCompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+    FixedLengthCompression(BuilderRef b,
                            EncodingInfo encodingScheme,
                            unsigned length,
                            StreamSet * const byteData,
@@ -64,7 +64,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
     EncodingInfo mEncodingScheme;
     unsigned mLo;
     unsigned mHi;
@@ -73,7 +73,7 @@ private:
 
 class FixedLengthDecompression : public MultiBlockKernel {
 public:
-    FixedLengthDecompression(const std::unique_ptr<kernel::KernelBuilder> & b,
+    FixedLengthDecompression(BuilderRef b,
                              EncodingInfo encodingScheme,
                              unsigned lo,
                              StreamSet * const byteData,
@@ -84,7 +84,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
     EncodingInfo mEncodingScheme;
     unsigned mLo;
     unsigned mHi;

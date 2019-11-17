@@ -15,7 +15,7 @@ namespace kernel {
  * either `PrintRegister` or `PrintInt` depending of the field width of `s`.
  */
 class DebugDisplayKernel : public MultiBlockKernel {
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 public:
     DebugDisplayKernel(BuilderRef b, llvm::StringRef name, StreamSet * s);
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;

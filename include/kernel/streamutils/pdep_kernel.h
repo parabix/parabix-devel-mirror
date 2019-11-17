@@ -74,7 +74,7 @@ StreamSet * InsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P,
 
 class StreamExpandKernel final : public MultiBlockKernel {
 public:
-    StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+    StreamExpandKernel(BuilderRef b,
                        StreamSet * mask,
                        StreamSet * source,
                        StreamSet * expanded,
@@ -84,7 +84,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) override;
 private:
     const unsigned mFieldWidth;
     const unsigned mSelectedStreamCount;
@@ -93,11 +93,11 @@ private:
 
 class FieldDepositKernel final : public MultiBlockKernel {
 public:
-    FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * input, StreamSet * output, const unsigned fieldWidth = sizeof(size_t) * 8);
+    FieldDepositKernel(BuilderRef, StreamSet * mask, StreamSet * input, StreamSet * output, const unsigned fieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const unsigned mFieldWidth;
     const unsigned mStreamCount;
@@ -105,11 +105,11 @@ private:
 
 class PDEPFieldDepositKernel final : public MultiBlockKernel {
 public:
-    PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> &, StreamSet * mask, StreamSet * expanded, StreamSet * outputs, const unsigned fieldWidth = sizeof(size_t) * 8);
+    PDEPFieldDepositKernel(BuilderRef, StreamSet * mask, StreamSet * expanded, StreamSet * outputs, const unsigned fieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const unsigned mPDEPWidth;
     const unsigned mStreamCount;
@@ -144,11 +144,11 @@ private:
  */
 class PDEPkernel final : public MultiBlockKernel {
 public:
-    PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned swizzleFactor = 4, std::string name = "PDEP");
+    PDEPkernel(BuilderRef b, const unsigned swizzleFactor = 4, std::string name = "PDEP");
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 private:
     const unsigned mSwizzleFactor;
 };

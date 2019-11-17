@@ -22,9 +22,9 @@ protected:
 
 class CharClassesKernel : public CharClassesSignature, public pablo::PabloKernel {
 public:
-    CharClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses);
+    CharClassesKernel(BuilderRef b, std::vector<re::CC *> && ccs, StreamSet * BasisBits, StreamSet * CharClasses);
     bool hasSignature() const override { return true; }
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const override;
+    std::string makeSignature(BuilderRef) const override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;
@@ -35,9 +35,9 @@ protected:
 
 class ByteClassesKernel: public CharClassesSignature, public pablo::PabloKernel {
 public:
-    ByteClassesKernel(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, std::vector<re::CC *> && ccs, StreamSet * inputStream, StreamSet * CharClasses);
+    ByteClassesKernel(BuilderRef b, std::vector<re::CC *> && ccs, StreamSet * inputStream, StreamSet * CharClasses);
     bool hasSignature() const override { return true; }
-    std::string makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const override;
+    std::string makeSignature(BuilderRef) const override;
     bool isCachable() const override { return true; }
 protected:
     void generatePabloMethod() override;

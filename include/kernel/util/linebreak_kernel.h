@@ -41,7 +41,7 @@ enum class NullCharMode {Data, Break, Abort};
 
 class UnixLinesKernelBuilder final : public pablo::PabloKernel {
 public:
-    UnixLinesKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b,
+    UnixLinesKernelBuilder(BuilderRef b,
                            kernel::StreamSet * Source,
                            kernel::StreamSet * UnixLineEnds,
                            UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
@@ -65,7 +65,7 @@ void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
 
 class NullDelimiterKernel final : public pablo::PabloKernel {
 public:
-    NullDelimiterKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+    NullDelimiterKernel(BuilderRef b,
                         kernel::StreamSet * Source,
                         kernel::StreamSet * NullDelimiters,
                         UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore);

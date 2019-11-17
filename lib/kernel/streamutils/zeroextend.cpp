@@ -16,7 +16,7 @@ inline static bool is_power_2(const unsigned n) {
     return ((n & (n - 1)) == 0) && n;
 }
 
-void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void ZeroExtend::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
 
     const Binding & input = getInputStreamSetBinding(0);
     const auto inputFieldWidth = input.getFieldWidth();
@@ -154,7 +154,7 @@ void ZeroExtend::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & 
     b->SetInsertPoint(exit);
 }
 
-ZeroExtend::ZeroExtend(const std::unique_ptr<kernel::KernelBuilder> & b,
+ZeroExtend::ZeroExtend(BuilderRef b,
                        StreamSet * const input, StreamSet * const output)
 : MultiBlockKernel(b, "zeroextend" + std::to_string(input->getFieldWidth()) + "x" + std::to_string(output->getFieldWidth()),
 {Binding{"input", input}},

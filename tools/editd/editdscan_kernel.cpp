@@ -12,7 +12,7 @@ using namespace llvm;
 
 namespace kernel {
 
-void editdScanKernel::generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void editdScanKernel::generateDoBlockMethod(BuilderRef b) {
     auto savePoint = b->saveIP();
     Function * scanWordFunction = generateScanWordRoutine(b);
     b->restoreIP(savePoint);
@@ -40,7 +40,7 @@ void editdScanKernel::generateDoBlockMethod(const std::unique_ptr<kernel::Kernel
     b->setScalarField("BlockNo", b->CreateAdd(blockNo, b->getSize(1)));
 }
 
-Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<KernelBuilder> &b) const {
+Function * editdScanKernel::generateScanWordRoutine(BuilderRef b) const {
 
     IntegerType * T = b->getIntNTy(mScanwordBitWidth);
     Module * const m = b->getModule();
@@ -88,7 +88,7 @@ Function * editdScanKernel::generateScanWordRoutine(const std::unique_ptr<Kernel
 
 }
 
-editdScanKernel::editdScanKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * matchResults) :
+editdScanKernel::editdScanKernel(BuilderRef b, StreamSet * matchResults) :
 BlockOrientedKernel(b, "editdScanMatch" + std::to_string(matchResults->getNumElements()),
               {Binding{"matchResults", matchResults}},
               {}, {}, {}, {InternalScalar{b->getSizeTy(), "BlockNo"}}),

@@ -128,7 +128,7 @@ void UTF8_index::generatePabloMethod() {
     pb.createAssign(pb.createExtract(u8index, pb.getInteger(0)), u8final);
 }
 
-UTF8_index::UTF8_index(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * Source, StreamSet * u8index)
+UTF8_index::UTF8_index(BuilderRef kb, StreamSet * Source, StreamSet * u8index)
 : PabloKernel(kb, "UTF8_index_" + std::to_string(Source->getNumElements()) + "x" + std::to_string(Source->getFieldWidth()),
 // input
 {Binding{"source", Source}},
@@ -208,7 +208,7 @@ std::string GrepKernelOptions::getSignature() {
     return mSignature;
 }
 
-ICGrepKernel::ICGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::unique_ptr<GrepKernelOptions> options)
+ICGrepKernel::ICGrepKernel(BuilderRef b, std::unique_ptr<GrepKernelOptions> options)
 : PabloKernel(b, AnnotateWithREflags("ic") + getStringHash(options->getSignature()),
 options->streamSetInputBindings(),
 options->streamSetOutputBindings(),
@@ -218,7 +218,7 @@ mOptions(std::move(options)) {
     addAttribute(InfrequentlyUsed());
 }
 
-std::string ICGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const {
+std::string ICGrepKernel::makeSignature(BuilderRef) const {
     return mOptions->getSignature();
 }
 
@@ -300,7 +300,7 @@ ByteBitGrepSignature::ByteBitGrepSignature(RE * prefix, RE * suffix)
 , mSignature(Printer_RE::PrintRE(mPrefixRE) + Printer_RE::PrintRE(mSuffixRE) ) {
 }
 
-ByteBitGrepKernel::ByteBitGrepKernel(const std::unique_ptr<kernel::KernelBuilder> & b, RE * const prefixRE, RE * const suffixRE, StreamSet * const Source, StreamSet * const matches, const Externals externals)
+ByteBitGrepKernel::ByteBitGrepKernel(BuilderRef b, RE * const prefixRE, RE * const suffixRE, StreamSet * const Source, StreamSet * const matches, const Externals externals)
 : ByteBitGrepSignature(prefixRE, suffixRE)
 , PabloKernel(b, AnnotateWithREflags("bBc") + getStringHash(mSignature),
 // inputs
@@ -310,7 +310,7 @@ makeInputBindings(Source, externals),
     addAttribute(InfrequentlyUsed());
 }
 
-std::string ByteBitGrepKernel::makeSignature(const std::unique_ptr<kernel::KernelBuilder> &) const {
+std::string ByteBitGrepKernel::makeSignature(BuilderRef) const {
     return mSignature;
 }
 
@@ -366,7 +366,7 @@ void MatchedLinesKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, lineBreaks, "matchedLines"));
 }
 
-MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
+MatchedLinesKernel::MatchedLinesKernel (BuilderRef iBuilder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
 : PabloKernel(iBuilder, "MatchedLines",
 // inputs
 {Binding{"matchResults", OriginalMatches}
@@ -377,14 +377,14 @@ MatchedLinesKernel::MatchedLinesKernel (const std::unique_ptr<kernel::KernelBuil
 }
 
 
-void InvertMatchesKernel::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) {
+void InvertMatchesKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     Value * input = iBuilder->loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
     Value * lbs = iBuilder->loadInputStreamBlock("lineBreaks", iBuilder->getInt32(0));
     Value * inverted = iBuilder->CreateAnd(iBuilder->CreateNot(input), lbs, "inverted");
     iBuilder->storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
-InvertMatchesKernel::InvertMatchesKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
+InvertMatchesKernel::InvertMatchesKernel(BuilderRef b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
 : BlockOrientedKernel(b, "Invert",
 // Inputs
 {Binding{"matchedLines", OriginalMatches},
@@ -405,7 +405,7 @@ void PopcountKernel::generatePabloMethod() {
     pb->createAssign(countResult, pb->createCount(pb->createInFile(toCount)));
 }
 
-PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & iBuilder, StreamSet * const toCount, Scalar * countResult)
+PopcountKernel::PopcountKernel (BuilderRef iBuilder, StreamSet * const toCount, Scalar * countResult)
 : PabloKernel(iBuilder, "Popcount",
 {Binding{"toCount", toCount}},
 {},
@@ -415,7 +415,7 @@ PopcountKernel::PopcountKernel (const std::unique_ptr<kernel::KernelBuilder> & i
 }
 
 
-void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+void AbortOnNull::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) {
     Module * const m = b->getModule();
     DataLayout DL(m);
     IntegerType * const intPtrTy = DL.getIntPtrType(m->getContext());
@@ -512,7 +512,7 @@ void AbortOnNull::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> &
     b->setProducedItemCount("untilNull", producedCount);
 }
 
-AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject)
+AbortOnNull::AbortOnNull(BuilderRef b, StreamSet * const InputStream, StreamSet * const OutputStream, Scalar * callbackObject)
 : MultiBlockKernel(b, "AbortOnNull",
 // inputs
 {Binding{"byteData", InputStream, FixedRate(), Principal()}},
@@ -525,7 +525,7 @@ AbortOnNull::AbortOnNull(const std::unique_ptr<kernel::KernelBuilder> & b, Strea
     addAttribute(MayFatallyTerminate());
 }
 
-ContextSpan::ContextSpan(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after)
+ContextSpan::ContextSpan(BuilderRef b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after)
 : PabloKernel(b, "ContextSpan-" + std::to_string(before) + "+" + std::to_string(after),
               // input
 {Binding{"markerStream", markerStream, FixedRate(1), LookAhead(before)}},

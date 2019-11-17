@@ -47,9 +47,9 @@ class CarryManager {
     template <typename T>
     using Vec = llvm::SmallVector<T, 64>;
 
-    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
-
 public:
+
+    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
 
     CarryManager() noexcept;
 

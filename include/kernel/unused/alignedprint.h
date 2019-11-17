@@ -13,34 +13,34 @@ namespace kernel {
 
 class PrintableBits final : public BlockOrientedKernel {
 public:
-    PrintableBits(const std::unique_ptr<kernel::KernelBuilder> & builder);
+    PrintableBits(BuilderRef builder);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
 };
 
 class SelectStream final : public BlockOrientedKernel {
 public:
-    SelectStream(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned streamIndex);
+    SelectStream(BuilderRef builder, unsigned sizeInputStreamSet, unsigned streamIndex);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
     unsigned mSizeInputStreamSet;
     unsigned mStreamIndex;
 };
 
 class ExpandOrSelectStreams final : public BlockOrientedKernel {
 public:
-    ExpandOrSelectStreams(const std::unique_ptr<kernel::KernelBuilder> & builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet);
+    ExpandOrSelectStreams(BuilderRef builder, unsigned sizeInputStreamSet, unsigned sizeOutputStreamSet);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
     unsigned mSizeInputStreamSet;
     unsigned mSizeOutputStreamSet;
 };
 
 class PrintStreamSet final : public BlockOrientedKernel {
 public:
-    PrintStreamSet(const std::unique_ptr<kernel::KernelBuilder> & builder, std::vector<std::string> && names, const unsigned minWidth = 16);
+    PrintStreamSet(BuilderRef builder, std::vector<std::string> && names, const unsigned minWidth = 16);
 private:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
 private:
     const std::vector<std::string> mNames;
     unsigned mNameWidth;

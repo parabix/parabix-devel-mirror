@@ -31,11 +31,11 @@ namespace kernel {
 
 /// MMAP SOURCE KERNEL
 
-Function * MMapSourceKernel::linkFileSizeMethod(const std::unique_ptr<kernel::KernelBuilder> & b) {
+Function * MMapSourceKernel::linkFileSizeMethod(BuilderRef b) {
     return b->LinkFunction("file_size", file_size);
 }
 
-void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod, const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
+void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod, const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
     BasicBlock * const emptyFile = b->CreateBasicBlock("emptyFile");
     BasicBlock * const nonEmptyFile = b->CreateBasicBlock("NonEmptyFile");
@@ -75,7 +75,7 @@ void MMapSourceKernel::generateInitializeMethod(Function * const fileSizeMethod,
 }
 
 
-void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
+void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
     BasicBlock * const dropPages = b->CreateBasicBlock("dropPages");
     BasicBlock * const checkRemaining = b->CreateBasicBlock("checkRemaining");
@@ -144,7 +144,7 @@ void MMapSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
 
     b->SetInsertPoint(exit);
 }
-void MMapSourceKernel::freeBuffer(const std::unique_ptr<KernelBuilder> & b, const unsigned codeUnitWidth) {
+void MMapSourceKernel::freeBuffer(BuilderRef b, const unsigned codeUnitWidth) {
     b->CreateFree(b->getScalarField("ancillaryBuffer"));
     Value * const fileItems = b->getScalarField("fileItems");
     Constant * const CODE_UNIT_BYTES = b->getSize(codeUnitWidth / 8);
@@ -154,7 +154,7 @@ void MMapSourceKernel::freeBuffer(const std::unique_ptr<KernelBuilder> & b, cons
 
 /// READ SOURCE KERNEL
 
-void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
+void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
     ConstantInt * const bufferItems = b->getSize(stride * 4);
     const auto codeUnitSize = codeUnitWidth / 8;
     ConstantInt * const bufferBytes = b->getSize(stride * 4 * codeUnitSize);
@@ -167,7 +167,7 @@ void ReadSourceKernel::generateInitializeMethod(const unsigned codeUnitWidth, co
     b->setCapacity("sourceBuffer", bufferItems);
 }
 
-void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, const std::unique_ptr<KernelBuilder> & b) {
+void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b) {
 
     ConstantInt * const itemsToRead = b->getSize(stride);
     ConstantInt * const codeUnitBytes = b->getSize(codeUnitWidth / 8);
@@ -287,18 +287,18 @@ void ReadSourceKernel::generateDoSegmentMethod(const unsigned codeUnitWidth, con
     b->SetInsertPoint(readExit);
 }
 
-void ReadSourceKernel::freeBuffer(const std::unique_ptr<KernelBuilder> & b) {
+void ReadSourceKernel::freeBuffer(BuilderRef b) {
     b->CreateFree(b->getScalarField("ancillaryBuffer"));
     b->CreateFree(b->getScalarField("buffer"));
 }
 
 /// Hybrid MMap/Read source kernel
 
-void FDSourceKernel::linkExternalMethods(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void FDSourceKernel::linkExternalMethods(BuilderRef b) {
     mFileSizeFunction = MMapSourceKernel::linkFileSizeMethod(b);
 }
 
-void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void FDSourceKernel::generateFinalizeMethod(BuilderRef b) {
     BasicBlock * finalizeRead = b->CreateBasicBlock("finalizeRead");
     BasicBlock * finalizeMMap = b->CreateBasicBlock("finalizeMMap");
     BasicBlock * finalizeDone = b->CreateBasicBlock("finalizeDone");
@@ -313,7 +313,7 @@ void FDSourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder>
     b->SetInsertPoint(finalizeDone);
 }
 
-void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void FDSourceKernel::generateInitializeMethod(BuilderRef b) {
     BasicBlock * initializeRead = b->CreateBasicBlock("initializeRead");
     BasicBlock * checkFileSize = b->CreateBasicBlock("checkFileSize");
     BasicBlock * initializeMMap = b->CreateBasicBlock("initializeMMap");
@@ -348,7 +348,7 @@ void FDSourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilde
     b->SetInsertPoint(initializeDone);
 }
 
-void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void FDSourceKernel::generateDoSegmentMethod(BuilderRef b) {
     BasicBlock * DoSegmentRead = b->CreateBasicBlock("DoSegmentRead");
     BasicBlock * DoSegmentMMap = b->CreateBasicBlock("DoSegmentMMap");
     BasicBlock * DoSegmentDone = b->CreateBasicBlock("DoSegmentDone");
@@ -365,7 +365,7 @@ void FDSourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder
 
 /// MEMORY SOURCE KERNEL
 
-void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void MemorySourceKernel::generateInitializeMethod(BuilderRef b) {
     Value * const fileSource = b->getScalarField("fileSource");
     b->setBaseAddress("sourceBuffer", fileSource);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -375,7 +375,7 @@ void MemorySourceKernel::generateInitializeMethod(const std::unique_ptr<KernelBu
     b->setCapacity("sourceBuffer", fileItems);
 }
 
-void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
 
     Constant * const STRIDE_ITEMS = b->getSize(getStride());
     Constant * const STRIDE_SIZE = b->getSize(getStride() * mCodeUnitWidth);
@@ -443,11 +443,11 @@ void MemorySourceKernel::generateDoSegmentMethod(const std::unique_ptr<KernelBui
     b->SetInsertPoint(exit);
 }
 
-void MemorySourceKernel::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void MemorySourceKernel::generateFinalizeMethod(BuilderRef b) {
     b->CreateFree(b->getScalarField("ancillaryBuffer"));
 }
 
-MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const fd, StreamSet * const outputStream)
+MMapSourceKernel::MMapSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream)
 : SegmentOrientedKernel(b, "mmap_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
 // input streams
 ,{}
@@ -468,7 +468,7 @@ MMapSourceKernel::MMapSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
     setStride(codegen::SegmentSize);
 }
 
-ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const fd, StreamSet * const outputStream)
+ReadSourceKernel::ReadSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream)
 : SegmentOrientedKernel(b, "read_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
 // input streams
 ,{}
@@ -491,7 +491,7 @@ ReadSourceKernel::ReadSourceKernel(const std::unique_ptr<kernel::KernelBuilder> 
 }
 
 
-FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream)
+FDSourceKernel::FDSourceKernel(BuilderRef b, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream)
 : SegmentOrientedKernel(b, "FD_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
 // input streams
 ,{}
@@ -515,7 +515,7 @@ FDSourceKernel::FDSourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
     setStride(codegen::SegmentSize);
 }
 
-MemorySourceKernel::MemorySourceKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream)
+MemorySourceKernel::MemorySourceKernel(BuilderRef b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream)
 : SegmentOrientedKernel(b, "memory_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth()) + ":" + std::to_string(outputStream->getNumElements()),
 // input streams
 {},

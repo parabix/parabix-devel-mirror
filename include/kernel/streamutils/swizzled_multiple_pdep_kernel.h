@@ -21,11 +21,11 @@ namespace kernel {
 
 class SwizzledMultiplePDEPkernel final : public MultiBlockKernel {
 public:
-    SwizzledMultiplePDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned swizzleFactor = 4, const unsigned numberOfStreamSet = 1, std::string name = "SwizzledMultiplePDEP");
+    SwizzledMultiplePDEPkernel(BuilderRef b, const unsigned swizzleFactor = 4, const unsigned numberOfStreamSet = 1, std::string name = "SwizzledMultiplePDEP");
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 private:
     const unsigned mSwizzleFactor;
     const unsigned mNumberOfStreamSet;

@@ -46,7 +46,7 @@ static cl::opt<std::string> inputFile(cl::Positional, cl::desc("<input file>"), 
 
 class Hexify : public PabloKernel {
 public:
-    Hexify(const std::unique_ptr<KernelBuilder> & kb, StreamSet * insertMask, StreamSet * spreadBasis, StreamSet * hexBasis)
+    Hexify(BuilderRef kb, StreamSet * insertMask, StreamSet * spreadBasis, StreamSet * hexBasis)
         : PabloKernel(kb, "Hexify",
                       {Binding{"insertMask", insertMask}, Binding{"spreadBasis", spreadBasis}},
                       {Binding{"hexBasis", hexBasis}}) {}

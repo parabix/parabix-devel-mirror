@@ -11,9 +11,9 @@ namespace kernel {
 
 class UntilNkernel final : public MultiBlockKernel {
 public:
-    UntilNkernel(const std::unique_ptr<kernel::KernelBuilder> & b, Scalar * maxCount, StreamSet * AllMatches, StreamSet * Matches);
+    UntilNkernel(BuilderRef b, Scalar * maxCount, StreamSet * AllMatches, StreamSet * Matches);
 private:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) final;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 
 };
 

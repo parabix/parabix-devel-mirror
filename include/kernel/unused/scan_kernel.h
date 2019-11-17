@@ -13,7 +13,7 @@ namespace kernel {
 class ScanKernelBase {
 public:
 
-    using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+    using BuilderRef = BuilderRef;
 
     enum class OptimizeMode { Sparse, Dense };
 

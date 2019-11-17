@@ -21,7 +21,7 @@ namespace kernel {
 
 class RunIndex : public pablo::PabloKernel {
 public:
-    RunIndex(const std::unique_ptr<KernelBuilder> & b,
+    RunIndex(BuilderRef b,
                StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow = nullptr);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }

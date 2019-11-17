@@ -16,6 +16,8 @@ namespace kernel {
 const unsigned BITS_PER_BYTE = 8;
 const unsigned SIZE_T_BITS = sizeof(size_t) * BITS_PER_BYTE;
 
+using BuilderRef = Kernel::BuilderRef;
+
 struct ScanWordParameters {
     unsigned width;
     unsigned indexWidth;
@@ -26,7 +28,7 @@ struct ScanWordParameters {
     Constant * WORDS_PER_BLOCK;
     Constant * WORDS_PER_STRIDE;
 
-    ScanWordParameters(const std::unique_ptr<KernelBuilder> & b, unsigned stride) :
+    ScanWordParameters(BuilderRef b, unsigned stride) :
 #ifdef PREFER_NARROW_SCANWIDTH
     width(std::max(BITS_PER_BYTE, stride/SIZE_T_BITS)),
 #else
@@ -45,7 +47,7 @@ struct ScanWordParameters {
 };
 
 
-void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     const bool mLineNumbering = true;
     // Determine the parameters for two-level scanning.
     ScanWordParameters sw(b, mStride);
@@ -294,7 +296,7 @@ void ScanMatchKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilde
     b->SetInsertPoint(scanReturn);
 }
 
-ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks)
+ScanMatchKernel::ScanMatchKernel(BuilderRef b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks)
     : MultiBlockKernel(b, "scanMatch" + std::to_string(strideBlocks),
 // inputs
 {Binding{"matchResult", Matches}
@@ -314,7 +316,7 @@ ScanMatchKernel::ScanMatchKernel(const std::unique_ptr<kernel::KernelBuilder> & 
 
 enum MatchCoordinatesEnum {LINE_STARTS = 0, LINE_ENDS = 1, LINE_NUMBERS = 2};
 
-MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+MatchCoordinatesKernel::MatchCoordinatesKernel(BuilderRef b,
                                                StreamSet * const Matches, StreamSet * const LineBreakStream,
                                                StreamSet * const Coordinates, unsigned strideBlocks)
 : MultiBlockKernel(b, "matchCoordinates" + std::to_string(strideBlocks),
@@ -336,7 +338,7 @@ MatchCoordinatesKernel::MatchCoordinatesKernel(const std::unique_ptr<kernel::Ker
      assert (Coordinates->getNumElements() == 3);
 }
 
-void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfStrides) {
+void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
     const bool mLineNumbering = true;
 
     // Determine the parameters for two-level scanning.
@@ -561,7 +563,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(const std::unique_ptr<Kerne
     // b->setProducedItemCount("Coordinates", finalStrideMatchCount);
 }
 
-MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * ByteStream, StreamSet * const Coordinates, Scalar * const callbackObject)
+MatchReporter::MatchReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const Coordinates, Scalar * const callbackObject)
 : SegmentOrientedKernel(b, "matchReporter" + std::to_string(Coordinates->getNumElements()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()},
@@ -580,7 +582,7 @@ MatchReporter::MatchReporter(const std::unique_ptr<kernel::KernelBuilder> & b, S
 
     // TO DO:  investigate add linebreaks as input:  set consumed by the last linebreak?
 
-void MatchReporter::generateDoSegmentMethod(const std::unique_ptr<KernelBuilder> & b) {
+void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
     Module * const m = b->getModule();
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");

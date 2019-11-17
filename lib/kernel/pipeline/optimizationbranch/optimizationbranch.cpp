@@ -7,7 +7,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::addInternalProperties(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void OptimizationBranch::addInternalProperties(BuilderRef b) {
     mCompiler = llvm::make_unique<OptimizationBranchCompiler>(this);
     mCompiler->addBranchProperties(b);
 }
@@ -15,48 +15,48 @@ void OptimizationBranch::addInternalProperties(const std::unique_ptr<kernel::Ker
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateInitializeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void OptimizationBranch::generateInitializeMethod(BuilderRef b) {
     mCompiler->generateInitializeMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateInitializeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+void OptimizationBranch::generateInitializeThreadLocalMethod(BuilderRef b) {
     mCompiler->generateInitializeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateKernelMethod(const std::unique_ptr<KernelBuilder> & b) {
+void OptimizationBranch::generateKernelMethod(BuilderRef b) {
     mCompiler->generateKernelMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateFinalizeThreadLocalMethod(const std::unique_ptr<KernelBuilder> & b) {
+void OptimizationBranch::generateFinalizeThreadLocalMethod(BuilderRef b) {
     mCompiler->generateFinalizeThreadLocalMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateFinalizeMethod(const std::unique_ptr<KernelBuilder> & b) {
+void OptimizationBranch::generateFinalizeMethod(BuilderRef b) {
     mCompiler->generateFinalizeMethod(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::addKernelDeclarations(const std::unique_ptr<KernelBuilder> & b) {
+void OptimizationBranch::addKernelDeclarations(BuilderRef b) {
     mNonZeroKernel->addKernelDeclarations(b);
     mAllZeroKernel->addKernelDeclarations(b);
     Kernel::addKernelDeclarations(b);
 }
 
-OptimizationBranch::OptimizationBranch(const std::unique_ptr<KernelBuilder> & b,
+OptimizationBranch::OptimizationBranch(BuilderRef b,
     std::string && signature,
     not_null<Relationship *> condition,
     Kernel * const nonZeroKernel,

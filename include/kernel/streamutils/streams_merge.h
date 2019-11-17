@@ -14,34 +14,34 @@ namespace kernel {
 
 class StreamsMerge : public BlockOrientedKernel {
 public:
-    StreamsMerge(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::vector<StreamSet *> & inputs, StreamSet * output);
+    StreamsMerge(BuilderRef b, const std::vector<StreamSet *> & inputs, StreamSet * output);
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef b) override;
 };
 
 class StreamsCombineKernel : public BlockOrientedKernel {
 public:
-    StreamsCombineKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::vector<unsigned> streamsNumOfSets);
+    StreamsCombineKernel(BuilderRef b, std::vector<unsigned> streamsNumOfSets);
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef b) override;
 private:
     const std::vector<unsigned> mStreamsNumOfSets;
 };
 
 class StreamsSplitKernel : public BlockOrientedKernel {
 public:
-    StreamsSplitKernel(const std::unique_ptr<kernel::KernelBuilder> & b, std::vector<unsigned> streamsNumOfSets);
+    StreamsSplitKernel(BuilderRef b, std::vector<unsigned> streamsNumOfSets);
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef b) override;
 private:
     const std::vector<unsigned> mStreamsNumOfSets;
 };
 
 class StreamsIntersect : public BlockOrientedKernel {
 public:
-    StreamsIntersect(const std::unique_ptr<kernel::KernelBuilder> & iBuilder, const std::vector<StreamSet *> & inputs, StreamSet * output);
+    StreamsIntersect(BuilderRef b, const std::vector<StreamSet *> & inputs, StreamSet * output);
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<kernel::KernelBuilder> & iBuilder) override;
+    void generateDoBlockMethod(BuilderRef b) override;
 };
 
 }

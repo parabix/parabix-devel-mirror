@@ -17,7 +17,7 @@ namespace kernel {
 class S2PKernel final : public MultiBlockKernel {
 public:
 
-    S2PKernel(const std::unique_ptr<kernel::KernelBuilder> &b,
+    S2PKernel(BuilderRef b,
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
               Scalar * signalNullObject = nullptr);
@@ -28,7 +28,7 @@ public:
 protected:
     Bindings makeOutputBindings(StreamSet * const BasisBits, bool abortOnNull);
     Bindings makeInputScalarBindings(Scalar * signalNullObject);
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     bool mAbortOnNull;
     unsigned mNumOfStreams;
@@ -36,12 +36,12 @@ private:
 
 class S2PMultipleStreamsKernel final : public MultiBlockKernel {
 public:
-    S2PMultipleStreamsKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+    S2PMultipleStreamsKernel(BuilderRef b,
                              StreamSet * codeUnitStream,
                              const StreamSets & outputStreams,
                              const bool aligned = true);
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const bool mAligned;
 };
@@ -49,16 +49,16 @@ private:
 
 class S2P_21Kernel final : public MultiBlockKernel {
 public:
-    S2P_21Kernel(const std::unique_ptr<kernel::KernelBuilder> &b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
+    S2P_21Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 };
 
 class S2P_PabloKernel final : public pablo::PabloKernel {
 public:
-    S2P_PabloKernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
+    S2P_PabloKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

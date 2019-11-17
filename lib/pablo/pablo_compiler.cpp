@@ -68,7 +68,7 @@ inline static unsigned getPointerElementAlignment(const Value * const ptr) {
     return getAlignment(ptr->getType()->getPointerElementType());
 }
 
-void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloCompiler::initializeKernelData(BuilderRef b) {
     mBranchCount = 0;
     examineBlock(b, mKernel->getEntryScope());
     mCarryManager->initializeCarryData(b, mKernel);
@@ -79,15 +79,15 @@ void PabloCompiler::initializeKernelData(const std::unique_ptr<kernel::KernelBui
     }
 }
 
-void PabloCompiler::releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloCompiler::releaseKernelData(BuilderRef b) {
     mCarryManager->releaseCarryData(b);
 }
 
-void PabloCompiler::clearCarryData(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloCompiler::clearCarryData(BuilderRef b) {
     mCarryManager->clearCarryData(b);
 }
 
-void PabloCompiler::compile(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloCompiler::compile(BuilderRef b) {
     mCarryManager->initializeCodeGen(b);
     PabloBlock * const entryBlock = mKernel->getEntryScope(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), b->allZeroes());
@@ -131,7 +131,7 @@ const Var * PabloCompiler::findInputParam(const Statement * const stmt, const Va
     return nullptr;
 }
 
-void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const block) {
+void PabloCompiler::examineBlock(BuilderRef b, const PabloBlock * const block) {
     for (const Statement * stmt : *block) {
         if (LLVM_UNLIKELY(isa<Lookahead>(stmt))) {
             const Lookahead * const la = cast<Lookahead>(stmt);
@@ -171,7 +171,7 @@ void PabloCompiler::examineBlock(const std::unique_ptr<kernel::KernelBuilder> & 
     }
 }
 
-void PabloCompiler::addBranchCounter(const std::unique_ptr<kernel::KernelBuilder> & b) {
+void PabloCompiler::addBranchCounter(BuilderRef b) {
     if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
         Value * ptr = b->getScalarFieldPtr("profile");
         assert (mBasicBlock.size() < ptr->getType()->getPointerElementType()->getArrayNumElements());
@@ -184,7 +184,7 @@ void PabloCompiler::addBranchCounter(const std::unique_ptr<kernel::KernelBuilder
     }
 }
 
-inline void PabloCompiler::compileBlock(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const block) {
+inline void PabloCompiler::compileBlock(BuilderRef b, const PabloBlock * const block) {
     for (const Statement * statement : *block) {
         compileStatement(b, statement);
     }
@@ -201,7 +201,7 @@ Vars getRootVars(const Branch * const branch) {
     return vars;
 }
 
-void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, const If * const ifStatement) {
+void PabloCompiler::compileIf(BuilderRef b, const If * const ifStatement) {
 
     //
     //  The If-ElseZero stmt:
@@ -326,7 +326,7 @@ void PabloCompiler::compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, 
     addBranchCounter(b);
 }
 
-void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & b, const While * const whileStatement) {
+void PabloCompiler::compileWhile(BuilderRef b, const While * const whileStatement) {
 
     const PabloBlock * const whileBody = whileStatement->getBody();
     using IncomingVec = Vec<std::tuple<const Var *, Value *, Value *>>;
@@ -490,7 +490,7 @@ void PabloCompiler::compileWhile(const std::unique_ptr<kernel::KernelBuilder> & 
     addBranchCounter(b);
 }
 
-void PabloCompiler::compileStatement(const std::unique_ptr<kernel::KernelBuilder> & b, const Statement * const stmt) {
+void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt) {
 
     if (LLVM_UNLIKELY(isa<If>(stmt))) {
         compileIf(b, cast<If>(stmt));
@@ -782,7 +782,7 @@ unsigned getIntegerBitWidth(const Type * ty) {
     return ty->getIntegerBitWidth();
 }
 
-Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloAST * const expr, const bool ensureLoaded) {
+Value * PabloCompiler::compileExpression(BuilderRef b, const PabloAST * const expr, const bool ensureLoaded) {
     const auto f = mMarker.find(expr);
     Value * value = nullptr;
     if (LLVM_LIKELY(f != mMarker.end())) {
@@ -988,7 +988,7 @@ Value * PabloCompiler::compileExpression(const std::unique_ptr<kernel::KernelBui
     return value;
 }
 
-Value * PabloCompiler::getPointerToVar(const std::unique_ptr<kernel::KernelBuilder> & b, const Var * var, Value * index1, Value * index2)  {
+Value * PabloCompiler::getPointerToVar(BuilderRef b, const Var * var, Value * index1, Value * index2)  {
     assert (var && index1);
     if (LLVM_LIKELY(var->isKernelParameter())) {
         Value * ptr = nullptr;

@@ -34,39 +34,41 @@ class PabloCompiler {
 
 public:
 
+    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+
     PabloCompiler(PabloKernel * kernel);
 
     ~PabloCompiler();
 
 protected:
 
-    void initializeKernelData(const std::unique_ptr<kernel::KernelBuilder> & b);
+    void initializeKernelData(BuilderRef b);
 
-    void compile(const std::unique_ptr<kernel::KernelBuilder> & b);
+    void compile(BuilderRef b);
 
-    void releaseKernelData(const std::unique_ptr<kernel::KernelBuilder> & b);
+    void releaseKernelData(BuilderRef b);
 
-    void clearCarryData(const std::unique_ptr<kernel::KernelBuilder> & b);
+    void clearCarryData(BuilderRef b);
 
 private:
 
-    void examineBlock(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const block);
+    void examineBlock(BuilderRef b, const PabloBlock * const block);
 
-    void compileBlock(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloBlock * const block);
+    void compileBlock(BuilderRef b, const PabloBlock * const block);
 
-    void compileStatement(const std::unique_ptr<kernel::KernelBuilder> & b, const Statement * stmt);
+    void compileStatement(BuilderRef b, const Statement * stmt);
 
-    void compileIf(const std::unique_ptr<kernel::KernelBuilder> & b, const If * ifStmt);
+    void compileIf(BuilderRef b, const If * ifStmt);
 
-    void compileWhile(const std::unique_ptr<kernel::KernelBuilder> & b, const While * whileStmt);
+    void compileWhile(BuilderRef b, const While * whileStmt);
 
-    void addBranchCounter(const std::unique_ptr<kernel::KernelBuilder> & b);
+    void addBranchCounter(BuilderRef b);
 
     const Var * findInputParam(const Statement * const stmt, const Var * const param) const;
 
-    llvm::Value * getPointerToVar(const std::unique_ptr<kernel::KernelBuilder> & b, const Var * var, llvm::Value * index1, llvm::Value * index2 = nullptr);
+    llvm::Value * getPointerToVar(BuilderRef b, const Var * var, llvm::Value * index1, llvm::Value * index2 = nullptr);
 
-    llvm::Value * compileExpression(const std::unique_ptr<kernel::KernelBuilder> & b, const PabloAST * expr, const bool ensureLoaded = true);
+    llvm::Value * compileExpression(BuilderRef b, const PabloAST * expr, const bool ensureLoaded = true);
 
 private:
 

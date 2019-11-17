@@ -22,6 +22,8 @@ namespace kernel {
 
 using BindingRef = RefWrapper<Binding>;
 
+using BuilderRef = Kernel::BuilderRef;
+
 using StreamSetGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
 struct RelationshipRef {
@@ -54,7 +56,7 @@ using RelationshipCache = flat_map<RelationshipGraph::vertex_descriptor, Value *
 
 using PortType = Kernel::PortType;
 using StreamPort = Kernel::StreamSetPort;
-using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+using BuilderRef = BuilderRef;
 using AttrId = Attribute::KindId;
 
 enum : unsigned {

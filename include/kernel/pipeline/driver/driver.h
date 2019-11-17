@@ -25,12 +25,13 @@ public:
     using Kernel = kernel::Kernel;
     using Relationship = kernel::Relationship;
     using Bindings = kernel::Bindings;
+    using BuilderRef = Kernel::BuilderRef;
 
     std::unique_ptr<kernel::ProgramBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
     std::unique_ptr<kernel::ProgramBuilder> makePipeline(Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
-    const std::unique_ptr<kernel::KernelBuilder> & getBuilder() {
+    BuilderRef getBuilder() {
         return iBuilder;
     }
 

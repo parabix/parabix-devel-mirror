@@ -15,13 +15,13 @@ class ErrorMonitorKernel final : public MultiBlockKernel {
 public:
     using IOStreamBindings = std::initializer_list<std::pair<StreamSet *, StreamSet *>>;
 
-    ErrorMonitorKernel(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * error, IOStreamBindings bindings);
+    ErrorMonitorKernel(BuilderRef b, StreamSet * error, IOStreamBindings bindings);
 private:
     std::string mName;
     std::vector<std::pair<std::string, std::string>> mStreamNames;
     std::size_t mNextNameId = 0;
 
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 
     std::pair<std::string, std::string> generateNewStreamSetNames() {
         std::size_t id = mNextNameId++;

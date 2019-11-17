@@ -14,7 +14,7 @@ namespace kernel {
 class DelMaskKernelBuilder final: public pablo::PabloKernel {
 public:
 
-    DelMaskKernelBuilder (const std::unique_ptr<kernel::KernelBuilder> & iBuilder)
+    DelMaskKernelBuilder (BuilderRef iBuilder)
     : PabloKernel(iBuilder, "delmask_kernel", {Binding{iBuilder->getStreamSetTy(8, 1), "u8bit"}},
                        {Binding{iBuilder->getStreamSetTy(1, 1), "delMask"},
                         Binding{iBuilder->getStreamSetTy(1, 1), "neg_delMask"},

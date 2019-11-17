@@ -124,14 +124,14 @@ namespace iso_8859_5 {
 
 class TranscoderKernelBuilder : public PabloKernel {
 public:
-    TranscoderKernelBuilder(const std::unique_ptr<kernel::KernelBuilder> & b, cc::UnicodeMappableAlphabet & a, StreamSet * sourceBasis, StreamSet * UnicodeBasis);
+    TranscoderKernelBuilder(BuilderRef b, cc::UnicodeMappableAlphabet & a, StreamSet * sourceBasis, StreamSet * UnicodeBasis);
     void generatePabloMethod() override;
 private:
     cc::UnicodeMappableAlphabet & mAlphabet;
 };
 
 TranscoderKernelBuilder::TranscoderKernelBuilder(
-        const std::unique_ptr<kernel::KernelBuilder> & b, cc::UnicodeMappableAlphabet & a, StreamSet * sourceBasis, StreamSet * UnicodeBasis)
+        BuilderRef b, cc::UnicodeMappableAlphabet & a, StreamSet * sourceBasis, StreamSet * UnicodeBasis)
 : PabloKernel(b, a.getName() + "ToUnicode",
 {Binding{"sourceBasis", sourceBasis}},
 {Binding{"UnicodeBasis", UnicodeBasis}},

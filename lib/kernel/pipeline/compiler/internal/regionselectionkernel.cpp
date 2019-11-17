@@ -6,10 +6,12 @@ using namespace llvm;
 
 namespace kernel {
 
+using BuilderRef = Kernel::BuilderRef;
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getPopCountAsInt
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * popCountOf(const std::unique_ptr<KernelBuilder> & b, const unsigned fieldWidth, const unsigned numOfFields, Value * const toCount) {
+inline Value * popCountOf(BuilderRef b, const unsigned fieldWidth, const unsigned numOfFields, Value * const toCount) {
     Value * partialSum = b->hsimd_partial_sum(fieldWidth, b->simd_popcount(fieldWidth, toCount));
     return b->CreateExtractElement(partialSum, numOfFields - 1);
 }
@@ -17,7 +19,7 @@ inline Value * popCountOf(const std::unique_ptr<KernelBuilder> & b, const unsign
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief anyNonZero
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * splatCarryBit(const std::unique_ptr<KernelBuilder> & b, const unsigned fieldWidth, const unsigned numOfFields, Value * const value) {
+inline Value * splatCarryBit(BuilderRef b, const unsigned fieldWidth, const unsigned numOfFields, Value * const value) {
     Value * partialMask = b->simd_eq(fieldWidth, value, b->allOnes());
     for (unsigned i = 1; i < numOfFields; i *= 2) {
         partialMask = b->simd_or(partialMask, b->mvmd_slli(fieldWidth, partialMask, i));
@@ -28,7 +30,7 @@ inline Value * splatCarryBit(const std::unique_ptr<KernelBuilder> & b, const uns
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief fineSelectedRegions
  ** ------------------------------------------------------------------------------------------------------------- */
-void RegionSelectionKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfStrides) {
+void RegionSelectionKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) {
 
     BasicBlock * const entry = b->GetInsertBlock();
 
@@ -493,7 +495,7 @@ void RegionSelectionKernel::generateMultiBlockLogic(const std::unique_ptr<Kernel
 
 }
 
-Value * RegionSelectionKernel::getRegionStarts(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const offset) const {
+Value * RegionSelectionKernel::getRegionStarts(BuilderRef b, Value * const offset) const {
     if (hasIndependentStartEndStreams()) {
         return b->getInputStreamBlockPtr("starts", b->getSize(mStartStreamIndex), offset);
     } else {
@@ -501,7 +503,7 @@ Value * RegionSelectionKernel::getRegionStarts(const std::unique_ptr<kernel::Ker
     }
 }
 
-Value * RegionSelectionKernel::getNumOfRegionStarts(const std::unique_ptr<kernel::KernelBuilder> & b) const {
+Value * RegionSelectionKernel::getNumOfRegionStarts(BuilderRef b) const {
     if (hasIndependentStartEndStreams()) {
         return b->getProcessedItemCount("starts");
     } else {
@@ -509,7 +511,7 @@ Value * RegionSelectionKernel::getNumOfRegionStarts(const std::unique_ptr<kernel
     }
 }
 
-Value * RegionSelectionKernel::getRegionEnds(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const offset) const {
+Value * RegionSelectionKernel::getRegionEnds(BuilderRef b, Value * const offset) const {
     if (hasIndependentStartEndStreams()) {
         return b->getInputStreamBlockPtr("ends", b->getSize(mEndStreamIndex), offset);
     } else {
@@ -517,7 +519,7 @@ Value * RegionSelectionKernel::getRegionEnds(const std::unique_ptr<kernel::Kerne
     }
 }
 
-Value * RegionSelectionKernel::getNumOfRegionEnds(const std::unique_ptr<kernel::KernelBuilder> & b) const {
+Value * RegionSelectionKernel::getNumOfRegionEnds(BuilderRef b) const {
     if (hasIndependentStartEndStreams()) {
         return b->getProcessedItemCount("ends");
     } else {
@@ -525,7 +527,7 @@ Value * RegionSelectionKernel::getNumOfRegionEnds(const std::unique_ptr<kernel::
     }
 }
 
-Value * RegionSelectionKernel::getSelectorStream(const std::unique_ptr<kernel::KernelBuilder> & b, Value * const offset) const {
+Value * RegionSelectionKernel::getSelectorStream(BuilderRef b, Value * const offset) const {
     assert (hasSelectorStream());
     return b->getInputStreamBlockPtr("selectors", b->getSize(mSelectorStreamIndex), offset);
 }
@@ -540,7 +542,7 @@ bool RegionSelectionKernel::hasIndependentStartEndStreams() const {
 
 #define NAME_PREFIX "RegionSelect"
 
-RegionSelectionKernel::RegionSelectionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Starts starts, Ends ends, StreamSet * const regionSpans)
+RegionSelectionKernel::RegionSelectionKernel(BuilderRef b, Starts starts, Ends ends, StreamSet * const regionSpans)
 : MultiBlockKernel(b, NAME_PREFIX "A" + std::to_string(starts.Index) + "." + std::to_string(ends.Index)
 // input streams
 ,{Binding{"starts", starts.Stream}
@@ -558,7 +560,7 @@ RegionSelectionKernel::RegionSelectionKernel(const std::unique_ptr<kernel::Kerne
     report_fatal_error("Non-selector region kernel is not supported yet.");
 }
 
-RegionSelectionKernel::RegionSelectionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Demarcators demarcators, Selectors selectors, StreamSet * const regionSpans)
+RegionSelectionKernel::RegionSelectionKernel(BuilderRef b, Demarcators demarcators, Selectors selectors, StreamSet * const regionSpans)
 : MultiBlockKernel(b, NAME_PREFIX "S" + std::to_string(demarcators.Index) + "." + std::to_string(selectors.Index)
 // input streams
 ,{Binding{"demarcators", demarcators.Stream}
@@ -577,7 +579,7 @@ RegionSelectionKernel::RegionSelectionKernel(const std::unique_ptr<kernel::Kerne
 
 }
 
-RegionSelectionKernel::RegionSelectionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, Starts starts, Ends ends, Selectors selectors, StreamSet * const regionSpans)
+RegionSelectionKernel::RegionSelectionKernel(BuilderRef b, Starts starts, Ends ends, Selectors selectors, StreamSet * const regionSpans)
 : MultiBlockKernel(b, NAME_PREFIX "S" + std::to_string(starts.Index) + "." + std::to_string(ends.Index) + "." + std::to_string(selectors.Index)
 // input streams
 ,{Binding{"starts", starts.Stream}

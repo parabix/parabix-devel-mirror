@@ -170,14 +170,14 @@ static size_t fsize;
 
 class PreprocessKernel final: public pablo::PabloKernel {
 public:
-    PreprocessKernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * BasisBits, StreamSet * CCResults);
+    PreprocessKernel(BuilderRef b, StreamSet * BasisBits, StreamSet * CCResults);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-PreprocessKernel::PreprocessKernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * BasisBits, StreamSet * CCResults)
+PreprocessKernel::PreprocessKernel(BuilderRef b, StreamSet * BasisBits, StreamSet * CCResults)
 : PabloKernel(b, "editd_preprocess", {{"basis", BasisBits}}, {{"pat", CCResults}}) {
 
 }
@@ -254,8 +254,8 @@ std::string createName(const std::vector<std::string> & patterns) {
 
 class PatternKernel final: public pablo::PabloKernel {
 public:
-    PatternKernel(const std::unique_ptr<KernelBuilder> & b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
-    std::string makeSignature(const std::unique_ptr<KernelBuilder> &) const override;
+    PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
+    std::string makeSignature(BuilderRef) const override;
     bool isCachable() const override { return true;}
 protected:
     void generatePabloMethod() override;
@@ -263,7 +263,7 @@ private:
     const std::vector<std::string> & mPatterns;
 };
 
-PatternKernel::PatternKernel(const std::unique_ptr<KernelBuilder> & b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E)
+PatternKernel::PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E)
 : PabloKernel(b, getStringHash(createName(patterns)),
 {{"pat", pat}},
 {{"E", E}})
@@ -271,7 +271,7 @@ PatternKernel::PatternKernel(const std::unique_ptr<KernelBuilder> & b, const std
     addAttribute(InfrequentlyUsed());
 }
 
-std::string PatternKernel::makeSignature(const std::unique_ptr<KernelBuilder> &) const {
+std::string PatternKernel::makeSignature(BuilderRef) const {
     return getName();
 }
 

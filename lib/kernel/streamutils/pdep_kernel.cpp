@@ -22,6 +22,8 @@ using namespace llvm;
 
 namespace kernel {
 
+using BuilderRef = Kernel::BuilderRef;
+
 void SpreadByMask(const std::unique_ptr<ProgramBuilder> & P,
                   StreamSet * mask, StreamSet * toSpread, StreamSet * outputs,
                   unsigned streamOffset,
@@ -34,7 +36,7 @@ void SpreadByMask(const std::unique_ptr<ProgramBuilder> & P,
     P->CreateKernelCall<FieldDepositKernel>(mask, expanded, outputs, expansionFieldWidth);
 }
 
-StreamExpandKernel::StreamExpandKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+StreamExpandKernel::StreamExpandKernel(BuilderRef b,
                                        StreamSet * mask,
                                        StreamSet * source,
                                        StreamSet * expanded,
@@ -56,7 +58,7 @@ Binding{"source", source, PopcountOf("marker")}},
 , mSelectedStreamCount(expanded->getNumElements()),
     mOptimization(opt) {}
 
-void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) {
+void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfBlocks) {
     Type * fieldWidthTy = b->getIntNTy(mFieldWidth);
     Type * sizeTy = b->getSizeTy();
     const unsigned numFields = b->getBitBlockWidth() / mFieldWidth;
@@ -187,7 +189,7 @@ void StreamExpandKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     b->SetInsertPoint(expansionDone);
 }
 
-FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+FieldDepositKernel::FieldDepositKernel(BuilderRef b
                                        , StreamSet * mask, StreamSet * input, StreamSet * output
                                        , const unsigned fieldWidth)
 : MultiBlockKernel(b, "FieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(input->getNumElements()),
@@ -200,9 +202,9 @@ FieldDepositKernel::FieldDepositKernel(const std::unique_ptr<kernel::KernelBuild
 
 }
 
-void PDEPFieldDepositLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks, unsigned fieldWidth, unsigned streamCount);
+void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsigned fieldWidth, unsigned streamCount);
 
-void FieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+void FieldDepositKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {
     if (AVX2_available() && BMI2_available() && ((mFieldWidth == 32) || (mFieldWidth == 64))) {
         PDEPFieldDepositLogic(kb, numOfBlocks, mFieldWidth, mStreamCount);
     } else {
@@ -228,7 +230,7 @@ void FieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBui
     }
 }
 
-void PDEPFieldDepositLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks, unsigned fieldWidth, unsigned streamCount) {
+void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsigned fieldWidth, unsigned streamCount) {
         Type * fieldTy = kb->getIntNTy(fieldWidth);
         Type * fieldPtrTy = PointerType::get(fieldTy, 0);
         Constant * PDEP_func = nullptr;
@@ -303,7 +305,7 @@ void PDEPFieldDepositLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Valu
     kb->SetInsertPoint(done);
 }
 
-PDEPFieldDepositKernel::PDEPFieldDepositKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+PDEPFieldDepositKernel::PDEPFieldDepositKernel(BuilderRef b
                                                , StreamSet * mask, StreamSet * input, StreamSet * output
                                                , const unsigned fieldWidth)
 : MultiBlockKernel(b, "PDEPFieldDeposit" + std::to_string(fieldWidth) + "_" + std::to_string(input->getNumElements()) ,
@@ -317,12 +319,12 @@ PDEPFieldDepositKernel::PDEPFieldDepositKernel(const std::unique_ptr<kernel::Ker
         llvm::report_fatal_error("Unsupported PDEP width for PDEPFieldDepositKernel");
 }
 
-void PDEPFieldDepositKernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) {
+void PDEPFieldDepositKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {
     PDEPFieldDepositLogic(kb, numOfBlocks, mPDEPWidth, mStreamCount);
 }
 
 
-PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const unsigned swizzleFactor, std::string name)
+PDEPkernel::PDEPkernel(BuilderRef b, const unsigned swizzleFactor, std::string name)
 : MultiBlockKernel(b, std::move(name),
                    // input stream sets
 {Binding{b->getStreamSetTy(), "marker", FixedRate(), Principal()},
@@ -333,7 +335,7 @@ PDEPkernel::PDEPkernel(const std::unique_ptr<kernel::KernelBuilder> & b, const u
 , mSwizzleFactor(swizzleFactor) {
 }
 
-void PDEPkernel::generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, Value * const numOfBlocks) {
+void PDEPkernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
     BasicBlock * const entry = b->GetInsertBlock();
     BasicBlock * const processBlock = b->CreateBasicBlock("processBlock");
     BasicBlock * const finishedStrides = b->CreateBasicBlock("finishedStrides");
@@ -449,7 +451,7 @@ std::string InsertString(StreamSet * mask, InsertPosition p) {
 
 class UnitInsertionExtractionMasks : public BlockOrientedKernel {
 public:
-    UnitInsertionExtractionMasks(const std::unique_ptr<KernelBuilder> & b,
+    UnitInsertionExtractionMasks(BuilderRef b,
                                  StreamSet * insertion_mask, StreamSet * stream01, StreamSet * valid01, InsertPosition p = InsertPosition::Before)
     : BlockOrientedKernel(b, "unitInsertionExtractionMasks" + InsertString(insertion_mask, p),
         {Binding{"insertion_mask", insertion_mask}},
@@ -460,12 +462,12 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const remainingBytes) override;
+    void generateDoBlockMethod(BuilderRef b) override;
+    void generateFinalBlockMethod(BuilderRef b, llvm::Value * const remainingBytes) override;
     InsertPosition mInsertPos;
 };
 
-void UnitInsertionExtractionMasks::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void UnitInsertionExtractionMasks::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     Value * insertion_mask = b->loadInputStreamBlock("insertion_mask", b->getSize(0), b->getSize(0));
     for (unsigned i = 1; i < getInputStreamSet("insertion_mask")->getNumElements(); i++) {
@@ -489,7 +491,7 @@ void UnitInsertionExtractionMasks::generateDoBlockMethod(const std::unique_ptr<K
     b->storeOutputStreamBlock("valid01", b->getSize(0), b->getSize(1), extract_mask_hi);
 }
 
-void UnitInsertionExtractionMasks::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBytes) {
+void UnitInsertionExtractionMasks::generateFinalBlockMethod(BuilderRef b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
@@ -507,7 +509,7 @@ StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, S
 
 class UGT_Kernel : public pablo::PabloKernel {
 public:
-    UGT_Kernel(const std::unique_ptr<KernelBuilder> & b, StreamSet * bixnum, unsigned immediate, StreamSet * result) :
+    UGT_Kernel(BuilderRef b, StreamSet * bixnum, unsigned immediate, StreamSet * result) :
     pablo::PabloKernel(b, "ugt_" + std::to_string(immediate) + "_" + std::to_string(bixnum->getNumElements()),
                 {Binding{"bixnum", bixnum}}, {Binding{"result", result}}), mTestVal(immediate) {}
     bool isCachable() const override { return true; }
@@ -527,7 +529,7 @@ void UGT_Kernel::generatePabloMethod() {
 
 class SpreadMaskStep : public pablo::PabloKernel {
 public:
-    SpreadMaskStep(const std::unique_ptr<KernelBuilder> & b,
+    SpreadMaskStep(BuilderRef b,
                    StreamSet * bixnum, StreamSet * result, InsertPosition p = InsertPosition::Before) :
     pablo::PabloKernel(b, "spreadMaskStep_" + InsertString(bixnum, p),
                 {Binding{"bixnum", bixnum, FixedRate(1), LookAhead(1)}},

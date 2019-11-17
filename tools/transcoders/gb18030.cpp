@@ -70,14 +70,14 @@ static cl::opt<std::string> OutputEncoding("encoding", cl::desc("Output encoding
 //
 class GB_18030_Parser : public pablo::PabloKernel {
 public:
-    GB_18030_Parser(const std::unique_ptr<KernelBuilder> & kb, StreamSet * basis, StreamSet * GB_marks);
+    GB_18030_Parser(BuilderRef kb, StreamSet * basis, StreamSet * GB_marks);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
 
-GB_18030_Parser::GB_18030_Parser (const std::unique_ptr<KernelBuilder> & b, StreamSet * basis, StreamSet * GB_marks)
+GB_18030_Parser::GB_18030_Parser (BuilderRef b, StreamSet * basis, StreamSet * GB_marks)
 : PabloKernel(b, "GB_18030_Parser",
 {Binding{"basis", basis}},
               {Binding{"GB_marks", GB_marks}}) {}
@@ -170,7 +170,7 @@ enum class GB_18030_IndexingKind {Codepoint, UTF16};
 
 class GB_18030_ExtractionMasks : public pablo::PabloKernel {
 public:
-    GB_18030_ExtractionMasks(const std::unique_ptr<KernelBuilder> & kb, StreamSet * GB_marks, StreamSet * basis, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4, StreamSet * GB_prefix4, StreamSet * error, GB_18030_IndexingKind k = GB_18030_IndexingKind::Codepoint);
+    GB_18030_ExtractionMasks(BuilderRef kb, StreamSet * GB_marks, StreamSet * basis, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4, StreamSet * GB_prefix4, StreamSet * error, GB_18030_IndexingKind k = GB_18030_IndexingKind::Codepoint);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
@@ -181,7 +181,7 @@ private:
 
 
 GB_18030_ExtractionMasks::GB_18030_ExtractionMasks
-    (const std::unique_ptr<KernelBuilder> & b,
+    (BuilderRef b,
      StreamSet * GB_marks, StreamSet * basis, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4, StreamSet * GB_prefix4, StreamSet * error, GB_18030_IndexingKind k)
 : PabloKernel(b, (k == GB_18030_IndexingKind::UTF16) ? "GB_18030_ExtractionMasks_u16" : "GB_18030_ExtractionMasks",
 {Binding{"GB_marks", GB_marks, FixedRate(1), LookAhead(3)}, Binding{"basis", basis}},
@@ -242,7 +242,7 @@ void GB_18030_ExtractionMasks::generatePabloMethod() {
 
 class GB_18030_DoubleByteIndex : public pablo::PabloKernel {
 public:
-    GB_18030_DoubleByteIndex(const std::unique_ptr<KernelBuilder> & kb,
+    GB_18030_DoubleByteIndex(BuilderRef kb,
                              StreamSet * GB_4byte, StreamSet * byte1_basis, StreamSet * byte2_basis,
                              StreamSet * GB_2byte, StreamSet * gb15_index);
     bool isCachable() const override { return true; }
@@ -252,7 +252,7 @@ protected:
 };
 
 GB_18030_DoubleByteIndex::GB_18030_DoubleByteIndex
-(const std::unique_ptr<kernel::KernelBuilder> & kb,
+(BuilderRef kb,
  StreamSet * GB_4byte, StreamSet * byte1_basis, StreamSet * byte2_basis, StreamSet * GB_2byte, StreamSet * gb15_index)
 : PabloKernel(kb, "GB_18030_DoubleByteIndex",
               // input
@@ -291,7 +291,7 @@ void GB_18030_DoubleByteIndex::generatePabloMethod() {
 
 class GB_18030_InitializeASCII : public pablo::PabloKernel {
 public:
-    GB_18030_InitializeASCII(const std::unique_ptr<KernelBuilder> & kb,
+    GB_18030_InitializeASCII(BuilderRef kb,
                              StreamSet * byte1_basis, StreamSet * u16_basis);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
@@ -301,7 +301,7 @@ protected:
 };
 
 GB_18030_InitializeASCII::GB_18030_InitializeASCII
-(const std::unique_ptr<kernel::KernelBuilder> & kb, StreamSet * byte1_basis, StreamSet * u16_basis)
+(BuilderRef kb, StreamSet * byte1_basis, StreamSet * u16_basis)
 : PabloKernel(kb, "GB_18030_InitializeASCII",
               // input
 {Binding{"byte1_basis", byte1_basis}},
@@ -327,7 +327,7 @@ void GB_18030_InitializeASCII::generatePabloMethod() {
 
 class GB_18030_DoubleByteRangeKernel : public pablo::PabloKernel {
 public:
-    GB_18030_DoubleByteRangeKernel(const std::unique_ptr<KernelBuilder> & kb,
+    GB_18030_DoubleByteRangeKernel(BuilderRef kb,
                                    StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
                                    StreamSet * u16_out,
                                    unsigned rangeBase, unsigned rangeBits);
@@ -341,7 +341,7 @@ private:
 };
 
 GB_18030_DoubleByteRangeKernel::GB_18030_DoubleByteRangeKernel
-(const std::unique_ptr<KernelBuilder> & kb,
+(BuilderRef kb,
  StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
  StreamSet * u16_out,
  unsigned rangeBase, unsigned rangeBits)
@@ -397,7 +397,7 @@ void GB_18030_DoubleByteRangeKernel::generatePabloMethod() {
 
 class GB_18030_FourByteLogic : public pablo::PabloKernel {
 public:
-    GB_18030_FourByteLogic(const std::unique_ptr<KernelBuilder> & kb,
+    GB_18030_FourByteLogic(BuilderRef kb,
                            StreamSet * GB_4byte, StreamSet * byte1, StreamSet * nybble1, StreamSet * byte2, StreamSet * nybble2, StreamSet * u16_basis,
                            StreamSet * UTF_out,
                            GB_18030_IndexingKind k = GB_18030_IndexingKind::Codepoint);
@@ -410,7 +410,7 @@ private:
 };
 
 GB_18030_FourByteLogic::GB_18030_FourByteLogic
-(const std::unique_ptr<kernel::KernelBuilder> & kb,
+(BuilderRef kb,
  StreamSet * GB_4byte, StreamSet * byte1, StreamSet * nybble1, StreamSet * byte2, StreamSet * nybble2, StreamSet * u16_basis,
  StreamSet * UTF_out, GB_18030_IndexingKind k)
 : PabloKernel(kb, (k == GB_18030_IndexingKind::UTF16) ? "GB_18030_FourByteLogic_u16" : "GB_18030_FourByteLogic",

@@ -46,12 +46,12 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
 //
 class DeletionKernel final : public BlockOrientedKernel {
 public:
-    DeletionKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    DeletionKernel(BuilderRef b, unsigned fw, unsigned streamCount);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
+    void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;
 private:
     const unsigned mDeletionFieldWidth;
     const unsigned mStreamCount;
@@ -60,13 +60,13 @@ private:
 // Compress within fields of size fieldWidth.
 class FieldCompressKernel final : public MultiBlockKernel {
 public:
-    FieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b,
+    FieldCompressKernel(BuilderRef b,
                         StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
                         Scalar * inputBase, unsigned fieldWidth = 64);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const unsigned mCompressFieldWidth;
     const unsigned mStreamCount;
@@ -74,11 +74,11 @@ private:
 
 class PEXTFieldCompressKernel final : public MultiBlockKernel {
 public:
-    PEXTFieldCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount);
+    PEXTFieldCompressKernel(BuilderRef b, unsigned fw, unsigned streamCount);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
     const unsigned mPEXTWidth;
     const unsigned mStreamCount;
@@ -89,7 +89,7 @@ private:
 //  compressed streams.
 class StreamCompressKernel final : public MultiBlockKernel {
 public:
-    StreamCompressKernel(const std::unique_ptr<kernel::KernelBuilder> & b
+    StreamCompressKernel(BuilderRef b
                          , StreamSet * extractionMask
                          , StreamSet * source
                          , StreamSet * compressedOutput
@@ -98,7 +98,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & kb, llvm::Value * const numOfBlocks) override;
+    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) override;
 private:
     const unsigned mCompressedFieldWidth;
     const unsigned mStreamCount;
@@ -111,16 +111,16 @@ Output: swizzles containing the input bitstreams with the specified bits deleted
 class SwizzledDeleteByPEXTkernel final : public MultiBlockKernel {
 public:
     using SwizzleSets = std::vector<std::vector<llvm::Value *>>;
-    SwizzledDeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b
+    SwizzledDeleteByPEXTkernel(BuilderRef b
                                , StreamSet * selectors, StreamSet * inputStreamSet
                                , const std::vector<StreamSet *> & outputs
                                , unsigned PEXTWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateMultiBlockLogic(const std::unique_ptr<KernelBuilder> & b, llvm::Value * const numOfBlocks) override;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfBlocks) override;
 private:
-    SwizzleSets makeSwizzleSets(const std::unique_ptr<KernelBuilder> & b, llvm::Value * selectors, llvm::Value * const strideIndex);
+    SwizzleSets makeSwizzleSets(BuilderRef b, llvm::Value * selectors, llvm::Value * const strideIndex);
 private:
     const unsigned mStreamCount;
     const unsigned mSwizzleFactor;
@@ -130,13 +130,13 @@ private:
 
 class DeleteByPEXTkernel final : public BlockOrientedKernel {
 public:
-    DeleteByPEXTkernel(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned fw, unsigned streamCount, unsigned PEXT_width = sizeof(size_t) * 8);
+    DeleteByPEXTkernel(BuilderRef b, unsigned fw, unsigned streamCount, unsigned PEXT_width = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
-    void generateProcessingLoop(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * delMask);
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
+    void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;
+    void generateProcessingLoop(BuilderRef iBuilder, llvm::Value * delMask);
 private:
     const unsigned mDelCountFieldWidth;
     const unsigned mStreamCount;
@@ -146,12 +146,12 @@ private:
 
 class SwizzledBitstreamCompressByCount final : public BlockOrientedKernel {
 public:
-    SwizzledBitstreamCompressByCount(const std::unique_ptr<kernel::KernelBuilder> & b, unsigned bitStreamCount, unsigned fieldWidth = sizeof(size_t) * 8);
+    SwizzledBitstreamCompressByCount(BuilderRef b, unsigned bitStreamCount, unsigned fieldWidth = sizeof(size_t) * 8);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    void generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder) override;
-    void generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & iBuilder, llvm::Value * remainingBytes) override;
+    void generateDoBlockMethod(BuilderRef iBuilder) override;
+    void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;
 private:
     const unsigned mBitStreamCount;
     const unsigned mFieldWidth;

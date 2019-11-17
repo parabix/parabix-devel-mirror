@@ -11,13 +11,13 @@
 using namespace kernel;
 using namespace llvm;
 
-HexToBinary::HexToBinary(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * hexStream, StreamSet * binStream)
+HexToBinary::HexToBinary(BuilderRef b, StreamSet * hexStream, StreamSet * binStream)
 : BlockOrientedKernel(b, "HexToBinary",
                    {Binding{"hexdata", hexStream, FixedRate()}},
                    {Binding{"binary_data", binStream, FixedRate(4)}},
 {}, {}, {}) {}
 
-void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void HexToBinary::generateDoBlockMethod(BuilderRef b) {
     Type * i8Ty = b->getInt8Ty();
     Constant * const ZERO = b->getSize(0);
     const unsigned bytesPerBlock = b->getBitBlockWidth()/8;
@@ -46,14 +46,14 @@ void HexToBinary::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     }
 }
 
-BinaryToHex::BinaryToHex(const std::unique_ptr<kernel::KernelBuilder> & b, StreamSet * binStream, StreamSet * hexStream)
+BinaryToHex::BinaryToHex(BuilderRef b, StreamSet * binStream, StreamSet * hexStream)
 : BlockOrientedKernel(b, "BinaryToHex",
                    {Binding{"binary_data", binStream, FixedRate(4)}},
                    {Binding{"hexdata", hexStream, FixedRate(), RoundUpTo(1)}},
                    {}, {}, {}) {}
 
 
-void BinaryToHex::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b) {
+void BinaryToHex::generateDoBlockMethod(BuilderRef b) {
     Type * i8Ty = b->getInt8Ty();
     Constant * const ZERO = b->getSize(0);
     const unsigned bytesPerBlock = b->getBitBlockWidth()/8;
@@ -75,7 +75,7 @@ void BinaryToHex::generateDoBlockMethod(const std::unique_ptr<KernelBuilder> & b
     }
 }
 
-void BinaryToHex::generateFinalBlockMethod(const std::unique_ptr<KernelBuilder> & b, Value * const remainingBits) {
+void BinaryToHex::generateFinalBlockMethod(BuilderRef b, Value * const remainingBits) {
     Value * priorProduced = b->getProducedItemCount("hexdata");
     CreateDoBlockMethodCall(b);
     Value * remainingHexDigits = b->CreateUDiv(b->CreateAdd(remainingBits, b->getSize(3)), b->getSize(4));
