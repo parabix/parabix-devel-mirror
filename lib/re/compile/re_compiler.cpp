@@ -414,24 +414,32 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
         return process(repeated, marker, pb);
     }
     //
-    // A bounded repetition with an upper bound of at least 2.
+    // A bounded repetition with a lower bound of at least 2.
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
         auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
-        if (lengths.first == lengths.second) {
+        int rpt = lb;
+        if ((lengths.first == lengths.second) && isByteLength(repeated)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
-            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, lengths.first, nullptr, pb);
-            auto lb_lgth = lengths.first * lb;
-            auto shft = markerPos(marker) == FinalMatchUnit ? lb_lgth : lb_lgth - 1;
-            PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), shft, "marker_fwd");
+            if (markerPos(marker) != FinalMatchUnit) {
+                marker = makeMarker(FinalMatchUnit, pb.createAnd(cc, markerVar(marker)));
+                rpt -= 1;
+            }
+            PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, lengths.first, nullptr, pb);
+            auto lb_lgth = lengths.first * rpt;
+            PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), lb_lgth, "marker_fwd");
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
         else if (isUnicodeUnitLength(repeated)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
-            PabloAST * cc_lb = consecutive_matches(cc, 1, lb, 1, u8Final(pb), pb);
-            const auto pos = markerPos(marker) == FinalMatchUnit ? lb : lb - 1;
-            PabloAST * marker_fwd = pb.createIndexedAdvance(markerVar(marker), u8Final(pb), pos);
+            PabloAST * cursor = markerVar(marker);
+            if (markerPos(marker) != FinalMatchUnit) {
+                cursor = pb.createAnd(cc, pb.createScanThru(markerVar(marker), u8NonFinal(pb)));
+                rpt -= 1;
+            }
+            PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, u8Final(pb), pb);
+            PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, u8Final(pb), rpt);
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
         else if (isTypeForLocal(repeated)) {
@@ -591,8 +599,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
 
 inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuilder & pb) {
     PabloAST * const SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
-    MarkerType m = AdvanceMarker(marker, FinalPostPositionUnit, pb);
-    return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(m), SOT, "SOT"));
+    MarkerType m = AdvanceMarker(marker, InitialPostPositionUnit, pb);
+    return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(m), SOT, "SOT"));
 }
 
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
