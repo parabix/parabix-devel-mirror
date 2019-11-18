@@ -435,7 +435,7 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
             PabloAST * cc = markerVar(compile(repeated, pb));
             PabloAST * cursor = markerVar(marker);
             if (markerPos(marker) != FinalMatchUnit) {
-                cursor = pb.createAnd(cc, pb.createScanThru(markerVar(marker), u8NonFinal(pb)));
+                cursor = pb.createAnd(cc, pb.createScanTo(markerVar(marker), u8Final(pb)));
                 rpt -= 1;
             }
             PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, u8Final(pb), pb);

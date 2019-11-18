@@ -565,29 +565,35 @@ PabloAST * PabloBuilder::createScanThru(PabloAST * from, PabloAST * thru, const 
 }
 
 PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to) {
-    if (isa<Zeroes>(from)) {
+    if (isa<Zeroes>(from) || isa<Ones>(to)) {
         return from;
     }
     return MAKE_BINARY(ScanTo, from, to);
 }
 
 PabloAST * PabloBuilder::createScanTo(PabloAST * from, PabloAST * to, const llvm::StringRef prefix) {
-    if (isa<Zeroes>(from)) {
+    if (isa<Zeroes>(from) || isa<Ones>(to)) {
         return from;
     }
     return MAKE_NAMED_BINARY(ScanTo, prefix, from, to);
 }
 
 PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru) {
-    if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
+    if (isa<Zeroes>(from)) {
         return from;
+    }
+    if (isa<Zeroes>(thru)) {
+        return createAdvance(from, getInteger(1));
     }
     return MAKE_BINARY(AdvanceThenScanThru, from, thru);
 }
 
 PabloAST * PabloBuilder::createAdvanceThenScanThru(PabloAST * from, PabloAST * thru, const llvm::StringRef prefix) {
-    if (isa<Zeroes>(from) || isa<Zeroes>(thru)) {
+    if (isa<Zeroes>(from)) {
         return from;
+    }
+    if (isa<Zeroes>(thru)) {
+        return createAdvance(from, getInteger(1), prefix);
     }
     return MAKE_NAMED_BINARY(AdvanceThenScanThru, prefix, from, thru);
 }
