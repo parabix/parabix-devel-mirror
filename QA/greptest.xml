@@ -569,6 +569,7 @@ A plain line.
 <grepcase regexp="^\u{4F60}$" datafile="codepoints" greplines="5"/>
 <grepcase regexp="(?g)^\u{4F60}$" datafile="codepoints" greplines="5"/>
 <grepcase regexp="^ক$" datafile="codepoints" greplines="7"/>
+<grepcase regexp="^.{3}$" datafile="codepoints" greplines="9"/>
 <!-- Bad tests:
 <grepcase regexp="(?g)^ক$" datafile="codepoints" grepcount="2"/>
 <grepcase regexp="^ক$" datafile="codepoints" grepcount="1"/> 

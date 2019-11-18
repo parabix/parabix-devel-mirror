@@ -379,6 +379,10 @@ struct FixedUTF8Validator : public RE_Validator {
         return (alphabet == &cc::UTF8) || (alphabet == &cc::Byte);
     }
 
+    bool validateStart(const Start * s) override {
+        return false;
+    }
+
     bool validateName(const Name * name) override {
         RE * defn = name->getDefinition();
         return (defn != nullptr) && validate(defn);

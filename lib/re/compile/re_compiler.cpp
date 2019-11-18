@@ -392,7 +392,7 @@ inline PabloAST * RE_Compiler::reachable(PabloAST *  const repeated, const int l
         return repeated;
     }
     const int total_length = repeat_count * length;
-    PabloAST * const v2 = pb.createIndexedAdvance(repeated, indexStream, 1);
+    PabloAST * const v2 = pb.createIndexedAdvance(repeated, indexStream, length);
     PabloAST * reachable = pb.createOr(repeated, v2, "within1");
     int i = length;
     while ((i * 2) < total_length) {
@@ -484,27 +484,26 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
         auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
         // TODO: handle fixed lengths > 1
         if ((lengths.first == lengths.second) && (lengths.first == 1)) {
+            PabloAST * repeatMarks = markerVar(compile(repeated, pb));
             // log2 upper bound for fixed length (=1) class
             // Create a mask of positions reachable within ub from current marker.
             // Use matchstar, then apply filter.
-            PabloAST * cursor = markerVar(AdvanceMarker(marker, InitialPostPositionUnit, pb));
-            // If we've advanced the cursor to the post position unit, cursor begins on the first masked bit of the bounded mask.
-            // Extend the mask by ub - 1 byte positions to ensure the mask ends on the FinalMatchUnit of the repeated region.
-            PabloAST * upperLimitMask = reachable(cursor, lengths.first, ub - 1, nullptr, pb);
-            PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask);
-            // MatchStar deposits any cursors on the post position. However those cursors may may land on the initial "byte" of a
-            // "multi-byte" character. Combine the masked range with any nonFinals.
-            PabloAST * bounded = pb.createMatchStar(cursor, masked, "bounded");
-            return makeMarker(InitialPostPositionUnit, bounded);
+            PabloAST * cursor = markerVar(marker);
+            PabloAST * upperLimitMask = reachable(cursor, lengths.first, ub, nullptr, pb);
+            PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
+            PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
+            return makeMarker(FinalMatchUnit, bounded);
         }
         else if (isUnicodeUnitLength(repeated)) {
+            PabloAST * repeatMarks = markerVar(compile(repeated, pb));
             // For a regexp which represent a single Unicode codepoint, we can use the u8Final(pb) stream
             // as an index stream for an indexed advance operation.
-            PabloAST * cursor = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-            PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, u8Final(pb), pb);
-            PabloAST * masked = pb.createAnd(markerVar(compile(repeated, pb)), upperLimitMask, "masked");
-            PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, u8NonFinal(pb)), "bounded");
-            return makeMarker(FinalPostPositionUnit, bounded);
+            PabloAST * cursor = markerVar(marker);
+            PabloAST * upperLimitMask = reachable(cursor, 1, ub, u8Final(pb), pb);
+            PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
+            masked = pb.createOr(masked, u8NonFinal(pb));
+            PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
+            return makeMarker(FinalMatchUnit, bounded);
         }
         else if (isTypeForLocal(repeated)) {
             CC * const first = RE_Local::getFirstUniqueSymbol(repeated);
@@ -592,8 +591,8 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
 
 inline MarkerType RE_Compiler::compileStart(MarkerType marker, pablo::PabloBuilder & pb) {
     PabloAST * const SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
-    MarkerType m = AdvanceMarker(marker, InitialPostPositionUnit, pb);
-    return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(m), SOT, "SOT"));
+    MarkerType m = AdvanceMarker(marker, FinalPostPositionUnit, pb);
+    return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(m), SOT, "SOT"));
 }
 
 inline MarkerType RE_Compiler::compileEnd(MarkerType marker, pablo::PabloBuilder & pb) {
