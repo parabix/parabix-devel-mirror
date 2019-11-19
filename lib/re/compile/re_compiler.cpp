@@ -32,6 +32,10 @@ using namespace llvm;
 
 namespace re {
 
+PabloAST * ScanToIndex(PabloAST * cursor, PabloAST * indexStrm, PabloBuilder & pb) {
+    return pb.createOr(pb.createAnd(cursor, indexStrm),
+                       pb.createScanTo(pb.createAnd(pb.createNot(indexStrm), cursor), indexStrm));
+}
 
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
@@ -110,30 +114,20 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         return makeMarker(FinalMatchUnit, pb.createZeroes());
     }
     PabloAST * nextPos = markerVar(marker);
+    if (marker.pos == FinalMatchUnit) {
+        nextPos = pb.createAdvance(nextPos, 1);
+    }
     const cc::Alphabet * a = cc->getAlphabet();
     if ((a == &mIndexingAlphabet) || (a == &cc::Byte) || (a == &cc::UTF8)) {
-        if (marker.pos == FinalMatchUnit) {
-            nextPos = pb.createAdvance(nextPos, 1);
-        }
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
     } else if (a == &cc::Unicode) {
         MarkerType m = compile(toUTF8(cc), pb);
-        if (isByteLength(cc)) {
-            if (marker.pos == FinalMatchUnit) {
-                nextPos = pb.createAdvance(nextPos, 1);
-            }
-        } else {
-            nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
+        if (!isByteLength(cc)) {
+            nextPos = ScanToIndex(nextPos, u8Final(pb), pb);
         }
         return makeMarker(FinalMatchUnit, pb.createAnd(markerVar(m), nextPos));
     } else {
-        if (isByteLength(cc)) {
-            if (marker.pos == FinalMatchUnit) {
-                nextPos = pb.createAdvance(nextPos, 1);
-            }
-        } else {
-            nextPos = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-        }
+        nextPos = ScanToIndex(nextPos, u8Final(pb), pb);
         unsigned i = 0;
         while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
         if (i == mAlphabets.size()) {
@@ -151,8 +145,9 @@ inline MarkerType RE_Compiler::compileName(Name * const name, MarkerType marker,
         nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
         return nameMarker;
     } else if (isUnicodeUnitLength(name)) {
-        MarkerType nextPos = AdvanceMarker(marker, FinalPostPositionUnit, pb);
-        nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
+        MarkerType nextPos = AdvanceMarker(marker, InitialPostPositionUnit, pb);
+        PabloAST * cursor = ScanToIndex(markerVar(nextPos), u8Final(pb), pb);
+        nameMarker.stream = pb.createAnd(cursor, markerVar(nameMarker), name->getName());
         return nameMarker;
     } else if (name->getType() == Name::Type::ZeroWidth) {
         AlignMarkers(marker, nameMarker, pb);
@@ -249,13 +244,13 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
     } else if (a->getKind() == Assertion::Kind::Boundary) {
         MarkerType cond = compile(asserted, pb);
         if (LLVM_LIKELY(markerPos(cond) == FinalMatchUnit)) {
-            MarkerType postCond = AdvanceMarker(cond, FinalPostPositionUnit, pb);
+            MarkerType postCond = AdvanceMarker(cond, InitialPostPositionUnit, pb);
             PabloAST * boundaryCond = pb.createXor(markerVar(cond), markerVar(postCond));
             if (a->getSense() == Assertion::Sense::Negative) {
                 boundaryCond = pb.createNot(boundaryCond);
             }
-            MarkerType fbyte = AdvanceMarker(marker, FinalPostPositionUnit, pb);
-            return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), boundaryCond, "boundary"));
+            MarkerType fbyte = AdvanceMarker(marker, InitialPostPositionUnit, pb);
+            return makeMarker(InitialPostPositionUnit, pb.createAnd(markerVar(fbyte), boundaryCond, "boundary"));
         }
         else UnsupportedRE("Unsupported boundary assertion");
     }
@@ -442,24 +437,6 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
             PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, u8Final(pb), rpt);
             return makeMarker(FinalMatchUnit, pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
-        else if (isTypeForLocal(repeated)) {
-            CC * const first = RE_Local::getFirstUniqueSymbol(repeated);
-            if (first) { // if the first symbol is unique, we can use it as an index stream.
-                PabloAST * firstCCstream = markerVar(compile(first, pb));
-                // Find all matches to the repeated regexp.
-                PabloAST * submatch = markerVar(AdvanceMarker(compile(repeated, pb), FinalPostPositionUnit, pb));
-                // Consecutive submatches require that the symbol following the end of one submatch is the first symbol for
-                // the next submatch.   lb-1 such submatches are required.
-                PabloAST * consecutive_submatch = consecutive_matches(submatch, 1, lb-1, 1, firstCCstream, pb);
-                // Find submatch positions which are lb-2 start symbols forward from the current marker position.
-                PabloAST * base = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-                PabloAST * marker_fwd = pb.createIndexedAdvance(base, firstCCstream, lb - 1);
-                PabloAST * consecutive_lb_1 = pb.createAnd(marker_fwd, consecutive_submatch);
-                // From any of these positions, any position reachable by one more occurrence of the
-                // regexp is a match.
-                return process(repeated, makeMarker(FinalPostPositionUnit, consecutive_lb_1), pb);
-            }
-        }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
     const auto group = ifGroupSize < lb ? ifGroupSize : lb;
@@ -513,17 +490,6 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
             PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
             return makeMarker(FinalMatchUnit, bounded);
         }
-        else if (isTypeForLocal(repeated)) {
-            CC * const first = RE_Local::getFirstUniqueSymbol(repeated);
-            if (first) { // if the first symbol is unique, we can use it as an index stream.
-                PabloAST * firstCCstream = markerVar(compile(first, pb));
-                PabloAST * cursor = markerVar(AdvanceMarker(marker, FinalPostPositionUnit, pb));
-                PabloAST * upperLimitMask = reachable(cursor, 1, ub - 1, firstCCstream, pb);
-                PabloAST * masked = pb.createAnd(markerVar(AdvanceMarker(compile(repeated, pb), FinalPostPositionUnit, pb)), upperLimitMask, "masked");
-                PabloAST * bounded = pb.createMatchStar(cursor, pb.createOr(masked, u8NonFinal(pb)), "bounded");
-                return makeMarker(FinalPostPositionUnit, bounded);
-            }
-        }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
     const auto group = ifGroupSize < ub ? ifGroupSize : ub;
@@ -559,7 +525,7 @@ MarkerType RE_Compiler::processUnboundedRep(RE * const repeated, MarkerType mark
         PabloAST * mask = markerVar(compile(repeated, pb));
         mask = pb.createOr(mask, u8NonFinal(pb));
         PabloAST * unbounded = pb.createMatchStar(base, mask);
-        return makeMarker(FinalPostPositionUnit, pb.createAnd(unbounded, u8Final(pb), "unbounded"));
+        return makeMarker(InitialPostPositionUnit, pb.createAnd(unbounded, pb.createAdvance(u8Final(pb), 1), "unbounded"));
     } else if (mStarDepth > 0){
         PabloBuilder * const outer = pb.getParent();
         Var * starPending = outer->createVar("pending", outer->createZeroes());
@@ -617,7 +583,7 @@ inline MarkerType RE_Compiler::AdvanceMarker(MarkerType marker, const MarkerPosi
             marker.pos = InitialPostPositionUnit;
         }
         if (newpos == FinalPostPositionUnit) {
-            marker.stream = pb.createOr(pb.createAnd(marker.stream, u8Final(pb)), pb.createScanThru(pb.createAnd(u8NonFinal(pb), marker.stream), u8NonFinal(pb), "fpp"));
+            marker.stream = ScanToIndex(marker.stream, u8Final(pb), pb);
             marker.pos = FinalPostPositionUnit;
         }
     }
