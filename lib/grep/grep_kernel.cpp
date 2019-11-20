@@ -151,6 +151,19 @@ void GrepKernelOptions::addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet *
     mAlphabets.emplace_back(a, basis);
 }
 
+void GrepKernelOptions::addExternal(std::string name, StreamSet * strm, int offset, int lgth, StreamSet * indexStrm) {
+    if ((lgth != 1) || (indexStrm != nullptr)) {
+        llvm::report_fatal_error("Length and index stream parameters for grep externals not yet supported.");
+    }
+    if (offset == 0) {
+        mExternals.emplace_back(name, strm, FixedRate(), ZeroExtended());
+    } else {
+        std::initializer_list<Attribute> attrs{ZeroExtended(), LookAhead(offset)};
+        mExternals.emplace_back(name, strm, FixedRate(), attrs);
+    }
+}
+
+
 Bindings GrepKernelOptions::streamSetInputBindings() {
     Bindings inputs;
     if (mExternals.empty()) {

@@ -177,6 +177,12 @@ void GrepEngine::initFileResult(const std::vector<boost::filesystem::path> & pat
 void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         mBreakCC = re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029)));
+        for (unsigned i = 0; i < REs.size(); ++i) {
+            if (hasEndAnchor(REs[i])) {
+                UnicodeIndexing = true;
+                break;
+            }
+        }
     } else if (mGrepRecordBreak == GrepRecordBreakKind::Null) {
         mBreakCC = re::makeCC(0, &cc::Unicode);  // Null
     } else {
@@ -200,7 +206,6 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         re::gatherUnicodeProperties(mREs[i], mUnicodeProperties);
         mREs[i] = regular_expression_passes(mREs[i]);
     }
-
     for (unsigned i = 0; i < mREs.size(); ++i) {
         if (hasGraphemeClusterBoundary(mREs[i])) {
             UnicodeIndexing = true;
@@ -209,6 +214,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (UnicodeIndexing) {
+        setComponent(mExternalComponents, Component::S2P);
         setComponent(mExternalComponents, Component::UTF8index);
     } else {
         for (unsigned i = 0; i < mREs.size(); ++i) {
@@ -356,7 +362,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
         } else {
             StreamSet * iGCB_stream = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mGCB_stream, iGCB_stream);
-            options->addExternal("\\b{g}", iGCB_stream);
+            options->addExternal("\\b{g}", iGCB_stream, 1);
         }
     }
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
@@ -374,7 +380,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
         } else {
             StreamSet * iU8_LB = P->CreateStreamSet(1, 1);
             FilterByMask(P, indexMask, mLineBreakStream, iU8_LB);
-            options->addExternal("UTF8_LB", iU8_LB);
+            options->addExternal("UTF8_LB", iU8_LB, 1);
         }
     }
 }
@@ -442,7 +448,7 @@ StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, 
     for(unsigned i = 0; i < numOfREs; ++i) {
         StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
         MatchResultsBufs[i] = MatchResults;
-        if (UnicodeIndexing && hasComponent(mExternalComponents, Component::S2P)) {
+        if (UnicodeIndexing) {
             UnicodeIndexedGrep(P, mREs[i], SourceStream, MatchResults);
         } else {
             U8indexedGrep(P, mREs[i], SourceStream, MatchResults);

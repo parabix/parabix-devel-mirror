@@ -37,15 +37,7 @@ public:
     void setCombiningStream(GrepCombiningType t, StreamSet * toCombine);
     void setResults(StreamSet * r);
 
-    void addExternal(std::string name, StreamSet * strm) {
-        mExternals.emplace_back(name, strm, FixedRate(), ZeroExtended());
-    }
-
-    template <typename ... Args>
-    void addExternal(std::string name, StreamSet * strm, Args ... args) {
-        std::initializer_list<Attribute> attrs{std::forward<Args>(args)...};
-        mExternals.emplace_back(name, strm, FixedRate(), attrs);
-    }
+    void addExternal(std::string name, StreamSet * strm, int offset = 0, int lgth = 1, StreamSet * indexStrm = nullptr);
 
     void addAlphabet(std::shared_ptr<cc::Alphabet> a, StreamSet * basis);
     void setRE(re::RE * re);
