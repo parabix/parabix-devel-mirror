@@ -12,36 +12,35 @@ using namespace llvm;
 namespace re {
 
 
-class CC_multiplexer final : public RE_Transformer {
+struct CC_multiplexer final : public RE_Transformer {
 public:
-    CC_multiplexer(const cc::MultiplexedAlphabet * mpx) :
-        RE_Transformer("Multiplex_" + mpx->getName()), mMultiplexedAlphabet(mpx) {}
-    RE * transformCC(CC *) override;
-    RE * transformName(Name *) override;
+    CC_multiplexer(const cc::MultiplexedAlphabet * mpx, std::set<Name *> externalNames) :
+        RE_Transformer("Multiplex_" + mpx->getName()),
+        mMultiplexedAlphabet(mpx), mExternalNames(externalNames) {}
+    RE * transformCC(CC * cc) override {
+        if (cc->getAlphabet() == mMultiplexedAlphabet->getSourceAlphabet()) {
+            return mMultiplexedAlphabet->transformCC(cc);
+        }
+        return cc;
+    };
+    RE * transformName(Name * name) override {
+        if (mExternalNames.count(name) > 0) return name;
+        if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+            RE * xfrm = transform(name->getDefinition());
+            if (name->getType() == Name::Type::ZeroWidth)
+                return makeZeroWidth(name->getFullName(), xfrm);
+            else
+                return makeName(name->getFullName(), xfrm);
+        }
+        return name;
+    }
 private:
     const cc::MultiplexedAlphabet * const mMultiplexedAlphabet;
+    std::set<Name *> mExternalNames;
 };
 
-RE * CC_multiplexer::transformCC(CC * cc) {
-    if (cc->getAlphabet() == mMultiplexedAlphabet->getSourceAlphabet()) {
-        return mMultiplexedAlphabet->transformCC(cc);
-    }
-    return cc;
-}
-
-RE * CC_multiplexer::transformName(Name * name) {
-    if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
-        RE * xfrm = transform(name->getDefinition());
-        if (name->getType() == Name::Type::ZeroWidth)
-            return makeZeroWidth(name->getFullName(), xfrm);
-        else
-            return makeName(name->getFullName(), xfrm);
-    }
-    return name;
-}
-
-RE * transformCCs(const cc::MultiplexedAlphabet * const mpx, RE * re) {
-    return CC_multiplexer(mpx).transformRE(re);
+RE * transformCCs(const cc::MultiplexedAlphabet * const mpx, RE * re, std::set<Name *> externalNames) {
+    return CC_multiplexer(mpx, externalNames).transformRE(re);
 }
 
 }
