@@ -210,7 +210,7 @@ void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_s
         while (fileIdx >= mCumulativeEntryCount[mDirectoryIndex]) {
             mDirectoryIndex++;
         }
-        selectPath(mCollectedPaths, std::move(mDirectoryList[mDirectoryIndex]/p));
+        selectPath(mCollectedPaths, mDirectoryList[mDirectoryIndex]/p);
     }
 }
 
