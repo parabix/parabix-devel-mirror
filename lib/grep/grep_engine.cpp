@@ -397,30 +397,26 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
 
 void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-    const auto UnicodeSets = re::collectCCs(re, cc::Unicode, std::set<re::Name *>{re::makeZeroWidth("\\b{g}")});
-    if (UnicodeSets.size() <= 1) {
-        options->setSource(Source);
-        options->setIndexingAlphabet(&cc::UTF8);
-        options->setResults(Results);
-        options->setRE(re);
-        addExternalStreams(P, options, re);
-        P->CreateKernelCall<ICGrepKernel>(std::move(options));
-        return;
-    }
-    auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
-    re = transformCCs(mpx, re);
-    options->setRE(re);
     options->setIndexingAlphabet(&cc::Unicode);
-    auto mpx_basis = mpx->getMultiplexedCCs();
-    //llvm::errs() << "mpx_basis.size() = " << mpx_basis.size() << "\n";
-    StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
-    StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
-    P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
-    FilterByMask(P, mU8index, u8CharClasses, CharClasses);
+    const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
+    if (UnicodeSets.empty()) {
+        // All inputs will be externals.
+        options->setSource(Source);
+        options->setRE(re);
+    } else {
+        auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
+        re = transformCCs(mpx, re, mExternalNames);
+        options->setRE(re);
+        auto mpx_basis = mpx->getMultiplexedCCs();
+        StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
+        StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
+        P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
+        FilterByMask(P, mU8index, u8CharClasses, CharClasses);
+        options->setSource(CharClasses);
+        options->addAlphabet(mpx, CharClasses);
+    }
     StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
-    options->setSource(CharClasses);
     options->setResults(MatchResults);
-    options->addAlphabet(mpx, CharClasses);
     addExternalStreams(P, options, re, mU8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
     StreamSet * u8index1 = P->CreateStreamSet(1, 1);
