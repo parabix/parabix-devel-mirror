@@ -400,8 +400,9 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     options->setIndexingAlphabet(&cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
     if (UnicodeSets.empty()) {
-        // All inputs will be externals.
-        options->setSource(Source);
+        // All inputs will be externals.   Set the source to be u8index,
+        // to set the correct input length.
+        options->setSource(mU8index);
         options->setRE(re);
     } else {
         auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
