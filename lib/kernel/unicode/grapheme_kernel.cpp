@@ -39,7 +39,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     re::RE_Compiler re_compiler(getEntryScope(), ccc);
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     std::set<re::Name *> externals;
-    re::gatherUnicodeProperties(GCB, externals);
+    re::gatherNames(GCB, externals);
     UCD::UCDCompiler::NameMap nameMap;
     for (auto & name : externals) {
         nameMap.emplace(name, nullptr);

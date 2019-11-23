@@ -265,6 +265,7 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
         }
         return makeMarker(markerPos(marker), pb.createAnd(markerVar(marker), la, "lookahead"));
     }
+#if 0
     if (((lengths.first == lengths.second) && isa<Name>(asserted))) {
         const auto & nameString = cast<Name>(asserted)->getFullName();
         const auto f = mExternalNameMap.find(nameString);
@@ -285,6 +286,7 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
             return makeMarker(markerPos(marker), matched);
         }
     }
+#endif
     MarkerType lookahead = compile(asserted, pb);
     if (LLVM_LIKELY((lengths.second == 1) && (markerPos(lookahead) == FinalMatchUnit))) {
         MarkerType lookahead = compile(asserted, pb);

@@ -580,7 +580,7 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     GCB = re::resolveUnicodeNames(GCB);
     std::set<re::Name *> externals;
-    re::gatherUnicodeProperties(GCB, externals);
+    re::gatherNames(GCB, externals);
     std::map<std::string, kernel::StreamSet *> propertyStreamMap;
     for (auto e : externals) {
         auto name = e->getFullName();

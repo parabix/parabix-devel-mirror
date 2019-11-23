@@ -174,6 +174,26 @@ void GrepEngine::initFileResult(const std::vector<boost::filesystem::path> & pat
     inputPaths = paths;
 }
 
+//
+// Moving matches to EOL.   Mathches need to be aligned at EOL if for
+// scanning or counting processes (with a max count != 1).   If the REs
+// are not all anchored, then we need to move the matches to EOL.
+bool GrepEngine::matchesToEOLrequired () {
+    // Moving matches is required for UnicodeLines mode, because matches
+    // may be on the CR of a CRLF.
+    if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) return true;
+    // If all REs are anchored to EOL already, then we can avoid moving them.
+    bool allAnchored = true;
+    for (unsigned i = 0; i < mREs.size(); ++i) {
+        if (!hasEndAnchor(mREs[i])) allAnchored = false;
+    }
+    if (allAnchored) return false;
+    //
+    // Not all REs are anchored.   We can avoid moving matches, if we are
+    // in MatchOnly mode (or CountOnly with MaxCount = 1) and no invert match inversion.
+    return (mEngineKind == EngineKind::EmitMatches) || (mMaxCount != 1) || mInvertMatches;
+}
+
 void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         mBreakCC = re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029)));
@@ -194,16 +214,14 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         anchorName->setDefinition(re::makeUnicodeBreak());
         anchorRE = anchorName;
         setComponent(mExternalComponents, Component::UTF8index);
+        mExternalNames.insert(anchorName);
     }
 
     mREs = REs;
-    bool allAnchored = true;
-    for(unsigned i = 0; i < mREs.size(); ++i) {
-        if (!hasEndAnchor(mREs[i])) allAnchored = false;
+    for (unsigned i = 0; i < mREs.size(); ++i) {
         mREs[i] = resolveModesAndExternalSymbols(mREs[i], mCaseInsensitive);
         mREs[i] = re::exclude_CC(mREs[i], mBreakCC);
         mREs[i] = resolveAnchors(mREs[i], anchorRE);
-        re::gatherUnicodeProperties(mREs[i], mUnicodeProperties);
         mREs[i] = regular_expression_passes(mREs[i]);
     }
     for (unsigned i = 0; i < mREs.size(); ++i) {
@@ -232,23 +250,15 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             mREs[i] = toUTF8(mREs[i]);
         }
     }
-    //
-    // Moving matches to EOL.   Mathches need to be aligned at EOL if for
-    // scanning or counting processes (with a max count != 1).   If the REs
-    // are not all anchored, then we need to move the matches to EOL.
-    // Moving matches is also required for UnicodeLines mode, because matches
-    // may be on the CR of a CRLF, as well as for InvertMatches mode.
-    if ((mEngineKind == EngineKind::EmitMatches) || (mMaxCount != 1) || mInvertMatches) {
-        if (!allAnchored || (mGrepRecordBreak == GrepRecordBreakKind::Unicode)) {
-            // Move matches to EOL.   This may be achieved internally by modifying
-            // the regular expression or externally.   The internal approach is more
-            // generally more efficient, but cannot be used if colorization is needed
-            // or in UnicodeLines mode.
-            if ((mGrepRecordBreak == GrepRecordBreakKind::Unicode) || (mEngineKind == EngineKind::EmitMatches) || mInvertMatches || UnicodeIndexing) {
-                setComponent(mExternalComponents, Component::MoveMatchesToEOL);
-            } else {
-                setComponent(mInternalComponents, Component::MoveMatchesToEOL);
-            }
+    if (matchesToEOLrequired()) {
+        // Move matches to EOL.   This may be achieved internally by modifying
+        // the regular expression or externally.   The internal approach is more
+        // generally more efficient, but cannot be used if colorization is needed
+        // or in UnicodeLines mode.
+        if ((mGrepRecordBreak == GrepRecordBreakKind::Unicode) || (mEngineKind == EngineKind::EmitMatches) || mInvertMatches || UnicodeIndexing) {
+            setComponent(mExternalComponents, Component::MoveMatchesToEOL);
+        } else {
+            setComponent(mInternalComponents, Component::MoveMatchesToEOL);
         }
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
@@ -259,13 +269,16 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             }
         }
     }
+    for (unsigned i = 0; i < mREs.size(); ++i) {
+        re::gatherNames(mREs[i], mExternalNames);
+    }
+
     // For simple regular expressions with a small number of characters, we
     // can bypass transposition and use the Direct CC compiler.
     mPrefixRE = nullptr;
     mSuffixRE = nullptr;
     if ((mREs.size() == 1) && (mGrepRecordBreak != GrepRecordBreakKind::Unicode) &&
-        (!hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) &&
-        mUnicodeProperties.empty() && !UnicodeIndexing) {
+        mExternalNames.empty() && !UnicodeIndexing) {
         if (byteTestsWithinLimit(mREs[0], ByteCClimit)) {
             return;  // skip transposition
         } else if (hasTriCCwithinLimit(mREs[0], ByteCClimit, mPrefixRE, mSuffixRE)) {
@@ -276,7 +289,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
     } else {
         setComponent(mExternalComponents, Component::S2P);
     }
-    if (!mUnicodeProperties.empty()) {
+    if (!mExternalNames.empty()) {
         setComponent(mExternalComponents, Component::UTF8index);
     }
 }
@@ -324,28 +337,33 @@ void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamS
 }
 
 void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
-    if (PropertyKernels) {
-        for (auto p : mUnicodeProperties) {
-            auto name = p->getFullName();
-            StreamSet * property = P->CreateStreamSet(1, 1);
-            mPropertyStreamMap.emplace(name, property);
-            P->CreateKernelCall<UnicodePropertyKernelBuilder>(p, SourceStream, property);
-        }
-    }
     if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
         mGCB_stream = P->CreateStreamSet(1, 1);
+        //GraphemeClusterLogic(P, SourceStream, mU8index, mGCB_stream);
         P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, mU8index, mGCB_stream);
+    }
+    if (PropertyKernels) {
+        for (auto e : mExternalNames) {
+            if (isa<re::CC>(e->getDefinition())) {
+                auto name = e->getFullName();
+                StreamSet * property = P->CreateStreamSet(1, 1);
+                //errs() << "preparing external: " << name << "\n";
+                mPropertyStreamMap.emplace(name, property);
+                P->CreateKernelCall<UnicodePropertyKernelBuilder>(e, SourceStream, property);
+            }
+        }
     }
 }
 
 
 void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, std::unique_ptr<GrepKernelOptions> & options, re::RE * regexp, StreamSet * indexMask) {
-    std::set<re::Name *> props;
-    re::gatherUnicodeProperties(regexp, props);
-    for (const auto & p : props) {
-        auto name = p->getFullName();
+    std::set<re::Name *> externals;
+    re::gatherNames(regexp, externals);
+    for (const auto & e : externals) {
+        auto name = e->getFullName();
         const auto f = mPropertyStreamMap.find(name);
         if (f != mPropertyStreamMap.end()) {
+            //errs() << "adding external: " << name << "\n";
             if (indexMask == nullptr) {
                 options->addExternal(name, f->second);
             } else {
@@ -397,7 +415,6 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         P->CreateKernelCall<ICGrepKernel>(std::move(options));
         return;
     }
-    //llvm::errs() << "UnicodeSets.size() = " << UnicodeSets.size() << "\n";
     auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);
     re = transformCCs(mpx, re);
     options->setRE(re);
