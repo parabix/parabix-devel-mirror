@@ -242,14 +242,6 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             }
         }
     }
-    // Conversion to UTF-8 indexing
-    // Converting an RE to its UTF-8 equivalent allows efficient direct matching
-    // of bytes without transformation to Unicode.
-    if (!UnicodeIndexing && !hasComponent(mExternalComponents, Component::UTF8index)) {
-        for (unsigned i = 0; i < mREs.size(); ++i) {
-            mREs[i] = toUTF8(mREs[i]);
-        }
-    }
     if (matchesToEOLrequired()) {
         // Move matches to EOL.   This may be achieved internally by modifying
         // the regular expression or externally.   The internal approach is more
@@ -262,7 +254,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
-        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF8(mBreakCC));
+        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
         for (unsigned i = 0; i < mREs.size(); ++i) {
             if (!hasEndAnchor(mREs[i])) {
                 mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});
@@ -340,7 +332,7 @@ void GrepEngine::prepareExternalStreams(const std::unique_ptr<ProgramBuilder> & 
     if (hasComponent(mExternalComponents, Component::GraphemeClusterBoundary)) {
         mGCB_stream = P->CreateStreamSet(1, 1);
         //GraphemeClusterLogic(P, SourceStream, mU8index, mGCB_stream);
-        P->CreateKernelCall<GraphemeClusterBreakKernel>(SourceStream, mU8index, mGCB_stream);
+        GraphemeClusterLogic(P, SourceStream, mU8index, mGCB_stream);
     }
     if (PropertyKernels) {
         for (auto e : mExternalNames) {
@@ -442,9 +434,12 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
     options->setSource(Source);
     options->setResults(Results);
     if (mSuffixRE != nullptr) {
+        mPrefixRE = toUTF8(mPrefixRE);
+        mSuffixRE = toUTF8(mSuffixRE);
         options->setPrefixRE(mPrefixRE);
         options->setRE(mSuffixRE);
     } else {
+        re = toUTF8(re);
         options->setRE(re);
     }
     addExternalStreams(P, options, re);

@@ -120,12 +120,6 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
     const cc::Alphabet * a = cc->getAlphabet();
     if ((a == &mIndexingAlphabet) || (a == &cc::Byte) || (a == &cc::UTF8)) {
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
-    } else if (a == &cc::Unicode) {
-        MarkerType m = compile(toUTF8(cc), pb);
-        if (!isByteLength(cc)) {
-            nextPos = ScanToIndex(nextPos, u8Final(pb), pb);
-        }
-        return makeMarker(FinalMatchUnit, pb.createAnd(markerVar(m), nextPos));
     } else {
         nextPos = ScanToIndex(nextPos, u8Final(pb), pb);
         unsigned i = 0;
