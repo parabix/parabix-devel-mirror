@@ -7,6 +7,7 @@
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
 #include <re/alphabet/alphabet.h>
+#include <kernel/pipeline/pipeline_builder.h>
 
 namespace IDISA { class IDISA_Builder; }
 namespace re { class RE; }
@@ -150,6 +151,9 @@ private:
     const unsigned          mBeforeContext;
     const unsigned          mAfterContext;
 };
+
+void GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
+                          StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream);
 
 }
 #endif

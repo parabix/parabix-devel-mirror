@@ -7,6 +7,8 @@
 
 #include <grep/grep_engine.h>
 #include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/codegenstate.h>
@@ -26,6 +28,10 @@
 #include <re/alphabet/alphabet.h>
 #include <re/toolchain/toolchain.h>
 #include <re/transforms/re_reverse.h>
+#include <kernel/unicode/UCD_property_kernel.h>
+#include <re/analysis/re_name_gather.h>
+#include <re/unicode/grapheme_clusters.h>
+#include <re/unicode/re_name_resolve.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/multiplex_CCs.h>
@@ -566,4 +572,34 @@ void ContextSpan::generatePabloMethod() {
                                   "consecutive" + std::to_string(lgth));
     }
     pb.createAssign(pb.createExtract(getOutputStreamVar("contextStream"), pb.getInteger(0)), pb.createInFile(consecutive));
+}
+
+void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
+                          StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream) {
+
+    re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
+    GCB = re::resolveUnicodeNames(GCB);
+    std::set<re::Name *> externals;
+    re::gatherUnicodeProperties(GCB, externals);
+    std::map<std::string, kernel::StreamSet *> propertyStreamMap;
+    for (auto e : externals) {
+        auto name = e->getFullName();
+        StreamSet * property = P->CreateStreamSet(1, 1);
+        propertyStreamMap.emplace(name, property);
+        P->CreateKernelCall<UnicodePropertyKernelBuilder>(e, Source, property);
+    }
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+    options->setIndexingAlphabet(&cc::UTF8);
+    options->setSource(Source);
+    options->setResults(GCBstream);
+    options->setRE(GCB);
+    options->addExternal("UTF8_index", U8index);
+    for (const auto & e : externals) {
+        auto name = e->getFullName();
+        const auto f = propertyStreamMap.find(name);
+        if (f != propertyStreamMap.end()) {
+            options->addExternal(name, f->second);
+        }
+    }
+    P->CreateKernelCall<ICGrepKernel>(std::move(options));
 }
