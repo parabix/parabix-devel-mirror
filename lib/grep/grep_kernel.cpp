@@ -143,7 +143,10 @@ UTF8_index::UTF8_index(BuilderRef kb, StreamSet * Source, StreamSet * u8index)
 
 }
 
-void GrepKernelOptions::setIndexingAlphabet(const cc::Alphabet * a) {mIndexingAlphabet = a;}
+void GrepKernelOptions::setIndexingAlphabet(const cc::Alphabet * a, StreamSet * idx) {
+    mIndexingAlphabet = a;
+    mIndexStream = idx;
+}
 void GrepKernelOptions::setRE(RE * e) {mRE = e;}
 void GrepKernelOptions::setPrefixRE(RE * e) {mPrefixRE = e;}
 void GrepKernelOptions::setSource(StreamSet * s) {mSource = s;}
@@ -177,6 +180,9 @@ Bindings GrepKernelOptions::streamSetInputBindings() {
     } else {
         inputs.emplace_back("basis", mSource, FixedRate());
     }
+    if (mCodeUnitAlphabet != mIndexingAlphabet) {
+        inputs.emplace_back("mIndexing", mIndexStream);
+    }
     if (mCombiningType != GrepCombiningType::None) {
         inputs.emplace_back("toCombine", mCombiningStream);
     }
@@ -207,7 +213,8 @@ std::string GrepKernelOptions::getSignature() {
         if (mSource->getFieldWidth() == 8) {
             mSignature += ":" + std::to_string(grep::ByteCClimit);
         }
-        mSignature += "/" + mIndexingAlphabet->getName();
+        mSignature += "/" + mCodeUnitAlphabet->getName();
+        mSignature += ":" + mIndexingAlphabet->getName();
         for (const auto & e : mExternals) {
             mSignature += "_" + e.getName();
         }
@@ -250,8 +257,14 @@ void ICGrepKernel::generatePabloMethod() {
     } else {
         ccc = make_unique<cc::Parabix_CC_Compiler_Builder>(getEntryScope(), getInputStreamSet("basis"));
     }
-    //cc::Parabix_CC_Compiler ccc(getEntryScope(), getInputStreamSet("basis"), mOptions->mBasisSetNumbering);
-    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mIndexingAlphabet));
+    RE_Compiler re_compiler(getEntryScope(), *ccc.get(), *(mOptions->mCodeUnitAlphabet));
+    if ((mOptions->mCodeUnitAlphabet) == (mOptions->mIndexingAlphabet)) {
+        re_compiler.addIndexingAlphabet(mOptions->mCodeUnitAlphabet, pb.createOnes());
+    } else {
+        auto alphabetName = mOptions->mIndexingAlphabet->getName();
+        PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
+        re_compiler.addIndexingAlphabet(mOptions->mIndexingAlphabet, idxStrm);
+    }
     for (const auto & e : mOptions->mExternals) {
         re_compiler.addPrecompiled(e.getName(), pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0)));
     }
@@ -589,7 +602,7 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
         P->CreateKernelCall<UnicodePropertyKernelBuilder>(e, Source, property);
     }
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-    options->setIndexingAlphabet(&cc::UTF8);
+    options->setIndexingAlphabet(&cc::Unicode, U8index);
     options->setSource(Source);
     options->setResults(GCBstream);
     options->setRE(GCB);

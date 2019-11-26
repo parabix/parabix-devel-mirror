@@ -396,8 +396,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
 }
 
 void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-    options->setIndexingAlphabet(&cc::Unicode);
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
     if (UnicodeSets.empty()) {
         // All inputs will be externals.   Set the source to be u8index,
@@ -426,8 +425,10 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
 }
 
 void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
-    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-    options->setIndexingAlphabet(&cc::UTF8);
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF8);
+    if (hasComponent(mExternalComponents, Component::UTF8index)) {
+        //options->setIndexingAlphabet(&cc::Unicode, mU8index);
+    }
     options->setSource(Source);
     options->setResults(Results);
     if (mSuffixRE != nullptr) {
@@ -442,7 +443,6 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
     addExternalStreams(P, options, re);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
 }
-
 
 StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet * InputStream) {
     StreamSet * SourceStream = getBasis(P, InputStream);

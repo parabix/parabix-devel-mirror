@@ -29,11 +29,12 @@ class GrepKernelOptions {
     friend class ICGrepKernel;
 public:
     using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
-    GrepKernelOptions() :
-        mIndexingAlphabet(&cc::Byte),
+    GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet = &cc::Byte) :
+        mCodeUnitAlphabet(codeUnitAlphabet),
+        mIndexingAlphabet(codeUnitAlphabet),
         mCombiningType(GrepCombiningType::None),
         mPrefixRE(nullptr) {}
-    void setIndexingAlphabet(const cc::Alphabet * a);
+    void setIndexingAlphabet(const cc::Alphabet * a, StreamSet * indexStream);
     void setSource(StreamSet * s);
     void setCombiningStream(GrepCombiningType t, StreamSet * toCombine);
     void setResults(StreamSet * r);
@@ -52,8 +53,10 @@ protected:
     std::string getSignature();
 
 private:
-    const cc::Alphabet * mIndexingAlphabet;
+    const cc::Alphabet * mCodeUnitAlphabet;
     StreamSet * mSource;
+    const cc::Alphabet * mIndexingAlphabet;
+    StreamSet * mIndexStream;
     GrepCombiningType mCombiningType;
     StreamSet * mCombiningStream;
     StreamSet * mResults;

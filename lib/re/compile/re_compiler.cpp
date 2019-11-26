@@ -37,6 +37,11 @@ PabloAST * ScanToIndex(PabloAST * cursor, PabloAST * indexStrm, PabloBuilder & p
                        pb.createScanTo(pb.createAnd(pb.createNot(indexStrm), cursor), indexStrm));
 }
 
+void RE_Compiler::addIndexingAlphabet(const cc::Alphabet * a, PabloAST * indexStream) {
+    mIndexingAlphabet = a;
+    mIndexStream = indexStream;
+}
+
 void RE_Compiler::addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
     mAlphabetCompilers.push_back(make_unique<cc::Parabix_CC_Compiler_Builder>(mEntryScope, basis_set));
@@ -118,14 +123,14 @@ MarkerType RE_Compiler::compileCC(CC * const cc, MarkerType marker, PabloBuilder
         nextPos = pb.createAdvance(nextPos, 1);
     }
     const cc::Alphabet * a = cc->getAlphabet();
-    if ((a == &mIndexingAlphabet) || (a == &cc::Byte) || (a == &cc::UTF8)) {
+    if ((a == &mCodeUnitAlphabet) || (a == &cc::Byte) || (a == &cc::UTF8)) {
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, pb.createInFile(mCCCompiler.compileCC(cc, pb))));
     } else {
         nextPos = ScanToIndex(nextPos, u8Final(pb), pb);
         unsigned i = 0;
         while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
         if (i == mAlphabets.size()) {
-            llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, indexingAlphabet = " + mIndexingAlphabet.getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
+            llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, codeUnitAlphabet = " + mCodeUnitAlphabet.getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
         }
         return makeMarker(FinalMatchUnit, pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
@@ -249,7 +254,7 @@ MarkerType RE_Compiler::compileAssertion(Assertion * const a, MarkerType marker,
         else UnsupportedRE("Unsupported boundary assertion");
     }
     // Lookahead assertions.
-    auto lengths = getLengthRange(asserted, &mIndexingAlphabet);
+    auto lengths = getLengthRange(asserted, &mCodeUnitAlphabet);
     if (lengths.second == 0) {
         MarkerType lookahead = compile(asserted, pb);
         AlignMarkers(marker, lookahead, pb);
@@ -409,7 +414,7 @@ MarkerType RE_Compiler::processLowerBound(RE * const repeated, const int lb, Mar
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
-        auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
+        auto lengths = getLengthRange(repeated, &mCodeUnitAlphabet);
         int rpt = lb;
         if ((lengths.first == lengths.second) && isByteLength(repeated)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
@@ -462,7 +467,7 @@ MarkerType RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Mar
     if ((ub > 1) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableLog2BoundedRepetition))) {
         // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
-        auto lengths = getLengthRange(repeated, &mIndexingAlphabet);
+        auto lengths = getLengthRange(repeated, &mCodeUnitAlphabet);
         // TODO: handle fixed lengths > 1
         if ((lengths.first == lengths.second) && (lengths.first == 1)) {
             PabloAST * repeatMarks = markerVar(compile(repeated, pb));
@@ -613,10 +618,10 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
 
 RE_Compiler::RE_Compiler(PabloBlock * scope,
                          cc::CC_Compiler & ccCompiler,
-                         const cc::Alphabet & indexingAlphabet)
+                         const cc::Alphabet & codeUnitAlphabet)
 : mEntryScope(scope)
+, mCodeUnitAlphabet(codeUnitAlphabet)
 , mCCCompiler(ccCompiler)
-, mIndexingAlphabet(indexingAlphabet)
 , mWhileTest(nullptr)
 , mStarDepth(0)
 , mCompiledName(&mBaseMap) {

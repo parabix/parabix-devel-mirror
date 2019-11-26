@@ -53,7 +53,9 @@ public:
 
     RE_Compiler(pablo::PabloBlock * scope,
                 cc::CC_Compiler & ccCompiler,
-                const cc::Alphabet & indexingAlphabet = cc::Byte);
+                const cc::Alphabet & codeUnitAlphabet = cc::Byte);
+
+    void addIndexingAlphabet(const cc::Alphabet * a, pablo::PabloAST * idxStream);
     
     //
     // The CCs (character classes) within a regular expression are generally
@@ -141,10 +143,12 @@ private:
 private:
 
     pablo::PabloBlock * const                       mEntryScope;
+    const cc::Alphabet &                            mCodeUnitAlphabet;
+    const cc::Alphabet *                            mIndexingAlphabet;
+    pablo::PabloAST *                               mIndexStream;
     std::vector<cc::Alphabet *>                     mAlphabets;
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     cc::CC_Compiler &                               mCCCompiler;
-    const cc::Alphabet &                            mIndexingAlphabet;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
     NameMap *                                       mCompiledName;
