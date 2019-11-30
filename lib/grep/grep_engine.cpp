@@ -395,9 +395,7 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
     if (UnicodeSets.empty()) {
-        // All inputs will be externals.   Set the source to be u8index,
-        // to set the correct input length.
-        options->setSource(mU8index);
+        // All inputs will be externals.   Do not register a source stream.
         options->setRE(re);
     } else {
         auto mpx = std::make_shared<MultiplexedAlphabet>("mpx", UnicodeSets);

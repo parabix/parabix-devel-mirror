@@ -166,16 +166,26 @@ void GrepKernelOptions::addExternal(std::string name, StreamSet * strm, int offs
         llvm::report_fatal_error("Length and index stream parameters for grep externals not yet supported.");
     }
     if (offset == 0) {
-        mExternals.emplace_back(name, strm, FixedRate(), ZeroExtended());
+        if (mSource) {
+            mExternals.emplace_back(name, strm, FixedRate(), ZeroExtended());
+        } else {
+            mExternals.emplace_back(name, strm);
+        }
     } else {
-        std::initializer_list<Attribute> attrs{ZeroExtended(), LookAhead(offset)};
-        mExternals.emplace_back(name, strm, FixedRate(), attrs);
+        if (mSource) {
+            std::initializer_list<Attribute> attrs{ZeroExtended(), LookAhead(offset)};
+            mExternals.emplace_back(name, strm, FixedRate(), attrs);
+        } else {
+            mExternals.emplace_back(name, strm, FixedRate(), LookAhead(offset));
+        }
     }
 }
 
 Bindings GrepKernelOptions::streamSetInputBindings() {
     Bindings inputs;
-    inputs.emplace_back(mCodeUnitAlphabet->getName() + "_basis", mSource);
+    if (mSource) {
+        inputs.emplace_back(mCodeUnitAlphabet->getName() + "_basis", mSource);
+    }
     for (const auto & a : mAlphabets) {
         inputs.emplace_back(a.first->getName() + "_basis", a.second);
     }
@@ -205,11 +215,13 @@ Bindings GrepKernelOptions::scalarOutputBindings() {
 
 std::string GrepKernelOptions::getSignature() {
     if (mSignature == "") {
-        mSignature = std::to_string(mSource->getNumElements()) + "x" + std::to_string(mSource->getFieldWidth());
-        if (mSource->getFieldWidth() == 8) {
-            mSignature += ":" + std::to_string(grep::ByteCClimit);
+        if (mSource) {
+            mSignature = std::to_string(mSource->getNumElements()) + "x" + std::to_string(mSource->getFieldWidth());
+            if (mSource->getFieldWidth() == 8) {
+                mSignature += ":" + std::to_string(grep::ByteCClimit);
+            }
+            mSignature += "/" + mCodeUnitAlphabet->getName();
         }
-        mSignature += "/" + mCodeUnitAlphabet->getName();
         if (mEncodingTransformer) {
             mSignature += ":" + mEncodingTransformer->getIndexingAlphabet()->getName();
         }
@@ -249,8 +261,11 @@ std::string ICGrepKernel::makeSignature(BuilderRef) const {
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::unique_ptr<cc::CC_Compiler> ccc;
-    std::vector<pablo::PabloAST *> basis_set = getInputStreamSet(mOptions->mCodeUnitAlphabet->getName() + "_basis");
-    RE_Compiler re_compiler(getEntryScope(), basis_set, mOptions->mCodeUnitAlphabet);
+    RE_Compiler re_compiler(getEntryScope(), mOptions->mCodeUnitAlphabet);
+    if (mOptions->mSource) {
+        std::vector<pablo::PabloAST *> basis_set = getInputStreamSet(mOptions->mCodeUnitAlphabet->getName() + "_basis");
+        re_compiler.addAlphabet(mOptions->mCodeUnitAlphabet, basis_set);
+    }
     for (unsigned i = 0; i < mOptions->mAlphabets.size(); i++) {
         auto & alpha = mOptions->mAlphabets[i].first;
         auto basis = getInputStreamSet(alpha->getName() + "_basis");
@@ -286,8 +301,8 @@ void ICGrepKernel::generatePabloMethod() {
             basis[2*i] = scope1->createPackL(scope1->getInteger(2), bitpairs[i]);
             basis[2*i + 1] = scope1->createPackH(scope1->getInteger(2), bitpairs[i]);
         }
-
-        RE_Compiler re_compiler(scope1, basis, mOptions->mCodeUnitAlphabet);
+        RE_Compiler re_compiler(scope1, mOptions->mCodeUnitAlphabet);
+        re_compiler.addAlphabet(mOptions->mCodeUnitAlphabet, basis);
         scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
     } else {
         pb.createAssign(final_matches, re_compiler.compile(mOptions->mRE));

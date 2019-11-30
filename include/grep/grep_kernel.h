@@ -33,6 +33,7 @@ public:
     GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet = &cc::UTF8, re::EncodingTransformer * encodingTransformer = nullptr) :
         mCodeUnitAlphabet(codeUnitAlphabet),
         mEncodingTransformer(encodingTransformer),
+        mSource(nullptr),
         mCombiningType(GrepCombiningType::None),
         mPrefixRE(nullptr) {}
     void setIndexingTransformer(re::EncodingTransformer *, StreamSet * indexStream);

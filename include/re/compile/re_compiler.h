@@ -74,7 +74,6 @@ class RE_Compiler {
     };
 
     RE_Compiler(pablo::PabloBlock * scope,
-                std::vector<pablo::PabloAST *> basis_set,
                 const cc::Alphabet * codeUnitAlphabet = &cc::UTF8);
 
     void addIndexingAlphabet(EncodingTransformer * indexingTransformer, pablo::PabloAST * idxStream);

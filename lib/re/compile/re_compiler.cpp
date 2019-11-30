@@ -133,15 +133,18 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
     unsigned i = 0;
     while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
     if (i < mAlphabets.size()) {
+        //llvm::errs() << "Found alphabet: " << i << ", " << mAlphabets[i]->getName() << "\n";
         return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
-    if ((a == mCodeUnitAlphabet) || (a == &cc::Byte)) {
-        return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[0]->compileCC(cc, pb)));
-    }
     if (mIndexingTransformer && (a == mIndexingTransformer->getIndexingAlphabet())) {
+        //llvm::errs() << "Found indexing alphabet: " << i << ", " << mIndexingTransformer->getIndexingAlphabet()->getName() << "\n";
         Marker ccm = compile(mIndexingTransformer->transformRE(cc), pb);
         nextPos = ScanToIndex(nextPos, mIndexStream, pb);
         return makeMarker(pb.createAnd(nextPos, markerVar(ccm)));
+    }
+    if (a == &cc::Byte) {
+        //llvm::errs() << "Using alphabet 0: for Byte\n";
+        return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[0]->compileCC(cc, pb)));
     }
     llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, codeUnitAlphabet = " + mCodeUnitAlphabet->getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
 }
@@ -179,6 +182,7 @@ inline Marker RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
         return makeMarker(f->second, offset);
     }
     if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
+        //errs() << "compiling definition of name: " << nameString << ": " <<Printer_RE::PrintRE(name->getDefinition()) << "\n";
         m = compile(name->getDefinition(), pb);
         mCompiledName->add(name, m);
         return m;
@@ -614,7 +618,6 @@ LLVM_ATTRIBUTE_NORETURN void RE_Compiler::UnsupportedRE(std::string errmsg) {
 }
 
 RE_Compiler::RE_Compiler(PabloBlock * scope,
-                         std::vector<pablo::PabloAST *> basis_set,
                          const cc::Alphabet * codeUnitAlphabet)
 : mEntryScope(scope)
 , mCodeUnitAlphabet(codeUnitAlphabet)
@@ -624,7 +627,6 @@ RE_Compiler::RE_Compiler(PabloBlock * scope,
 , mCompiledName(&mBaseMap) {
     PabloBuilder pb(mEntryScope);
     mIndexStream = pb.createOnes();
-    addAlphabet(codeUnitAlphabet, basis_set);
 }
 
 } // end of namespace re
