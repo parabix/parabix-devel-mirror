@@ -10,52 +10,74 @@
 #include <vector>                       // for vector<>::iterator
 #include <boost/container/flat_map.hpp>
 #include <pablo/builder.hpp>
-#include <re/adt/re_seq.h>              // for Seq
+#include <re/adt/adt.h>              // for Seq
 #include <re/alphabet/alphabet.h>
+#include <re/transforms/to_utf8.h>
 
 namespace cc { class CC_Compiler; class Alphabet;}
 namespace pablo { class PabloAST; }
 namespace pablo { class PabloBlock; }
 namespace pablo { class Var; }
-namespace re { class Alt; }
-namespace re { class Assertion; }
-namespace re { class Diff; }
-namespace re { class Intersect; }
-namespace re { class Name; }
-namespace re { class RE; }
-namespace re { class Rep; }
-namespace re { class CC; }
-
-/*   Marker streams represent the results of matching steps.
-     Three types of marker streams are used internally.
-     FinalMatchUnit markers are used for character classes and
-     other strings identified by a one bit at their final position.
-     InitialPostPositionUnit markers are used to mark matches with
-     a 1 bit immediately after a match.   InitialPostPositionUnit markers
-     are generally required whenever a regular expression element
-     can match the empty string (e.g., * and ? repeated items).
-     FinalPostPositionUnit markers are used for single code unit
-     lookahead assertions.  
-*/
 
 namespace re {
 
 class RE_Compiler {
-public:
+    public:
 
-    enum MarkerPosition {FinalMatchUnit, InitialPostPositionUnit, FinalPostPositionUnit};
+/*   The regular expression compiler works in terms of two fundamental bit stream
+     concepts: index streams and marker streams.
 
-    struct MarkerType {
-        MarkerPosition pos;
+     Index streams mark positions corresponding to whole matching units.
+     For example, if the matching units are UTF-8 sequences, then the index
+     stream is identifies the last byte of each UTF-8 sequence denoting a single
+     Unicode codepoint.   If the matching units are UTF-16 sequences then the
+     index stream will have one bits on every UTF-16 code unit that denotes
+     a full Unicode character itself, as well as on the final code unit of
+     a surrogate pair.
+
+     Index streams may be defined with respect to a particular regular expression.
+     For example, an index stream with respect to an regular expression involved
+     in a bounded repetition may mark the last code unit of substrings matching
+     a so-called characteristic subexpression of the bounded repetition.
+     As a characteristic subexpression is a subexpression that must be matched
+     once and only once for the repetition, the index stream may be used to
+     count the number of repetitions.
+
+     If the unit of matching is defined in terms of code units (e.g., UTF-8 bytes
+     or UTF-16 double bytes) then the correspoinding index stream is the stream
+     of all one bits.
+
+     Marker streams represent the results of matching steps.
+     Markers have an offset with respect to compiled regular expressions.
+     Offset 0 means that each marker bit is placed at a position corresponding
+     to the last code unit of a matched substring.
+
+     Offsets are expressed with respect to an index stream.   An offset N > 0
+     means that the marker is placed N positions further along the index stream
+     than the last code unit of the matched substring.
+
+     An offset of 1 with an index stream of all ones means that marker stream
+     is placed on the code unit immediately after the last code unit matched.  The offset
+     1 naturally arises whenever a regular expression can match the empty string.
+
+     Non-zero offsets also arise in matching lookahead assertions.  For example,
+     Unicode boundary assertions such as word boundaries or grapheme cluster
+     boundaries typically involving lookahead at one or two Unicode characters.
+     If the underlying streams are based on UTF-8 code units, then the index
+     stream for such an offset is the the stream marking the final bytes of
+     UTF-8 code unit sequences.  */
+
+    struct Marker {
+        unsigned offset;
         pablo::PabloAST * stream;
-        MarkerType & operator =(const MarkerType &) = default;
+        Marker & operator =(const Marker &) = default;
     };
 
     RE_Compiler(pablo::PabloBlock * scope,
-                cc::CC_Compiler & ccCompiler,
-                const cc::Alphabet & codeUnitAlphabet = cc::Byte);
+                std::vector<pablo::PabloAST *> basis_set,
+                const cc::Alphabet * codeUnitAlphabet = &cc::UTF8);
 
-    void addIndexingAlphabet(const cc::Alphabet * a, pablo::PabloAST * idxStream);
+    void addIndexingAlphabet(EncodingTransformer * indexingTransformer, pablo::PabloAST * idxStream);
     
     //
     // The CCs (character classes) within a regular expression are generally
@@ -71,7 +93,7 @@ public:
     // the alphabet value and the set of parallel bit streams that comprise
     // a basis for the coded alphabet values.
 
-    void addAlphabet(cc::Alphabet * a, std::vector<pablo::PabloAST* > basis_set);
+    void addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAST* > basis_set);
 
     void addAlphabet(const std::shared_ptr<cc::Alphabet> & a, std::vector<pablo::PabloAST* > basis_set) {
         addAlphabet(a.get(), basis_set);
@@ -87,7 +109,7 @@ private:
 
     struct NameMap {
         NameMap(NameMap * parent = nullptr) : mParent(parent), mMap() {}
-        bool get(const Name * name, MarkerType & marker) const {
+        bool get(const Name * name, Marker & marker) const {
             auto f = mMap.find(name);
             if (f == mMap.end()) {
                 return mParent ? mParent->get(name, marker) : false;
@@ -96,59 +118,55 @@ private:
                 return true;
             }
         }
-        void add(const Name * const name, MarkerType marker) {
+        void add(const Name * const name, Marker marker) {
             mMap.emplace(name, std::move(marker));
         }
         NameMap * getParent() const { return mParent; }
     private:
         NameMap * const mParent;
-        boost::container::flat_map<const Name *, MarkerType> mMap;
+        boost::container::flat_map<const Name *, Marker> mMap;
     };
 
 
-    MarkerType compile(RE * re, pablo::PabloBuilder & pb);
-    MarkerType compile(RE * re, pablo::PabloAST * const cursors, pablo::PabloBuilder & pb);
+    Marker compile(RE * re, pablo::PabloBuilder & pb);
+    Marker compile(RE * re, pablo::PabloAST * const cursors, pablo::PabloBuilder & pb);
 
-    MarkerType process(RE * re, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileName(Name * name, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileCC(CC * cc, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileSeq(Seq * seq, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileAlt(Alt * alt, MarkerType base, pablo::PabloBuilder & pb);
-    MarkerType compileAssertion(Assertion * a, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileRep(Rep * rep, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileDiff(Diff * diff, MarkerType marker, pablo::PabloBuilder & cg);
-    MarkerType compileIntersect(Intersect * x, MarkerType marker, pablo::PabloBuilder & cg);
+    Marker process(RE * re, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileName(Name * name, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileCC(CC * cc, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileSeq(Seq * seq, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileSeqTail(Seq::const_iterator current, const Seq::const_iterator end, int matchLenSoFar, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileAlt(Alt * alt, Marker base, pablo::PabloBuilder & pb);
+    Marker compileAssertion(Assertion * a, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileRep(Rep * rep, Marker marker, pablo::PabloBuilder & pb);
+    Marker compileDiff(Diff * diff, Marker marker, pablo::PabloBuilder & cg);
+    Marker compileIntersect(Intersect * x, Marker marker, pablo::PabloBuilder & cg);
     pablo::PabloAST * consecutive_matches(pablo::PabloAST * repeated_j, int j, int repeat_count, const int match_length, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
     pablo::PabloAST * reachable(pablo::PabloAST * repeated, int length, int repeat_count, pablo::PabloAST * indexStream, pablo::PabloBuilder & pb);
     static bool isFixedLength(RE * regexp);
-    MarkerType processLowerBound(RE * repeated,  int lb, MarkerType marker, int ifGroupSize, pablo::PabloBuilder & pb);
-    MarkerType processUnboundedRep(RE * repeated, MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType processBoundedRep(RE * repeated, int ub, MarkerType marker, int ifGroupSize,  pablo::PabloBuilder & pb);
+    Marker processLowerBound(RE * repeated,  int lb, Marker marker, int ifGroupSize, pablo::PabloBuilder & pb);
+    Marker processUnboundedRep(RE * repeated, Marker marker, pablo::PabloBuilder & pb);
+    Marker processBoundedRep(RE * repeated, int ub, Marker marker, int ifGroupSize,  pablo::PabloBuilder & pb);
 
-    MarkerType compileName(Name * name, pablo::PabloBuilder & pb);
-    MarkerType compileStart(MarkerType marker, pablo::PabloBuilder & pb);
-    MarkerType compileEnd(MarkerType marker, pablo::PabloBuilder & pb);
+    Marker compileName(Name * name, pablo::PabloBuilder & pb);
+    Marker compileStart(Marker marker, pablo::PabloBuilder & pb);
+    Marker compileEnd(Marker marker, pablo::PabloBuilder & pb);
 
-    MarkerType AdvanceMarker(MarkerType marker, const MarkerPosition newpos, pablo::PabloBuilder & pb);
-    void AlignMarkers(MarkerType & m1, MarkerType & m2, pablo::PabloBuilder & pb);
+    Marker AdvanceMarker(Marker marker, const unsigned newpos, pablo::PabloBuilder & pb);
+    void AlignMarkers(Marker & m1, Marker & m2, pablo::PabloBuilder & pb);
     
-    pablo::PabloAST * u8NonFinal(pablo::PabloBuilder & pb);
-    pablo::PabloAST * u8Final(pablo::PabloBuilder & pb);
-
-    static inline MarkerPosition markerPos(const MarkerType & m) {return m.pos; }
-    static inline pablo::PabloAST * markerVar(const MarkerType & m) {return m.stream; }
-    static inline MarkerType makeMarker(MarkerPosition newpos, pablo::PabloAST * strm) {return {newpos, strm};}
+    static inline unsigned markerOffset(const Marker & m) {return m.offset; }
+    static inline pablo::PabloAST * markerVar(const Marker & m) {return m.stream; }
+    static inline Marker makeMarker(pablo::PabloAST * strm, unsigned offset=0) {return {offset, strm};}
 
 private:
 
     pablo::PabloBlock * const                       mEntryScope;
-    const cc::Alphabet &                            mCodeUnitAlphabet;
-    const cc::Alphabet *                            mIndexingAlphabet;
+    const cc::Alphabet *                            mCodeUnitAlphabet;
+    EncodingTransformer *                           mIndexingTransformer;
     pablo::PabloAST *                               mIndexStream;
-    std::vector<cc::Alphabet *>                     mAlphabets;
+    std::vector<const cc::Alphabet *>                     mAlphabets;
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
-    cc::CC_Compiler &                               mCCCompiler;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;
     NameMap *                                       mCompiledName;

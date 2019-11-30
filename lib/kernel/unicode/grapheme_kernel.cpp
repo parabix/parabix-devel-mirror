@@ -36,7 +36,7 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
     UCD::UCDCompiler unicodeCompiler(ccc);
-    re::RE_Compiler re_compiler(getEntryScope(), ccc);
+    re::RE_Compiler re_compiler(getEntryScope(), getInputStreamSet("basis"), &cc::UTF8);
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     std::set<re::Name *> externals;
     re::gatherNames(GCB, externals);

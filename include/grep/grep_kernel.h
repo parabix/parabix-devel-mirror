@@ -7,6 +7,7 @@
 
 #include <pablo/pablo_kernel.h>  // for PabloKernel
 #include <re/alphabet/alphabet.h>
+#include <re/transforms/to_utf8.h>
 #include <kernel/pipeline/pipeline_builder.h>
 
 namespace IDISA { class IDISA_Builder; }
@@ -29,12 +30,12 @@ class GrepKernelOptions {
     friend class ICGrepKernel;
 public:
     using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
-    GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet = &cc::Byte) :
+    GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet = &cc::UTF8, re::EncodingTransformer * encodingTransformer = nullptr) :
         mCodeUnitAlphabet(codeUnitAlphabet),
-        mIndexingAlphabet(codeUnitAlphabet),
+        mEncodingTransformer(encodingTransformer),
         mCombiningType(GrepCombiningType::None),
         mPrefixRE(nullptr) {}
-    void setIndexingAlphabet(const cc::Alphabet * a, StreamSet * indexStream);
+    void setIndexingTransformer(re::EncodingTransformer *, StreamSet * indexStream);
     void setSource(StreamSet * s);
     void setCombiningStream(GrepCombiningType t, StreamSet * toCombine);
     void setResults(StreamSet * r);
@@ -54,8 +55,8 @@ protected:
 
 private:
     const cc::Alphabet * mCodeUnitAlphabet;
+    re::EncodingTransformer * mEncodingTransformer;
     StreamSet * mSource;
-    const cc::Alphabet * mIndexingAlphabet;
     StreamSet * mIndexStream;
     GrepCombiningType mCombiningType;
     StreamSet * mCombiningStream;
@@ -78,29 +79,6 @@ public:
 protected:
     void generatePabloMethod() override;
     std::unique_ptr<GrepKernelOptions> mOptions;
-};
-
-struct ByteBitGrepSignature {
-    ByteBitGrepSignature(re::RE * prefix, re::RE * suffix);
-protected:
-    re::RE * const  mPrefixRE;
-    re::RE * const  mSuffixRE;
-    std::string     mSignature;
-};
-
-
-class ByteBitGrepKernel : public ByteBitGrepSignature, public pablo::PabloKernel {
-    using Externals = std::vector<std::pair<std::string, StreamSet *>>;
-public:
-    ByteBitGrepKernel(BuilderRef iBuilder, re::RE * const prefix, re::RE * const suffix, StreamSet * const Source, StreamSet * const MatchResults,
-                      const Externals externals = {});
-    std::string makeSignature(BuilderRef) const override;
-    bool isCachable() const override { return true; }
-    bool hasFamilyName() const override { return true; }
-private:
-    static Bindings makeInputBindings(StreamSet * const source, const Externals & externals);
-protected:
-    void generatePabloMethod() override;
 };
 
 class MatchedLinesKernel : public pablo::PabloKernel {
@@ -156,6 +134,7 @@ private:
 };
 
 void GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P,
+                          re::UTF8_Transformer * t,
                           StreamSet * Source, StreamSet * U8index, StreamSet * GCBstream);
 
 }
