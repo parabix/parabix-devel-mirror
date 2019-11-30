@@ -9,15 +9,11 @@
 #include <re/adt/adt.h>
 #include <unicode/core/unicode_set.h>
 #include <unicode/utf/UTF.h>
+#include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
 
 namespace re {
-class UTF8_Transformer : public RE_Transformer {
-public:
-    UTF8_Transformer(NameTransformationMode m = NameTransformationMode::None) : RE_Transformer("ToUTF8", m) {}
-    RE * transformCC(CC * cc) override;
-};
 
 static RE * rangeCodeUnits(codepoint_t lo, codepoint_t hi, unsigned index, const unsigned lgth){
     const codepoint_t hunit = UTF<8>::nthCodeUnit(hi, index);
@@ -65,10 +61,12 @@ RE * UTF8_Transformer::transformCC(CC * cc) {
     return makeAlt(alt.begin(), alt.end());
 }
 
+UTF8_Transformer::UTF8_Transformer(NameTransformationMode m) :
+    EncodingTransformer("ToUTF8", &cc::Unicode, &cc::UTF8, m) {}
+
 RE * toUTF8(RE * r, bool convertName) {
     const auto mode = convertName ? NameTransformationMode::TransformDefinition : NameTransformationMode::None;
     return UTF8_Transformer(mode).transformRE(r);
 }
 
 }
-
