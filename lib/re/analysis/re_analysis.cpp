@@ -99,58 +99,6 @@ const CC* matchableCodepoints(const RE * re) {
     return makeCC(); // otherwise = Start, End, Assertion
 }
 
-bool isByteLength(const RE * re) {
-    if (const Alt * alt = dyn_cast<Alt>(re)) {
-        for (const RE * re : *alt) {
-            if (!isByteLength(re)) {
-                return false;
-            }
-        }
-        return true;
-    } else if (const Seq * seq = dyn_cast<Seq>(re)) {
-        bool byteLengthSeen = false;
-        for (const RE * e : *seq) {
-            if (isa<Assertion>(e)) continue;
-            else if (byteLengthSeen) return false;
-            else if (isByteLength(e)) byteLengthSeen = true;
-            else return false;
-        }
-        return byteLengthSeen;
-    } else if (const Rep * rep = dyn_cast<Rep>(re)) {
-        return (rep->getLB() == 1) && (rep->getUB() == 1) && isByteLength(rep->getRE());
-    } else if (const Diff * diff = dyn_cast<Diff>(re)) {
-        return isByteLength(diff->getLH());
-    } else if (const Intersect * e = dyn_cast<Intersect>(re)) {
-        return isByteLength(e->getLH()) || isByteLength(e->getRH());
-    } else if (const CC * cc = dyn_cast<CC>(re)) {
-        if (cc->empty()) return false;
-        const cc::Alphabet * a = cc->getAlphabet();
-        if (a == &cc::Unicode) {
-            return (cc->max_codepoint() <= 0x7F);
-        } else if (a == &cc::Byte) {
-            return true;
-        } else if (a == &cc::UTF8) {
-            return true;
-        } else if (isa<cc::MultiplexedAlphabet>(a)) {
-            const cc::Alphabet * srcA = cast<cc::MultiplexedAlphabet>(a)->getSourceAlphabet();
-            if (srcA == &cc::Byte) {
-                return true;
-            } else if (cc->sourceCC) {
-                return isByteLength(cc->sourceCC);
-//            } else if (srcA == &cc::Unicode) {
-//                return cast<cc::MultiplexedAlphabet>(a)->invertCC(cc)->max_codepoint() <= 0x7F;
-            } else return (a == &cc::Byte);
-        }
-        return false;
-    } else if (const Name * n = dyn_cast<Name>(re)) {
-        if (n->getType() == Name::Type::ZeroWidth) {
-            return false;
-        }
-        return isByteLength(n->getDefinition());
-    }
-    return false; // otherwise
-}
-
 bool isUnicodeUnitLength(const RE * re) {
     if (const Alt * alt = dyn_cast<Alt>(re)) {
         for (const RE * re : *alt) {

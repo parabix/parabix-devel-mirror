@@ -16,8 +16,6 @@ bool matchesEmptyString(const RE * re);
 //  codepoint value is cp.
 const CC * matchableCodepoints(const RE * re);
 
-bool isByteLength(const RE * re);
-
 bool isUnicodeUnitLength(const RE * re);
 
 std::pair<int, int> getLengthRange(const RE * re, const cc::Alphabet * indexingAlphabet);

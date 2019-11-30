@@ -18,7 +18,7 @@
 #include <re/cc/multiplex_CCs.h>
 #include <re/cc/cc_compiler.h>
 #include <re/transforms/to_utf8.h>
-#include <re/analysis/re_analysis.h>     // for isByteLength, isUnicodeUnitLength
+#include <re/analysis/re_analysis.h>
 #include <re/analysis/re_local.h>
 #include <re/toolchain/toolchain.h>
 #include <re/ucd/ucd_compiler.hpp>
@@ -152,16 +152,26 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
 inline Marker RE_Compiler::compileName(Name * const name, Marker marker, PabloBuilder & pb) {
     const auto & nameString = name->getName();
     Marker nameMarker = compileName(name, pb);
-    if (isByteLength(name)) {
-        Marker nextPos = AdvanceMarker(marker, 1, pb);
-        nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
+    auto lengths = getLengthRange(name, mCodeUnitAlphabet);
+    if ((lengths.first == 1) && (lengths.second == 1)) {
+        PabloAST * nextPos = markerVar(marker);
+        if (marker.offset == 0) {
+            nextPos = pb.createAdvance(nextPos, 1);
+        }
+        nameMarker.stream = pb.createAnd(nextPos, markerVar(nameMarker), name->getName());
         return nameMarker;
-    } else if (isUnicodeUnitLength(name)) {
-        Marker nextPos = AdvanceMarker(marker, 1, pb);
-        PabloAST * cursor = ScanToIndex(markerVar(nextPos), mIndexStream, pb);
-        nameMarker.stream = pb.createAnd(cursor, markerVar(nameMarker), name->getName());
-        return nameMarker;
-    } else if (name->getType() == Name::Type::ZeroWidth) {
+    }
+    if (mIndexingTransformer) {
+        auto lengths = getLengthRange(name, mIndexingTransformer->getIndexingAlphabet());
+        //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+        if ((lengths.first == 1) && (lengths.second == 1)) {
+            Marker nextPos = AdvanceMarker(marker, 1, pb);
+            PabloAST * cursor = ScanToIndex(markerVar(nextPos), mIndexStream, pb);
+            nameMarker.stream = pb.createAnd(cursor, markerVar(nameMarker), name->getName());
+            return nameMarker;
+        }
+    }
+    if (name->getType() == Name::Type::ZeroWidth) {
         AlignMarkers(marker, nameMarker, pb);
         PabloAST * ze = markerVar(nameMarker);
         return makeMarker(pb.createAnd(markerVar(marker), ze, "zerowidth"), markerOffset(marker));
@@ -435,8 +445,9 @@ Marker RE_Compiler::processLowerBound(RE * const repeated, const int lb, Marker 
         // Check for a regular expression that satisfies on of the special conditions that
         // allow implementation using the log2 technique.
         auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
+        //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
         int rpt = lb;
-        if ((lengths.first == lengths.second) && isByteLength(repeated)) {
+        if ((lengths.first == 1) && (lengths.second == 1)) {
             PabloAST * cc = markerVar(compile(repeated, pb));
             if (markerOffset(marker) != 0) {
                 marker = makeMarker(pb.createAnd(cc, markerVar(marker)));
@@ -447,16 +458,20 @@ Marker RE_Compiler::processLowerBound(RE * const repeated, const int lb, Marker 
             PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), lb_lgth, "marker_fwd");
             return makeMarker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
-        else if (isUnicodeUnitLength(repeated)) {
-            PabloAST * cc = markerVar(compile(repeated, pb));
-            PabloAST * cursor = markerVar(marker);
-            if (markerOffset(marker) != 0) {
-                cursor = pb.createAnd(cc, pb.createScanTo(markerVar(marker), mIndexStream));
-                rpt -= 1;
+        if (mIndexingTransformer) {
+            auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
+            //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+            if ((lengths.first == 1) && (lengths.second == 1)) {
+                PabloAST * cc = markerVar(compile(repeated, pb));
+                PabloAST * cursor = markerVar(marker);
+                if (markerOffset(marker) != 0) {
+                    cursor = pb.createAnd(cc, pb.createScanTo(markerVar(marker), mIndexStream));
+                    rpt -= 1;
+                }
+                PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, mIndexStream, pb);
+                PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, mIndexStream, rpt);
+                return makeMarker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
             }
-            PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, mIndexStream, pb);
-            PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, mIndexStream, rpt);
-            return makeMarker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
@@ -489,7 +504,7 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
         // allow implementation using the log2 technique.
         auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
         // TODO: handle fixed lengths > 1
-        if ((lengths.first == lengths.second) && (lengths.first == 1)) {
+        if ((lengths.first == 1) && (lengths.second == 1)) {
             PabloAST * repeatMarks = markerVar(compile(repeated, pb));
             // log2 upper bound for fixed length (=1) class
             // Create a mask of positions reachable within ub from current marker.
@@ -500,16 +515,20 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
             PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
             return makeMarker(bounded);
         }
-        else if (isUnicodeUnitLength(repeated)) {
-            PabloAST * repeatMarks = markerVar(compile(repeated, pb));
-            // For a regexp which represent a single Unicode codepoint, we can use the mIndexStream stream
-            // as an index stream for an indexed advance operation.
-            PabloAST * cursor = markerVar(marker);
-            PabloAST * upperLimitMask = reachable(cursor, 1, ub, mIndexStream, pb);
-            PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
-            masked = pb.createOr(masked, pb.createNot(mIndexStream));
-            PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
-            return makeMarker(bounded);
+        if (mIndexingTransformer) {
+            auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
+            //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+            if ((lengths.first == 1) && (lengths.second == 1)) {
+                PabloAST * repeatMarks = markerVar(compile(repeated, pb));
+                // For a regexp which represent a single Unicode codepoint, we can use the mIndexStream stream
+                // as an index stream for an indexed advance operation.
+                PabloAST * cursor = markerVar(marker);
+                PabloAST * upperLimitMask = reachable(cursor, 1, ub, mIndexStream, pb);
+                PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
+                masked = pb.createOr(masked, pb.createNot(mIndexStream));
+                PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
+                return makeMarker(bounded);
+            }
         }
     }
     // Fall through to general case.  Process the first item and insert the rest into an if-structure.
@@ -537,17 +556,28 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
 Marker RE_Compiler::processUnboundedRep(RE * const repeated, Marker marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
     PabloAST * base = markerVar(AdvanceMarker(marker, 1, pb));
-    if (isByteLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
-        PabloAST * mask = markerVar(compile(repeated, pb));
-        // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
-        PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
-        return makeMarker(unbounded, 1);
-    } else if (isUnicodeUnitLength(repeated) && LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
-        PabloAST * mask = markerVar(compile(repeated, pb));
-        mask = pb.createOr(mask, pb.createNot(mIndexStream));
-        PabloAST * unbounded = pb.createMatchStar(base, mask);
-        return makeMarker(pb.createAnd(unbounded, pb.createNot(pb.createAdvance(pb.createNot(mIndexStream), 1)), "unbounded"), 1);
-    } else if (mStarDepth > 0){
+    if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
+        auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
+        //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+        if ((lengths.first == 1) && (lengths.second == 1)) {
+            PabloAST * mask = markerVar(compile(repeated, pb));
+            mask = pb.createOr(mask, pb.createNot(mIndexStream));
+            // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
+            PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
+            return makeMarker(pb.createAnd(unbounded, mIndexStream, "unbounded"), 1);
+        }
+        if (mIndexingTransformer) {
+            auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
+            //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
+            if ((lengths.first == 1) && (lengths.second == 1)) {
+                PabloAST * mask = markerVar(compile(repeated, pb));
+                mask = pb.createOr(mask, pb.createNot(mIndexStream));
+                PabloAST * unbounded = pb.createMatchStar(base, mask);
+                return makeMarker(pb.createAnd(unbounded, mIndexStream, "unbounded"), 1);
+            }
+        }
+    }
+    if (mStarDepth > 0){
         PabloBuilder * const outer = pb.getParent();
         Var * starPending = outer->createVar("pending", outer->createZeroes());
         Var * starAccum = outer->createVar("accum", outer->createZeroes());
