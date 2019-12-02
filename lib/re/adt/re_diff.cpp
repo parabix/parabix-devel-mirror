@@ -12,7 +12,10 @@ namespace re {
 
 RE * makeDiff(RE * lh, RE * rh) {
     if (lh == rh) return makeEmptySet();
-    if (isEmptySeq(lh)) {
+    if (LLVM_UNLIKELY(isEmptySet(rh))) {
+        return lh;
+    } else if (isEmptySeq(lh)) {
+        if (isEmptySeq(rh)) return makeEmptySet();
         if (isa<Rep>(rh) && (cast<Rep>(rh)->getLB() == 0)) return makeEmptySet();
         if (isa<CC>(rh) || isa<Seq>(rh)) return lh;
     } else if (LLVM_UNLIKELY(isEmptySet(rh))) {
