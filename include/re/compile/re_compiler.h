@@ -164,7 +164,8 @@ private:
     const cc::Alphabet *                            mCodeUnitAlphabet;
     EncodingTransformer *                           mIndexingTransformer;
     pablo::PabloAST *                               mIndexStream;
-    std::vector<const cc::Alphabet *>                     mAlphabets;
+    std::vector<const cc::Alphabet *>               mAlphabets;
+    std::vector<std::vector<pablo::PabloAST *>>     mBasisSets;
     std::vector<std::unique_ptr<cc::CC_Compiler>>   mAlphabetCompilers;
     pablo::PabloAST *                               mWhileTest;
     int                                             mStarDepth;

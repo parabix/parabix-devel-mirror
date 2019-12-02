@@ -255,7 +255,7 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
         }
     }
     if (hasComponent(mInternalComponents, Component::MoveMatchesToEOL)) {
-        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), mBreakCC);
+        re::RE * notBreak = re::makeDiff(re::makeByte(0x00, 0xFF), toUTF8(mBreakCC));
         for (unsigned i = 0; i < mREs.size(); ++i) {
             if (!hasEndAnchor(mREs[i])) {
                 mREs[i] = re::makeSeq({mREs[i], re::makeRep(notBreak, 0, re::Rep::UNBOUNDED_REP), makeNegativeLookAheadAssertion(notBreak)});

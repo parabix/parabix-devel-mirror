@@ -39,6 +39,7 @@ PabloAST * ScanToIndex(PabloAST * cursor, PabloAST * indexStrm, PabloBuilder & p
 
 void RE_Compiler::addAlphabet(const cc::Alphabet * a, std::vector<pablo::PabloAST *> basis_set) {
     mAlphabets.push_back(a);
+    mBasisSets.push_back(basis_set);
     bool useDirectCC = basis_set[0]->getType()->getVectorElementType()->getIntegerBitWidth() > 1;
     std::unique_ptr<cc::CC_Compiler> ccc;
     if (useDirectCC) {
@@ -85,7 +86,7 @@ inline Marker RE_Compiler::compile(RE * const re, PabloAST * const cursors, Pabl
 }
 
 inline Marker RE_Compiler::compile(RE * const re, PabloBuilder & pb) {
-    return process(re, makeMarker(pb.createOnes(), 1), pb);
+    return process(re, makeMarker(mIndexStream, 1), pb);
 }
 
 Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
@@ -126,24 +127,38 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
         return makeMarker(pb.createZeroes());
     }
     PabloAST * nextPos = markerVar(marker);
-    if (marker.offset == 0) {
-        nextPos = pb.createAdvance(nextPos, 1);
-    }
     const cc::Alphabet * a = cc->getAlphabet();
     unsigned i = 0;
     while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
     if (i < mAlphabets.size()) {
         //llvm::errs() << "Found alphabet: " << i << ", " << mAlphabets[i]->getName() << "\n";
+        if (marker.offset == 0) {
+            nextPos = pb.createAdvance(nextPos, 1);
+        }
         return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
     if (mIndexingTransformer && (a == mIndexingTransformer->getIndexingAlphabet())) {
         //llvm::errs() << "Found indexing alphabet: " << i << ", " << mIndexingTransformer->getIndexingAlphabet()->getName() << "\n";
-        Marker ccm = compile(mIndexingTransformer->transformRE(cc), pb);
-        nextPos = ScanToIndex(nextPos, mIndexStream, pb);
-        return makeMarker(pb.createAnd(nextPos, markerVar(ccm)));
+        const cc::Alphabet * encodingAlphabet = mIndexingTransformer->getEncodingAlphabet();
+        unsigned i = 0;
+        while (i < mAlphabets.size() && (encodingAlphabet != mAlphabets[i])) i++;
+        if (i < mAlphabets.size()) {
+            RE_Compiler code_unit_compiler(pb.getPabloBlock(), mIndexingTransformer->getEncodingAlphabet());
+            code_unit_compiler.addAlphabet(encodingAlphabet, mBasisSets[i]);
+            PabloAST * ccm = code_unit_compiler.compile(mIndexingTransformer->transformRE(cc));
+            if (marker.offset == 0) {
+                nextPos = pb.createIndexedAdvance(nextPos, mIndexStream, 1);
+            }
+            return makeMarker(pb.createAnd(nextPos, ccm, cc->canonicalName()));
+        } else {
+            llvm::report_fatal_error("EncodingAlphabet " + encodingAlphabet->getName() + " not registered!\n");
+        }
     }
     if (a == &cc::Byte) {
         //llvm::errs() << "Using alphabet 0: for Byte\n";
+        if (marker.offset == 0) {
+            nextPos = pb.createAdvance(nextPos, 1);
+        }
         return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[0]->compileCC(cc, pb)));
     }
     llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, codeUnitAlphabet = " + mCodeUnitAlphabet->getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
@@ -166,8 +181,8 @@ inline Marker RE_Compiler::compileName(Name * const name, Marker marker, PabloBu
         //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
         if ((lengths.first == 1) && (lengths.second == 1)) {
             Marker nextPos = AdvanceMarker(marker, 1, pb);
-            PabloAST * cursor = ScanToIndex(markerVar(nextPos), mIndexStream, pb);
-            nameMarker.stream = pb.createAnd(cursor, markerVar(nameMarker), name->getName());
+            //PabloAST * cursor = ScanToIndex(markerVar(nextPos), mIndexStream, pb);
+            nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
             return nameMarker;
         }
     }
@@ -616,8 +631,8 @@ Marker RE_Compiler::processUnboundedRep(RE * const repeated, Marker marker, Pabl
 
 inline Marker RE_Compiler::compileStart(Marker marker, pablo::PabloBuilder & pb) {
     PabloAST * const SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
-    //Marker m = AdvanceMarker(marker, 1, pb);
-    return makeMarker(pb.createAnd(markerVar(marker), SOT, "SOT"), 1);
+    Marker m = AdvanceMarker(marker, 1, pb);
+    return makeMarker(pb.createAnd(markerVar(m), SOT, "SOT"), 1);
 }
 
 inline Marker RE_Compiler::compileEnd(Marker marker, pablo::PabloBuilder & pb) {
