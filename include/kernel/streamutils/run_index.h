@@ -17,18 +17,22 @@ namespace kernel {
     An overflow bit stream may also be added as an output parameter, in which
     case this stream will mark all those positions within runs that are
     indexed above 2^K - 1.
+ 
+    If the invert parameter is set to true, then the run indexes are
+    calculated for runs of 0 bits.
 */
 
 class RunIndex : public pablo::PabloKernel {
 public:
     RunIndex(BuilderRef b,
-               StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow = nullptr);
+               StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow = nullptr, bool invert = false);
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 private:
     unsigned mIndexCount;
     bool mOverflow;
+    bool mInvertMask;
 };
 
 }

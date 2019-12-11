@@ -15,6 +15,7 @@ SRC
     stream_select.cpp
     stream_shift.cpp
     streams_merge.cpp
+    string_insert.cpp
     swizzle.cpp
     swizzled_multiple_pdep_kernel.cpp
     until_n.cpp

@@ -20,21 +20,23 @@ Bindings RunIndexOutputBindings(StreamSet * runIndex, StreamSet * overflow) {
 }
     
 RunIndex::RunIndex(BuilderRef b,
-                   StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow)
-    : PabloKernel(b, "RunIndex-" + std::to_string(runIndex->getNumElements()) + (overflow == nullptr ? "" : "overflow"),
+                   StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow, bool invert)
+    : PabloKernel(b, "RunIndex-" + std::to_string(runIndex->getNumElements()) + (overflow == nullptr ? "" : "overflow") + (invert ? "" : "_invert"),
            // input
 {Binding{"runMarks", runMarks}},
            // output
 RunIndexOutputBindings(runIndex, overflow)),
 mIndexCount(runIndex->getNumElements()),
-mOverflow(overflow != nullptr) {
+mOverflow(overflow != nullptr),
+mInvertMask(invert) {
     assert(mIndexCount > 0);
     assert(mIndexCount <= 5);
 }
 
 void RunIndex::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    Var * runMarks = pb.createExtract(getInputStreamVar("runMarks"), pb.getInteger(0));
+    Var * runMarksVar = pb.createExtract(getInputStreamVar("runMarks"), pb.getInteger(0));
+    PabloAST * runMarks = mInvertMask ? pb.createInFile(pb.createNot(runMarksVar)) : runMarksVar;
     PabloAST * runStart = pb.createAnd(runMarks, pb.createAdvance(pb.createNot(runMarks), 1), "runStart");
     PabloAST * selectZero = runMarks;
     PabloAST * outputEnable = runMarks;
