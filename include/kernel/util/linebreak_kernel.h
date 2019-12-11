@@ -76,4 +76,13 @@ protected:
     UnterminatedLineAtEOF mEOFmode;
 };
 
+class LineStartsKernel final : public pablo::PabloKernel {
+public:
+    LineStartsKernel(BuilderRef b, kernel::StreamSet * LineEnds, kernel::StreamSet * LineStarts);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
 #endif
