@@ -85,4 +85,13 @@ protected:
     void generatePabloMethod() override;
 };
 
+class LineSpansKernel final : public pablo::PabloKernel {
+public:
+    LineSpansKernel(BuilderRef b, kernel::StreamSet * LineStarts, kernel::StreamSet * LineEnds, kernel::StreamSet * LineSpans);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
 #endif

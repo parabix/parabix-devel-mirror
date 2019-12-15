@@ -346,3 +346,16 @@ void LineStartsKernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(getOutputStreamVar("LineEnds"), 0), lineStarts);
 }
 
+LineSpansKernel::LineSpansKernel(BuilderRef b, StreamSet * LineStarts, StreamSet * LineEnds, StreamSet * LineSpans)
+: PabloKernel(b, "LineSpans",
+              {Binding{"LineStarts", LineStarts}, Binding{"LineEnds", LineEnds}},
+              {Binding{"LineSpans", LineSpans}}) {}
+
+void LineSpansKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    PabloAST * lineStarts = getInputStreamSet("LineStarts")[0];
+    PabloAST * lineEnds = getInputStreamSet("LineEnds")[0];
+    PabloAST * lineSpans = pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {lineStarts, lineEnds});
+    pb.createAssign(pb.createExtract(getOutputStreamVar("LineSpans"), 0), lineSpans);
+}
+
