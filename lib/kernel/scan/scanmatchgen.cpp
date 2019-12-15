@@ -251,7 +251,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.
     Value * dropMatch = b->CreateResetLowestBit(theMatchWord, "dropMatch");
-    Value * thisWordDone = b->CreateICmpEQ(dropMatch, sz_ZERO);
+    Value * thisWordDone = b->CreateIsNull(dropMatch);
     // There may be more matches in the match mask.
     Value * resetMatchMask = b->CreateResetLowestBit(matchMaskPhi, "nextMatchMask");
     Value * nextMatchMask = b->CreateSelect(thisWordDone, resetMatchMask, matchMaskPhi);
@@ -433,7 +433,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     b->SetInsertPoint(strideMasksReady);
     // If there are no breaks in the stride, there are no matches.   We can move on to
     // the next stride immediately.
-    b->CreateUnlikelyCondBr(b->CreateICmpEQ(breakMask, sz_ZERO), strideCoordinatesDone, updateLineInfo);
+    b->CreateUnlikelyCondBr(b->CreateIsNull(breakMask), strideCoordinatesDone, updateLineInfo);
 
     b->SetInsertPoint(updateLineInfo);
     // We have at least one line break.   Determine the end-of-stride line start position
@@ -458,7 +458,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     // can immediately move on to the next stride.
     // We optimize for the case of no matches; the cost of the branch penalty
     // is expected to be small relative to the processing of each match.
-    b->CreateLikelyCondBr(b->CreateICmpEQ(matchMask, sz_ZERO), strideCoordinatesDone, strideCoordinateLoop);
+    b->CreateLikelyCondBr(b->CreateIsNull(matchMask), strideCoordinatesDone, strideCoordinateLoop);
 
     // Precondition: we have at least one more match to process.
     b->SetInsertPoint(strideCoordinateLoop);
@@ -474,7 +474,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     Value * matchWordIdx = b->CreateCountForwardZeroes(matchMaskPhi, "matchWordIdx");
     Value * nextMatchWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(matchWordBasePtr, matchWordIdx)), sizeTy);
     Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
-    Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
+    Value * theMatchWord = b->CreateSelect(b->CreateIsNull(matchWordPhi), nextMatchWord, matchWordPhi);
     Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
     Value * matchEndPosInWord = b->CreateCountForwardZeroes(theMatchWord);
     Value * matchEndPos = b->CreateAdd(matchWordPos, matchEndPosInWord, "matchEndPos");
@@ -521,7 +521,7 @@ void MatchCoordinatesKernel::generateMultiBlockLogic(BuilderRef b, Value * const
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.
     Value * dropMatch = b->CreateResetLowestBit(theMatchWord);
-    Value * thisWordDone = b->CreateICmpEQ(dropMatch, sz_ZERO);
+    Value * thisWordDone = b->CreateIsNull(dropMatch);
     // There may be more matches in the match mask.
     Value * nextMatchMask = b->CreateSelect(thisWordDone, b->CreateResetLowestBit(matchMaskPhi), matchMaskPhi);
     BasicBlock * currentBB = b->GetInsertBlock();
@@ -643,6 +643,217 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
 
     b->SetInsertPoint(scanReturn);
 
+}
+
+MatchFilterKernel::MatchFilterKernel(BuilderRef b,
+                                     StreamSet * const MatchStarts, StreamSet * const LineBreakStream,
+                                     StreamSet * const InputStream, StreamSet * Output, unsigned strideBlocks)
+: MultiBlockKernel(b, "matchFilter" + std::to_string(strideBlocks),
+{Binding{"matchStarts", MatchStarts}, Binding{"lineBreak", LineBreakStream}, Binding{"InputStream", InputStream}},
+{Binding{"Output", Output, BoundedRate(0,1)}},
+{},
+{},
+{InternalScalar{b->getInt1Ty(), "pendingMatch"}}) {
+    // The stride size must be limited so that the scanword mask is a single size_t value.
+    setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+    assert (Matches->getNumElements() == 1);
+    assert (LineBreakStream->getNumElements() == 1);
+}
+
+void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+    // Determine the parameters for two-level scanning.
+    ScanWordParameters sw(b, mStride);
+
+    Constant * sz_STRIDE = b->getSize(mStride);
+    Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
+    Constant * sz_ZERO = b->getSize(0);
+    Constant * sz_ONE = b->getSize(1);
+    Type * sizeTy = b->getSizeTy();
+
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
+    BasicBlock * const stridePrecomputation = b->CreateBasicBlock("stridePrecomputation");
+    BasicBlock * const strideMasksReady = b->CreateBasicBlock("strideMasksReady");
+    BasicBlock * const strideMatchProcessing = b->CreateBasicBlock("strideMatchProcessing");
+    BasicBlock * const strideMatchLoop = b->CreateBasicBlock("strideMatchLoop");
+    BasicBlock * const pendingMatchProcessing = b->CreateBasicBlock("pendingMatchProcessing");
+    BasicBlock * const strideInitialMatch = b->CreateBasicBlock("strideInitialMatch");
+    BasicBlock * const inStrideMatch = b->CreateBasicBlock("inStrideMatch");
+    BasicBlock * const strideEndMatch = b->CreateBasicBlock("strideEndMatch");
+    BasicBlock * const strideMatchesDone = b->CreateBasicBlock("strideMatchesDone");
+    BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
+
+    Value * const initialPos = b->getProcessedItemCount("matchStarts");
+    Value * const pendingMatch = b->getScalarField("pendingMatch");
+    Value * const initialProduced = b->getProducedItemCount("Output");
+    Value * const avail = b->getAvailableItemCount("InputStream");
+    b->CreateBr(stridePrologue);
+
+    b->SetInsertPoint(stridePrologue);
+    // Set up the loop variables as PHI nodes at the beginning of each stride.
+    PHINode * const strideNo = b->CreatePHI(sizeTy, 3);
+    strideNo->addIncoming(sz_ZERO, entryBlock);
+    PHINode * const pendingMatchPhi = b->CreatePHI(pendingMatch->getType(), 3, "pendingMatchPhi");
+    pendingMatchPhi->addIncoming(pendingMatch, entryBlock);
+    PHINode * const strideProducedPhi = b->CreatePHI(sizeTy, 3, "strideProducedPhi");
+    strideProducedPhi->addIncoming(initialProduced, entryBlock);
+    Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
+    Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
+    Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
+    b->CreateBr(stridePrecomputation);
+    // Precompute index masks for one stride of the match result and line break streams,
+    // as well as a partial sum popcount of line numbers if line numbering is on.
+    b->SetInsertPoint(stridePrecomputation);
+    PHINode * const matchMaskAccum = b->CreatePHI(sizeTy, 2);
+    matchMaskAccum->addIncoming(sz_ZERO, stridePrologue);
+    PHINode * const breakMaskAccum = b->CreatePHI(sizeTy, 2);
+    breakMaskAccum->addIncoming(sz_ZERO, stridePrologue);
+    PHINode * const blockNo = b->CreatePHI(sizeTy, 2);
+    blockNo->addIncoming(sz_ZERO, stridePrologue);
+    Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
+    Value * matchBitBlock = b->loadInputStreamBlock("matchStarts", sz_ZERO, strideBlockIndex);
+    Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
+
+    Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
+    Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
+    Value * matchWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
+    Value * breakWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
+    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "matchMask");
+    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "breakMask");
+    Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
+
+    matchMaskAccum->addIncoming(matchMask, stridePrecomputation);
+    breakMaskAccum->addIncoming(breakMask, stridePrecomputation);
+    blockNo->addIncoming(nextBlockNo, stridePrecomputation);
+    b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
+
+    b->SetInsertPoint(strideMasksReady);
+    // First check whether there is any pending match or any match in the stride.
+    // If not we can immediately move on to the next stride.
+    // We optimize for the case of no matches; the cost of the branch penalty
+    // is expected to be small relative to the processing of each match.
+    Value * anyMatches = b->CreateOr(b->CreateIsNotNull(pendingMatchPhi), b->CreateIsNotNull(matchMask));
+    b->CreateUnlikelyCondBr(anyMatches, strideMatchProcessing, strideMatchesDone);
+
+    b->SetInsertPoint(strideMatchProcessing);
+    Value * matchWordBasePtr = b->getInputStreamBlockPtr("matchStarts", sz_ZERO, strideBlockOffset);
+    matchWordBasePtr = b->CreateBitCast(matchWordBasePtr, sw.pointerTy);
+    Value * breakWordBasePtr = b->getInputStreamBlockPtr("lineBreak", sz_ZERO, strideBlockOffset);
+    breakWordBasePtr = b->CreateBitCast(breakWordBasePtr, sw.pointerTy);
+
+    // Do we have a pending matched line continuing from the previous stride?
+    b->CreateUnlikelyCondBr(b->CreateIsNotNull(pendingMatchPhi), pendingMatchProcessing, strideMatchLoop);
+
+    // Precondition: we have at least one more match to process.
+    b->SetInsertPoint(strideMatchLoop);
+    PHINode * const matchMaskPhi = b->CreatePHI(sizeTy, 3);
+    matchMaskPhi->addIncoming(matchMask, strideMatchProcessing);
+    PHINode * const matchWordPhi = b->CreatePHI(sizeTy, 3);
+    matchWordPhi->addIncoming(sz_ZERO, strideMatchProcessing);
+    PHINode * const producedPosPhi = b->CreatePHI(sizeTy, 3);
+    producedPosPhi->addIncoming(strideProducedPhi, strideMatchProcessing);
+
+    // If we have any bits in the current matchWordPhi, continue with those, otherwise load
+    // the next match word.
+    Value * matchWordIdx = b->CreateCountForwardZeroes(matchMaskPhi, "matchWordIdx");
+    Value * nextMatchWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(matchWordBasePtr, matchWordIdx)), sizeTy);
+    Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
+    Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
+    Value * matchPosInWord = b->CreateCountForwardZeroes(theMatchWord);
+    Value * matchPos = b->CreateAdd(matchWordPos, matchPosInWord, "matchPos");
+    // We have the match start position, now find the match end position.
+    Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
+    Value * notBeforeMatch = b->CreateNot(b->CreateMaskToLowestBitExclusive(theMatchWord));
+    Value * followingMatchIdx = b->CreateNot(b->CreateMaskToLowestBitInclusive(matchMaskPhi));
+    Value * breaksInWord = b->CreateAnd(matchBreakWord, notBeforeMatch);
+    Value * breaksAfterWord = b->CreateAnd(breakMask, followingMatchIdx);
+    Value * hasBreak = b->CreateOr(breaksInWord, breaksAfterWord);
+    b->CreateUnlikelyCondBr(b->CreateIsNull(hasBreak), strideEndMatch, inStrideMatch);
+
+    b->SetInsertPoint(inStrideMatch);
+    // We have a matched line completely within the stride.
+    Value * breakWordIdx = b->CreateCountForwardZeroes(breaksAfterWord, "breakWordIdx");
+    breakWordIdx = b->CreateSelect(b->CreateIsNotNull(breaksInWord), matchWordIdx, breakWordIdx);
+    Value * breakWordPos = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx, sw.WIDTH));
+    Value * nextBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx)), sizeTy);
+    Value * breakWord = b->CreateSelect(b->CreateIsNull(breaksInWord), nextBreakWord, breaksInWord);
+    Value * breakPosInWord = b->CreateCountForwardZeroes(breakWord);
+    Value * matchEndPos = b->CreateAdd(breakWordPos, breakPosInWord, "breakPos");
+    Value * const bufLimit = b->CreateSub(avail, sz_ONE);
+    matchEndPos = b->CreateUMin(matchEndPos, bufLimit);
+    Value * lineLength = b->CreateAdd(b->CreateSub(matchEndPos, matchPos), sz_ONE);
+    Value * const matchStartPtr = b->getRawInputPointer("InputStream", matchPos);
+    Value * const outputPtr = b->getRawOutputPointer("Output", producedPosPhi);
+    b->CreateMemCpy(outputPtr, matchStartPtr, lineLength, 1);
+    Value * nextProducedPos = b->CreateAdd(producedPosPhi, lineLength);
+
+    //  We've dealt with the match, now prepare for the next one, if any.
+    // There may be more matches in the current word.
+    Value * dropMatch = b->CreateResetLowestBit(theMatchWord, "dropMatch");
+    Value * thisWordDone = b->CreateIsNull(dropMatch);
+    // There may be more matches in the match mask.
+    Value * resetMatchMask = b->CreateResetLowestBit(matchMaskPhi, "nextMatchMask");
+    Value * nextMatchMask = b->CreateSelect(thisWordDone, resetMatchMask, matchMaskPhi);
+    BasicBlock * currentBB = b->GetInsertBlock();
+    matchMaskPhi->addIncoming(nextMatchMask, currentBB);
+    matchWordPhi->addIncoming(dropMatch, currentBB);
+    producedPosPhi->addIncoming(nextProducedPos, currentBB);
+    b->CreateCondBr(b->CreateIsNotNull(nextMatchMask), strideMatchLoop, strideMatchesDone);
+
+    b->SetInsertPoint(pendingMatchProcessing);
+    b->CreateLikelyCondBr(b->CreateIsNotNull(breakMask), strideInitialMatch, strideEndMatch);
+
+    b->SetInsertPoint(strideInitialMatch);
+    Value * breakWordIdx1 = b->CreateCountForwardZeroes(breakMask);
+    Value * breakWord1 = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx1)), sizeTy);
+    Value * breakWord1Pos = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx1, sw.WIDTH));
+    Value * break1Pos = b->CreateAdd(breakWord1Pos, b->CreateCountForwardZeroes(breakWord1));
+    Value * initialLineLgth = b->CreateAdd(b->CreateSub(break1Pos, stridePos), sz_ONE);
+    Value * const strideStartPtr = b->getRawInputPointer("InputStream", stridePos);
+    Value * const outputPtr1 = b->getRawOutputPointer("Output", strideProducedPhi);
+    b->CreateMemCpy(outputPtr1, strideStartPtr, initialLineLgth, 1);
+    Value * producedPos1 = b->CreateAdd(strideProducedPhi, initialLineLgth);
+    matchMaskPhi->addIncoming(matchMask, strideInitialMatch);
+    matchWordPhi->addIncoming(sz_ZERO, strideInitialMatch);
+    producedPosPhi->addIncoming(producedPos1, strideInitialMatch);
+    b->CreateCondBr(b->CreateIsNotNull(matchMask), strideMatchLoop, strideMatchesDone);
+
+    b->SetInsertPoint(strideEndMatch);
+    PHINode * const partialLineStart = b->CreatePHI(sizeTy, 2);
+    partialLineStart->addIncoming(matchPos, strideMatchLoop);
+    partialLineStart->addIncoming(stridePos, pendingMatchProcessing);
+    PHINode * const partialProducedPhi = b->CreatePHI(sizeTy, 2);
+    partialProducedPhi->addIncoming(producedPosPhi, strideMatchLoop);
+    partialProducedPhi->addIncoming(strideProducedPhi, pendingMatchProcessing);
+    Value * partialLineBytes = b->CreateSub(sz_STRIDE, b->CreateSub(partialLineStart, stridePos));
+    Value * const partialLineStartPtr = b->getRawInputPointer("InputStream", partialLineStart);
+    Value * const partialLineOutputPtr = b->getRawOutputPointer("Output", partialProducedPhi);
+    b->CreateMemCpy(partialLineOutputPtr, partialLineStartPtr, partialLineBytes, 1);
+    Value * partialProducedPos = b->CreateAdd(partialProducedPhi, partialLineBytes, "partialProducedPos");
+    strideNo->addIncoming(nextStrideNo, strideEndMatch);
+    pendingMatchPhi->addIncoming(ConstantInt::get(pendingMatch->getType(), 1), strideEndMatch);
+    strideProducedPhi->addIncoming(partialProducedPos, strideEndMatch);
+    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), stridePrologue, stridesDone);
+
+    b->SetInsertPoint(strideMatchesDone);
+    PHINode * const strideFinalProduced = b->CreatePHI(sizeTy, 3);
+    strideFinalProduced->addIncoming(nextProducedPos, inStrideMatch);
+    strideFinalProduced->addIncoming(producedPos1, strideInitialMatch);
+    strideFinalProduced->addIncoming(strideProducedPhi, strideMasksReady);
+    strideNo->addIncoming(nextStrideNo, strideMatchesDone);
+    pendingMatchPhi->addIncoming(Constant::getNullValue(pendingMatch->getType()), strideMatchesDone);
+    strideProducedPhi->addIncoming(strideFinalProduced, strideMatchesDone);
+    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), stridePrologue, stridesDone);
+
+    b->SetInsertPoint(stridesDone);
+    PHINode * const finalProducedPhi = b->CreatePHI(sizeTy, 2);
+    finalProducedPhi->addIncoming(partialProducedPos, strideEndMatch);
+    finalProducedPhi->addIncoming(strideFinalProduced, strideMatchesDone);
+    PHINode * const finalPendingPhi = b->CreatePHI(pendingMatch->getType(), 2);
+    finalPendingPhi->addIncoming(ConstantInt::get(pendingMatch->getType(), 1), strideEndMatch);
+    finalPendingPhi->addIncoming(Constant::getNullValue(pendingMatch->getType()), strideMatchesDone);
+    b->setScalarField("pendingMatch", finalPendingPhi);
+    b->setProducedItemCount("Output", finalProducedPhi);
 }
 
 }

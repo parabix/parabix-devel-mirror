@@ -43,5 +43,14 @@ private:
     void generateDoSegmentMethod(BuilderRef iBuilder) override;
 };
 
+class MatchFilterKernel : public MultiBlockKernel {
+public:
+    MatchFilterKernel(BuilderRef b, StreamSet * const MatchStarts, StreamSet * const LineBreaks,
+                      StreamSet * const ByteStream, StreamSet * Output, unsigned strideBlocks = 1);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+private:
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
+};
 }
 #endif // SCANMATCHGEN_H
