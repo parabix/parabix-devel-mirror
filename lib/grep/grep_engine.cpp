@@ -22,6 +22,7 @@
 #include <grep/regex_passes.h>
 #include <grep/resolve_properties.h>
 #include <kernel/basis/s2p_kernel.h>
+#include <kernel/basis/p2s_kernel.h>
 #include <kernel/core/idisa_target.h>
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
@@ -33,11 +34,16 @@
 #include <kernel/unicode/grapheme_kernel.h>
 #include <kernel/util/linebreak_kernel.h>
 #include <kernel/streamutils/streams_merge.h>
+#include <kernel/streamutils/stream_select.h>
+#include <kernel/streamutils/stream_shift.h>
+#include <kernel/streamutils/string_insert.h>
 #include <kernel/scan/scanmatchgen.h>
 #include <kernel/streamutils/until_n.h>
 #include <kernel/streamutils/sentinel.h>
+#include <kernel/streamutils/run_index.h>
 #include <kernel/streamutils/deletion.h>
 #include <kernel/streamutils/pdep_kernel.h>
+#include <kernel/io/stdout_kernel.h>
 #include <pablo/pablo_kernel.h>
 #include <re/adt/adt.h>
 #include <re/adt/re_utility.h>
@@ -58,6 +64,7 @@
 #include <sys/stat.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
+#include <kernel/util/debug_display.h>
 
 using namespace llvm;
 using namespace cc;
@@ -577,36 +584,124 @@ void EmitMatchesEngine::grepCodeGen() {
     StreamSet * const ByteStream = E->CreateStreamSet(1, ENCODING_BITS);
     E->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
 
-    StreamSet * Matches = grepPipeline(E, ByteStream);
+    StreamSet * SourceStream = getBasis(E, ByteStream);
+
+    grepPrologue(E, SourceStream);
+
+    prepareExternalStreams(E, SourceStream);
+
+    const auto numOfREs = mREs.size();
+    std::vector<StreamSet *> MatchResultsBufs(numOfREs);
+
+    for(unsigned i = 0; i < numOfREs; ++i) {
+        StreamSet * const MatchResults = E->CreateStreamSet(1, 1);
+        MatchResultsBufs[i] = MatchResults;
+        if (UnicodeIndexing) {
+            UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
+        } else {
+            U8indexedGrep(E, mREs[i], SourceStream, MatchResults);
+        }
+    }
+
+    StreamSet * Matches = MatchResultsBufs[0];
+    if (MatchResultsBufs.size() > 1) {
+        StreamSet * const MergedMatches = E->CreateStreamSet();
+        E->CreateKernelCall<StreamsMerge>(MatchResultsBufs, MergedMatches);
+        Matches = MergedMatches;
+    }
+    StreamSet * MatchedLineEnds = Matches;
+    if (hasComponent(mExternalComponents, Component::MoveMatchesToEOL)) {
+        StreamSet * const MovedMatches = E->CreateStreamSet();
+        E->CreateKernelCall<MatchedLinesKernel>(Matches, mLineBreakStream, MovedMatches);
+        MatchedLineEnds = MovedMatches;
+    }
+    if (mInvertMatches) {
+        StreamSet * const InvertedMatches = E->CreateStreamSet();
+        E->CreateKernelCall<InvertMatchesKernel>(MatchedLineEnds, mLineBreakStream, InvertedMatches);
+        MatchedLineEnds = InvertedMatches;
+    }
+    if (mMaxCount > 0) {
+        StreamSet * const TruncatedMatches = E->CreateStreamSet();
+        Scalar * const maxCount = E->getInputScalar("maxCount");
+        E->CreateKernelCall<UntilNkernel>(maxCount, MatchedLineEnds, TruncatedMatches);
+        MatchedLineEnds = TruncatedMatches;
+    }
+
+    StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
+    FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
 
     if ((mAfterContext != 0) || (mBeforeContext != 0)) {
-        StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
-        FilterByMask(E, mLineBreakStream, Matches, MatchesByLine);
         StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
         StreamSet * SelectedLines = E->CreateStreamSet(1, 1);
         SpreadByMask(E, mLineBreakStream, ContextByLine, SelectedLines);
-        Matches = SelectedLines;
+        MatchedLineEnds = SelectedLines;
+        MatchesByLine = ContextByLine;
     }
 
-    if (MatchCoordinateBlocks > 0) {
-        StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
-        E->CreateKernelCall<MatchCoordinatesKernel>(Matches, mLineBreakStream, MatchCoords, MatchCoordinateBlocks);
-        Scalar * const callbackObject = E->getInputScalar("callbackObject");
-        Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, callbackObject);
-        mGrepDriver.LinkFunction(matchK, "accumulate_match_wrapper", accumulate_match_wrapper);
-        mGrepDriver.LinkFunction(matchK, "finalize_match_wrapper", finalize_match_wrapper);
-    } else {
-        Scalar * const callbackObject = E->getInputScalar("callbackObject");
-        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(Matches, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
-        mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
-        mGrepDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", finalize_match_wrapper);
-    }
+    StreamSet * LineStarts = E->CreateStreamSet(1, 1);
+    E->CreateKernelCall<LineStartsKernel>(mLineBreakStream, LineStarts);
+    StreamSet * MatchedLineStarts = E->CreateStreamSet(1, 1);
+    SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
+
+    StreamSet * Filtered = E->CreateStreamSet(1, 8);
+    E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);
+
+    StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
+    E->CreateKernelCall<LineSpansKernel>(MatchedLineStarts, MatchedLineEnds, MatchedLineSpans);
+    E->CreateKernelCall<DebugDisplayKernel>("MatchedLineSpans", MatchedLineSpans);
+    
+    StreamSet * FilteredMatches = E->CreateStreamSet(1, 1);
+    FilterByMask(E, MatchedLineSpans, Matches, FilteredMatches);
+    E->CreateKernelCall<DebugDisplayKernel>("FilteredMatches", FilteredMatches);
+
+    StreamSet * FilteredMatchStarts = E->CreateStreamSet(1, 1);
+    E->CreateKernelCall<ShiftBack>(FilteredMatches, FilteredMatchStarts, 3);
+    E->CreateKernelCall<DebugDisplayKernel>("FilteredMatchStarts", FilteredMatchStarts);
+
+    StreamSet * const InsertMarks = E->CreateStreamSet(2, 1);
+    E->CreateKernelCall<StreamSelect>(InsertMarks, SelectOperationList {Select({ {FilteredMatchStarts, {0}}, {FilteredMatches, {0}} })});
+
+    std::string ESC = "\x1B";
+    std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
+    unsigned insertLengthBits = 4;
+    
+    StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
+    E->CreateKernelCall<StringInsertBixNum>(colorEscapes, InsertMarks, InsertBixNum);
+    E->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
+    StreamSet * const SpreadMask = InsertionSpreadMask(E, InsertBixNum, InsertPosition::After);
+    E->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
+    
+    // For each run of 0s marking insert positions, create a parallel
+    // bixnum sequentially numbering the string insert positions.
+    StreamSet * const InsertIndex = E->CreateStreamSet(insertLengthBits);
+    E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
+    E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
+    
+    StreamSet * FilteredBasis = E->CreateStreamSet(8, 1);
+    E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
+    
+    // Baais bit streams expanded with 0 bits for each string to be inserted.
+    StreamSet * ExpandedBasis = E->CreateStreamSet(8);
+    SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
+    E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
+    
+    // Map the match start/end marks to their positions in the expanded basis.
+    StreamSet * ExpandedMarks = E->CreateStreamSet(2);
+    SpreadByMask(E, SpreadMask, InsertMarks, ExpandedMarks);
+    
+    StreamSet * ColorizedBasis = E->CreateStreamSet(8);
+    E->CreateKernelCall<StringReplaceKernel>(colorEscapes, ExpandedBasis, SpreadMask, ExpandedMarks, InsertIndex, ColorizedBasis);
+    
+    StreamSet * ColorizedBytes  = E->CreateStreamSet(1, 8);
+    E->CreateKernelCall<P2SKernel>(ColorizedBasis, ColorizedBytes);
+    
+    E->CreateKernelCall<StdOutKernel>(ColorizedBytes);
+
     E->setOutputScalar("countResult", E->CreateConstant(idb->getInt64(0)));
 
     mMainMethod = E->compile();
 }
-
 
 //
 //  The doGrep methods apply a GrepEngine to a single file, processing the results
