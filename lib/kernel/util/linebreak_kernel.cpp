@@ -343,7 +343,7 @@ void LineStartsKernel::generatePabloMethod() {
     PabloAST * lineEnds = getInputStreamSet("LineEnds")[0];
     // Line starts are the positions after every line end, as well as the initial position.
     PabloAST * lineStarts = pb.createInFile(pb.createNot(pb.createAdvance(pb.createNot(lineEnds), 1)));
-    pb.createAssign(pb.createExtract(getOutputStreamVar("LineEnds"), 0), lineStarts);
+    pb.createAssign(pb.createExtract(getOutputStreamVar("LineStarts"), 0), lineStarts);
 }
 
 LineSpansKernel::LineSpansKernel(BuilderRef b, StreamSet * LineStarts, StreamSet * LineEnds, StreamSet * LineSpans)
