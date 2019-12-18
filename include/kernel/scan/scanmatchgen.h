@@ -52,5 +52,17 @@ public:
 private:
     void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
 };
+
+class ColorizedReporter : public SegmentOrientedKernel {
+public:
+    ColorizedReporter(BuilderRef b,
+                       StreamSet * ByteStream, StreamSet * const SourceCoords, StreamSet * const ColorizedCoords,
+                       Scalar * const callbackObject);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+private:
+    void generateDoSegmentMethod(BuilderRef iBuilder) override;
+};
+
 }
 #endif // SCANMATCHGEN_H
