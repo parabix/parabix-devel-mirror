@@ -857,10 +857,10 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
 }
 
 ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const SourceCoords, StreamSet * const ColorizedCoords, Scalar * const callbackObject)
-: SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()),
+: SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()},
-    Binding{"SourceCoords", SourceCoords, GreedyRate(1)}, Binding{"ColorizedCoords", ColorizedCoords, GreedyRate(1)}},
+    Binding{"SourceCoords", SourceCoords, FixedRate(1)}, Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1)}},
                         // outputs
 {},
                         // input scalars
