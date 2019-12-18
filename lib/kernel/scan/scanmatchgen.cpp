@@ -656,7 +656,7 @@ MatchFilterKernel::MatchFilterKernel(BuilderRef b,
 {InternalScalar{b->getInt1Ty(), "pendingMatch"}}) {
     // The stride size must be limited so that the scanword mask is a single size_t value.
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
-    assert (Matches->getNumElements() == 1);
+    assert (MatchStarts->getNumElements() == 1);
     assert (LineBreakStream->getNumElements() == 1);
 }
 

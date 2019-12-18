@@ -400,6 +400,7 @@ void GrepEngine::addExternalStreams(const std::unique_ptr<ProgramBuilder> & P, s
 
 void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::Unicode);
+    auto lengths = getLengthRange(re, &cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
     if (UnicodeSets.empty()) {
         // All inputs will be externals.   Do not register a source stream.
@@ -420,15 +421,19 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     options->setResults(MatchResults);
     addExternalStreams(P, options, re, mU8index);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
+    StreamSet * MatchPairs = P->CreateStreamSet(2, 1);
+    P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, MatchPairs);
     StreamSet * u8index1 = P->CreateStreamSet(1, 1);
     P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
-    SpreadByMask(P, u8index1, MatchResults, Results);
+    SpreadByMask(P, u8index1, MatchPairs, Results);
 }
 
 void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE * re, StreamSet * Source, StreamSet * Results) {
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::UTF8);
+    auto lengths = getLengthRange(re, &cc::UTF8);
     options->setSource(Source);
-    options->setResults(Results);
+    StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
+    options->setResults(MatchResults);
     if (hasComponent(mExternalComponents, Component::UTF8index)) {
         options->setIndexingTransformer(&mUTF8_Transformer, mU8index);
         if (mSuffixRE != nullptr) {
@@ -447,6 +452,7 @@ void GrepEngine::U8indexedGrep(const std::unique_ptr<ProgramBuilder> & P, re::RE
     }
     addExternalStreams(P, options, re);
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
+    P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, Results);
 }
 
 StreamSet * GrepEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & P, StreamSet * InputStream) {
@@ -594,7 +600,7 @@ void EmitMatchesEngine::grepCodeGen() {
     std::vector<StreamSet *> MatchResultsBufs(numOfREs);
 
     for(unsigned i = 0; i < numOfREs; ++i) {
-        StreamSet * const MatchResults = E->CreateStreamSet(1, 1);
+        StreamSet * const MatchResults = E->CreateStreamSet(2, 1);
         MatchResultsBufs[i] = MatchResults;
         if (UnicodeIndexing) {
             UnicodeIndexedGrep(E, mREs[i], SourceStream, MatchResults);
@@ -649,18 +655,11 @@ void EmitMatchesEngine::grepCodeGen() {
 
     StreamSet * MatchedLineSpans = E->CreateStreamSet(1, 1);
     E->CreateKernelCall<LineSpansKernel>(MatchedLineStarts, MatchedLineEnds, MatchedLineSpans);
-    E->CreateKernelCall<DebugDisplayKernel>("MatchedLineSpans", MatchedLineSpans);
+    //E->CreateKernelCall<DebugDisplayKernel>("MatchedLineSpans", MatchedLineSpans);
     
-    StreamSet * FilteredMatches = E->CreateStreamSet(1, 1);
-    FilterByMask(E, MatchedLineSpans, Matches, FilteredMatches);
-    E->CreateKernelCall<DebugDisplayKernel>("FilteredMatches", FilteredMatches);
-
-    StreamSet * FilteredMatchStarts = E->CreateStreamSet(1, 1);
-    E->CreateKernelCall<ShiftBack>(FilteredMatches, FilteredMatchStarts, 3);
-    E->CreateKernelCall<DebugDisplayKernel>("FilteredMatchStarts", FilteredMatchStarts);
-
-    StreamSet * const InsertMarks = E->CreateStreamSet(2, 1);
-    E->CreateKernelCall<StreamSelect>(InsertMarks, SelectOperationList {Select({ {FilteredMatchStarts, {0}}, {FilteredMatches, {0}} })});
+    StreamSet * InsertMarks = E->CreateStreamSet(2, 1);
+    FilterByMask(E, MatchedLineSpans, Matches, InsertMarks);
+    //E->CreateKernelCall<DebugDisplayKernel>("FilteredMatches", FilteredMatches);
 
     std::string ESC = "\x1B";
     std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
@@ -668,15 +667,15 @@ void EmitMatchesEngine::grepCodeGen() {
     
     StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
     E->CreateKernelCall<StringInsertBixNum>(colorEscapes, InsertMarks, InsertBixNum);
-    E->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
+    //E->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
     StreamSet * const SpreadMask = InsertionSpreadMask(E, InsertBixNum, InsertPosition::After);
-    E->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
+    //E->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
     
     // For each run of 0s marking insert positions, create a parallel
     // bixnum sequentially numbering the string insert positions.
     StreamSet * const InsertIndex = E->CreateStreamSet(insertLengthBits);
     E->CreateKernelCall<RunIndex>(SpreadMask, InsertIndex, nullptr, /*invert = */ true);
-    E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
+    //E->CreateKernelCall<DebugDisplayKernel>("InsertIndex", InsertIndex);
     
     StreamSet * FilteredBasis = E->CreateStreamSet(8, 1);
     E->CreateKernelCall<S2PKernel>(Filtered, FilteredBasis);
@@ -684,7 +683,7 @@ void EmitMatchesEngine::grepCodeGen() {
     // Baais bit streams expanded with 0 bits for each string to be inserted.
     StreamSet * ExpandedBasis = E->CreateStreamSet(8);
     SpreadByMask(E, SpreadMask, FilteredBasis, ExpandedBasis);
-    E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
+    //E->CreateKernelCall<DebugDisplayKernel>("ExpandedBasis", ExpandedBasis);
     
     // Map the match start/end marks to their positions in the expanded basis.
     StreamSet * ExpandedMarks = E->CreateStreamSet(2);
