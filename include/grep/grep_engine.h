@@ -76,6 +76,7 @@ public:
 
     void setPreferMMap(bool b = true) {mPreferMMap = b;}
 
+    void setColoring(bool b = true)  {mColoring = b;}
     void showFileNames(bool b = true) {mShowFileNames = b;}
     void setStdinLabel(std::string lbl) {mStdinLabel = lbl;}
     void showLineNumbers(bool b = true) {mShowLineNumbers = b;}
@@ -104,10 +105,11 @@ protected:
     typedef uint32_t component_t;
     enum class Component : component_t {
         NoComponents = 0,
-        S2P = 0x01,
-        UTF8index = 0x02,
-        MoveMatchesToEOL = 0x04,
-        GraphemeClusterBoundary = 0x08
+        S2P = 1,
+        UTF8index = 2,
+        MoveMatchesToEOL = 4,
+        MatchStarts = 8,
+        GraphemeClusterBoundary = 16
     };
     bool hasComponent(Component compon_set, Component c);
     void setComponent(Component & compon_set, Component c);
@@ -137,6 +139,7 @@ protected:
     bool mSuppressFileMessages;
     argv::BinaryFilesMode mBinaryFilesMode;
     bool mPreferMMap;
+    bool mColoring;
     bool mShowFileNames;
     std::string mStdinLabel;
     bool mShowLineNumbers;

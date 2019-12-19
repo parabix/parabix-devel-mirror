@@ -366,8 +366,8 @@ mMatchLength(length) {}
 
 void FixedMatchPairsKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    auto matchResults = getInputStreamSet("MatchResults");
-    PabloAST * matchEnds = matchResults.back();
+    Var * matchResults = getInputStreamVar("MatchResults");
+    Var * matchEnds = pb.createExtract(matchResults, pb.getInteger(0));
     Var * matchPairsVar = getOutputStreamVar("MatchPairs");
     pb.createAssign(pb.createExtract(matchPairsVar, 0), pb.createLookahead(matchEnds, mMatchLength));
     pb.createAssign(pb.createExtract(matchPairsVar, 1), matchEnds);

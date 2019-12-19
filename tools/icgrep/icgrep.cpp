@@ -163,6 +163,10 @@ int main(int argc, char *argv[]) {
     if (argv::NoMessagesFlag) grep->suppressFileMessages();
     if (argv::MmapFlag) grep->setPreferMMap();
     grep->setBinaryFilesOption(argv::BinaryFilesFlag);
+    if ((argv::ColorFlag == argv::alwaysColor) ||
+        ((argv::ColorFlag == argv::autoColor) && isatty(STDOUT_FILENO))) {
+        grep->setColoring();
+    }
     grep->initREs(REs);
     grep->grepCodeGen();
     grep->initFileResult(allFiles); // unnecessary copy!
