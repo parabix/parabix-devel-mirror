@@ -369,8 +369,8 @@ void FixedMatchPairsKernel::generatePabloMethod() {
     Var * matchResults = getInputStreamVar("MatchResults");
     Var * matchEnds = pb.createExtract(matchResults, pb.getInteger(0));
     Var * matchPairsVar = getOutputStreamVar("MatchPairs");
-    pb.createAssign(pb.createExtract(matchPairsVar, 0), pb.createLookahead(matchEnds, mMatchLength));
-    pb.createAssign(pb.createExtract(matchPairsVar, 1), matchEnds);
+    pb.createAssign(pb.createExtract(matchPairsVar, 0), pb.createLookahead(matchEnds, mMatchLength-1));
+    pb.createAssign(pb.createExtract(matchPairsVar, 1), pb.createAdvance(matchEnds, 1));
 }
 
 void PopcountKernel::generatePabloMethod() {

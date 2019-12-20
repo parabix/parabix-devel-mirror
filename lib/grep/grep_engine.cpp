@@ -696,7 +696,7 @@ void EmitMatchesEngine::grepCodeGen() {
         StreamSet * const InsertBixNum = E->CreateStreamSet(insertLengthBits, 1);
         E->CreateKernelCall<StringInsertBixNum>(colorEscapes, InsertMarks, InsertBixNum);
         //E->CreateKernelCall<DebugDisplayKernel>("InsertBixNum", InsertBixNum);
-        StreamSet * const SpreadMask = InsertionSpreadMask(E, InsertBixNum, InsertPosition::After);
+        StreamSet * const SpreadMask = InsertionSpreadMask(E, InsertBixNum, InsertPosition::Before);
         //E->CreateKernelCall<DebugDisplayKernel>("SpreadMask", SpreadMask);
 
         // For each run of 0s marking insert positions, create a parallel
