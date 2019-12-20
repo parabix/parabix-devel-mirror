@@ -10,6 +10,7 @@
 #include <pablo/pe_ones.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_infile.h>
+#include <pablo/pe_lookahead.h>
 #include <pablo/bixnum/bixnum.h>
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/cc_compiler.h>
@@ -76,7 +77,8 @@ StringReplaceKernel::StringReplaceKernel(BuilderRef b, std::vector<std::string> 
                                          StreamSet * output)
     : PabloKernel(b, StringReplaceName(insertStrs, insertMarks),
                  {Binding{"basis", basis}, Binding{"spreadMask", spreadMask},
-                  Binding{"insertMarks", insertMarks}, Binding{"runIndex", runIndex}},
+                  Binding{"insertMarks", insertMarks, FixedRate(1), LookAhead(1 << (runIndex->getNumElements()))},
+                     Binding{"runIndex", runIndex}},
                  {Binding{"output", output}}),
     mInsertStrings(insertStrs),
     mMultiplexing(insertMarks->getNumElements() < insertStrs.size()) {}
@@ -94,7 +96,8 @@ void StringReplaceKernel::generatePabloMethod() {
     PabloAST * runMask = pb.createInFile(pb.createNot(spreadMask));
     std::vector<PabloAST *> insertSpans(insertMarks.size());
     for (unsigned i = 0; i < mInsertStrings.size(); i++) {
-        PabloAST * span = pb.createMatchStar(pb.createAdvance(insertMarks[i], 1), runMask);
+        PabloAST * stringStart = pb.createLookahead(insertMarks[i], mInsertStrings[i].size());
+        PabloAST * span = pb.createMatchStar(stringStart, runMask);
         insertSpans[i] = pb.createAnd(span, runMask);
     }
     for (unsigned bit = 0; bit < 8; bit++) {

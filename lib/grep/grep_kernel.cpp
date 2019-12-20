@@ -322,24 +322,23 @@ void ICGrepKernel::generatePabloMethod() {
 
 void MatchedLinesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    PabloAST * matchResults = pb.createExtract(getInputStreamVar("matchResults"), pb.getInteger(0));
+    auto matchResults = getInputStreamSet("matchResults");
     PabloAST * lineBreaks = pb.createExtract(getInputStreamVar("lineBreaks"), pb.getInteger(0));
     PabloAST * notLB = pb.createNot(lineBreaks);
-    PabloAST * match_follow = pb.createMatchStar(matchResults, notLB);
+    PabloAST * match_follow = pb.createMatchStar(matchResults.back(), notLB);
     Var * const matchedLines = getOutputStreamVar("matchedLines");
     pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, lineBreaks, "matchedLines"));
 }
 
-MatchedLinesKernel::MatchedLinesKernel (BuilderRef iBuilder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
-: PabloKernel(iBuilder, "MatchedLines",
+MatchedLinesKernel::MatchedLinesKernel (BuilderRef iBuilder, StreamSet * Matches, StreamSet * LineBreakStream, StreamSet * MatchedLines)
+: PabloKernel(iBuilder, "MatchedLines" + std::to_string(Matches->getNumElements()),
 // inputs
-{Binding{"matchResults", OriginalMatches}
+{Binding{"matchResults", Matches}
 ,Binding{"lineBreaks", LineBreakStream, FixedRate()}},
 // output
-{Binding{"matchedLines", Matches}}) {
+{Binding{"matchedLines", MatchedLines}}) {
 
 }
-
 
 void InvertMatchesKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     Value * input = iBuilder->loadInputStreamBlock("matchedLines", iBuilder->getInt32(0));
@@ -348,18 +347,36 @@ void InvertMatchesKernel::generateDoBlockMethod(BuilderRef iBuilder) {
     iBuilder->storeOutputStreamBlock("nonMatches", iBuilder->getInt32(0), inverted);
 }
 
-InvertMatchesKernel::InvertMatchesKernel(BuilderRef b, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches)
-: BlockOrientedKernel(b, "Invert",
+InvertMatchesKernel::InvertMatchesKernel(BuilderRef b, StreamSet * Matches, StreamSet * LineBreakStream, StreamSet * InvertedMatches)
+: BlockOrientedKernel(b, "Invert" + std::to_string(Matches->getNumElements()),
 // Inputs
-{Binding{"matchedLines", OriginalMatches},
+{Binding{"matchedLines", Matches},
  Binding{"lineBreaks", LineBreakStream}},
 // Outputs
-{Binding{"nonMatches", Matches}},
+{Binding{"nonMatches", InvertedMatches}},
 // Input/Output Scalars and internal state
 {}, {}, {}) {
 
 }
 
+FixedMatchPairsKernel::FixedMatchPairsKernel(BuilderRef b, unsigned length, StreamSet * MatchResults, StreamSet * MatchPairs)
+: PabloKernel(b, "FixedMatchPairsKernel" + std::to_string(MatchResults->getNumElements()) + "x1_by" + std::to_string(length),
+{Binding{"MatchResults", MatchResults, FixedRate(1), LookAhead(length)}}, {Binding{"MatchPairs", MatchPairs}}),
+mMatchLength(length) {}
+
+void FixedMatchPairsKernel::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    Var * matchResults = getInputStreamVar("MatchResults");
+    Var * matchEnds = pb.createExtract(matchResults, pb.getInteger(0));
+    Var * matchPairsVar = getOutputStreamVar("MatchPairs");
+    PabloAST * starts = pb.createLookahead(matchEnds, mMatchLength-1);
+    PabloAST * follows = pb.createAdvance(matchEnds, 1);
+    PabloAST * disjoint = pb.createXor(starts, follows);
+    starts = pb.createAnd(starts, disjoint);
+    follows = pb.createAnd(follows, disjoint);
+    pb.createAssign(pb.createExtract(matchPairsVar, 0), starts);
+    pb.createAssign(pb.createExtract(matchPairsVar, 1), follows);
+}
 
 void PopcountKernel::generatePabloMethod() {
     auto pb = getEntryScope();

@@ -617,15 +617,16 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             } else { // Need to form shift result from two adjacent blocks.
                 Value * ptr1 = b->getInputStreamBlockPtr(stream->getName(), index, b->getSize(block_shift + 1));
                 Value * lookAhead1 = b->CreateBlockAlignedLoad(ptr1);
-                if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
-                    value = b->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
-                } else {
+                // TODO: Investigate why this optimization is buggy.
+                //if (LLVM_UNLIKELY((bit_shift % 8) == 0)) { // Use a single whole-byte shift, if possible.
+                //    value = b->mvmd_dslli(8, lookAhead1, lookAhead, (bit_shift / 8));
+                //} else {
                     Type  * const streamType = b->getIntNTy(b->getBitBlockWidth());
                     Value * b1 = b->CreateBitCast(lookAhead1, streamType);
                     Value * b0 = b->CreateBitCast(lookAhead, streamType);
                     Value * result = b->CreateOr(b->CreateShl(b1, b->getBitBlockWidth() - bit_shift), b->CreateLShr(b0, bit_shift));
                     value = b->CreateBitCast(result, b->getBitBlockType());
-                }
+                //}
             }
         } else if (const Repeat * const s = dyn_cast<Repeat>(stmt)) {
             value = compileExpression(b, s->getValue());

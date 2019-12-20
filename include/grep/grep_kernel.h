@@ -98,6 +98,16 @@ private:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
 };
 
+class FixedMatchPairsKernel : public pablo::PabloKernel {
+public:
+    FixedMatchPairsKernel(BuilderRef builder, unsigned length, StreamSet * MatchEnds, StreamSet * MatchPairs);
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+    unsigned mMatchLength;
+};
+
 class PopcountKernel : public pablo::PabloKernel {
 public:
     PopcountKernel(BuilderRef builder, StreamSet * const toCount, Scalar * countResult);
