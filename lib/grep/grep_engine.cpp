@@ -633,7 +633,7 @@ void EmitMatchesEngine::grepCodeGen() {
     StreamSet * MatchedLineEnds;
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
         StreamSet * Selected = E->CreateStreamSet(1, 1);
-        E->CreateKernelCall<StreamSelect>(Selected, Select(Matches, {0}));
+        E->CreateKernelCall<StreamSelect>(Selected, Select(Matches, {1}));
         MatchedLineEnds = Selected;
     } else {
         MatchedLineEnds = Matches;
@@ -687,7 +687,7 @@ void EmitMatchesEngine::grepCodeGen() {
 
         StreamSet * InsertMarks = E->CreateStreamSet(2, 1);
         FilterByMask(E, MatchedLineSpans, Matches, InsertMarks);
-        //E->CreateKernelCall<DebugDisplayKernel>("FilteredMatches", FilteredMatches);
+        //E->CreateKernelCall<DebugDisplayKernel>("Matches", Matches);
 
         std::string ESC = "\x1B";
         std::vector<std::string> colorEscapes = {ESC + "[01;31m" + ESC + "[K", ESC + "[m"};
