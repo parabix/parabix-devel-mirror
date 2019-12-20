@@ -428,10 +428,11 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     StreamSet * u8index1 = P->CreateStreamSet(1, 1);
     P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
+        StreamSet * u8initial = P->CreateStreamSet(1, 1);
+        P->CreateKernelCall<LineStartsKernel>(mU8index, u8initial);
         StreamSet * MatchPairs = P->CreateStreamSet(2, 1);
-        llvm::errs() << "UnicodeIndexedGrep:  FixedMatchPairs \n";
         P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, MatchPairs);
-        SpreadByMask(P, u8index1, MatchPairs, Results);
+        SpreadByMask(P, u8initial, MatchPairs, Results);
     } else {
         SpreadByMask(P, u8index1, MatchResults, Results);
     }
