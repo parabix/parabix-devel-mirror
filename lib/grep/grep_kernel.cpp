@@ -277,13 +277,14 @@ void ICGrepKernel::generatePabloMethod() {
         re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
     }
     for (const auto & e : mOptions->mExternals) {
-        re_compiler.addPrecompiled(e.getName(), pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0)));
+        PabloAST * extStrm = pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0));
+        re_compiler.addPrecompiled(e.getName(), RE_Compiler::Marker(extStrm));
     }
     Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     if (mOptions->mPrefixRE) {
-        PabloAST * const prefixMatches = re_compiler.compile(mOptions->mPrefixRE);
+        RE_Compiler::Marker prefixMatches = re_compiler.compileRE(mOptions->mPrefixRE);
         PabloBlock * scope1 = getEntryScope()->createScope();
-        pb.createIf(prefixMatches, scope1);
+        pb.createIf(prefixMatches.stream(), scope1);
 
         PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
         PabloAST * nybbles[2];
@@ -303,9 +304,11 @@ void ICGrepKernel::generatePabloMethod() {
         }
         RE_Compiler re_compiler(scope1, mOptions->mCodeUnitAlphabet);
         re_compiler.addAlphabet(mOptions->mCodeUnitAlphabet, basis);
-        scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
+        RE_Compiler::Marker suffixMatches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
+        scope1->createAssign(final_matches, suffixMatches.stream());
     } else {
-        pb.createAssign(final_matches, re_compiler.compile(mOptions->mRE));
+        RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE);
+        pb.createAssign(final_matches, matches.stream());
     }
     Var * const output = getOutputStreamVar("matches");
     if (mOptions->mCombiningType == GrepCombiningType::None) {

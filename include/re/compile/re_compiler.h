@@ -29,7 +29,7 @@ class RE_Compiler {
 
      Index streams mark positions corresponding to whole matching units.
      For example, if the matching units are UTF-8 sequences, then the index
-     stream is identifies the last byte of each UTF-8 sequence denoting a single
+     stream identifies the last byte of each UTF-8 sequence denoting a single
      Unicode codepoint.   If the matching units are UTF-16 sequences then the
      index stream will have one bits on every UTF-16 code unit that denotes
      a full Unicode character itself, as well as on the final code unit of
@@ -67,10 +67,15 @@ class RE_Compiler {
      stream for such an offset is the the stream marking the final bytes of
      UTF-8 code unit sequences.  */
 
-    struct Marker {
-        unsigned offset;
-        pablo::PabloAST * stream;
+    class Marker {
+    public:
+        Marker(pablo::PabloAST * strm, unsigned offset = 0) : mOffset(offset), mStream(strm) {}
         Marker & operator =(const Marker &) = default;
+        unsigned offset() {return mOffset;}
+        pablo::PabloAST * stream() {return mStream;}
+    private:
+        unsigned mOffset;
+        pablo::PabloAST * mStream;
     };
 
     RE_Compiler(pablo::PabloBlock * scope,
@@ -98,10 +103,12 @@ class RE_Compiler {
         addAlphabet(a.get(), basis_set);
     }
     
-    void addPrecompiled(std::string precompiledName, pablo::PabloAST * precompiledStream);
+    void addPrecompiled(std::string precompiledName, Marker precompiled);
 
-    pablo::PabloAST * compile(RE * re, pablo::PabloAST * const initialCursors = nullptr);
-
+    Marker compileRE(RE * re);
+    
+    Marker compileRE(RE * re, Marker initialMarkers);
+    
     static LLVM_ATTRIBUTE_NORETURN void UnsupportedRE(std::string errmsg);
     
 private:
@@ -128,7 +135,7 @@ private:
 
 
     Marker compile(RE * re, pablo::PabloBuilder & pb);
-    Marker compile(RE * re, pablo::PabloAST * const cursors, pablo::PabloBuilder & pb);
+    Marker compile(RE * re, Marker initialMarkers, pablo::PabloBuilder & pb);
 
     Marker process(RE * re, Marker marker, pablo::PabloBuilder & pb);
     Marker compileName(Name * name, Marker marker, pablo::PabloBuilder & pb);
@@ -154,10 +161,6 @@ private:
     Marker AdvanceMarker(Marker marker, const unsigned newpos, pablo::PabloBuilder & pb);
     void AlignMarkers(Marker & m1, Marker & m2, pablo::PabloBuilder & pb);
     
-    static inline unsigned markerOffset(const Marker & m) {return m.offset; }
-    static inline pablo::PabloAST * markerVar(const Marker & m) {return m.stream; }
-    static inline Marker makeMarker(pablo::PabloAST * strm, unsigned offset=0) {return {offset, strm};}
-
 private:
 
     pablo::PabloBlock * const                       mEntryScope;

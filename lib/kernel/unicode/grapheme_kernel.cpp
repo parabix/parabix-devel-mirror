@@ -49,9 +49,10 @@ void GraphemeClusterBreakKernel::generatePabloMethod() {
     // GCB rule shouldn't have any regex names so using re::resolveUnicodeNames is good enough.
     GCB = resolveUnicodeNames(GCB);
     unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
-    re_compiler.addPrecompiled("UTF8_index", pb.createExtract(getInputStreamVar("u8index"), pb.getInteger(0)));
-    PabloAST * const gcb = re_compiler.compile(GCB);
+    PabloAST * u8index = pb.createExtract(getInputStreamVar("u8index"), pb.getInteger(0));
+    re_compiler.addPrecompiled("UTF8_index", re::RE_Compiler::Marker(u8index));
+    re::RE_Compiler::Marker gcb_marker = re_compiler.compileRE(GCB);
     Var * const breaks = getOutputStreamVar("\\b{g}");
-    pb.createAssign(pb.createExtract(breaks, pb.getInteger(0)), gcb);
+    pb.createAssign(pb.createExtract(breaks, pb.getInteger(0)), gcb_marker.stream());
 }
 

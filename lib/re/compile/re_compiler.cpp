@@ -54,21 +54,21 @@ void RE_Compiler::addIndexingAlphabet(EncodingTransformer * indexingTransformer,
     mIndexingTransformer = indexingTransformer;
     mIndexStream = indexStream;
 }
-
-void RE_Compiler::addPrecompiled(std::string precompiledName, PabloAST * precompiledStream) {
-    PabloBuilder pb(mEntryScope);
-    mExternalNameMap.insert(std::make_pair(precompiledName, precompiledStream));
-}
-
+    
 using Marker = RE_Compiler::Marker;
 
-PabloAST * RE_Compiler::compile(RE * const re, PabloAST * const initialCursors) {
-    pablo::PabloBuilder mPB(mEntryScope);
-    const auto markers = initialCursors ? compile(re, initialCursors, mPB) : compile(re, mPB);
-    return markerVar(markers);
+void RE_Compiler::addPrecompiled(std::string precompiledName, Marker precompiled) {
+    PabloBuilder pb(mEntryScope);
+    mExternalNameMap.insert(std::make_pair(precompiledName, precompiled.stream()));
 }
 
-inline Marker RE_Compiler::compile(RE * const re, PabloAST * const cursors, PabloBuilder & pb) {
+Marker RE_Compiler::compileRE(RE * const re) {
+    pablo::PabloBuilder mPB(mEntryScope);
+    return process(re, Marker(mIndexStream, 1), mPB);
+}
+
+Marker RE_Compiler::compileRE(RE * const re, Marker initialMarkers) {
+    pablo::PabloBuilder pb(mEntryScope);
     //  An important use case for an initial set of cursors to be passed in
     //  is that the initial cursors are computed from a prefix of an RE such
     //  that there is a high probability of all cursors remaining in a block
@@ -78,15 +78,15 @@ inline Marker RE_Compiler::compile(RE * const re, PabloAST * const cursors, Pabl
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
     auto nested = pb.createScope();
-    Marker m1 = process(re, makeMarker(cursors), nested);
-    nested.createAssign(m, markerVar(m1));
-    pb.createIf(cursors, nested);
+    Marker m1 = process(re, initialMarkers, nested);
+    nested.createAssign(m, m1.stream());
+    pb.createIf(initialMarkers.stream(), nested);
     mCompiledName = nestedMap.getParent();
-    return makeMarker(m, m1.offset);
+    return Marker(m, m1.offset());
 }
 
 inline Marker RE_Compiler::compile(RE * const re, PabloBuilder & pb) {
-    return process(re, makeMarker(mIndexStream, 1), pb);
+    return process(re, Marker(mIndexStream, 1), pb);
 }
 
 Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
@@ -124,18 +124,18 @@ Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
 
 Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
     if (cc->empty()) {
-        return makeMarker(pb.createZeroes());
+        return Marker(pb.createZeroes());
     }
-    PabloAST * nextPos = markerVar(marker);
+    PabloAST * nextPos = marker.stream();
     const cc::Alphabet * a = cc->getAlphabet();
     unsigned i = 0;
     while (i < mAlphabets.size() && (a != mAlphabets[i])) i++;
     if (i < mAlphabets.size()) {
         //llvm::errs() << "Found alphabet: " << i << ", " << mAlphabets[i]->getName() << "\n";
-        if (marker.offset == 0) {
+        if (marker.offset() == 0) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
-        return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
+        return Marker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }
     if (mIndexingTransformer && (a == mIndexingTransformer->getIndexingAlphabet())) {
         //llvm::errs() << "Found indexing alphabet: " << i << ", " << mIndexingTransformer->getIndexingAlphabet()->getName() << "\n";
@@ -145,21 +145,21 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
         if (i < mAlphabets.size()) {
             RE_Compiler code_unit_compiler(pb.getPabloBlock(), mIndexingTransformer->getEncodingAlphabet());
             code_unit_compiler.addAlphabet(encodingAlphabet, mBasisSets[i]);
-            PabloAST * ccm = code_unit_compiler.compile(mIndexingTransformer->transformRE(cc));
-            if (marker.offset == 0) {
+            Marker ccm = code_unit_compiler.compileRE(mIndexingTransformer->transformRE(cc));
+            if (marker.offset() == 0) {
                 nextPos = pb.createIndexedAdvance(nextPos, mIndexStream, 1);
             }
-            return makeMarker(pb.createAnd(nextPos, ccm, cc->canonicalName()));
+            return Marker(pb.createAnd(nextPos, ccm.stream(), cc->canonicalName()));
         } else {
             llvm::report_fatal_error("EncodingAlphabet " + encodingAlphabet->getName() + " not registered!\n");
         }
     }
     if (a == &cc::Byte) {
         //llvm::errs() << "Using alphabet 0: for Byte\n";
-        if (marker.offset == 0) {
+        if (marker.offset() == 0) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
-        return makeMarker(pb.createAnd(nextPos, mAlphabetCompilers[0]->compileCC(cc, pb)));
+        return Marker(pb.createAnd(nextPos, mAlphabetCompilers[0]->compileCC(cc, pb)));
     }
     llvm::report_fatal_error("Alphabet " + a->getName() + " has no CC compiler, codeUnitAlphabet = " + mCodeUnitAlphabet->getName() + "\n in compiling RE: " + Printer_RE::PrintRE(cc) + "\n");
 }
@@ -169,27 +169,25 @@ inline Marker RE_Compiler::compileName(Name * const name, Marker marker, PabloBu
     Marker nameMarker = compileName(name, pb);
     auto lengths = getLengthRange(name, mCodeUnitAlphabet);
     if ((lengths.first == 1) && (lengths.second == 1)) {
-        PabloAST * nextPos = markerVar(marker);
-        if (marker.offset == 0) {
+        PabloAST * nextPos = marker.stream();
+        if (marker.offset() == 0) {
             nextPos = pb.createAdvance(nextPos, 1);
         }
-        nameMarker.stream = pb.createAnd(nextPos, markerVar(nameMarker), name->getName());
-        return nameMarker;
+        return Marker(pb.createAnd(nextPos, nameMarker.stream(), name->getName()), nameMarker.offset());
     }
     if (mIndexingTransformer) {
         auto lengths = getLengthRange(name, mIndexingTransformer->getIndexingAlphabet());
         //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
         if ((lengths.first == 1) && (lengths.second == 1)) {
             Marker nextPos = AdvanceMarker(marker, 1, pb);
-            //PabloAST * cursor = ScanToIndex(markerVar(nextPos), mIndexStream, pb);
-            nameMarker.stream = pb.createAnd(markerVar(nextPos), markerVar(nameMarker), name->getName());
-            return nameMarker;
+            //PabloAST * cursor = ScanToIndex(nextPos.stream(), mIndexStream, pb);
+            return Marker(pb.createAnd(nextPos.stream(), nameMarker.stream(), name->getName()), nameMarker.offset());
         }
     }
     if (name->getType() == Name::Type::ZeroWidth) {
         AlignMarkers(marker, nameMarker, pb);
-        PabloAST * ze = markerVar(nameMarker);
-        return makeMarker(pb.createAnd(markerVar(marker), ze, "zerowidth"), markerOffset(marker));
+        PabloAST * ze = nameMarker.stream();
+        return Marker(pb.createAnd(marker.stream(), ze, "zerowidth"), marker.offset());
     } else {
         llvm::report_fatal_error(nameString + " is neither Unicode unit length nor ZeroWidth.");
     }
@@ -197,14 +195,14 @@ inline Marker RE_Compiler::compileName(Name * const name, Marker marker, PabloBu
 
 inline Marker RE_Compiler::compileName(Name * const name, PabloBuilder & pb) {
     const auto & nameString = name->getFullName();
-    Marker m;
+    Marker m(nullptr);
     if (LLVM_LIKELY(mCompiledName->get(name, m))) {
         return m;
     }
     const auto f = mExternalNameMap.find(nameString);
     if (f != mExternalNameMap.end()) {
         const auto offset = (name->getType() == Name::Type::ZeroWidth) ? 1 : 0;
-        return makeMarker(f->second, offset);
+        return Marker(f->second, offset);
     }
     if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
         //errs() << "compiling definition of name: " << nameString << ": " <<Printer_RE::PrintRE(name->getDefinition()) << "\n";
@@ -241,10 +239,10 @@ Marker RE_Compiler::compileSeqTail(Seq::const_iterator current, const Seq::const
         mCompiledName = &nestedMap;
         auto nested = pb.createScope();
         Marker m1 = compileSeqTail(current, end, 0, marker, nested);
-        nested.createAssign(m, markerVar(m1));
-        pb.createIf(markerVar(marker), nested);
+        nested.createAssign(m, m1.stream());
+        pb.createIf(marker.stream(), nested);
         mCompiledName = nestedMap.getParent();
-        return makeMarker(m, m1.offset);
+        return Marker(m, m1.offset());
     }
 }
 
@@ -254,9 +252,9 @@ Marker RE_Compiler::compileAlt(Alt * const alt, const Marker base, PabloBuilder 
     // Advances in each alternative.
     for (RE * re : *alt) {
         Marker m = process(re, base, pb);
-        const unsigned o = markerOffset(m);
+        const unsigned o = m.offset();
         while (o >= accum.size()) {accum.push_back(pb.createZeroes());}
-        accum[o] = pb.createOr(accum[o], markerVar(m), "alt");
+        accum[o] = pb.createOr(accum[o], m.stream(), "alt");
     }
     unsigned max_offset = accum.size() - 1;
     if ((max_offset > 0) && !isa<Zeroes>(accum[0])) {
@@ -269,7 +267,7 @@ Marker RE_Compiler::compileAlt(Alt * const alt, const Marker base, PabloBuilder 
             accum[max_offset] = pb.createOr(accum[max_offset], adjusted);
         }
     }
-    return makeMarker(accum[max_offset], max_offset);
+    return Marker(accum[max_offset], max_offset);
 }
 
 Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBuilder & pb) {
@@ -277,21 +275,21 @@ Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBu
     if (a->getKind() == Assertion::Kind::LookBehind) {
         Marker lookback = compile(asserted, pb);
         AlignMarkers(marker, lookback, pb);
-        PabloAST * lb = markerVar(lookback);
+        PabloAST * lb = lookback.stream();
         if (a->getSense() == Assertion::Sense::Negative) {
             lb = pb.createNot(lb);
         }
-        return makeMarker(pb.createAnd(markerVar(marker), lb, "lookback"), markerOffset(marker));
+        return Marker(pb.createAnd(marker.stream(), lb, "lookback"), marker.offset());
     } else if (a->getKind() == Assertion::Kind::Boundary) {
         Marker cond = compile(asserted, pb);
-        if (LLVM_LIKELY(markerOffset(cond) == 0)) {
+        if (LLVM_LIKELY(cond.offset() == 0)) {
             Marker postCond = AdvanceMarker(cond, 1, pb);
-            PabloAST * boundaryCond = pb.createXor(markerVar(cond), markerVar(postCond));
+            PabloAST * boundaryCond = pb.createXor(cond.stream(), postCond.stream());
             if (a->getSense() == Assertion::Sense::Negative) {
                 boundaryCond = pb.createNot(boundaryCond);
             }
             Marker fbyte = AdvanceMarker(marker, 1, pb);
-            return makeMarker(pb.createAnd(markerVar(fbyte), boundaryCond, "boundary"), 1);
+            return Marker(pb.createAnd(fbyte.stream(), boundaryCond, "boundary"), 1);
         }
         else UnsupportedRE("Unsupported boundary assertion");
     }
@@ -301,11 +299,11 @@ Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBu
     if (lengths.second == 0) {
         Marker lookahead = compile(asserted, pb);
         AlignMarkers(marker, lookahead, pb);
-        PabloAST * la = markerVar(lookahead);
+        PabloAST * la = lookahead.stream();
         if (a->getSense() == Assertion::Sense::Negative) {
             la = pb.createNot(la);
         }
-        return makeMarker(pb.createAnd(markerVar(marker), la, "lookahead"), markerOffset(marker));
+        return Marker(pb.createAnd(marker.stream(), la, "lookahead"), marker.offset());
     }
 #if 0
     if (((lengths.first == lengths.second) && isa<Name>(asserted))) {
@@ -324,30 +322,30 @@ Marker RE_Compiler::compileAssertion(Assertion * const a, Marker marker, PabloBu
             if (a->getSense() == Assertion::Sense::Negative) {
                 nameMarker = pb.createNot(nameMarker);
             }
-            PabloAST * matched = pb.createAnd(markerVar(marker), nameMarker);
-            return makeMarker(markerPos(marker), matched);
+            PabloAST * matched = pb.createAnd(marker.stream(), nameMarker);
+            return Marker(markerPos(marker), matched);
         }
     }
 #endif
     Marker lookahead = compile(asserted, pb);
-    if (LLVM_LIKELY((lengths.second == 1) && (markerOffset(lookahead) == 0))) {
+    if (LLVM_LIKELY((lengths.second == 1) && (lookahead.offset() == 0))) {
         Marker lookahead = compile(asserted, pb);
-        PabloAST * la = markerVar(lookahead);
+        PabloAST * la = lookahead.stream();
         if (a->getSense() == Assertion::Sense::Negative) {
             la = pb.createNot(la);
         }
         Marker fbyte = AdvanceMarker(marker, 1, pb);
-        return makeMarker(pb.createAnd(markerVar(fbyte), la, "lookahead"), 1);
+        return Marker(pb.createAnd(fbyte.stream(), la, "lookahead"), 1);
     }
 #if 0
     lengths = getLengthRange(asserted, &cc::Unicode);
     if (LLVM_LIKELY((lengths.second == 1) && (markerPos(lookahead) == FinalMatchUnit))) {
-        PabloAST * la = markerVar(lookahead);
+        PabloAST * la = lookahead.stream();
         if (a->getSense() == Assertion::Sense::Negative) {
             la = pb.createNot(la);
         }
         Marker fbyte = AdvanceMarker(marker, FinalPostPositionUnit, pb);
-        return makeMarker(FinalPostPositionUnit, pb.createAnd(markerVar(fbyte), la, "lookahead"));
+        return Marker(FinalPostPositionUnit, pb.createAnd(fbyte.stream(), la, "lookahead"));
     }
 #endif
     llvm::errs() << "lengths.second = " << lengths.second << "\n";
@@ -367,7 +365,7 @@ Marker RE_Compiler::compileDiff(Diff * diff, Marker marker, PabloBuilder & pb) {
         Marker t1 = process(lh, marker, pb);
         Marker t2 = process(rh, marker, pb);
         AlignMarkers(t1, t2, pb);
-        return makeMarker(pb.createAnd(markerVar(t1), pb.createNot(markerVar(t2)), "diff"), markerOffset(t1));
+        return Marker(pb.createAnd(t1.stream(), pb.createNot(t2.stream()), "diff"), t1.offset());
     }
     UnsupportedRE("Unsupported Diff operands: " + Printer_RE::PrintRE(diff));
 }
@@ -379,7 +377,7 @@ Marker RE_Compiler::compileIntersect(Intersect * const x, Marker marker, PabloBu
         Marker t1 = process(lh, marker, pb);
         Marker t2 = process(rh, marker, pb);
         AlignMarkers(t1, t2, pb);
-        return makeMarker(pb.createAnd(markerVar(t1), markerVar(t2), "intersect"), markerOffset(t1));
+        return Marker(pb.createAnd(t1.stream(), t2.stream(), "intersect"), t1.offset());
     }
     UnsupportedRE("Unsupported Intersect operands: " + Printer_RE::PrintRE(x));
 }
@@ -463,29 +461,29 @@ Marker RE_Compiler::processLowerBound(RE * const repeated, const int lb, Marker 
         //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
         int rpt = lb;
         if ((lengths.first == 1) && (lengths.second == 1)) {
-            PabloAST * cc = markerVar(compile(repeated, pb));
-            if (markerOffset(marker) != 0) {
-                marker = makeMarker(pb.createAnd(cc, markerVar(marker)));
+            PabloAST * cc = compile(repeated, pb).stream();
+            if (marker.offset() != 0) {
+                marker = Marker(pb.createAnd(cc, marker.stream()));
                 rpt -= 1;
             }
             PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, lengths.first, nullptr, pb);
             auto lb_lgth = lengths.first * rpt;
-            PabloAST * marker_fwd = pb.createAdvance(markerVar(marker), lb_lgth, "marker_fwd");
-            return makeMarker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
+            PabloAST * marker_fwd = pb.createAdvance(marker.stream(), lb_lgth, "marker_fwd");
+            return Marker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
         }
         if (mIndexingTransformer) {
             auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
             //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
             if ((lengths.first == 1) && (lengths.second == 1)) {
-                PabloAST * cc = markerVar(compile(repeated, pb));
-                PabloAST * cursor = markerVar(marker);
-                if (markerOffset(marker) != 0) {
-                    cursor = pb.createAnd(cc, pb.createScanTo(markerVar(marker), mIndexStream));
+                PabloAST * cc = compile(repeated, pb).stream();
+                PabloAST * cursor = marker.stream();
+                if (marker.offset() != 0) {
+                    cursor = pb.createAnd(cc, pb.createScanTo(marker.stream(), mIndexStream));
                     rpt -= 1;
                 }
                 PabloAST * cc_lb = consecutive_matches(cc, 1, rpt, 1, mIndexStream, pb);
                 PabloAST * marker_fwd = pb.createIndexedAdvance(cursor, mIndexStream, rpt);
-                return makeMarker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
+                return Marker(pb.createAnd(marker_fwd, cc_lb, "lowerbound"));
             }
         }
     }
@@ -502,10 +500,10 @@ Marker RE_Compiler::processLowerBound(RE * const repeated, const int lb, Marker 
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
     Marker m1 = processLowerBound(repeated, lb - group, marker, ifGroupSize * 2, nested);
-    nested.createAssign(m, markerVar(m1));
-    pb.createIf(markerVar(marker), nested);
+    nested.createAssign(m, m1.stream());
+    pb.createIf(marker.stream(), nested);
     mCompiledName = nestedMap.getParent();
-    return makeMarker(m, m1.offset);
+    return Marker(m, m1.offset());
 }
 
 Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker marker, const int ifGroupSize,  PabloBuilder & pb) {
@@ -520,29 +518,29 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
         auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
         // TODO: handle fixed lengths > 1
         if ((lengths.first == 1) && (lengths.second == 1)) {
-            PabloAST * repeatMarks = markerVar(compile(repeated, pb));
+            PabloAST * repeatMarks = compile(repeated, pb).stream();
             // log2 upper bound for fixed length (=1) class
             // Create a mask of positions reachable within ub from current marker.
             // Use matchstar, then apply filter.
-            PabloAST * cursor = markerVar(marker);
+            PabloAST * cursor = marker.stream();
             PabloAST * upperLimitMask = reachable(cursor, lengths.first, ub, nullptr, pb);
             PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
             PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
-            return makeMarker(bounded);
+            return Marker(bounded);
         }
         if (mIndexingTransformer) {
             auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
             //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
             if ((lengths.first == 1) && (lengths.second == 1)) {
-                PabloAST * repeatMarks = markerVar(compile(repeated, pb));
+                PabloAST * repeatMarks = compile(repeated, pb).stream();
                 // For a regexp which represent a single Unicode codepoint, we can use the mIndexStream stream
                 // as an index stream for an indexed advance operation.
-                PabloAST * cursor = markerVar(marker);
+                PabloAST * cursor = marker.stream();
                 PabloAST * upperLimitMask = reachable(cursor, 1, ub, mIndexStream, pb);
                 PabloAST * masked = pb.createAnd(repeatMarks, upperLimitMask, "masked");
                 masked = pb.createOr(masked, pb.createNot(mIndexStream));
                 PabloAST * bounded = pb.createAnd(pb.createMatchStar(cursor, masked), upperLimitMask, "bounded");
-                return makeMarker(bounded);
+                return Marker(bounded);
             }
         }
     }
@@ -552,7 +550,7 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
         Marker a = process(repeated, marker, pb);
         Marker m = marker;
         AlignMarkers(a, m, pb);
-        marker = makeMarker(pb.createOr(markerVar(a), markerVar(m)), markerOffset(a));
+        marker = Marker(pb.createOr(a.stream(), m.stream()), a.offset());
     }
     if (ub == group) {
         return marker;
@@ -562,33 +560,33 @@ Marker RE_Compiler::processBoundedRep(RE * const repeated, const int ub, Marker 
     NameMap nestedMap(mCompiledName);
     mCompiledName = &nestedMap;
     Marker m1 = processBoundedRep(repeated, ub - group, marker, ifGroupSize * 2, nested);
-    nested.createAssign(m1a, markerVar(m1));
-    pb.createIf(markerVar(marker), nested);
+    nested.createAssign(m1a, m1.stream());
+    pb.createIf(marker.stream(), nested);
     mCompiledName = nestedMap.getParent();
-    return makeMarker(m1a, markerOffset(m1));
+    return Marker(m1a, m1.offset());
 }
 
 Marker RE_Compiler::processUnboundedRep(RE * const repeated, Marker marker, PabloBuilder & pb) {
     // always use PostPosition markers for unbounded repetition.
-    PabloAST * base = markerVar(AdvanceMarker(marker, 1, pb));
+    PabloAST * base = AdvanceMarker(marker, 1, pb).stream();
     if (LLVM_LIKELY(!AlgorithmOptionIsSet(DisableMatchStar))) {
         auto lengths = getLengthRange(repeated, mCodeUnitAlphabet);
         //llvm::errs() << "getLengthRange(repeated, mCodeUnitAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
         if ((lengths.first == 1) && (lengths.second == 1)) {
-            PabloAST * mask = markerVar(compile(repeated, pb));
+            PabloAST * mask = compile(repeated, pb).stream();
             mask = pb.createOr(mask, pb.createNot(mIndexStream));
             // The post position character may land on the initial byte of a multi-byte character. Combine them with the masked range.
             PabloAST * unbounded = pb.createMatchStar(base, mask, "unbounded");
-            return makeMarker(pb.createAnd(unbounded, mIndexStream, "unbounded"), 1);
+            return Marker(pb.createAnd(unbounded, mIndexStream, "unbounded"), 1);
         }
         if (mIndexingTransformer) {
             auto lengths = getLengthRange(repeated, mIndexingTransformer->getIndexingAlphabet());
             //llvm::errs() << "getLengthRange(repeated, getIndexingAlphabet) = " << lengths.first << ", " << lengths.second << "\n";
             if ((lengths.first == 1) && (lengths.second == 1)) {
-                PabloAST * mask = markerVar(compile(repeated, pb));
+                PabloAST * mask = compile(repeated, pb).stream();
                 mask = pb.createOr(mask, pb.createNot(mIndexStream));
                 PabloAST * unbounded = pb.createMatchStar(base, mask);
-                return makeMarker(pb.createAnd(unbounded, mIndexStream, "unbounded"), 1);
+                return Marker(pb.createAnd(unbounded, mIndexStream, "unbounded"), 1);
             }
         }
     }
@@ -599,14 +597,14 @@ Marker RE_Compiler::processUnboundedRep(RE * const repeated, Marker marker, Pabl
         mStarDepth++;
         PabloAST * m1 = pb.createOr(base, starPending);
         PabloAST * m2 = pb.createOr(base, starAccum);
-        Marker result = process(repeated, makeMarker(m1, 1), pb);
+        Marker result = process(repeated, Marker(m1, 1), pb);
         result = AdvanceMarker(result, 1, pb);
-        PabloAST * loopComputation = markerVar(result);
+        PabloAST * loopComputation = result.stream();
         pb.createAssign(starPending, pb.createAnd(loopComputation, pb.createNot(m2)));
         pb.createAssign(starAccum, pb.createOr(loopComputation, m2));
         mWhileTest = pb.createOr(mWhileTest, starPending);
         mStarDepth--;
-        return makeMarker(pb.createOr(base, starAccum, "unbounded"), markerOffset(result));
+        return Marker(pb.createOr(base, starAccum, "unbounded"), result.offset());
     } else {
         Var * whileTest = pb.createVar("test", base);
         Var * whilePending = pb.createVar("pending", base);
@@ -616,45 +614,44 @@ Marker RE_Compiler::processUnboundedRep(RE * const repeated, Marker marker, Pabl
         NameMap nestedMap(mCompiledName);
         mCompiledName = &nestedMap;
         mStarDepth++;
-        Marker result = process(repeated, makeMarker(whilePending, 1), wb);
+        Marker result = process(repeated, Marker(whilePending, 1), wb);
         result = AdvanceMarker(result, 1, wb);
-        PabloAST * loopComputation = markerVar(result);
+        PabloAST * loopComputation = result.stream();
         wb.createAssign(whilePending, wb.createAnd(loopComputation, wb.createNot(whileAccum)));
         wb.createAssign(whileAccum, wb.createOr(loopComputation, whileAccum));
         wb.createAssign(whileTest, wb.createOr(mWhileTest, whilePending));
         pb.createWhile(whileTest, wb);
         mStarDepth--;
         mCompiledName = nestedMap.getParent();
-        return makeMarker(whileAccum, markerOffset(result));
+        return Marker(whileAccum, result.offset());
     }
 }
 
 inline Marker RE_Compiler::compileStart(Marker marker, pablo::PabloBuilder & pb) {
     PabloAST * const SOT = pb.createNot(pb.createAdvance(pb.createOnes(), 1));
     Marker m = AdvanceMarker(marker, 1, pb);
-    return makeMarker(pb.createAnd(markerVar(m), SOT, "SOT"), 1);
+    return Marker(pb.createAnd(m.stream(), SOT, "SOT"), 1);
 }
 
 inline Marker RE_Compiler::compileEnd(Marker marker, pablo::PabloBuilder & pb) {
-    PabloAST * const nextPos = markerVar(AdvanceMarker(marker, 1, pb));
+    PabloAST * const nextPos = AdvanceMarker(marker, 1, pb).stream();
     PabloAST * endOfText = pb.createAtEOF(pb.createAdvance(pb.createOnes(), 1), "EOT");
     PabloAST * const EOT_match = pb.createAnd(endOfText, nextPos, "EOT_match");
-    return makeMarker(EOT_match, 1);
+    return Marker(EOT_match, 1);
 }
 
 inline Marker RE_Compiler::AdvanceMarker(Marker marker, const unsigned offset, PabloBuilder & pb) {
-    if (marker.offset < offset) {
-        marker.stream = pb.createIndexedAdvance(marker.stream, mIndexStream, offset - marker.offset);
-        marker.offset = offset;
+    if (marker.offset() < offset) {
+        return Marker(pb.createIndexedAdvance(marker.stream(), mIndexStream, offset - marker.offset()), offset);
     }
     return marker;
 }
 
 inline void RE_Compiler::AlignMarkers(Marker & m1, Marker & m2, PabloBuilder & pb) {
-    if (m1.offset < m2.offset) {
-        m1 = AdvanceMarker(m1, m2.offset, pb);
-    } else if (m2.offset < m1.offset) {
-        m2 = AdvanceMarker(m2, m1.offset, pb);
+    if (m1.offset() < m2.offset()) {
+        m1 = AdvanceMarker(m1, m2.offset(), pb);
+    } else if (m2.offset() < m1.offset()) {
+        m2 = AdvanceMarker(m2, m1.offset(), pb);
     }
 }
 
