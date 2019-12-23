@@ -463,6 +463,7 @@ abcdefghijklmno</datafile>
 <grepcase regexp="ab*" datafile="StartEndAlt" greplines="2 3 4 5 6 7 8 9 10 11 12 13 14 15 16"/>
 <grepcase regexp="^user|^I|our$" datafile="StartEndAlt" greplines="4 7 10 12 15"/>
 <grepcase regexp="fe|si" datafile="simple1" greplines="2 3 4"/>
+<grepcase regexp="le$" datafile="simple1" greplines="3 4"/>
 <grepcase regexp="fe|si" datafile="." flags="-c -r -include=simpl*" grepcount="3"/>
 <grepcase regexp="in" datafile="simple1" greplines="2 3"/>
 <grepcase regexp="in" datafile="." flags="-c -r -include=s* -exclude=s[A-Za-hj-z]*" grepcount="2"/>

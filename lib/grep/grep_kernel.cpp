@@ -18,6 +18,7 @@
 #include <pablo/pe_var.h>           // for Var
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <pablo/pe_infile.h>
+#include <pablo/pe_advance.h>
 #include <pablo/boolean.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
@@ -304,11 +305,15 @@ void ICGrepKernel::generatePabloMethod() {
         }
         RE_Compiler re_compiler(scope1, mOptions->mCodeUnitAlphabet);
         re_compiler.addAlphabet(mOptions->mCodeUnitAlphabet, basis);
-        RE_Compiler::Marker suffixMatches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
-        scope1->createAssign(final_matches, suffixMatches.stream());
+        RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
+        PabloAST * matchResult = matches.stream();
+        if (matches.offset() == 0) matchResult = scope1->createAdvance(matchResult, scope1->getInteger(1));
+        scope1->createAssign(final_matches, matchResult);
     } else {
         RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE);
-        pb.createAssign(final_matches, matches.stream());
+        PabloAST * matchResult = matches.stream();
+        if (matches.offset() == 0) matchResult = pb.createAdvance(matchResult, 1);
+        pb.createAssign(final_matches, matchResult);
     }
     Var * const output = getOutputStreamVar("matches");
     if (mOptions->mCombiningType == GrepCombiningType::None) {
@@ -370,15 +375,14 @@ mMatchLength(length) {}
 void FixedMatchPairsKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     Var * matchResults = getInputStreamVar("MatchResults");
-    Var * matchEnds = pb.createExtract(matchResults, pb.getInteger(0));
+    PabloAST * matchFollows = pb.createExtract(matchResults, pb.getInteger(0));
     Var * matchPairsVar = getOutputStreamVar("MatchPairs");
-    PabloAST * starts = pb.createLookahead(matchEnds, mMatchLength-1);
-    PabloAST * follows = pb.createAdvance(matchEnds, 1);
-    PabloAST * disjoint = pb.createXor(starts, follows);
+    PabloAST * starts = pb.createLookahead(matchFollows, mMatchLength);
+    PabloAST * disjoint = pb.createXor(starts, matchFollows);
     starts = pb.createAnd(starts, disjoint);
-    follows = pb.createAnd(follows, disjoint);
+    matchFollows = pb.createAnd(matchFollows, disjoint);
     pb.createAssign(pb.createExtract(matchPairsVar, 0), starts);
-    pb.createAssign(pb.createExtract(matchPairsVar, 1), follows);
+    pb.createAssign(pb.createExtract(matchPairsVar, 1), matchFollows);
 }
 
 void PopcountKernel::generatePabloMethod() {

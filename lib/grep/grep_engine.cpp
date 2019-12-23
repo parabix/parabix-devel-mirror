@@ -240,16 +240,18 @@ void GrepEngine::initREs(std::vector<re::RE *> & REs) {
             break;
         }
     }
+    for (unsigned i = 0; i < mREs.size(); ++i) {
+        if (!validateFixedUTF8(mREs[i])) {
+            setComponent(mExternalComponents, Component::UTF8index);
+            if (mColoring) {
+                UnicodeIndexing = true;
+            }
+            break;
+        }
+    }
     if (UnicodeIndexing) {
         setComponent(mExternalComponents, Component::S2P);
         setComponent(mExternalComponents, Component::UTF8index);
-    } else {
-        for (unsigned i = 0; i < mREs.size(); ++i) {
-            if (!validateFixedUTF8(mREs[i])) {
-                setComponent(mExternalComponents, Component::UTF8index);
-                break;
-            }
-        }
     }
     if ((mEngineKind == EngineKind::EmitMatches) && mColoring && !mInvertMatches) {
         setComponent(mExternalComponents, Component::MatchStarts);
