@@ -303,7 +303,7 @@ void UnicodeLinesLogic(const std::unique_ptr<kernel::ProgramBuilder> & P,
     Kernel * k = P->CreateKernelCall<UnicodeLinesKernelBuilder>
          (Basis, LF, UnicodeLB, u8index, m, nullMode, signalNullObject);
     if (nullMode == NullCharMode::Abort) {
-        P->getDriver().LinkFunction(k, "signal_dispatcher", kernel::signal_dispatcher);
+        k->link("signal_dispatcher", kernel::signal_dispatcher);
     }
 }
 

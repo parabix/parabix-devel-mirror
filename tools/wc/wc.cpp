@@ -17,7 +17,6 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
-#include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <toolchain/pablo_toolchain.h>
 #include <kernel/pipeline/driver/cpudriver.h>
@@ -172,10 +171,10 @@ WordCountFunctionType wcPipelineGen(CPUDriver & pxDriver) {
 
     Kernel * const wck = P->CreateKernelCall<WordCountKernel>(CountableStream);
 
-    Scalar * const lineCount = wck->getOutputScalar("lineCount");
-    Scalar * const wordCount = wck->getOutputScalar("wordCount");
-    Scalar * const charCount = wck->getOutputScalar("charCount");
-    Scalar * const fileSize = mmapK->getOutputScalar("fileItems");
+    Scalar * const lineCount = wck->getOutputScalarAt(0);
+    Scalar * const wordCount = wck->getOutputScalarAt(1);
+    Scalar * const charCount = wck->getOutputScalarAt(2);
+    Scalar * const fileSize = mmapK->getOutputScalarAt(0);
 
     P->CreateCall("record_counts", record_counts, {lineCount, wordCount, charCount, fileSize, fileIdx});
 

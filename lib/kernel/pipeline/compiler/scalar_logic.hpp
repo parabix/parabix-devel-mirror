@@ -10,7 +10,6 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
     std::vector<Value *> args;
-    b->setKernel(mPipelineKernel);
     for (unsigned call = FirstCall; call <= LastCall; ++call) {
         writeOutputScalars(b, call, args);
         const RelationshipNode & rn = mScalarGraph[call];
@@ -31,7 +30,7 @@ std::vector<Value *> PipelineCompiler::getFinalOutputScalars(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOutputScalars
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, std::vector<Value *> & args) {
+void PipelineCompiler::writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args) {
     const auto n = in_degree(index, mScalarGraph);
     args.resize(n);
     for (const auto e : make_iterator_range(in_edges(index, mScalarGraph))) {
@@ -44,7 +43,7 @@ void PipelineCompiler::writeOutputScalars(BuilderRef b, const unsigned index, st
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getScalar
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getScalar(BuilderRef b, const unsigned index) {
+Value * PipelineCompiler::getScalar(BuilderRef b, const size_t index) {
     Value * value = mScalarValue[index];
     if (value) {
         return value;
@@ -60,7 +59,7 @@ Value * PipelineCompiler::getScalar(BuilderRef b, const unsigned index) {
         const auto i = source(producer, mScalarGraph);
         const RelationshipType & rt = mScalarGraph[producer];
         if (i == PipelineInput) {
-            const Binding & input = mPipelineKernel->getInputScalarBinding(rt.Number);
+            const Binding & input = mTarget->getInputScalarBinding(rt.Number);
             value = b->getScalarField(input.getName());
         } else { // output scalar of some kernel
             Value * const outputScalars = getScalar(b, i);

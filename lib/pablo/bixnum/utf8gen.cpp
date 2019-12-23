@@ -78,7 +78,7 @@ void UTF8fieldDepositMask::generateFinalBlockMethod(BuilderRef b, Value * const 
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(b);
+    RepeatDoBlockLogic(b);
 }
 
 

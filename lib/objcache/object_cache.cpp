@@ -86,10 +86,10 @@ const MDString * getSignature(const llvm::Module * const M) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadCachedObjectFile
  ** ------------------------------------------------------------------------------------------------------------- */
-bool ParabixObjectCache::loadCachedObjectFile(BuilderRef idb, kernel::Kernel * const kernel) {
+bool ParabixObjectCache::loadCachedObjectFile(BuilderRef b, kernel::Kernel * const kernel) {
     if (LLVM_LIKELY(kernel->isCachable())) {
         assert (kernel->getModule() == nullptr);
-        const auto moduleId = kernel->getCacheName(idb);
+        const auto moduleId = kernel->getCacheName(b);
 
         // TODO: To enable the quick lookup of previously cached objects, I need to reclaim ownership
         // of the modules from the JIT engine before it destroys them.
@@ -116,7 +116,7 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef idb, kernel::Kernel * c
             #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
             auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
             #else
-            auto loadedFile = getOwningLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
+            auto loadedFile = getOwningLazyBitcodeModule(std::move(kernelBuffer.get()), b->getContext());
             #endif
             // if there was no error when parsing the bitcode
             if (LLVM_LIKELY(loadedFile)) {
@@ -124,7 +124,7 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef idb, kernel::Kernel * c
                 if (kernel->hasSignature()) {
                     const MDString * const sig = getSignature(M.get());
                     assert ("signature is missing from kernel file: possible module naming conflict or change in the LLVM metadata storage policy?" && sig);
-                    if (LLVM_UNLIKELY(sig == nullptr || !sig->getString().equals(kernel->makeSignature(idb)))) {
+                    if (LLVM_UNLIKELY(sig == nullptr || !sig->getString().equals(kernel->makeSignature(b)))) {
                         goto invalid;
                     }
                 }
@@ -134,10 +134,10 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef idb, kernel::Kernel * c
                     Module * const m = M.release();
                     // defaults to <path>/<moduleId>.kernel
                     m->setModuleIdentifier(moduleId);
-                    kernel->setModule(m);
-                    kernel->prepareCachedKernel(idb);
+                    b->setModule(m);
+                    kernel->loadCachedKernel(b);
                     mCachedObject.emplace(moduleId, std::make_pair(m, std::move(objectBuffer.get())));
-                    // update the modified time of the .kernel, .o and .kernel files
+                    // update the modified time of the .o and .kernel files
                     const auto access_time = currentTime();
                     fs::last_write_time(fileName.c_str(), access_time);
                     sys::path::replace_extension(fileName, KERNEL_FILE_EXTENSION);
@@ -149,14 +149,14 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef idb, kernel::Kernel * c
 
 invalid:
 
-        Module * const module = kernel->setModule(new Module(moduleId, idb->getContext()));
+        Module * const module = kernel->setModule(new Module(moduleId, b->getContext()));
         // mark this module as cachable
         module->getOrInsertNamedMetadata(CACHEABLE);
         // if this module has a signature, add it to the metadata
         if (kernel->hasSignature()) {
             NamedMDNode * const md = module->getOrInsertNamedMetadata(SIGNATURE);
             assert (md->getNumOperands() == 0);
-            MDString * const sig = MDString::get(module->getContext(), kernel->makeSignature(idb));
+            MDString * const sig = MDString::get(module->getContext(), kernel->makeSignature(b));
             md->addOperand(MDNode::get(module->getContext(), {sig}));
         }
     }

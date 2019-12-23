@@ -81,6 +81,10 @@ public:
         return mHandle;
     }
 
+    void setHandle(llvm::Value * const handle) const {
+        mHandle = handle;
+    }
+
     virtual void allocateBuffer(BuilderPtr b) = 0;
 
     virtual void releaseBuffer(BuilderPtr b) const = 0;
@@ -122,17 +126,13 @@ public:
 
     virtual void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const = 0;
 
-    void setHandle(BuilderPtr b, llvm::Value * const handle) const;
+    static llvm::Type * resolveType(BuilderPtr b, llvm::Type * const streamSetType);
 
 protected:
-
-    llvm::Value * getHandle(BuilderPtr b) const;
 
     llvm::Value * addOverflow(BuilderPtr b, llvm::Value * const bufferCapacity, llvm::Value * const overflowItems, llvm::Value * const consumedOffset) const;
 
     StreamSetBuffer(const BufferKind k, BuilderPtr b, llvm::Type * baseType, const size_t overflowBlocks, const size_t underflowSize, const bool linear, const unsigned AddressSpace);
-
-    static llvm::Type * resolveType(BuilderPtr b, llvm::Type * const streamSetType);
 
 private:
 
@@ -270,8 +270,6 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    friend class KernelBuilder;
-
     enum Field {BaseAddress, Capacity, PriorBaseAddress};
 
 public:
@@ -308,16 +306,13 @@ public:
 
     void setBaseAddress(BuilderPtr b, llvm::Value * addr) const override;
 
-    llvm::Value * getOverflowAddress(BuilderPtr b) const override;  
+    llvm::Value * getOverflowAddress(BuilderPtr b) const override;
 
 private:
 
     const size_t    mInitialCapacity;
 
 };
-
-using StreamSetBuffers = std::vector<StreamSetBuffer *>;
-using OwnedStreamSetBuffers = std::vector<std::unique_ptr<StreamSetBuffer>>;
 
 }
 #endif // STREAMSET_H

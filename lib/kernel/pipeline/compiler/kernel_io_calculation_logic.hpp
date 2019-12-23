@@ -556,8 +556,7 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
             const Binding & input = getInputBinding(i);
             const ProcessingRate & rate = input.getRate();
 
-            if (rate.isFixed()) {
-                Value * accessible = accessibleItems[i];
+            if (rate.isFixed()) {                
                 const auto factor = rate.getRate() / mFixedRateLCM;
                 Value * calculated = b->CreateCeilUMulRate(minFixedRateFactor, factor);
                 auto addPort = in_edges(mKernelIndex, mAddGraph).first + i;
@@ -583,8 +582,8 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
                     Value * const z = b->CreateCeilUMulRate(y, r);
                     calculated = b->CreateSelect(isClosedNormally(b, i), z, calculated);
                 }
-
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
+                    Value * const accessible = accessibleItems[i];
                     Value * correctItemCount = b->CreateICmpULE(calculated, accessible);
                     if (LLVM_UNLIKELY(mIsInputZeroExtended[i] != nullptr)) {
                         correctItemCount = b->CreateOr(correctItemCount, mIsInputZeroExtended[i]);

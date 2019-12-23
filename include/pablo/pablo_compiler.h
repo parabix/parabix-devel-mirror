@@ -7,6 +7,8 @@
 #ifndef PABLO_COMPILER_H
 #define PABLO_COMPILER_H
 
+#include <kernel/core/block_kernel_compiler.h>
+#include <pablo/carry_manager.h>
 #include <unordered_map>
 #include <vector>
 #include <memory>
@@ -14,7 +16,6 @@ namespace IDISA { class IDISA_Builder; }
 namespace llvm { class BasicBlock; }
 namespace llvm { class Function; }
 namespace llvm { class Value; }
-namespace pablo { class CarryManager; }
 namespace pablo { class If; }
 namespace pablo { class PabloAST; }
 namespace pablo { class PabloBlock; }
@@ -22,11 +23,10 @@ namespace pablo { class PabloKernel; }
 namespace pablo { class Statement; }
 namespace pablo { class Var; }
 namespace pablo { class While; }
-namespace kernel { class KernelBuilder; }
 
 namespace pablo {
 
-class PabloCompiler {
+class PabloCompiler final : public kernel::BlockKernelCompiler {
 
     friend class PabloKernel;
 
@@ -34,11 +34,9 @@ class PabloCompiler {
 
 public:
 
-    using BuilderRef = const std::unique_ptr<kernel::KernelBuilder> &;
+    using BuilderRef = kernel::Kernel::BuilderRef;
 
     PabloCompiler(PabloKernel * kernel);
-
-    ~PabloCompiler();
 
 protected:
 

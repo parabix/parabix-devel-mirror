@@ -13,6 +13,8 @@ SRC
     callback.cpp
     idisa_target.cpp
     kernel_builder.cpp
+    kernel_compiler.cpp
+    block_kernel_compiler.cpp
     kernel.cpp
     multiblock_kernel.cpp
     processing_rate.cpp

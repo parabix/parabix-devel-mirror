@@ -60,7 +60,7 @@ void IDISA_Builder::CallPrintRegister(StringRef name, Value * const value, const
         raw_string_ostream out(tmp);
         out << "%-40s =";
         for(unsigned i = 0; i < (getBitBlockWidth() / 8); ++i) {
-            out << " %02x";
+            out << " %02" PRIx32;
         }
         out << '\n';
         BasicBlock * entry = BasicBlock::Create(m->getContext(), "entry", function);

@@ -4,20 +4,19 @@
  */
 
 #include <pablo/pablo_kernel.h>
-
 #include <pablo/codegenstate.h>
 #include <pablo/pablo_compiler.h>
 #include <pablo/pe_var.h>
 #include <pablo/pe_zeroes.h>
 #include <pablo/pe_ones.h>
 #include <pablo/passes.h>
+
 #include <toolchain/pablo_toolchain.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/streamset.h>
 #include <toolchain/toolchain.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/ErrorHandling.h>
-
 #include <pablo/branch.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -29,14 +28,21 @@ using namespace llvm;
 
 namespace pablo {
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief instantiateKernelCompiler
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::unique_ptr<KernelCompiler> PabloKernel::instantiateKernelCompiler(BuilderRef /* b */) const noexcept {
+    return llvm::make_unique<PabloCompiler>(const_cast<PabloKernel *>(this));
+}
+
 Var * PabloKernel::getInputStreamVar(const std::string & name) {
-    const auto port = getStreamPort(name);
+    const auto port = mPabloCompiler->getStreamPort(name);
     assert (port.Type == PortType::Input);
     return mInputs[port.Number];
 }
 
 std::vector<PabloAST *> PabloKernel::getInputStreamSet(const std::string & name) {
-    const auto port = getStreamPort(name);
+    const auto port = mPabloCompiler->getStreamPort(name);
     assert (port.Type == PortType::Input);
     const Binding & input = getInputStreamSetBinding(port.Number);
     const auto numOfStreams = IDISA::getNumOfStreams(input.getType());
@@ -47,9 +53,8 @@ std::vector<PabloAST *> PabloKernel::getInputStreamSet(const std::string & name)
     return inputSet;
 }
 
-
 Var * PabloKernel::getOutputStreamVar(const std::string & name) {
-    const auto port = getStreamPort(name);
+    const auto port = mPabloCompiler->getStreamPort(name);
     assert (port.Type == PortType::Output);
     return mOutputs[port.Number];
 }
@@ -138,6 +143,7 @@ Ones * PabloKernel::getAllOnesValue(Type * type) {
 }
 
 void PabloKernel::addInternalProperties(BuilderRef b) {
+    mPabloCompiler = reinterpret_cast<PabloCompiler *>(b->getCompiler());
     mSizeTy = b->getSizeTy();
     mStreamTy = b->getStreamTy();
     mSymbolTable.reset(new SymbolGenerator(b->getContext(), mAllocator));
@@ -164,49 +170,46 @@ void PabloKernel::addInternalProperties(BuilderRef b) {
     }
     generatePabloMethod();
     pablo_function_passes(this);
-    mPabloCompiler.reset(new PabloCompiler(this));
     mPabloCompiler->initializeKernelData(b);
+    mPabloCompiler = nullptr;
     mSizeTy = nullptr;
     mStreamTy = nullptr;
 }
 
-void PabloKernel::generateDoBlockMethod(BuilderRef iBuilder) {
-    mSizeTy = iBuilder->getSizeTy();
-    mStreamTy = iBuilder->getStreamTy();
-    mPabloCompiler->compile(iBuilder);
+void PabloKernel::generateDoBlockMethod(BuilderRef b) {
+    mPabloCompiler = reinterpret_cast<PabloCompiler *>(b->getCompiler());
+    mSizeTy = b->getSizeTy();
+    mStreamTy = b->getStreamTy();
+    mPabloCompiler->compile(b);
+    mPabloCompiler = nullptr;
     mSizeTy = nullptr;
     mStreamTy = nullptr;
 }
-
-#if 0
-void PabloKernel::beginConditionalRegion(BuilderRef b) {
-    mPabloCompiler->clearCarryData(b);
-}
-#endif
 
 void PabloKernel::generateFinalBlockMethod(BuilderRef b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
-    // the position just past EOF, as well as a mask marking all positions past EOF.
+    // the position just past EOF, as well as a mask marking all positions past EOF.    
     b->setScalarField("EOFbit", b->bitblock_set_bit(remainingBytes));
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(b);
+    RepeatDoBlockLogic(b);
 }
 
-void PabloKernel::generateFinalizeMethod(BuilderRef iBuilder) {
-    mPabloCompiler->releaseKernelData(iBuilder);
+void PabloKernel::generateFinalizeMethod(BuilderRef b) {
+    mPabloCompiler = reinterpret_cast<PabloCompiler *>(b->getCompiler());
+    mPabloCompiler->releaseKernelData(b);
 
     if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
 
 
-        Value * fd = iBuilder->CreateOpenCall(iBuilder->GetString("./" + getName() + ".profile"),
-                                              iBuilder->getInt32(O_WRONLY | O_CREAT | O_TRUNC),
-                                              iBuilder->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
+        Value * fd = b->CreateOpenCall(b->GetString("./" + getName() + ".profile"),
+                                              b->getInt32(O_WRONLY | O_CREAT | O_TRUNC),
+                                              b->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
 
-        Function * dprintf = iBuilder->GetDprintf();
+        Function * dprintf = b->GetDprintf();
 
 
 
-        Value * profile = iBuilder->getScalarFieldPtr("profile");
+        Value * profile = b->getScalarFieldPtr("profile");
 
 
         unsigned branchCount = 0;
@@ -219,14 +222,14 @@ void PabloKernel::generateFinalizeMethod(BuilderRef iBuilder) {
             str << bb->getName();
             str << "\n";
 
-            Value * taken = iBuilder->CreateLoad(iBuilder->CreateGEP(profile, {iBuilder->getInt32(0), iBuilder->getInt32(branchCount++)}));
-            iBuilder->CreateCall(dprintf, {fd, iBuilder->GetString(str.str()), taken});
+            Value * taken = b->CreateLoad(b->CreateGEP(profile, {b->getInt32(0), b->getInt32(branchCount++)}));
+            b->CreateCall(dprintf, {fd, b->GetString(str.str()), taken});
 
         }
 
-        iBuilder->CreateCloseCall(fd);
+        b->CreateCloseCall(fd);
     }
-
+    mPabloCompiler = nullptr;
 }
 
 String * PabloKernel::makeName(const llvm::StringRef prefix) const {

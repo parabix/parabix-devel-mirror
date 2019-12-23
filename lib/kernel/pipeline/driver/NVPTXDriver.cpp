@@ -51,9 +51,9 @@ NVPTXDriver::NVPTXDriver(std::string && moduleName)
     mMainModule->setDataLayout("e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v32:32:32-v64:64:64-v128:128:128-n16:32:64");
     mMainModule->setTargetTriple("nvptx64-nvidia-cuda");
 
-    iBuilder.reset(IDISA::GetIDISA_GPU_Builder(*mContext));
-    iBuilder->setModule(mMainModule);
-    iBuilder->CreateBaseFunctions();
+    mBuilder.reset(IDISA::GetIDISA_GPU_Builder(*mContext));
+    mBuilder->setModule(mMainModule);
+    mBuilder->CreateBaseFunctions();
 }
 
 Function * NVPTXDriver::addLinkFunction(Module *, llvm::StringRef, FunctionType *, void *) const {
@@ -141,8 +141,8 @@ void * NVPTXDriver::finalizeObject(Function * mainMethod) {
     PM.add(createCFGSimplificationPass());
 
     for (kernel::Kernel * const kb : mPipeline) {
-        iBuilder->setKernel(kb);
-        kb->generateKernel(iBuilder);
+        mBuilder->setKernel(kb);
+        kb->generateKernel(mBuilder);
     }
 
     Function * mainFunc = mMainModule->getFunction("Main");
@@ -150,7 +150,7 @@ void * NVPTXDriver::finalizeObject(Function * mainMethod) {
     MDNode * Node = MDNode::get(mMainModule->getContext(),
                                 {llvm::ValueAsMetadata::get(mainFunc),
                                  MDString::get(mMainModule->getContext(), "kernel"),
-                                 ConstantAsMetadata::get(ConstantInt::get(iBuilder->getInt32Ty(), 1))});
+                                 ConstantAsMetadata::get(ConstantInt::get(mBuilder->getInt32Ty(), 1))});
     NamedMDNode *NMD = mMainModule->getOrInsertNamedMetadata("nvvm.annotations");
     NMD->addOperand(Node);
 

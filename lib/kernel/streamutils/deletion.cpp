@@ -833,7 +833,7 @@ void SwizzledBitstreamCompressByCount::generateDoBlockMethod(BuilderRef kb) {
 }
 
 void SwizzledBitstreamCompressByCount::generateFinalBlockMethod(BuilderRef kb, Value * /* remainingBytes */) {
-    CreateDoBlockMethodCall(kb);
+    RepeatDoBlockLogic(kb);
     Constant * blockOffsetMask = kb->getSize(kb->getBitBlockWidth() - 1);
     Constant * outputIndexShift = kb->getSize(std::log2(mFieldWidth));
 

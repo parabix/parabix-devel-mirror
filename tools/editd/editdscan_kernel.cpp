@@ -57,8 +57,10 @@ Function * editdScanKernel::generateScanWordRoutine(BuilderRef b) const {
     Value * basePos = &*(args++);
     basePos->setName("basePos");
 
-    FunctionType * fTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty()}, false);
-    Function * const matchProcessor = Function::Create(fTy, Function::InternalLinkage, "wrapped_report_pos", m);
+    Function * const matchProcessor = m->getFunction("wrapped_report_pos");
+    assert (matchProcessor);
+//    FunctionType * fTy = FunctionType::get(b->getVoidTy(), {T, b->getInt32Ty()}, false);
+//    Function * const matchProcessor = Function::Create(fTy, Function::ExternalLinkage, "wrapped_report_pos", m);
 
     BasicBlock * entryBlock = BasicBlock::Create(b->getContext(), "entry", scanFunc, 0);
     BasicBlock * matchesCondBlock = BasicBlock::Create(b->getContext(), "matchesCond", scanFunc, 0);

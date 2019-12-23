@@ -12,7 +12,7 @@ using namespace llvm;
 namespace kernel {
 
 void CollapseStreamSet::generateDoBlockMethod(BuilderRef b) {
-    const size_t n = getInputStreamSet("input")->getNumElements();
+    const size_t n = b->getInputStreamSet("input")->getNumElements();
     Value * accum = b->loadInputStreamBlock("input", b->getInt32(0));
     for (size_t i = 1; i < n; ++i) {
         accum = b->CreateOr(accum, b->loadInputStreamBlock("input", b->getInt32(i)));

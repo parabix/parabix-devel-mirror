@@ -20,7 +20,7 @@ void PipelineCompiler::start(BuilderRef b) {
     }
     mKernel = nullptr;
     mKernelIndex = 0;
-    mPipelineEntryBranch = b->CreateBr(mPipelineLoop);
+    b->CreateBr(mPipelineLoop);
 
     b->SetInsertPoint(mPipelineLoop);
     mMadeProgressInLastSegment = b->CreatePHI(b->getInt1Ty(), 2);

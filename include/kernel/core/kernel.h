@@ -12,9 +12,10 @@
 #include <util/not_null.h>
 #include <util/slab_allocator.h>
 #include <llvm/ADT/StringRef.h>
-#include <llvm/ADT/DenseMap.h>
+#include <llvm/IR/Module.h>
 #include <llvm/IR/Function.h>
 #include <llvm/Support/Compiler.h>
+#include <codegen/FunctionTypeBuilder.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,27 +25,26 @@ namespace llvm { class PHINode; }
 
 class BaseDriver;
 
-const static std::string BUFFER_HANDLE_SUFFIX = "_buffer";
-
 namespace kernel {
 
 class KernelBuilder;
+class KernelCompiler;
+class BlockKernelCompiler;
 class StreamSetBuffer;
 class StreamSet;
 
 class Kernel : public AttributeSet {
-    friend class KernelBuilder;
-    friend class PipelineBuilder;
+    friend class KernelCompiler;
     friend class PipelineCompiler;
     friend class PipelineKernel;
-    friend class OptimizationBranch;
     friend class OptimizationBranchCompiler;
+    friend class OptimizationBranch;
     friend class BaseDriver;
 public:
 
     using BuilderRef = const std::unique_ptr<KernelBuilder> &;
 
-    using ArgIterator = llvm::Function::arg_iterator;
+    using KernelCompilerRef = const std::unique_ptr<KernelCompiler> &;
 
     enum class TypeId {
         SegmentOriented
@@ -53,6 +53,31 @@ public:
         , Pipeline
         , OptimizationBranch
     };
+
+    using InitArgs = llvm::SmallVector<llvm::Value *, 32>;
+
+    using InitArgTypes = llvm::SmallVector<llvm::Type *, 32>;
+
+    using ParamMap = llvm::DenseMap<Scalar *, llvm::Value *>;
+
+    struct LinkedFunction {
+        const std::string  Name;
+        llvm::FunctionType * const Type;
+        void * const FunctionPtr;
+
+        LinkedFunction(std::string && Name, llvm::FunctionType * Type, void * FunctionPtr)
+        : Name(Name), Type(Type), FunctionPtr(FunctionPtr) { }
+    };
+
+    using LinkedFunctions = llvm::SmallVector<LinkedFunction, 0>;
+
+    enum MainMethodGenerationType {
+        AddInternal
+        , DeclareExternal
+        , AddExternal
+    };
+
+    using Rational = ProcessingRate::Rational;
 
     static bool classof(const Kernel *) { return true; }
 
@@ -74,8 +99,8 @@ public:
             return mValueType;
         }
 
-        const std::string & getName() const {
-            return mName;
+        const llvm::StringRef getName() const {
+            return llvm::StringRef(mName);
         }
 
         const unsigned getGroup() const {
@@ -170,8 +195,8 @@ public:
         return false;
     }
 
-    LLVM_READNONE virtual bool containsKernelFamilies() const {
-        return false;
+    LLVM_READNONE virtual bool externallyInitialized() const {
+        return hasFamilyName();
     }
 
     LLVM_READNONE virtual const std::string getFamilyName() const {
@@ -213,59 +238,23 @@ public:
         return mInputStreamSets[i];
     }
 
-    LLVM_READNONE const Binding & getInputStreamSetBinding(const llvm::StringRef name) const {
-        return getInputStreamSetBinding(getBinding(BindingType::StreamInput, name).Index);
-    }
-
     LLVM_READNONE StreamSet * getInputStreamSet(const unsigned i) const {
         return llvm::cast<StreamSet>(getInputStreamSetBinding(i).getRelationship());
-    }
-
-    LLVM_READNONE StreamSet * getInputStreamSet(const llvm::StringRef name) const {
-        return llvm::cast<StreamSet>(getInputStreamSetBinding(name).getRelationship());
-    }
-
-    void setInputStreamSet(const llvm::StringRef name, StreamSet * value) {
-        setInputStreamSetAt(getBinding(BindingType::StreamInput, name).Index, value);
     }
 
     LLVM_READNONE unsigned getNumOfStreamInputs() const {
         return mInputStreamSets.size();
     }
 
-    LLVM_READNONE const OwnedStreamSetBuffers & getInputStreamSetBuffers() const {
-        return mStreamSetInputBuffers;
-    }
-
-    LLVM_READNONE StreamSetBuffer * getInputStreamSetBuffer(const unsigned i) const {
-        assert (i < mStreamSetInputBuffers.size());
-        assert (mStreamSetInputBuffers[i]);
-        return mStreamSetInputBuffers[i].get();
-    }
-
-    LLVM_READNONE StreamSetBuffer * getInputStreamSetBuffer(const llvm::StringRef name) const {
-        return getInputStreamSetBuffer(getBinding(BindingType::StreamInput, name).Index);
-    }
+    virtual void setInputStreamSetAt(const unsigned i, StreamSet * value);
 
     LLVM_READNONE const Binding & getOutputStreamSetBinding(const unsigned i) const {
         assert (i < getNumOfStreamOutputs());
         return mOutputStreamSets[i];
     }
 
-    LLVM_READNONE const Binding & getOutputStreamSetBinding(const llvm::StringRef name) const {
-        return getOutputStreamSetBinding(getBinding(BindingType::StreamOutput, name).Index);
-    }
-
     LLVM_READNONE StreamSet * getOutputStreamSet(const unsigned i) const {
         return llvm::cast<StreamSet>(getOutputStreamSetBinding(i).getRelationship());
-    }
-
-    LLVM_READNONE StreamSet * getOutputStreamSet(const llvm::StringRef name) const {
-        return llvm::cast<StreamSet>(getOutputStreamSetBinding(name).getRelationship());
-    }
-
-    void setOutputStreamSet(const llvm::StringRef name, StreamSet * value) {
-        setOutputStreamSetAt(getBinding(BindingType::StreamOutput, name).Index, value);
     }
 
     const Bindings & getOutputStreamSetBindings() const {
@@ -280,19 +269,11 @@ public:
         return mOutputStreamSets.size();
     }
 
-    LLVM_READNONE const OwnedStreamSetBuffers & getOutputStreamSetBuffers() const {
-        return mStreamSetOutputBuffers;
+    Scalar * getInputScalarAt(const unsigned i) const {
+        return llvm::cast<Scalar>(getInputScalarBinding(i).getRelationship());
     }
 
-    LLVM_READNONE StreamSetBuffer * getOutputStreamSetBuffer(const unsigned i) const {
-        assert (i < mStreamSetOutputBuffers.size());
-        assert (mStreamSetOutputBuffers[i]);
-        return mStreamSetOutputBuffers[i].get();
-    }
-
-    LLVM_READNONE StreamSetBuffer * getOutputStreamSetBuffer(const llvm::StringRef name) const {
-        return getOutputStreamSetBuffer(getBinding(BindingType::StreamOutput, name).Index);
-    }
+    virtual void setOutputStreamSetAt(const unsigned i, StreamSet * value);
 
     const Bindings & getInputScalarBindings() const {
         return mInputScalars;
@@ -307,21 +288,11 @@ public:
         return mInputScalars[i];
     }
 
-    LLVM_READNONE const Binding & getInputScalarBinding(const llvm::StringRef name) const {
-        return getInputScalarBinding(getBinding(BindingType::ScalarInput, name).Index);
-    }
-
-    LLVM_READNONE Scalar * getInputScalar(const unsigned i) {
-        return llvm::cast<Scalar>(getInputScalarBinding(i).getRelationship());
-    }
-
-    LLVM_READNONE Scalar * getInputScalar(const llvm::StringRef name) {
-        return llvm::cast<Scalar>(getInputScalarBinding(name).getRelationship());
-    }
-
     LLVM_READNONE unsigned getNumOfScalarInputs() const {
         return mInputScalars.size();
     }
+
+    virtual void setInputScalarAt(const unsigned i, Scalar * value);
 
     const Bindings & getOutputScalarBindings() const {
         return mOutputScalars;
@@ -336,50 +307,35 @@ public:
         return mOutputScalars[i];
     }
 
-    LLVM_READNONE const Binding & getOutputScalarBinding(const llvm::StringRef name) const {
-        return getOutputScalarBinding(getBinding(BindingType::ScalarOutput, name).Index);
-    }
-
-    LLVM_READNONE Scalar * getOutputScalar(const llvm::StringRef name) {
-        return llvm::cast<Scalar>(getOutputScalarBinding(name).getRelationship());
-    }
-
-    LLVM_READNONE Scalar * getOutputScalar(const unsigned i) {
-        return llvm::cast<Scalar>(getOutputScalarBinding(i).getRelationship());
-    }
-
-
     LLVM_READNONE unsigned getNumOfScalarOutputs() const {
         return mOutputScalars.size();
     }
 
+    Scalar * getOutputScalarAt(const unsigned i) const {
+        return llvm::cast<Scalar>(getOutputScalarBinding(i).getRelationship());
+    }
+
+    virtual void setOutputScalarAt(const unsigned i, Scalar * value);
+
     void addInternalScalar(llvm::Type * type, const llvm::StringRef name, const unsigned group = 1) {
+        assert ("cannot modify state types after initialization" && !mSharedStateType && !mThreadLocalStateType);
         mInternalScalars.emplace_back(ScalarType::Internal, type, name, group);
     }
 
     void addNonPersistentScalar(llvm::Type * type, const llvm::StringRef name) {
+        assert ("cannot modify state types after initialization" && !mSharedStateType && !mThreadLocalStateType);
         mInternalScalars.emplace_back(ScalarType::NonPersistent, type, name, 0);
     }
 
     void addThreadLocalScalar(llvm::Type * type, const llvm::StringRef name, const unsigned group = 1) {
+        assert ("cannot modify state types after initialization" && !mSharedStateType && !mThreadLocalStateType);
         mInternalScalars.emplace_back(ScalarType::ThreadLocal, type, name, group);
     }
 
-    llvm::Value * getHandle() const {
-        return mSharedHandle;
+    llvm::Module * setModule(llvm::Module * const module) {
+        mModule = module;
+        return module;
     }
-
-    void setHandle(BuilderRef b, llvm::Value * const handle) const;
-
-    llvm::Value * getThreadLocalHandle() const {
-        return mThreadLocalHandle;
-    }
-
-    void setThreadLocalHandle(llvm::Value * const handle) const {
-        mThreadLocalHandle = handle;
-    }
-
-    llvm::Module * setModule(llvm::Module * const module);
 
     llvm::Module * getModule() const {
         return mModule;
@@ -393,19 +349,60 @@ public:
         return mThreadLocalStateType;
     }
 
-    LLVM_READNONE const StreamSetBuffer * getStreamSetBuffer(const llvm::StringRef name) const {
-        const auto port = getStreamPort(name);
-        if (port.Type == PortType::Input) {
-            return getInputStreamSetBuffer(port.Number);
-        } else {
-            return getOutputStreamSetBuffer(port.Number);
-        }
-    }
+    void makeModule(BuilderRef b);
 
-    llvm::Module * makeModule(BuilderRef b);
+    void generateKernel(BuilderRef b);
 
-    // Add ExternalLinkage method declarations for the kernel to a given client module.
+    void loadCachedKernel(BuilderRef b);
+
+    template <typename ExternalFunctionType>
+    void link(llvm::StringRef name, ExternalFunctionType & functionPtr);
+
+    LLVM_READNONE std::string getCacheName(BuilderRef b) const;
+
     virtual void addKernelDeclarations(BuilderRef b);
+
+    virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+
+    virtual ~Kernel() = 0;
+
+protected:
+
+    llvm::Function * getInitializeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addInitializeDeclaration(BuilderRef b) const;
+
+    llvm::Function * getInitializeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addInitializeThreadLocalDeclaration(BuilderRef b) const;
+
+    llvm::Function * addDoSegmentDeclaration(BuilderRef b) const;
+
+    std::vector<llvm::Type *> getDoSegmentFields(BuilderRef b) const;
+
+    llvm::Function * getDoSegmentFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * getFinalizeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addFinalizeThreadLocalDeclaration(BuilderRef b) const;
+
+    llvm::Function * getFinalizeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addFinalizeDeclaration(BuilderRef b) const;
+
+public:
+
+    llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method);
+
+protected:
+
+    llvm::Value * constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const ParamMap & params) const;
+
+    virtual void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const;
+
+    virtual void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const;
+
+protected:
 
     llvm::Value * createInstance(BuilderRef b) const;
 
@@ -417,63 +414,29 @@ public:
 
     void finalizeThreadLocalInstance(BuilderRef b, llvm::ArrayRef<llvm::Value *> args) const;
 
-    void generateKernel(BuilderRef b);
-
-    void prepareKernel(BuilderRef b);
-
-    void prepareCachedKernel(BuilderRef b);
-
-    LLVM_READNONE std::string getCacheName(BuilderRef b) const;
-
-    LLVM_READNONE StreamSetPort getStreamPort(const llvm::StringRef name) const;
-
-    LLVM_READNONE const Binding & getStreamBinding(const llvm::StringRef name) const {
-        return getStreamBinding(getStreamPort(name));
-    }
-
-    LLVM_READNONE const Binding & getStreamBinding(const StreamSetPort port) const {
-        return (port.Type == PortType::Input) ? getInputStreamSetBinding(port.Number) : getOutputStreamSetBinding(port.Number);
-    }
-
-    LLVM_READNONE ProcessingRate::RateValue getLowerBound(const Binding & binding) const;
-
-    LLVM_READNONE ProcessingRate::RateValue getUpperBound(const Binding & binding) const;
-
-    LLVM_READNONE bool requiresOverflow(const Binding & binding) const;
-
-    /* Fill in any generated names / attributes for the kernel if their initialization is dependent on
-     * settings / bindings added after construction. */
-    virtual void finalizeKernel() { }
-
-    enum MainMethodGenerationType {
-        AddInternal
-        , DeclareExternal
-        , AddExternal
-    };
-
-    virtual llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method);
-
-    using InitArgs = llvm::SmallVector<llvm::Value *, 32>;
-
-    using InitArgTypes = llvm::SmallVector<llvm::Type *, 32>;
-
-    using ParamMap = llvm::DenseMap<Scalar *, llvm::Value *>;
-
-    llvm::Value * constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const ParamMap & params) const;
-
-    virtual bool hasStaticMain() const { return true; }
-
-    virtual ~Kernel() = 0;
-
 protected:
 
     static std::string getStringHash(const llvm::StringRef str);
 
     LLVM_READNONE std::string getDefaultFamilyName() const;
 
+    LLVM_READNONE bool canSetTerminateSignal() const;
+
+    static bool isLocalBuffer(const Binding & output);
+
+    static bool requiresExplicitPartialFinalStride(const Kernel * const kernel);
+
+    LLVM_READNONE bool hasFixedRate() const;
+
+    LLVM_READNONE Rational getFixedRateLCM() const;
+
     virtual void addInternalProperties(BuilderRef) { }
 
-    virtual void linkExternalMethods(BuilderRef) { }
+    virtual void addAdditionalFunctions(BuilderRef) { }
+
+    virtual void linkExternalMethods(BuilderRef b);
+
+    void constructStateTypes(BuilderRef b);
 
     virtual void generateInitializeMethod(BuilderRef) { }
 
@@ -485,93 +448,11 @@ protected:
 
     virtual void generateFinalizeMethod(BuilderRef) { }
 
-    virtual void addAdditionalFunctions(BuilderRef) { }
+private:
 
-    virtual void setInputStreamSetAt(const unsigned i, StreamSet * value);
+    LLVM_READNONE bool supportsInternalSynchronization() const;
 
-    virtual void setOutputStreamSetAt(const unsigned i, StreamSet * value);
-
-    virtual void setInputScalarAt(const unsigned i, Scalar * value);
-
-    virtual void setOutputScalarAt(const unsigned i, Scalar * value);
-
-    virtual std::vector<llvm::Value *> getFinalOutputScalars(BuilderRef b);
-
-    LLVM_READNONE const BindingMapEntry & getBinding(const BindingType type, const llvm::StringRef name) const;
-
-    LLVM_READNONE llvm::Value * getAccessibleInputItems(const llvm::StringRef name) const {
-        return getAccessibleInputItems(getBinding(BindingType::StreamInput, name).Index);
-    }
-
-    LLVM_READNONE llvm::Value * getAccessibleInputItems(const unsigned index) const {
-        assert (index < mAccessibleInputItems.size());
-        return mAccessibleInputItems[index];
-    }
-
-    LLVM_READNONE llvm::Value * getAvailableInputItems(const llvm::StringRef name) const {
-        return getAvailableInputItems(getBinding(BindingType::StreamInput, name).Index);
-    }
-
-    LLVM_READNONE llvm::Value * getAvailableInputItems(const unsigned index) const {
-        assert (index < mAvailableInputItems.size());
-        return mAvailableInputItems[index];
-    }
-
-    LLVM_READNONE bool canSetTerminateSignal() const;
-
-    LLVM_READNONE llvm::Value * getTerminationSignalPtr() const {
-        return mTerminationSignalPtr;
-    }
-
-    LLVM_READNONE llvm::Value * getProcessedInputItemsPtr(const llvm::StringRef name) const {
-        return getProcessedInputItemsPtr(getBinding(BindingType::StreamInput, name).Index);
-    }
-
-    LLVM_READNONE llvm::Value * getProcessedInputItemsPtr(const unsigned index) const {
-        return mProcessedInputItemPtr[index];
-    }
-
-    LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const llvm::StringRef name) const {
-        return getProducedOutputItemsPtr(getBinding(BindingType::StreamOutput, name).Index);
-    }
-
-    LLVM_READNONE llvm::Value * getProducedOutputItemsPtr(const unsigned index) const {
-        return mProducedOutputItemPtr[index];
-    }
-
-    LLVM_READNONE llvm::Value * getWritableOutputItems(const llvm::StringRef name) const {
-        return getWritableOutputItems(getBinding(BindingType::StreamOutput, name).Index);
-    }
-
-    LLVM_READNONE llvm::Value * getWritableOutputItems(const unsigned index) const {
-        return mWritableOutputItems[index];
-    }
-
-    LLVM_READNONE llvm::Value * getConsumedOutputItems(const llvm::StringRef name) const {
-        return getConsumedOutputItems(getBinding(BindingType::StreamOutput, name).Index);
-    }
-
-    LLVM_READNONE llvm::Value * getConsumedOutputItems(const unsigned index) const {
-        return mConsumedOutputItems[index];
-    }
-
-    llvm::Value * getNumOfStrides() const {
-        return mNumOfStrides;
-    }
-
-    llvm::Value * getExternalSegNo() const {
-        return mExternalSegNo;
-    }
-
-    LLVM_READNONE llvm::Value * isFinal() const {
-        return mIsFinal;
-    }
-
-    virtual void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const;
-
-    virtual void bindFamilyInitializationArguments(BuilderRef b, ArgIterator & arg, const ArgIterator & arg_end) const;
-
-    virtual void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const;
+protected:
 
     // Constructor
     Kernel(BuilderRef b,
@@ -580,119 +461,31 @@ protected:
            Bindings &&scalar_inputs, Bindings &&scalar_outputs,
            InternalScalars && internal_scalars);
 
-private:
-
-    llvm::Function * addInitializeDeclaration(BuilderRef b) const;
-
-    void callGenerateInitializeMethod(BuilderRef b);
-
-    llvm::Function * addInitializeThreadLocalDeclaration(BuilderRef b) const;
-
-    void callGenerateInitializeThreadLocalMethod(BuilderRef b);
-
-    llvm::Function * addDoSegmentDeclaration(BuilderRef b) const;
-
-    std::vector<llvm::Type *> getDoSegmentFields(BuilderRef b) const;
-
-    void callGenerateDoSegmentMethod(BuilderRef b);
-
-    void setDoSegmentProperties(BuilderRef b, const llvm::ArrayRef<llvm::Value *> args);
-
-    std::vector<llvm::Value *> getDoSegmentProperties(BuilderRef b) const;
-
-    llvm::Function * addFinalizeThreadLocalDeclaration(BuilderRef b) const;
-
-    void callGenerateFinalizeThreadLocalMethod(BuilderRef b);
-
-    llvm::Function * addFinalizeDeclaration(BuilderRef b) const;
-
-    void callGenerateFinalizeMethod(BuilderRef b);
-
-    void addBaseKernelProperties(BuilderRef b);
-
-    llvm::Function * getInitializeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
-
-    llvm::Function * getInitializeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
-
-    llvm::Function * getDoSegmentFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
-
-    llvm::Function * getFinalizeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
-
-    llvm::Function * getFinalizeFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
-
-    void constructStateTypes(BuilderRef b);
-
-    enum class InitializeScalarMapOptions {
-        SkipThreadLocal
-        , IncludeThreadLocal
-    };
-
-    void initializeScalarMap(BuilderRef b, const InitializeScalarMapOptions options) const;
-
-    unsigned getSharedScalarIndex(KernelBuilder * b, const llvm::StringRef name) const;
-
-    llvm::Value * getScalarValuePtr(KernelBuilder * b, const llvm::StringRef name) const;
-
-    void setTerminationSignalPtr(llvm::Value * ptr) {
-        mTerminationSignalPtr = ptr;
-    }
-
-    void setExternalSegNo(llvm::Value * segNo) {
-        mExternalSegNo = segNo;
-    }
-
 protected:
 
-    mutable bool                    mIsGenerated = false;
+    const TypeId        mTypeId;
+    unsigned            mStride;
+    llvm::Module *      mModule = nullptr;
+    llvm::StructType *  mSharedStateType = nullptr;
+    llvm::StructType *  mThreadLocalStateType = nullptr;
 
-    mutable llvm::Value *           mSharedHandle = nullptr;
-    mutable llvm::Value *           mThreadLocalHandle = nullptr;
-
-    llvm::Module *                  mModule = nullptr;
-    llvm::StructType *              mSharedStateType = nullptr;
-    llvm::StructType *              mThreadLocalStateType = nullptr;
-
-    Bindings                        mInputStreamSets;
-    Bindings                        mOutputStreamSets;
-
-    Bindings                        mInputScalars;
-    Bindings                        mOutputScalars;
-    InternalScalars                 mInternalScalars;
-
-    llvm::Function *                mCurrentMethod = nullptr;
-    unsigned                        mStride;
-
-    llvm::Value *                   mTerminationSignalPtr = nullptr;
-    llvm::Value *                   mIsFinal = nullptr;
-    llvm::Value *                   mNumOfStrides = nullptr;
-    llvm::Value *                   mFixedRateFactor = nullptr;
-    llvm::Value *                   mThreadLocalPtr = nullptr;
-    llvm::Value *                   mExternalSegNo = nullptr;
-
-    std::vector<llvm::Value *>      mUpdatableProcessedInputItemPtr;
-    std::vector<llvm::Value *>      mProcessedInputItemPtr;
-
-    std::vector<llvm::Value *>      mAccessibleInputItems;
-    std::vector<llvm::Value *>      mAvailableInputItems;
-    std::vector<llvm::Value *>      mPopCountRateArray;
-    std::vector<llvm::Value *>      mNegatedPopCountRateArray;
-
-    std::vector<llvm::Value *>      mUpdatableProducedOutputItemPtr;
-    std::vector<llvm::Value *>      mProducedOutputItemPtr;
-
-    std::vector<llvm::Value *>      mWritableOutputItems;
-    std::vector<llvm::Value *>      mConsumedOutputItems;
-
-    mutable ScalarValueMap          mScalarValueMap;
-    mutable BindingMap              mBindingMap;
-
-    const std::string               mKernelName;
-    const TypeId                    mTypeId;
-
-    mutable OwnedStreamSetBuffers   mStreamSetInputBuffers;
-    mutable OwnedStreamSetBuffers   mStreamSetOutputBuffers;
-
+    Bindings            mInputStreamSets;
+    Bindings            mOutputStreamSets;
+    Bindings            mInputScalars;
+    Bindings            mOutputScalars;
+    InternalScalars     mInternalScalars;
+    const std::string   mKernelName;
+    LinkedFunctions     mLinkedFunctions;
 };
+
+template <typename ExternalFunctionType>
+inline void Kernel::link(llvm::StringRef name, ExternalFunctionType & functionPtr) {
+    assert ("Kernel does not have a module?" && mModule);
+    auto & C = mModule->getContext();
+    auto * const type = FunctionTypeBuilder<ExternalFunctionType>::get(C);
+    assert ("FunctionTypeBuilder did not resolve a function type." && type);
+    mLinkedFunctions.emplace_back(name, type, reinterpret_cast<void *>(functionPtr));
+}
 
 class SegmentOrientedKernel : public Kernel {
 public:
@@ -764,6 +557,7 @@ private:
 
 
 class BlockOrientedKernel : public MultiBlockKernel {
+    friend class BlockKernelCompiler;
 public:
 
     static bool classof(const Kernel * const k) {
@@ -772,22 +566,26 @@ public:
 
     static bool classof(const void *) { return false; }
 
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+
 protected:
 
-    void CreateDoBlockMethodCall(BuilderRef b);
-
-    // Each kernel builder subtype must provide its own logic for generating
+    // Each BlockOrientedKernel must provide its own logic for generating
     // doBlock calls.
     virtual void generateDoBlockMethod(BuilderRef b) = 0;
 
-    // Each kernel builder subtypre must also specify the logic for processing the
+    // Each BlockOrientedKernel must also specify the logic for processing the
     // final block of stream data, if there is any special processing required
-    // beyond simply calling the doBlock function.   In the case that the final block
+    // beyond simply calling the doBlock function. In the case that the final block
     // processing may be trivially implemented by dispatching to the doBlock method
     // without additional preparation, the default generateFinalBlockMethod need
     // not be overridden.
 
+    void RepeatDoBlockLogic(BuilderRef b);
+
     virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingItems);
+
+
 
     BlockOrientedKernel(BuilderRef b,
                         std::string && kernelName,
@@ -797,29 +595,10 @@ protected:
                         Bindings && scalar_outputs,
                         InternalScalars && internal_scalars);
 
-    llvm::Value * getRemainingItems(BuilderRef b);
-
 private:
-
-    void annotateInputBindingsWithPopCountArrayAttributes();
-
-    void incrementCountableItemCounts(BuilderRef b);
-
-    llvm::Value * getPopCountRateItemCount(BuilderRef b, const ProcessingRate & rate);
 
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 
-    void writeDoBlockMethod(BuilderRef b);
-
-    void writeFinalBlockMethod(BuilderRef b, llvm::Value * remainingItems);
-
-private:
-
-    llvm::Function *            mDoBlockMethod;
-    llvm::BasicBlock *          mStrideLoopBody;
-    llvm::IndirectBrInst *      mStrideLoopBranch;
-    llvm::PHINode *             mStrideLoopTarget;
-    llvm::PHINode *             mStrideBlockIndex;
 };
 
 }

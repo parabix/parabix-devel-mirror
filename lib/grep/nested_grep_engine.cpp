@@ -10,8 +10,10 @@
 #include <kernel/scan/scanmatchgen.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/core/kernel_builder.h>
-
 #include <llvm/Support/raw_ostream.h>
+#include <grep/grep_toolchain.h>
+
+#include <re/adt/printer_re.h>
 
 using namespace kernel;
 using namespace llvm;
@@ -41,7 +43,7 @@ public:
     bool hasSignature() const override { return false; }
 
 protected:
-    void generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+    void generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) override {
         PointerType * const int8PtrTy = b->getInt8PtrTy();
         Value * const processed = b->getProcessedItemCount("breaks");
         Value * const source = b->CreatePointerCast(b->getRawInputPointer("breaks", processed), int8PtrTy);
@@ -79,6 +81,8 @@ public:
                          }()
                          // num of threads
                          , 1
+                         // num of segments (is num of threads)
+                         , codegen::ThreadNum
                          // make kernel list
                          , [&]() -> Kernels {
                              Kernels kernels;
@@ -86,15 +90,15 @@ public:
                              assert(BasisBits && u8index && breaks && matches);
 
                              const auto n = patterns.size();
-                             auto & b = driver.getBuilder();
 
                              assert ("logic error: outer kernel should have been used directly when n == 0" && n > 0);
 
                              StreamSet * resultSoFar = breaks;
 
                              if (LLVM_LIKELY(outerKernel != nullptr)) {
+                                 // assert (outerKernel->hasFamilyName());
                                  resultSoFar = driver.CreateStreamSet();
-                                 outerKernel->setOutputStreamSet("matches", resultSoFar);
+                                 outerKernel->setOutputStreamSetAt(0, resultSoFar);
                                  // if we already constructed the outer kernel through nesting,
                                  // it may not be necessary to add it back to the execution engine.
                                  driver.addKernel(outerKernel);
@@ -126,14 +130,13 @@ public:
                                      options->setCombiningStream(exclude ? GrepCombiningType::Exclude : GrepCombiningType::Include, resultSoFar);
                                  }
                                  options->addExternal("UTF8_index", u8index);
-                                 Kernel * const matcher = new ICGrepKernel(b, std::move(options));
+                                 Kernel * const matcher = new ICGrepKernel(driver.getBuilder(), std::move(options));
+                                 assert (matcher->hasFamilyName());
                                  driver.addKernel(matcher);
                                  kernels.push_back(matcher);
                                  resultSoFar = MatchResults;
                              }
                              assert (resultSoFar == matches);
-
-                             driver.generateUncachedKernels();
                              return kernels;
                          }()
                          // called functions
@@ -141,11 +144,10 @@ public:
                          // stream inputs
                          , {{"basis", BasisBits}, {"u8index", u8index}, {"breaks", breaks}}
                          // stream outputs
-                         , {{"matches", matches}}
+                         , {{"matches", matches, FixedRate(), Add1()}}
                          // scalars
                          , {}, {}) {
-        setStride(driver.getBuilder()->getBitBlockWidth());
-        addAttribute(InternallySynchronized());
+        addAttribute(InternallySynchronized());   
     }
 
     bool hasFamilyName() const override { return true; }
@@ -193,7 +195,8 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
     assert (mBreakCC && mBasisBits && mU8index && mBreaks && mMatches);
 
     Kernel * kernel = nullptr;
-
+    const auto preserve = mGrepDriver.isPreservingKernelModules();
+    mGrepDriver.setIsPreservingKernelModules(true);
     if (LLVM_UNLIKELY(patterns.empty())) {
         if (LLVM_LIKELY(mNested.size() > 1)) {
             mNested.push_back(mNested.back());
@@ -210,7 +213,11 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
                                               mNested.back(), // outer kernel
                                               patterns, mCaseInsensitive, mBreakCC);
     }
+    kernel->setStride(codegen::SegmentSize);
+
+    mGrepDriver.generateUncachedKernels();
     mGrepDriver.addKernel(kernel);
+    mGrepDriver.setIsPreservingKernelModules(preserve);
     mNested.push_back(kernel);
 }
 
@@ -219,6 +226,7 @@ void NestedInternalSearchEngine::pop() {
     mNested.pop_back();
     assert (mMainMethod.size() > 0);
     mMainMethod.pop_back();
+    assert (mMainMethod.size() + 1 == mNested.size());
 }
 
 void NestedInternalSearchEngine::init() {
@@ -244,6 +252,9 @@ void NestedInternalSearchEngine::grepCodeGen() {
 
     assert (mBreakCC && mBasisBits && mU8index && mBreaks && mMatches);
 
+    const auto preserve = mGrepDriver.isPreservingKernelModules();
+    mGrepDriver.setIsPreservingKernelModules(true);
+
     Scalar * const buffer = mGrepDriver.CreateScalar(b->getInt8PtrTy());
     Scalar * const length = mGrepDriver.CreateScalar(b->getSizeTy());
     Scalar * const accumulator = mGrepDriver.CreateScalar(b->getIntAddrTy());
@@ -262,21 +273,23 @@ void NestedInternalSearchEngine::grepCodeGen() {
     E->CreateKernelCall<UTF8_index>(mBasisBits, mU8index);
 
     assert (mNested.size() > 1 && mNested.back());
-    E->AddKernelCall(mNested.back());
-
-//    if (MatchCoordinateBlocks > 0) {
-//        StreamSet * MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
-//        E->CreateKernelCall<MatchCoordinatesKernel>(matches, RecordBreakStream, MatchCoords, MatchCoordinateBlocks);
-//        Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, callbackObject);
-//        mGrepDriver.LinkFunction(matchK, "accumulate_match_wrapper", accumulate_match_wrapper);
-//        mGrepDriver.LinkFunction(matchK, "finalize_match_wrapper", finalize_match_wrapper);
-//    } else {
-        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(mMatches, mBreaks, ByteStream, accumulator, 4); // ScanMatchBlocks
-        mGrepDriver.LinkFunction(scanMatchK, "accumulate_match_wrapper", accumulate_match_wrapper);
-        mGrepDriver.LinkFunction(scanMatchK, "finalize_match_wrapper", finalize_match_wrapper);
-//    }
+    Kernel * const outer = mNested.back(); assert (outer->getModule());
+    E->AddKernelCall(outer);
+    if (MatchCoordinateBlocks > 0) {
+        StreamSet * const MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
+        E->CreateKernelCall<MatchCoordinatesKernel>(mMatches, mBreaks, MatchCoords, MatchCoordinateBlocks);
+        Kernel * const matchK = E->CreateKernelCall<MatchReporter>(ByteStream, MatchCoords, accumulator);
+        matchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
+        matchK->link("finalize_match_wrapper", finalize_match_wrapper);
+    } else {
+        Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(mMatches, mBreaks, ByteStream, accumulator, ScanMatchBlocks);
+        scanMatchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
+        scanMatchK->link("finalize_match_wrapper", finalize_match_wrapper);
+    }
 
     mMainMethod.push_back(E->compile());
+    assert (mMainMethod.size() + 1 == mNested.size());
+    mGrepDriver.setIsPreservingKernelModules(preserve);
 }
 
 void NestedInternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum) {

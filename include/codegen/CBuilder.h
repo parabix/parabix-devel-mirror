@@ -156,7 +156,28 @@ public:
 
     llvm::Function * GetPrintf();
 
+    // Create call to int printf(const char *format, ...);
+    template <typename ... Args>
+    llvm::CallInst * CreatePrintfCall(const llvm::StringRef format, Args ... args) {
+        std::initializer_list<llvm::Value *> a{std::forward<Args>(args)...};
+        return __CreatePrintfCall(GetString(format), a);
+    }
+
     llvm::Function * GetDprintf();
+
+    // Create call to int dprintf(int fd, const char *format, ...);
+    template <typename ... Args>
+    llvm::CallInst * CreateDprintfCall(llvm::Value * const fd, const llvm::StringRef format, Args ... args) {
+        std::initializer_list<llvm::Value *> a{std::forward<Args>(args)...};
+        return __CreateDprintfCall(fd, GetString(format), a);
+    }
+
+    // Create call to int sprintf(char * str, const char *format, ...);
+    template <typename ... Args>
+    llvm::CallInst * CreateSprintfCall(llvm::Value * const str, const llvm::StringRef format, Args ... args) {
+        std::initializer_list<llvm::Value *> a{std::forward<Args>(args)...};
+        return __CreateSprintfCall(str, GetString(format), a);
+    }
 
     //  Create calls to unistd.h functions.
     //
@@ -224,16 +245,16 @@ public:
 
     //  Create a call to:  int pthread_create(pthread_t *thread, const pthread_attr_t *attr,
     //                    void *(*start_routine)(void*), void *arg);
-    llvm::Value * CreatePThreadCreateCall(llvm::Value * thread, llvm::Value * attr, llvm::Function * start_routine, llvm::Value * arg);
+    llvm::Value * CreatePThreadCreateCall(llvm::Value * const thread, llvm::Value * const attr, llvm::Function * const start_routine, llvm::Value * const arg);
 
     //  Create a call to:  int pthread_yield(void);
     llvm::Value * CreatePThreadYield();
 
     //  Create a call to:  void pthread_exit(void *value_ptr);
-    llvm::Value * CreatePThreadExitCall(llvm::Value * value_ptr);
+    llvm::Value * CreatePThreadExitCall(llvm::Value * const value_ptr);
 
     //  Create a call to:  int pthread_join(pthread_t thread, void **value_ptr);
-    llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * value_ptr);
+    llvm::Value * CreatePThreadJoinCall(llvm::Value * thread, llvm::Value * const value_ptr);
 
     //  Create a call to:  int pthread_self(void);
     llvm::Value * CreatePThreadSelf();
@@ -433,7 +454,19 @@ public:
 
     llvm::BasicBlock * WriteDefaultRethrowBlock();
 
+    void CheckAddress(llvm::Value * const Ptr, llvm::Value * const Size, llvm::StringRef Name) {
+        CheckAddress(Ptr, Size, GetString(Name));
+    }
+
+    void CheckAddress(llvm::Value * const Ptr, llvm::Value * const Size, llvm::Constant * const Name);
+
 protected:
+
+    llvm::CallInst * __CreatePrintfCall(llvm::Value * const format, std::initializer_list<llvm::Value *> args);
+
+    llvm::CallInst * __CreateDprintfCall(llvm::Value * const fd, llvm::Value * const format, std::initializer_list<llvm::Value *> args);
+
+    llvm::CallInst * __CreateSprintfCall(llvm::Value * const str, llvm::Value * const format, std::initializer_list<llvm::Value *> args);
 
     llvm::Function * getDefaultPersonalityFunction();
 
@@ -446,6 +479,8 @@ protected:
     llvm::Function * getEndCatch();
 
     llvm::Function * getRethrow();
+
+    static llvm::AllocaInst * resolveStackAddress(llvm::Value * Ptr);
 
     bool hasAlignedAlloc() const;
 

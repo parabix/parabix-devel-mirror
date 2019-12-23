@@ -377,8 +377,12 @@ void MemorySourceKernel::generateInitializeMethod(BuilderRef b) {
 
 void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
 
+    const auto source = b->getOutputStreamSet("sourceBuffer");
+
+    const auto codeUnitWidth = source->getFieldWidth();
+
     Constant * const STRIDE_ITEMS = b->getSize(getStride());
-    Constant * const STRIDE_SIZE = b->getSize(getStride() * mCodeUnitWidth);
+    Constant * const STRIDE_SIZE = b->getSize(getStride() * codeUnitWidth);
     Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
 
     BasicBlock * const createTemporary = b->CreateBasicBlock("createTemporary");
@@ -396,9 +400,11 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
     Value * readEnd = nullptr;
 
     // compute the range of our unconsumed buffer slice
-    if (LLVM_UNLIKELY(mStreamSetCount > 1)) {
+
+    const auto streamSetCount = source->getNumElements();
+    if (LLVM_UNLIKELY(streamSetCount > 1)) {
         Constant * const ZERO = b->getSize(0);
-        const StreamSetBuffer * const sourceBuffer = getOutputStreamSetBuffer("sourceBuffer");
+        const StreamSetBuffer * const sourceBuffer = b->getOutputStreamSetBuffer("sourceBuffer");
         Value * const fromIndex = b->CreateUDiv(consumedItems, BLOCK_WIDTH);
         Value * const sourceBufferBaseAddress = sourceBuffer->getBaseAddress(b);
         readStart = sourceBuffer->getStreamBlockPtr(b, sourceBufferBaseAddress, ZERO, fromIndex);
@@ -410,7 +416,7 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
         Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
         readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
         readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
-        if (mCodeUnitWidth == 1) {
+        if (codeUnitWidth == 1) {
             // If trying to load a bitstream and the number of items is not byte-aligned, load an extra byte.
             Value * const isPartialByte = b->CreateICmpNE(b->CreateURem(fileItems, b->getSize(8)), b->getSize(0));
             readEnd = b->CreateGEP(readEnd, b->CreateSelect(isPartialByte, b->getInt32(1), b->getInt32(0)));
@@ -424,7 +430,7 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
     Value * const unconsumedBytes = b->CreateTrunc(b->CreateSub(readEndInt, readStartInt), b->getSizeTy());
     Value * const bufferSize = b->CreateRoundUp(b->CreateAdd(unconsumedBytes, BLOCK_WIDTH), STRIDE_SIZE);
     Value * const buffer = b->CreateAlignedMalloc(bufferSize, b->getCacheAlignment());
-    PointerType * const codeUnitPtrTy = b->getIntNTy(mCodeUnitWidth)->getPointerTo();
+    PointerType * const codeUnitPtrTy = b->getIntNTy(codeUnitWidth)->getPointerTo();
     b->setScalarField("ancillaryBuffer", b->CreatePointerCast(buffer, codeUnitPtrTy));
     b->CreateMemCpy(buffer, readStart, unconsumedBytes, 1);
     b->CreateMemZero(b->CreateGEP(buffer, unconsumedBytes), b->CreateSub(bufferSize, unconsumedBytes), 1);
@@ -443,9 +449,12 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
     b->SetInsertPoint(exit);
 }
 
+
+
 void MemorySourceKernel::generateFinalizeMethod(BuilderRef b) {
     b->CreateFree(b->getScalarField("ancillaryBuffer"));
 }
+
 
 MMapSourceKernel::MMapSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream)
 : SegmentOrientedKernel(b, "mmap_source" + std::to_string(codegen::SegmentSize) + "@" + std::to_string(outputStream->getFieldWidth())
@@ -525,13 +534,10 @@ MemorySourceKernel::MemorySourceKernel(BuilderRef b, Scalar * fileSource, Scalar
 {Binding{"fileSource", fileSource}, Binding{"fileItems", fileItems}},
 {},
 // internal scalar
-{InternalScalar{fileSource->getType(), "buffer"}
-,InternalScalar{fileSource->getType(), "ancillaryBuffer"}
-})
-, mStreamSetCount(outputStream->getNumElements())
-, mCodeUnitWidth(outputStream->getFieldWidth()) {
+{}) {
     addAttribute(MustExplicitlyTerminate());
     setStride(codegen::SegmentSize);
+    addInternalScalar(fileSource->getType(), "ancillaryBuffer");
 }
 
 }

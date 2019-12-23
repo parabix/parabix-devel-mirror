@@ -91,7 +91,7 @@ void editdCPUKernel::generateDoBlockMethod(BuilderRef idb) {
 
 void editdCPUKernel::generateFinalBlockMethod(BuilderRef idb, Value * remainingBytes) {
     idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(idb);
+    RepeatDoBlockLogic(idb);
 }
 
 editdCPUKernel::editdCPUKernel(BuilderRef b,

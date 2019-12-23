@@ -435,9 +435,9 @@ void LengthGroupCompression::generateMultiBlockLogic(BuilderRef b, Value * const
     // Although we have written the last block mask, we do not include it as
     // produced, because we may need to update it in the event that there is
     // a compressible symbol starting in this segment and finishing in the next.
-    Value * produced = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_BLOCKWIDTH));
+    Value * produced = b->CreateSelect(b->isFinal(), avail, b->CreateSub(avail, sz_BLOCKWIDTH));
     b->setProducedItemCount("compressionMask", produced);
-    b->CreateCondBr(mIsFinal, compressionMaskDone, updatePending);
+    b->CreateCondBr(b->isFinal(), compressionMaskDone, updatePending);
     b->SetInsertPoint(updatePending);
     Value * pendingPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", produced), bitBlockPtrTy);
     //b->CallPrintInt("pendingPtr", pendingPtr);
@@ -731,7 +731,7 @@ void LengthGroupDecompression::generateMultiBlockLogic(BuilderRef b, Value * con
     if (!DelayedAttribute) {
         Value * guaranteedProduced = b->CreateSub(avail, lg.HI);
         b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), lg.HI, 1);
-        b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+        b->setProducedItemCount("result", b->CreateSelect(b->isFinal(), avail, guaranteedProduced));
     }
 }
 
@@ -1085,15 +1085,15 @@ void FixedLengthCompression::generateMultiBlockLogic(BuilderRef b, Value * const
     // In the next segment, we may need to access byte data in the last
     // 16 bytes of this segment.
     if (DeferredAttribute) {
-        Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, b->getSize(16)));
+        Value * processed = b->CreateSelect(b->isFinal(), avail, b->CreateSub(avail, b->getSize(16)));
         b->setProcessedItemCount("byteData", processed);
     }
     // Although we have written the last block mask, we do not include it as
     // produced, because we may need to update it in the event that there is
     // a compressible symbol starting in this segment and finishing in the next.
-    Value * produced = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_BLOCKWIDTH));
+    Value * produced = b->CreateSelect(b->isFinal(), avail, b->CreateSub(avail, sz_BLOCKWIDTH));
     b->setProducedItemCount("compressionMask", produced);
-    b->CreateCondBr(mIsFinal, compressionMaskDone, updatePending);
+    b->CreateCondBr(b->isFinal(), compressionMaskDone, updatePending);
     b->SetInsertPoint(updatePending);
     Value * pendingPtr = b->CreateBitCast(b->getRawOutputPointer("compressionMask", produced), bitBlockPtrTy);
     //b->CallPrintInt("pendingPtr", pendingPtr);
@@ -1369,7 +1369,7 @@ void FixedLengthDecompression::generateMultiBlockLogic(BuilderRef b, Value * con
     // If the segment ends in the middle of a 2-byte codeword, we need to
     // make sure that we still have access to the codeword in the next block.
     if (DeferredAttribute) {
-        Value * processed = b->CreateSelect(mIsFinal, avail, b->CreateSub(avail, sz_DELAYED));
+        Value * processed = b->CreateSelect(b->isFinal(), avail, b->CreateSub(avail, sz_DELAYED));
         b->setProcessedItemCount("byteData", processed);
     }
     // Although we have written the full input stream to output, there may
@@ -1379,6 +1379,6 @@ void FixedLengthDecompression::generateMultiBlockLogic(BuilderRef b, Value * con
     Value * guaranteedProduced = b->CreateSub(avail, sz_DELAYED);
     //b->CreateMemCpy(b->getScalarFieldPtr("pendingOutput"), b->getRawOutputPointer("result", guaranteedProduced), sz_DELAYED, 1);
     if (!DelayedAttribute) {
-        b->setProducedItemCount("result", b->CreateSelect(mIsFinal, avail, guaranteedProduced));
+        b->setProducedItemCount("result", b->CreateSelect(b->isFinal(), avail, guaranteedProduced));
     }
 }

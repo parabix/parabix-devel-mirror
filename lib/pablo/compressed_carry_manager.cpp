@@ -388,8 +388,10 @@ Value * CompressedCarryManager::indexedAdvanceCarryInCarryOut(BuilderRef b,
         Constant * carryQueueBlocks = b->getSize(carry_blocks);
         Value * carryBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryPosition, blockWidth), carryQueueBlocks), b->getInt32Ty());
         Value * carryEndBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryBlockEndPos, blockWidth), carryQueueBlocks), b->getInt32Ty());
-        Value * lo_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryBlock});
-        Value * hi_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryEndBlock});
+        Constant * const ZERO = b->getInt32(0);
+        Constant * const CFI = b->getInt32(mCurrentFrameIndex);
+        Value * lo_GEP = b->CreateGEP(mCurrentFrame, {ZERO, CFI, carryBlock});
+        Value * hi_GEP = b->CreateGEP(mCurrentFrame, {ZERO, CFI, carryEndBlock});
         Value * c_lo = b->CreateBitCast(b->CreateBlockAlignedLoad(lo_GEP), iBitBlock);
         Value * c_hi = b->CreateBitCast(b->CreateBlockAlignedLoad(hi_GEP), iBitBlock);
         Value * lo_shift = b->CreateZExt(b->CreateURem(carryPosition, blockWidth), iBitBlock);
@@ -404,8 +406,8 @@ Value * CompressedCarryManager::indexedAdvanceCarryInCarryOut(BuilderRef b,
         Value * carryOutEndPos = b->CreateAdd(carryOutPosition, blockWidth_1);
         carryBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryOutPosition, blockWidth), carryQueueBlocks), b->getInt32Ty());
         carryEndBlock = b->CreateTrunc(b->CreateURem(b->CreateUDiv(carryOutEndPos, blockWidth), carryQueueBlocks), b->getInt32Ty());
-        lo_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryBlock});
-        hi_GEP = b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(mCurrentFrameIndex), carryEndBlock});
+        lo_GEP = b->CreateGEP(mCurrentFrame, {ZERO, CFI, carryBlock});
+        hi_GEP = b->CreateGEP(mCurrentFrame, {ZERO, CFI, carryEndBlock});
         lo_shift = b->CreateZExt(b->CreateURem(carryOutPosition, blockWidth), iBitBlock);
         hi_shift = b->CreateZExt(b->CreateSub(blockWidth_1, b->CreateURem(carryOutEndPos, blockWidth)), iBitBlock);
         c_lo = b->CreateOr(b->CreateBitCast(b->CreateBlockAlignedLoad(lo_GEP), iBitBlock), b->CreateShl(carryOut, lo_shift));
@@ -418,9 +420,10 @@ Value * CompressedCarryManager::indexedAdvanceCarryInCarryOut(BuilderRef b,
         if (mIfDepth > 0) {
             const auto summaryBlocks = ceil_udiv(shiftAmount, b->getBitBlockWidth());
             const auto summarySize = ceil_udiv(summaryBlocks, b->getBitBlockWidth());
+            Constant * const SF = b->getInt32(summaryFrame);
             for (unsigned i = 0; i < summarySize; i++) {
                 // All ones summary for now.
-                b->CreateBlockAlignedStore(b->allOnes(), b->CreateGEP(mCurrentFrame, {b->getInt32(0), b->getInt32(summaryFrame), b->getInt32(i)}));
+                b->CreateBlockAlignedStore(b->allOnes(), b->CreateGEP(mCurrentFrame, {ZERO, SF, b->getInt32(i)}));
             }
         }
         return result;
@@ -451,9 +454,11 @@ Value * CompressedCarryManager::generateSummaryTest(BuilderRef b, Value * condit
 Value * CompressedCarryManager::getNextCarryIn(BuilderRef b) {
     assert (mCurrentFrameIndex < mCurrentFrame->getType()->getPointerElementType()->getStructNumElements());
     Constant * const ZERO = b->getInt32(0);
-    Value * indices[3] { ZERO, b->getInt32(mCurrentFrameIndex), (mLoopDepth == 0 ? ZERO : mLoopSelector) };
-    ArrayRef<Value *> ar(indices, 3);
-    mCarryPackPtr = b->CreateGEP(mCurrentFrame, ar);
+    FixedArray<Value *, 3> ar;
+    ar[0] = ZERO;
+    ar[1] = b->getInt32(mCurrentFrameIndex);
+    ar[2] = mLoopDepth == 0 ? ZERO : mLoopSelector;
+    mCarryPackPtr = b->CreateInBoundsGEP(mCurrentFrame, ar);
     Type * const carryTy = mCarryPackPtr->getType()->getPointerElementType();
     Value * const carryIn = b->CreateLoad(mCarryPackPtr);
     if (mLoopDepth > 0) {

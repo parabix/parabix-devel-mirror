@@ -470,7 +470,8 @@ protected:
 void UnitInsertionExtractionMasks::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     Value * insertion_mask = b->loadInputStreamBlock("insertion_mask", b->getSize(0), b->getSize(0));
-    for (unsigned i = 1; i < getInputStreamSet("insertion_mask")->getNumElements(); i++) {
+    const auto n = b->getInputStreamSet("insertion_mask")->getNumElements();
+    for (unsigned i = 1; i < n; i++) {
         insertion_mask = b->CreateOr(insertion_mask, b->loadInputStreamBlock("insertion_mask", b->getSize(i), b->getSize(0)));
     }
     Constant * mask01 = nullptr;
@@ -495,7 +496,7 @@ void UnitInsertionExtractionMasks::generateFinalBlockMethod(BuilderRef b, Value 
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(b);
+    RepeatDoBlockLogic(b);
 }
 
 StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask, InsertPosition p) {

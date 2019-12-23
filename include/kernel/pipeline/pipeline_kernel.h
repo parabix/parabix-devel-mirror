@@ -56,7 +56,15 @@ public:
 
     bool hasSignature() const final { return true; }
 
-    bool containsKernelFamilies() const;
+    bool externallyInitialized() const;
+
+    void setInputStreamSetAt(const unsigned i, StreamSet * const value) final;
+
+    void setOutputStreamSetAt(const unsigned i, StreamSet * const value) final;
+
+    void setInputScalarAt(const unsigned i, Scalar * const value) final;
+
+    void setOutputScalarAt(const unsigned i, Scalar * const value) final;
 
     std::string makeSignature(BuilderRef) const final {
         return mSignature;
@@ -64,6 +72,10 @@ public:
 
     const unsigned getNumOfThreads() const {
         return mNumOfThreads;
+    }
+
+    const unsigned getNumOfSegments() const {
+        return mNumOfSegments;
     }
 
     const Kernels & getKernels() const {
@@ -74,26 +86,30 @@ public:
         return mCallBindings;
     }
 
+    void addKernelDeclarations(BuilderRef b) final;
+
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
+
     virtual ~PipelineKernel();
-
-    bool hasStaticMain() const final {
-        return !containsKernelFamilies();
-    }
-
-    llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) final;
 
 protected:
 
     PipelineKernel(BaseDriver & driver,
                    std::string && signature,
-                   const unsigned numOfThreads,
+                   const unsigned numOfThreads, const unsigned numOfSegments,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs);
 
+    void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const final;
+
+    void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const final;
+
     void linkExternalMethods(BuilderRef b) final;
 
-    void addKernelDeclarations(BuilderRef b) final;
+    void addAdditionalFunctions(BuilderRef b) final;
+
+    void addInternalProperties(BuilderRef b) final;
 
     void generateInitializeMethod(BuilderRef b) final;
 
@@ -101,34 +117,14 @@ protected:
 
     void generateKernelMethod(BuilderRef b) final;
 
-    void generateFinalizeMethod(BuilderRef b) final;
-
     void generateFinalizeThreadLocalMethod(BuilderRef b) final;
 
-    void addAdditionalFunctions(BuilderRef b) final;
-
-    void addInternalProperties(BuilderRef b) final;
-
-    void setInputStreamSetAt(const unsigned i, StreamSet * const value) final;
-
-    void setOutputStreamSetAt(const unsigned i, StreamSet * const value) final;
-
-    void setInputScalarAt(const unsigned i, Scalar * const value) final;
-
-    void setOutputScalarAt(const unsigned i, Scalar * const value) final;
-
-    std::vector<llvm::Value *> getFinalOutputScalars(BuilderRef b) final;
-
-    void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const final;
-
-    void bindFamilyInitializationArguments(BuilderRef b, ArgIterator & arg, const ArgIterator & arg_end) const final;
-
-    void recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & args, const ParamMap & params) const final;
+    void generateFinalizeMethod(BuilderRef b) final;
 
 protected:
 
-    mutable std::unique_ptr<PipelineCompiler> mCompiler;
     const unsigned                            mNumOfThreads;
+    const unsigned                            mNumOfSegments;
     const Kernels                             mKernels;
     CallBindings                              mCallBindings;
     const std::string                         mSignature;

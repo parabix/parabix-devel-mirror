@@ -55,6 +55,8 @@ void LineSpanFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const n
     Value * const i64_ZERO = b->getInt64(0);
     Value * const i64_ONE = b->getInt64(1);
 
+    #warning REVISIT: this kernel does not read numOfStreams?
+
     BasicBlock * const block_Entry = b->GetInsertBlock();
     BasicBlock * const block_PreProcess = b->CreateBasicBlock("preprocess");
     BasicBlock * const block_UseSpan = b->CreateBasicBlock("useSpan");
@@ -68,7 +70,7 @@ void LineSpanFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const n
     Value * const noAvailableLineNumbers = b->CreateICmpEQ(ic_AvailableLineNumbers, i64_ZERO);
     Value * const noAvailableSpans = b->CreateICmpEQ(ic_AvailableSpans, i64_ZERO);
     Value * const noAvailableStreams = b->CreateOr(noAvailableLineNumbers, noAvailableSpans);
-    Value * const shouldExit = b->CreateOr(noAvailableStreams, mIsFinal);
+    Value * const shouldExit = b->CreateOr(noAvailableStreams, b->isFinal());
     b->CreateUnlikelyCondBr(shouldExit, block_Exit, block_PreProcess);
 
     auto GenerateContinueCheck = [&](Value * lnIdx, Value * spanIdx) -> Value * {

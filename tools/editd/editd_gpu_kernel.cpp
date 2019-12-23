@@ -96,7 +96,7 @@ void editdGPUKernel::generateDoBlockMethod(BuilderRef idb) {
 
 void editdGPUKernel::generateFinalBlockMethod(BuilderRef idb, Value * remainingBytes) {
     idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(idb);
+    RepeatDoBlockLogic(idb);
 }
 
 editdGPUKernel::editdGPUKernel(BuilderRef b, unsigned dist, unsigned pattLen, unsigned groupSize) :

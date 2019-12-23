@@ -81,13 +81,12 @@ void BaseDriver::addKernel(not_null<Kernel *> kernel) {
     // original kernel. However, the module for that kernel is already owned by the JIT
     // engine so we avoid declaring it as cached or uncached.
     if (LLVM_LIKELY(kernel->getModule() == nullptr)) {
-        if (LLVM_LIKELY(ParabixObjectCache::checkForCachedKernel(iBuilder, kernel))) {
-            mCachedKernel.emplace_back(kernel);
+        if (LLVM_LIKELY(ParabixObjectCache::checkForCachedKernel(mBuilder, kernel))) {
+            assert ("cached kernel does not contain a module?" && kernel->getModule());
+            mCachedKernel.emplace(kernel.get());
         } else {
-            if (kernel->getModule() == nullptr) {
-                kernel->makeModule(iBuilder);
-            }
-            mUncachedKernel.emplace_back(kernel);
+            kernel->makeModule(mBuilder);
+            mUncachedKernel.emplace(kernel.get());
         }
     }
 }
@@ -98,13 +97,11 @@ void BaseDriver::addKernel(not_null<Kernel *> kernel) {
 BaseDriver::BaseDriver(std::string && moduleName)
 : mContext(new llvm::LLVMContext())
 , mMainModule(new llvm::Module(moduleName, *mContext))
-, iBuilder(nullptr) {
+, mBuilder(nullptr) {
     ParabixObjectCache::initializeCacheSystems();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief deconstructor
+ * @brief destructor
  ** ------------------------------------------------------------------------------------------------------------- */
-BaseDriver::~BaseDriver() {
-
-}
+BaseDriver::~BaseDriver() { }

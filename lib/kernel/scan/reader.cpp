@@ -21,7 +21,7 @@ void ScanReader::generateMultiBlockLogic(BuilderRef b, Value * const numOfStride
     BasicBlock * const readItem = b->CreateBasicBlock("readItem");
     BasicBlock * const exitBlock = b->CreateBasicBlock("exitBlock");
     Value * const initialStride = b->getProcessedItemCount("scan");
-    Value * const isInvalidFinalItem = b->CreateAnd(mIsFinal, b->CreateICmpEQ(b->getSize(0), b->getAccessibleItemCount("scan")));
+    Value * const isInvalidFinalItem = b->CreateAnd(b->isFinal(), b->CreateICmpEQ(b->getSize(0), b->getAccessibleItemCount("scan")));
     b->CreateCondBr(isInvalidFinalItem, exitBlock, readItem);
 
     b->SetInsertPoint(readItem);

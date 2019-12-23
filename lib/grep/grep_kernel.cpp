@@ -261,7 +261,6 @@ std::string ICGrepKernel::makeSignature(BuilderRef) const {
 
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<cc::CC_Compiler> ccc;
     RE_Compiler re_compiler(getEntryScope(), mOptions->mCodeUnitAlphabet);
     if (mOptions->mSource) {
         std::vector<pablo::PabloAST *> basis_set = getInputStreamSet(mOptions->mCodeUnitAlphabet->getName() + "_basis");
@@ -273,7 +272,6 @@ void ICGrepKernel::generatePabloMethod() {
         re_compiler.addAlphabet(alpha, basis);
     }
     if ((mOptions->mEncodingTransformer)) {
-        auto alphabetName = mOptions->mEncodingTransformer->getIndexingAlphabet()->getName();
         PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
         re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
     }
@@ -315,17 +313,19 @@ void ICGrepKernel::generatePabloMethod() {
         if (matches.offset() == 0) matchResult = pb.createAdvance(matchResult, 1);
         pb.createAssign(final_matches, matchResult);
     }
-    Var * const output = getOutputStreamVar("matches");
+    Var * const output = pb.createExtract(getOutputStreamVar("matches"), pb.getInteger(0));
+    PabloAST * value = nullptr;
     if (mOptions->mCombiningType == GrepCombiningType::None) {
-        pb.createAssign(pb.createExtract(output, pb.getInteger(0)),final_matches);
+        value = final_matches;
     } else {
         PabloAST * toCombine = pb.createExtract(getInputStreamVar("toCombine"), pb.getInteger(0));
         if (mOptions->mCombiningType == GrepCombiningType::Exclude) {
-            pb.createAssign(pb.createExtract(output, pb.getInteger(0)), pb.createAnd(toCombine, pb.createNot(final_matches)));
+            value = pb.createAnd(toCombine, pb.createNot(final_matches), "toCombine");
         } else {
-            pb.createAssign(pb.createExtract(output, pb.getInteger(0)), pb.createOr(toCombine, final_matches));
+            value = pb.createOr(toCombine, final_matches, "toCombine");
         }
     }
+    pb.createAssign(output, value);
 }
 
 void MatchedLinesKernel::generatePabloMethod() {
@@ -437,7 +437,7 @@ void AbortOnNull::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numO
         blockMin[i] = b->fwCast(8, b->allOnes());
     }
     // If we're in the final block bypass the fast loop.
-    b->CreateCondBr(mIsFinal, finalStride, strideLoop);
+    b->CreateCondBr(b->isFinal(), finalStride, strideLoop);
 
     b->SetInsertPoint(strideLoop);
     PHINode * const baseBlockIndex = b->CreatePHI(b->getSizeTy(), 2);

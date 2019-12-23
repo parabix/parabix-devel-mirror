@@ -201,7 +201,7 @@ void FileSelectAccumulator::addDirectory(fs::path dirPath, unsigned cumulativeEn
 
 void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_start, char * name_end) {
     assert(name_end > name_start);
-    assert(name_end - name_start <= 4096);
+    assert((name_end - name_start) <= 4096);
     fs::path p(std::string(name_start, name_end - name_start));
     if (fileIdx < mFullPathEntries) {
         selectPath(mCollectedPaths, std::move(p));

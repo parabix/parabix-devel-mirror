@@ -208,7 +208,7 @@ public:
 
     ExpressionTable & operator=(ExpressionTable && other) = delete;
 
-    // NOTE: this deconstructor is *required* to ensure the correct order of "deleting"
+    // NOTE: this destructor is *required* to ensure the correct order of "deleting"
     // the internal maps before releasing the slab(s).
     ~ExpressionTable() noexcept { clear(); }
 

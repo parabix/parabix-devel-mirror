@@ -53,83 +53,14 @@ static_assert(sizeof(void *) == sizeof(uintptr_t), "");
 
 using namespace llvm;
 
-
 static int accumulatedFreeCalls = 0;
 
 extern "C" void free_debug_wrapper(void * ptr) {
-    accumulatedFreeCalls++;
-    if (accumulatedFreeCalls <= codegen::FreeCallBisectLimit) {
+    if (accumulatedFreeCalls < codegen::FreeCallBisectLimit) {
+        accumulatedFreeCalls++;
         free(ptr);
     }
 }
-
-#ifdef HAS_ADDRESS_SANITIZER
-Value * checkHeapAddress(CBuilder * const b, Value * const Ptr, Value * const Size) {
-    Module * const m = b->getModule();
-    PointerType * const voidPtrTy = b->getVoidPtrTy();
-    IntegerType * const sizeTy = b->getSizeTy();
-    Function * isPoisoned = m->getFunction("__asan_region_is_poisoned");
-    if (LLVM_UNLIKELY(isPoisoned == nullptr)) {
-        isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m);
-        isPoisoned->setCallingConv(CallingConv::C);
-        isPoisoned->setReturnDoesNotAlias();
-        #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
-        isPoisoned->setDoesNotAlias(1);
-        #endif
-    }
-    Value * const addr = b->CreatePointerCast(Ptr, voidPtrTy);
-    Value * check = b->CreateCall(isPoisoned, { addr, b->CreateTrunc(Size, sizeTy) });
-    return b->CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy));
-}
-
-#define CHECK_HEAP_ADDRESS(Ptr, Size, Name) \
-if (LLVM_UNLIKELY(hasAddressSanitizer())) { \
-    __CreateAssert(checkHeapAddress(this, Ptr, Size), Name " was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR, {Size, Ptr}); \
-}
-#else
-#define CHECK_HEAP_ADDRESS(Ptr, Size, Name)
-#endif
-
-static AllocaInst * resolveStackAddress(Value * Ptr) {
-    for (;;) {
-        if (GetElementPtrInst * gep = dyn_cast<GetElementPtrInst>(Ptr)) {
-            Ptr = gep->getPointerOperand();
-        } else if (CastInst * ci = dyn_cast<CastInst>(Ptr)) {
-            Ptr = ci->getOperand(0);
-        } else {
-            return dyn_cast<AllocaInst>(Ptr);
-        }
-    }
-}
-
-static inline bool notConstantZeroArraySize(const AllocaInst * const Base) {
-    if (const Constant * const as = dyn_cast_or_null<Constant>(Base->getArraySize())) {
-        return !as->isNullValue();
-    }
-    return false;
-}
-
-static Value * checkStackAddress(CBuilder * const b, Value * const Ptr, Value * const Size, AllocaInst * const Base) {
-    DataLayout DL(b->getModule());
-    IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-    Value * sz = ConstantExpr::getBitCast(ConstantExpr::getSizeOf(Base->getAllocatedType()), intPtrTy);
-    if (notConstantZeroArraySize(Base)) {
-        sz = b->CreateMul(sz, b->CreateZExtOrTrunc(Base->getArraySize(), intPtrTy));
-    }
-    Value * const p = b->CreatePtrToInt(Ptr, intPtrTy);
-    Value * const s = b->CreatePtrToInt(Base, intPtrTy);
-    Value * const w = b->CreateAdd(p, b->CreateZExtOrTrunc(Size, intPtrTy));
-    Value * const e = b->CreateAdd(s, sz);
-    return b->CreateAnd(b->CreateICmpUGE(p, s), b->CreateICmpULE(w, e));
-}
-
-#define CHECK_ADDRESS(Ptr, Size, Name) \
-    CreateAssert(Ptr, Name " was given a null address"); \
-    if (AllocaInst * Base = resolveStackAddress(Ptr)) { \
-        CreateAssert(checkStackAddress(this, Ptr, Size, Base), Name " was given an invalid stack address"); \
-    } else { \
-        CHECK_HEAP_ADDRESS(Ptr, Size, Name) \
-    }
 
 Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const Twine & Name) {
     if (ConstantInt * const c = dyn_cast<ConstantInt>(divisor)) {
@@ -244,7 +175,7 @@ Value * CBuilder::CreateWriteCall(Value * fileDescriptor, Value * buf, Value * n
     }
     buf = CreatePointerCast(buf, voidPtrTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(buf, nbyte, "CreateWriteCall");
+        CheckAddress(buf, nbyte, "CreateWriteCall");
     }
     return CreateCall(write, {fileDescriptor, buf, nbyte});
 }
@@ -262,7 +193,7 @@ Value * CBuilder::CreateReadCall(Value * fileDescriptor, Value * buf, Value * nb
     }
     buf = CreatePointerCast(buf, voidPtrTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(buf, nbyte, "CreateReadCall");
+        CheckAddress(buf, nbyte, "CreateReadCall");
     }
     return CreateCall(readFn, {fileDescriptor, buf, nbyte});
 }
@@ -320,7 +251,7 @@ Value * CBuilder::CreateFSync(Value * fileDescriptor) {
 Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
     Module * const m = getModule();
     Function * mkstempFn = m->getFunction("mkstemp");
-    if (mkstempFn == nullptr) {
+    if (LLVM_UNLIKELY(mkstempFn == nullptr)) {
         FunctionType * const fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, false);
         mkstempFn = Function::Create(fty, Function::ExternalLinkage, "mkstemp", m);
     }
@@ -330,7 +261,7 @@ Value * CBuilder::CreateMkstempCall(Value * ftemplate) {
 Value * CBuilder::CreateStrlenCall(Value * str) {
     Module * const m = getModule();
     Function * strlenFn = m->getFunction("strlen");
-    if (strlenFn == nullptr) {
+    if (LLVM_UNLIKELY(strlenFn == nullptr)) {
         FunctionType * const fty = FunctionType::get(getSizeTy(), {getInt8PtrTy()}, false);
         strlenFn = Function::Create(fty, Function::ExternalLinkage, "strlen", m);
     }
@@ -340,7 +271,7 @@ Value * CBuilder::CreateStrlenCall(Value * str) {
 Function * CBuilder::GetPrintf() {
     Module * const m = getModule();
     Function * printf = m->getFunction("printf");
-    if (printf == nullptr) {
+    if (LLVM_UNLIKELY(printf == nullptr)) {
         FunctionType * const fty = FunctionType::get(getInt32Ty(), {getInt8PtrTy()}, true);
         printf = Function::Create(fty, Function::ExternalLinkage, "printf", m);
         printf->addAttribute(1, Attribute::NoAlias);
@@ -348,14 +279,44 @@ Function * CBuilder::GetPrintf() {
     return printf;
 }
 
+CallInst * CBuilder::__CreatePrintfCall(Value * const format, std::initializer_list<Value *> args) {
+    SmallVector<Value *, 1> argVals(2);
+    argVals[0] = format;
+    argVals.append(args);
+    return CreateCall(GetPrintf(), argVals);
+}
+
 Function * CBuilder::GetDprintf() {
     Module * const m = getModule();
     Function * dprintf = m->getFunction("dprintf");
-    if (dprintf == nullptr) {
+    if (LLVM_UNLIKELY(dprintf == nullptr)) {
         FunctionType * fty = FunctionType::get(getInt32Ty(), {getInt32Ty(), getInt8PtrTy()}, true);
         dprintf = Function::Create(fty, Function::ExternalLinkage, "dprintf", m);
     }
     return dprintf;
+}
+
+CallInst * CBuilder::__CreateDprintfCall(Value * const fd, Value * const format, std::initializer_list<Value *> args) {
+    SmallVector<Value *, 8> argVals(2);
+    argVals[0] = fd;
+    argVals[1] = format;
+    argVals.append(args);
+    return CreateCall(GetDprintf(), argVals);
+}
+
+CallInst * CBuilder::__CreateSprintfCall(Value * const str, Value * const format, std::initializer_list<Value *> args) {
+    Module * const m = getModule();
+    Function * sprintf = m->getFunction("dprintf");
+    if (LLVM_UNLIKELY(sprintf == nullptr)) {
+        PointerType * int8PtrTy = getInt8PtrTy();
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {int8PtrTy, int8PtrTy}, true);
+        sprintf = Function::Create(fty, Function::ExternalLinkage, "sprintf", m);
+    }
+    SmallVector<Value *, 8> argVals(2);
+    argVals[0] = str;
+    argVals[1] = format;
+    argVals.append(args);
+    return CreateCall(sprintf, argVals);
 }
 
 void CBuilder::CallPrintIntCond(StringRef name, Value * const value, Value * const cond, const STD_FD fd) {
@@ -374,11 +335,12 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
     Constant * printRegister = m->getFunction("print_int");
     IntegerType * const int64Ty = getInt64Ty();
     if (LLVM_UNLIKELY(printRegister == nullptr)) {
-        FunctionType *FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(), int64Ty }, false);
+        auto ip = saveIP();
+        FunctionType * const FT = FunctionType::get(getVoidTy(), { getInt32Ty(), getInt8PtrTy(), int64Ty }, false);
         Function * printFn = Function::Create(FT, Function::InternalLinkage, "print_int", m);
         auto arg = printFn->arg_begin();
         BasicBlock * entry = BasicBlock::Create(getContext(), "entry", printFn);
-        IRBuilder<> builder(entry);
+        SetInsertPoint(entry);
         Value * const fdInt = &*(arg++);
         fdInt->setName("fd");
         Value * const name = &*(arg++);
@@ -390,9 +352,11 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
         args[1] = GetString("%-40s = %" PRIx64 "\n");
         args[2] = name;
         args[3] = value;
-        builder.CreateCall(GetDprintf(), args);
-        builder.CreateRetVoid();
+        CreateCall(GetDprintf(), args);
+        CreateFSync(fdInt);
+        CreateRetVoid();
         printRegister = printFn;
+        restoreIP(ip);
     }
     Value * num = nullptr;
     if (value->getType()->isPointerTy()) {
@@ -419,11 +383,11 @@ Value * CBuilder::CreateMalloc(Value * size) {
     }
     size = CreateZExtOrTrunc(size, sizeTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CreateAssert(size, "CreateMalloc: 0-byte malloc is implementation defined");
+        __CreateAssert(CreateIsNotNull(size), "CreateMalloc: 0-byte malloc is implementation defined", {});
     }
     CallInst * const ptr = CreateCall(f, size);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CreateAssert(ptr, "CreateMalloc: returned null pointer");
+        __CreateAssert(CreateIsNotNull(ptr), "CreateMalloc: returned null pointer", {});
     }
     CreateMemZero(ptr, size, 1);
     return ptr;
@@ -475,16 +439,16 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
             f->setCallingConv(CallingConv::C);
         }
         Value * handle = CreateAlloca(voidPtrTy);
-        CallInst * success = CreateCall(f, {handle, align, size});
+        CallInst * const success = CreateCall(f, {handle, align, size});
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            CreateAssertZero(success, "CreateAlignedMalloc: posix_memalign reported bad allocation");
+            __CreateAssert(CreateIsNull(success), "CreateAlignedMalloc: posix_memalign reported bad allocation (%d)", {success});
         }
         ptr = CreateLoad(handle);
     } else {
         report_fatal_error("stdlib.h does not contain either aligned_alloc or posix_memalign");
     }
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CreateAssert(ptr, "CreateAlignedMalloc: returned null (out of memory?)");
+        __CreateAssert(CreateIsNotNull(ptr), "CreateAlignedMalloc: returned null (out of memory?)", {});
     }
     CreateMemZero(ptr, size, alignment);
     return ptr;
@@ -763,10 +727,18 @@ PointerType * LLVM_READNONE CBuilder::getVoidPtrTy(const unsigned AddressSpace) 
 
 
 Value * CBuilder::CreateAtomicFetchAndAdd(Value * const val, Value * const ptr) {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Constant * const Size = ConstantExpr::getSizeOf(val->getType());
+        CheckAddress(ptr, Size, "CreateAtomicFetchAndAdd: ptr");
+    }
     return CreateAtomicRMW(AtomicRMWInst::Add, ptr, val, AtomicOrdering::AcquireRelease);
 }
 
 Value * CBuilder::CreateAtomicFetchAndSub(Value * const val, Value * const ptr) {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        Constant * const Size = ConstantExpr::getSizeOf(val->getType());
+        CheckAddress(ptr, Size, "CreateAtomicFetchAndSub: ptr");
+    }
     return CreateAtomicRMW(AtomicRMWInst::Sub, ptr, val, AtomicOrdering::AcquireRelease);
 }
 
@@ -827,7 +799,7 @@ Value * CBuilder::CreateFReadCall(Value * ptr, Value * size, Value * nitems, Val
     }
     ptr = CreatePointerCast(ptr, voidPtrTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(ptr, CreateMul(size, nitems), "CreateFReadCall");
+        CheckAddress(ptr, CreateMul(size, nitems), "CreateFReadCall");
     }
     return CreateCall(fReadFunc, {ptr, size, nitems, stream});
 }
@@ -844,7 +816,7 @@ Value * CBuilder::CreateFWriteCall(Value * ptr, Value * size, Value * nitems, Va
     }
     ptr = CreatePointerCast(ptr, voidPtrTy);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(ptr, CreateMul(size, nitems), "CreateFReadCall");
+        CheckAddress(ptr, CreateMul(size, nitems), "CreateFReadCall");
     }
     return CreateCall(fWriteFunc, {ptr, size, nitems, stream});
 }
@@ -886,7 +858,7 @@ Type * CBuilder::getPThreadTy() {
     return IntegerType::get(getContext(), sizeof(pthread_t) * 8);
 }
 
-Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function * start_routine, Value * arg) {
+Value * CBuilder::CreatePThreadCreateCall(Value *  const thread, Value *  const attr, Function *  const start_routine, Value *  const arg) {
     Module * const m = getModule();
     Type * const voidPtrTy = getVoidPtrTy();
     Function * pthreadCreateFunc = m->getFunction("pthread_create");
@@ -899,6 +871,7 @@ Value * CBuilder::CreatePThreadCreateCall(Value * thread, Value * attr, Function
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         __CreateAssert(CreateIsNotNull(thread), "PThreadCreate: thread cannot be null", {});
         __CreateAssert(CreateIsNotNull(start_routine), "PThreadCreate: start_routine cannot be null", {});
+        CheckAddress(arg, ConstantExpr::getSizeOf(voidPtrTy), "CreatePThreadCreateCall");
     }
     return CreateCall(pthreadCreateFunc, {thread, attr, start_routine, CreatePointerCast(arg, voidPtrTy)});
 }
@@ -914,27 +887,33 @@ Value * CBuilder::CreatePThreadYield() {
     return CreateCall(f);
 }
 
-Value * CBuilder::CreatePThreadExitCall(Value * value_ptr) {
+Value * CBuilder::CreatePThreadExitCall(Value * const value_ptr) {
     Module * const m = getModule();
     Function * pthreadExitFunc = m->getFunction("pthread_exit");
+    PointerType * const voidPtrTy = getVoidPtrTy();
     if (pthreadExitFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getVoidTy(), {getVoidPtrTy()}, false);
+        FunctionType * fty = FunctionType::get(getVoidTy(), {voidPtrTy}, false);
         pthreadExitFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_exit", m);
         pthreadExitFunc->addFnAttr(Attribute::NoReturn);
         pthreadExitFunc->setCallingConv(CallingConv::C);
     }
+    // TODO: test whether value_ptr is null or a heap allocated address?
     CallInst * exitThread = CreateCall(pthreadExitFunc, {value_ptr});
     exitThread->setDoesNotReturn();
     return exitThread;
 }
 
-Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * value_ptr){
+Value * CBuilder::CreatePThreadJoinCall(Value * thread, Value * const value_ptr){
     Module * const m = getModule();
     Function * pthreadJoinFunc = m->getFunction("pthread_join");
+    PointerType * const voidPtrPtrTy = getVoidPtrTy()->getPointerTo();
     if (pthreadJoinFunc == nullptr) {
-        FunctionType * fty = FunctionType::get(getInt32Ty(), {getPThreadTy(), getVoidPtrTy()->getPointerTo()}, false);
+        FunctionType * fty = FunctionType::get(getInt32Ty(), {getPThreadTy(), voidPtrPtrTy}, false);
         pthreadJoinFunc = Function::Create(fty, Function::ExternalLinkage, "pthread_join", m);
         pthreadJoinFunc->setCallingConv(CallingConv::C);
+    }
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        CheckAddress(value_ptr, ConstantExpr::getSizeOf(voidPtrPtrTy), "CreatePThreadJoinCall");
     }
     return CreateCall(pthreadJoinFunc, {thread, value_ptr});
 }
@@ -954,6 +933,9 @@ extern "C"
 BOOST_NOINLINE
 void __report_failure_v(const char * name, const char * fmt, const uintptr_t * trace, const uint32_t traceLength, va_list & args) {
     // TODO: look into boost stacktrace, available from version 1.65
+
+    // colourize the output if and only if stderr is piped to the terminal
+    const auto colourize = isatty(STDERR_FILENO) == 1;
     raw_fd_ostream out(STDERR_FILENO, false);
     if (trace) {
         SmallVector<char, 4096> tmp;
@@ -979,25 +961,37 @@ void __report_failure_v(const char * name, const char * fmt, const uintptr_t * t
 
             }
         }
-        out.changeColor(raw_fd_ostream::WHITE, true);
+        if (colourize) {
+            out.changeColor(raw_fd_ostream::WHITE, true);
+        }
         out << "Compilation Stacktrace:\n";
-        out.resetColor();
+        if (colourize) {
+            out.resetColor();
+        }
         out << trace_string.str();
     }
     if (name) {
-        out.changeColor(raw_fd_ostream::RED, true);
+        if (colourize) {
+            out.changeColor(raw_fd_ostream::RED, true);
+        }
         out << name << ": ";
     }
-    out.changeColor(raw_fd_ostream::WHITE, true);
+    if (colourize) {
+        out.changeColor(raw_fd_ostream::WHITE, true);
+    }
     char buffer[1024] = {0};
     const auto m = std::vsprintf(buffer, fmt, args);
     assert (m > 0);
     out.write(buffer, m);
     if (trace == nullptr) {
-        out.changeColor(raw_fd_ostream::WHITE, true);
+        if (colourize) {
+            out.changeColor(raw_fd_ostream::WHITE, true);
+        }
         out << "\nNo debug symbols loaded.\n";
     }
-    out.resetColor();
+    if (colourize) {
+        out.resetColor();
+    }
     out << "\n\n";
     out.flush();
 }
@@ -1161,8 +1155,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     args[2] = GetString(fmt);
     args[3] = trace;
     args[4] = depth;
-    args.insert(args.begin() + 5, params);
-    assert (args.size() == params.size() + 5);
+    args.append(params);
     IRBuilder<>::CreateCall(assertFunc, args);
 }
 
@@ -1178,7 +1171,7 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
-llvm::AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine & Name) {
+AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine & Name) {
 
     auto BB = GetInsertBlock();
     auto F = BB->getParent();
@@ -1304,28 +1297,28 @@ Function * CBuilder::LinkFunction(StringRef name, FunctionType * type, void * fu
 
 LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
+        CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
 LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine & Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
+        CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
 LoadInst * CBuilder::CreateLoad(Type * Ty, Value *Ptr, const Twine & Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Ty), "CreateLoad");
+        CheckAddress(Ptr, ConstantExpr::getSizeOf(Ty), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
 }
 
 LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
+        CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ptr, isVolatile, Name);
 }
@@ -1334,7 +1327,7 @@ StoreInst * CBuilder::CreateStore(Value * Val, Value * Ptr, bool isVolatile) {
     assert ("Ptr is not a pointer type for Val" &&
             Ptr->getType()->isPointerTy() && Val->getType() == Ptr->getType()->getPointerElementType());
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr, ConstantExpr::getSizeOf(Val->getType()), "CreateStore");
+        CheckAddress(Ptr, ConstantExpr::getSizeOf(Val->getType()), "CreateStore");
     }
     return IRBuilder<>::CreateStore(Val, Ptr, isVolatile);
 }
@@ -1402,7 +1395,7 @@ Value * CBuilder::CreateMemChr(Value * ptr, Value * byteVal, Value * num) {
         memchrFn = Function::Create(memchrTy, Function::ExternalLinkage, "memchr", m);
     }
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(ptr, num, "CreateMemChr: Src");
+        CheckAddress(ptr, num, "CreateMemChr: Src");
     }
     return CreateCall(memchrFn, {ptr, byteVal, num});
 }
@@ -1410,8 +1403,8 @@ Value * CBuilder::CreateMemChr(Value * ptr, Value * byteVal, Value * num) {
 CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsigned Align, bool isVolatile,
                                    MDNode *TBAATag, MDNode *ScopeTag, MDNode *NoAliasTag) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Src, Size, "CreateMemMove: Src");
-        CHECK_ADDRESS(Dst, Size, "CreateMemMove: Dst");
+        CheckAddress(Src, Size, "CreateMemMove: Src");
+        CheckAddress(Dst, Size, "CreateMemMove: Dst");
         // If the call to this intrinisic has an alignment value that is not 0 or 1, then the caller
         // guarantees that both the source and destination pointers are aligned to that boundary.
         if (Align > 1) {
@@ -1435,8 +1428,8 @@ CallInst * CBuilder::CreateMemMove(Value * Dst, Value * Src, Value *Size, unsign
 CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned Align, bool isVolatile,
                                   MDNode *TBAATag, MDNode *TBAAStructTag, MDNode *ScopeTag, MDNode *NoAliasTag) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Src, Size, "CreateMemCpy: Src");
-        CHECK_ADDRESS(Dst, Size, "CreateMemCpy: Dst");
+        CheckAddress(Src, Size, "CreateMemCpy: Src");
+        CheckAddress(Dst, Size, "CreateMemCpy: Dst");
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
         Value * intSrc = CreatePtrToInt(Src, intPtrTy);
@@ -1463,7 +1456,7 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
 CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsigned Align,
                        bool isVolatile, MDNode * TBAATag, MDNode * ScopeTag, MDNode * NoAliasTag) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr, Size, "CreateMemSet");
+        CheckAddress(Ptr, Size, "CreateMemSet");
         if (Align > 1) {
             DataLayout DL(getModule());
             IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
@@ -1477,8 +1470,8 @@ CallInst * CBuilder::CreateMemSet(Value * Ptr, Value * Val, Value * Size, unsign
 
 CallInst * CBuilder::CreateMemCmp(Value * Ptr1, Value * Ptr2, Value * Num) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        CHECK_ADDRESS(Ptr1, Num, "CreateMemCmp: Ptr1");
-        CHECK_ADDRESS(Ptr2, Num, "CreateMemCmp: Ptr2");
+        CheckAddress(Ptr1, Num, "CreateMemCmp: Ptr1");
+        CheckAddress(Ptr2, Num, "CreateMemCmp: Ptr2");
     }
     Module * const m = getModule();
     Function * f = m->getFunction("memcmp");
@@ -1687,6 +1680,62 @@ Function * CBuilder::getRethrow() {
     return cxa_rethrow;
 }
 
+AllocaInst * CBuilder::resolveStackAddress(Value * Ptr) {
+    for (;;) {
+        if (GetElementPtrInst * gep = dyn_cast<GetElementPtrInst>(Ptr)) {
+            Ptr = gep->getPointerOperand();
+        } else if (CastInst * ci = dyn_cast<CastInst>(Ptr)) {
+            Ptr = ci->getOperand(0);
+        } else {
+            return dyn_cast<AllocaInst>(Ptr);
+        }
+    }
+}
+
+static inline bool notConstantZeroArraySize(const AllocaInst * const Base) {
+    if (const Constant * const as = dyn_cast_or_null<Constant>(Base->getArraySize())) {
+        return !as->isNullValue();
+    }
+    return false;
+}
+
+void CBuilder::CheckAddress(Value * const Ptr, Value * const Size, Constant * const Name) {
+    __CreateAssert(CreateIsNotNull(Ptr), "%s was given a null address", {Name});
+    if (AllocaInst * Base = resolveStackAddress(Ptr)) {
+        DataLayout DL(getModule());
+        IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
+        Value * sz = ConstantExpr::getBitCast(ConstantExpr::getSizeOf(Base->getAllocatedType()), intPtrTy);
+        if (notConstantZeroArraySize(Base)) {
+            sz = CreateMul(sz, CreateZExtOrTrunc(Base->getArraySize(), intPtrTy));
+        }
+        Value * const p = CreatePtrToInt(Ptr, intPtrTy);
+        Value * const s = CreatePtrToInt(Base, intPtrTy);
+        Value * const w = CreateAdd(p, CreateZExtOrTrunc(Size, intPtrTy));
+        Value * const e = CreateAdd(s, sz);
+        Value * const valid = CreateAnd(CreateICmpUGE(p, s), CreateICmpULE(w, e));
+        __CreateAssert(valid, "%s was given an invalid stack address", {Name});
+    }
+    #ifdef HAS_ADDRESS_SANITIZER
+    if (LLVM_UNLIKELY(hasAddressSanitizer())) {
+        Module * const m = getModule();
+        PointerType * const voidPtrTy = getVoidPtrTy();
+        IntegerType * const sizeTy = getSizeTy();
+        Function * isPoisoned = m->getFunction("__asan_region_is_poisoned");
+        if (LLVM_UNLIKELY(isPoisoned == nullptr)) {
+            isPoisoned = Function::Create(FunctionType::get(voidPtrTy, {voidPtrTy, sizeTy}, false), Function::ExternalLinkage, "__asan_region_is_poisoned", m);
+            isPoisoned->setCallingConv(CallingConv::C);
+            isPoisoned->setReturnDoesNotAlias();
+            #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
+            isPoisoned->setDoesNotAlias(1);
+            #endif
+        }
+        Value * const addr = CreatePointerCast(Ptr, voidPtrTy);
+        Value * check = CreateCall(isPoisoned, { addr, CreateTrunc(Size, sizeTy) });
+        Value * const valid = CreateICmpEQ(check, ConstantPointerNull::get(voidPtrTy));
+        __CreateAssert(valid, "%s was given an unallocated %" PRIuMAX "-byte memory address 0x%" PRIxPTR, {Name, Size, Ptr});
+    }
+    #endif
+}
 
 
 CBuilder::CBuilder(LLVMContext & C)
@@ -1730,7 +1779,6 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
 //    #ifdef HAS_ADDRESS_SANITIZER
 //    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
 //    DenseSet<CallInst *> alreadyTested;
-
 //    AliasAnalysis & AA = getAnalysis<AliasAnalysis>();
 //    #endif
 
@@ -1799,18 +1847,20 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 auto extract = [](const Value * a) -> const char * {
                                     const GlobalVariable * const g = cast<GlobalVariable>(a->stripPointerCasts());
                                     const ConstantDataArray * const d = cast<ConstantDataArray>(g->getInitializer());
-                                    return d->getRawDataValues().data();
+                                    // StringRef does not "own" the data
+                                    const StringRef ref = d->getRawDataValues();
+                                    return ref.data();
                                 };
-                                const char * const name = extract(ci.getOperand(1));
-                                const char * const msg = extract(ci.getOperand(2));
-                                const uintptr_t * const trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3)));
+                                const char * const name = extract(ci.getOperand(1)); assert (name);
+                                const char * const msg = extract(ci.getOperand(2)); assert (msg);
+                                const uintptr_t * const trace = reinterpret_cast<const uintptr_t *>(extract(ci.getOperand(3))); assert (trace);
                                 const uint32_t n = cast<ConstantInt>(ci.getOperand(4))->getLimitedValue();
 
                                 // since we may not necessarily be able to statically evaluate every varadic param,
                                 // attempt to fill in what constants we can and report <any> for all others.
                                 boost::format fmt(msg);
                                 for (unsigned i = 5; i < ci.getNumArgOperands(); ++i) {
-                                    Value * const arg = ci.getOperand(i);
+                                    Value * const arg = ci.getOperand(i); assert (arg);
                                     if (LLVM_LIKELY(isa<Constant>(arg))) {
                                         if (LLVM_LIKELY(isa<ConstantInt>(arg))) {
                                             const auto v = cast<ConstantInt>(arg)->getLimitedValue();
@@ -1821,7 +1871,8 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                         } else {
                                             Type * const ty = arg->getType();
                                             if (ty->isPointerTy()) {
-                                                fmt % extract(arg);
+                                                const char * const argC = extract(arg); assert (argC);
+                                                fmt % argC;
                                             } else {
                                                 fmt % "<unknown>";
                                             }
@@ -1830,7 +1881,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                         fmt % "<any>";
                                     }
                                 }
-                                __report_failure(name, msg, trace, n);
+                                __report_failure(name, fmt.str().data(), trace, n);
                                 exit(-1);
                             }
                             remove = true;

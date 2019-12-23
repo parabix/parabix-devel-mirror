@@ -163,7 +163,7 @@ void radix64Kernel::generateFinalBlockMethod(BuilderRef b, Value * remainingByte
     BasicBlock * radix64_loop = b->CreateBasicBlock("radix64_loop");
     BasicBlock * fbExit = b->CreateBasicBlock("fbExit");
 
-    const unsigned PACK_SIZE = b->getStride()/8;
+    const unsigned PACK_SIZE = getStride() / 8;
     Constant * packSize = b->getSize(PACK_SIZE);
 
     // Enter the loop only if there is at least one byte remaining to process.
@@ -237,7 +237,7 @@ void base64Kernel::generateFinalBlockMethod(BuilderRef b, Value * remainingBytes
     Value * remainMod4 = b->CreateAnd(remainingBytes, THREE);
     Value * padBytes = b->CreateAnd(b->CreateSub(b->getSize(4), remainMod4), THREE);
 
-    Constant * const PACK_SIZE = b->getSize(b->getStride() / 8);
+    Constant * const PACK_SIZE = b->getSize(getStride() / 8);
 
     // Enter the loop only if there is at least one byte remaining to process.
     b->CreateCondBr(b->CreateICmpEQ(remainingBytes, ZERO), fbExit, base64_loop);

@@ -95,6 +95,7 @@ protected:
     BaseDriver &        mDriver;
     // eventual pipeline configuration
     unsigned            mNumOfThreads;
+    unsigned            mNumOfBufferSegments;
     const bool          mRequiresPipeline;
     Bindings            mInputStreamSets;
     Bindings            mOutputStreamSets;
@@ -117,6 +118,10 @@ public:
 
     void setNumOfThreads(const unsigned threads) {
         mNumOfThreads = threads;
+    }
+
+    void setNumOfBufferSegments(const unsigned bufferSegments) {
+        mNumOfBufferSegments = bufferSegments;
     }
 
     ProgramBuilder(BaseDriver & driver,

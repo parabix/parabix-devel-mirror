@@ -282,7 +282,8 @@ Kernel * PipelineBuilder::makeKernel() {
     out.flush();
 
     PipelineKernel * const pipeline =
-        new PipelineKernel(mDriver, std::move(signature), mNumOfThreads,
+        new PipelineKernel(mDriver, std::move(signature),
+                           mNumOfThreads, codegen::BufferSegments,
                            std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars));
@@ -449,6 +450,7 @@ PipelineBuilder::PipelineBuilder(BaseDriver & driver,
     const unsigned numOfThreads, const bool requiresPipeline)
 : mDriver(driver)
 , mNumOfThreads(numOfThreads)
+, mNumOfBufferSegments(numOfThreads)
 , mRequiresPipeline(requiresPipeline)
 , mInputStreamSets(stream_inputs)
 , mOutputStreamSets(stream_outputs)

@@ -163,7 +163,7 @@ void get_editd_pattern(int & pattern_segs, int & total_len) {
 
 //TODO: make a "CBuffer" class to abstract away the complexity of making these function typedefs.
 
-typedef void (*preprocessFunctionType)(char * output_data, size_t * output_produced, size_t output_size, const uint32_t fd);
+typedef void (*preprocessFunctionType)(size_t, char * output_data, size_t output_size, const uint32_t fd);
 
 static char * chStream;
 static size_t fsize;
@@ -206,7 +206,7 @@ preprocessFunctionType preprocessPipeline(CPUDriver & pxDriver) {
     P->CreateKernelCall<MMapSourceKernel>(fileDescriptor, ByteStream);
     StreamSet * const BasisBits = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-    P->CreateKernelCall<PreprocessKernel>(BasisBits, CCResults);
+    P->CreateKernelCall<PreprocessKernel>(BasisBits, CCResults);    
     return reinterpret_cast<preprocessFunctionType>(P->compile());
 }
 
@@ -237,9 +237,8 @@ char * preprocess(preprocessFunctionType preprocess) {
     // Given a 8-bit bytestream of length n, we need space for 4 bitstreams of length n ...
     AlignedAllocator<char, ALIGNMENT> alloc;
     const size_t n = round_up_to(fsize, 8 * ALIGNMENT);
-    chStream = alloc.allocate((4 * n) / 8);
-    size_t length = 0;
-    preprocess(chStream, &length, n, fd);
+    chStream = alloc.allocate((4 * n) / 8);    
+    preprocess(n, chStream, 0, fd);
     close(fd);
     return chStream;
 }
@@ -310,12 +309,12 @@ editdFunctionType editdPipeline(CPUDriver & pxDriver, const std::vector<std::str
     auto P = pxDriver.makePipeline({Binding{inputType, "input"}, Binding{sizeTy, "fileSize"}});
     Scalar * const inputStream = P->getInputScalar("input");
     Scalar * const fileSize = P->getInputScalar("fileSize");
-    b->LinkFunction("wrapped_report_pos", wrapped_report_pos);
     StreamSet * const ChStream = P->CreateStreamSet(4);
     P->CreateKernelCall<MemorySourceKernel>(inputStream, fileSize, ChStream);
     StreamSet * const MatchResults = P->CreateStreamSet(editDistance + 1);
     P->CreateKernelCall<PatternKernel>(patterns, ChStream, MatchResults);
-    P->CreateKernelCall<editdScanKernel>(MatchResults);
+    Kernel * const scan = P->CreateKernelCall<editdScanKernel>(MatchResults);
+    scan->link("wrapped_report_pos", wrapped_report_pos);
     return reinterpret_cast<editdFunctionType>(P->compile());
 }
 
@@ -325,7 +324,6 @@ multiEditdFunctionType multiEditdPipeline(CPUDriver & pxDriver) {
 
     auto & b = pxDriver.getBuilder();
     auto P = pxDriver.makePipeline({Binding{b->getInt32Ty(), "fileDescriptor"}});
-    b->LinkFunction("wrapped_report_pos", wrapped_report_pos);
     Scalar * const fileDescriptor = P->getInputScalar("fileDescriptor");
 
     StreamSet * const ByteStream = P->CreateStreamSet(1, 8);
@@ -352,37 +350,28 @@ multiEditdFunctionType multiEditdPipeline(CPUDriver & pxDriver) {
         StreamSet * const MergedResults = P->CreateStreamSet();
         P->CreateKernelCall<StreamsMerge>(MatchResults, MergedResults);
     }
-    P->CreateKernelCall<editdScanKernel>(MergedResults);
-
+    Kernel * const scan = P->CreateKernelCall<editdScanKernel>(MergedResults);
+    scan->link("wrapped_report_pos", wrapped_report_pos);
     return reinterpret_cast<multiEditdFunctionType>(P->compile());
 }
 
 typedef void (*editdIndexFunctionType)(char * byte_data, size_t filesize, const char * pattern);
 
 editdIndexFunctionType editdIndexPatternPipeline(CPUDriver & pxDriver, unsigned patternLen) {
-
     auto & b = pxDriver.getBuilder();
-
     Type * const inputType = b->getIntNTy(1)->getPointerTo();
     Type * const sizeTy = b->getSizeTy();
     Type * const patternPtrTy = PointerType::get(b->getInt8Ty(), 0);
-
     auto P = pxDriver.makePipeline({Binding{inputType, "input"}, Binding{sizeTy, "fileSize"}, Binding{patternPtrTy, "pattStream"}});
     Scalar * const inputStream = P->getInputScalar("input");
     Scalar * const fileSize = P->getInputScalar("fileSize");
     Scalar * const pattStream = P->getInputScalar("pattStream");
-
-    b->LinkFunction("wrapped_report_pos", wrapped_report_pos);
-
     StreamSet * const ChStream = P->CreateStreamSet(4);
     P->CreateKernelCall<MemorySourceKernel>(inputStream, fileSize, ChStream);
-
     StreamSet * const MatchResults = P->CreateStreamSet(editDistance + 1);
-
     P->CreateKernelCall<editdCPUKernel>(patternLen, groupSize, pattStream, ChStream, MatchResults);
-
-    P->CreateKernelCall<editdScanKernel>(MatchResults);
-
+    Kernel * const scan = P->CreateKernelCall<editdScanKernel>(MatchResults);
+    scan->link("wrapped_report_pos", wrapped_report_pos);
     return reinterpret_cast<editdIndexFunctionType>(P->compile());
 }
 
