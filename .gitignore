@@ -1,0 +1,28 @@
+# Don't track build directories
+*build*/
+libllv*
+# Don't track LLVM source
+llvm-[0-9]*.src
+
+# Don't track backup files
+*.bak
+*.kate-swp
+*~
+.git/
+.DS_Store
+#
+# Don't track IDE files
+*.files
+*.config
+*.creator.user
+*.creator
+*.includes
+*.vscode
+#
+# Don't track compiled python
+*.pyc
+#
+# Don't track UCD files
+UCD-scripts/UCD-*
+UCD-scripts/generated*
+
