@@ -1005,9 +1005,6 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, const StreamSetPor
 void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b, Value * halting) {
 
     BasicBlock * const exitBlock = b->GetInsertBlock();
-//    mTerminatedAtLoopExitPhi->addIncoming(mTerminatedInitially, exitBlock);
-//    mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
-//    mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
     mHaltingPhi->addIncoming(halting, exitBlock);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -1019,6 +1016,9 @@ void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b, Value * halting) 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         mUpdatedProducedPhi[i]->addIncoming(mAlreadyProducedPhi[i], exitBlock);
+        if (mUpdatedProducedDeferredPhi[i]) {
+            mUpdatedProducedDeferredPhi[i]->addIncoming(mAlreadyProducedDeferredPhi[i], exitBlock);
+        }
     }
 
 }

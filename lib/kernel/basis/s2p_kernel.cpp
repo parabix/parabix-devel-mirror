@@ -96,85 +96,83 @@ void s2p_ideal(BuilderRef iBuilder, Value * input[], Value * output[]) {
 }
 #endif
 
-void S2PKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks) {
-    Module * m = kb->getModule();
+void S2PKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+    Module * m = b->getModule();
     DataLayout DL(m);
-    IntegerType * const intPtrTy = DL.getIntPtrType(kb->getContext());
-    PointerType * const voidPtrTy = kb->getVoidPtrTy();
-    BasicBlock * entry = kb->GetInsertBlock();
-    BasicBlock * s2pLoop = kb->CreateBasicBlock("s2pLoop");
-    BasicBlock * s2pFinalize = kb->CreateBasicBlock("s2pFinalize");
-    Constant * const ZERO = kb->getSize(0);
+    IntegerType * const intPtrTy = DL.getIntPtrType(b->getContext());
+    PointerType * const voidPtrTy = b->getVoidPtrTy();
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * s2pLoop = b->CreateBasicBlock("s2pLoop");
+    BasicBlock * s2pFinalize = b->CreateBasicBlock("s2pFinalize");
+    Constant * const ZERO = b->getSize(0);
     // Declarations for AbortOnNull mode:
     PHINode * nullCheckPhi = nullptr;
     Value * nonNullSoFar = nullptr;
 
-    kb->CreateBr(s2pLoop);
+    b->CreateBr(s2pLoop);
 
-    kb->SetInsertPoint(s2pLoop);
-    PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
+    b->SetInsertPoint(s2pLoop);
+    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2); // block offset from the base block, e.g. 0, 1, 2, ...
     blockOffsetPhi->addIncoming(ZERO, entry);
     if (mAbortOnNull) {
-        nullCheckPhi = kb->CreatePHI(kb->getBitBlockType(), 2);
-        nullCheckPhi->addIncoming(kb->allOnes(), entry);
+        nullCheckPhi = b->CreatePHI(b->getBitBlockType(), 2);
+        nullCheckPhi->addIncoming(b->allOnes(), entry);
     }
     Value * bytepack[8];
     for (unsigned i = 0; i < 8; i++) {
-        bytepack[i] = kb->loadInputStreamPack("byteStream", ZERO, kb->getInt32(i), blockOffsetPhi);
+        bytepack[i] = b->loadInputStreamPack("byteStream", ZERO, b->getInt32(i), blockOffsetPhi);
     }
     Value * basisbits[8];
-    s2p(kb, bytepack, basisbits);
+    s2p(b, bytepack, basisbits);
     for (unsigned i = 0; i < mNumOfStreams; ++i) {
-        kb->storeOutputStreamBlock("basisBits", kb->getInt32(i), blockOffsetPhi, basisbits[i]);
+        b->storeOutputStreamBlock("basisBits", b->getInt32(i), blockOffsetPhi, basisbits[i]);
     }
     if (mAbortOnNull) {
-        Value * nonNull = kb->simd_or(kb->simd_or(kb->simd_or(basisbits[0], basisbits[1]),
-                                                  kb->simd_or(basisbits[2], basisbits[3])),
-                                      kb->simd_or(kb->simd_or(basisbits[4], basisbits[5]),
-                                                  kb->simd_or(basisbits[6], basisbits[7])));
-        nonNullSoFar = kb->simd_and(nonNull, nullCheckPhi);
+        Value * nonNull = b->simd_or(b->simd_or(b->simd_or(basisbits[0], basisbits[1]),
+                                                  b->simd_or(basisbits[2], basisbits[3])),
+                                      b->simd_or(b->simd_or(basisbits[4], basisbits[5]),
+                                                  b->simd_or(basisbits[6], basisbits[7])));
+        nonNullSoFar = b->simd_and(nonNull, nullCheckPhi);
         nullCheckPhi->addIncoming(nonNullSoFar, s2pLoop);
     }
-    Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
+    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
     blockOffsetPhi->addIncoming(nextBlk, s2pLoop);
-    Value * moreToDo = kb->CreateICmpNE(nextBlk, numOfBlocks);
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
 
-    kb->CreateCondBr(moreToDo, s2pLoop, s2pFinalize);
+    b->CreateCondBr(moreToDo, s2pLoop, s2pFinalize);
 
-    kb->SetInsertPoint(s2pFinalize);
+    b->SetInsertPoint(s2pFinalize);
     //  s2p is complete, except for null byte check.
     if (mAbortOnNull) {
-        BasicBlock * nullByteDetected = kb->CreateBasicBlock("nullByteDetected");
-        BasicBlock * nullInFileDetected = kb->CreateBasicBlock("nullInFileDetected");
-        BasicBlock * s2pExit = kb->CreateBasicBlock("s2pExit");
-        Value * itemsToDo = kb->getAccessibleItemCount("byteStream");
-        Value * anyNull = kb->bitblock_any(kb->simd_not(nonNullSoFar));
-        kb->CreateCondBr(anyNull, nullByteDetected, s2pExit);
+        BasicBlock * nullByteDetected = b->CreateBasicBlock("nullByteDetected");
+        BasicBlock * nullInFileDetected = b->CreateBasicBlock("nullInFileDetected");
+        BasicBlock * s2pExit = b->CreateBasicBlock("s2pExit");
+        Value * itemsToDo = b->getAccessibleItemCount("byteStream");
+        Value * anyNull = b->bitblock_any(b->simd_not(nonNullSoFar));
+        b->CreateCondBr(anyNull, nullByteDetected, s2pExit);
 
-        kb->SetInsertPoint(nullByteDetected);
+        b->SetInsertPoint(nullByteDetected);
         // A null byte has been detected, determine its position and whether it is past EOF.
-        Value * byteStreamBasePtr = kb->getInputStreamBlockPtr("byteStream", ZERO, ZERO);
-        Value * ptrToNull = kb->CreateMemChr(kb->CreatePointerCast(byteStreamBasePtr, voidPtrTy), kb->getInt32(0), itemsToDo);
-        Value * nullInFile = kb->CreateICmpNE(ptrToNull, ConstantPointerNull::get(cast<PointerType>(ptrToNull->getType())));
-        kb->CreateCondBr(nullInFile, nullInFileDetected, s2pExit);
+        Value * byteStreamBasePtr = b->getInputStreamBlockPtr("byteStream", ZERO, ZERO);
+        Value * ptrToNull = b->CreateMemChr(b->CreatePointerCast(byteStreamBasePtr, voidPtrTy), b->getInt32(0), itemsToDo);
+        Value * nullInFile = b->CreateICmpNE(ptrToNull, ConstantPointerNull::get(cast<PointerType>(ptrToNull->getType())));
+        b->CreateCondBr(nullInFile, nullInFileDetected, s2pExit);
 
-        kb->SetInsertPoint(nullInFileDetected);
+        b->SetInsertPoint(nullInFileDetected);
         // A null byte has been located within the file; set the termination code and call the signal handler.
-        Value * firstNull = kb->CreatePtrToInt(ptrToNull, intPtrTy);
-        Value * startOfStride = kb->CreatePtrToInt(byteStreamBasePtr, intPtrTy);
-        Value * itemsBeforeNull = kb->CreateZExtOrTrunc(kb->CreateSub(firstNull, startOfStride), itemsToDo->getType());
-        Value * producedCount = kb->CreateAdd(kb->getProducedItemCount("basisBits"), itemsBeforeNull);
-        kb->setProducedItemCount("basisBits", producedCount);
-        kb->setFatalTerminationSignal();
+        Value * firstNull = b->CreatePtrToInt(ptrToNull, intPtrTy);
+        Value * startOfStride = b->CreatePtrToInt(byteStreamBasePtr, intPtrTy);
+        Value * itemsBeforeNull = b->CreateZExtOrTrunc(b->CreateSub(firstNull, startOfStride), itemsToDo->getType());
+        Value * producedCount = b->CreateAdd(b->getProducedItemCount("basisBits"), itemsBeforeNull);
+        b->setProducedItemCount("basisBits", producedCount);
+        b->setFatalTerminationSignal();
         Function * const dispatcher = m->getFunction("signal_dispatcher"); assert (dispatcher);
-        Value * handler = kb->getScalarField("handler_address");
-        kb->CreateCall(dispatcher, {handler, ConstantInt::get(kb->getInt32Ty(), NULL_SIGNAL)});
-        kb->CreateBr(s2pExit);
+        Value * handler = b->getScalarField("handler_address");
+        b->CreateCall(dispatcher, {handler, ConstantInt::get(b->getInt32Ty(), NULL_SIGNAL)});
+        b->CreateBr(s2pExit);
 
-        kb->SetInsertPoint(s2pExit);
+        b->SetInsertPoint(s2pExit);
     }
-
-    kb->setProducedItemCount("basisBits", kb->getAvailableItemCount("byteStream"));
 }
 
 inline Bindings S2PKernel::makeOutputBindings(StreamSet * const BasisBits) {

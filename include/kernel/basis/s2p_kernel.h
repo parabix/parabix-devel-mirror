@@ -28,7 +28,7 @@ public:
 protected:
     Bindings makeOutputBindings(StreamSet * const BasisBits);
     Bindings makeInputScalarBindings(Scalar * signalNullObject);
-    void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 private:
     bool mAbortOnNull;
     unsigned mNumOfStreams;

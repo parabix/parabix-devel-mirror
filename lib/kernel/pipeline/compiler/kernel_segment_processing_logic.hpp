@@ -426,6 +426,10 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
         mAlreadyProducedPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProduced");
         mAlreadyProducedPhi[i]->addIncoming(mInitiallyProducedItemCount[i], mKernelEntry);
+        if (mInitiallyProducedDeferredItemCount[i]) {
+            mAlreadyProducedDeferredPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProducedDeferred");
+            mAlreadyProducedDeferredPhi[i]->addIncoming(mInitiallyProducedDeferredItemCount[i], mKernelEntry);
+        }
     }
     // Since we may loop and call the kernel again, we want to mark that we've progressed
     // if we execute any kernel even if we could not complete a full segment.

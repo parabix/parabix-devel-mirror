@@ -238,7 +238,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     Value * const deferred = mProcessedDeferredItemCount[i];
                     Value * const isDeferred = b->CreateICmpULE(deferred, processed);
-                    Value * const isFinal = b->CreateIsNull(mNumOfLinearStrides);
+                    Value * const isFinal = mIsFinalInvocationPhi;
                     // TODO: workaround now for ScanMatch; if it ends with a match on a
                     // block-aligned boundary the start of the next match seems to be one
                     // after? Revise the logic to only perform a 0-item final block on
@@ -253,7 +253,6 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                                     deferred, processed);
                 }
             }
-
         } else if (rate.isBounded() || rate.isUnknown()) {
             assert (mReturnedProcessedItemCountPtr[i]);
             processed = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
@@ -277,6 +276,31 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         Value * produced = nullptr;
         if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum())) {
             produced = b->CreateAdd(mAlreadyProducedPhi[i], mLinearOutputItemsPhi[i]);
+            if (mAlreadyProducedDeferredPhi[i]) {
+                assert (mReturnedProducedItemCountPtr[i]);
+                mProducedDeferredItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
+                #ifdef PRINT_DEBUG_MESSAGES
+                const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
+                debugPrint(b, prefix + "_processed_deferred'", mProcessedDeferredItemCount[i]);
+                #endif
+                if (LLVM_UNLIKELY(mCheckAssertions)) {
+                    Value * const deferred = mProducedDeferredItemCount[i];
+                    Value * const isDeferred = b->CreateICmpULE(deferred, produced);
+                    Value * const isFinal = mIsFinalInvocationPhi;
+                    // TODO: workaround now for ScanMatch; if it ends with a match on a
+                    // block-aligned boundary the start of the next match seems to be one
+                    // after? Revise the logic to only perform a 0-item final block on
+                    // kernels that may produce Add'ed data? Define the final/non-final
+                    // contract first.
+                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, isFinal);
+                    b->CreateAssert(isDeferredOrFinal,
+                                    "%s.%s: deferred processed item count (%" PRIu64 ") "
+                                    "exceeds non-deferred (%" PRIu64 ")",
+                                    mKernelAssertionName,
+                                    b->GetString(output.getName()),
+                                    deferred, produced);
+                }
+            }
         } else if (rate.isBounded() || rate.isUnknown()) {
             assert (mReturnedProducedItemCountPtr[i]);
             produced = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
