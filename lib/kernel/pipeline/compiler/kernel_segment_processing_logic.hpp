@@ -1,4 +1,4 @@
-﻿#include "pipeline_compiler.hpp"
+#include "pipeline_compiler.hpp"
 #include "kernel_logic.hpp"
 #include "kernel_io_calculation_logic.hpp"
 #include "kernel_execution_logic.hpp"
@@ -316,7 +316,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
 
-    ConstantInt * const TRUE = b->getTrue();
+    ConstantInt * const i1_TRUE = b->getTrue();
 
     if (mKernelIsInternallySynchronized) {
 
@@ -370,8 +370,8 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
         b->CreateCondBr(done, mKernelLoopExit, mKernelLoopEntry);
 
-        mAlreadyProgressedPhi->addIncoming(TRUE, ioBoundsCheck);
-        mExecutedAtLeastOncePhi->addIncoming(TRUE, ioBoundsCheck);
+        mAlreadyProgressedPhi->addIncoming(i1_TRUE, ioBoundsCheck);
+        mExecutedAtLeastOncePhi->addIncoming(i1_TRUE, ioBoundsCheck);
         mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
 
     } else { // just exit the loop
@@ -398,7 +398,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     }
 
     mTerminatedAtLoopExitPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
-    mHasProgressedPhi->addIncoming(TRUE, exitBlock);
+    mHasProgressedPhi->addIncoming(i1_TRUE, exitBlock);
     mHaltingPhi->addIncoming(mHalted, exitBlock);
     mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, exitBlock);
 
