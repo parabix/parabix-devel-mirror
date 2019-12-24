@@ -244,7 +244,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                     // after? Revise the logic to only perform a 0-item final block on
                     // kernels that may produce Add'ed data? Define the final/non-final
                     // contract first.
-                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, isFinal);
+                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, b->CreateIsNotNull(isFinal));
                     b->CreateAssert(isDeferredOrFinal,
                                     "%s.%s: deferred processed item count (%" PRIu64 ") "
                                     "exceeds non-deferred (%" PRIu64 ")",
@@ -292,7 +292,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                     // after? Revise the logic to only perform a 0-item final block on
                     // kernels that may produce Add'ed data? Define the final/non-final
                     // contract first.
-                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, isFinal);
+                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, b->CreateIsNotNull(isFinal));
                     b->CreateAssert(isDeferredOrFinal,
                                     "%s.%s: deferred processed item count (%" PRIu64 ") "
                                     "exceeds non-deferred (%" PRIu64 ")",
