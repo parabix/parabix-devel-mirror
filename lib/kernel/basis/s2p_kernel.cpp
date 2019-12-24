@@ -173,17 +173,15 @@ void S2PKernel::generateMultiBlockLogic(BuilderRef kb, Value * const numOfBlocks
 
         kb->SetInsertPoint(s2pExit);
     }
+
+    kb->setProducedItemCount("basisBits", kb->getAvailableItemCount("byteStream"));
 }
 
-Bindings S2PKernel::makeOutputBindings(StreamSet * const BasisBits, bool abortOnNull) {
-    if (abortOnNull) {
-        return {Binding("basisBits", BasisBits)};
-    } else {
-        return {Binding("basisBits", BasisBits)};
-    }
+inline Bindings S2PKernel::makeOutputBindings(StreamSet * const BasisBits) {
+    return {Binding("basisBits", BasisBits)};
 }
 
-Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
+inline Bindings S2PKernel::makeInputScalarBindings(Scalar * signalNullObject) {
     if (signalNullObject) {
         return {Binding{"handler_address", signalNullObject}};
     } else {
@@ -197,7 +195,7 @@ S2PKernel::S2PKernel(BuilderRef b,
                      Scalar * signalNullObject)
 : MultiBlockKernel(b, (signalNullObject ? "s2pa" : "s2p") + std::to_string(BasisBits->getNumElements())
 , {Binding{"byteStream", codeUnitStream, FixedRate(), Principal()}}
-, makeOutputBindings(BasisBits, signalNullObject)
+, makeOutputBindings(BasisBits)
 , makeInputScalarBindings(signalNullObject), {}, {})
 , mAbortOnNull(signalNullObject != nullptr)
 , mNumOfStreams(BasisBits->getNumElements()) {

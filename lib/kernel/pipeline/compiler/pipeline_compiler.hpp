@@ -26,9 +26,9 @@
 #include <algorithm>
 #include <queue>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
-#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 // #define DISABLE_ZERO_EXTEND
 

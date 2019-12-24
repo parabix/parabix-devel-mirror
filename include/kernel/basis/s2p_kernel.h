@@ -26,7 +26,7 @@ public:
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
-    Bindings makeOutputBindings(StreamSet * const BasisBits, bool abortOnNull);
+    Bindings makeOutputBindings(StreamSet * const BasisBits);
     Bindings makeInputScalarBindings(Scalar * signalNullObject);
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
