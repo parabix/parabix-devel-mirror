@@ -189,15 +189,7 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
         if (LLVM_LIKELY(mTarget->isStateful())) {
             setHandle(nextArg());
         }
-        Value * instance = nullptr;
-        Constant * const size = ConstantExpr::getSizeOf(mTarget->getThreadLocalStateType());
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-            instance = b->CreateAlignedMalloc(size, b->getPageSize());
-            b->CreateMProtect(instance, size, CBuilder::Protect::READ);
-        } else {
-            instance = b->CreateAlignedMalloc(size, b->getCacheAlignment());
-        }
-        mThreadLocalHandle = b->CreatePointerCast(instance, mTarget->getThreadLocalStateType()->getPointerTo());
+        mThreadLocalHandle = b->CreateCacheAlignedMalloc(mTarget->getThreadLocalStateType());
         initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
         mTarget->generateInitializeThreadLocalMethod(b);
         Value * const retVal = mThreadLocalHandle;

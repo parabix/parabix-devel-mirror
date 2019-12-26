@@ -398,8 +398,23 @@ Value * CBuilder::CreateCacheAlignedMalloc(Type * const type, Value * const Arra
     if (ArraySize) {
         size = CreateMul(size, CreateZExtOrTrunc(ArraySize, size->getType()));
     }
-    size = CreateRoundUp(size, ConstantInt::get(size->getType(), getCacheAlignment()));
     return CreatePointerCast(CreateCacheAlignedMalloc(size), type->getPointerTo(addressSpace));
+}
+
+Value * CBuilder::CreateCacheAlignedMalloc(llvm::Value * const size) {
+    unsigned alignment = 0;
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+        alignment = getPageSize();
+    } else {
+        alignment = getCacheAlignment();
+    }
+    Constant * align = ConstantInt::get(size->getType(), alignment);
+    Value * const alignedSize = CreateRoundUp(size, align);
+    Value * const ptr = CreateAlignedMalloc(alignedSize, alignment);
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+        CreateMProtect(ptr, alignedSize, Protect::READ);
+    }
+    return ptr;
 }
 
 Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
@@ -411,6 +426,7 @@ Value * CBuilder::CreateAlignedMalloc(Value * size, const unsigned alignment) {
     PointerType * const voidPtrTy = getVoidPtrTy();
     ConstantInt * const align = ConstantInt::get(sizeTy, alignment);
     size = CreateZExtOrTrunc(size, sizeTy);
+
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         Constant * const ZERO = ConstantInt::get(sizeTy, 0);
         __CreateAssert(CreateICmpNE(size, ZERO),

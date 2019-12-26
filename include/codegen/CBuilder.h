@@ -108,9 +108,7 @@ public:
 
     llvm::Value * CreateAlignedMalloc(llvm::Value * const size, const unsigned alignment);
 
-    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * const size) {
-        return CreateAlignedMalloc(size, getCacheAlignment());
-    }
+    llvm::Value * CreateCacheAlignedMalloc(llvm::Value * const size);
 
     llvm::Value * CreateCacheAlignedMalloc(llvm::Type * const type, llvm::Value * const ArraySize = nullptr, const unsigned addressSpace = 0);
 

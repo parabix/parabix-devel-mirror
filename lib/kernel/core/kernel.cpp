@@ -789,16 +789,8 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
  * @brief createInstance
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::createInstance(BuilderRef b) const {
-    if (isStateful()) {
-        Constant * const size = ConstantExpr::getSizeOf(getSharedStateType());
-        Value * handle = nullptr;
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-            handle = b->CreateAlignedMalloc(size, b->getPageSize());
-            b->CreateMProtect(handle, size, CBuilder::Protect::READ);
-        } else {
-            handle = b->CreateAlignedMalloc(size, b->getCacheAlignment());
-        }
-        return b->CreatePointerCast(handle, getSharedStateType()->getPointerTo());
+    if (LLVM_LIKELY(isStateful())) {
+        return b->CreateCacheAlignedMalloc(getSharedStateType());
     }
     llvm_unreachable("createInstance should not be called on stateless kernels");
     return nullptr;
