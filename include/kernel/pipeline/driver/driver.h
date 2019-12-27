@@ -27,7 +27,7 @@ public:
     using Relationship = kernel::Relationship;
     using Bindings = kernel::Bindings;
     using BuilderRef = Kernel::BuilderRef;
-    using KernelSet = boost::container::flat_set<std::unique_ptr<Kernel>>;
+    using KernelSet = std::vector<std::unique_ptr<Kernel>>;
 
     std::unique_ptr<kernel::ProgramBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
@@ -61,12 +61,12 @@ public:
         return mMainModule;
     }
 
-    bool isPreservingKernelModules() const {
-        return mPreserveKernelModules;
+    bool getPreservesKernels() const {
+        return mPreservesKernels;
     }
 
-    void setIsPreservingKernelModules(const bool value = true) {
-        mPreserveKernelModules = value;
+    void setPreserveKernels(const bool value = true) {
+        mPreservesKernels = value;
     }
 
 protected:
@@ -83,9 +83,10 @@ protected:
     std::unique_ptr<llvm::LLVMContext>                      mContext;
     llvm::Module * const                                    mMainModule;
     std::unique_ptr<kernel::KernelBuilder>                  mBuilder;
-    bool                                                    mPreserveKernelModules = false;
+    bool                                                    mPreservesKernels = false;
     KernelSet                                               mUncachedKernel;
     KernelSet                                               mCachedKernel;
+    KernelSet                                               mPreservedKernel;
     SlabAllocator<>                                         mAllocator;
 };
 

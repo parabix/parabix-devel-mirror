@@ -381,6 +381,7 @@ std::vector<fs::path> getFullFileList(CPUDriver & driver, cl::list<std::string> 
     // them to the global list of selected files.
 
     grep::NestedInternalSearchEngine pathSelectEngine(driver);
+    pathSelectEngine.setNumOfThreads(1);
     pathSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
     pathSelectEngine.init();
     pathSelectEngine.push(coalesceREs(getIncludeExcludePatterns(), GitREcoalescing));

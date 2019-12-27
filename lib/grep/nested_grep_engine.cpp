@@ -180,7 +180,7 @@ NestedInternalSearchEngine::NestedInternalSearchEngine(BaseDriver & driver)
 : mGrepRecordBreak(GrepRecordBreakKind::LF)
 , mCaseInsensitive(false)
 , mGrepDriver(driver)
-, mNumOfThreads(codegen::ThreadNum)
+, mNumOfThreads(1)
 , mBreakCC(nullptr)
 , mNested(1, nullptr) {
 
@@ -195,8 +195,8 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
     assert (mBreakCC && mBasisBits && mU8index && mBreaks && mMatches);
 
     Kernel * kernel = nullptr;
-    const auto preserve = mGrepDriver.isPreservingKernelModules();
-    mGrepDriver.setIsPreservingKernelModules(true);
+    const auto preserve = mGrepDriver.getPreservesKernels();
+    mGrepDriver.setPreserveKernels(true);
     if (LLVM_UNLIKELY(patterns.empty())) {
         if (LLVM_LIKELY(mNested.size() > 1)) {
             mNested.push_back(mNested.back());
@@ -217,7 +217,7 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
 
     mGrepDriver.generateUncachedKernels();
     mGrepDriver.addKernel(kernel);
-    mGrepDriver.setIsPreservingKernelModules(preserve);
+    mGrepDriver.setPreserveKernels(preserve);
     mNested.push_back(kernel);
 }
 
@@ -252,8 +252,8 @@ void NestedInternalSearchEngine::grepCodeGen() {
 
     assert (mBreakCC && mBasisBits && mU8index && mBreaks && mMatches);
 
-    const auto preserve = mGrepDriver.isPreservingKernelModules();
-    mGrepDriver.setIsPreservingKernelModules(true);
+    const auto preserve = mGrepDriver.getPreservesKernels();
+    mGrepDriver.setPreserveKernels(true);
 
     Scalar * const buffer = mGrepDriver.CreateScalar(b->getInt8PtrTy());
     Scalar * const length = mGrepDriver.CreateScalar(b->getSizeTy());
@@ -273,7 +273,7 @@ void NestedInternalSearchEngine::grepCodeGen() {
     E->CreateKernelCall<UTF8_index>(mBasisBits, mU8index);
 
     assert (mNested.size() > 1 && mNested.back());
-    Kernel * const outer = mNested.back(); assert (outer->getModule());
+    Kernel * const outer = mNested.back();
     E->AddKernelCall(outer);
     if (MatchCoordinateBlocks > 0) {
         StreamSet * const MatchCoords = E->CreateStreamSet(3, sizeof(size_t) * 8);
@@ -289,7 +289,7 @@ void NestedInternalSearchEngine::grepCodeGen() {
 
     mMainMethod.push_back(E->compile());
     assert (mMainMethod.size() + 1 == mNested.size());
-    mGrepDriver.setIsPreservingKernelModules(preserve);
+    mGrepDriver.setPreserveKernels(preserve);
 }
 
 void NestedInternalSearchEngine::doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum) {

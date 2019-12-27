@@ -332,9 +332,8 @@ public:
         mInternalScalars.emplace_back(ScalarType::ThreadLocal, type, name, group);
     }
 
-    llvm::Module * setModule(llvm::Module * const module) {
+    void setModule(llvm::Module * const module) {
         mModule = module;
-        return module;
     }
 
     llvm::Module * getModule() const {
@@ -347,6 +346,10 @@ public:
 
     llvm::StructType * getThreadLocalStateType() const {
         return mThreadLocalStateType;
+    }
+
+    bool isGenerated() const {
+        return mGenerated;
     }
 
     void makeModule(BuilderRef b);
@@ -468,6 +471,7 @@ protected:
     llvm::Module *      mModule = nullptr;
     llvm::StructType *  mSharedStateType = nullptr;
     llvm::StructType *  mThreadLocalStateType = nullptr;
+    bool                mGenerated = false;
 
     Bindings            mInputStreamSets;
     Bindings            mOutputStreamSets;

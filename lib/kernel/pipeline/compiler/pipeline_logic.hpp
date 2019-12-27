@@ -39,7 +39,7 @@ inline void destroyStateObject(BuilderRef b, Value * ptr) {
 inline void PipelineCompiler::generateImplicitKernels(BuilderRef b) {
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
         Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
-        if (LLVM_LIKELY(kernel->getModule())) continue;
+        if (LLVM_LIKELY(kernel->isGenerated())) continue;
         if (kernel->getInitializeFunction(b, false)) {
             kernel->loadCachedKernel(b);
         } else {

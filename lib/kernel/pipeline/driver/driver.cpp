@@ -54,6 +54,10 @@ Scalar * BaseDriver::CreateConstant(not_null<llvm::Constant *> value) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void BaseDriver::addKernel(not_null<Kernel *> kernel) {
 
+    if (LLVM_UNLIKELY(kernel->isGenerated() || kernel->getModule())) {
+        return;
+    }
+
     // Verify the I/O relationships were properly set / defaulted in.
 
     for (Binding & input : kernel->getInputScalarBindings()) {
@@ -80,14 +84,11 @@ void BaseDriver::addKernel(not_null<Kernel *> kernel) {
     // If the pipeline contained a single kernel, the pipeline builder will return the
     // original kernel. However, the module for that kernel is already owned by the JIT
     // engine so we avoid declaring it as cached or uncached.
-    if (LLVM_LIKELY(kernel->getModule() == nullptr)) {
-        if (LLVM_LIKELY(ParabixObjectCache::checkForCachedKernel(mBuilder, kernel))) {
-            assert ("cached kernel does not contain a module?" && kernel->getModule());
-            mCachedKernel.emplace(kernel.get());
-        } else {
-            kernel->makeModule(mBuilder);
-            mUncachedKernel.emplace(kernel.get());
-        }
+    if (LLVM_LIKELY(ParabixObjectCache::checkForCachedKernel(mBuilder, kernel))) {
+        assert ("cached kernel does not contain a module?" && kernel->getModule());
+        mCachedKernel.emplace_back(kernel.get());
+    } else {
+        mUncachedKernel.emplace_back(kernel.get());
     }
 }
 

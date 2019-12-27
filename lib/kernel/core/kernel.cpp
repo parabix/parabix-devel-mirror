@@ -138,6 +138,8 @@ std::unique_ptr<KernelCompiler> Kernel::instantiateKernelCompiler(BuilderRef /* 
  * @brief makeModule
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::makeModule(BuilderRef b) {
+    assert (!mGenerated);
+    assert (mModule == nullptr);
     Module * const m = new Module(getCacheName(b), b->getContext());
     Module * const prior = b->getModule();
     m->setTargetTriple(prior->getTargetTriple());
@@ -149,6 +151,7 @@ void Kernel::makeModule(BuilderRef b) {
  * @brief generateKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::generateKernel(BuilderRef b) {
+    assert (!mGenerated);
     if (LLVM_UNLIKELY(mModule == nullptr)) {
         report_fatal_error(getName() + " does not have a module");
     }
@@ -157,6 +160,7 @@ void Kernel::generateKernel(BuilderRef b) {
     }
     b->setModule(mModule);
     instantiateKernelCompiler(b)->generateKernel(b);
+    mGenerated = true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -170,6 +174,7 @@ inline StructType * nullIfEmpty(StructType * type) {
  * @brief loadCachedKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::loadCachedKernel(BuilderRef b) {
+    assert (!mGenerated);
     if (LLVM_UNLIKELY(mModule != nullptr)) {
         report_fatal_error("loadCachedKernel was called after associating " + getName() + " with a module");
     }
@@ -178,6 +183,7 @@ void Kernel::loadCachedKernel(BuilderRef b) {
     mThreadLocalStateType = nullIfEmpty(m->getTypeByName(getName() + THREAD_LOCAL_SUFFIX));
     mModule = m;
     linkExternalMethods(b);
+    mGenerated = true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -195,6 +201,7 @@ void Kernel::linkExternalMethods(BuilderRef b) {
  * @brief constructStateTypes
  ** ------------------------------------------------------------------------------------------------------------- */
 void Kernel::constructStateTypes(BuilderRef b) {
+    assert (!mGenerated);
     Module * const m = getModule(); assert (b->getModule() == m);
     mSharedStateType = m->getTypeByName(getName() + SHARED_SUFFIX);
     mThreadLocalStateType = m->getTypeByName(getName() + THREAD_LOCAL_SUFFIX);

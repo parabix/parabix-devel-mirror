@@ -223,7 +223,7 @@ void CPUDriver::generateUncachedKernels() {
         Module * const module = kernel->getModule(); assert (module);
         module->setTargetTriple(mMainModule->getTargetTriple());
         mPassManager->run(*module);
-        mCachedKernel.emplace(kernel.release());
+        mCachedKernel.emplace_back(kernel.release());
     }
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
     llvm::reportAndResetTimings();
@@ -245,16 +245,9 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
         }
-        Module * m = kernel->getModule();
-        if (isPreservingKernelModules()) {
-            #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
-            m = CloneModule(*m).release();
-            #else
-            m = CloneModule(m).release();
-            #endif
-        } else { // claim ownership of the module
-            kernel->setModule(nullptr);
-        }
+        // release ownership of the module
+        Module * const m = kernel->getModule();
+        kernel->setModule(nullptr);
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InfrequentlyUsed))) {
             O1.emplace_back(m);
         } else {
@@ -264,12 +257,14 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
 
     const auto method = pipeline->externallyInitialized() ? Kernel::AddInternal : Kernel::DeclareExternal;
     Function * const main = pipeline->addOrDeclareMainFunction(mBuilder, method);
-    mPassManager->run(*mainModule);
 
-    if (!isPreservingKernelModules()) {
-        // NOTE: pipeline is destroyed after calling clear!
-        mCachedKernel.clear();
+    if (getPreservesKernels()) {
+        for (auto & kernel : mCachedKernel) {
+            mPreservedKernel.emplace_back(kernel.release());
+        }
     }
+    // NOTE: pipeline is destroyed after calling clear unless this driver preserves kernels!
+    mCachedKernel.clear();
 
     if (!O1.empty()) {
         mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);

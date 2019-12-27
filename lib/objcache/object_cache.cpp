@@ -109,9 +109,6 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef b, kernel::Kernel * con
         fileName.append(moduleId);
         fileName.append(KERNEL_FILE_EXTENSION);
         auto kernelBuffer = MemoryBuffer::getFile(fileName, -1, false);
-        if (codegen::TraceObjectCache) {
-            errs() << "Found cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
-        }
         if (kernelBuffer) {
             #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
             auto loadedFile = getLazyBitcodeModule(std::move(kernelBuffer.get()), idb->getContext());
@@ -125,6 +122,9 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef b, kernel::Kernel * con
                     const MDString * const sig = getSignature(M.get());
                     assert ("signature is missing from kernel file: possible module naming conflict or change in the LLVM metadata storage policy?" && sig);
                     if (LLVM_UNLIKELY(sig == nullptr || !sig->getString().equals(kernel->makeSignature(b)))) {
+                        if (LLVM_UNLIKELY(codegen::TraceObjectCache)) {
+                            errs() << "Mismatched signature in cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
+                        }
                         goto invalid;
                     }
                 }
@@ -142,24 +142,34 @@ bool ParabixObjectCache::loadCachedObjectFile(BuilderRef b, kernel::Kernel * con
                     fs::last_write_time(fileName.c_str(), access_time);
                     sys::path::replace_extension(fileName, KERNEL_FILE_EXTENSION);
                     fs::last_write_time(fileName.c_str(), access_time);
+                    if (LLVM_UNLIKELY(codegen::TraceObjectCache)) {
+                        errs() << "Read cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
+                    }
                     return true;
                 }
+            } else if (LLVM_UNLIKELY(codegen::TraceObjectCache)) {
+                errs() << "Failed to load cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
             }
+
         }
 
 invalid:
 
-        Module * const module = kernel->setModule(new Module(moduleId, b->getContext()));
+        kernel->makeModule(b);
+        Module * const module = kernel->getModule();
         // mark this module as cachable
         module->getOrInsertNamedMetadata(CACHEABLE);
         // if this module has a signature, add it to the metadata
         if (kernel->hasSignature()) {
-            NamedMDNode * const md = module->getOrInsertNamedMetadata(SIGNATURE);
+            NamedMDNode * const md = module->getOrInsertNamedMetadata(SIGNATURE);            
             assert (md->getNumOperands() == 0);
-            MDString * const sig = MDString::get(module->getContext(), kernel->makeSignature(b));
+            MDString * const sig = MDString::get(module->getContext(), kernel->makeSignature(b));            
             md->addOperand(MDNode::get(module->getContext(), {sig}));
         }
+    } else { // uncachable
+        kernel->makeModule(b);
     }
+
     return false;
 }
 
@@ -169,9 +179,11 @@ invalid:
  * A new module has been compiled. If it is cacheable and no conflicting module exists, write it out.
  ** ------------------------------------------------------------------------------------------------------------- */
 void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef Obj) {
-    if (LLVM_LIKELY(M->getNamedMetadata(CACHEABLE))) {
+
+    if (LLVM_LIKELY(M->getNamedMetadata(CACHEABLE) != nullptr)) {
 
         const auto moduleId = M->getModuleIdentifier();
+
         Path objectName(mCachePath);
         sys::path::append(objectName, CACHE_PREFIX);
         objectName.append(moduleId);
@@ -181,8 +193,8 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
         std::error_code EC;
         raw_fd_ostream objFile(objectName, EC, sys::fs::F_None);
         if (LLVM_UNLIKELY(EC)) {
-            std::string tmp;
-            llvm::raw_string_ostream msg(tmp);
+            SmallVector<char, 512> tmp;
+            llvm::raw_svector_ostream msg(tmp);
             msg << "Could not write to \""
                 << objectName.str()
                 << "\" in object cache directory.\n\n"
@@ -212,11 +224,24 @@ void ParabixObjectCache::notifyObjectCompiled(const Module * M, MemoryBufferRef 
 
         sys::path::replace_extension(objectName, KERNEL_FILE_EXTENSION);
         raw_fd_ostream kernelFile(objectName.str(), EC, sys::fs::F_None);
-#if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
+
+        if (LLVM_UNLIKELY(EC)) {
+            SmallVector<char, 512> tmp;
+            llvm::raw_svector_ostream msg(tmp);
+            msg << "Could not write to \""
+                << objectName.str()
+                << "\" in object cache directory.\n\n"
+                "Reason: " << EC.message() << "\n\n"
+                "Rerun " << codegen::ProgramName << " with --enable-object-cache=0";
+            report_fatal_error(msg.str());
+        }
+
+        #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(7, 0, 0)
         WriteBitcodeToFile(H.get(), kernelFile);
-#else
+        #else
         WriteBitcodeToFile(*H, kernelFile);
-#endif
+        #endif
+
         kernelFile.close();
         if (codegen::TraceObjectCache) {
             errs() << "Wrote cache file: " << moduleId << KERNEL_FILE_EXTENSION << "\n";
@@ -240,7 +265,12 @@ std::unique_ptr<MemoryBuffer> ParabixObjectCache::getObject(const Module * modul
  * @brief checkForCachedKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 bool ParabixObjectCache::checkForCachedKernel(BuilderRef b, not_null<kernel::Kernel *> kernel) noexcept {
-    return mInstance.get() && mInstance->loadCachedObjectFile(b, kernel);
+    if (mInstance) {
+        return mInstance->loadCachedObjectFile(b, kernel);
+    } else {
+        kernel->makeModule(b);
+        return false;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
