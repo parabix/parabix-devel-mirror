@@ -153,18 +153,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         if (LLVM_UNLIKELY(binding.isDeferred())) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
         }
-        unsigned buffer{};
-        if (i < numOfInputs) {
-            buffer = source(e, mBufferGraph);
-        } else {
-            buffer = target(e, mBufferGraph);
-        }
-        const BufferNode & bn = mBufferGraph[buffer];
-        if (LLVM_LIKELY(bn.isInternal() || bn.isOwned())) {
-            mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-        } else {
-            mTarget->addNonPersistentScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
-        }
+        mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
     if (internallySynchronized) {
@@ -399,12 +388,8 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     threadStructArg->setName("threadStruct");
 
     Value * const initialSharedState = getHandle();
-    assert (initialSharedState);
     Value * const initialThreadLocal = getThreadLocalHandle();
     Value * const initialTerminationSignalPtr = getTerminationSignalPtr();
-    assert (initialThreadLocal || initialTerminationSignalPtr == nullptr);
-    assert (initialTerminationSignalPtr || mCurrentThreadTerminationSignalPtr == nullptr);
-    Value * const initialExternalSegNo = getExternalSegNo();
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE PIPELINE DRIVER CONTINUED
@@ -465,6 +450,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
 
     // store where we'll resume compiling the DoSegment method
     const auto resumePoint = b->saveIP();
+    const auto storedState = storeDoSegmentState();
 
     // -------------------------------------------------------------------------------------------------------------------------
     // MAKE PIPELINE THREAD
@@ -505,10 +491,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // TODO: the pipeline kernel scalar state is invalid after leaving this function. Best bet would be to copy the
     // scalarmap and replace it.
     destroyStateObject(b, processState);
-    setHandle(initialSharedState);
-    setThreadLocalHandle(initialThreadLocal);
-    setTerminationSignalPtr(initialTerminationSignalPtr);
-    setExternalSegNo(initialExternalSegNo);
+    restoreDoSegmentState(storedState);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

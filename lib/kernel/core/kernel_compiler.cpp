@@ -34,7 +34,7 @@ const static std::string TERMINATION_SIGNAL = "__termination_signal";
 // TODO: this check is a bit too strict in general; if the pipeline could request data/
 // EOF padding from the MemorySource kernel, it would be possible to re-enable.
 
-// #define CHECK_IO_ADDRESS_RANGE
+#define CHECK_IO_ADDRESS_RANGE
 
 // TODO: split the init/final into two methods each, one to do allocation/init, and the
 // other final/deallocate? Would potentially allow us to reuse the kernel/stream set
@@ -266,22 +266,20 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
 
         PointerType * const int8PtrTy = b->getInt8PtrTy();
 
+        ConstantInt * const ZERO = b->getSize(0);
         ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
 
+        Value * const fromIndex = b->CreateUDiv(startItemCount, BLOCK_WIDTH);
         Value * const baseAddress = buffer->getBaseAddress(b);
-
-        ConstantInt * const ZERO = b->getSize(0);
-        Value * const startIndex = b->CreateUDiv(startItemCount, BLOCK_WIDTH);
-        Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, startIndex);
+        Value * const startPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, fromIndex);
         Value * const start = b->CreatePointerCast(startPtr, int8PtrTy);
-
-        Value * const MAX = b->CreateSub(buffer->getStreamSetCount(b), b->getSize(1));
-        Value * const endIndex = b->CreateCeilUDiv(buffer->getCapacity(b), BLOCK_WIDTH);
-        Value * const endPtr = buffer->getStreamBlockPtr(b, baseAddress, MAX, endIndex);
+        Value * const toIndex = b->CreateCeilUDiv(buffer->getCapacity(b), BLOCK_WIDTH);
+        Value * const endPtr = buffer->getStreamBlockPtr(b, baseAddress, ZERO, toIndex);
         Value * const end = b->CreatePointerCast(endPtr, int8PtrTy);
 
         Value * const length = b->CreatePtrDiff(end, start);
         b->CheckAddress(start, length, out.str());
+
 
     };
     #endif
@@ -454,6 +452,99 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getDoSegmentProperties
+ *
+ * Reverse of the setDoSegmentProperties operation; used by the PipelineKernel when constructing internal threads
+ * to simplify passing of the state data.
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const {
+
+    // WARNING: any change to this must be reflected in addDoSegmentDeclaration, getDoSegmentFields,
+    // setDoSegmentProperties, and PipelineCompiler::writeKernelCall
+
+    std::vector<Value *> props;
+    if (LLVM_LIKELY(mTarget->isStateful())) {
+        props.push_back(mSharedHandle); assert (mSharedHandle);
+    }
+    if (LLVM_UNLIKELY(mTarget->hasThreadLocal())) {
+        props.push_back(mThreadLocalHandle); assert (mThreadLocalHandle);
+    }
+    props.push_back(mNumOfStrides); assert (mNumOfStrides);
+    if (LLVM_UNLIKELY(!Kernel::requiresExplicitPartialFinalStride(mTarget))) {
+        props.push_back(mIsFinal);
+    }
+    if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
+        props.push_back(mExternalSegNo);
+    }
+    if (LLVM_LIKELY(mTarget->hasFixedRate())) {
+        props.push_back(mFixedRateFactor); // fixedRateFactor
+    }
+
+    const auto numOfInputs = getNumOfStreamInputs();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        /// ----------------------------------------------------
+        /// logical buffer base address
+        /// ----------------------------------------------------
+        const auto & buffer = mStreamSetInputBuffers[i];
+        props.push_back(buffer->getBaseAddress(b));
+        /// ----------------------------------------------------
+        /// processed item count
+        /// ----------------------------------------------------
+        const Binding & input = mInputStreamSets[i];
+        if (isAddressable(input)) {
+            props.push_back(mProcessedInputItemPtr[i]);
+        } else if (LLVM_LIKELY(isCountable(input))) {
+            props.push_back(b->CreateLoad(mProcessedInputItemPtr[i]));
+        }
+        /// ----------------------------------------------------
+        /// accessible item count
+        /// ----------------------------------------------------
+        if (requiresItemCount(input)) {
+            props.push_back(mAccessibleInputItems[i]);
+        }
+    }
+
+    // set all of the output buffers
+    const auto numOfOutputs = getNumOfStreamOutputs();
+    const auto canTerminate = canSetTerminateSignal();
+
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        /// ----------------------------------------------------
+        /// logical buffer base address
+        /// ----------------------------------------------------
+        const auto & buffer = mStreamSetOutputBuffers[i];
+        const Binding & output = mOutputStreamSets[i];
+        const auto isLocal = Kernel::isLocalBuffer(output);
+        if (LLVM_UNLIKELY(isLocal)) {
+            // If an output is a managed buffer, the address is stored within the state instead
+            // of being passed in through the function call.
+            props.push_back(mUpdatableOutputBaseVirtualAddressPtr[i]);
+        } else {
+            props.push_back(buffer->getBaseAddress(b));
+        }
+        /// ----------------------------------------------------
+        /// produced item count
+        /// ----------------------------------------------------
+        if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
+            props.push_back(mProducedOutputItemPtr[i]);
+        } else if (LLVM_LIKELY(isCountable(output))) {
+            props.push_back(b->CreateLoad(mProducedOutputItemPtr[i]));
+        }
+        /// ----------------------------------------------------
+        /// writable / consumed item count
+        /// ----------------------------------------------------
+        if (requiresItemCount(output)) {
+            props.push_back(mWritableOutputItems[i]);
+        }
+        if (LLVM_UNLIKELY(isLocal)) {
+            props.push_back(mConsumedOutputItems[i]);
+        }
+    }
+    return props;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief callGenerateDoSegmentMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
@@ -538,96 +629,97 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getDoSegmentProperties
- *
- * Reverse of the setDoSegmentProperties operation; used by the PipelineKernel when constructing internal threads
- * to simplify passing of the state data.
+ * @brief copyInternalState
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const {
+std::vector<Value *> KernelCompiler::storeDoSegmentState() const {
 
-    // WARNING: any change to this must be reflected in addDoSegmentDeclaration, getDoSegmentFields,
-    // setDoSegmentProperties, and PipelineCompiler::writeKernelCall
-
-    std::vector<Value *> props;
-    if (LLVM_LIKELY(mTarget->isStateful())) {
-        props.push_back(mSharedHandle); assert (mSharedHandle);
-    }
-    if (LLVM_UNLIKELY(mTarget->hasThreadLocal())) {
-        props.push_back(mThreadLocalHandle); assert (mThreadLocalHandle);
-    }
-    props.push_back(mNumOfStrides); assert (mNumOfStrides);
-    if (LLVM_UNLIKELY(!Kernel::requiresExplicitPartialFinalStride(mTarget))) {
-        props.push_back(mIsFinal);
-    }
-    if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
-        props.push_back(mExternalSegNo);
-    }
-    if (LLVM_LIKELY(mTarget->hasFixedRate())) {
-        props.push_back(mFixedRateFactor); // fixedRateFactor
-    }
 
     const auto numOfInputs = getNumOfStreamInputs();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        /// ----------------------------------------------------
-        /// logical buffer base address
-        /// ----------------------------------------------------
-        const auto & buffer = mStreamSetInputBuffers[i];
-        props.push_back(buffer->getBaseAddress(b));
-        /// ----------------------------------------------------
-        /// processed item count
-        /// ----------------------------------------------------
-        const Binding & input = mInputStreamSets[i];
-        if (isAddressable(input)) {
-            props.push_back(mProcessedInputItemPtr[i]);
-        } else if (LLVM_LIKELY(isCountable(input))) {
-            props.push_back(b->CreateLoad(mProcessedInputItemPtr[i]));
-        }
-        /// ----------------------------------------------------
-        /// accessible item count
-        /// ----------------------------------------------------
-        if (requiresItemCount(input)) {
-            props.push_back(mAccessibleInputItems[i]);
-        }
-    }
-
-    // set all of the output buffers
     const auto numOfOutputs = getNumOfStreamOutputs();
-    const auto canTerminate = canSetTerminateSignal();
 
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        /// ----------------------------------------------------
-        /// logical buffer base address
-        /// ----------------------------------------------------
-        const auto & buffer = mStreamSetOutputBuffers[i];
-        const Binding & output = mOutputStreamSets[i];
-        const auto isLocal = Kernel::isLocalBuffer(output);
-        if (LLVM_UNLIKELY(isLocal)) {
-            // If an output is a managed buffer, the address is stored within the state instead
-            // of being passed in through the function call.
-            Value * const handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
-            props.push_back(handle);
-        } else {
-            props.push_back(buffer->getBaseAddress(b));
-        }
-        /// ----------------------------------------------------
-        /// produced item count
-        /// ----------------------------------------------------
-        if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
-            props.push_back(mProducedOutputItemPtr[i]);
-        } else if (LLVM_LIKELY(isCountable(output))) {
-            props.push_back(b->CreateLoad(mProducedOutputItemPtr[i]));
-        }
-        /// ----------------------------------------------------
-        /// writable / consumed item count
-        /// ----------------------------------------------------
-        if (requiresItemCount(output)) {
-            props.push_back(mWritableOutputItems[i]);
-        }
-        if (LLVM_UNLIKELY(isLocal)) {
-            props.push_back(mConsumedOutputItems[i]);
-        }
-    }
-    return props;
+    std::vector<Value *> S;
+    S.resize(7 + numOfInputs * 4 + numOfOutputs * 6);
+
+    auto o = S.begin();
+
+    auto append = [&](Value * v) {
+        *o++ = v;
+    };
+
+    append(mSharedHandle);
+    append(mThreadLocalHandle);
+    append(mTerminationSignalPtr);
+    append(mIsFinal);
+    append(mNumOfStrides);
+    append(mFixedRateFactor);
+    append(mExternalSegNo);
+
+    auto copy = [&](const Vec<llvm::Value *> & V, const size_t n) {
+        o = std::copy_n(V.begin(), n, o);
+    };
+
+    copy(mProcessedInputItemPtr, numOfInputs);
+    copy(mAccessibleInputItems, numOfInputs);
+    copy(mAvailableInputItems, numOfInputs);
+    copy(mUpdatableProcessedInputItemPtr, numOfInputs);
+
+
+    copy(mProducedOutputItemPtr, numOfOutputs);
+    copy(mInitiallyProducedOutputItems, numOfOutputs);
+    copy(mWritableOutputItems, numOfOutputs);
+    copy(mConsumedOutputItems, numOfOutputs);
+    copy(mUpdatableProducedOutputItemPtr, numOfOutputs);
+    copy(mUpdatableOutputBaseVirtualAddressPtr, numOfOutputs);
+
+    assert (o == S.end());
+
+    return S;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief restoreInternalState
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelCompiler::restoreDoSegmentState(const std::vector<Value *> & S) {
+
+    auto o = S.begin();
+
+    auto extract = [&](Value *& v) {
+        assert (o != S.end());
+        v = *o++;
+    };
+
+    extract(mSharedHandle);
+    extract(mThreadLocalHandle);
+    extract(mTerminationSignalPtr);
+    extract(mIsFinal);
+    extract(mNumOfStrides);
+    extract(mFixedRateFactor);
+    extract(mExternalSegNo);
+
+    auto revert = [&](Vec<llvm::Value *> & V, const size_t n) {
+        assert (static_cast<size_t>(std::distance(o, S.end())) >= n);
+        assert (V.size() == n);
+        std::copy_n(o, n, V.begin());
+        o += n;
+    };
+
+    const auto numOfInputs = getNumOfStreamInputs();
+    revert(mProcessedInputItemPtr, numOfInputs);
+    revert(mAccessibleInputItems, numOfInputs);
+    revert(mAvailableInputItems, numOfInputs);
+    revert(mUpdatableProcessedInputItemPtr, numOfInputs);
+
+    const auto numOfOutputs = getNumOfStreamOutputs();
+    revert(mProducedOutputItemPtr, numOfOutputs);
+    revert(mInitiallyProducedOutputItems, numOfOutputs);
+    revert(mWritableOutputItems, numOfOutputs);
+    revert(mConsumedOutputItems, numOfOutputs);
+    revert(mUpdatableProducedOutputItemPtr, numOfOutputs);
+    revert(mUpdatableOutputBaseVirtualAddressPtr, numOfOutputs);
+
+    assert (o == S.end());
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -727,36 +819,32 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
 
     mScalarFieldMap.clear();
 
-    #ifndef NDEBUG
-    auto noDuplicateFileName = [&](const bool valid, const StringRef bindingName) {
-        if (LLVM_LIKELY(valid)) return true;
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << "Kernel " << getName() << " contains two scalar fields named " << bindingName;
-        report_fatal_error(out.str());
+    auto addToScalarFieldMap = [&](StringRef bindingName, Value * const scalar, Type * const expectedType) {
+        const auto i = mScalarFieldMap.insert(std::make_pair(bindingName, scalar));
+        if (LLVM_UNLIKELY(!i.second)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "Kernel " << getName() << " contains two scalar fields named " << bindingName;
+            report_fatal_error(out.str());
+        }
+        Type * const actualType = scalar->getType()->getPointerElementType();
+        if (LLVM_UNLIKELY(actualType != expectedType)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "Scalar " << getName() << '.' << bindingName << " was expected to be a ";
+            expectedType->print(out);
+            out << " but was stored as a ";
+            actualType->print(out);
+            report_fatal_error(out.str());
+        }
     };
-
-    auto isMatchingType = [&](Value * const scalar, Type * const expectedType, const StringRef bindingName) {
-        Type * const type = scalar->getType()->getPointerElementType();
-        if (LLVM_LIKELY(type == expectedType)) return true;
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << "Scalar " << getName() << '.' << bindingName << " was expected to be ";
-        expectedType->print(out);
-        out << " but was stored as ";
-        type->print(out);
-        report_fatal_error(out.str());
-    };
-    #endif
 
     auto enumerate = [&](const Bindings & bindings) {
         for (const auto & binding : bindings) {
             assert (sharedIndex < sharedCount);
             indices[1] = b->getInt32(sharedIndex++);
-            Value * scalar = b->CreateInBoundsGEP(mSharedHandle, indices);
-            assert (isMatchingType(scalar, binding.getType(), binding.getName()));
-            const auto i = mScalarFieldMap.insert(std::make_pair(binding.getName(), scalar));
-            assert(noDuplicateFileName(i.second, binding.getName()));
+            Value * const scalar = b->CreateInBoundsGEP(mSharedHandle, indices);
+            addToScalarFieldMap(binding.getName(), scalar, binding.getType());
         }
     };
 
@@ -784,9 +872,7 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
                 break;
             default: llvm_unreachable("I/O scalars cannot be internal");
         }
-        assert (isMatchingType(scalar, binding.getValueType(), binding.getName()));
-        const auto i = mScalarFieldMap.insert(std::make_pair(binding.getName(), scalar));
-        assert(noDuplicateFileName(i.second, binding.getName()));
+        addToScalarFieldMap(binding.getName(), scalar, binding.getValueType());
     }
     assert (mSharedHandle == nullptr || sharedIndex == sharedCount);
     assert (mThreadLocalHandle == nullptr || threadLocalIndex == threadLocalCount);

@@ -12,6 +12,9 @@
 namespace kernel {
 
 class KernelCompiler {
+
+    friend class PipelineCompiler;
+
 public:
 
     using BuilderRef = const std::unique_ptr<KernelBuilder> &;
@@ -334,6 +337,18 @@ private:
 
     void initializeIOBindingMap();
 
+protected:
+
+    // In threaded mode, the PipelineCompiler generates a DoSegment block that instantiates
+    // a set of thread functions. When compiling the DoSegmentThread functions, the I/O
+    // arguments must refer to the argments of the DoSegmentThread function but we want to
+    // be able to revert them back to the original DoSegment arguments afterwards to maintain
+    // a consistent interface.
+
+    std::vector<llvm::Value *> storeDoSegmentState() const;
+
+    void restoreDoSegmentState(const std::vector<llvm::Value *> & S);
+
 public:
 
     void callGenerateInitializeMethod(BuilderRef b);
@@ -382,7 +397,6 @@ protected:
     llvm::Value *                   mIsFinal = nullptr;
     llvm::Value *                   mNumOfStrides = nullptr;
     llvm::Value *                   mFixedRateFactor = nullptr;
-    llvm::Value *                   mThreadLocalPtr = nullptr;
     llvm::Value *                   mExternalSegNo = nullptr;
 
     Vec<llvm::Value *>              mUpdatableProcessedInputItemPtr;

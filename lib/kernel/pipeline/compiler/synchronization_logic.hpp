@@ -60,10 +60,10 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const LockType l
         const auto suffix = getLockName();
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + suffix);
 
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* waiting " + prefix + suffix + " = %" PRIu64 " (PTR) %" PRIu64, mSegNo, waitingOnPtr);
-        debugPrint(b, "* init " + prefix + suffix + " = %" PRIu64, b->CreateLoad(waitingOnPtr));
-        #endif
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        debugPrint(b, "* waiting " + prefix + suffix + " = %" PRIu64 " (PTR) %" PRIu64, mSegNo, waitingOnPtr);
+//        debugPrint(b, "* init " + prefix + suffix + " = %" PRIu64, b->CreateLoad(waitingOnPtr));
+//        #endif
 
         BasicBlock * const nextNode = b->GetInsertBlock()->getNextNode();
         BasicBlock * const acquired = b->CreateBasicBlock(prefix + "_acquired" + suffix, nextNode);
@@ -137,9 +137,9 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const LockType l
             b->CreateAssert(unchanged, out.str(), mKernelAssertionName, currentSegNo, mSegNo);
         }
         b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* released " + prefix + suffix + " %" PRIu64 " (PTR) %" PRIu64, nextSegNo, waitingOnPtr);
-        #endif
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        debugPrint(b, "* released " + prefix + suffix + " %" PRIu64 " (PTR) %" PRIu64, nextSegNo, waitingOnPtr);
+//        #endif
     }
 }
 

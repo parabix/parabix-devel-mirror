@@ -237,7 +237,8 @@ char * preprocess(preprocessFunctionType preprocess) {
     // Given a 8-bit bytestream of length n, we need space for 4 bitstreams of length n ...
     AlignedAllocator<char, ALIGNMENT> alloc;
     const size_t n = round_up_to(fsize, 8 * ALIGNMENT);
-    chStream = alloc.allocate((4 * n) / 8);    
+    const auto m = (4 * n) / 8;
+    chStream = alloc.allocate(m);
     preprocess(n, chStream, 0, fd);
     close(fd);
     return chStream;
