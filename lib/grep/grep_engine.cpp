@@ -877,8 +877,9 @@ void * DoGrepThreadFunction(void *args) {
 }
 
 bool GrepEngine::searchAllFiles() {
-    const unsigned numOfThreads = std::min(static_cast<unsigned>(codegen::TaskThreads), static_cast<unsigned>(inputPaths.size()));
-    codegen::setTaskThreads(std::max(numOfThreads, 1u));
+    const unsigned numOfThreads = std::min(static_cast<unsigned>(codegen::TaskThreads),
+                                           std::max(static_cast<unsigned>(inputPaths.size(), 1u));
+    codegen::setTaskThreads(numOfThreads);
     std::vector<pthread_t> threads(numOfThreads);
 
     for(unsigned long i = 1; i < numOfThreads; ++i) {
