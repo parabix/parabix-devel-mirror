@@ -94,13 +94,25 @@ static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(Se
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
+static cl::opt<unsigned, true>
+MaxTaskThreadsOption("max-task-threads", cl::location(TaskThreads),
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(0),
-                                          cl::desc("Number of threads used for segment pipeline parallel (relative to number of cores if 0 or negative"), cl::value_desc("integer"));
+                     cl::init(llvm::sys::getHostNumPhysicalCores()),
 #else
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
-                                          cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
+                     cl::init(2),
 #endif
+                     cl::desc("Maximum number of threads to assign for separate pipeline tasks."),
+                     cl::value_desc("positive integer"));
+
+static cl::opt<unsigned, true>
+ThreadNumOption("thread-num", cl::location(SegmentThreads),
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+                cl::init(llvm::sys::getHostNumPhysicalCores()),
+#else
+                cl::init(2),
+#endif
+                cl::desc("Number of threads used for segment pipeline parallel"),
+                cl::value_desc("positive integer"));
 
 static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),
                                           cl::desc("Number of blocks per stride for scanning kernels"), cl::value_desc("positive initeger"));
@@ -128,8 +140,8 @@ unsigned BlockSize;
 unsigned SegmentSize;
 
 unsigned BufferSegments;
-
-int ThreadNum;
+unsigned TaskThreads;
+unsigned SegmentThreads;
 
 unsigned ScanBlocks;
 
@@ -204,11 +216,6 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
         report_fatal_error("CUDA compiler is not supported.");
     }
 #endif
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
-    if (ThreadNum <= 0) {
-        ThreadNum = llvm::sys::getHostNumPhysicalCores() + ThreadNum;
-    }
-#endif
 }
 
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(6, 0, 0)
@@ -225,6 +232,17 @@ void printParabixVersion (raw_ostream & outs) {
 
 void AddParabixVersionPrinter() {
     cl::AddExtraVersionPrinter(&printParabixVersion);
+}
+
+void setTaskThreads(unsigned taskThreads) {
+    TaskThreads = std::max(taskThreads, 1u);
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+    unsigned coresPerTask = llvm::sys::getHostNumPhysicalCores()/TaskThreads;
+#else
+    unsigned coresPerTask = 2;  // assumption
+#endif
+    SegmentThreads = std::min(coresPerTask, SegmentThreads);
+    //llvm::errs() << "Task threads: " << taskThreads << ", segment threads: " << SegmentThreads << "\n";
 }
 
 }

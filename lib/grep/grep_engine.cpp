@@ -12,6 +12,7 @@
 #include <iostream>
 #include <sched.h>
 #include <boost/filesystem.hpp>
+#include <toolchain/toolchain.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/ADT/STLExtras.h> // for make_unique
@@ -876,7 +877,8 @@ void * DoGrepThreadFunction(void *args) {
 }
 
 bool GrepEngine::searchAllFiles() {
-    const unsigned numOfThreads = std::min(static_cast<unsigned>(Threads), static_cast<unsigned>(inputPaths.size()));
+    const unsigned numOfThreads = std::min(static_cast<unsigned>(codegen::TaskThreads), static_cast<unsigned>(inputPaths.size()));
+    codegen::setTaskThreads(std::max(numOfThreads, 1u));
     std::vector<pthread_t> threads(numOfThreads);
 
     for(unsigned long i = 1; i < numOfThreads; ++i) {

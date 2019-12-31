@@ -502,7 +502,7 @@ ProgramBuilder::ProgramBuilder(
       driver,
       std::move(stream_inputs), std::move(stream_outputs),
       std::move(scalar_inputs), std::move(scalar_outputs),
-      codegen::ThreadNum, true) {
+      codegen::SegmentThreads, true) {
 
 }
 

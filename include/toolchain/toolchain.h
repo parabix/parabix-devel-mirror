@@ -66,7 +66,8 @@ const unsigned LaneWidth = 64;
 extern unsigned BlockSize;  // set from command line
 extern unsigned SegmentSize; // set from command line
 extern unsigned BufferSegments;
-extern int ThreadNum;
+extern unsigned TaskThreads;
+extern unsigned SegmentThreads;
 extern unsigned ScanBlocks;
 extern bool EnableObjectCache;
 extern bool TraceObjectCache;
@@ -79,6 +80,7 @@ void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer
 
 void AddParabixVersionPrinter();
 
+void setTaskThreads(unsigned taskThreads);
 }
 
 #endif
