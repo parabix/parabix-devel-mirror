@@ -102,7 +102,7 @@ HexLinesFunctionType generatePipeline(CPUDriver & pxDriver) {
 
     StreamSet * nonLF = P->CreateStreamSet(1);
     std::vector<re::CC *> nonLF_CC = {re::makeCC(re::makeByte(0,9), re::makeByte(0xB, 0xff))};
-    P->CreateKernelCall<CharacterClassKernelBuilder>("nonLF", nonLF_CC, BasisBits, nonLF);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(nonLF_CC, BasisBits, nonLF);
     
     StreamSet * hexInsertMask = UnitInsertionSpreadMask(P, nonLF, InsertPosition::After);
     StreamSet * spreadBasis = P->CreateStreamSet(8);

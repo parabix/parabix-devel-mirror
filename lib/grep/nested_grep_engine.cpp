@@ -267,9 +267,8 @@ void NestedInternalSearchEngine::grepCodeGen() {
     StreamSet * const ByteStream = E->CreateStreamSet(1, 8);
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
-    const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
     E->CreateKernelCall<S2PKernel>(ByteStream, mBasisBits);
-    E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{mBreakCC}, mBasisBits, mBreaks);
+    E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{mBreakCC}, mBasisBits, mBreaks);
     E->CreateKernelCall<UTF8_index>(mBasisBits, mU8index);
 
     assert (mNested.size() > 1 && mNested.back());

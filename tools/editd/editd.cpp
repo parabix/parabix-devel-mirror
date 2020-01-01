@@ -337,7 +337,7 @@ multiEditdFunctionType multiEditdPipeline(CPUDriver & pxDriver) {
     ccs.emplace_back(re::makeCC(re::makeCC(0x54), re::makeCC(0x74)));
 
     StreamSet * const ChStream = P->CreateStreamSet(4);
-    P->CreateKernelCall<CharacterClassKernelBuilder>("editd_cc", ccs, ByteStream, ChStream);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(ccs, ByteStream, ChStream);
 
     const auto n = pattGroups.size();
     std::vector<StreamSet *> MatchResults(n);

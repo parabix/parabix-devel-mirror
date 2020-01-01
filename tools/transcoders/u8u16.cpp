@@ -371,7 +371,7 @@ u8u16FunctionType generatePipeline2(CPUDriver & pxDriver, cc::ByteNumbering byte
 
     CC * const nonAsciiCC = makeByte(0x80, 0xFF);
     P->CreateKernelCall<CharacterClassKernelBuilder>(
-        "nonASCII", std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
+        std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
 
     auto B = P->CreateOptimizationBranch(nonAscii,
         {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}},

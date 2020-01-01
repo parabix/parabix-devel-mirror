@@ -991,11 +991,9 @@ void InternalSearchEngine::grepCodeGen(re::RE * matchingRE) {
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
-    const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
-
     StreamSet * BasisBits = E->CreateStreamSet(8);
     E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-    E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
+    E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
     StreamSet * u8index = E->CreateStreamSet();
     E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
@@ -1066,10 +1064,9 @@ void InternalMultiSearchEngine::grepCodeGen(const re::PatternVector & patterns) 
     E->CreateKernelCall<MemorySourceKernel>(buffer, length, ByteStream);
 
     StreamSet * RecordBreakStream = E->CreateStreamSet();
-    const auto RBname = (mGrepRecordBreak == GrepRecordBreakKind::Null) ? "Null" : "LF";
     StreamSet * BasisBits = E->CreateStreamSet(8);
     E->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-    E->CreateKernelCall<CharacterClassKernelBuilder>(RBname, std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
+    E->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{breakCC}, BasisBits, RecordBreakStream);
 
     StreamSet * u8index = E->CreateStreamSet();
     E->CreateKernelCall<UTF8_index>(BasisBits, u8index);
