@@ -79,6 +79,7 @@ protected:
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
     MemorySourceKernel(BuilderRef b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream);
+    bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:
     void generateInitializeMethod(BuilderRef b) override;
