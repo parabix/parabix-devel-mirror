@@ -19,8 +19,6 @@ namespace kernel {
 class UTF8_index : public pablo::PabloKernel {
 public:
     UTF8_index(BuilderRef kb, StreamSet * Source, StreamSet * u8index);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -30,12 +28,7 @@ class GrepKernelOptions {
     friend class ICGrepKernel;
 public:
     using Alphabets = std::vector<std::pair<std::shared_ptr<cc::Alphabet>, StreamSet *>>;
-    GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet = &cc::UTF8, re::EncodingTransformer * encodingTransformer = nullptr) :
-        mCodeUnitAlphabet(codeUnitAlphabet),
-        mEncodingTransformer(encodingTransformer),
-        mSource(nullptr),
-        mCombiningType(GrepCombiningType::None),
-        mPrefixRE(nullptr) {}
+    GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet = &cc::UTF8, re::EncodingTransformer * encodingTransformer = nullptr);
     void setIndexingTransformer(re::EncodingTransformer *, StreamSet * indexStream);
     void setSource(StreamSet * s);
     void setCombiningStream(GrepCombiningType t, StreamSet * toCombine);
@@ -52,41 +45,41 @@ protected:
     Bindings streamSetOutputBindings();
     Bindings scalarInputBindings();
     Bindings scalarOutputBindings();
-    std::string getSignature();
+    std::string makeSignature();
 
 private:
-    const cc::Alphabet * mCodeUnitAlphabet;
-    re::EncodingTransformer * mEncodingTransformer;
-    StreamSet * mSource;
-    StreamSet * mIndexStream;
-    GrepCombiningType mCombiningType;
-    StreamSet * mCombiningStream;
-    StreamSet * mResults;
-    Bindings mExternals;
-    Alphabets mAlphabets;
-    re::RE * mRE;
-    re::RE * mPrefixRE;
-    std::string     mSignature;
+
+    const cc::Alphabet *        mCodeUnitAlphabet;
+    re::EncodingTransformer *   mEncodingTransformer;
+    StreamSet *                 mSource = nullptr;
+    StreamSet *                 mIndexStream = nullptr;
+    GrepCombiningType           mCombiningType = GrepCombiningType::None;
+    StreamSet *                 mCombiningStream = nullptr;
+    StreamSet *                 mResults = nullptr;
+    Bindings                    mExternals;
+    Alphabets                   mAlphabets;
+    re::RE *                    mRE = nullptr;
+    re::RE *                    mPrefixRE = nullptr;
 };
 
 
 class ICGrepKernel : public pablo::PabloKernel {
 public:
     ICGrepKernel(BuilderRef iBuilder,
-                 std::unique_ptr<GrepKernelOptions> options);
-    std::string makeSignature(BuilderRef) const override;
-    bool isCachable() const override { return true; }
+                 std::unique_ptr<GrepKernelOptions> && options);
+    llvm::StringRef getSignature() const override;
+    bool hasSignature() const override { return true; }
     bool hasFamilyName() const override { return true; }
 protected:
     void generatePabloMethod() override;
-    std::unique_ptr<GrepKernelOptions> mOptions;
+private:
+    std::unique_ptr<GrepKernelOptions>  mOptions;
+    std::string                         mSignature;
 };
 
 class MatchedLinesKernel : public pablo::PabloKernel {
 public:
     MatchedLinesKernel(BuilderRef builder, StreamSet * OriginalMatches, StreamSet * LineBreakStream, StreamSet * Matches);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -101,8 +94,6 @@ private:
 class FixedMatchPairsKernel : public pablo::PabloKernel {
 public:
     FixedMatchPairsKernel(BuilderRef builder, unsigned length, StreamSet * MatchEnds, StreamSet * MatchPairs);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     unsigned mMatchLength;
@@ -111,8 +102,6 @@ protected:
 class PopcountKernel : public pablo::PabloKernel {
 public:
     PopcountKernel(BuilderRef builder, StreamSet * const toCount, Scalar * countResult);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -135,8 +124,6 @@ private:
 class ContextSpan final : public pablo::PabloKernel {
 public:
     ContextSpan(BuilderRef b, StreamSet * const markerStream, StreamSet * const contextStream, unsigned before, unsigned after);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:

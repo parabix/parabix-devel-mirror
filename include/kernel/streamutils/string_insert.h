@@ -23,8 +23,6 @@ class StringInsertBixNum : public pablo::PabloKernel {
 public:
     StringInsertBixNum(BuilderRef b, std::vector<std::string> & insertStrs,
                        StreamSet * insertMarks, StreamSet * insertBixNum);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 private:
     std::vector<std::string> mInsertStrings;
@@ -38,8 +36,6 @@ public:
                         StreamSet * basis, StreamSet * spreadMask,
                         StreamSet * insertMarks, StreamSet * runIndex,
                         StreamSet * output);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 private:
     std::vector<std::string> mInsertStrings;

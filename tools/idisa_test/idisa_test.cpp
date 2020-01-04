@@ -45,8 +45,6 @@ static cl::opt<int> Immediate("i", cl::desc("Immediate value for mvmd_dslli"), c
 class ShiftLimitKernel : public BlockOrientedKernel {
 public:
     ShiftLimitKernel(BuilderRef b, unsigned fw, unsigned limit, StreamSet * input, StreamSet * output);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef kb) override;
 private:
@@ -74,8 +72,6 @@ class IdisaBinaryOpTestKernel : public MultiBlockKernel {
 public:
     IdisaBinaryOpTestKernel(BuilderRef b, std::string idisa_op, unsigned fw, unsigned imm,
                             StreamSet * Operand1, StreamSet * Operand2, StreamSet * result);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
@@ -180,8 +176,6 @@ public:
     IdisaBinaryOpCheckKernel(BuilderRef b, std::string idisa_op, unsigned fw, unsigned imm,
                              StreamSet * Operand1, StreamSet * Operand2, StreamSet * result,
                              StreamSet * expected, Scalar * failures);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef kb) override;
 private:

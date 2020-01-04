@@ -16,8 +16,6 @@ namespace kernel {
 class HexToBinary final : public kernel::BlockOrientedKernel {
 public:
     HexToBinary(BuilderRef b, StreamSet * hexStream, StreamSet * binStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef b) override;
 };
@@ -30,8 +28,6 @@ protected:
 class BinaryToHex final : public kernel::BlockOrientedKernel {
 public:
     BinaryToHex(BuilderRef b, StreamSet * binStream, StreamSet * hexStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef b) override;
     void generateFinalBlockMethod(BuilderRef b, llvm::Value * const remainingBits) override;

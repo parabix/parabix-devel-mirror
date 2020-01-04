@@ -15,8 +15,6 @@ namespace kernel {
 class ShiftForward final : public pablo::PabloKernel {
 public:
     ShiftForward(BuilderRef b, StreamSet * inputs, StreamSet * outputs, unsigned shiftAmount = 1);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     unsigned mShiftAmount;
@@ -25,8 +23,6 @@ protected:
 class ShiftBack final : public pablo::PabloKernel {
 public:
     ShiftBack(BuilderRef b, StreamSet * inputs, StreamSet * outputs, unsigned shiftAmount = 1);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     unsigned mShiftAmount;

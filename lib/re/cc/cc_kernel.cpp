@@ -40,7 +40,7 @@ CharacterClassesSignature::CharacterClassesSignature(const std::vector<CC *> &cc
              (signalNullObject ? "_abort_on_null" : "")) {
 }
 
-std::string CharacterClassKernelBuilder::makeSignature(BuilderRef) const {
+StringRef CharacterClassKernelBuilder::getSignature() const {
     return mSignature;
 }
 

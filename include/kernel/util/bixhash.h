@@ -30,8 +30,6 @@ public:
                   {Binding{"basis", basis}, Binding{"run", run}},
                   {Binding{"hashes", hashes}}),
     mHashBits(hashes->getNumElements()), mHashSteps(steps), mSeed(seed) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:

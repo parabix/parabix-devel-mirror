@@ -39,8 +39,6 @@ public:
 
 
     bool hasFamilyName() const override { return true; }
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 
 protected:
     void generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) override {
@@ -68,7 +66,9 @@ public:
                              Kernel * const outerKernel,
                              const re::PatternVector & patterns,
                              const bool caseInsensitive,
-                             re::CC * const breakCC)
+                             re::CC * const breakCC,
+
+                             const bool requiresInternalSynchronization)
         : PipelineKernel(driver
                          // signature
                          , [&]() -> std::string {
@@ -147,7 +147,9 @@ public:
                          , {{"matches", matches, FixedRate(), Add1()}}
                          // scalars
                          , {}, {}) {
-        addAttribute(InternallySynchronized());   
+        if (requiresInternalSynchronization) {
+            addAttribute(InternallySynchronized());
+        }
     }
 
     bool hasFamilyName() const override { return true; }
@@ -211,7 +213,8 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
                                               mBasisBits, mU8index, mBreaks,
                                               mMatches,
                                               mNested.back(), // outer kernel
-                                              patterns, mCaseInsensitive, mBreakCC);
+                                              patterns, mCaseInsensitive, mBreakCC,
+                                              mNumOfThreads > 1);
     }
     kernel->setStride(codegen::SegmentSize);
 

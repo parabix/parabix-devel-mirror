@@ -212,6 +212,15 @@ inline const Binding & OptimizationBranchCompiler::getOutputBinding(const Kernel
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief concat
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StringRef concat(StringRef A, StringRef B, SmallVector<char, 256> & tmp) {
+    Twine C = A + B;
+    tmp.clear();
+    return C.toStringRef(tmp);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeRelationshipGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const RelationshipType type) const {
@@ -702,8 +711,10 @@ Value * OptimizationBranchCompiler::enterBranch(BuilderRef b, const unsigned bra
 
     const Kernel * const kernel = mBranches[branchType];
     const auto prefix = kernel->getName();
-    BasicBlock * const otherWait = b->CreateBasicBlock(prefix + "_waitForOtherBranch");
-    BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "_start");
+
+    SmallVector<char, 256> tmp;
+    BasicBlock * const otherWait = b->CreateBasicBlock(concat(prefix, "_waitForOtherBranch", tmp));
+    BasicBlock * const kernelStart = b->CreateBasicBlock(concat(prefix, "_start", tmp));
     b->CreateCondBr(isBranchReady(b, branchType), kernelStart, otherWait);
     b->SetInsertPoint(otherWait);
     b->CreatePThreadYield();
@@ -779,11 +790,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
         reset(mPopCountRateArray, numOfInputs);
         reset(mNegatedPopCountRateArray, numOfInputs);
 
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = kernel->getName();
-        b->CallPrintInt(prefix + "_numOfStrides", numOfStrides);
-        #endif
-
         for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
             const RelationshipRef & path = mStreamSetGraph[preceding(e, mStreamSetGraph)];
@@ -792,10 +798,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             Value * processed = getProcessedInputItemsPtr(host.Index);
             mProcessedInputItemPtr[path.Index] = processed;
             processed = b->CreateLoad(processed);
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = kernel->getName() + ":" + input.getName();
-            b->CallPrintInt(prefix + "_processedIn", processed);
-            #endif
             mProcessedInputItems[path.Index] = processed;
             // logical base input address
             const StreamSetBuffer * const buffer = getInputStreamSetBuffer(host.Index);
@@ -804,9 +806,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             Value * const accessible = getAccessibleInputItems(path.Index);
             Value * const provided = calculateAccessibleOrWritableItems(b, kernel, input, firstIndex, lastIndex, accessible);
             mAccessibleInputItems[path.Index] = b->CreateSelect(isFinal, accessible, provided);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_accessible", mAccessibleInputItems[path.Index]);
-            #endif
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
                 mPopCountRateArray[path.Index] = b->CreateGEP(mPopCountRateArray[host.Index], firstIndex);
             }
@@ -830,10 +829,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             mProducedOutputItemPtr[path.Index] = produced;
             produced = b->CreateLoad(produced);
             mProducedOutputItems[path.Index] = produced;
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = kernel->getName() + ":" + output.getName();
-            b->CallPrintInt(prefix + "_producedIn", produced);
-            #endif
             // logical base input address
             const StreamSetBuffer * const buffer = getOutputStreamSetBuffer(host.Index);
             mBaseOutputAddress[path.Index] = buffer->getBaseAddress(b);
@@ -841,9 +836,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             Value * const writable = getWritableOutputItems(path.Index);
             Value * const provided = calculateAccessibleOrWritableItems(b, kernel, output, firstIndex, lastIndex, writable);
             mWritableOutputItems[path.Index] = b->CreateSelect(isFinal, writable, provided);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_writable", mWritableOutputItems[path.Index]);
-            #endif
         }
 
         calculateFinalOutputItemCounts(b, isFinal, branchType);
@@ -913,9 +905,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             } else {
                 processed = b->CreateLoad(mProcessedInputItemPtr[i]);
             }
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(kernel->getName() + "." + input.getName() + "_processedOut", processed);
-            #endif
         }
 
         for (unsigned i = 0; i < numOfOutputs; ++i) {
@@ -928,9 +917,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             } else {
                 produced = b->CreateLoad(mProducedOutputItemPtr[i]);
             }
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(kernel->getName() + "." + output.getName() + "_producedOut", produced);
-            #endif
         }
 
         if (mTerminatedPhi) {
@@ -1023,10 +1009,6 @@ inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRe
             const ProcessingRate & rate = output.getRate();
             if (rate.isFixed()) {
                 pendingOutputItems[path.Index] = b->CreateCeilUDivRate(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
-                #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = kernel->getName() + ":" + output.getName();
-                b->CallPrintInt(prefix + "_writable'", pendingOutputItems[path.Index]);
-                #endif
             }
         }
         b->CreateBr(executeKernel);

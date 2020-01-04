@@ -27,9 +27,6 @@ public:
 
     explicit RegionSelectionKernel(BuilderRef b, Starts starts, Ends ends, Selectors selectors, StreamSet * const regionSpans);
 
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 
 protected:

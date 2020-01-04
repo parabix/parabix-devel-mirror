@@ -21,8 +21,6 @@ namespace kernel {
 class expand3_4Kernel final : public MultiBlockKernel {
 public:
     expand3_4Kernel(BuilderRef b, StreamSet * input, StreamSet * expandedOutput);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 };
@@ -30,8 +28,6 @@ private:
 class radix64Kernel final : public BlockOrientedKernel {
 public:
     radix64Kernel(BuilderRef, StreamSet * input, StreamSet * output);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     virtual void generateDoBlockMethod(BuilderRef b) override;
     virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingBytes) override;
@@ -41,8 +37,6 @@ private:
 class base64Kernel final : public BlockOrientedKernel {
 public:
     base64Kernel(BuilderRef, StreamSet * input, StreamSet * output);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     virtual void generateDoBlockMethod(BuilderRef b) override;
     virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingBytes) override;

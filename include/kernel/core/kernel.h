@@ -187,7 +187,7 @@ public:
     // all scalar fields have been added.   If there are no fields to
     // be added, the default method for preparing kernel state may be used.
 
-    LLVM_READNONE virtual const std::string getName() const {
+    LLVM_READNONE const llvm::StringRef getName() const {
         return mKernelName;
     }
 
@@ -203,15 +203,17 @@ public:
         if (hasFamilyName()) {
             return getDefaultFamilyName();
         } else {
-            return getName();
+            return getName().str();
         }
     }
 
-    virtual std::string makeSignature(BuilderRef b) const;
+    virtual bool isCachable() const { return true; }
 
-    virtual bool hasSignature() const { return true; }
+    virtual bool hasSignature() const { return false; }
 
-    virtual bool isCachable() const { return false; }
+    virtual llvm::StringRef getSignature() const {
+        return getName();
+    }
 
     LLVM_READNONE bool isStateful() const {
         return mSharedStateType != nullptr;
@@ -349,10 +351,14 @@ public:
     }
 
     bool isGenerated() const {
-        return mGenerated;
+        return mModule != nullptr;
     }
 
+    std::string makeCacheName(BuilderRef b);
+
     void makeModule(BuilderRef b);
+
+    void ensureLoaded() const;
 
     void generateKernel(BuilderRef b);
 
@@ -360,8 +366,6 @@ public:
 
     template <typename ExternalFunctionType>
     void link(llvm::StringRef name, ExternalFunctionType & functionPtr);
-
-    LLVM_READNONE std::string getCacheName(BuilderRef b) const;
 
     virtual void addKernelDeclarations(BuilderRef b);
 
@@ -466,20 +470,20 @@ protected:
 
 protected:
 
-    const TypeId        mTypeId;
-    unsigned            mStride;
-    llvm::Module *      mModule = nullptr;
-    llvm::StructType *  mSharedStateType = nullptr;
-    llvm::StructType *  mThreadLocalStateType = nullptr;
-    bool                mGenerated = false;
+    const TypeId                mTypeId;
+    unsigned                    mStride;
+    llvm::Module *              mModule = nullptr;
+    mutable llvm::StructType *  mSharedStateType = nullptr;
+    mutable llvm::StructType *  mThreadLocalStateType = nullptr;
+    bool                        mGenerated = false;
 
-    Bindings            mInputStreamSets;
-    Bindings            mOutputStreamSets;
-    Bindings            mInputScalars;
-    Bindings            mOutputScalars;
-    InternalScalars     mInternalScalars;
-    const std::string   mKernelName;
-    LinkedFunctions     mLinkedFunctions;
+    Bindings                    mInputStreamSets;
+    Bindings                    mOutputStreamSets;
+    Bindings                    mInputScalars;
+    Bindings                    mOutputScalars;
+    InternalScalars             mInternalScalars;
+    const std::string           mKernelName;
+    LinkedFunctions             mLinkedFunctions;
 };
 
 template <typename ExternalFunctionType>

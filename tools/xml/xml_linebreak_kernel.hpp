@@ -32,9 +32,6 @@ public:
         assert(out->getFieldWidth() == 1 && out->getNumElements() == 1);
     }
 
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-
     void generatePabloMethod() override {
         using namespace pablo;
         using namespace cc;

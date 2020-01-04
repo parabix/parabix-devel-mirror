@@ -94,8 +94,6 @@ extern "C" {
 class WordCountKernel final: public pablo::PabloKernel {
 public:
     WordCountKernel(BuilderRef b, StreamSet * const countable);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

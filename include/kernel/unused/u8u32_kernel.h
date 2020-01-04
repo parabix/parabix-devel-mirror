@@ -21,8 +21,7 @@ public:
                         Binding{iBuilder->getStreamSetTy(1, 1), "errMask"}}, {}) {
 
     }
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
+
     void generatePabloMethod() override;
 
 };

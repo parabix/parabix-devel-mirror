@@ -14,9 +14,6 @@ public:
 
     explicit PopCountKernel(BuilderRef b, const PopCountType type, const unsigned stepFactor, StreamSet * input, StreamSet * const positive, StreamSet * negative);
 
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 
 private:

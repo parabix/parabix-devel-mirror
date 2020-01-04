@@ -811,10 +811,10 @@ Value * isNullSymbol (BuilderRef b, std::vector<Value *> sym) {
 }
 
 void generateKeyProcessingLoops(BuilderRef b,
-                                ScanWordParameters & sw,
-                                EncodingInfo & encodingScheme,
-                                unsigned lo,
-                                std::vector<Value *> keyMasks,
+                                const ScanWordParameters & sw,
+                                const EncodingInfo & encodingScheme,
+                                const unsigned lo,
+                                const std::vector<Value *> & keyMasks,
                                 Value * strideBlockOffset,
                                 Value * stridePos,
                                 BasicBlock * keysDone) {
@@ -1104,10 +1104,10 @@ void FixedLengthCompression::generateMultiBlockLogic(BuilderRef b, Value * const
 }
 
 void generateDecompKeyProcessingLoops(BuilderRef b,
-                                ScanWordParameters & sw,
-                                EncodingInfo & encodingScheme,
-                                unsigned lo,
-                                std::vector<Value *> keyMasks,
+                                const ScanWordParameters & sw,
+                                const EncodingInfo & encodingScheme,
+                                const unsigned lo,
+                                const std::vector<Value *> & keyMasks,
                                 Value * strideBlockOffset,
                                 Value * stridePos,
                                 BasicBlock * keysDone) {
@@ -1183,10 +1183,10 @@ void generateDecompKeyProcessingLoops(BuilderRef b,
 }
 
 void generateHashProcessingLoops(BuilderRef b,
-                                 ScanWordParameters & sw,
-                                 EncodingInfo & encodingScheme,
-                                 unsigned lo,
-                                 std::vector<Value *> hashMasks,
+                                 const ScanWordParameters & sw,
+                                 const EncodingInfo & encodingScheme,
+                                 const unsigned lo,
+                                 const std::vector<Value *> & hashMasks,
                                  Value * strideBlockOffset,
                                  Value * stridePos,
                                  BasicBlock * hashesDone) {

@@ -47,8 +47,6 @@ using namespace kernel;
 class MatchPriorKernel final: public pablo::PabloKernel {
 public:
     MatchPriorKernel(BuilderRef b, StreamSet * const countable, Scalar * countResult);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

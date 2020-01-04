@@ -7,7 +7,6 @@
 #include <kernel/core/kernel.h>
 #include <kernel/core/relationship.h>
 #include <util/slab_allocator.h>
-#include <boost/container/flat_set.hpp>
 #include <string>
 #include <vector>
 #include <memory>
@@ -16,6 +15,7 @@ namespace llvm { class Function; }
 namespace kernel { class KernelBuilder; }
 namespace kernel { class ProgramBuilder; }
 class CBuilder;
+class ParabixObjectCache;
 
 class BaseDriver : public codegen::VirtualDriver {
     friend class CBuilder;
@@ -28,6 +28,8 @@ public:
     using Bindings = kernel::Bindings;
     using BuilderRef = Kernel::BuilderRef;
     using KernelSet = std::vector<std::unique_ptr<Kernel>>;
+    using KernelMap = llvm::StringMap<std::unique_ptr<Kernel>>;
+
 
     std::unique_ptr<kernel::ProgramBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
@@ -83,10 +85,13 @@ protected:
     std::unique_ptr<llvm::LLVMContext>                      mContext;
     llvm::Module * const                                    mMainModule;
     std::unique_ptr<kernel::KernelBuilder>                  mBuilder;
+    std::unique_ptr<ParabixObjectCache>                     mObjectCache;
+
     bool                                                    mPreservesKernels = false;
     KernelSet                                               mUncachedKernel;
     KernelSet                                               mCachedKernel;
-    KernelSet                                               mPreservedKernel;
+    KernelSet                                               mCompiledKernel;
+    KernelSet                                               mPreservedKernel;    
     SlabAllocator<>                                         mAllocator;
 };
 

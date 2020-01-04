@@ -27,8 +27,6 @@ public:
 
 private:
 
-    std::string getMangledName(std::string s);
-
     void preparePassManager();
 
     llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const override;
@@ -40,6 +38,7 @@ private:
     std::unique_ptr<llvm::raw_fd_ostream>                   mIROutputStream;
     std::unique_ptr<llvm::raw_fd_ostream>                   mASMOutputStream;
     std::unique_ptr<llvm::legacy::PassManager>              mPassManager;
+    std::vector<std::pair<llvm::Function *, void *>>        mCachedFunctionMappings;
 };
 
 #endif // CPUDRIVER_H

@@ -19,8 +19,6 @@ class DebugDisplayKernel : public MultiBlockKernel {
 public:
     DebugDisplayKernel(BuilderRef b, llvm::StringRef name, StreamSet * s);
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     llvm::StringRef mName;
     uint32_t        mFW;

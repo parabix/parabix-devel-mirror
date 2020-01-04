@@ -93,8 +93,6 @@ public:
         std::string const & callbackName,
         std::initializer_list<StreamSet *> additionalStreams);
 protected:
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 private:
     std::string              mCallbackName;

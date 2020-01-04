@@ -50,8 +50,6 @@ public:
         : PabloKernel(kb, "Hexify",
                       {Binding{"insertMask", insertMask}, Binding{"spreadBasis", spreadBasis}},
                       {Binding{"hexBasis", hexBasis}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

@@ -24,7 +24,7 @@ void PipelineCompiler::debugInit(BuilderRef b) {
 
 
 template <typename ... Args>
-BOOST_NOINLINE void PipelineCompiler::debugPrint(BuilderRef b, StringRef format, Args ...args) const {
+BOOST_NOINLINE void PipelineCompiler::debugPrint(BuilderRef b, Twine format, Args ...args) const {
     SmallVector<char, 512> tmp;
     raw_svector_ostream out(tmp);
     out << "%016" PRIx64 << "  " << format << "\n";

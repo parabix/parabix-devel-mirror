@@ -200,10 +200,13 @@ void PabloKernel::generateFinalizeMethod(BuilderRef b) {
 
     if (CompileOptionIsSet(PabloCompilationFlags::EnableProfiling)) {
 
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << "./" << getName() << ".profile";
 
-        Value * fd = b->CreateOpenCall(b->GetString("./" + getName() + ".profile"),
-                                              b->getInt32(O_WRONLY | O_CREAT | O_TRUNC),
-                                              b->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
+        Value * const fd = b->CreateOpenCall(b->GetString(out.str()),
+                                             b->getInt32(O_WRONLY | O_CREAT | O_TRUNC),
+                                             b->getInt32(S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH));
 
         Function * dprintf = b->GetDprintf();
 

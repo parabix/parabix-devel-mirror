@@ -23,9 +23,8 @@ class CharacterClassKernelBuilder final : public CharacterClassesSignature, publ
 public:    
     CharacterClassKernelBuilder(BuilderRef b, std::vector<re::CC *> charClasses, StreamSet * source, StreamSet * ccStream, Scalar * signalNullObject = nullptr);
 protected:
-    bool isCachable() const override { return true; }
     bool hasSignature() const override { return true; }
-    std::string makeSignature(BuilderRef) const override;
+    llvm::StringRef getSignature() const override;
     void generatePabloMethod() override;
     Bindings makeInputScalarBindings(Scalar * signalNullObject);
 private:
