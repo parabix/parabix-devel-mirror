@@ -681,7 +681,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     }
 
     Module * const m = b->getModule();
-    Function * const doSegment = getDoSegmentFunction(b);
+    Function * const doSegment = getDoSegmentFunction(b, false); assert (doSegment);
     assert (doSegment->arg_size() >= suppliedArgs);
     const auto numOfDoSegArgs = doSegment->arg_size() - suppliedArgs;
     Function * const terminate = getFinalizeFunction(b);
@@ -737,12 +737,6 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         return v;
     };
 
-    SmallVector<Value *, 16> segmentArgs(doSegment->arg_size());
-    segmentArgs[suppliedArgs - 1] = b->getSize(1); // numOfStrides
-    for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
-        segmentArgs[suppliedArgs + i] = nextArg();
-    }
-
     Value * sharedHandle = nullptr;
     BEGIN_SCOPED_REGION
     ParamMap paramMap;
@@ -756,16 +750,21 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
 
     assert (isStateful() || sharedHandle == nullptr);
 
+    SmallVector<Value *, 32> segmentArgs;
+    segmentArgs.reserve(numOfDoSegArgs + suppliedArgs);
+    if (LLVM_LIKELY(isStateful())) {
+        segmentArgs.push_back(sharedHandle);
+    }
     Value * threadLocalHandle = nullptr;
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         threadLocalHandle = initializeThreadLocalInstance(b, sharedHandle);
+        segmentArgs.push_back(threadLocalHandle);
     }
-    if (LLVM_LIKELY(isStateful())) {
-        segmentArgs[0] = sharedHandle;
+    segmentArgs.push_back(b->getSize(1)); // numOfStrides
+    for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
+        segmentArgs.push_back(nextArg());
     }
-    if (hasThreadLocal()) {
-        segmentArgs[suppliedArgs - 2] = threadLocalHandle;
-    }
+    assert (segmentArgs.size() == doSegment->arg_size());
 
     #ifdef NDEBUG
     const bool ea = true;
