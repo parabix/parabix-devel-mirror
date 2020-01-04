@@ -39,8 +39,6 @@ public:
 
 
     bool hasFamilyName() const override { return true; }
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 
 protected:
     void generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) override {

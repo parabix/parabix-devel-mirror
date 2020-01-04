@@ -785,7 +785,7 @@ public:
     #ifdef PRINT_DEBUG_MESSAGES
     void debugInit(BuilderRef b);
     template <typename ... Args>
-    void debugPrint(BuilderRef b, StringRef format, Args ...args) const;
+    void debugPrint(BuilderRef b, Twine format, Args ...args) const;
     void debugHalt(BuilderRef b) const;
     void debugResume(BuilderRef b) const;
     void debugClose(BuilderRef b);
@@ -879,7 +879,7 @@ protected:
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
     BasicBlock *                                mPipelineEnd = nullptr;
-    BasicBlock *                                mRethrowException = nullptr;    
+    BasicBlock *                                mRethrowException = nullptr;
     Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 8>                        mVirtualBaseAddressPtr;
     Vec<Value *, 16>                            mTruncatedInputBuffer;

@@ -54,8 +54,7 @@ inline bool useAVX2() {
 class U8U16Kernel final: public pablo::PabloKernel {
 public:
     U8U16Kernel(BuilderRef b, StreamSet * BasisBits, StreamSet * u8bits, StreamSet * DelMask);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
+protected:
     void generatePabloMethod() override;
 };
 

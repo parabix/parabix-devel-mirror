@@ -295,7 +295,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         assert (virtualBaseAddress->getType() == buffer->getPointerType());
         Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
         buffer->setHandle(localHandle);
-        assert (isa<ExternalBuffer>(buffer));
         buffer->setBaseAddress(b, virtualBaseAddress);
 
         /// ----------------------------------------------------

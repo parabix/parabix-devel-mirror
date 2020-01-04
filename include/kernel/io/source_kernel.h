@@ -14,8 +14,6 @@ class MMapSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
     MMapSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void linkExternalMethods(BuilderRef b) override {
         mFileSizeFunction = linkFileSizeMethod(b);
     }
@@ -42,8 +40,6 @@ class ReadSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
     ReadSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generateInitializeMethod(BuilderRef b) override {
         generateInitializeMethod(mCodeUnitWidth, mStride, b);
     }
@@ -65,8 +61,6 @@ private:
 class FDSourceKernel final : public SegmentOrientedKernel {
 public:
     FDSourceKernel(BuilderRef b, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void linkExternalMethods(BuilderRef b) override;
     void generateInitializeMethod(BuilderRef b) override;
     void generateDoSegmentMethod(BuilderRef b) override;
@@ -79,8 +73,6 @@ protected:
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
     MemorySourceKernel(BuilderRef b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateInitializeMethod(BuilderRef b) override;
     void generateDoSegmentMethod(BuilderRef b) override;

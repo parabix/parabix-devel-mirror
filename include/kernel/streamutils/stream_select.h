@@ -71,9 +71,6 @@ public:
     StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation);
     StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList operations);
 
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-
 protected:
     void generateDoBlockMethod(BuilderRef b) override;
 
@@ -106,9 +103,6 @@ public:
     using BuilderRef = BuilderRef;
 
     IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation);
-
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 
 protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;

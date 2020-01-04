@@ -21,10 +21,6 @@ public:
               StreamSet * const codeUnitStream,
               StreamSet * const BasisBits,
               Scalar * signalNullObject = nullptr);
-
-
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     Bindings makeOutputBindings(StreamSet * const BasisBits);
     Bindings makeInputScalarBindings(Scalar * signalNullObject);
@@ -50,8 +46,6 @@ private:
 class S2P_21Kernel final : public MultiBlockKernel {
 public:
     S2P_21Kernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 };
@@ -59,8 +53,6 @@ protected:
 class S2P_PabloKernel final : public pablo::PabloKernel {
 public:
     S2P_PabloKernel(BuilderRef b, StreamSet * const codeUnitStream, StreamSet * const BasisBits);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:

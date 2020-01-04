@@ -10,6 +10,7 @@
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ExecutionEngine/ObjectCache.h>
 #include <llvm/ADT/StringRef.h>
+#include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 #include <util/not_null.h>
 #include <kernel/core/kernel.h>
@@ -32,24 +33,28 @@ namespace llvm { class LLVMContext; }
 // it to the ExecutionEngine.
 //
 
+enum class CacheObjectResult {
+    CACHED
+    , COMPILED
+    , UNCACHED
+};
+
 class ParabixObjectCache final : public llvm::ObjectCache {
     template <typename K, typename V>
     using Map = boost::container::flat_map<K, V>;
-    using ModuleCache = Map<std::string, std::pair<llvm::Module *, std::unique_ptr<llvm::MemoryBuffer>>>;
+    template <typename K>
+    using Set = boost::container::flat_set<K>;
+    using KnownSignatures = Map<std::string, llvm::Module *>;
+    using ModuleCache = Map<std::string, std::unique_ptr<llvm::MemoryBuffer>>;
     using Instance = std::unique_ptr<ParabixObjectCache>;
     using BuilderRef = kernel::Kernel::BuilderRef;
 public:
+
+    friend class BaseDriver;
+
     using Path = llvm::SmallString<128>;
 
-    static bool checkForCachedKernel(BuilderRef b, not_null<kernel::Kernel *> kernel) noexcept;
-
-    static void initializeCacheSystems() noexcept;
-
-    static ParabixObjectCache * getInstance() {
-        return mInstance.get();
-    }
-
-    bool loadCachedObjectFile(BuilderRef idb, kernel::Kernel * const kernel);
+    CacheObjectResult loadCachedObjectFile(BuilderRef b, kernel::Kernel * const kernel) noexcept;
 
     void notifyObjectCompiled(const llvm::Module * M, llvm::MemoryBufferRef Obj) override;
 
@@ -65,7 +70,8 @@ private:
     void initiateCacheCleanUp() noexcept;
     bool requiresCacheCleanUp() noexcept;
 private:
-    static Instance     mInstance;
+    static bool         mStartedCacheCleanupDaemon;
+    KnownSignatures     mKnownSignatures;
     ModuleCache         mCachedObject;
     Path                mCachePath;
 };

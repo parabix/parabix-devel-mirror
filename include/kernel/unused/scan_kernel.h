@@ -80,9 +80,6 @@ public:
 
     ScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, llvm::StringRef callbackName, OptimizeMode optimizeModes = OptimizeMode::Sparse);
 
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-
 protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 
@@ -122,9 +119,6 @@ class MultiStreamScanKernel : protected ScanKernelBase, public MultiBlockKernel 
 public:
 
     MultiStreamScanKernel(BuilderRef b, StreamSet * scanStream, StreamSet * sourceStream, llvm::StringRef callbackName, OptimizeMode optimizeMode = OptimizeMode::Sparse);
-
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 
 protected:
     

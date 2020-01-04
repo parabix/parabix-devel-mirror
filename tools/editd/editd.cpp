@@ -171,8 +171,6 @@ static size_t fsize;
 class PreprocessKernel final: public pablo::PabloKernel {
 public:
     PreprocessKernel(BuilderRef b, StreamSet * BasisBits, StreamSet * CCResults);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -252,11 +250,9 @@ std::string createName(const std::vector<std::string> & patterns) {
     return name + std::to_string(editDistance);
 }
 
-class PatternKernel final: public pablo::PabloKernel {
+class PatternKernel final : public pablo::PabloKernel {
 public:
     PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
-    std::string makeSignature(BuilderRef) const override;
-    bool isCachable() const override { return true;}
 protected:
     void generatePabloMethod() override;
 private:
@@ -269,10 +265,6 @@ PatternKernel::PatternKernel(BuilderRef b, const std::vector<std::string> & patt
 {{"E", E}})
 , mPatterns(patterns) {
     addAttribute(InfrequentlyUsed());
-}
-
-std::string PatternKernel::makeSignature(BuilderRef) const {
-    return getName();
 }
 
 void PatternKernel::generatePabloMethod() {
@@ -386,9 +378,10 @@ void * DoEditd(void *)
     groupCount++;
     count_mutex.unlock();
 
+    CPUDriver pxDriver("editd");
+
     while (groupIdx < pattGroups.size()){
 
-        CPUDriver pxDriver("editd");
         auto editd = editdPipeline(pxDriver, pattGroups[groupIdx]);
         editd(chStream, fsize);
 
@@ -408,11 +401,13 @@ int main(int argc, char *argv[]) {
 
     get_editd_pattern(pattern_segs, total_len);
 
+
+    CPUDriver pxDriver("editd");
     if (MultiEditdKernels) {
-        CPUDriver pxDriver("editd");
+
         auto editd = multiEditdPipeline(pxDriver);
 
-        std::string fileName = inputFiles[0];
+        const auto & fileName = inputFiles[0];
         const int fd = open(inputFiles[0].c_str(), O_RDONLY);
         if (LLVM_UNLIKELY(fd == -1)) {
             std::cerr << "Error: cannot open " << fileName << " for processing. Skipped.\n";
@@ -424,13 +419,10 @@ int main(int argc, char *argv[]) {
         return 0;
     }
 
-    CPUDriver pxDriver("preprocess");
     auto preprocess_ptr = preprocessPipeline(pxDriver);
     preprocess(preprocess_ptr);
 
     if(pattVector.size() == 1){
-
-        CPUDriver pxDriver("editd");
         auto editd = editdPipeline(pxDriver, pattVector);
         editd(chStream, fsize);
         std::cout << "total matches is " << matchList.size() << std::endl;
@@ -438,10 +430,8 @@ int main(int argc, char *argv[]) {
     else{
         if (Threads == 1) {
             if (EditdIndexPatternKernels) {
-                CPUDriver pxDriver("editd");
                 auto editd_ptr = editdIndexPatternPipeline(pxDriver, pattVector[0].length());
-
-                for(unsigned i=0; i<pattVector.size(); i+=groupSize){
+                for(unsigned i=0; i< pattVector.size(); i+=groupSize){
                     std::string pattern = "";
                     for (int j=0; j<groupSize; j++){
                         pattern += pattVector[i+j];
@@ -450,9 +440,7 @@ int main(int argc, char *argv[]) {
                 }
             }
             else {
-                for(unsigned i=0; i<pattGroups.size(); i++){
-
-                    CPUDriver pxDriver("editd");
+                for(unsigned i=0; i< pattGroups.size(); i++){
                     auto editd = editdPipeline(pxDriver, pattGroups[i]);
                     editd(chStream, fsize);
                 }

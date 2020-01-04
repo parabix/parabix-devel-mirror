@@ -81,8 +81,6 @@ public:
                        Scalar * base,
                        const StreamExpandOptimization = StreamExpandOptimization::None,
                        const unsigned FieldWidth = sizeof(size_t) * 8);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) override;
 private:
@@ -94,8 +92,6 @@ private:
 class FieldDepositKernel final : public MultiBlockKernel {
 public:
     FieldDepositKernel(BuilderRef, StreamSet * mask, StreamSet * input, StreamSet * output, const unsigned fieldWidth = sizeof(size_t) * 8);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
@@ -106,8 +102,6 @@ private:
 class PDEPFieldDepositKernel final : public MultiBlockKernel {
 public:
     PDEPFieldDepositKernel(BuilderRef, StreamSet * mask, StreamSet * expanded, StreamSet * outputs, const unsigned fieldWidth = sizeof(size_t) * 8);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
@@ -145,8 +139,6 @@ private:
 class PDEPkernel final : public MultiBlockKernel {
 public:
     PDEPkernel(BuilderRef b, const unsigned swizzleFactor = 4, std::string name = "PDEP");
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 private:

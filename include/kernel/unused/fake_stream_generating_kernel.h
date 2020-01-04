@@ -12,8 +12,6 @@ namespace kernel {
     public:
         FakeStreamGeneratingKernel(BuilderRef b, StreamSet * refStream, StreamSet * outputStream);
         FakeStreamGeneratingKernel(BuilderRef b, StreamSet * refStream, const StreamSets & outputStreams);
-        bool isCachable() const override { return true; }
-        bool hasSignature() const override { return false; }
     protected:
         void generateDoSegmentMethod(BuilderRef) final;
     };

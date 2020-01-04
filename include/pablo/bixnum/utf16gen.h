@@ -65,8 +65,6 @@ private:
 class UTF16_InitialMask : public pablo::PabloKernel {
 public:
     UTF16_InitialMask(BuilderRef kb, kernel::StreamSet * u16final, kernel::StreamSet * u16initial);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -78,8 +76,6 @@ protected:
 class UTF16_SupplementaryBasis : public pablo::PabloKernel {
 public:
     UTF16_SupplementaryBasis(BuilderRef kb, kernel::StreamSet * u32basis, kernel::StreamSet * u16_SMP_basis);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -93,8 +89,6 @@ public:
     UTF16assembly(BuilderRef kb,
                  kernel::StreamSet * SMPbits4_0, kernel::StreamSet * u16bits15_10, kernel::StreamSet * u16bits9_0, kernel::StreamSet * u16final,
                  kernel::StreamSet * u16basis);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

@@ -24,10 +24,8 @@ public:
     void generateInitializeMethod(BuilderRef b) override;
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
     void generateFinalizeMethod(BuilderRef b) override;
-    bool hasSignature() const override { return false; }
-    bool isCachable() const override { return true; }
 private:
-    Mode mMode;
+    const Mode mMode;
 };
 
 }

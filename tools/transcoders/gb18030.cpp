@@ -71,8 +71,6 @@ static cl::opt<std::string> OutputEncoding("encoding", cl::desc("Output encoding
 class GB_18030_Parser : public pablo::PabloKernel {
 public:
     GB_18030_Parser(BuilderRef kb, StreamSet * basis, StreamSet * GB_marks);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -171,8 +169,6 @@ enum class GB_18030_IndexingKind {Codepoint, UTF16};
 class GB_18030_ExtractionMasks : public pablo::PabloKernel {
 public:
     GB_18030_ExtractionMasks(BuilderRef kb, StreamSet * GB_marks, StreamSet * basis, StreamSet * GB_1, StreamSet * GB_2, StreamSet * GB_3, StreamSet * GB_4, StreamSet * GB_prefix4, StreamSet * error, GB_18030_IndexingKind k = GB_18030_IndexingKind::Codepoint);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:
@@ -245,8 +241,6 @@ public:
     GB_18030_DoubleByteIndex(BuilderRef kb,
                              StreamSet * GB_4byte, StreamSet * byte1_basis, StreamSet * byte2_basis,
                              StreamSet * GB_2byte, StreamSet * gb15_index);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -293,9 +287,7 @@ class GB_18030_InitializeASCII : public pablo::PabloKernel {
 public:
     GB_18030_InitializeASCII(BuilderRef kb,
                              StreamSet * byte1_basis, StreamSet * u16_basis);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-    const unsigned ASCII_Bits = 7;
+    constexpr static unsigned ASCII_Bits = 7;
 protected:
     void generatePabloMethod() override;
 };
@@ -331,8 +323,6 @@ public:
                                    StreamSet * GB_2byte, StreamSet * gb15_index, StreamSet * u16_in,
                                    StreamSet * u16_out,
                                    unsigned rangeBase, unsigned rangeBits);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:
@@ -401,8 +391,6 @@ public:
                            StreamSet * GB_4byte, StreamSet * byte1, StreamSet * nybble1, StreamSet * byte2, StreamSet * nybble2, StreamSet * u16_basis,
                            StreamSet * UTF_out,
                            GB_18030_IndexingKind k = GB_18030_IndexingKind::Codepoint);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 private:

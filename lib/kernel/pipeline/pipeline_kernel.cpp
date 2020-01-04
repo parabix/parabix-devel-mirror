@@ -135,16 +135,6 @@ void PipelineKernel::recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & 
 
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getName
- *
- * The name of the pipeline kernel the list of family names of each owned kernel followed by the description of the
- * relationships between each.
- ** ------------------------------------------------------------------------------------------------------------- */
-const std::string PipelineKernel::getName() const {
-    return mKernelName;
-}
-
 #define JOIN3(X,Y,Z) BOOST_JOIN(X,BOOST_JOIN(Y,Z))
 
 #define REPLACE_INTERNAL_KERNEL_BINDINGS(BindingType) \

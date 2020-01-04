@@ -94,10 +94,13 @@ CPUDriver::CPUDriver(std::string && moduleName)
     if (mEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-    auto cache = ParabixObjectCache::getInstance();
-    if (cache) {
-        mEngine->setObjectCache(cache);
+    if (mObjectCache) {
+        mEngine->setObjectCache(mObjectCache.get());
     }
+    mEngine->DisableSymbolSearching(false);
+    mEngine->DisableLazyCompilation(true);
+    mEngine->DisableGVCompilation(true);
+
     auto triple = mTarget->getTargetTriple().getTriple();
     const DataLayout DL(mTarget->createDataLayout());
     mMainModule->setTargetTriple(triple);
@@ -105,6 +108,8 @@ CPUDriver::CPUDriver(std::string && moduleName)
     mBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
     mBuilder->setDriver(*this);
     mBuilder->setModule(mMainModule);
+
+
 }
 
 Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
@@ -121,18 +126,6 @@ Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, Functi
         report_fatal_error("Cannot link " + name + ": a function with a different signature already exists with that name in " + mod->getName());
     }
     return f;
-}
-
-std::string CPUDriver::getMangledName(std::string s) {
-    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
-    DataLayout DL(mTarget->createDataLayout());
-    std::string MangledName;
-    raw_string_ostream MangledNameStream(MangledName);
-    Mangler::getNameWithPrefix(MangledNameStream, s, DL);
-    return MangledName;
-    #else
-    return s;
-    #endif
 }
 
 inline void CPUDriver::preparePassManager() {
@@ -215,16 +208,15 @@ inline void CPUDriver::preparePassManager() {
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
     preparePassManager();
-    KernelSet uncachedKernels;
-    mUncachedKernel.swap(uncachedKernels);
-    mCachedKernel.reserve(uncachedKernels.size());
-    for (auto & kernel : uncachedKernels) {
+    mCachedKernel.reserve(mUncachedKernel.size());
+    for (auto & kernel : mUncachedKernel) {
         kernel->generateKernel(mBuilder);
         Module * const module = kernel->getModule(); assert (module);
         module->setTargetTriple(mMainModule->getTargetTriple());
         mPassManager->run(*module);
         mCachedKernel.emplace_back(kernel.release());
     }
+    mUncachedKernel.clear();
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
     llvm::reportAndResetTimings();
     #endif
@@ -233,21 +225,17 @@ void CPUDriver::generateUncachedKernels() {
 
 void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
 
-    using ModuleSet = std::vector<Module *>;
+    using ModuleSet = llvm::SmallVector<Module *, 32>;
 
-    // write/declare the "main" method
     ModuleSet O1;
     ModuleSet O3;
 
-    Module * const mainModule = new Module("main", *mContext);
-    mBuilder->setModule(mainModule);
     for (const auto & kernel : mCachedKernel) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
         }
-        // release ownership of the module
         Module * const m = kernel->getModule();
-        kernel->setModule(nullptr);
+        assert ("cached kernel has no module?" && m);
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InfrequentlyUsed))) {
             O1.emplace_back(m);
         } else {
@@ -255,39 +243,68 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         }
     }
 
+    // CHECK: it appears as long as the main module is added to to the engine,
+    // we can simply compile the remaining ones. This, however, does cause an
+    // assertion failure within LLVM in debug builds as LLVM expects every
+    // module to be transferred to it prior to calling finalizeObject.
+
+    // #define ADD_ALL_MODULES_FOR_LLVM_DEBUG_BUILD
+
+    auto addModules = [&](const ModuleSet & S, const CodeGenOpt::Level level) {
+        if (S.empty()) return;
+        mEngine->getTargetMachine()->setOptLevel(level);
+        #ifdef ADD_ALL_MODULES_FOR_LLVM_DEBUG_BUILD
+        for (Module * M : S) {
+            mEngine->addModule(std::unique_ptr<Module>(M));
+        }
+        mEngine->finalizeObject();
+        #else
+        for (Module * M : S) {
+            mEngine->generateCodeForModule(M);
+        }
+        #endif
+    };
+
+    auto removeModules = [&](const ModuleSet & S) {
+        #ifdef ADD_ALL_MODULES_FOR_LLVM_DEBUG_BUILD
+        for (Module * M : S) {
+            mEngine->removeModule(M);
+        }
+        #endif
+    };
+
+    // compile any uncompiled kernels
+    addModules(O3, CodeGenOpt::Aggressive);
+    addModules(O1, CodeGenOpt::Less);
+
+    // write/declare the "main" method
+    auto mainModule = make_unique<Module>("main", *mContext);
+    mainModule->setTargetTriple(mMainModule->getTargetTriple());
+    mainModule->setDataLayout(mMainModule->getDataLayout());
+    mBuilder->setModule(mainModule.get());
+    pipeline->addKernelDeclarations(mBuilder);
     const auto method = pipeline->externallyInitialized() ? Kernel::AddInternal : Kernel::DeclareExternal;
     Function * const main = pipeline->addOrDeclareMainFunction(mBuilder, method);
+    mBuilder->setModule(mMainModule);
 
+    // NOTE: the pipeline kernel is destructed after calling clear unless this driver preserves kernels!
     if (getPreservesKernels()) {
         for (auto & kernel : mCachedKernel) {
             mPreservedKernel.emplace_back(kernel.release());
         }
+    } else {
+        mPreservedKernel.clear();
     }
-    // NOTE: pipeline is destroyed after calling clear unless this driver preserves kernels!
     mCachedKernel.clear();
 
-    if (!O1.empty()) {
-        mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
-        for (const auto & m : O1) {
-            mEngine->addModule(std::unique_ptr<Module>(m));
-        }
-        mEngine->finalizeObject();
-    }
-    if (!O3.empty()) {
-        mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Aggressive);
-        for (const auto & m : O3) {
-            mEngine->addModule(std::unique_ptr<Module>(m));
-        }
-        mEngine->finalizeObject();
-    }
-    // compile any uncompiled kernel/method
-    // write/declare the "main" method
-    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
-    mEngine->addModule(std::unique_ptr<Module>(mainModule));
-    mEngine->finalizeObject();
     // return the compiled main method
-    mBuilder->setModule(mMainModule);
-    return mEngine->getPointerToFunction(main);
+    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
+    mEngine->addModule(std::move(mainModule));
+    mEngine->finalizeObject();
+    auto mainFnPtr = mEngine->getFunctionAddress(main->getName());
+    removeModules(O3);
+    removeModules(O1);
+    return reinterpret_cast<void *>(mainFnPtr);
 }
 
 bool CPUDriver::hasExternalFunction(llvm::StringRef functionName) const {

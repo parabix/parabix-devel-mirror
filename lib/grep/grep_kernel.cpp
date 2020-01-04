@@ -214,49 +214,57 @@ Bindings GrepKernelOptions::scalarOutputBindings() {
     return {};
 }
 
-std::string GrepKernelOptions::getSignature() {
-    if (mSignature == "") {
-        if (mSource) {
-            mSignature = std::to_string(mSource->getNumElements()) + "x" + std::to_string(mSource->getFieldWidth());
-            if (mSource->getFieldWidth() == 8) {
-                mSignature += ":" + std::to_string(grep::ByteCClimit);
-            }
-            mSignature += "/" + mCodeUnitAlphabet->getName();
-        }
-        if (mEncodingTransformer) {
-            mSignature += ":" + mEncodingTransformer->getIndexingAlphabet()->getName();
-        }
-        for (const auto & e : mExternals) {
-            mSignature += "_" + e.getName();
-        }
-        for (const auto & a: mAlphabets) {
-            mSignature += "_" + a.first->getName();
-        }
-        if (mCombiningType == GrepCombiningType::Exclude) {
-            mSignature += "&~";
-        } else if (mCombiningType == GrepCombiningType::Include) {
-            mSignature += "|=";
-        }
-        if (mPrefixRE) {
-            mSignature += ":" + Printer_RE::PrintRE(mPrefixRE);
-        }
-        mSignature += ":" + Printer_RE::PrintRE(mRE);
-    }
-    return mSignature;
+GrepKernelOptions::GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet, re::EncodingTransformer * encodingTransformer)
+: mCodeUnitAlphabet(codeUnitAlphabet)
+, mEncodingTransformer(encodingTransformer) {
+
 }
 
-ICGrepKernel::ICGrepKernel(BuilderRef b, std::unique_ptr<GrepKernelOptions> options)
-: PabloKernel(b, AnnotateWithREflags("ic") + getStringHash(options->getSignature()),
+std::string GrepKernelOptions::makeSignature() {
+    std::string tmp;
+    raw_string_ostream sig(tmp);
+    if (mSource) {
+        sig << mSource->getNumElements() << 'x' << mSource->getFieldWidth();
+        if (mSource->getFieldWidth() == 8) {
+            sig << ':' << grep::ByteCClimit;
+        }
+        sig << '/' << mCodeUnitAlphabet->getName();
+    }
+    if (mEncodingTransformer) {
+        sig << ':' << mEncodingTransformer->getIndexingAlphabet()->getName();
+    }
+    for (const auto & e : mExternals) {
+        sig << '_' << e.getName();
+    }
+    for (const auto & a: mAlphabets) {
+        sig << '_' << a.first->getName();
+    }
+    if (mCombiningType == GrepCombiningType::Exclude) {
+        sig << "&~";
+    } else if (mCombiningType == GrepCombiningType::Include) {
+        sig << "|=";
+    }
+    if (mPrefixRE) {
+        sig << ':' << Printer_RE::PrintRE(mPrefixRE);
+    }
+    sig << ':' << Printer_RE::PrintRE(mRE);
+    sig.flush();
+    return tmp;
+}
+
+ICGrepKernel::ICGrepKernel(BuilderRef b, std::unique_ptr<GrepKernelOptions> && options)
+: PabloKernel(b, AnnotateWithREflags("ic") + getStringHash(options->makeSignature()),
 options->streamSetInputBindings(),
 options->streamSetOutputBindings(),
 options->scalarInputBindings(),
 options->scalarOutputBindings()),
-mOptions(std::move(options)) {
-    addAttribute(InfrequentlyUsed());
+mOptions(std::move(options)),
+mSignature(mOptions->makeSignature()) {
+    addAttribute(InfrequentlyUsed());    
 }
 
-std::string ICGrepKernel::makeSignature(BuilderRef) const {
-    return mOptions->getSignature();
+StringRef ICGrepKernel::getSignature() const {
+    return mSignature;
 }
 
 void ICGrepKernel::generatePabloMethod() {
@@ -271,7 +279,7 @@ void ICGrepKernel::generatePabloMethod() {
         auto basis = getInputStreamSet(alpha->getName() + "_basis");
         re_compiler.addAlphabet(alpha, basis);
     }
-    if ((mOptions->mEncodingTransformer)) {
+    if (mOptions->mEncodingTransformer) {
         PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
         re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
     }

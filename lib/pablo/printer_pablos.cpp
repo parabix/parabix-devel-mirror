@@ -265,19 +265,19 @@ static void PrintExpression(PabloAST const * expr, raw_ostream & out) noexcept {
 }
 
 
-static std::string printKernelNameAnnotations(std::string name, raw_ostream & out) {
-    size_t pos = std::min(name.find('+'), name.find('-'));
-    if (pos == std::string::npos) {
+static const StringRef printKernelNameAnnotations(StringRef name, raw_ostream & out) {
+    auto pos = name.find_first_of("+-");
+    if (pos == StringRef::npos) {
         return name;
     }
     out << "#\n" << "# Pablo Debug Annotations:\n";
-    std::string kernelName = name.substr(0, pos);
-    while (pos != std::string::npos) {
+    auto kernelName = name.substr(0, pos);
+    while (pos != StringRef::npos) {
         char a = name[pos];
-        name.erase(0, pos + 1);
-        pos = std::min(name.find('+'), name.find('-'));
-        std::string annotation = name.substr(0, pos);
+        auto pos2 = name.find_first_of("+-");
+        auto annotation = name.substr(pos + 1, pos2);
         out << "# " << a << annotation << "\n";
+        pos = pos2;
     }
     out << "#\n";
     return kernelName;
@@ -285,7 +285,7 @@ static std::string printKernelNameAnnotations(std::string name, raw_ostream & ou
 
 
 void PabloPrinter::print(PabloKernel const * kernel, raw_ostream & out) noexcept {
-    auto kernelName = printKernelNameAnnotations(kernel->getName().c_str(), out);
+    auto kernelName = printKernelNameAnnotations(kernel->getName(), out);
     out << "kernel " << kernelName << " :: ";
     out << "[";
     for (size_t i = 0; i < kernel->getInputStreamSetBindings().size(); ++i) {

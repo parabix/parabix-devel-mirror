@@ -22,8 +22,6 @@ namespace kernel {
 class SwizzledMultiplePDEPkernel final : public MultiBlockKernel {
 public:
     SwizzledMultiplePDEPkernel(BuilderRef b, const unsigned swizzleFactor = 4, const unsigned numberOfStreamSet = 1, std::string name = "SwizzledMultiplePDEP");
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 private:

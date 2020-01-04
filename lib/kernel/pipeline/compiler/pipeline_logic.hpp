@@ -38,8 +38,11 @@ inline void destroyStateObject(BuilderRef b, Value * ptr) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateImplicitKernels(BuilderRef b) {
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
-        if (LLVM_LIKELY(kernel->isGenerated())) continue;
+        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));        
+        if (LLVM_LIKELY(kernel->isGenerated())) {
+            kernel->ensureLoaded();
+            continue;
+        }
         if (kernel->getInitializeFunction(b, false)) {
             kernel->loadCachedKernel(b);
         } else {
@@ -225,7 +228,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         }
     }
 
-    allocateOwnedBuffers(b);    
+    allocateOwnedBuffers(b);
     initializeBufferExpansionHistory(b);
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
@@ -365,6 +368,16 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief concat
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StringRef concat(StringRef A, StringRef B, SmallVector<char, 256> & tmp) {
+    Twine C = A + B;
+    tmp.clear();
+    C.toVector(tmp);
+    return StringRef(tmp.data(), tmp.size());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateMultiThreadKernelMethod
  *
  * Given a computation expressed as a logical pipeline of K kernels k0, k_1, ...k_(K-1)
@@ -380,8 +393,10 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     ConstantInt * const ZERO = b->getInt32(0);
     Constant * const nullVoidPtrVal = ConstantPointerNull::getNullValue(voidPtrTy);
 
+    SmallVector<char, 256> tmp;
+    const auto threadName = concat(mTarget->getName(), "_DoSegmentThread", tmp);
+
     FunctionType * const threadFuncType = FunctionType::get(b->getVoidTy(), {voidPtrTy}, false);
-    const auto threadName = mTarget->getName() + "_DoSegmentThread";
     Function * const threadFunc = Function::Create(threadFuncType, Function::InternalLinkage, threadName, m);
     threadFunc->setCallingConv(CallingConv::C);
     auto threadStructArg = threadFunc->arg_begin();
@@ -456,7 +471,12 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     // MAKE PIPELINE THREAD
     // -------------------------------------------------------------------------------------------------------------------------
     b->SetInsertPoint(BasicBlock::Create(m->getContext(), "entry", threadFunc));
-    Value * const threadStruct = b->CreatePointerCast(threadStructArg, processState->getType());
+    PointerType * const threadStructTy = cast<PointerType>(processState->getType());
+    #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(4, 0, 0)
+    Value * const threadStruct = b->CreatePointerCast(&*threadStructArg, threadStructTy);
+    #else
+    Value * const threadStruct = b->CreatePointerCast(threadStructArg, threadStructTy);
+    #endif
     assert (isFromCurrentFunction(b, threadStruct));
     readThreadState(b, threadStruct);
     assert (isFromCurrentFunction(b, getHandle()));
@@ -464,7 +484,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
 
     // generate the pipeline logic for this thread
     start(b);
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {        
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i);
         startCycleCounter(b, CycleCounter::INITIAL);
         executeKernel(b);
@@ -504,7 +524,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
         Value * const segNo = b->getScalarField(makeKernelName(i) + LOGICAL_SEGMENT_SUFFIX);
         mSegNo = b->CreateUMax(mSegNo, segNo);
-    }    
+    }
     loadInternalStreamSetHandles(b);
     printOptionalCycleCounter(b);
     printOptionalBlockingIOStatistics(b);
@@ -514,7 +534,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     printProducedItemCountDeltas(b);
     printUnconsumedItemCounts(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        setActiveKernel(b, i);        
+        setActiveKernel(b, i);
         SmallVector<Value *, 1> params;
         if (LLVM_LIKELY(mKernel->isStateful())) {
             params.push_back(mKernelHandle);

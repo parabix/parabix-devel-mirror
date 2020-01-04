@@ -54,7 +54,7 @@ Scalar * BaseDriver::CreateConstant(not_null<llvm::Constant *> value) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void BaseDriver::addKernel(not_null<Kernel *> kernel) {
 
-    if (LLVM_UNLIKELY(kernel->isGenerated() || kernel->getModule())) {
+    if (LLVM_UNLIKELY(kernel->isGenerated())) {
         return;
     }
 
@@ -81,15 +81,25 @@ void BaseDriver::addKernel(not_null<Kernel *> kernel) {
         }
     }
 
-    // If the pipeline contained a single kernel, the pipeline builder will return the
-    // original kernel. However, the module for that kernel is already owned by the JIT
-    // engine so we avoid declaring it as cached or uncached.
-    if (LLVM_LIKELY(ParabixObjectCache::checkForCachedKernel(mBuilder, kernel))) {
-        assert ("cached kernel does not contain a module?" && kernel->getModule());
-        mCachedKernel.emplace_back(kernel.get());
+    if (LLVM_LIKELY(mObjectCache.get())) {
+        switch (mObjectCache->loadCachedObjectFile(mBuilder, kernel)) {
+            case CacheObjectResult::CACHED:
+                mCachedKernel.emplace_back(kernel.get());
+                break;
+            case CacheObjectResult::COMPILED:
+                mCompiledKernel.emplace_back(kernel.get());
+                break;
+            case CacheObjectResult::UNCACHED:
+                mUncachedKernel.emplace_back(kernel.get());
+                break;
+        }
+        assert ("kernel does not contain a module?" && kernel->getModule());
     } else {
+        kernel->makeModule(mBuilder);
         mUncachedKernel.emplace_back(kernel.get());
     }
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -98,8 +108,11 @@ void BaseDriver::addKernel(not_null<Kernel *> kernel) {
 BaseDriver::BaseDriver(std::string && moduleName)
 : mContext(new llvm::LLVMContext())
 , mMainModule(new llvm::Module(moduleName, *mContext))
-, mBuilder(nullptr) {
-    ParabixObjectCache::initializeCacheSystems();
+, mBuilder(nullptr)
+, mObjectCache(nullptr) {
+    if (LLVM_UNLIKELY(codegen::EnableObjectCache)) {
+        mObjectCache.reset(new ParabixObjectCache());
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

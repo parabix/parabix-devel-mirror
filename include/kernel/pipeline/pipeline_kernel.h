@@ -50,10 +50,6 @@ public:
 
     using CallBindings = std::vector<CallBinding>;
 
-    const std::string getName() const final;
-
-    bool isCachable() const final { return true; }
-
     bool hasSignature() const final { return true; }
 
     bool externallyInitialized() const;
@@ -66,7 +62,7 @@ public:
 
     void setOutputScalarAt(const unsigned i, Scalar * const value) final;
 
-    std::string makeSignature(BuilderRef) const final {
+    llvm::StringRef getSignature() const final {
         return mSignature;
     }
 

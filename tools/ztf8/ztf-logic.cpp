@@ -22,7 +22,7 @@ using namespace pablo;
 using namespace kernel;
 using namespace llvm;
 
-unsigned EncodingInfo::getLengthGroupNo(unsigned lgth) {
+unsigned EncodingInfo::getLengthGroupNo(unsigned lgth) const {
     for (unsigned i = 0; i < byLength.size(); i++) {
         if ((byLength[i].lo <= lgth)  && (byLength[i].hi >= lgth)) {
             return i;
@@ -31,7 +31,7 @@ unsigned EncodingInfo::getLengthGroupNo(unsigned lgth) {
     llvm_unreachable("failed to locate length group info");
 }
 
-unsigned EncodingInfo::maxSymbolLength() {
+unsigned EncodingInfo::maxSymbolLength() const {
     unsigned maxSoFar = 0;
     for (unsigned i = 0; i < byLength.size(); i++) {
         if (byLength[i].hi >=  maxSoFar) {
@@ -41,7 +41,7 @@ unsigned EncodingInfo::maxSymbolLength() {
     return maxSoFar;
 }
 
-unsigned EncodingInfo::maxEncodingBytes() {
+unsigned EncodingInfo::maxEncodingBytes() const {
     unsigned enc_bytes = 0;
     for (auto g : byLength) {
         if (g.encoding_bytes > enc_bytes) enc_bytes = g.encoding_bytes;
@@ -49,7 +49,7 @@ unsigned EncodingInfo::maxEncodingBytes() {
     return enc_bytes;
 }
 
-std::string EncodingInfo::uniqueSuffix() {
+std::string EncodingInfo::uniqueSuffix() const {
     std::stringstream s;
     for (auto g : byLength) {
         s << "_" << g.lo << "_" << g.hi << ":" << g.encoding_bytes;
@@ -59,7 +59,7 @@ std::string EncodingInfo::uniqueSuffix() {
     return s.str();
 }
 
-unsigned EncodingInfo::prefixLengthOffset(unsigned lgth) {
+unsigned EncodingInfo::prefixLengthOffset(unsigned lgth) const {
     unsigned groupNo = getLengthGroupNo(lgth);
     auto g = byLength[groupNo];
     unsigned suffix_bits_avail = (g.encoding_bytes - 1) * 7;

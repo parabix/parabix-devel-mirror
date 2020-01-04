@@ -136,7 +136,7 @@ void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
         size_t maxLength = 0;
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
-            maxLength = std::max(maxLength, kernel->getName().length());
+            maxLength = std::max(maxLength, kernel->getName().size());
         }
         maxLength += 4;
 
@@ -353,7 +353,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
-            maxKernelLength = std::max(maxKernelLength, kernel->getName().length());
+            maxKernelLength = std::max(maxKernelLength, kernel->getName().size());
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const BufferRateData & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
@@ -805,7 +805,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         size_t maxBindingLength = 0;
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
-            maxKernelLength = std::max(maxKernelLength, kernel->getName().length());
+            maxKernelLength = std::max(maxKernelLength, kernel->getName().size());
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const BufferRateData & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;

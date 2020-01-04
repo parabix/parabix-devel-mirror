@@ -66,8 +66,6 @@ private:
 class UTF8_DepositMasks : public pablo::PabloKernel {
 public:
     UTF8_DepositMasks(BuilderRef kb, kernel::StreamSet * u8final, kernel::StreamSet * u8initial, kernel::StreamSet * u8mask12_17, kernel::StreamSet * u8mask6_11);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -82,8 +80,6 @@ public:
                  kernel::StreamSet * deposit18_20, kernel::StreamSet * deposit12_17, kernel::StreamSet * deposit6_11, kernel::StreamSet * deposit0_5,
                  kernel::StreamSet * u8initial, kernel::StreamSet * u8final, kernel::StreamSet * u8mask6_11, kernel::StreamSet * u8mask12_17,
                  kernel::StreamSet * u8basis);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

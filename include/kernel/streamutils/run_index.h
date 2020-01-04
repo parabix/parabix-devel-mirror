@@ -26,8 +26,6 @@ class RunIndex : public pablo::PabloKernel {
 public:
     RunIndex(BuilderRef b,
                StreamSet * const runMarks, StreamSet * runIndex, StreamSet * overflow = nullptr, bool invert = false);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 private:
     unsigned mIndexCount;

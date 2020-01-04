@@ -105,12 +105,10 @@ void UnixLinesKernelBuilder::generatePabloMethod() {
 class LineFeedKernelBuilder final : public pablo::PabloKernel {
 public:
     LineFeedKernelBuilder(BuilderRef b, StreamSet * Basis, StreamSet * LineFeedStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
-    unsigned mNumOfStreams;
-    unsigned mStreamFieldWidth;
+    const unsigned mNumOfStreams;
+    const unsigned mStreamFieldWidth;
 };
 
 LineFeedKernelBuilder::LineFeedKernelBuilder(BuilderRef b, StreamSet * Basis, StreamSet * LineFeedStream)
@@ -148,12 +146,10 @@ public:
                               UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
                               NullCharMode nullMode = NullCharMode::Data,
                               Scalar * signalNullObject = nullptr);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
-    UnterminatedLineAtEOF mEOFmode;
-    NullCharMode mNullMode;
+    const UnterminatedLineAtEOF mEOFmode;
+    const NullCharMode mNullMode;
 };
 
 UnicodeLinesKernelBuilder::UnicodeLinesKernelBuilder(BuilderRef b,
