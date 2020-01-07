@@ -58,7 +58,7 @@ public:
 
     using InitArgTypes = llvm::SmallVector<llvm::Type *, 32>;
 
-    using ParamMap = llvm::DenseMap<Scalar *, llvm::Value *>;
+    using ParamMap = llvm::DenseMap<const Scalar *, llvm::Value *>;
 
     struct LinkedFunction {
         const std::string  Name;
@@ -358,7 +358,7 @@ public:
 
     void makeModule(BuilderRef b);
 
-    void ensureLoaded() const;
+    void ensureLoaded();
 
     void generateKernel(BuilderRef b);
 
@@ -399,7 +399,7 @@ protected:
 
 public:
 
-    llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method);
+    llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) const;
 
 protected:
 
@@ -413,11 +413,11 @@ protected:
 
     llvm::Value * createInstance(BuilderRef b) const;
 
-    void initializeInstance(BuilderRef b, llvm::ArrayRef<llvm::Value *> args);
+    void initializeInstance(BuilderRef b, llvm::ArrayRef<llvm::Value *> args) const;
 
     llvm::Value * finalizeInstance(BuilderRef b, llvm::Value * const handle) const;
 
-    llvm::Value * initializeThreadLocalInstance(BuilderRef b, llvm::Value * handle);
+    llvm::Value * initializeThreadLocalInstance(BuilderRef b, llvm::Value * handle) const;
 
     void finalizeThreadLocalInstance(BuilderRef b, llvm::ArrayRef<llvm::Value *> args) const;
 
@@ -473,8 +473,8 @@ protected:
     const TypeId                mTypeId;
     unsigned                    mStride;
     llvm::Module *              mModule = nullptr;
-    mutable llvm::StructType *  mSharedStateType = nullptr;
-    mutable llvm::StructType *  mThreadLocalStateType = nullptr;
+    llvm::StructType *          mSharedStateType = nullptr;
+    llvm::StructType *          mThreadLocalStateType = nullptr;
     bool                        mGenerated = false;
 
     Bindings                    mInputStreamSets;

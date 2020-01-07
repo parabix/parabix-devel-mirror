@@ -243,27 +243,40 @@ char * preprocess(preprocessFunctionType preprocess) {
 }
 
 
-std::string createName(const std::vector<std::string> & patterns) {
-    std::string name = "";
-    for(unsigned i=0; i<patterns.size(); i++)
-        name += patterns[i];
-    return name + std::to_string(editDistance);
+LLVM_READNONE std::string createName(const std::vector<std::string> & patterns) {
+    std::string name;
+    raw_string_ostream out(name);
+    for(const auto & pat : patterns) {
+        out << pat;
+    }
+    out << std::to_string(editDistance);
+    out.flush();
+    return name;
 }
 
 class PatternKernel final : public pablo::PabloKernel {
 public:
     PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
+
+    StringRef getSignature() const {
+        return mSignature;
+    }
+    bool hasSignature() const override { return true; }
+    bool hasFamilyName() const override { return true; }
+
 protected:
     void generatePabloMethod() override;
 private:
     const std::vector<std::string> & mPatterns;
+    const std::string mSignature;
 };
 
 PatternKernel::PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E)
-: PabloKernel(b, getStringHash(createName(patterns)),
+: PabloKernel(b, "Editd_pattern_" + getStringHash(createName(patterns)),
 {{"pat", pat}},
 {{"E", E}})
-, mPatterns(patterns) {
+, mPatterns(patterns)
+, mSignature(createName(patterns)) {
     addAttribute(InfrequentlyUsed());
 }
 
@@ -362,7 +375,7 @@ editdIndexFunctionType editdIndexPatternPipeline(CPUDriver & pxDriver, unsigned 
     StreamSet * const ChStream = P->CreateStreamSet(4);
     P->CreateKernelCall<MemorySourceKernel>(inputStream, fileSize, ChStream);
     StreamSet * const MatchResults = P->CreateStreamSet(editDistance + 1);
-    P->CreateKernelCall<editdCPUKernel>(patternLen, groupSize, pattStream, ChStream, MatchResults);
+    P->CreateKernelCall<editdCPUKernel>(editDistance, patternLen, groupSize, pattStream, ChStream, MatchResults);
     Kernel * const scan = P->CreateKernelCall<editdScanKernel>(MatchResults);
     scan->link("wrapped_report_pos", wrapped_report_pos);
     return reinterpret_cast<editdIndexFunctionType>(P->compile());

@@ -186,8 +186,10 @@ inline StringRef concat(StringRef A, StringRef B, SmallVector<char, 256> & tmp) 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief ensureLoaded
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::ensureLoaded() const {
-    if (LLVM_LIKELY(mGenerated)) return;
+void Kernel::ensureLoaded() {
+    if (LLVM_LIKELY(mGenerated)) {
+        return;
+    }
     SmallVector<char, 256> tmp;
     mSharedStateType = nullIfEmpty(mModule->getTypeByName(concat(getName(), SHARED_SUFFIX, tmp)));
     mThreadLocalStateType = nullIfEmpty(mModule->getTypeByName(concat(getName(), THREAD_LOCAL_SUFFIX, tmp)));
@@ -670,15 +672,9 @@ Function * Kernel::addFinalizeDeclaration(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addOrDeclareMainFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) {
+Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) const {
 
-    unsigned suppliedArgs = 1;
-    if (LLVM_LIKELY(isStateful())) {
-        ++suppliedArgs;
-    }
-    if (LLVM_UNLIKELY(hasThreadLocal())) {
-        ++suppliedArgs;
-    }
+    const auto suppliedArgs = 1U + (isStateful() ? 1U : 0U) + (hasThreadLocal() ? 1U : 0U);
 
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(b, false); assert (doSegment);
@@ -737,34 +733,35 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         return v;
     };
 
+    SmallVector<Value *, 16> segmentArgs(doSegment->arg_size());
+    segmentArgs[suppliedArgs - 1] = b->getSize(1); // numOfStrides
+    for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
+        segmentArgs[suppliedArgs + i] = nextArg();
+    }
+
     Value * sharedHandle = nullptr;
     BEGIN_SCOPED_REGION
     ParamMap paramMap;
     for (const auto & input : getInputScalarBindings()) {
-        paramMap.insert(std::make_pair(cast<Scalar>(input.getRelationship()), nextArg()));
+        const Scalar * const scalar = cast<Scalar>(input.getRelationship());
+        Value * const value = nextArg();
+        paramMap.insert(std::make_pair(scalar, value));
     }
-    assert (arg == main->arg_end());
     InitArgs args;
     sharedHandle = constructFamilyKernels(b, args, paramMap);
     END_SCOPED_REGION
-
     assert (isStateful() || sharedHandle == nullptr);
 
-    SmallVector<Value *, 32> segmentArgs;
-    segmentArgs.reserve(numOfDoSegArgs + suppliedArgs);
     if (LLVM_LIKELY(isStateful())) {
-        segmentArgs.push_back(sharedHandle);
+        assert ((hasThreadLocal() && suppliedArgs == 3) || (!hasThreadLocal() && suppliedArgs == 2));
+        segmentArgs[0] = sharedHandle;
     }
     Value * threadLocalHandle = nullptr;
     if (LLVM_UNLIKELY(hasThreadLocal())) {
         threadLocalHandle = initializeThreadLocalInstance(b, sharedHandle);
-        segmentArgs.push_back(threadLocalHandle);
+        assert ((isStateful() && suppliedArgs == 3) || (!isStateful() && suppliedArgs == 2));
+        segmentArgs[suppliedArgs - 2] = threadLocalHandle;
     }
-    segmentArgs.push_back(b->getSize(1)); // numOfStrides
-    for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
-        segmentArgs.push_back(nextArg());
-    }
-    assert (segmentArgs.size() == doSegment->arg_size());
 
     #ifdef NDEBUG
     const bool ea = true;
@@ -844,7 +841,7 @@ Value * Kernel::createInstance(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeInstance(BuilderRef b, llvm::ArrayRef<Value *> args) {
+void Kernel::initializeInstance(BuilderRef b, llvm::ArrayRef<Value *> args) const {
     assert (args.size() == getNumOfScalarInputs() + 1);
     assert (args[0] && "cannot initialize before creation");
     assert (args[0]->getType()->getPointerElementType() == getSharedStateType());
@@ -855,7 +852,7 @@ void Kernel::initializeInstance(BuilderRef b, llvm::ArrayRef<Value *> args) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeThreadLocalInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle) {
+Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle) const {
     Value * instance = nullptr;
     if (hasThreadLocal()) {
         Function * const init = getInitializeThreadLocalFunction(b);
@@ -909,8 +906,6 @@ Value * Kernel::constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const 
         }
         hostArgs.push_back(b->CreatePointerCast(ptr, voidPtrTy));
     };
-
-    ensureLoaded();
 
     Value * handle = nullptr;
     BEGIN_SCOPED_REGION
