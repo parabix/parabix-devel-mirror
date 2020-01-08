@@ -20,9 +20,7 @@ enable_testing()
 
 ###   Build Options   ###
 
-option(ENABLE_MULTIPLEXING "Compiling the Multiplexing Module")
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
-option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 
 # Framework build style: default is collection of static libraries
@@ -70,23 +68,20 @@ set(Boost_USE_STATIC_LIBS ${USE_STATIC_LIBS})
 set(Boost_USE_MULTITHREADED OFF)
 set(Boost_USE_STATIC_RUNTIME OFF)
 find_package(Boost 1.61 REQUIRED COMPONENTS system filesystem iostreams)
-message(STATUS "Found Boost_LIBRARY_DIR: ${Boost_LIBRARY_DIR}")
+message(STATUS "Found Boost_LIBRARY_DIRS: ${Boost_LIBRARY_DIRS}")
 include_directories("${Boost_INCLUDE_DIRS}")
-link_directories(${Boost_LIBRARY_DIR})
+link_directories(${Boost_LIBRARY_DIRS})
 
 
 
 ###   Import Dependency: Z3   ###
 
-if(ENABLE_MULTIPLEXING)
-    message(STATUS "Enabling Multiplexing")
-    find_package(Z3 REQUIRED)
-    include_directories(${Z3_INCLUDE_DIRS})
-    # target_link_libraries(PabloADT ${Z3_LIBRARIES})
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_MULTIPLEXING")
+find_package(Z3)
+if (Z3_FOUND)
+include_directories(${Z3_INCLUDE_DIRS})
+message(STATUS "Found Z3_LIBRARIES: ${Z3_LIBRARIES}")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_Z3")
 endif()
-
-
 
 ###   Project Configuration   ###
 
@@ -105,9 +100,6 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/bin)
 
 # Parabix Object Cache default
 set(PARABIX_OBJECT_CACHE "$ENV{HOME}/.cache/parabix/")
-if (NOT EXISTS(${PARABIX_OBJECT_CACHE}))
-    file(MAKE_DIRECTORY ${PARABIX_OBJECT_CACHE})
-endif()
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPARABIX_OBJECT_CACHE='\"${PARABIX_OBJECT_CACHE}\"'")
 
 # Use @rpath for dylibs on macOS
@@ -231,6 +223,10 @@ function(parabix_add_module)
         endif()
         parabix_set_library_name(${ARG_NAME})
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
+        # TODO: not all modules will require Z3; make a boolean argument for this
+        if (Z3_FOUND)
+            target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+        endif()
     endif()
 endfunction(parabix_add_module)
 

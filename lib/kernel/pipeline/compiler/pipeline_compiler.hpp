@@ -25,6 +25,9 @@
 #include <util/small_flat_set.hpp>
 #include <algorithm>
 #include <queue>
+#ifdef HAS_Z3
+#include <z3.h>
+#endif
 
 // #define PRINT_DEBUG_MESSAGES
 
@@ -56,7 +59,6 @@ using BindingRef = RefWrapper<Binding>;
 using PortType = Kernel::PortType;
 using StreamSetPort = Kernel::StreamSetPort;
 using AttrId = Attribute::KindId;
-using Rational = KernelBuilder::Rational;
 using Rational = ProcessingRate::Rational;
 using RateId = ProcessingRate::KindId;
 using Scalars = PipelineKernel::Scalars;
@@ -66,6 +68,8 @@ using CallRef = RefWrapper<CallBinding>;
 using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
+
+class Expr;
 
 #warning create a preallocation phase for kernels to add capacity suggestions
 
@@ -485,8 +489,12 @@ using PortEvalVec = Vec<unsigned, 32>;
 
 using ArgVec = Vec<Value *, 64>;
 
+using Allocator = SlabAllocator<>;
+
 template <typename T>
 using OwningVec = std::vector<std::unique_ptr<T>>;
+
+
 
 class PipelineCompiler final : public KernelCompiler {
 public:
@@ -791,6 +799,17 @@ public:
     void debugClose(BuilderRef b);
     #endif
 
+// rate calculation math functions
+
+    Expr * constant(const Rational & value);
+    Expr * variable();
+
+    Expr * add(const Expr * X, const Expr * Y);
+    Expr * subtract(const Expr * X, const Expr * Y);
+    Expr * multiply(const Expr * X, const Expr * Y);
+    Expr * min(const Expr * X, const Expr * Y);
+    Expr * max(const Expr * X, const Expr * Y);
+
 // misc. functions
 
     Value * getFamilyFunctionFromKernelState(BuilderRef b, Type * const type, const std::string &suffix) const;
@@ -1007,6 +1026,11 @@ protected:
     OwningVec<StreamSetBuffer>                  mInternalBuffers;
     OwningVec<Kernel>                           mInternalKernels;
     OwningVec<Binding>                          mInternalBindings;
+    Allocator                                   mAllocator;
+    #ifdef HAS_Z3
+    Z3_context                                  mZ3Context;
+    Z3_solver                                   mZ3Solver;
+    #endif
 };
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.

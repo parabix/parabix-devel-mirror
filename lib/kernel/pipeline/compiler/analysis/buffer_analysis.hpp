@@ -7,6 +7,8 @@
 #include <tuple>
 #include <llvm/Support/ErrorHandling.h>
 
+#include "rate_math.hpp"
+
 // TODO: any buffers that exist only to satisfy the output dependencies are unnecessary.
 // We could prune away kernels if none of their outputs are needed but we'd want some
 // form of "fake" buffer for output streams in which only some are unnecessary. Making a
@@ -411,6 +413,322 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
     }
 }
 
+#if 1
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifySymbolicRates
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
+
+    // Identify the symbolic rates of each kernel, where Fixed rates inherit the
+    // symbolic rate of the kernel, popcount/partial sum/relative rates share the
+    // same rate when referencing the same source, and bounded/unknown rates are
+    // given a new rate. When a kernel has inputs whose rate differ, the kernel is
+    // assigned a new rate otherwise the kernel inherits the rate of its inputs.
+
+    using RateMap = flat_map<unsigned, Expr *>;
+
+    using SymbolicRateMinGraph = adjacency_list<hash_setS, vecS, directedS, unsigned>;
+    using ReferenceGraph = adjacency_list<vecS, vecS, bidirectionalS>;
+
+    using CommonPartialSumRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
+//    using CommonDelayedRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
+    using CommonFixedRateChangeMap = flat_map<std::tuple<Rational, unsigned, unsigned>, unsigned>;
+
+    CommonPartialSumRateMap P;
+    CommonFixedRateChangeMap F;
+//    CommonDelayedRateMap D;
+    SymbolicRateMinGraph M;
+
+    flat_set<unsigned> rates;
+
+    const auto first = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
+    const auto last = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
+
+    for (auto kernel = first; kernel <= last; ++kernel) {
+
+        auto rateIsBoundedBy = [&](const unsigned a, const unsigned b) {
+            // maintain a transitive closure of the rates
+            add_edge(a, b, M);
+            for (const auto e : make_iterator_range(out_edges(b, M))) {
+                add_edge(a, target(e, M), M);
+            }
+        };
+
+        auto getReferenceSymbolicRate = [&](const BufferRateData & bd, const unsigned refSymRate) -> unsigned {
+            const auto ref = getReferenceBufferVertex(kernel, bd.Port);
+            const auto key = std::make_pair(ref, refSymRate);
+            const auto f = P.find(key);
+            if (LLVM_LIKELY(f == P.end())) {
+                const auto symbolicRate = add_vertex(M);
+                rateIsBoundedBy(symbolicRate, refSymRate);
+                P.emplace(key, symbolicRate);
+                return symbolicRate;
+            } else {
+                return f->second;
+            }
+        };
+
+//        auto getDelayedSymbolicRate = [&](const unsigned symRate, const unsigned delay) -> unsigned {
+//            const auto key = std::make_pair(symRate, delay);
+//            const auto f = D.find(key);
+//            if (LLVM_LIKELY(f == D.end())) {
+//                const auto symbolicRate = add_vertex(M);
+//                rateIsBoundedBy(symbolicRate, symRate);
+//                D.emplace(key, symbolicRate);
+//                return symbolicRate;
+//            } else {
+//                return f->second;
+//            }
+//        };
+
+        rates.clear();
+
+        // Determine whether we have any relative bindings. These will be temporarily ignored and then
+        // filled in after we determine the reference rates.
+
+        const auto numOfInputs = in_degree(kernel, G);
+        const auto numOfOutputs = out_degree(kernel, G);
+
+        ReferenceGraph R(numOfInputs + numOfOutputs);
+
+        for (const auto e : make_iterator_range(in_edges(kernel, G))) {
+            const BufferRateData & bd = G[e];
+            const Binding & input = bd.Binding;
+            const ProcessingRate & rate = input.getRate();
+            if (LLVM_UNLIKELY(rate.isRelative())) {
+                const StreamSetPort ref = getReference(bd.Port);
+                assert ("input stream cannot refer to an output stream" && ref.Type == PortType::Input);
+                add_edge(bd.Port.Number, ref.Number, R);
+            }
+        }
+        for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+            const BufferRateData & bd = G[e];
+            const Binding & input = bd.Binding;
+            const ProcessingRate & rate = input.getRate();
+            if (LLVM_UNLIKELY(rate.isRelative())) {
+                StreamSetPort ref = getReference(bd.Port);
+                if (LLVM_UNLIKELY(ref.Type == PortType::Output)) {
+                    ref.Number += numOfInputs;
+                }
+                add_edge(bd.Port.Number + numOfInputs, ref.Number, R);
+            }
+        }
+
+        // Identify the input rates
+        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+            BufferRateData & inputRate = G[input];
+            // is this a relative rate?
+            if (LLVM_UNLIKELY(out_degree(inputRate.Port.Number, R) != 0)) {
+                continue;
+            }
+
+            const auto output = in_edge(source(input, G), G);
+            assert (out_degree(inputRate.Port.Number, R) == 0);
+            const BufferRateData & outputRate = G[output];
+            const Binding & binding = inputRate.Binding;
+            const ProcessingRate & inputProcessingRate = binding.getRate();
+
+            if (LLVM_LIKELY(inputProcessingRate.isFixed())) {
+                // When going from a non-Fixed production rate to Fixed consumption rate
+                // or streaming fixed rate data at "unaligned" rates, we are potentially
+                // "truncating" the flow of information.
+
+                auto compatibleFixedRates = [&]() {
+                    if (LLVM_UNLIKELY(binding.hasLookahead())) {
+                        return false;
+                    }
+                    if (outputRate.Minimum != outputRate.Maximum) {
+                        return false;
+                    }
+                    const auto g = lcm(outputRate.Minimum, inputRate.Minimum);
+                    const auto m = std::max(outputRate.Minimum, inputRate.Minimum);
+                    if (LLVM_UNLIKELY(g != m)) {
+                        return false;
+                    }
+                    return true;
+                };
+
+                // TODO: The truncated buffer need not need to be dynamic.
+                if (compatibleFixedRates()) {
+//                    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Delayed))) {
+//                        const auto & delay = binding.findAttribute(AttrId::Delayed);
+//                        inputRate.SymbolicRate = getDelayedSymbolicRate(outputRate.SymbolicRate, delay.amount());
+//                    } else {
+                        inputRate.SymbolicRate = outputRate.SymbolicRate;
+//                    }
+                } else {
+                    unsigned la = 0;
+                    if (LLVM_UNLIKELY(binding.hasLookahead())) {
+                        la = binding.getLookahead();
+                    }
+                    const auto key = std::make_tuple(inputRate.Maximum, outputRate.SymbolicRate, la);
+                    const auto f = F.find(key);
+                    if (f == F.end()) {
+                        inputRate.SymbolicRate = add_vertex(M);
+                        rateIsBoundedBy(inputRate.SymbolicRate, outputRate.SymbolicRate);
+                        F.emplace(key, inputRate.SymbolicRate);
+                    } else {
+                        inputRate.SymbolicRate = f->second;
+                        assert (inputRate.SymbolicRate != outputRate.SymbolicRate);
+                    }
+                }
+            } else if (LLVM_UNLIKELY(inputProcessingRate.isGreedy())) {
+                inputRate.SymbolicRate = outputRate.SymbolicRate;
+            } else if (LLVM_UNLIKELY(inputProcessingRate.isPartialSum())) {
+                inputRate.SymbolicRate = getReferenceSymbolicRate(inputRate, outputRate.SymbolicRate);
+            } else if (inputProcessingRate.isBounded() || inputProcessingRate.isUnknown()) {
+                inputRate.SymbolicRate = add_vertex(M);
+                rateIsBoundedBy(inputRate.SymbolicRate, outputRate.SymbolicRate);
+            } else {
+                llvm_unreachable("unknown rate type");
+            }
+        }
+
+
+        // Do we have a principal input stream?
+        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+            const BufferRateData & inputRate = G[input];
+            const Binding & binding = inputRate.Binding;
+            if (binding.hasAttribute(AttrId::Principal)) {
+                assert (out_degree(inputRate.Port.Number, R) == 0);
+                rates.insert(inputRate.SymbolicRate);
+                goto has_principal_rate;
+            }
+        }
+
+        // No; just insert all of the possible rates
+        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+            const BufferRateData & inputRate = G[input];
+            rates.insert(inputRate.SymbolicRate);
+        }
+
+has_principal_rate:
+
+        assert ("independent sources must have unique symbolic rates." && (in_degree(kernel, G) != 0 || rates.empty()));
+
+        // Determine the symbolic rate of this kernel
+        unsigned symbolicRate = 0;
+        if (LLVM_UNLIKELY(rates.empty())) {
+            symbolicRate = add_vertex(M);
+        } else if (rates.size() == 1) {
+            symbolicRate = *rates.begin();
+        } else if (rates.size() > 1) {
+            symbolicRate = [&]() -> unsigned {
+                // If one of the rates dominates all other rates, we can inherit it.
+                // Otherwise we'll have to create a new one.
+                const auto begin = rates.begin();
+                const auto end = rates.end();
+
+                for (auto i = begin; i != end; ) {
+                    const auto s = *i;
+                    for (auto j = begin; j != i; ++j) {
+                        if (!edge(s, *j, M).second) {
+                            goto does_not_dominate;
+                        }
+                    }
+                    for (auto j = i + 1; j != end; ++j) {
+                        if (!edge(s, *j, M).second) {
+                            goto does_not_dominate;
+                        }
+                    }
+                    return s;
+    does_not_dominate:
+                    ++i;
+                }
+                const auto s = add_vertex(M);
+                for (auto i = begin; i != end; ++i) {
+                    rateIsBoundedBy(s, *i);
+                }
+                return s;
+            }();
+        }
+
+        auto forceNewRate = [&]() {
+
+            // Is it safe to ignore this?
+
+//            const Kernel * const K = getKernel(kernel);
+//            for (const Attribute & attr : K->getAttributes()) {
+//                switch (attr.getKind()) {
+//                    case AttrId::CanTerminateEarly:
+//                    case AttrId::MustExplicitlyTerminate:
+//                        return true;
+//                    default: continue;
+//                }
+//            }
+            return false;
+        };
+
+        if (LLVM_UNLIKELY(forceNewRate())) {
+            const auto newSymbolicRate = add_vertex(M);
+            rateIsBoundedBy(newSymbolicRate, symbolicRate);
+            symbolicRate = newSymbolicRate;
+        }
+
+        // Correct the input rate to be relative to the newly computed symbolic rate.
+        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+            BufferRateData & inputRate = G[input];
+            const Binding & binding = inputRate.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            if (LLVM_LIKELY(rate.isFixed())) {
+                inputRate.SymbolicRate = symbolicRate;
+            } else if (LLVM_UNLIKELY(rate.isPartialSum())) {
+                inputRate.SymbolicRate = getReferenceSymbolicRate(inputRate, symbolicRate);
+            }
+        }
+
+        // Determine the output rates
+        for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+            BufferRateData & outputRate = G[e];
+            // is this a relative rate?
+            if (LLVM_UNLIKELY(out_degree(outputRate.Port.Number + numOfInputs, R) != 0)) {
+                continue;
+            }
+            const Binding & binding = outputRate.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            if (LLVM_LIKELY(rate.isFixed())) {
+                outputRate.SymbolicRate = symbolicRate;
+            } else if (LLVM_UNLIKELY(rate.isPartialSum())) {
+                outputRate.SymbolicRate = getReferenceSymbolicRate(outputRate, symbolicRate);
+            } else { // if (rate.isBounded() || rate.isUnknown()) {
+                outputRate.SymbolicRate = add_vertex(M);
+                rateIsBoundedBy(outputRate.SymbolicRate, symbolicRate);
+            }
+        }
+
+        // Fill in any relative rates
+        for (const auto e : make_iterator_range(edges(R))) {
+
+            auto getBufferRate = [&](const unsigned v) -> BufferRateData & {
+                BufferGraph::edge_descriptor f;
+                if (v < numOfInputs) {
+                    graph_traits<BufferGraph>::in_edge_iterator ei, ei_end;
+                    std::tie(ei, ei_end) = in_edges(kernel, G);
+                    assert (std::distance(ei, ei_end) < v);
+                    f = *(ei + v);
+                } else {
+                    const unsigned w = v - numOfInputs;
+                    graph_traits<BufferGraph>::out_edge_iterator ei, ei_end;
+                    std::tie(ei, ei_end) = out_edges(kernel, G);
+                    assert (std::distance(ei, ei_end) < w);
+                    f = *(ei + w);
+                }
+                BufferRateData & bd = G[f];
+                assert (bd.Port.Number == (v < numOfInputs ? v : (v - numOfInputs)));
+                assert (bd.Port.Type == (v < numOfInputs ? PortType::Input : PortType::Output));
+                return bd;
+            };
+
+            BufferRateData & relativePort = getBufferRate(source(e, R));
+            const BufferRateData & referencePort = getBufferRate(target(e, R));
+            relativePort.SymbolicRate = referencePort.SymbolicRate;
+        }
+    }
+}
+
+#else
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifySymbolicRates
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -721,6 +1039,8 @@ has_principal_rate:
         }
     }
 }
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyThreadLocalBuffers
