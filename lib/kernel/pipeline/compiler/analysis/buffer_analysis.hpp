@@ -426,69 +426,35 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
     // given a new rate. When a kernel has inputs whose rate differ, the kernel is
     // assigned a new rate otherwise the kernel inherits the rate of its inputs.
 
-    using RateMap = flat_map<unsigned, Expr *>;
+    using RateMap = flat_map<unsigned, RateBound>;
 
     using SymbolicRateMinGraph = adjacency_list<hash_setS, vecS, directedS, unsigned>;
+
     using ReferenceGraph = adjacency_list<vecS, vecS, bidirectionalS>;
 
-    using CommonPartialSumRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
-//    using CommonDelayedRateMap = flat_map<std::pair<unsigned, unsigned>, unsigned>;
-    using CommonFixedRateChangeMap = flat_map<std::tuple<Rational, unsigned, unsigned>, unsigned>;
+    using CommonPartialSumRateMap = flat_map<std::pair<unsigned, Expr>, Expr>;
 
     CommonPartialSumRateMap P;
-    CommonFixedRateChangeMap F;
-//    CommonDelayedRateMap D;
     SymbolicRateMinGraph M;
 
-    flat_set<unsigned> rates;
+    flat_set<Expr> symbolicInputRates;
 
     const auto first = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
     const auto last = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
 
+
+    // With the assumption that we have an unbounded input from any sources and infinite length buffers,
+    // calculate the upper/lower bound for the number of items/strides we can process in a single segment.
+
     for (auto kernel = first; kernel <= last; ++kernel) {
-
-        auto rateIsBoundedBy = [&](const unsigned a, const unsigned b) {
-            // maintain a transitive closure of the rates
-            add_edge(a, b, M);
-            for (const auto e : make_iterator_range(out_edges(b, M))) {
-                add_edge(a, target(e, M), M);
-            }
-        };
-
-        auto getReferenceSymbolicRate = [&](const BufferRateData & bd, const unsigned refSymRate) -> unsigned {
-            const auto ref = getReferenceBufferVertex(kernel, bd.Port);
-            const auto key = std::make_pair(ref, refSymRate);
-            const auto f = P.find(key);
-            if (LLVM_LIKELY(f == P.end())) {
-                const auto symbolicRate = add_vertex(M);
-                rateIsBoundedBy(symbolicRate, refSymRate);
-                P.emplace(key, symbolicRate);
-                return symbolicRate;
-            } else {
-                return f->second;
-            }
-        };
-
-//        auto getDelayedSymbolicRate = [&](const unsigned symRate, const unsigned delay) -> unsigned {
-//            const auto key = std::make_pair(symRate, delay);
-//            const auto f = D.find(key);
-//            if (LLVM_LIKELY(f == D.end())) {
-//                const auto symbolicRate = add_vertex(M);
-//                rateIsBoundedBy(symbolicRate, symRate);
-//                D.emplace(key, symbolicRate);
-//                return symbolicRate;
-//            } else {
-//                return f->second;
-//            }
-//        };
-
-        rates.clear();
 
         // Determine whether we have any relative bindings. These will be temporarily ignored and then
         // filled in after we determine the reference rates.
 
         const auto numOfInputs = in_degree(kernel, G);
         const auto numOfOutputs = out_degree(kernel, G);
+        const Kernel * const kernelObj = getKernel(kernel);
+        const auto strideSize = kernelObj->getStride();
 
         ReferenceGraph R(numOfInputs + numOfOutputs);
 
@@ -515,156 +481,153 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
             }
         }
 
-        // Identify the input rates
-        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-            BufferRateData & inputRate = G[input];
-            // is this a relative rate?
-            if (LLVM_UNLIKELY(out_degree(inputRate.Port.Number, R) != 0)) {
-                continue;
+        auto calculateSymbolicRate = [&](const BufferRateData & ioRate, const BufferRateData & refRate) -> Expr {
+
+            const Binding & binding = ioRate.Binding;
+            const ProcessingRate & rate = binding.getRate();
+
+            using RateId = ProcessingRate::KindId;
+
+            switch (rate.getKind()) {
+                case RateId::Fixed:
+                    return constant(rate.getRate() * strideSize);
+                case RateId::Bounded:
+                    return bounded_variable(rate.getLowerBound() * strideSize, rate.getUpperBound() * strideSize);
+                case RateId::PartialSum:
+                    BEGIN_SCOPED_REGION
+                    const auto ref = getReferenceBufferVertex(kernel, ioRate.Port);
+                    assert (refRate.SymbolicRate);
+                    const auto key = std::make_pair(ref, refRate.SymbolicRate);
+                    const auto f = P.find(key);
+                    if (LLVM_LIKELY(f == P.end())) {
+                        Expr const popCountRate = bounded_variable(constant(0), refRate.SymbolicRate);
+                        P.emplace(key, popCountRate);
+                        return popCountRate;
+                    }
+                    return f->second;
+                    END_SCOPED_REGION
+                case RateId::Greedy:
+                    assert (refRate.SymbolicRate);
+                    return refRate.SymbolicRate;
+                case RateId::Unknown:
+                    return free_variable();
+                default: llvm_unreachable("invalid or unhandled rate type");
             }
 
-            const auto output = in_edge(source(input, G), G);
-            assert (out_degree(inputRate.Port.Number, R) == 0);
-            const BufferRateData & outputRate = G[output];
-            const Binding & binding = inputRate.Binding;
-            const ProcessingRate & inputProcessingRate = binding.getRate();
-
-            if (LLVM_LIKELY(inputProcessingRate.isFixed())) {
-                // When going from a non-Fixed production rate to Fixed consumption rate
-                // or streaming fixed rate data at "unaligned" rates, we are potentially
-                // "truncating" the flow of information.
-
-                auto compatibleFixedRates = [&]() {
-                    if (LLVM_UNLIKELY(binding.hasLookahead())) {
-                        return false;
-                    }
-                    if (outputRate.Minimum != outputRate.Maximum) {
-                        return false;
-                    }
-                    const auto g = lcm(outputRate.Minimum, inputRate.Minimum);
-                    const auto m = std::max(outputRate.Minimum, inputRate.Minimum);
-                    if (LLVM_UNLIKELY(g != m)) {
-                        return false;
-                    }
-                    return true;
-                };
-
-                // TODO: The truncated buffer need not need to be dynamic.
-                if (compatibleFixedRates()) {
-//                    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Delayed))) {
-//                        const auto & delay = binding.findAttribute(AttrId::Delayed);
-//                        inputRate.SymbolicRate = getDelayedSymbolicRate(outputRate.SymbolicRate, delay.amount());
-//                    } else {
-                        inputRate.SymbolicRate = outputRate.SymbolicRate;
-//                    }
-                } else {
-                    unsigned la = 0;
-                    if (LLVM_UNLIKELY(binding.hasLookahead())) {
-                        la = binding.getLookahead();
-                    }
-                    const auto key = std::make_tuple(inputRate.Maximum, outputRate.SymbolicRate, la);
-                    const auto f = F.find(key);
-                    if (f == F.end()) {
-                        inputRate.SymbolicRate = add_vertex(M);
-                        rateIsBoundedBy(inputRate.SymbolicRate, outputRate.SymbolicRate);
-                        F.emplace(key, inputRate.SymbolicRate);
-                    } else {
-                        inputRate.SymbolicRate = f->second;
-                        assert (inputRate.SymbolicRate != outputRate.SymbolicRate);
-                    }
-                }
-            } else if (LLVM_UNLIKELY(inputProcessingRate.isGreedy())) {
-                inputRate.SymbolicRate = outputRate.SymbolicRate;
-            } else if (LLVM_UNLIKELY(inputProcessingRate.isPartialSum())) {
-                inputRate.SymbolicRate = getReferenceSymbolicRate(inputRate, outputRate.SymbolicRate);
-            } else if (inputProcessingRate.isBounded() || inputProcessingRate.isUnknown()) {
-                inputRate.SymbolicRate = add_vertex(M);
-                rateIsBoundedBy(inputRate.SymbolicRate, outputRate.SymbolicRate);
-            } else {
-                llvm_unreachable("unknown rate type");
-            }
-        }
-
-
-        // Do we have a principal input stream?
-        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-            const BufferRateData & inputRate = G[input];
-            const Binding & binding = inputRate.Binding;
-            if (binding.hasAttribute(AttrId::Principal)) {
-                assert (out_degree(inputRate.Port.Number, R) == 0);
-                rates.insert(inputRate.SymbolicRate);
-                goto has_principal_rate;
-            }
-        }
-
-        // No; just insert all of the possible rates
-        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-            const BufferRateData & inputRate = G[input];
-            rates.insert(inputRate.SymbolicRate);
-        }
-
-has_principal_rate:
-
-        assert ("independent sources must have unique symbolic rates." && (in_degree(kernel, G) != 0 || rates.empty()));
-
-        // Determine the symbolic rate of this kernel
-        unsigned symbolicRate = 0;
-        if (LLVM_UNLIKELY(rates.empty())) {
-            symbolicRate = add_vertex(M);
-        } else if (rates.size() == 1) {
-            symbolicRate = *rates.begin();
-        } else if (rates.size() > 1) {
-            symbolicRate = [&]() -> unsigned {
-                // If one of the rates dominates all other rates, we can inherit it.
-                // Otherwise we'll have to create a new one.
-                const auto begin = rates.begin();
-                const auto end = rates.end();
-
-                for (auto i = begin; i != end; ) {
-                    const auto s = *i;
-                    for (auto j = begin; j != i; ++j) {
-                        if (!edge(s, *j, M).second) {
-                            goto does_not_dominate;
-                        }
-                    }
-                    for (auto j = i + 1; j != end; ++j) {
-                        if (!edge(s, *j, M).second) {
-                            goto does_not_dominate;
-                        }
-                    }
-                    return s;
-    does_not_dominate:
-                    ++i;
-                }
-                const auto s = add_vertex(M);
-                for (auto i = begin; i != end; ++i) {
-                    rateIsBoundedBy(s, *i);
-                }
-                return s;
-            }();
-        }
-
-        auto forceNewRate = [&]() {
-
-            // Is it safe to ignore this?
-
-//            const Kernel * const K = getKernel(kernel);
-//            for (const Attribute & attr : K->getAttributes()) {
-//                switch (attr.getKind()) {
-//                    case AttrId::CanTerminateEarly:
-//                    case AttrId::MustExplicitlyTerminate:
-//                        return true;
-//                    default: continue;
-//                }
-//            }
-            return false;
         };
 
-        if (LLVM_UNLIKELY(forceNewRate())) {
-            const auto newSymbolicRate = add_vertex(M);
-            rateIsBoundedBy(newSymbolicRate, symbolicRate);
-            symbolicRate = newSymbolicRate;
+        auto applyInputAttributes = [&](const Binding & binding, Expr symrate) -> Expr {
+
+            bool isPrincipal = false;
+            bool isDeferred = false;
+            unsigned delay = 0;
+            unsigned added = 0;
+            unsigned truncated = 0;
+
+            for (const Attribute & attr : binding.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::Principal:
+                        isPrincipal = true;
+                        break;
+                    case AttrId::Deferred:
+                        isDeferred = true;
+                        break;
+                    case AttrId::Delayed:
+                        delay += attr.amount();
+                        break;
+                    case AttrId::Add:
+                        added += attr.amount();
+                        break;
+                    case AttrId::Truncate:
+                        truncated += attr.amount();
+                        break;
+                }
+            }
+
+            return symrate;
+        };
+
+        auto applyOutputAttributes = [&](const Binding & binding, Expr symrate) -> Expr {
+            bool isDeferred = false;
+            unsigned delay = 0;
+            unsigned added = 0;
+
+            for (const Attribute & attr : binding.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::Deferred:
+                        isDeferred = true;
+                        break;
+                    case AttrId::Delayed:
+                        delay += attr.amount();
+                        break;
+                    case AttrId::Add:
+                        added += attr.amount();
+                        break;
+                }
+            }
+
+            if (LLVM_UNLIKELY(isDeferred || delay || added)) {
+                Expr lb = symrate;
+                Expr ub = symrate;
+                if (isDeferred) {
+                    lb = constant(0);
+                }
+                if (delay) {
+                    lb = subtract(symrate, constant(delay));
+                }
+                if (added) {
+                    ub = add(ub, constant(added));
+                }
+                symrate = bounded_variable(lb, ub);
+            }
+            return symrate;
+        };
+
+        // Any kernel without an input must be a source kernel
+        if (LLVM_UNLIKELY(numOfInputs == 0)) {
+
+            for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+                const BufferRateData & outputRate = G[e];
+                // is this a relative rate?
+                if (LLVM_UNLIKELY(out_degree(outputRate.Port.Number, R) != 0)) {
+                    continue;
+                }
+
+                auto symrate = calculateSymbolicRate(outputRate, outputRate);
+                outputRate.SymbolicRate = applyOutputAttributes(outputRate.Binding, symrate);
+            }
+
+        } else { // non-source kernel
+
+            // Identify the input rates
+
+            SmallFlatSet<Expr, 8> dataflow;
+
+            for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+                BufferRateData & inputRate = G[input];
+                // is this a relative rate?
+                if (LLVM_UNLIKELY(out_degree(inputRate.Port.Number, R) != 0)) {
+                    continue;
+                }
+
+                const auto output = in_edge(source(input, G), G);
+                assert (out_degree(inputRate.Port.Number, R) == 0);
+                const BufferRateData & outputRate = G[output];
+                auto symrate = calculateSymbolicRate(inputRate, outputRate);
+                inputRate.SymbolicRate = applyInputAttributes(inputRate.Binding, symrate);
+
+                Expr strides = divide(outputRate.SymbolicRate, inputRate.SymbolicRate);
+                dataflow.insert(strides);
+            }
+
+            // Characterize the expected number of strides
+
+
+
+
         }
+
+
 
         // Correct the input rate to be relative to the newly computed symbolic rate.
         for (const auto input : make_iterator_range(in_edges(kernel, G))) {
@@ -1182,11 +1145,11 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
                 // Fixed rate input streams may potentially truncate the input passed into them.
                 // Make sure the truncation is taken into account when computing the bounds.
                 if (LLVM_LIKELY(rate.isFixed())) {
-                    const auto flower_expected = floor(lower_expected);
+                    const auto flower_expected = mk_floor(lower_expected);
                     const auto dlower_expected = lower_expected - flower_expected;
                     lower_expected = flower_expected;
 
-                    const auto flower_absolute = floor(lower_absolute);
+                    const auto flower_absolute = mk_floor(lower_absolute);
                     const auto dlower_absolute = lower_absolute - flower_absolute;
                     lower_absolute = flower_absolute;
 
@@ -1248,7 +1211,7 @@ void PipelineCompiler::computeDataFlow(BufferGraph & G) const {
             // bound accordingly.
 
             upper_expected = ceiling(upper_expected + mod_one(lower_expected));
-            lower_expected = floor(lower_expected);
+            lower_expected = mk_floor(lower_expected);
 
             lower_absolute = std::min(lower_absolute, lower_expected);
             upper_absolute = std::max(upper_absolute, upper_expected);

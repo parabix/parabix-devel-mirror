@@ -896,7 +896,7 @@ Value * PipelineCompiler::getFirstStrideLength(BuilderRef b, const StreamSetPort
 
         }
         const Rational lb = rate.getLowerBound(); // * mKernel->getStride();
-        const auto ilb = floor(lb);
+        const auto ilb = mk_floor(lb);
         Value * firstBound = b->getSize(ilb);
         if (LLVM_UNLIKELY(ilb > 0)) {
             Constant * const ZERO = b->getSize(0);

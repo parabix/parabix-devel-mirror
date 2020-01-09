@@ -25,9 +25,7 @@
 #include <util/small_flat_set.hpp>
 #include <algorithm>
 #include <queue>
-#ifdef HAS_Z3
 #include <z3.h>
-#endif
 
 // #define PRINT_DEBUG_MESSAGES
 
@@ -69,7 +67,7 @@ using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
 
-class Expr;
+using Expr = Z3_ast;
 
 #warning create a preallocation phase for kernels to add capacity suggestions
 
@@ -311,6 +309,7 @@ struct BufferRateData {
 
     RelationshipType Port;
     BindingRef Binding;
+
     Rational Minimum;
     Rational Maximum;
     Rational MinimumExpectedFlow;
@@ -318,7 +317,7 @@ struct BufferRateData {
     Rational MinimumSpace;
     Rational MaximumSpace;
 
-    unsigned  SymbolicRate;
+    Expr     SymbolicRate;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -343,7 +342,7 @@ struct BufferRateData {
     , Minimum(minRate), Maximum(maxRate)
     , MinimumExpectedFlow(0), MaximumExpectedFlow(0)
     , MinimumSpace(0), MaximumSpace(0)
-    , SymbolicRate(0) {
+    , SymbolicRate(nullptr) {
 
     }
 
@@ -494,7 +493,8 @@ using Allocator = SlabAllocator<>;
 template <typename T>
 using OwningVec = std::vector<std::unique_ptr<T>>;
 
-
+#define BEGIN_SCOPED_REGION {
+#define END_SCOPED_REGION }
 
 class PipelineCompiler final : public KernelCompiler {
 public:
@@ -801,14 +801,21 @@ public:
 
 // rate calculation math functions
 
-    Expr * constant(const Rational & value);
-    Expr * variable();
+    Expr constant(const Rational value) const;
+    Expr free_variable() const;
+    Expr bounded_variable(Expr inclusive_lb, Expr inclusive_ub) const;
+    Expr bounded_variable(const Rational inclusive_lb, const Rational inclusive_ub) const;
+    Expr add(Expr X, Expr Y) const;
+    Expr subtract(Expr X, Expr Y) const;
+    Expr multiply(Expr X, Expr Y) const;
+    Expr divide(Expr X, Expr Y) const;
+    Expr min(Expr X, Expr Y) const;
+    Expr max(Expr X, Expr Y) const;
+    Expr mk_floor(Expr X) const;
+    Expr mk_ceiling(Expr X) const;
 
-    Expr * add(const Expr * X, const Expr * Y);
-    Expr * subtract(const Expr * X, const Expr * Y);
-    Expr * multiply(const Expr * X, const Expr * Y);
-    Expr * min(const Expr * X, const Expr * Y);
-    Expr * max(const Expr * X, const Expr * Y);
+    void start_smt_solver();
+    void destroy_smt_solver();
 
 // misc. functions
 
@@ -1010,6 +1017,10 @@ protected:
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
 
+    Z3_context                                  mZ3Context;
+    Z3_solver                                   mZ3Solver;
+    Expr                                        mZ3_ZERO;
+    Expr                                        mZ3_ONE;
 
     const BufferGraph                           mBufferGraph;
 
@@ -1026,11 +1037,7 @@ protected:
     OwningVec<StreamSetBuffer>                  mInternalBuffers;
     OwningVec<Kernel>                           mInternalKernels;
     OwningVec<Binding>                          mInternalBindings;
-    Allocator                                   mAllocator;
-    #ifdef HAS_Z3
-    Z3_context                                  mZ3Context;
-    Z3_solver                                   mZ3Solver;
-    #endif
+
 };
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.

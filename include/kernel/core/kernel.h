@@ -358,11 +358,7 @@ public:
 
     void makeModule(BuilderRef b);
 
-<<<<<<< Updated upstream
     void ensureLoaded();
-=======
-    void ensureLoaded() const;
->>>>>>> Stashed changes
 
     void generateKernel(BuilderRef b);
 
@@ -477,13 +473,8 @@ protected:
     const TypeId                mTypeId;
     unsigned                    mStride;
     llvm::Module *              mModule = nullptr;
-<<<<<<< Updated upstream
     llvm::StructType *          mSharedStateType = nullptr;
     llvm::StructType *          mThreadLocalStateType = nullptr;
-=======
-    mutable llvm::StructType *  mSharedStateType = nullptr;
-    mutable llvm::StructType *  mThreadLocalStateType = nullptr;
->>>>>>> Stashed changes
     bool                        mGenerated = false;
 
     Bindings                    mInputStreamSets;

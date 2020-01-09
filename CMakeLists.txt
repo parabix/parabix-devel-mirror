@@ -76,12 +76,9 @@ link_directories(${Boost_LIBRARY_DIRS})
 
 ###   Import Dependency: Z3   ###
 
-find_package(Z3)
-if (Z3_FOUND)
+find_package(Z3 REQUIRED)
 include_directories(${Z3_INCLUDE_DIRS})
 message(STATUS "Found Z3_LIBRARIES: ${Z3_LIBRARIES}")
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_Z3")
-endif()
 
 ###   Project Configuration   ###
 
@@ -198,14 +195,14 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb
 
 function(parabix_add_module)
     cmake_parse_arguments(
-        ARG         # resultant argument prefix
-        ""          # boolean args
-        "NAME"      # mono-valued arguments:
-                    #   NAME: target name
-        "SRC;DEPS"  # multi-valued arguments:
-                    #   SRC:  source file list
-                    #   DEPS: target dependencies
-        ${ARGN}     # arguments to parse
+        ARG             # resultant argument prefix
+        "USES_Z3"       # boolean args
+        "NAME"          # mono-valued arguments:
+                        #   NAME: target name
+        "SRC;DEPS"      # multi-valued arguments:
+                        #   SRC:  source file list
+                        #   DEPS: target dependencies
+        ${ARGN}         # arguments to parse
     )
     if(NOT ARG_NAME)
         message(FATAL_ERROR "parabix_add_module: A target name is required")
@@ -223,8 +220,7 @@ function(parabix_add_module)
         endif()
         parabix_set_library_name(${ARG_NAME})
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
-        # TODO: not all modules will require Z3; make a boolean argument for this
-        if (Z3_FOUND)
+        if (ARG_USES_Z3)
             target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
         endif()
     endif()

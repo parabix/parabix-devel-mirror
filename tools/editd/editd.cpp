@@ -257,16 +257,12 @@ LLVM_READNONE std::string createName(const std::vector<std::string> & patterns) 
 class PatternKernel final : public pablo::PabloKernel {
 public:
     PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
-<<<<<<< Updated upstream
-
     StringRef getSignature() const {
         return mSignature;
     }
     bool hasSignature() const override { return true; }
     bool hasFamilyName() const override { return true; }
 
-=======
->>>>>>> Stashed changes
 protected:
     void generatePabloMethod() override;
 private:

@@ -284,7 +284,7 @@ inline void PipelineCompiler::validateSegmentExecution(BuilderRef b) {
     if (LLVM_UNLIKELY(mBoundedKernel)) {
 
         const BufferNode & bn = mBufferGraph[mKernelIndex];
-        const auto lb = floor(bn.Lower);
+        const auto lb = mk_floor(bn.Lower);
         const auto ub = ceiling(bn.Upper);
         Value * notTooFew = nullptr;
         if (lb == 0) {
