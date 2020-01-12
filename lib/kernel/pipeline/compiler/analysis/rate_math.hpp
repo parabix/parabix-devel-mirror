@@ -97,81 +97,131 @@ inline Expr PipelineCompiler::multiply(Expr X, Expr Y) const {
  * divide
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Expr PipelineCompiler::divide(Expr X, Expr Y) const {
-    Z3_ast args[2] = { X, Y };
-    return Z3_simplify(mZ3Context, Z3_mk_div(mZ3Context, 2, args));
+    return Z3_simplify(mZ3Context, Z3_mk_div(mZ3Context, X, Y));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * min
  ** ------------------------------------------------------------------------------------------------------------- */
-Expr PipelineCompiler::min(Expr X, Expr Y) const {
+Expr PipelineCompiler::mk_min(const ExprSet & set) const {
 
-    auto lessThan = [&](Z3_ast const x, Z3_ast const y) {
-        Z3_solver_push(mZ3Context, mZ3Solver);
-        Z3_solver_assert(mZ3Context, mZ3Solver, Z3_mk_lt(mZ3Context, x, y));
-        const auto result = Z3_solver_check(mZ3Context, mZ3Solver);
-        Z3_solver_pop(mZ3Context, mZ3Solver, 1);
-        return result;
-    };
+    // check whether we can statically prove which values are always minimal
 
-    // check whether we can statically prove which value is always minimal
-    const auto exists_X_le_Y = lessThan(X, Y);
-    if (LLVM_LIKELY(exists_X_le_Y != Z3_L_UNDEF)) {
-        const auto exists_Y_lt_X = lessThan(Y, X);
-        if (LLVM_LIKELY(exists_Y_lt_X != Z3_L_UNDEF)) {
-            // ∄c : Y(c) < X(c)
-            if (exists_Y_lt_X == Z3_L_FALSE) {
-                return X;
-            }
-            if (exists_X_le_Y == Z3_L_FALSE) {
-                return Y;
-            }
-        }
+    const auto n = set.size();
+
+    if (LLVM_UNLIKELY(n == 1)) {
+        return *set.begin();
     }
 
-    // undefined or both have satisfying assignments
+    BitVector filtered(n);
+    for (auto i = 1U; i != n; ++i) {
+
+        if (filtered.test(i)) {
+            continue;
+        }
+
+        auto filter = [&](const unsigned begin, const unsigned end) {
+            for (auto j = begin; j != end; ++j) {
+
+                if (filtered.test(j)) {
+                    continue;
+                }
+
+                // ∄x : f_j(x) < f_i(x)
+                Z3_solver_push(mZ3Context, mZ3Solver);
+                const auto c = Z3_mk_lt(mZ3Context, *set.nth(j), *set.nth(i));
+                Z3_solver_assert(mZ3Context, mZ3Solver, c);
+                const auto result = Z3_solver_check(mZ3Context, mZ3Solver);
+                Z3_solver_pop(mZ3Context, mZ3Solver, 1);
+
+                if (result == Z3_L_FALSE) {
+                    filtered.set(j);
+                }
+            }
+        };
+
+        filter(0U, i);
+        filter(i + 1U, n);
+    }
+
+    const auto m = filtered.count();
+    if (LLVM_UNLIKELY(m == (n - 1U))) {
+        const auto i = filtered.find_first_unset();
+        assert (i != -1);
+        return *set.nth(i);
+    }
+
+    // at least two have minimal assignments; create a new variable with the appropriate constraints
     auto q = free_variable();
-    auto c1 = Z3_mk_le(mZ3Context, q, X);
-    Z3_solver_assert(mZ3Context, mZ3Solver, c1);
-    auto c2 = Z3_mk_le(mZ3Context, q, Y);
-    Z3_solver_assert(mZ3Context, mZ3Solver, c2);
+    for (auto i = 0U; i != n; ++i) {
+        if (filtered.test(i)) {
+            continue;
+        }
+        auto c = Z3_mk_le(mZ3Context, q, *set.nth(i));
+        Z3_solver_assert(mZ3Context, mZ3Solver, c);
+    }
     return q;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * max
  ** ------------------------------------------------------------------------------------------------------------- */
-Expr PipelineCompiler::max(Expr X, Expr Y) const {
+Expr PipelineCompiler::mk_max(const ExprSet & set) const {
+    // check whether we can statically prove which values are always minimal
 
-    auto greaterThan = [&](Z3_ast const x, Z3_ast const y) {
-        Z3_solver_push(mZ3Context, mZ3Solver);
-        Z3_solver_assert(mZ3Context, mZ3Solver, Z3_mk_ge(mZ3Context, x, y));
-        const auto result = Z3_solver_check(mZ3Context, mZ3Solver);
-        Z3_solver_pop(mZ3Context, mZ3Solver, 1);
-        return result;
-    };
+    const auto n = set.size();
 
-    // check whether we can statically prove which value is always maximal
-    const auto exists_X_gt_Y = greaterThan(X, Y);
-    if (LLVM_LIKELY(exists_X_gt_Y != Z3_L_UNDEF)) {
-        const auto exists_Y_gt_X = greaterThan(Y, X);
-        if (LLVM_LIKELY(exists_Y_gt_X != Z3_L_UNDEF)) {
-            // ∄c : Y(c) > X(c)
-            if (exists_Y_gt_X == Z3_L_FALSE) {
-                return X;
-            }
-            if (exists_X_gt_Y == Z3_L_FALSE) {
-                return Y;
-            }
-        }
+    if (LLVM_UNLIKELY(n == 1)) {
+        return *set.begin();
     }
 
-    // undefined or both have satisfying assignments
+    BitVector filtered(n);
+    for (auto i = 1U; i != n; ++i) {
+
+        if (filtered.test(i)) {
+            continue;
+        }
+
+        auto filter = [&](const unsigned begin, const unsigned end) {
+            for (auto j = begin; j != end; ++j) {
+
+                if (filtered.test(j)) {
+                    continue;
+                }
+
+                // ∄x : f_j(x) > f_i(x)
+                Z3_solver_push(mZ3Context, mZ3Solver);
+                const auto c = Z3_mk_gt(mZ3Context, *set.nth(j), *set.nth(i));
+                Z3_solver_assert(mZ3Context, mZ3Solver, c);
+                const auto result = Z3_solver_check(mZ3Context, mZ3Solver);
+                Z3_solver_pop(mZ3Context, mZ3Solver, 1);
+
+                if (result == Z3_L_FALSE) {
+                    filtered.set(j);
+                }
+            }
+        };
+
+        filter(0U, i);
+        filter(i + 1U, n);
+    }
+
+    const auto m = filtered.count();
+    if (LLVM_UNLIKELY(m == (n - 1U))) {
+        const auto i = filtered.find_first_unset();
+        assert (i != -1);
+        return *set.nth(i);
+    }
+
+    // at least two have maximal assignments; create a new variable with the appropriate constraints
     auto q = free_variable();
-    auto c1 = Z3_mk_ge(mZ3Context, q, X);
-    Z3_solver_assert(mZ3Context, mZ3Solver, c1);
-    auto c2 = Z3_mk_ge(mZ3Context, q, Y);
-    Z3_solver_assert(mZ3Context, mZ3Solver, c2);
+    for (auto i = 0U; i != n; ++i) {
+        if (filtered.test(i)) {
+            continue;
+        }
+        auto c = Z3_mk_ge(mZ3Context, q, *set.nth(i));
+        Z3_solver_assert(mZ3Context, mZ3Solver, c);
+    }
     return q;
 }
 

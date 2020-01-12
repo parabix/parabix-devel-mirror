@@ -134,7 +134,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mTarget->addThreadLocalScalar(localStateTy, prefix + KERNEL_THREAD_LOCAL_SUFFIX);
     }
 
-    /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(kernelIndex);
+    /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(kernelIndex, mBufferGraph);
 
     const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
 

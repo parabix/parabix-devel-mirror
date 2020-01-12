@@ -29,13 +29,15 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 // #define DISABLE_ZERO_EXTEND
 
 // #define DISABLE_INPUT_ZEROING
 
 // #define DISABLE_OUTPUT_ZEROING
+
+// #define USE_Z3
 
 using namespace boost;
 using namespace boost::math;
@@ -68,6 +70,7 @@ using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
 
 using Expr = Z3_ast;
+using ExprSet = SmallFlatSet<Expr, 8>;
 
 #warning create a preallocation phase for kernels to add capacity suggestions
 
@@ -136,6 +139,8 @@ enum class ReasonType : unsigned {
     , ImplicitPopCount
     // -----------------------------
     , Reference
+    // -----------------------------
+    , OrderingConstraint
 };
 
 struct RelationshipType : public StreamSetPort {
@@ -275,6 +280,8 @@ struct BufferNode {
     unsigned LookAhead = 0;
     unsigned RequiredSpace = 0;
 
+    unsigned PartitionId = 0;
+
     bool isOwned() const {
         return (Type & BufferType::Unowned) == BufferType::None;
     }
@@ -317,7 +324,11 @@ struct BufferRateData {
     Rational MinimumSpace;
     Rational MaximumSpace;
 
-    Expr     SymbolicRate;
+    #ifdef USE_Z3
+    Expr     SymbolicRate = nullptr;
+    #else
+    unsigned SymbolicRate = 0;
+    #endif
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -341,21 +352,13 @@ struct BufferRateData {
     : Port(port), Binding(binding)
     , Minimum(minRate), Maximum(maxRate)
     , MinimumExpectedFlow(0), MaximumExpectedFlow(0)
-    , MinimumSpace(0), MaximumSpace(0)
-    , SymbolicRate(nullptr) {
+    , MinimumSpace(0), MaximumSpace(0) {
 
     }
 
 };
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
-
-using BufferSetGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
-
-template <typename vertex_descriptor>
-using RelMap = flat_map<const Relationship *, vertex_descriptor>;
-
-using BufferMap = RelMap<BufferGraph::vertex_descriptor>;
 
 struct ConsumerNode {
     mutable Value * Consumed = nullptr;
@@ -383,9 +386,6 @@ enum TerminationSignal : unsigned {
 };
 
 using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, no_property, bool>;
-
-using RelationshipVertex = RelationshipGraph::vertex_descriptor;
-using RelationshipMap = RelMap<RelationshipVertex>;
 
 enum CountingType : unsigned {
     Unknown = 0
@@ -676,7 +676,11 @@ public:
     void verifyIOStructure() const;
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
+
+    unsigned partitionIntoFixedRateSubgraphs(BufferGraph & G) const;
+
     void identifySymbolicRates(BufferGraph & G) const;
+
     void identifyThreadLocalBuffers(BufferGraph & G) const;
     void computeDataFlow(BufferGraph & G) const;
 
@@ -754,9 +758,11 @@ public:
     static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
 
+    void addFixedRateRegionKernelOrderingConstraints(Relationships & G) const;
+
     bool hasZeroExtendedStream() const;
 
-    void determineEvaluationOrderOfKernelIO(const size_t kernelIndex);
+    void determineEvaluationOrderOfKernelIO(const size_t kernelIndex, const BufferGraph &G);
     TerminationGraph makeTerminationGraph();
     PipelineIOGraph makePipelineIOGraph() const;
     LLVM_READNONE bool isOpenSystem() const;
@@ -809,8 +815,8 @@ public:
     Expr subtract(Expr X, Expr Y) const;
     Expr multiply(Expr X, Expr Y) const;
     Expr divide(Expr X, Expr Y) const;
-    Expr min(Expr X, Expr Y) const;
-    Expr max(Expr X, Expr Y) const;
+    Expr mk_min(const ExprSet &set) const;
+    Expr mk_max(const ExprSet & set) const;
     Expr mk_floor(Expr X) const;
     Expr mk_ceiling(Expr X) const;
 
@@ -1194,6 +1200,11 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
         ty = ty->getArrayElementType();
     }
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
+}
+
+inline size_t round_up_to(const size_t x, const size_t y) {
+    assert(is_power_2(y));
+    return (x + y - 1) & -y;
 }
 
 #ifndef NDEBUG

@@ -332,7 +332,9 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     OwningVector<Kernel> internalKernels;
     OwningVector<Binding> internalBindings;
 
-    const auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings);
+    auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings);
+
+    addFixedRateRegionKernelOrderingConstraints(G);
 
     // Compute the lexographical ordering of H
 
@@ -1225,6 +1227,220 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 }
 
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief sortGraphIntoFixedRateRegions
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships & G) const {
+
+    // LLVM BitVector does not have a built-in < comparator
+    using BV = dynamic_bitset<>;
+    using Partition = std::vector<unsigned>;
+    using PartitionMap = std::map<const BV, Partition>;
+    using Vertices = Vec<unsigned, 64>;
+
+    std::vector<unsigned> O;
+    if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
+        report_fatal_error("Pipeline contains a cycle");
+    }
+
+    std::vector<BV> rateSet(num_vertices(G));
+
+    unsigned currentRateId = 0;
+
+    for (const auto u : O) {
+
+        BV & kernelRateSet = rateSet[u];
+
+        auto mergeRateIds = [](BV & dst, BV & src) {
+            if (src.capacity() < dst.capacity()) {
+                src.resize(dst.capacity());
+            } else if (dst.capacity() < src.capacity()) {
+                dst.resize(src.capacity());
+            }
+            dst |= src;
+        };
+
+        // combine all incoming rates sets
+        auto required = kernelRateSet.size();
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto u = source(e, G);
+            const BV & inputRateSet = rateSet[u];
+            required = std::max(required, inputRateSet.size());
+        }
+
+        kernelRateSet.resize(required);
+
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto u = source(e, G);
+            BV & inputRateSet = rateSet[u];
+            mergeRateIds(kernelRateSet, inputRateSet);
+        }
+
+        const RelationshipNode & node = G[u];
+
+        if (node.Type == RelationshipNode::IsKernel) {
+
+            auto addRateId = [](BV & bv, const unsigned rateId) {
+                if (LLVM_UNLIKELY(rateId >= bv.capacity())) {
+                    bv.resize(round_up_to(rateId + 1, BV::bits_per_block));
+                }
+                bv.set(rateId);
+            };
+
+            auto taintWithNewRate = [&]() {
+                // A source kernel produces data without input thus is the root of a
+                // new partition.
+                if (in_degree(u, G) == 0) {
+                    return true;
+                }
+                // If this kernel has any bounded or unknown input rates, there is a
+                // potential change of rate of dataflow through the kernel.
+                for (const auto e : make_iterator_range(in_edges(u, G))) {
+                    const auto input = source(e, G);
+                    const RelationshipNode & inputNode = G[input];
+                    if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
+                        const Binding & binding = inputNode.Binding;
+                        const ProcessingRate & rate = binding.getRate();
+                        switch (rate.getKind()) {
+                            // countable
+                            case RateId::Fixed:
+                            case RateId::PartialSum:
+                            case RateId::Greedy:
+                                // If a countable rate has a deferred attribute, we cannot infer
+                                // how many items will actually be consumed.
+                                if (LLVM_UNLIKELY(binding.isDeferred())) {
+                                    return true;
+                                }
+                                break;
+                            // non-countable
+                            case RateId::Bounded:
+                                return true;
+                            default: break;
+                        }
+                    }
+                }
+                return false;
+            };
+
+            if (LLVM_UNLIKELY(taintWithNewRate())) {
+                addRateId(kernelRateSet, currentRateId++);
+            }
+
+            // If this kernel is a PopCount kernel, then it will consume/produce data
+            // at a fixed rate. However, its output will influence the number of items
+            // consumed/produced by any of its descendents. Rather than reasoning about
+            // it at the consumer node, simply mark its outputs as having a new rate.
+
+            unsigned popCountRateId = 0;
+            if (LLVM_UNLIKELY(isa<PopCountKernel>(node.Kernel))) {
+                popCountRateId = currentRateId++;
+                assert (popCountRateId > 0);
+            }
+
+            bool hasRelativeRate = false;
+
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+
+                const auto output = target(e, G);
+                BV & outgoingRateSet = rateSet[output];
+                // inherit all of the kernel rates
+                outgoingRateSet = kernelRateSet;
+
+                const RelationshipNode & outputNode = G[output];
+                if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
+
+                    if (LLVM_UNLIKELY(popCountRateId != 0)) {
+                        addRateId(outgoingRateSet, popCountRateId);
+                    }
+
+                    const Binding & binding = outputNode.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+
+                    bool requiresNewRateId = false;
+
+                    switch (rate.getKind()) {
+                        case RateId::Bounded:
+                        case RateId::Unknown:
+                            requiresNewRateId = true;
+                            break;
+                        case RateId::Fixed:
+                        case RateId::PartialSum:
+                            requiresNewRateId = binding.isDeferred();
+                            break;
+                        case RateId::Relative:
+                            hasRelativeRate = true;
+                            break;
+                        default: break;
+                    }
+
+                    if (requiresNewRateId) {
+                        const auto newRateId = currentRateId++;
+                        assert (newRateId > 0);
+                        addRateId(outgoingRateSet, newRateId);
+                    }
+
+                }
+
+            }
+
+            if (LLVM_UNLIKELY(hasRelativeRate)) {
+                for (const auto e : make_iterator_range(out_edges(u, G))) {
+                    const auto output = target(e, G);
+                    const RelationshipNode & outputNode = G[output];
+                    const Binding & binding = outputNode.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    if (LLVM_UNLIKELY(rate.isRelative())) {
+                        for (const auto f : make_iterator_range(in_edges(output, G))) {
+                            const RelationshipType & type = G[f];
+                            if (type.Reason == ReasonType::Reference) {
+                                const auto ref = source(f, G);
+                                mergeRateIds(rateSet[output], rateSet[ref]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Now that we've tainted the kernels with any influencing rate ids, sort them into
+    // partitions.
+    PartitionMap partitionSets;
+    for (auto u : O) {
+        const RelationshipNode & node = G[u];
+        if (node.Type == RelationshipNode::IsKernel) {
+            const BV & kernelRateSet = rateSet[u];
+            auto f = partitionSets.find(kernelRateSet);
+            if (f == partitionSets.end()) {
+                f = partitionSets.emplace(kernelRateSet, Partition{}).first;
+            }
+            Partition & partition = f->second;
+            partition.push_back(u);
+        }
+    }
+
+    if (partitionSets.size() > 1) {
+        // if we have two or more partitions, add in ordering constraints to ensure each
+        // kernel within the same partition is sequential.
+
+        auto current = partitionSets.begin();
+        for (;;) {
+            const auto prior = current++;
+            if (LLVM_UNLIKELY(current == partitionSets.end())) {
+                break;
+            }
+            const Partition & A = prior->second;
+            const Partition & B = current->second;
+            for (const auto u : A) {
+                for (const auto v : B) {
+                    add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+                }
+            }
+        }
+    }
+
+
+}
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1358,30 +1574,30 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
  * Returns a lexographically sorted list of ports s.t. the inputs will be ordered as close as possible (baring
  * any constraints) to the kernel's original I/O ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernelIndex) {
+void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernel, const BufferGraph & G) {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
-    const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
-    const auto numOfOutputs = out_degree(kernelIndex, mBufferGraph);
+    const auto numOfInputs = in_degree(kernel, G);
+    const auto numOfOutputs = out_degree(kernel, G);
     const auto firstOutput = numOfInputs;
     const auto numOfPorts = numOfInputs + numOfOutputs;
 
 
-    Graph G(numOfPorts);
+    Graph E(numOfPorts);
 
     // enumerate the input relations
 
     SmallVector<unsigned, 16> zext(numOfInputs);
 
-    for (const auto e : make_iterator_range(in_edges(kernelIndex, mBufferGraph))) {
-        const BufferRateData & bd = mBufferGraph[e];
+    for (const auto e : make_iterator_range(in_edges(kernel, G))) {
+        const BufferRateData & bd = G[e];
         const Binding & input = bd.Binding;
         const ProcessingRate & rate = input.getRate();
         if (rate.hasReference()) {
-            const StreamSetPort ref = getReference(kernelIndex, bd.Port);
+            const StreamSetPort ref = getReference(kernel, bd.Port);
             assert ("input stream cannot refer to an output stream" && ref.Type == PortType::Input);
-            add_edge(ref.Number, bd.Port.Number, G);
+            add_edge(ref.Number, bd.Port.Number, E);
         }
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
             zext.push_back(bd.Port.Number);
@@ -1390,16 +1606,16 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernelInd
     assert (std::is_sorted(zext.begin(), zext.end()));
 
     // and then enumerate the output relations
-    for (const auto e : make_iterator_range(out_edges(kernelIndex, mBufferGraph))) {
-        const BufferRateData & bd = mBufferGraph[e];
+    for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+        const BufferRateData & bd = G[e];
         const Binding & output = bd.Binding;
         const ProcessingRate & rate = output.getRate();
         if (rate.hasReference()) {
-            StreamSetPort ref = getReference(kernelIndex, bd.Port);
+            StreamSetPort ref = getReference(kernel, bd.Port);
             if (LLVM_UNLIKELY(ref.Type == PortType::Output)) {
                 ref.Number += firstOutput;
             }
-            add_edge(ref.Number, bd.Port.Number + firstOutput, G);
+            add_edge(ref.Number, bd.Port.Number + firstOutput, E);
         }
     }
 
@@ -1415,38 +1631,38 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernelInd
                 for (unsigned k = 0; k < n; ++k) {
                     const auto t = zext[k];
                     if (i == t) continue;
-                    add_edge_if_no_induced_cycle(i, zext[k], G);
+                    add_edge_if_no_induced_cycle(i, zext[k], E);
                 }
             }
         }
     }
 
     // check any pipeline input first
-    if (out_degree(PipelineInput, mBufferGraph)) {
+    if (out_degree(PipelineInput, G)) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto buffer = getInputBufferVertex(kernelIndex, i);
-            if (LLVM_UNLIKELY(is_parent(buffer, PipelineInput, mBufferGraph))) {
+            const auto buffer = getInputBufferVertex(kernel, i);
+            if (LLVM_UNLIKELY(is_parent(buffer, PipelineInput, G))) {
                 for (unsigned j = 0; j < i; ++j) {
-                    add_edge_if_no_induced_cycle(i, j, G);
+                    add_edge_if_no_induced_cycle(i, j, E);
                 }
                 for (unsigned j = i + 1; j < numOfPorts; ++j) {
-                    add_edge_if_no_induced_cycle(i, j, G);
+                    add_edge_if_no_induced_cycle(i, j, E);
                 }
             }
         }
     }
 
     // ... and check any pipeline output first
-    if (in_degree(PipelineOutput, mBufferGraph)) {
+    if (in_degree(PipelineOutput, G)) {
         for (unsigned i = 0; i < numOfOutputs; ++i) {
-            const auto buffer = getOutputBufferVertex(kernelIndex, i);
-            if (LLVM_UNLIKELY(has_child(buffer, PipelineOutput, mBufferGraph))) {
+            const auto buffer = getOutputBufferVertex(kernel, i);
+            if (LLVM_UNLIKELY(has_child(buffer, PipelineOutput, G))) {
                 const auto k = firstOutput + i;
                 for (unsigned j = 0; j < k; ++j) {
-                    add_edge_if_no_induced_cycle(k, j, G);
+                    add_edge_if_no_induced_cycle(k, j, E);
                 }
                 for (unsigned j = k + 1; j < numOfPorts; ++j) {
-                    add_edge_if_no_induced_cycle(k, j, G);
+                    add_edge_if_no_induced_cycle(k, j, E);
                 }
             }
         }
@@ -1456,21 +1672,22 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernelInd
     std::vector<unsigned> D;
     D.reserve(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (LLVM_UNLIKELY(isa<DynamicBuffer>(getOutputBuffer(kernelIndex, i)))) {
+        const StreamSetBuffer * const buffer = getOutputBuffer(kernel, i);
+        if (LLVM_UNLIKELY(buffer != nullptr && isa<DynamicBuffer>(buffer))) {
             D.push_back(i);
         }
     }
 
     for (const auto i : D) {
         for (unsigned j = 0; j < numOfInputs; ++j) {
-            add_edge_if_no_induced_cycle(j, firstOutput + i, G);
+            add_edge_if_no_induced_cycle(j, firstOutput + i, E);
         }
         auto Dj = D.begin();
         for (unsigned j = 0; j < numOfOutputs; ++j) {
             if (*Dj == j) {
                 ++Dj;
             } else {
-                add_edge_if_no_induced_cycle(firstOutput + j, firstOutput + i, G);
+                add_edge_if_no_induced_cycle(firstOutput + j, firstOutput + i, E);
             }
         }
         assert (Dj == D.end());
@@ -1479,7 +1696,7 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernelInd
     // TODO: add additional constraints on input ports to indicate the ones
     // likely to have fewest number of strides?
     mPortEvaluationOrder.clear();
-    if (LLVM_UNLIKELY(!lexical_ordering(G, mPortEvaluationOrder))) {
+    if (LLVM_UNLIKELY(!lexical_ordering(E, mPortEvaluationOrder))) {
         report_fatal_error(mKernel->getName() + " has cyclic port dependencies.");
     }
 }

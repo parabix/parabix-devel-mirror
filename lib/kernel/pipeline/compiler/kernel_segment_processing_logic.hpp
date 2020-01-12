@@ -74,7 +74,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
-    /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(mKernelIndex);
+    /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(mKernelIndex, mBufferGraph);
 
 
     const auto prefix = makeKernelName(mKernelIndex);
@@ -284,7 +284,7 @@ inline void PipelineCompiler::validateSegmentExecution(BuilderRef b) {
     if (LLVM_UNLIKELY(mBoundedKernel)) {
 
         const BufferNode & bn = mBufferGraph[mKernelIndex];
-        const auto lb = mk_floor(bn.Lower);
+        const auto lb = floor(bn.Lower);
         const auto ub = ceiling(bn.Upper);
         Value * notTooFew = nullptr;
         if (lb == 0) {
