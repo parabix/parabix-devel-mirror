@@ -524,8 +524,6 @@ protected:
 };
 
 class MultiBlockKernel : public Kernel {
-    friend class BlockOrientedKernel;
-    friend class OptimizationBranch;
 public:
 
     static bool classof(const Kernel * const k) {
@@ -544,10 +542,6 @@ protected:
                      Bindings && scalar_outputs,
                      InternalScalars && internal_scalars);
 
-    virtual void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) = 0;
-
-private:
-
     MultiBlockKernel(BuilderRef b,
                      const TypeId kernelTypId,
                      std::string && kernelName,
@@ -556,6 +550,8 @@ private:
                      Bindings && scalar_parameters,
                      Bindings && scalar_outputs,
                      InternalScalars && internal_scalars);
+
+    virtual void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) = 0;
 
 private:
 

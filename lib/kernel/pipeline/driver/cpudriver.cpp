@@ -230,6 +230,10 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     ModuleSet O1;
     ModuleSet O3;
 
+    for (const auto & kernel : mCompiledKernel) {
+        kernel->ensureLoaded();
+    }
+
     for (const auto & kernel : mCachedKernel) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
@@ -243,34 +247,19 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         }
     }
 
-    // CHECK: it appears as long as the main module is added to to the engine,
-    // we can simply compile the remaining ones. This, however, does cause an
-    // assertion failure within LLVM in debug builds as LLVM expects every
-    // module to be transferred to it prior to calling finalizeObject.
-
-    // #define ADD_ALL_MODULES_FOR_LLVM_DEBUG_BUILD
-
     auto addModules = [&](const ModuleSet & S, const CodeGenOpt::Level level) {
         if (S.empty()) return;
         mEngine->getTargetMachine()->setOptLevel(level);
-        #ifdef ADD_ALL_MODULES_FOR_LLVM_DEBUG_BUILD
         for (Module * M : S) {
             mEngine->addModule(std::unique_ptr<Module>(M));
         }
         mEngine->finalizeObject();
-        #else
-        for (Module * M : S) {
-            mEngine->generateCodeForModule(M);
-        }
-        #endif
     };
 
     auto removeModules = [&](const ModuleSet & S) {
-        #ifdef ADD_ALL_MODULES_FOR_LLVM_DEBUG_BUILD
         for (Module * M : S) {
             mEngine->removeModule(M);
         }
-        #endif
     };
 
     // compile any uncompiled kernels
@@ -292,10 +281,14 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         for (auto & kernel : mCachedKernel) {
             mPreservedKernel.emplace_back(kernel.release());
         }
+        for (auto & kernel : mCompiledKernel) {
+            mPreservedKernel.emplace_back(kernel.release());
+        }
     } else {
         mPreservedKernel.clear();
     }
     mCachedKernel.clear();
+    mCompiledKernel.clear();
 
     // return the compiled main method
     mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
