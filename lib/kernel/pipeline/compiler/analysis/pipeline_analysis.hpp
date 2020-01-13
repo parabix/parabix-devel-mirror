@@ -366,7 +366,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
                 assert (rn.Relationship);
                 if (isa<StreamSet>(rn.Relationship)) {
                     streamSets.push_back(i);
-                } else {
+                } else { assert (isa<Scalar>(rn.Relationship));
                     scalars.push_back(i);
                 }
                 break;
@@ -413,35 +413,14 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     // Since we know by construction the first kernel vertex of G must be
     // the vertex that represents the pipeline input, select it.
-    subsitution[kernels[0]] = P.PipelineInput;
-    assert (G[kernels[0]].Kernel == pipelineKernel);
-
-    // We cannot be sure which kernel represents the pipeline output
-    // but do know that the only kernel other 0 that is mapped to the
-    // the pipelineKernel must refer to it. Find the output.
-
-    unsigned pipelineOutput = 0;
-    for (auto i = numOfKernels - 1U; i > 0U; --i) {
-        const auto k = kernels[i];
-        if (LLVM_LIKELY(G[k].Kernel == pipelineKernel)) {
-            assert (subsitution[k] == -1U);
-            subsitution[k] = P.PipelineOutput;
-            pipelineOutput = i;
-        }
-    }
-    assert (pipelineOutput > 0);
 
     // Now fill in all of the remaining kernels subsitute position
-    auto kernelIndex = P.FirstKernel;
-    for (auto i = 1U; i != numOfKernels; ++i) {
-        if (LLVM_UNLIKELY(i == pipelineOutput)) continue;
-        const auto k = kernels[i];
-        assert (subsitution[k] == -1U);
-        assert (G[k].Kernel != pipelineKernel);
-        assert (kernelIndex <= P.LastKernel);
-        subsitution[k] = kernelIndex++;
+    for (auto i = 0; i != numOfKernels; ++i) {
+        assert (subsitution[kernels[i]] == -1U);
+        subsitution[kernels[i]] = P.PipelineInput + i;
     }
-    assert (kernelIndex == P.PipelineOutput);
+    assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
+    assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {
         assert (subsitution[streamSets[i]] == -1U);
@@ -479,6 +458,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
             for (const auto e : make_iterator_range(in_edges(j, G))) {
                 const auto i = source(e, G);
                 if (G[i].Type == type) {
+                    assert (G[e].Reason != ReasonType::OrderingConstraint);
                     const auto u = subsitution[i];
                     assert (u < num_vertices(H));
                     temp.emplace_back(G[e], u);
@@ -499,6 +479,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
             for (const auto e : make_iterator_range(out_edges(j, G))) {
                 const auto i = target(e, G);
                 if (G[i].Type == type) {
+                    assert (G[e].Reason != ReasonType::OrderingConstraint);
                     const auto w = subsitution[i];
                     assert (w < num_vertices(H));
                     temp.emplace_back(G[e], w);
@@ -568,6 +549,7 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
         vertex[i] = G.add(K);
     }
     const auto p_out = add_vertex(RelationshipNode(pipelineKernel), G);
+
     addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputStreamSetBindings(), G);
     addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputStreamSetBindings(), G, true);
 
@@ -602,11 +584,17 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
         addConsumerRelationships(PortType::Input, C, G);
     }
 
-
-
     // Pipeline optimizations
     combineDuplicateKernels(b, kernels, G);
     removeUnusedKernels(pipelineKernel, p_in, p_out, kernels, G);
+
+    // Add ordering constraints to ensure the input must be before all kernel invocations
+    // and the invocations must come before the output.
+    for (unsigned i = 0; i < n; ++i) {
+        const auto v = vertex[i];
+        add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+        add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+    }
 
     return G;
 }
@@ -1252,6 +1240,7 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
         BV & kernelRateSet = rateSet[u];
 
         auto mergeRateIds = [](BV & dst, BV & src) {
+            //
             if (src.capacity() < dst.capacity()) {
                 src.resize(dst.capacity());
             } else if (dst.capacity() < src.capacity()) {
