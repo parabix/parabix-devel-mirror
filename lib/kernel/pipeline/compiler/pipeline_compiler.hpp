@@ -280,8 +280,6 @@ struct BufferNode {
     unsigned LookAhead = 0;
     unsigned RequiredSpace = 0;
 
-    unsigned PartitionId = 0;
-
     bool isOwned() const {
         return (Type & BufferType::Unowned) == BufferType::None;
     }
@@ -408,6 +406,8 @@ struct RegionData {
 template <typename T>
 using OwningVector = std::vector<std::unique_ptr<T>>;
 
+using PartitionIdVector = std::vector<unsigned>;
+
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
     static constexpr unsigned FirstKernel = 1U;
@@ -422,18 +422,19 @@ struct PipelineGraphBundle {
     unsigned FirstScalar = 0;
     unsigned LastScalar = 0;
 
-    RelationshipGraph Streams;
-    RelationshipGraph Scalars;
-
-    OwningVector<Kernel> InternalKernels;
-    OwningVector<Binding> InternalBindings;
+    RelationshipGraph       Streams;
+    RelationshipGraph       Scalars;
+    OwningVector<Kernel>    InternalKernels;
+    OwningVector<Binding>   InternalBindings;
+    PartitionIdVector       KernelPartitionId;
 
     PipelineGraphBundle(const unsigned n, const unsigned m,
                         OwningVector<Kernel> && internalKernels,
                         OwningVector<Binding> && internalBindings)
     : Streams(n), Scalars(m)
     , InternalKernels(std::move(internalKernels))
-    , InternalBindings(std::move(internalBindings)) {
+    , InternalBindings(std::move(internalBindings))
+    , KernelPartitionId(n, 0) {
 
     }
 };
@@ -677,8 +678,6 @@ public:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
 
-    unsigned partitionIntoFixedRateSubgraphs(BufferGraph & G) const;
-
     void identifySymbolicRates(BufferGraph & G) const;
 
     void identifyThreadLocalBuffers(BufferGraph & G) const;
@@ -747,7 +746,8 @@ public:
     Relationships generateInitialPipelineGraph(BuilderRef b,
                                                PipelineKernel * const pipelineKernel,
                                                OwningVector<Kernel> & internalKernels,
-                                               OwningVector<Binding> & internalBindings);
+                                               OwningVector<Binding> & internalBindings,
+                                               std::vector<unsigned> & partitionIds);
 
     void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & G,
                                   OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings);
@@ -758,7 +758,7 @@ public:
     static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
 
-    void addFixedRateRegionKernelOrderingConstraints(Relationships & G) const;
+    void addFixedRateRegionKernelOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
 
     bool hasZeroExtendedStream() const;
 
@@ -1020,6 +1020,8 @@ protected:
     const unsigned                              LastCall;
     const unsigned                              FirstScalar;
     const unsigned                              LastScalar;
+    const PartitionIdVector                     KernelPartitionId;
+
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
 
@@ -1131,6 +1133,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mNumOfSegments(pipelineKernel->getNumOfSegments())
 , mStreamGraph(std::move(P.Streams))
 , mScalarGraph(std::move(P.Scalars))
+, KernelPartitionId(std::move(P.KernelPartitionId))
 , LastKernel(P.LastKernel)
 , PipelineOutput(P.PipelineOutput)
 , FirstStreamSet(P.FirstStreamSet)

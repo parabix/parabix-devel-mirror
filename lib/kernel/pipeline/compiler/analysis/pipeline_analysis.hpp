@@ -332,9 +332,9 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     OwningVector<Kernel> internalKernels;
     OwningVector<Binding> internalBindings;
 
-    auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings);
+    std::vector<unsigned> partitionIds;
 
-    addFixedRateRegionKernelOrderingConstraints(G);
+    const auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings, partitionIds);
 
     // Compute the lexographical ordering of H
 
@@ -395,7 +395,14 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     const auto n = numOfKernels + numOfBindings + numOfStreamSets;
     const auto m = numOfKernels + numOfCallees + numOfScalars;
 
-    PipelineGraphBundle P(n, m, std::move(internalKernels), std::move(internalBindings));
+    SmallVector<unsigned, 256> subsitution(num_vertices(G), -1U);
+
+    // Construct our temporary bundle; it'll
+
+    PipelineGraphBundle P(n, m,
+                          std::move(internalKernels),
+                          std::move(internalBindings));
+
     P.LastKernel = P.PipelineInput + numOfKernels - 2;
     P.PipelineOutput = P.LastKernel + 1;
 
@@ -409,15 +416,13 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     P.FirstScalar = P.LastCall + 1;
     P.LastScalar = P.LastCall + numOfScalars;
 
-    SmallVector<unsigned, 256> subsitution(num_vertices(G), -1U);
-
-    // Since we know by construction the first kernel vertex of G must be
-    // the vertex that represents the pipeline input, select it.
-
     // Now fill in all of the remaining kernels subsitute position
     for (auto i = 0; i != numOfKernels; ++i) {
-        assert (subsitution[kernels[i]] == -1U);
-        subsitution[kernels[i]] = P.PipelineInput + i;
+        const auto in = kernels[i];
+        assert (subsitution[in] == -1U);
+        const auto out = P.PipelineInput + i;
+        subsitution[in] = out;
+        P.KernelPartitionId[out] = partitionIds[in];
     }
     assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
@@ -527,7 +532,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
  ** ------------------------------------------------------------------------------------------------------------- */
 Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel,
                                                              OwningVector<Kernel> & internalKernels,
-                                                             OwningVector<Binding> & internalBindings) {
+                                                             OwningVector<Binding> & internalBindings,
+                                                             std::vector<unsigned> & partitionIds) {
 
 
     // Copy the list of kernels and add in any internal kernels
@@ -596,6 +602,13 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
         add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
     }
 
+    // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
+    // the same sequence. This will help us to partition the graph later and is useful to determine
+    // whether we can bypass a region without testing every kernel.
+
+    addFixedRateRegionKernelOrderingConstraints(G, partitionIds);
+
+
     return G;
 }
 
@@ -603,7 +616,8 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
  * @brief addRegionSelectorKernels
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & G,
-                                                OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings) {
+                                                OwningVector<Kernel> & internalKernels,
+                                                OwningVector<Binding> & internalBindings) {
 
     enum : unsigned {
         REGION_START = 0
@@ -1218,13 +1232,12 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief sortGraphIntoFixedRateRegions
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships & G) const {
+void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
 
     // LLVM BitVector does not have a built-in < comparator
     using BV = dynamic_bitset<>;
     using Partition = std::vector<unsigned>;
     using PartitionMap = std::map<const BV, Partition>;
-    using Vertices = Vec<unsigned, 64>;
 
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
@@ -1240,7 +1253,8 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
         BV & kernelRateSet = rateSet[u];
 
         auto mergeRateIds = [](BV & dst, BV & src) {
-            //
+            // boost dynamic_bitset will cause a segfault if both buffers
+            // are not of equivalent length.
             if (src.capacity() < dst.capacity()) {
                 src.resize(dst.capacity());
             } else if (dst.capacity() < src.capacity()) {
@@ -1399,31 +1413,35 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
         const RelationshipNode & node = G[u];
         if (node.Type == RelationshipNode::IsKernel) {
             const BV & kernelRateSet = rateSet[u];
-            auto f = partitionSets.find(kernelRateSet);
-            if (f == partitionSets.end()) {
-                f = partitionSets.emplace(kernelRateSet, Partition{}).first;
-            }
-            Partition & partition = f->second;
+            Partition & partition = partitionSets[kernelRateSet];
             partition.push_back(u);
         }
     }
 
-    if (partitionSets.size() > 1) {
+    partitionIds.resize(num_vertices(G), 0);
+
+    if (LLVM_UNLIKELY(partitionSets.empty())) {
+        return;
+    }
+
+    unsigned partitionId = 0;
+    auto current = partitionSets.begin();
+    for (;;) {
+        const auto prior = current++;
+        const Partition & A = prior->second;
+        for (const auto v : A) {
+            partitionIds[v] = partitionId;
+        }
+        ++partitionId;
+        if (LLVM_UNLIKELY(current == partitionSets.end())) {
+            break;
+        }
         // if we have two or more partitions, add in ordering constraints to ensure each
         // kernel within the same partition is sequential.
-
-        auto current = partitionSets.begin();
-        for (;;) {
-            const auto prior = current++;
-            if (LLVM_UNLIKELY(current == partitionSets.end())) {
-                break;
-            }
-            const Partition & A = prior->second;
-            const Partition & B = current->second;
-            for (const auto u : A) {
-                for (const auto v : B) {
-                    add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
-                }
+        const Partition & B = current->second;
+        for (const auto u : A) {
+            for (const auto v : B) {
+                add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
             }
         }
     }

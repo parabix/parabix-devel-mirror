@@ -121,9 +121,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
-    partitionIntoFixedRateSubgraphs(G);
-
-
     identifySymbolicRates(G);
     identifyThreadLocalBuffers(G);
     computeDataFlow(G);
@@ -345,7 +342,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
 
     for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
-        const Kernel * const kernel = mStreamGraph[i].Kernel; assert (kernel);
+        const RelationshipNode & node = mStreamGraph[i];
+        const Kernel * const kernel = node.Kernel; assert (kernel);
 
         auto computeBufferRateBounds = [&](const RelationshipType port,
                                            const RelationshipNode & bindingNode,
@@ -415,191 +413,6 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
         }
     }
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief partitionIntoFixedRateSubgraphs
- ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::partitionIntoFixedRateSubgraphs(BufferGraph & G) const {
-
-    // LLVM BitVector does not have a built-in < comparator
-    using BV = dynamic_bitset<>;
-    using BVIds = std::map<const BV, unsigned>;
-    using InEdgeIterator = graph_traits<BufferGraph>::in_edge_iterator;
-    std::vector<BV> rateSet(LastStreamSet + 1);
-
-    const auto first = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
-    const auto last = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
-
-    unsigned currentRateId = 0;
-
-    for (auto kernel = first; kernel <= last; ++kernel) {
-
-        BV & kernelRateSet = rateSet[kernel];
-
-        // combine all incoming buffer rates sets
-        const auto numOfInputs = in_degree(kernel, G);
-
-        if (LLVM_LIKELY(numOfInputs != 0)) {
-            InEdgeIterator ei, ei_end;
-            std::tie(ei, ei_end) = in_edges(kernel, G);
-            kernelRateSet = rateSet[source(*ei, G)];
-            while (++ei != ei_end) {
-                kernelRateSet |=  rateSet[source(*ei, G)];
-            }
-        }
-
-        auto taintWithNewRate = [&]() {
-            // A source kernel produces data without input thus is the root of a
-            // new partition.
-            if (numOfInputs == 0) {
-                return true;
-            }
-            // If this kernel has any bounded or unknown input rates, there is a
-            // potential change of rate of dataflow through the kernel.
-            for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-                BufferRateData & inputRate = G[input];
-                const Binding & binding = inputRate.Binding;
-                const ProcessingRate & rate = binding.getRate();
-
-                switch (rate.getKind()) {
-                    // countable
-                    case RateId::Fixed:
-                    case RateId::PartialSum:
-                    case RateId::Greedy:
-                        // If a countable rate has a deferred attribute, we cannot infer
-                        // how many items will actually be consumed.
-                        if (LLVM_UNLIKELY(binding.isDeferred())) {
-                            return true;
-                        }
-                        break;
-                    // non-countable
-                    case RateId::Bounded:
-                        return true;
-                    default: break;
-                }
-            }
-            return false;
-        };
-
-        auto addRateId = [](BV & bv, const unsigned rateId) {
-            if (LLVM_UNLIKELY(rateId > bv.capacity())) {
-                bv.resize(round_up_to(rateId, BV::bits_per_block));
-            }
-            bv.set(rateId);
-        };
-
-        if (LLVM_UNLIKELY(taintWithNewRate())) {
-            addRateId(kernelRateSet, ++currentRateId);
-        }
-
-
-        // If this kernel is a PopCount kernel, then it will consume/produce data
-        // at a fixed rate. However, its output will influence the number of items
-        // consumed/produced by any of its descendents. Rather than reasoning about
-        // it at the consumer node, simply mark its output buffer as having a new rate.
-
-        const Kernel * const kernelObj = getKernel(kernel);
-
-        unsigned popCountRateId = 0;
-        if (LLVM_UNLIKELY(isa<PopCountKernel>(kernelObj))) {
-            popCountRateId = ++currentRateId;
-            // We need at least one source kernel for a popcount rate to exist
-            assert (popCountRateId > 0);
-        }
-
-        SmallVector<unsigned, 32> newRateIds(out_degree(kernel, G), 0);
-        bool hasRelativeRate = false;
-
-        for (const auto e : make_iterator_range(out_edges(kernel, G))) {
-
-            BV & outgoingRateSet = rateSet[target(e, G)];
-            // inherit all of the kernel rates
-            outgoingRateSet = kernelRateSet;
-
-            if (LLVM_UNLIKELY(popCountRateId != 0)) {
-                addRateId(outgoingRateSet, popCountRateId);
-            }
-
-            const BufferRateData & outputRate = G[e];
-            const Binding & binding = outputRate.Binding;
-            const ProcessingRate & rate = binding.getRate();
-
-            bool requiresNewRateId = false;
-
-            switch (rate.getKind()) {
-                case RateId::Bounded:
-                case RateId::Unknown:
-                    requiresNewRateId = true;
-                    break;
-                case RateId::Fixed:
-                case RateId::PartialSum:
-                    requiresNewRateId = binding.isDeferred();
-                    break;
-                case RateId::Relative:
-                    hasRelativeRate = true;
-                    break;
-                default: break;
-            }
-
-            if (requiresNewRateId) {
-                const auto newRateId = ++currentRateId;
-                assert (newRateId > 0);
-                newRateIds[outputRate.Port.Number] = newRateId;
-                addRateId(outgoingRateSet, newRateId);
-            }
-
-        }
-
-        if (LLVM_UNLIKELY(hasRelativeRate)) {
-            for (const auto e : make_iterator_range(out_edges(kernel, G))) {
-                const BufferRateData & outputRate = G[e];
-                const Binding & binding = outputRate.Binding;
-                const ProcessingRate & rate = binding.getRate();
-                if (LLVM_UNLIKELY(rate.isRelative())) {
-                    const StreamSetPort refPort = getReference(kernel, outputRate.Port);
-
-                    // If an output rate is relative to the input rate, we can
-                    // ignore it because a relative rate must refer to a variable
-                    // rate and any kernel with a variable input rate is tainted
-                    // with a new rateId.
-
-                    if (refPort.Type == PortType::Output) {
-                        const auto refRateId = newRateIds[refPort.Number];
-                        if (refRateId) {
-                            // if refRateId is 0 then it must be relative to a partialsum rate
-                            // (or some other rate that is already accounted for)
-                            BV & outgoingRateSet = rateSet[target(e, G)];
-                            addRateId(outgoingRateSet, refRateId);
-                        }
-                    }
-                }
-            }
-        }
-
-    }
-
-    // now that we've tainted the kernels with any influencing rate ids, convert each unique set
-    // to a unique fixed number.
-
-    BVIds partitionIds;
-    unsigned nextPartitionId = 0;
-    for (auto kernel = first; kernel <= last; ++kernel) {
-        const BV & kernelRateSet = rateSet[kernel];
-        auto f = partitionIds.find(kernelRateSet);
-        unsigned partitionId;
-        if (f == partitionIds.end()) {
-            partitionId = ++nextPartitionId;
-            partitionIds.emplace(kernelRateSet, partitionId);
-        } else {
-            partitionId = f->second;
-        }
-        BufferNode & kernelData = G[kernel];
-        kernelData.PartitionId = partitionId;
-    }
-
-    return nextPartitionId; // total # of partitions
-}
-
 
 #ifdef USE_Z3
 
@@ -1777,7 +1590,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
     out << "digraph \"" << mTarget->getName() << "\" {\n"
            "v" << PipelineInput << " [label=\"[" <<
            PipelineInput << "] P_{in}\\n"
-           " Partition: " << sn.PartitionId << "\\n";
+           " Partition: " << KernelPartitionId[PipelineInput] << "\\n";
            rate_range(sn.Lower, sn.Upper);
     out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
@@ -1788,7 +1601,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         const BufferNode & bn = G[i];
         out << "v" << i <<
                " [label=\"[" << i << "] " << name << "\\n"
-               " Partition: " << bn.PartitionId << "\\n";
+               " Partition: " << KernelPartitionId[i] << "\\n";
         rate_range(bn.Lower, bn.Upper);
 
         out << "\" shape=rect, style=rounded, peripheries=2];\n";
@@ -1798,7 +1611,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 
     out << "v" << PipelineOutput << " [label=\"[" <<
            PipelineOutput << "] P_{out}\\n"
-           " Partition: " << tn.PartitionId << "\\n";
+           " Partition: " << KernelPartitionId[PipelineOutput] << "\\n";
            rate_range(tn.Lower, tn.Upper);
     out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
