@@ -28,7 +28,7 @@ class Relationship {
     friend class PipelineKernel;
 public:
 
-    using Allocator = ProxyAllocator<Relationship *>;
+    using Allocator = ProxyAllocator<Relationship>;
 
     static inline bool classof(const Relationship *) {
         return true;

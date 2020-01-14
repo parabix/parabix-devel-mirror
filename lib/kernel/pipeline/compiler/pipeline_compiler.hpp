@@ -422,6 +422,8 @@ struct PipelineGraphBundle {
     unsigned FirstScalar = 0;
     unsigned LastScalar = 0;
 
+    unsigned PartitionCount = 0;
+
     RelationshipGraph       Streams;
     RelationshipGraph       Scalars;
     OwningVector<Kernel>    InternalKernels;
@@ -746,8 +748,7 @@ public:
     Relationships generateInitialPipelineGraph(BuilderRef b,
                                                PipelineKernel * const pipelineKernel,
                                                OwningVector<Kernel> & internalKernels,
-                                               OwningVector<Binding> & internalBindings,
-                                               std::vector<unsigned> & partitionIds);
+                                               OwningVector<Binding> & internalBindings);
 
     void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & G,
                                   OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings);
@@ -758,7 +759,7 @@ public:
     static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
 
-    void addFixedRateRegionKernelOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
+    unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
 
     bool hasZeroExtendedStream() const;
 
@@ -772,6 +773,15 @@ public:
     bool hasFixedRateLCM();
 
     AddGraph makeAddGraph() const;
+
+// dataflow analysis functions
+
+    void computeDataFlowRates(BufferGraph & G) const;
+
+    void computeStaticDataFlowRatesForParition(const BufferGraph & G,
+                                         const SmallVector<unsigned, 16> & partition,
+                                         const unsigned partitionId,
+                                         std::vector<unsigned> & kernelStrideRates) const;
 
 // synchronization functions
 
@@ -807,18 +817,28 @@ public:
 
 // rate calculation math functions
 
+
+
     Expr constant(const Rational value) const;
-    Expr free_variable() const;
+
+    enum ExprVarType {
+        INT
+        , REAL
+    };
+
+    Expr free_variable(const ExprVarType type = ExprVarType::REAL) const;
     Expr bounded_variable(Expr inclusive_lb, Expr inclusive_ub) const;
     Expr bounded_variable(const Rational inclusive_lb, const Rational inclusive_ub) const;
     Expr add(Expr X, Expr Y) const;
     Expr subtract(Expr X, Expr Y) const;
     Expr multiply(Expr X, Expr Y) const;
     Expr divide(Expr X, Expr Y) const;
+    Expr equals(Expr X, Expr Y) const;
     Expr mk_min(const ExprSet &set) const;
     Expr mk_max(const ExprSet & set) const;
     Expr mk_floor(Expr X) const;
     Expr mk_ceiling(Expr X) const;
+    void addConstraint(Expr C) const;
 
     void start_smt_solver();
     void destroy_smt_solver();
@@ -884,6 +904,8 @@ protected:
 
     const unsigned								mNumOfThreads;
     const unsigned                              mNumOfSegments;
+
+    mutable Allocator                           mAllocator;
 
     size_t                                      mKernelIndex = 0;
     const Kernel *                              mKernel = nullptr;
@@ -1021,6 +1043,7 @@ protected:
     const unsigned                              FirstScalar;
     const unsigned                              LastScalar;
     const PartitionIdVector                     KernelPartitionId;
+    const unsigned                              PartitionCount;
 
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
@@ -1133,7 +1156,6 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mNumOfSegments(pipelineKernel->getNumOfSegments())
 , mStreamGraph(std::move(P.Streams))
 , mScalarGraph(std::move(P.Scalars))
-, KernelPartitionId(std::move(P.KernelPartitionId))
 , LastKernel(P.LastKernel)
 , PipelineOutput(P.PipelineOutput)
 , FirstStreamSet(P.FirstStreamSet)
@@ -1144,6 +1166,8 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , LastCall(P.LastCall)
 , FirstScalar(P.FirstScalar)
 , LastScalar(P.LastScalar)
+, KernelPartitionId(std::move(P.KernelPartitionId))
+, PartitionCount(P.PartitionCount)
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
 , mBufferGraph(makeBufferGraph(b))

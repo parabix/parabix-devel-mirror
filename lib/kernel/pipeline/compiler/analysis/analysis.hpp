@@ -3,7 +3,7 @@
 
 #include "pipeline_analysis.hpp"
 #include "buffer_analysis.hpp"
-
+#include "dataflow_analysis.hpp"
 
 
 

@@ -121,6 +121,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
+
     identifySymbolicRates(G);
     identifyThreadLocalBuffers(G);
     computeDataFlow(G);
@@ -332,6 +333,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     printBufferGraph(G, errs());
     #endif
 
+    computeDataFlowRates(G);
+
     return G;
 }
 
@@ -414,7 +417,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
     }
 }
 
-#ifdef USE_Z3
+#if 0
 
 BufferRateData & getRateDataForPortNum(const unsigned kernel, const unsigned portNum, BufferGraph & G) {
     const auto numOfInputs = in_degree(kernel, G);
@@ -473,34 +476,6 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
         const auto numOfOutputs = out_degree(kernel, G);
         const Kernel * const kernelObj = getKernel(kernel);
         const auto strideSize = kernelObj->getStride();
-
-
-#if 0
-
-        for (const auto i : mPortEvaluationOrder) {
-
-
-
-
-            const Binding & binding = (i < numOfInputs) ? getInputBinding(kernel, i) : getOutputBinding(kernel, i - numOfInputs);
-            const ProcessingRate & rate = binding.getRate();
-            if (LLVM_UNLIKELY(rate.isRelative() || rate.isPartialSum())) {
-                StreamSetPort port{(i < numOfInputs) ? PortType::Input : PortType::Output,  };
-                if (i < numOfInputs) {
-                    port.Type = PortType::Input;
-                    port.Number = i;
-                } else {
-                    port.Type = PortType::Output;
-                    port.Number = i - numOfInputs;
-                }
-
-                const StreamSetPort ref = getReference(kernel, port);
-                auto H = rate.isRelative() ? R : S;
-                add_edge(i, ref.Number, H);
-            }
-        }
-
-#endif
 
         auto toPortIndex = [&](const StreamSetPort port) {
             if (port.Type == PortType::Input) {
@@ -699,7 +674,7 @@ void PipelineCompiler::identifySymbolicRates(BufferGraph & G) const {
     }
 }
 
-#else
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifySymbolicRates
@@ -1011,8 +986,6 @@ has_principal_rate:
         }
     }
 }
-
-#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyThreadLocalBuffers

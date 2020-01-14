@@ -11,14 +11,27 @@ namespace kernel {
  * constant
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Expr PipelineCompiler::constant(const Rational value) const {
-    return Z3_mk_real(mZ3Context, value.numerator(), value.denominator());
+    if (value.denominator() == 1) {
+        return Z3_mk_int(mZ3Context, value.numerator(), Z3_mk_int_sort(mZ3Context));
+    } else {
+        return Z3_mk_real(mZ3Context, value.numerator(), value.denominator());
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * variable
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Expr PipelineCompiler::free_variable() const {
-    auto v = Z3_mk_fresh_const(mZ3Context, nullptr, Z3_mk_real_sort(mZ3Context));
+inline Expr PipelineCompiler::free_variable(const ExprVarType type) const {
+    Z3_sort S;
+    switch (type) {
+        case ExprVarType::INT:
+            S = Z3_mk_int_sort(mZ3Context);
+            break;
+        case ExprVarType::REAL:
+            S = Z3_mk_real_sort(mZ3Context);
+            break;
+    }
+    auto v = Z3_mk_fresh_const(mZ3Context, nullptr, S);
     // we only care about non-negative values
     auto c1 = Z3_mk_ge(mZ3Context, v, mZ3_ZERO);
     Z3_solver_assert(mZ3Context, mZ3Solver, c1);
@@ -29,17 +42,6 @@ inline Expr PipelineCompiler::free_variable() const {
  * bounded_variable
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Expr PipelineCompiler::bounded_variable(Expr inclusive_lb, Expr inclusive_ub) const {
-
-    #warning does Z3_mk_eq assert there is an assignment in which they are equal or that all assignments are equal?
-
-    Z3_solver_push(mZ3Context, mZ3Solver);
-    Z3_solver_assert(mZ3Context, mZ3Solver, Z3_mk_eq(mZ3Context, inclusive_lb, inclusive_ub));
-    const auto eq = Z3_solver_check(mZ3Context, mZ3Solver);
-    Z3_solver_pop(mZ3Context, mZ3Solver, 1);
-    if (eq == Z3_L_TRUE) {
-        return inclusive_lb;
-    }
-
     auto v = Z3_mk_fresh_const(mZ3Context, nullptr, Z3_mk_real_sort(mZ3Context));
     auto c1 = Z3_mk_ge(mZ3Context, v, inclusive_lb);
     Z3_solver_assert(mZ3Context, mZ3Solver, c1);
@@ -58,13 +60,7 @@ inline Expr PipelineCompiler::bounded_variable(const Rational inclusive_lb, cons
     }
     auto lb = Z3_mk_real(mZ3Context, inclusive_lb.numerator(), inclusive_lb.denominator());
     auto ub = Z3_mk_real(mZ3Context, inclusive_ub.numerator(), inclusive_ub.denominator());
-
-    auto v = Z3_mk_fresh_const(mZ3Context, nullptr, Z3_mk_real_sort(mZ3Context));
-    auto c1 = Z3_mk_ge(mZ3Context, v, lb);
-    Z3_solver_assert(mZ3Context, mZ3Solver, c1);
-    auto c2 = Z3_mk_le(mZ3Context, v, ub);
-    Z3_solver_assert(mZ3Context, mZ3Solver, c2);
-    return v;
+    return bounded_variable(lb, ub);
 
 }
 
@@ -98,6 +94,13 @@ inline Expr PipelineCompiler::multiply(Expr X, Expr Y) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Expr PipelineCompiler::divide(Expr X, Expr Y) const {
     return Z3_simplify(mZ3Context, Z3_mk_div(mZ3Context, X, Y));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * equals
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Expr PipelineCompiler::equals(Expr X, Expr Y) const {
+    return Z3_simplify(mZ3Context, Z3_mk_eq(mZ3Context, X, Y));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -253,6 +256,14 @@ Expr PipelineCompiler::mk_ceiling(Expr X) const {
     return Z3_simplify(mZ3Context, Z3_mk_sub(mZ3Context, 2, args));
 
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * addConstraint
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addConstraint(Expr C) const {
+    Z3_solver_assert(mZ3Context, mZ3Solver, C);
+}
+
 
 #if 0
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -332,12 +332,16 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     OwningVector<Kernel> internalKernels;
     OwningVector<Binding> internalBindings;
 
+    auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings);
+
+    // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
+    // the same sequence. This will help us to partition the graph later and is useful to determine
+    // whether we can bypass a region without testing every kernel.
+
     std::vector<unsigned> partitionIds;
+    const auto numOfPartitions = partitionIntoFixedRateRegionsWithOrderingConstraints(G, partitionIds);
 
-    const auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings, partitionIds);
-
-    // Compute the lexographical ordering of H
-
+    // Compute the lexographical ordering of G
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
         // TODO: inspect G to determine what type of cycle. E.g., do we have circular references in the binding of
@@ -415,6 +419,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     P.LastCall = P.PipelineOutput + numOfCallees;
     P.FirstScalar = P.LastCall + 1;
     P.LastScalar = P.LastCall + numOfScalars;
+
+    P.PartitionCount = numOfPartitions;
 
     // Now fill in all of the remaining kernels subsitute position
     for (auto i = 0; i != numOfKernels; ++i) {
@@ -532,8 +538,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
  ** ------------------------------------------------------------------------------------------------------------- */
 Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel,
                                                              OwningVector<Kernel> & internalKernels,
-                                                             OwningVector<Binding> & internalBindings,
-                                                             std::vector<unsigned> & partitionIds) {
+                                                             OwningVector<Binding> & internalBindings) {
 
 
     // Copy the list of kernels and add in any internal kernels
@@ -601,13 +606,6 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
         add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
         add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
     }
-
-    // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
-    // the same sequence. This will help us to partition the graph later and is useful to determine
-    // whether we can bypass a region without testing every kernel.
-
-    addFixedRateRegionKernelOrderingConstraints(G, partitionIds);
-
 
     return G;
 }
@@ -1228,16 +1226,19 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
 
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief sortGraphIntoFixedRateRegions
+ * @brief partitionIntoFixedRateRegionWithOrderingConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
+unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
 
     // LLVM BitVector does not have a built-in < comparator
     using BV = dynamic_bitset<>;
     using Partition = std::vector<unsigned>;
     using PartitionMap = std::map<const BV, Partition>;
+
+    using PartialSumMap = flat_map<unsigned, unsigned>;
+
+    #error make partial sum map
 
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
@@ -1290,6 +1291,33 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
                 bv.set(rateId);
             };
 
+            auto bindingRateRequiresNewPartition = [](const Binding & binding) {
+                const ProcessingRate & rate = binding.getRate();
+                switch (rate.getKind()) {
+                    // countable
+                    case RateId::Fixed:
+                    case RateId::PartialSum:
+                    case RateId::Greedy:
+                        // If a countable rate has a deferred attribute, we cannot infer
+                        // how many items will actually be consumed.
+                        for (const Attribute & attr : binding.getAttributes()) {
+                            switch (attr.getKind()) {
+                                case AttrId::Delayed:
+                                case AttrId::Deferred:
+                                    return true;
+                                default:
+                                    break;
+                            }
+                        }
+                        break;
+                    // non-countable
+                    case RateId::Bounded:
+                        return true;
+                    default: break;
+                }
+                return false;
+            };
+
             auto taintWithNewRate = [&]() {
                 // A source kernel produces data without input thus is the root of a
                 // new partition.
@@ -1302,23 +1330,8 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
                     const auto input = source(e, G);
                     const RelationshipNode & inputNode = G[input];
                     if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
-                        const Binding & binding = inputNode.Binding;
-                        const ProcessingRate & rate = binding.getRate();
-                        switch (rate.getKind()) {
-                            // countable
-                            case RateId::Fixed:
-                            case RateId::PartialSum:
-                            case RateId::Greedy:
-                                // If a countable rate has a deferred attribute, we cannot infer
-                                // how many items will actually be consumed.
-                                if (LLVM_UNLIKELY(binding.isDeferred())) {
-                                    return true;
-                                }
-                                break;
-                            // non-countable
-                            case RateId::Bounded:
-                                return true;
-                            default: break;
+                        if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(inputNode.Binding))) {
+                            return true;
                         }
                     }
                 }
@@ -1334,13 +1347,14 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
             // consumed/produced by any of its descendents. Rather than reasoning about
             // it at the consumer node, simply mark its outputs as having a new rate.
 
+            // TODO: if a PopCountKernel is ever constructed by the programmer and used
+            // as an actual input stream, this would be overly conservative.
+
             unsigned popCountRateId = 0;
             if (LLVM_UNLIKELY(isa<PopCountKernel>(node.Kernel))) {
                 popCountRateId = currentRateId++;
                 assert (popCountRateId > 0);
             }
-
-            bool hasRelativeRate = false;
 
             for (const auto e : make_iterator_range(out_edges(u, G))) {
 
@@ -1351,54 +1365,29 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
 
                 const RelationshipNode & outputNode = G[output];
                 if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
-
                     if (LLVM_UNLIKELY(popCountRateId != 0)) {
                         addRateId(outgoingRateSet, popCountRateId);
                     }
-
-                    const Binding & binding = outputNode.Binding;
-                    const ProcessingRate & rate = binding.getRate();
-
-                    bool requiresNewRateId = false;
-
-                    switch (rate.getKind()) {
-                        case RateId::Bounded:
-                        case RateId::Unknown:
-                            requiresNewRateId = true;
-                            break;
-                        case RateId::Fixed:
-                        case RateId::PartialSum:
-                            requiresNewRateId = binding.isDeferred();
-                            break;
-                        case RateId::Relative:
-                            hasRelativeRate = true;
-                            break;
-                        default: break;
-                    }
-
-                    if (requiresNewRateId) {
+                    if (bindingRateRequiresNewPartition(outputNode.Binding)) {
                         const auto newRateId = currentRateId++;
                         assert (newRateId > 0);
                         addRateId(outgoingRateSet, newRateId);
                     }
-
                 }
-
             }
 
-            if (LLVM_UNLIKELY(hasRelativeRate)) {
-                for (const auto e : make_iterator_range(out_edges(u, G))) {
-                    const auto output = target(e, G);
-                    const RelationshipNode & outputNode = G[output];
-                    const Binding & binding = outputNode.Binding;
-                    const ProcessingRate & rate = binding.getRate();
-                    if (LLVM_UNLIKELY(rate.isRelative())) {
-                        for (const auto f : make_iterator_range(in_edges(output, G))) {
-                            const RelationshipType & type = G[f];
-                            if (type.Reason == ReasonType::Reference) {
-                                const auto ref = source(f, G);
-                                mergeRateIds(rateSet[output], rateSet[ref]);
-                            }
+            // Fill in any relative rates
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+                const auto output = target(e, G);
+                const RelationshipNode & outputNode = G[output];
+                const Binding & binding = outputNode.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                if (LLVM_UNLIKELY(rate.isRelative())) {
+                    for (const auto f : make_iterator_range(in_edges(output, G))) {
+                        const RelationshipType & type = G[f];
+                        if (type.Reason == ReasonType::Reference) {
+                            const auto ref = source(f, G);
+                            mergeRateIds(rateSet[output], rateSet[ref]);
                         }
                     }
                 }
@@ -1406,8 +1395,7 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
         }
     }
 
-    // Now that we've tainted the kernels with any influencing rate ids, sort them into
-    // partitions.
+    // Now that we've tainted the kernels with any influencing rate ids, sort them into partitions.
     PartitionMap partitionSets;
     for (auto u : O) {
         const RelationshipNode & node = G[u];
@@ -1421,18 +1409,18 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
     partitionIds.resize(num_vertices(G), 0);
 
     if (LLVM_UNLIKELY(partitionSets.empty())) {
-        return;
+        return 0;
     }
 
-    unsigned partitionId = 0;
+    unsigned nextPartitionId = 0;
     auto current = partitionSets.begin();
     for (;;) {
         const auto prior = current++;
         const Partition & A = prior->second;
         for (const auto v : A) {
-            partitionIds[v] = partitionId;
+            partitionIds[v] = nextPartitionId;
         }
-        ++partitionId;
+        ++nextPartitionId;
         if (LLVM_UNLIKELY(current == partitionSets.end())) {
             break;
         }
@@ -1446,7 +1434,7 @@ void PipelineCompiler::addFixedRateRegionKernelOrderingConstraints(Relationships
         }
     }
 
-
+    return nextPartitionId;
 }
 
 
