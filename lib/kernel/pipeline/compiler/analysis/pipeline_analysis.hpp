@@ -1236,9 +1236,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     using Partition = std::vector<unsigned>;
     using PartitionMap = std::map<const BV, Partition>;
 
-    using PartialSumMap = flat_map<unsigned, unsigned>;
-
-    #error make partial sum map
+    using PartialSumKey = std::pair<RefWrapper<BV>, unsigned>;
+    using PartialSumMap = flat_map<PartialSumKey, unsigned>;
 
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
@@ -1247,6 +1246,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     std::vector<BV> rateSet(num_vertices(G));
 
+    PartialSumMap P;
+
     unsigned currentRateId = 0;
 
     for (const auto u : O) {
@@ -1254,8 +1255,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         BV & kernelRateSet = rateSet[u];
 
         auto mergeRateIds = [](BV & dst, BV & src) {
-            // boost dynamic_bitset will cause a segfault if both buffers
-            // are not of equivalent length.
+            // boost dynamic_bitset will segfault if both buffers are not of equivalent length.
             if (src.capacity() < dst.capacity()) {
                 src.resize(dst.capacity());
             } else if (dst.capacity() < src.capacity()) {
@@ -1291,29 +1291,51 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 bv.set(rateId);
             };
 
+            auto checkForPartialSum = [&](const ProcessingRate & rate, const unsigned bindingNode, BV & updateableRateSet) {
+                if (LLVM_UNLIKELY(rate.isPartialSum())) {
+                    for (const auto f : make_iterator_range(in_edges(bindingNode, G))) {
+                        const RelationshipType t = G[f];
+                        if (t.Reason == ReasonType::Reference) {
+                            const auto refBuffer = source(f, G);
+                            BV & bindingRateSet = rateSet[bindingNode];
+                            auto key = std::make_pair(RefWrapper<BV>{bindingRateSet}, refBuffer);
+                            const auto p = P.find(key);
+                            unsigned partialSumId;
+                            if (p == P.end()) {
+                                partialSumId = currentRateId++;
+                                P.emplace(key, partialSumId);
+                            } else {
+                                partialSumId = p->second;
+                            }
+                            addRateId(updateableRateSet, partialSumId);
+                        }
+                    }
+                }
+            };
+
             auto bindingRateRequiresNewPartition = [](const Binding & binding) {
                 const ProcessingRate & rate = binding.getRate();
                 switch (rate.getKind()) {
                     // countable
                     case RateId::Fixed:
-                    case RateId::PartialSum:
                     case RateId::Greedy:
-                        // If a countable rate has a deferred attribute, we cannot infer
-                        // how many items will actually be consumed.
-                        for (const Attribute & attr : binding.getAttributes()) {
-                            switch (attr.getKind()) {
-                                case AttrId::Delayed:
-                                case AttrId::Deferred:
-                                    return true;
-                                default:
-                                    break;
-                            }
-                        }
+                    case RateId::PartialSum:
                         break;
                     // non-countable
                     case RateId::Bounded:
                         return true;
                     default: break;
+                }
+                // Check the attributes to see whether any impose a partition change
+                for (const Attribute & attr : binding.getAttributes()) {
+                    switch (attr.getKind()) {
+                        case AttrId::Deferred:
+                        case AttrId::Delayed:
+                        case AttrId::LookAhead:
+                            return true;
+                        default:
+                            break;
+                    }
                 }
                 return false;
             };
@@ -1330,7 +1352,9 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                     const auto input = source(e, G);
                     const RelationshipNode & inputNode = G[input];
                     if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
-                        if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(inputNode.Binding))) {
+                        const Binding & binding = inputNode.Binding;
+                        checkForPartialSum(binding.getRate(), input, kernelRateSet);
+                        if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(binding))) {
                             return true;
                         }
                     }
@@ -1342,33 +1366,17 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 addRateId(kernelRateSet, currentRateId++);
             }
 
-            // If this kernel is a PopCount kernel, then it will consume/produce data
-            // at a fixed rate. However, its output will influence the number of items
-            // consumed/produced by any of its descendents. Rather than reasoning about
-            // it at the consumer node, simply mark its outputs as having a new rate.
-
-            // TODO: if a PopCountKernel is ever constructed by the programmer and used
-            // as an actual input stream, this would be overly conservative.
-
-            unsigned popCountRateId = 0;
-            if (LLVM_UNLIKELY(isa<PopCountKernel>(node.Kernel))) {
-                popCountRateId = currentRateId++;
-                assert (popCountRateId > 0);
-            }
-
             for (const auto e : make_iterator_range(out_edges(u, G))) {
 
                 const auto output = target(e, G);
                 BV & outgoingRateSet = rateSet[output];
                 // inherit all of the kernel rates
                 outgoingRateSet = kernelRateSet;
-
                 const RelationshipNode & outputNode = G[output];
                 if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
-                    if (LLVM_UNLIKELY(popCountRateId != 0)) {
-                        addRateId(outgoingRateSet, popCountRateId);
-                    }
-                    if (bindingRateRequiresNewPartition(outputNode.Binding)) {
+                    const Binding & binding = outputNode.Binding;
+                    checkForPartialSum(binding.getRate(), output, outgoingRateSet);
+                    if (bindingRateRequiresNewPartition(binding)) {
                         const auto newRateId = currentRateId++;
                         assert (newRateId > 0);
                         addRateId(outgoingRateSet, newRateId);

@@ -22,6 +22,11 @@ private:
     const T * mReference;
 };
 
+template <typename T>
+constexpr inline bool operator< (const RefWrapper<T> & a, const RefWrapper<T> & b) {
+    return &a.get() < &b.get();
+}
+
 }
 
 #endif // REFWRAPPER_H

@@ -317,6 +317,10 @@ struct BufferRateData {
 
     Rational Minimum;
     Rational Maximum;
+
+    Rational MinDataFlow;
+    Rational MaxDataFlow;
+
     Rational MinimumExpectedFlow;
     Rational MaximumExpectedFlow;
     Rational MinimumSpace;
@@ -349,6 +353,7 @@ struct BufferRateData {
                    Rational minRate, Rational maxRate)
     : Port(port), Binding(binding)
     , Minimum(minRate), Maximum(maxRate)
+    , MinDataFlow(), MaxDataFlow()
     , MinimumExpectedFlow(0), MaximumExpectedFlow(0)
     , MinimumSpace(0), MaximumSpace(0) {
 
@@ -778,10 +783,10 @@ public:
 
     void computeDataFlowRates(BufferGraph & G) const;
 
-    void computeStaticDataFlowRatesForParition(const BufferGraph & G,
-                                         const SmallVector<unsigned, 16> & partition,
+    void computeStaticDataFlowRatesForParition(BufferGraph &G,
+                                         const unsigned firstKernel, const unsigned lastKernel,
                                          const unsigned partitionId,
-                                         std::vector<unsigned> & kernelStrideRates) const;
+                                         std::vector<unsigned> & strideRateFactor) const;
 
 // synchronization functions
 
