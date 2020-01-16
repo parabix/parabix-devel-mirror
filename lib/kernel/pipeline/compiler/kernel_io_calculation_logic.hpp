@@ -16,8 +16,7 @@ namespace kernel {
 void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     // bound the number of strides by the maximum expected
-    const BufferNode & bn = mBufferGraph[mKernelIndex];
-    Constant * const maxStrides = b->getSize(ceiling(bn.Upper));
+    Constant * const maxStrides = b->getSize(ExpectedNumOfStrides[mKernelIndex]);
     mNumOfLinearStrides = b->CreateSub(maxStrides, mCurrentNumOfStrides);
 
     // If this kernel does not have an explicit do final segment, then we want to know whether this stride will

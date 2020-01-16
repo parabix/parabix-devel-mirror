@@ -27,7 +27,8 @@
 #include <queue>
 #include <z3.h>
 
-// #define PRINT_DEBUG_MESSAGES
+
+#define PRINT_DEBUG_MESSAGES
 
 #define PRINT_BUFFER_GRAPH
 
@@ -68,9 +69,6 @@ using CallRef = RefWrapper<CallBinding>;
 using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
-
-using Expr = Z3_ast;
-using ExprSet = SmallFlatSet<Expr, 8>;
 
 #warning create a preallocation phase for kernels to add capacity suggestions
 
@@ -272,8 +270,6 @@ enum class SymbolicRateType : unsigned {
 
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
-    Rational Lower{};
-    Rational Upper{};
     unsigned LookBehind = 0;
     unsigned LookBehindReflection = 0;
     unsigned CopyBack = 0;
@@ -314,23 +310,8 @@ struct BufferRateData {
 
     RelationshipType Port;
     BindingRef Binding;
-
     Rational Minimum;
     Rational Maximum;
-
-    Rational MinDataFlow;
-    Rational MaxDataFlow;
-
-    Rational MinimumExpectedFlow;
-    Rational MaximumExpectedFlow;
-    Rational MinimumSpace;
-    Rational MaximumSpace;
-
-    #ifdef USE_Z3
-    Expr     SymbolicRate = nullptr;
-    #else
-    unsigned SymbolicRate = 0;
-    #endif
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -352,10 +333,7 @@ struct BufferRateData {
     BufferRateData(RelationshipType port, BindingRef binding,
                    Rational minRate, Rational maxRate)
     : Port(port), Binding(binding)
-    , Minimum(minRate), Maximum(maxRate)
-    , MinDataFlow(), MaxDataFlow()
-    , MinimumExpectedFlow(0), MaximumExpectedFlow(0)
-    , MinimumSpace(0), MaximumSpace(0) {
+    , Minimum(minRate), Maximum(maxRate) {
 
     }
 
@@ -684,9 +662,6 @@ public:
     void verifyIOStructure() const;
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
-
-    void identifySymbolicRates(BufferGraph & G) const;
-
     void identifyThreadLocalBuffers(BufferGraph & G) const;
     void computeDataFlow(BufferGraph & G) const;
 
@@ -781,12 +756,11 @@ public:
 
 // dataflow analysis functions
 
-    void computeDataFlowRates(BufferGraph & G) const;
+    void computeDataFlowRates(BuilderRef b, BufferGraph & G);
 
-    void computeStaticDataFlowRatesForParition(BufferGraph &G,
-                                         const unsigned firstKernel, const unsigned lastKernel,
-                                         const unsigned partitionId,
-                                         std::vector<unsigned> & strideRateFactor) const;
+    std::vector<unsigned> calculateExpectedNumOfStridesPerSegment(const BufferGraph & G) const;
+
+    void estimateDataFlowBounds(BuilderRef b, BufferGraph & G, const std::vector<unsigned> & expected) const ;
 
 // synchronization functions
 
@@ -819,34 +793,6 @@ public:
     void debugResume(BuilderRef b) const;
     void debugClose(BuilderRef b);
     #endif
-
-// rate calculation math functions
-
-
-
-    Expr constant(const Rational value) const;
-
-    enum ExprVarType {
-        INT
-        , REAL
-    };
-
-    Expr free_variable(const ExprVarType type = ExprVarType::REAL) const;
-    Expr bounded_variable(Expr inclusive_lb, Expr inclusive_ub) const;
-    Expr bounded_variable(const Rational inclusive_lb, const Rational inclusive_ub) const;
-    Expr add(Expr X, Expr Y) const;
-    Expr subtract(Expr X, Expr Y) const;
-    Expr multiply(Expr X, Expr Y) const;
-    Expr divide(Expr X, Expr Y) const;
-    Expr equals(Expr X, Expr Y) const;
-    Expr mk_min(const ExprSet &set) const;
-    Expr mk_max(const ExprSet & set) const;
-    Expr mk_floor(Expr X) const;
-    Expr mk_ceiling(Expr X) const;
-    void addConstraint(Expr C) const;
-
-    void start_smt_solver();
-    void destroy_smt_solver();
 
 // misc. functions
 
@@ -1050,13 +996,10 @@ protected:
     const PartitionIdVector                     KernelPartitionId;
     const unsigned                              PartitionCount;
 
+    std::vector<unsigned>                       ExpectedNumOfStrides;
+
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
-
-    Z3_context                                  mZ3Context;
-    Z3_solver                                   mZ3Solver;
-    Expr                                        mZ3_ZERO;
-    Expr                                        mZ3_ONE;
 
     const BufferGraph                           mBufferGraph;
 

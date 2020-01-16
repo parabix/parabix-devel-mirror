@@ -34,8 +34,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelTerminationCheck);
         BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelTerminationCheck);
 
-        const BufferNode & bn = mBufferGraph[mKernelIndex];
-        Constant * const maxStrides = b->getSize(ceiling(bn.Upper));
+        Constant * const maxStrides = b->getSize(ExpectedNumOfStrides[mKernelIndex]);
         releaseLock = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
         releaseLock = b->CreateOr(b->CreateIsNotNull(mIsFinalInvocationPhi), releaseLock);
 
@@ -233,7 +232,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 mProcessedDeferredItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
-                debugPrint(b, prefix + "_processed_deferred'", mProcessedDeferredItemCount[i]);
+                debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     Value * const deferred = mProcessedDeferredItemCount[i];
@@ -281,7 +280,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 mProducedDeferredItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
-                debugPrint(b, prefix + "_processed_deferred'", mProcessedDeferredItemCount[i]);
+                debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     Value * const deferred = mProducedDeferredItemCount[i];

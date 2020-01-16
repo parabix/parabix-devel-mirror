@@ -235,9 +235,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     // chain the progress state so that the next one carries on from this one
     mHalted = mHaltedPhi;
     mPipelineProgress = mNextPipelineProgress;
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        validateSegmentExecution(b);
-    }
     releaseSynchronizationLock(b, LockType::Segment);
 }
 
@@ -266,44 +263,6 @@ void PipelineCompiler::replacePhiCatchBlocksWith(BasicBlock * const loopExit, Ba
     mKernelLoopExitPhiCatch = loopExit;
     mKernelInitiallyTerminatedPhiCatch->eraseFromParent();
     mKernelInitiallyTerminatedPhiCatch = initiallyTerminatedExit;
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief validateSegmentExecution
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::validateSegmentExecution(BuilderRef b) {
-
-//    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
-//    Value * const signal = b->CreateLoad(ptr);
-//    Value * const matching = b->CreateICmpEQ(signal, mTerminatedAtExitPhi);
-//    b->CreateAssert(matching,
-//                    "%s: non matching termination signal (current %u, stored %u)",
-//                    mKernelAssertionName, mTerminatedAtExitPhi, signal);
-
-    if (LLVM_UNLIKELY(mBoundedKernel)) {
-
-        const BufferNode & bn = mBufferGraph[mKernelIndex];
-        const auto lb = floor(bn.Lower);
-        const auto ub = ceiling(bn.Upper);
-        Value * notTooFew = nullptr;
-        if (lb == 0) {
-            notTooFew = b->getTrue();
-        } else {
-            notTooFew = b->CreateICmpUGE(mTotalNumOfStridesAtExitPhi, b->getSize(lb));
-            Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-            notTooFew = b->CreateOr(terminated, notTooFew);
-        }
-
-        Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStridesAtExitPhi, b->getSize(ub));
-        Value * const withinRange = b->CreateAnd(notTooFew, notTooMany);
-
-        b->CreateAssert(withinRange, "%s: processed %" PRIu64 " strides but expected [%" PRIu64 ",%" PRIu64 "]",
-                        mKernelAssertionName,
-                        mTotalNumOfStridesAtExitPhi,
-                        b->getSize(lb), b->getSize(ub)
-                        );
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -365,8 +324,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         b->SetInsertPoint(ioBoundsCheck);
 
         // bound the number of strides by the maximum expected
-        const BufferNode & bn = mBufferGraph[mKernelIndex];
-        Constant * const maxStrides = b->getSize(ceiling(bn.Upper));
+        Constant * const maxStrides = b->getSize(ExpectedNumOfStrides[mKernelIndex]);
         Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
         b->CreateCondBr(done, mKernelLoopExit, mKernelLoopEntry);
 
