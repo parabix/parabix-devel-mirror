@@ -75,7 +75,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
     /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(mKernelIndex, mBufferGraph);
-
+    mMaximumNumOfStrides = 100; // ExpectedNumOfStrides[mKernelIndex]
 
     const auto prefix = makeKernelName(mKernelIndex);
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", mPipelineEnd);
@@ -324,7 +324,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         b->SetInsertPoint(ioBoundsCheck);
 
         // bound the number of strides by the maximum expected
-        Constant * const maxStrides = b->getSize(ExpectedNumOfStrides[mKernelIndex]);
+        Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
         Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
         b->CreateCondBr(done, mKernelLoopExit, mKernelLoopEntry);
 

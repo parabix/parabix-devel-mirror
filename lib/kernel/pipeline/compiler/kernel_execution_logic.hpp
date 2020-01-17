@@ -34,7 +34,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelTerminationCheck);
         BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelTerminationCheck);
 
-        Constant * const maxStrides = b->getSize(ExpectedNumOfStrides[mKernelIndex]);
+        Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
         releaseLock = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
         releaseLock = b->CreateOr(b->CreateIsNotNull(mIsFinalInvocationPhi), releaseLock);
 

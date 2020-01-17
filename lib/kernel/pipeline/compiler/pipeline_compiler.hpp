@@ -756,11 +756,17 @@ public:
 
 // dataflow analysis functions
 
-    void computeDataFlowRates(BuilderRef b, BufferGraph & G);
+    void computeDataFlowRates(BufferGraph & G);
 
-    std::vector<unsigned> calculateExpectedNumOfStridesPerSegment(const BufferGraph & G) const;
+    enum StridesPerSegmentCalculationType {
+        LowerBound,
+        Expected,
+        UpperBound
+    };
 
-    void estimateDataFlowBounds(BuilderRef b, BufferGraph & G, const std::vector<unsigned> & expected) const ;
+    std::vector<unsigned> calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, const StridesPerSegmentCalculationType type) const;
+
+    void estimateDataFlowBounds(BufferGraph & G, const std::vector<unsigned> & expected) const ;
 
 // synchronization functions
 
@@ -912,6 +918,8 @@ protected:
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
     Value *                                     mHasClosedInputStream = nullptr;
+
+    unsigned                                    mMaximumNumOfStrides = 0;
 
     Rational                                    mFixedRateLCM;
     Value *                                     mTerminatedExplicitly = nullptr;

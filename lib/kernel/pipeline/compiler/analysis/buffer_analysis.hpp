@@ -119,7 +119,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
-    computeDataFlowRates(b, G);
+    computeDataFlowRates(G);
 
     SmallFlatSet<BufferGraph::vertex_descriptor, 16> E;
     // mark all external I/O
@@ -179,6 +179,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         }
     }
 
+    const auto blockWidth = b->getBitBlockWidth();
+
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
@@ -228,9 +230,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const auto overflowSize = std::max(bn.CopyBack, bn.LookAhead);
-            const auto underflowSize = bn.LookBehind;
-            const auto bufferSize = bn.RequiredSpace;
+            const auto overflowSize = round_up_to(std::max(bn.CopyBack, bn.LookAhead), blockWidth);
+            const auto underflowSize = round_up_to(bn.LookBehind, blockWidth);
+            const auto minRequiredSize = std::max(underflowSize, overflowSize) * 2;
+            const auto requiredSpace = std::max<size_t>(bn.RequiredSpace, minRequiredSize);
+            const auto bufferSize = round_up_to(requiredSpace, blockWidth) * 2;
+
             Type * const baseType = output.getType();
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.

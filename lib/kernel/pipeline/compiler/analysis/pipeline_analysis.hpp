@@ -1234,10 +1234,11 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     // LLVM BitVector does not have a built-in < comparator
     using BV = dynamic_bitset<>;
     using Partition = std::vector<unsigned>;
-    using PartitionMap = std::map<const BV, Partition>;
-
-    using PartialSumKey = std::pair<RefWrapper<BV>, unsigned>;
+    using PartitionMap = std::map<BV, Partition>;
+    using PartialSumKey = std::pair<BV, unsigned>;
     using PartialSumMap = flat_map<PartialSumKey, unsigned>;
+
+    printRelationshipGraph(G, errs(), "G");
 
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
@@ -1252,7 +1253,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     for (const auto u : O) {
 
-        BV & kernelRateSet = rateSet[u];
+        const RelationshipNode & node = G[u];
 
         auto mergeRateIds = [](BV & dst, BV & src) {
             // boost dynamic_bitset will segfault if both buffers are not of equivalent length.
@@ -1264,27 +1265,19 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             dst |= src;
         };
 
-        // combine all incoming rates sets
-        auto required = kernelRateSet.size();
-        for (const auto e : make_iterator_range(in_edges(u, G))) {
-            const auto u = source(e, G);
-            const BV & inputRateSet = rateSet[u];
-            required = std::max(required, inputRateSet.size());
-        }
-
-        kernelRateSet.resize(required);
+        BV & nodeRateSet = rateSet[u];
 
         for (const auto e : make_iterator_range(in_edges(u, G))) {
-            const auto u = source(e, G);
-            BV & inputRateSet = rateSet[u];
-            mergeRateIds(kernelRateSet, inputRateSet);
+            const auto input = source(e, G);
+            // Combine all incoming rates sets
+            BV & inputRateSet = rateSet[input];
+            // assert (inputRateSet.any());
+            mergeRateIds(nodeRateSet, inputRateSet);
         }
-
-        const RelationshipNode & node = G[u];
 
         if (node.Type == RelationshipNode::IsKernel) {
 
-            auto addRateId = [](BV & bv, const unsigned rateId) {
+             auto addRateId = [](BV & bv, const unsigned rateId) {
                 if (LLVM_UNLIKELY(rateId >= bv.capacity())) {
                     bv.resize(round_up_to(rateId + 1, BV::bits_per_block));
                 }
@@ -1313,12 +1306,27 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 }
             };
 
-            auto bindingRateRequiresNewPartition = [](const Binding & binding) {
+            const auto isSourceKernel = (in_degree(u, G) == 0);
+
+            auto bindingRateRequiresNewPartition = [&](const Binding & binding, const bool isInput) {
                 const ProcessingRate & rate = binding.getRate();
                 switch (rate.getKind()) {
                     // countable
                     case RateId::Fixed:
+                        // A source kernel produces data without input thus its output(s)
+                        // must begin a new partition even for Fixed rate kernels.
+                        if (isSourceKernel) {
+                            return true;
+                        }
+                        break;
                     case RateId::Greedy:
+                        // A greedy input with a lower bound > 0 cannot safely be included
+                        // in its producers's partition unless its producer is guaranteed
+                        // to generate more data than it consumes.
+                        if (rate.getLowerBound().numerator() > 0) {
+                            return true;
+                        }
+                        break;
                     case RateId::PartialSum:
                         break;
                     // non-countable
@@ -1330,6 +1338,12 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 for (const Attribute & attr : binding.getAttributes()) {
                     switch (attr.getKind()) {
                         case AttrId::Deferred:
+                            // A deferred output rate is closer to an unknown rate than a
+                            // countable rate but a deferred input rate simply means the
+                            // buffer must be dynamic.
+                            if (isInput) {
+                                break;
+                            }
                         case AttrId::Delayed:
                         case AttrId::LookAhead:
                             return true;
@@ -1340,46 +1354,38 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 return false;
             };
 
-            auto taintWithNewRate = [&]() {
-                // A source kernel produces data without input thus is the root of a
-                // new partition.
-                if (in_degree(u, G) == 0) {
-                    return true;
-                }
-                // If this kernel has any bounded or unknown input rates, there is a
-                // potential change of rate of dataflow through the kernel.
-                for (const auto e : make_iterator_range(in_edges(u, G))) {
-                    const auto input = source(e, G);
-                    const RelationshipNode & inputNode = G[input];
-                    if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
-                        const Binding & binding = inputNode.Binding;
-                        checkForPartialSum(binding.getRate(), input, kernelRateSet);
-                        if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(binding))) {
-                            return true;
-                        }
+
+
+            // If this kernel has any bounded or unknown input rates, there is a
+            // potential change of rate of dataflow through the kernel.
+            auto startNewPartition = isSourceKernel;
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
+                const auto input = source(e, G);
+                const RelationshipNode & inputNode = G[input];
+                if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
+                    const Binding & binding = inputNode.Binding;
+                    checkForPartialSum(binding.getRate(), input, nodeRateSet);
+                    if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(binding, true))) {
+                        startNewPartition = true;
                     }
                 }
-                return false;
-            };
+            }
 
-            if (LLVM_UNLIKELY(taintWithNewRate())) {
-                addRateId(kernelRateSet, currentRateId++);
+            if (LLVM_UNLIKELY(startNewPartition)) {
+                addRateId(nodeRateSet, currentRateId++);
             }
 
             for (const auto e : make_iterator_range(out_edges(u, G))) {
-
                 const auto output = target(e, G);
-                BV & outgoingRateSet = rateSet[output];
-                // inherit all of the kernel rates
-                outgoingRateSet = kernelRateSet;
                 const RelationshipNode & outputNode = G[output];
                 if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
+                    // inherit all of the kernel rates
+                    BV & outgoingRateSet = rateSet[output];
+                    outgoingRateSet = nodeRateSet;
                     const Binding & binding = outputNode.Binding;
                     checkForPartialSum(binding.getRate(), output, outgoingRateSet);
-                    if (bindingRateRequiresNewPartition(binding)) {
-                        const auto newRateId = currentRateId++;
-                        assert (newRateId > 0);
-                        addRateId(outgoingRateSet, newRateId);
+                    if (bindingRateRequiresNewPartition(binding, false)) {
+                        addRateId(outgoingRateSet, currentRateId++);
                     }
                 }
             }
@@ -1388,15 +1394,21 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             for (const auto e : make_iterator_range(out_edges(u, G))) {
                 const auto output = target(e, G);
                 const RelationshipNode & outputNode = G[output];
-                const Binding & binding = outputNode.Binding;
-                const ProcessingRate & rate = binding.getRate();
-                if (LLVM_UNLIKELY(rate.isRelative())) {
-                    for (const auto f : make_iterator_range(in_edges(output, G))) {
-                        const RelationshipType & type = G[f];
-                        if (type.Reason == ReasonType::Reference) {
-                            const auto ref = source(f, G);
-                            mergeRateIds(rateSet[output], rateSet[ref]);
+                if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
+                    const Binding & binding = outputNode.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    if (LLVM_UNLIKELY(rate.isRelative())) {
+                        bool found = false;
+                        for (const auto f : make_iterator_range(in_edges(output, G))) {
+                            const RelationshipType & type = G[f];
+                            if (type.Reason == ReasonType::Reference) {
+                                const auto ref = source(f, G);
+                                mergeRateIds(rateSet[output], rateSet[ref]);
+                                found = true;
+                                break;
+                            }
                         }
+                        assert (found);
                     }
                 }
             }

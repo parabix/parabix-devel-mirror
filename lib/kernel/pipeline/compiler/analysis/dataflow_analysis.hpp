@@ -8,18 +8,18 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeParitionDataFlowRates
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::computeDataFlowRates(BuilderRef b, BufferGraph & G) {
+void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
 
-    ExpectedNumOfStrides = calculateExpectedNumOfStridesPerSegment(G);
+    ExpectedNumOfStrides = calculateExpectedNumOfStridesPerSegment(G, StridesPerSegmentCalculationType::Expected);
 
-    estimateDataFlowBounds(b, G, ExpectedNumOfStrides);
+    estimateDataFlowBounds(G, ExpectedNumOfStrides);
 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateExpectedNumOfStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(const BufferGraph & G) const {
+std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, const StridesPerSegmentCalculationType type) const {
 
     Z3_config cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "MODEL", "true");
@@ -61,6 +61,30 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
     //  Where for a given rate of [n,m]:
     //    RATE(c) := (STRIDES) * (n + m) / 2
 
+//    auto calculateInputBound = [&](const BufferRateData & r) {
+//        switch (type) {
+//            case StridesPerSegmentCalculationType::LowerBound:
+//                return r.Maximum;
+//            case StridesPerSegmentCalculationType::Expected:
+//                return (r.Minimum + r.Maximum) * Rational{1,2};
+//            case StridesPerSegmentCalculationType::UpperBound:
+//                return r.Minimum;
+//        }
+//        llvm_unreachable("");
+//    };
+
+//    auto calculateOutputBound = [&](const BufferRateData & r) {
+//        switch (type) {
+//            case StridesPerSegmentCalculationType::LowerBound:
+//                return r.Minimum;
+//            case StridesPerSegmentCalculationType::Expected:
+//                return (r.Minimum + r.Maximum) * Rational{1,2};
+//            case StridesPerSegmentCalculationType::UpperBound:
+//                return r.Maximum;
+//        }
+//        llvm_unreachable("");
+//    };
+
     const auto firstKernel = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
 
@@ -74,9 +98,13 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
         }
     }
 
+    const Rational HALF{1, 2};
+
+    const Rational R_ONE{1, 1};
+
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
-        auto kernelVar = VarList[kernel];
+        const auto avgStridesPerSegmentVar = VarList[kernel];
 
         bool hasGreedyRate = false;
 
@@ -100,10 +128,10 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
                     strideRate = producedRate;
                     hasGreedyRate = true;
                 }
-                const auto consumedRate = multiply(kernelVar, strideRate);
+                const auto consumedRate = multiply(avgStridesPerSegmentVar, strideRate);
                 Z3_ast constraint = nullptr;
                 // A greedy rate or partition-local stream must always consume everything
-                if (rate.isGreedy() || KernelPartitionId[producer] == KernelPartitionId[kernel]) {
+                if (KernelPartitionId[producer] == KernelPartitionId[kernel]) { // rate.isGreedy() ||
                     constraint = Z3_mk_eq(ctx, producedRate, consumedRate);
                 } else {
                     constraint = Z3_mk_ge(ctx, producedRate, consumedRate);
@@ -121,9 +149,8 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
 
             } else {
 
-                const auto m = inputRate.Minimum + inputRate.Maximum;
-                const auto r = Rational{1, 2} * m;
-                const auto consumedRate = multiply(kernelVar, constant(r));
+                const auto r = constant(std::max(inputRate.Minimum, R_ONE));
+                const auto consumedRate = multiply(avgStridesPerSegmentVar, r);
                 const auto constraint = Z3_mk_ge(ctx, producedRate, consumedRate);
                 Z3_solver_assert(ctx, solver, constraint);
 
@@ -132,20 +159,20 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
 
         // Any kernel with a greedy rate must exhaust its input within a single iteration.
         if (LLVM_UNLIKELY(hasGreedyRate)) {
-            const auto constraint = Z3_mk_eq(ctx, kernelVar, ONE);
+            const auto constraint = Z3_mk_eq(ctx, avgStridesPerSegmentVar, ONE);
             Z3_solver_assert(ctx, solver, constraint);
         }
 
         for (const auto output : make_iterator_range(out_edges(kernel, G))) {
             const BufferRateData & outputRate = G[output];
             const auto buffer = target(output, G);
-            // TODO: how should we handle Unknown output rates?
-
-            const auto m = outputRate.Minimum + outputRate.Maximum;
-            const auto r = Rational{1, 2} * std::max(m, Rational{1});
-            const auto producedRate = multiply(kernelVar, constant(r));
-
-            VarList[buffer] = producedRate;
+            if (LLVM_UNLIKELY(outputRate.Maximum.numerator() == 0)) {
+                VarList[buffer] = bounded_variable(constant(0));
+            } else {
+                const auto r = constant(outputRate.Maximum);
+                const auto producedRate = multiply(avgStridesPerSegmentVar, r);
+                VarList[buffer] = producedRate;
+            }
         }
     }
 
@@ -168,6 +195,10 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
         if (LLVM_UNLIKELY(Z3_get_numeral_uint(ctx, value, &num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to integer!");
         }
+        assert (num > 0);
+
+        errs() << "Kernel " << kernel << " : " << num << "\n";
+
         expected[kernel] = num;
     }
     Z3_model_dec_ref(ctx, model);
@@ -183,10 +214,7 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief estimateDataFlowBounds
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::estimateDataFlowBounds(BuilderRef b, BufferGraph & G, const std::vector<unsigned> & expected) const {
-
-    const auto blockWidth = b->getBitBlockWidth();
-    const Rational BLOCK_WIDTH{blockWidth};
+void PipelineCompiler::estimateDataFlowBounds(BufferGraph & G, const std::vector<unsigned> & expected) const {
 
     auto roundUpTo = [](const Rational a, const Rational b) {
         // m = mod(a, b)
@@ -216,11 +244,9 @@ void PipelineCompiler::estimateDataFlowBounds(BuilderRef b, BufferGraph & G, con
         const auto pMin = pData.Minimum * expected[producer];
         const auto pMax = pData.Maximum * expected[producer];
 
-        Rational relRateMin(std::numeric_limits<unsigned>::max());
-        Rational relRateMax(std::numeric_limits<unsigned>::min());
+        Rational consumeMin(std::numeric_limits<unsigned>::max());
+        Rational consumeMax(std::numeric_limits<unsigned>::min());
         Rational requiredSpace(pMax);
-
-        Rational minConsumption{pMax};
 
         unsigned lookBehind{0};
         unsigned reflectionSpace{0};
@@ -240,9 +266,9 @@ void PipelineCompiler::estimateDataFlowBounds(BuilderRef b, BufferGraph & G, con
             }
         }
 
-        Rational requiredSizeFactor{BLOCK_WIDTH};
+        Rational requiredSizeFactor{1};
         if (pData.Maximum == pData.Minimum) {
-            requiredSizeFactor = lcm(BLOCK_WIDTH, pData.Maximum);
+            requiredSizeFactor = pData.Maximum;
         }
 
         for (const auto input : make_iterator_range(out_edges(streamSet, G))) {
@@ -254,24 +280,13 @@ void PipelineCompiler::estimateDataFlowBounds(BuilderRef b, BufferGraph & G, con
             const auto cMin = cData.Minimum * expected[consumer];
             const auto cMax = cData.Maximum * expected[consumer];
 
-            minConsumption = std::min(minConsumption, cMin);
-
-            assert (cMax.numerator() > 0);
-            requiredSpace = std::max(requiredSpace, cMax);
+            consumeMin = std::min(consumeMin, cMin);
+            consumeMax = std::min(consumeMax, cMax);
             if (cData.Maximum == cData.Minimum) {
                 requiredSizeFactor = lcm(requiredSizeFactor, cData.Maximum);
             }
 
-            const auto kMin = pMin / cMax;
-            relRateMin = std::min(relRateMin, kMin);
-
-            if (LLVM_LIKELY(cMin.numerator() > 0)) {
-                const auto kMax = pMax / cMin;
-                relRateMax = std::max(relRateMax, kMax);
-            }
-
             const Binding & inputBinding = cData.Binding;
-
             // Get output overflow size
             unsigned lookAhead = 0;
             for (const Attribute & attr : inputBinding.getAttributes()) {
@@ -290,53 +305,18 @@ void PipelineCompiler::estimateDataFlowBounds(BuilderRef b, BufferGraph & G, con
             lookAheadSpace = std::max(lookAheadSpace, lookAhead);
         }
 
-        auto & out = errs();
-
-        auto print_rational = [&out](const Rational & r) {
-            if (r.denominator() > 1) {
-                const auto n = r.numerator() / r.denominator();
-                const auto p = r.numerator() % r.denominator();
-                out << n << '+' << p << '/' << r.denominator();
-            } else {
-                out << r.numerator();
-            }
-        };
-
-        auto rate_range = [&out, print_rational](const Rational & a, const Rational & b) {
-            print_rational(a);
-            out << " - ";
-            print_rational(b);
-        };
-
-        errs() << streamSet << ")  "
-                  "rel_rate := ";
-        rate_range(relRateMin, relRateMax);
-        errs() << "\n";
-
-
-        if (relRateMax > relRateMin) {
-            requiredSpace += (relRateMax - relRateMin);
+        if (consumeMax > consumeMin) {
+            requiredSpace += (consumeMax - consumeMin);
         }
-
-        const auto delay = pMax - minConsumption;
 
         BufferNode & bn = G[streamSet];
-
-        bn.LookBehind = roundUpTo(lookBehind, BLOCK_WIDTH);
-        bn.LookBehindReflection = roundUpTo(reflectionSpace, BLOCK_WIDTH);
-        bn.CopyBack = roundUpTo(copyBackSpace, BLOCK_WIDTH);
-        bn.LookAhead = roundUpTo(lookAheadSpace, BLOCK_WIDTH);
-
-        const auto overflowSize = std::max(bn.CopyBack, bn.LookAhead);
-
-        if (LLVM_UNLIKELY(delay > overflowSize)) {
-            requiredSpace += delay - overflowSize;
-        }
-
-        const auto minRequiredSize = std::max(bn.LookBehind, overflowSize) * 2;
-        requiredSpace = std::max(requiredSpace, Rational{minRequiredSize});
-
+        bn.LookBehind = lookBehind;
+        bn.LookBehindReflection = reflectionSpace;
+        bn.CopyBack = copyBackSpace;
+        bn.LookAhead = lookAheadSpace;
         bn.RequiredSpace = roundUpTo(requiredSpace, requiredSizeFactor);
+
+        assert (bn.RequiredSpace > 0);
 
     }
 

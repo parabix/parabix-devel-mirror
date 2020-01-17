@@ -27,6 +27,11 @@ constexpr inline bool operator< (const RefWrapper<T> & a, const RefWrapper<T> & 
     return &a.get() < &b.get();
 }
 
+template <typename T>
+constexpr inline bool operator == (const RefWrapper<T> & a, const RefWrapper<T> & b) {
+    return &a.get() == &b.get();
+}
+
 }
 
 #endif // REFWRAPPER_H
