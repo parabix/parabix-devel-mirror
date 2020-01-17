@@ -191,6 +191,7 @@ bool GrepEngine::matchesToEOLrequired () {
 }
 
 void GrepEngine::initREs(std::vector<re::RE *> & REs) {
+    if (mEngineKind != EngineKind::EmitMatches) mColoring = false;
     if (mGrepRecordBreak == GrepRecordBreakKind::Unicode) {
         mBreakCC = re::makeCC(re::makeCC(0x0A, 0x0D), re::makeCC(re::makeCC(0x85), re::makeCC(0x2028, 0x2029)));
         for (unsigned i = 0; i < REs.size(); ++i) {
