@@ -274,7 +274,7 @@ static const StringRef printKernelNameAnnotations(StringRef name, raw_ostream & 
     auto kernelName = name.substr(0, pos);
     while (pos != StringRef::npos) {
         char a = name[pos];
-        auto pos2 = name.find_first_of("+-");
+        auto pos2 = name.find_first_of("+-", pos+1);
         auto annotation = name.substr(pos + 1, pos2);
         out << "# " << a << annotation << "\n";
         pos = pos2;
