@@ -13,7 +13,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     // WARNING: any change to this must be reflected in Kernel::addDoSegmentDeclaration, Kernel::getDoSegmentFields,
     // Kernel::setDoSegmentProperties and Kernel::getDoSegmentProperties.
 
-    #warning share internally synchronized item counts via state?
+    // TODO: consider whether we should share internally synchronized item counts via state?
 
     // TODO: add MProtect to buffers and their handles.
 
@@ -197,7 +197,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced, nullptr));
         }
         mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, args);
-        #warning should we pass a requested amount to source streams?
+        // TODO:  consider whether we should pass a requested amount to source streams?
         if (requiresItemCount(output)) {
             args.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
         }

@@ -1,4 +1,4 @@
-﻿#ifndef PIPELINE_COMPILER_HPP
+#ifndef PIPELINE_COMPILER_HPP
 #define PIPELINE_COMPILER_HPP
 
 #include <kernel/pipeline/pipeline_kernel.h>
@@ -67,7 +67,7 @@ using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
 
-#warning create a preallocation phase for kernels to add capacity suggestions
+// TODO: create a preallocation phase for kernels to add capacity suggestions
 
 // TODO: replace ints used for port #s with the following
 // BOOST_STRONG_TYPEDEF(unsigned, PortNumber)

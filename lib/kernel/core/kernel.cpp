@@ -1,4 +1,4 @@
-﻿/*
+/*
  *  Copyright (c) 2018 International Characters.
  *  This software is licensed to the public under the Open Software License 3.0.
  */
@@ -897,7 +897,7 @@ Value * Kernel::finalizeInstance(BuilderRef b, Value * const handle) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * Kernel::constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const ParamMap & params) const {
 
-    #warning TODO: need to test for termination on init call
+    // TODO: need to test for termination on init call
 
     PointerType * const voidPtrTy = b->getVoidPtrTy();
     auto addHostArg = [&](Value * ptr) {
@@ -1090,7 +1090,7 @@ inline std::string annotateKernelNameWithDebugFlags(std::string && name) {
         buffer << "_FreeLimit";
     }
     buffer.flush();
-    return name;
+    return std::move(name);
 }
 
 // CONSTRUCTOR
@@ -1109,7 +1109,7 @@ Kernel::Kernel(BuilderRef b,
 , mInputScalars(std::move(scalar_inputs))
 , mOutputScalars(std::move(scalar_outputs))
 , mInternalScalars( std::move(internal_scalars))
-, mKernelName(std::move(annotateKernelNameWithDebugFlags(std::move(kernelName)))) {
+, mKernelName(annotateKernelNameWithDebugFlags(std::move(kernelName))) {
 
 
 }

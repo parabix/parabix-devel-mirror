@@ -18,7 +18,6 @@ namespace kernel {
 
 using BuilderRef = Kernel::BuilderRef;
 
-const int PACK_LANES = 2;
 void s2p_step(BuilderRef iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
     Value * t0 = iBuilder->hsimd_packh(16, s0, s1);
     Value * t1 = iBuilder->hsimd_packl(16, s0, s1);

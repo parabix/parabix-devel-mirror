@@ -258,7 +258,7 @@ class PatternKernel final : public pablo::PabloKernel {
 public:
     PatternKernel(BuilderRef b, const std::vector<std::string> & patterns, StreamSet * pat, StreamSet * E);
 
-    StringRef getSignature() const {
+    StringRef getSignature() const override {
         return mSignature;
     }
     bool hasSignature() const override { return true; }

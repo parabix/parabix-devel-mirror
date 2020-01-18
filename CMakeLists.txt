@@ -115,6 +115,10 @@ set(CMAKE_MACOSX_RPATH ON)
 
 # Enable all warnings
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -pedantic")
+if (${LLVM_PACKAGE_VERSION} VERSION_LESS "6.0")
+# LLVM 5 and earlier generate many warnings about deprecated declarations; suppress these.
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-fvisibility-inlines-hidden" SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG)
