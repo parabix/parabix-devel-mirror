@@ -863,8 +863,8 @@ ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, Strea
 : SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()}
-,Binding{"SourceCoords", SourceCoords, GreedyRate(1)}
-,Binding{"ColorizedCoords", ColorizedCoords, GreedyRate(1)}},
+,Binding{"SourceCoords", SourceCoords, FixedRate(1)}
+,Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1)}},
 // outputs
 {},
 // input scalars

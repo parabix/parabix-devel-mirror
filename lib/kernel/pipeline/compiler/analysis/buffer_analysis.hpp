@@ -180,6 +180,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     }
 
     const auto blockWidth = b->getBitBlockWidth();
+    const auto numOfSegments = std::max(mNumOfSegments, mNumOfThreads);
 
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
@@ -234,7 +235,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             const auto underflowSize = round_up_to(bn.LookBehind, blockWidth);
             const auto minRequiredSize = std::max(underflowSize, overflowSize) * 2;
             const auto requiredSpace = std::max<size_t>(bn.RequiredSpace, minRequiredSize);
-            const auto bufferSize = round_up_to(requiredSpace, blockWidth) * 2;
+            const auto bufferSize = round_up_to(requiredSpace, blockWidth) * numOfSegments;
 
             Type * const baseType = output.getType();
 

@@ -125,8 +125,6 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
 
                 errs() << " ";
                 errs().write_hex(reinterpret_cast<uintptr_t>(rn.Relationship));
-
-                break;
         }
         out << "\"];\n";
         out.flush();
@@ -162,8 +160,28 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
             case ReasonType::Reference:
                 out << " (ref)";
                 break;
+            case ReasonType::OrderingConstraint:
+                out << " (ordering constraint)";
+                break;
         }
-        out << "\"];\n";
+        out << "\"";
+
+        switch (rt.Reason) {
+            case ReasonType::None:
+            case ReasonType::Explicit:
+                break;
+            case ReasonType::ImplicitPopCount:
+            case ReasonType::ImplicitRegionSelector:
+                out << " color=blue";
+                break;
+            case ReasonType::Reference:
+                out << " color=gray";
+                break;
+            case ReasonType::OrderingConstraint:
+                out << " color=red";
+                break;
+        }
+        out << "];\n";
         out.flush();
     }
     out << "}\n\n";
@@ -1235,10 +1253,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     using BV = dynamic_bitset<>;
     using Partition = std::vector<unsigned>;
     using PartitionMap = std::map<BV, Partition>;
+    using PartitionVector = std::vector<Partition>;
     using PartialSumKey = std::pair<BV, unsigned>;
     using PartialSumMap = flat_map<PartialSumKey, unsigned>;
-
-    printRelationshipGraph(G, errs(), "G");
+    using PartitionGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
@@ -1257,10 +1275,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
         auto mergeRateIds = [](BV & dst, BV & src) {
             // boost dynamic_bitset will segfault if both buffers are not of equivalent length.
-            if (src.capacity() < dst.capacity()) {
-                src.resize(dst.capacity());
-            } else if (dst.capacity() < src.capacity()) {
-                dst.resize(src.capacity());
+            if (src.size() < dst.size()) {
+                src.resize(dst.size());
+            } else if (dst.size() < src.size()) {
+                dst.resize(src.size());
             }
             dst |= src;
         };
@@ -1286,12 +1304,13 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
             auto checkForPartialSum = [&](const ProcessingRate & rate, const unsigned bindingNode, BV & updateableRateSet) {
                 if (LLVM_UNLIKELY(rate.isPartialSum())) {
+                    bool found = false;
                     for (const auto f : make_iterator_range(in_edges(bindingNode, G))) {
                         const RelationshipType t = G[f];
                         if (t.Reason == ReasonType::Reference) {
                             const auto refBuffer = source(f, G);
                             BV & bindingRateSet = rateSet[bindingNode];
-                            auto key = std::make_pair(RefWrapper<BV>{bindingRateSet}, refBuffer);
+                            auto key = std::make_pair(bindingRateSet, refBuffer);
                             const auto p = P.find(key);
                             unsigned partialSumId;
                             if (p == P.end()) {
@@ -1301,14 +1320,43 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                                 partialSumId = p->second;
                             }
                             addRateId(updateableRateSet, partialSumId);
+                            found = true;
                         }
                     }
+                    assert (found);
                 }
             };
 
-            const auto isSourceKernel = (in_degree(u, G) == 0);
 
-            auto bindingRateRequiresNewPartition = [&](const Binding & binding, const bool isInput) {
+            // Determine whether this kernel is a source kernel; note: it may have
+            // input scalars so we cannot simply test whether its in-degree is 0.
+
+            bool isSourceKernel = true;
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
+                const auto input = source(e, G);
+                const RelationshipNode & inputNode = G[input];
+                if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
+                    isSourceKernel = false;
+                    break;
+                }
+            }
+
+            if (isSourceKernel) {
+                bool noOutputStreamSet = true;
+                for (const auto e : make_iterator_range(out_edges(u, G))) {
+                    const auto output = target(e, G);
+                    const RelationshipNode & outputNode = G[output];
+                    if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
+                        noOutputStreamSet = false;
+                        break;
+                    }
+                }
+                if (LLVM_UNLIKELY(noOutputStreamSet)) {
+                    continue;
+                }
+            }
+
+            auto bindingRateRequiresNewPartition = [&](const Binding & binding, const unsigned bindingNode, const bool isInput) {
                 const ProcessingRate & rate = binding.getRate();
                 switch (rate.getKind()) {
                     // countable
@@ -1323,10 +1371,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                         // A greedy input with a lower bound > 0 cannot safely be included
                         // in its producers's partition unless its producer is guaranteed
                         // to generate more data than it consumes.
-                        if (rate.getLowerBound().numerator() > 0) {
-                            return true;
-                        }
-                        break;
+                        return true;
                     case RateId::PartialSum:
                         break;
                     // non-countable
@@ -1358,14 +1403,14 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
             // If this kernel has any bounded or unknown input rates, there is a
             // potential change of rate of dataflow through the kernel.
-            auto startNewPartition = isSourceKernel;
+            auto startNewPartition = false;
             for (const auto e : make_iterator_range(in_edges(u, G))) {
                 const auto input = source(e, G);
                 const RelationshipNode & inputNode = G[input];
                 if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
                     const Binding & binding = inputNode.Binding;
                     checkForPartialSum(binding.getRate(), input, nodeRateSet);
-                    if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(binding, true))) {
+                    if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(binding, input, true))) {
                         startNewPartition = true;
                     }
                 }
@@ -1384,7 +1429,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                     outgoingRateSet = nodeRateSet;
                     const Binding & binding = outputNode.Binding;
                     checkForPartialSum(binding.getRate(), output, outgoingRateSet);
-                    if (bindingRateRequiresNewPartition(binding, false)) {
+                    if (bindingRateRequiresNewPartition(binding, output, false)) {
                         addRateId(outgoingRateSet, currentRateId++);
                     }
                 }
@@ -1420,41 +1465,159 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     for (auto u : O) {
         const RelationshipNode & node = G[u];
         if (node.Type == RelationshipNode::IsKernel) {
-            const BV & kernelRateSet = rateSet[u];
-            Partition & partition = partitionSets[kernelRateSet];
+            auto & partition = partitionSets[rateSet[u]];
             partition.push_back(u);
         }
     }
 
     partitionIds.resize(num_vertices(G), 0);
 
-    if (LLVM_UNLIKELY(partitionSets.empty())) {
-        return 0;
+    const auto n = partitionSets.size();
+    if (LLVM_UNLIKELY(n < 2)) {
+        return n;
     }
 
-    unsigned nextPartitionId = 0;
-    auto current = partitionSets.begin();
-    for (;;) {
-        const auto prior = current++;
-        const Partition & A = prior->second;
+    unsigned partitionId = 1U;
+    for (auto i = partitionSets.begin();;) {
+        const Partition & A = i->second;
         for (const auto v : A) {
-            partitionIds[v] = nextPartitionId;
+            partitionIds[v] = partitionId;
         }
-        ++nextPartitionId;
-        if (LLVM_UNLIKELY(current == partitionSets.end())) {
+        ++partitionId;
+        if (++i == partitionSets.end()) {
             break;
         }
-        // if we have two or more partitions, add in ordering constraints to ensure each
-        // kernel within the same partition is sequential.
-        const Partition & B = current->second;
+        const Partition & B = i->second;
         for (const auto u : A) {
             for (const auto v : B) {
+
+//                const auto b = add_edge_if_no_induced_cycle(u, v, G);
+
+//                if (LLVM_UNLIKELY(!b)) {
+//                    errs() << "ERROR: adding " << u << "->" << v << " creates a cycle\n";
+//                    printRelationshipGraph(G, errs());
+//                    exit(-1);
+//                }
+
                 add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
             }
         }
     }
 
-    return nextPartitionId;
+    #ifndef NDEBUG
+    // Report a "not a DAG" error if something has gone wrong
+    BEGIN_SCOPED_REGION
+    std::vector<unsigned> __tmp;
+    topological_sort(G, std::back_inserter(__tmp));
+    END_SCOPED_REGION
+    #endif
+
+    assert (partitionId == (n + 1U));
+
+#if 0
+
+    // Convert the map to a vector to simplify look up later
+    PartitionVector V;
+    V.reserve(n);
+
+    for (auto i = partitionSets.begin(); i != partitionSets.end(); ++i) {
+        Partition & A = i->second;
+        const auto partitionId = V.size();
+        for (const auto v : A) {
+            partitionIds[v] = partitionId;
+        }
+        V.emplace_back(std::move(A));
+    }
+
+    // Now that we've partitioned the graph, compute a summary graph so that we can determine
+    // a topological ordering of the partitions that ensures adding the ordering constraints will
+    // result in a legal (acyclic) pipeline graph.
+
+    PartitionGraph H(n);
+    for (unsigned u = 0; u != n; ++u) {
+        const auto pu = partitionIds[u];
+        for (const auto g : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(g, G);
+            const auto pv = partitionIds[v];
+            if (pu != pv) {
+                add_edge(pu, pv, H);
+            }
+        }
+    }
+
+//        const RelationshipNode & node = G[u];
+//        if (node.Type == RelationshipNode::IsKernel) {
+//            const auto pu = partitionIds[u];
+//            for (const auto e : make_iterator_range(in_edges(u, G))) {
+//                const auto v = source(e, G);
+//                const RelationshipNode & node = G[v];
+//                if (node.Type == RelationshipNode::IsBinding) {
+//                    for (const auto f : make_iterator_range(in_edges(v, G))) {
+//                        const auto w = source(f, G);
+//                        const RelationshipNode & node = G[w];
+//                        if (node.Type == RelationshipNode::IsRelationship) {
+//                            const auto x = parent(w, G);
+//                            assert (G[x].Type == RelationshipNode::IsBinding);
+//                            bool found = false;
+//                            for (const auto g : make_iterator_range(in_edges(x, G))) {
+//                                const auto y = source(g, G);
+//                                const RelationshipNode & node = G[y];
+//                                if (LLVM_LIKELY(node.Type == RelationshipNode::IsKernel)) {
+//                                    const auto py = partitionIds[y];
+//                                    if (pu != py) {
+//                                        add_edge(pu, py, H);
+//                                    }
+//                                    found = true;
+//                                }
+//                            }
+//                            assert (found);
+//                        }
+//                    }
+//                }
+//            }
+//        }
+//    }
+
+    // Compute the transitive reduction to reduce the number of constraints we'll have to insert.
+    transitive_reduction_dag(H);
+
+    printGraph(H, errs(), "Partitions");
+
+//    // Renumber the partitions based on their lexical ordering.
+//    O.clear();
+//    lexical_ordering(H, O);
+//    unsigned partitionId = 0;
+//    for (auto i : O) {
+//        const Partition & A = V[i];
+//        for (const auto v : A) {
+//            partitionIds[v] = partitionId;
+//        }
+//        ++partitionId;
+//    }
+
+    // Now insert the constraints into G
+    for (unsigned i = 0; i != n; ++i) {
+        const Partition & A = V[i];
+        for (const auto e : make_iterator_range(in_edges(i, H))) {
+            const auto j = source(e, H);
+            const Partition & B = V[j];
+            for (const auto u : A) {
+                const RelationshipNode & node = G[u];
+                if (node.Type == RelationshipNode::IsKernel) {
+                    for (const auto v : B) {
+                        const RelationshipNode & node = G[v];
+                        if (node.Type == RelationshipNode::IsKernel) {
+                            add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+#endif
+
+    return n;
 }
 
 

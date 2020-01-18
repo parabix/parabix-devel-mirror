@@ -36,10 +36,19 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
         }
     };
 
-    auto bounded_variable = [&](Z3_ast lb) {
+    auto lower_bounded_variable = [&](Z3_ast lb) {
         auto v = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_int_sort(ctx));
         auto c1 = Z3_mk_ge(ctx, v, lb);
         Z3_solver_assert(ctx, solver, c1);
+        return v;
+    };
+
+    auto bounded_variable = [&](Z3_ast lb, Z3_ast ub) {
+        auto v = Z3_mk_fresh_const(ctx, nullptr, Z3_mk_int_sort(ctx));
+        auto c1 = Z3_mk_ge(ctx, v, lb);
+        Z3_solver_assert(ctx, solver, c1);
+        auto c2 = Z3_mk_le(ctx, v, ub);
+        Z3_solver_assert(ctx, solver, c2);
         return v;
     };
 
@@ -85,6 +94,10 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
 //        llvm_unreachable("");
 //    };
 
+    auto average = [](const BufferRateData & r) {
+        return std::max((r.Minimum + r.Maximum) * Rational{1,2}, Rational{1});
+    };
+
     const auto firstKernel = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
 
@@ -94,50 +107,44 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
         if (in_degree(kernel, G) == 0) {
             VarList[kernel] = ONE;
         } else {
-            VarList[kernel] = bounded_variable(ONE);
+            VarList[kernel] = lower_bounded_variable(ONE);
         }
     }
 
-    const Rational HALF{1, 2};
-
-    const Rational R_ONE{1, 1};
+    flat_set<unsigned> crossesPartition;
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
         const auto avgStridesPerSegmentVar = VarList[kernel];
 
-        bool hasGreedyRate = false;
+        unsigned numOfGreedyRates = 0;
 
         for (const auto input : make_iterator_range(in_edges(kernel, G))) {
             const auto buffer = source(input, G);
-            const auto producer = parent(buffer, G);
 
             const BufferRateData & inputRate = G[input];
             const Binding & binding = inputRate.Binding;
             const ProcessingRate & rate = binding.getRate();
 
-            const auto producedRate = VarList[buffer];
-            assert (producedRate);
+            const auto producedRate = VarList[buffer]; assert (producedRate);
 
-            if (rate.isFixed() || rate.isGreedy()) {
+            if (LLVM_LIKELY(rate.isFixed())) {
 
-                Z3_ast strideRate = nullptr;
-                if (LLVM_LIKELY(rate.isFixed())) {
-                    strideRate = constant(inputRate.Minimum);
-                } else {
-                    strideRate = producedRate;
-                    hasGreedyRate = true;
-                }
-                const auto consumedRate = multiply(avgStridesPerSegmentVar, strideRate);
+                auto consumedRate = constant(inputRate.Maximum);
+                consumedRate = multiply(avgStridesPerSegmentVar, consumedRate);
                 Z3_ast constraint = nullptr;
-                // A greedy rate or partition-local stream must always consume everything
-                if (KernelPartitionId[producer] == KernelPartitionId[kernel]) { // rate.isGreedy() ||
+                // A partition-local stream must always consume everything
+                const auto producer = parent(buffer, G);
+                if (KernelPartitionId[producer] == KernelPartitionId[kernel]) {
                     constraint = Z3_mk_eq(ctx, producedRate, consumedRate);
+                    crossesPartition.insert(kernel);
                 } else {
                     constraint = Z3_mk_ge(ctx, producedRate, consumedRate);
                 }
                 Z3_solver_assert(ctx, solver, constraint);
 
+            } else if (LLVM_UNLIKELY(rate.isGreedy())) {
+                ++numOfGreedyRates;
             } else if (LLVM_UNLIKELY(rate.isUnknown())) {
 
                 SmallVector<char, 256> tmp;
@@ -148,17 +155,18 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
                 report_fatal_error(msg.str());
 
             } else {
-
-                const auto r = constant(std::max(inputRate.Minimum, R_ONE));
+                // const auto r = constant(average(inputRate));
+                // const auto r = constant(inputRate.Minimum);
+                const auto r = bounded_variable(constant(inputRate.Minimum), constant(inputRate.Maximum));
                 const auto consumedRate = multiply(avgStridesPerSegmentVar, r);
                 const auto constraint = Z3_mk_ge(ctx, producedRate, consumedRate);
                 Z3_solver_assert(ctx, solver, constraint);
-
+                crossesPartition.insert(kernel);
             }
         }
 
-        // Any kernel with a greedy rate must exhaust its input within a single iteration.
-        if (LLVM_UNLIKELY(hasGreedyRate)) {
+        // Any kernel with a greedy rate must exhaust its input in a single iteration.
+        if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, G))) {
             const auto constraint = Z3_mk_eq(ctx, avgStridesPerSegmentVar, ONE);
             Z3_solver_assert(ctx, solver, constraint);
         }
@@ -167,46 +175,107 @@ std::vector<unsigned> PipelineCompiler::calculateExpectedNumOfStridesPerSegment(
             const BufferRateData & outputRate = G[output];
             const auto buffer = target(output, G);
             if (LLVM_UNLIKELY(outputRate.Maximum.numerator() == 0)) {
-                VarList[buffer] = bounded_variable(constant(0));
+                // TODO: is there  a better way to handle unknown outputs? This
+                // free variable represents the ideal amount of data to transfer
+                // to subsequent kernels but that cannot be determined a priori;
+                // thus this variable isn't very meaningful.
+                VarList[buffer] = lower_bounded_variable(constant(outputRate.Minimum));
             } else {
-                const auto r = constant(outputRate.Maximum);
+                // const auto r = constant(outputRate.Maximum);
+                // const auto r = constant(average(outputRate));
+
+                const auto r = bounded_variable(constant(outputRate.Minimum), constant(outputRate.Maximum));
                 const auto producedRate = multiply(avgStridesPerSegmentVar, r);
                 VarList[buffer] = producedRate;
             }
         }
     }
 
-    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
-        report_fatal_error("Unexpected error: unsolvable dataflow graph.");
+    std::vector<unsigned> avgNumOfStrides(PipelineOutput + 1);
+
+    bool noSolutions = true;
+
+    unsigned iteration = 0;
+
+//    for (auto partitioningKernel : crossesPartition) {
+
+
+//        errs() << "---------------------------------------------\n"
+//                  "Z3: " << iteration << "\n";
+
+
+    for (;;) {
+
+        if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
+            break;
+        }
+
+        const auto model = Z3_solver_get_model(ctx, solver);
+        Z3_model_inc_ref(ctx, model);
+        for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+            Z3_ast const kernelVar = VarList[kernel];
+            Z3_ast value;
+            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, kernelVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+            }
+            unsigned num;
+            if (LLVM_UNLIKELY(Z3_get_numeral_uint(ctx, value, &num) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to convert model value to integer!");
+            }
+            assert (num > 0);
+            avgNumOfStrides[kernel] = num;
+        }
+        Z3_model_dec_ref(ctx, model);
+
+        for (const auto kernel : crossesPartition) {
+            const auto avgStridesPerSegmentVar = VarList[kernel];
+            const auto constraint = Z3_mk_gt(ctx, avgStridesPerSegmentVar, constant(avgNumOfStrides[kernel]));
+            Z3_solver_assert(ctx, solver, constraint);
+        }
+
+        noSolutions = false;
     }
 
-    Z3_model model = Z3_solver_get_model(ctx, solver);
-    Z3_model_inc_ref(ctx, model);
+//        Z3_solver_push(ctx, solver);
+//        const auto avgStridesPerSegmentVar = VarList[partitioningKernel];
+//        Z3_ast validMaximizingConstraint = nullptr;
+//        for (auto c = avgNumOfStrides[partitioningKernel];;++c) {
 
-    std::vector<unsigned> expected(PipelineOutput + 1);
+//            errs() << "Z3: " << iteration << "  V" << partitioningKernel << " ?> " << c << "\n";
 
-    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-        Z3_ast const kernelVar = VarList[kernel];
-        Z3_ast value;
-        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, kernelVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
-        }
-        unsigned num;
-        if (LLVM_UNLIKELY(Z3_get_numeral_uint(ctx, value, &num) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error when attempting to convert model value to integer!");
-        }
-        assert (num > 0);
+//            const auto maximizingConstraint = Z3_mk_gt(ctx, avgStridesPerSegmentVar, constant(c));
+//            Z3_solver_assert(ctx, solver, maximizingConstraint);
+//            if (Z3_solver_check(ctx, solver) != Z3_L_TRUE) {
+//                break;
+//            }
+//            validMaximizingConstraint = maximizingConstraint;
+//        }
+//        Z3_solver_pop(ctx, solver, 1);
+//        if (validMaximizingConstraint) {
+//            Z3_solver_assert(ctx, solver, validMaximizingConstraint);
+//        }
 
-        errs() << "Kernel " << kernel << " : " << num << "\n";
+//        for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+//            if (avgNumOfStrides[kernel] > 1) {
+//                const auto avgStridesPerSegmentVar = VarList[kernel];
+//                const auto constraint = Z3_mk_gt(ctx, avgStridesPerSegmentVar, constant(avgNumOfStrides[kernel]));
+//                Z3_solver_assert(ctx, solver, constraint);
+//            }
+//        }
 
-        expected[kernel] = num;
-    }
-    Z3_model_dec_ref(ctx, model);
+//        noSolutions = false;
+
+//        ++iteration;
+//    }
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
 
-    return expected;
+    if (LLVM_UNLIKELY(noSolutions)) {
+        report_fatal_error("Unexpected Z3 error: unsolvable dataflow graph.");
+    }
+
+    return avgNumOfStrides;
 }
 
 

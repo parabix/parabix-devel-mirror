@@ -24,12 +24,7 @@ private:
 
 template <typename T>
 constexpr inline bool operator< (const RefWrapper<T> & a, const RefWrapper<T> & b) {
-    return &a.get() < &b.get();
-}
-
-template <typename T>
-constexpr inline bool operator == (const RefWrapper<T> & a, const RefWrapper<T> & b) {
-    return &a.get() == &b.get();
+    return a.get() < b.get();
 }
 
 }
