@@ -170,6 +170,14 @@ static uint32_t resultStreamFieldWidth(__selops::__selop<StreamSet *> const & se
     return fw;
 }
 
+static uint32_t resultStreamCount(std::vector<__selops::__selop<StreamSet *>> const & ops) {
+    uint32_t count = 0;
+    for (auto const & op : ops) {
+        count += resultStreamCount(op);
+    }
+    return count;
+}
+
 // returns { mappedOperations, kernelBindings }
 static std::pair<std::vector<__selops::__selop<std::string>>, std::unordered_map<StreamSet *, std::string>>
 mapOperationsToStreamNames(__selops::__selop<StreamSet *> const & operation) {
