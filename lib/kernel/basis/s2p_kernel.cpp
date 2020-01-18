@@ -20,26 +20,13 @@ using BuilderRef = Kernel::BuilderRef;
 
 const int PACK_LANES = 2;
 void s2p_step(BuilderRef iBuilder, Value * s0, Value * s1, Value * hi_mask, unsigned shift, Value * &p0, Value * &p1) {
-    Value * t0 = nullptr;
-    Value * t1 = nullptr;
-    if ((iBuilder->getBitBlockWidth() == 256) && (PACK_LANES == 2)) {
-        Value * x0 = iBuilder->esimd_mergel(128, s0, s1);
-        Value * x1 = iBuilder->esimd_mergeh(128, s0, s1);
-
-        t0 = iBuilder->hsimd_packh_in_lanes(PACK_LANES, 16, x0, x1);
-        t1 = iBuilder->hsimd_packl_in_lanes(PACK_LANES, 16, x0, x1);
-
-    } else {
-        t0 = iBuilder->hsimd_packh(16, s0, s1);
-        t1 = iBuilder->hsimd_packl(16, s0, s1);
-    }
-
+    Value * t0 = iBuilder->hsimd_packh(16, s0, s1);
+    Value * t1 = iBuilder->hsimd_packl(16, s0, s1);
     p0 = iBuilder->simd_if(1, hi_mask, t0, iBuilder->simd_srli(16, t1, shift));
     p1 = iBuilder->simd_if(1, hi_mask, iBuilder->simd_slli(16, t0, shift), t1);
 }
 
 void s2p(BuilderRef iBuilder, Value * input[], Value * output[]) {
-    // Little-endian bit number is used for variables.
     Value * bit66442200[4];
     Value * bit77553311[4];
 
