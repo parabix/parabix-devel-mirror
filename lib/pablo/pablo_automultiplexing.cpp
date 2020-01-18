@@ -19,7 +19,7 @@
 #include <functional>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/ErrorHandling.h>
-#include "maxsat.hpp"
+#include <util/maxsat.hpp>
 
 using namespace llvm;
 using namespace boost;
