@@ -227,8 +227,8 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
 
     using ModuleSet = llvm::SmallVector<Module *, 32>;
 
-    ModuleSet O1;
-    ModuleSet O3;
+    ModuleSet Infrequent;
+    ModuleSet Normal;
 
     for (const auto & kernel : mCompiledKernel) {
         kernel->ensureLoaded();
@@ -241,9 +241,9 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         Module * const m = kernel->getModule();
         assert ("cached kernel has no module?" && m);
         if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InfrequentlyUsed))) {
-            O1.emplace_back(m);
+            Infrequent.emplace_back(m);
         } else {
-            O3.emplace_back(m);
+            Normal.emplace_back(m);
         }
     }
 
@@ -263,8 +263,8 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     };
 
     // compile any uncompiled kernels
-    addModules(O3, CodeGenOpt::Aggressive);
-    addModules(O1, CodeGenOpt::Less);
+    addModules(Normal, CodeGenOpt::None);
+    addModules(Infrequent, CodeGenOpt::None);
 
     // write/declare the "main" method
     auto mainModule = make_unique<Module>("main", *mContext);
@@ -295,8 +295,8 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     mEngine->addModule(std::move(mainModule));
     mEngine->finalizeObject();
     auto mainFnPtr = mEngine->getFunctionAddress(main->getName());
-    removeModules(O3);
-    removeModules(O1);
+    removeModules(Normal);
+    removeModules(Infrequent);
     return reinterpret_cast<void *>(mainFnPtr);
 }
 
