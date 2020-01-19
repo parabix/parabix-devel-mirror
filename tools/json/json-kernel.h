@@ -67,19 +67,19 @@ protected:
 };
 
 /*
-   Marks symbols used in numbers such as 'e', 'E', '.'
-   joining it at the end if they match expression:
+   Finds symbols used in numbers such as 'e', 'E', '.'
+   and join them at the end if they match the expression:
    \-?(0|[1-9][0-9]*)(.[0-9]+)?([Ee][+-]?[0-9]+)?
 */
-class JSONNumberMarker : public pablo::PabloKernel {
+class JSONNumberSpan : public pablo::PabloKernel {
 public:
-    JSONNumberMarker(const std::unique_ptr<KernelBuilder> & b,
-                     StreamSet * const basis, StreamSet * const lex, StreamSet * const strSpan,
-                     StreamSet * nbrMarker, StreamSet * nbrLex)
+    JSONNumberSpan(const std::unique_ptr<KernelBuilder> & b,
+                   StreamSet * const basis, StreamSet * const lex, StreamSet * const strSpan,
+                   StreamSet * nbrLex, StreamSet * nbrSpan, StreamSet * nbrErr)
     : pablo::PabloKernel(b,
                          "jsonNumberMarker",
                          {Binding{"basis", basis, FixedRate(1), LookAhead(1)}, Binding{"lex", lex}, Binding{"strSpan", strSpan}},
-                         {Binding{"nbrMarker", nbrMarker}, Binding{"nbrLex", nbrLex}}) {}
+                         {Binding{"nbrLex", nbrLex}, Binding{"nbrSpan", nbrSpan}, Binding{"nbrErr", nbrErr}}) {}
     bool isCachable() const override { return true; }
     bool hasSignature() const override { return false; }
 protected:

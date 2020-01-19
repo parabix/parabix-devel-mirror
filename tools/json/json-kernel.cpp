@@ -191,14 +191,15 @@ void JSONKeywordSpan::generatePabloMethod() {
     pb.createAssign(pb.createExtract(kwErr, pb.getInteger(0)), err);
 }
 
-void JSONNumberMarker::generatePabloMethod() {
+void JSONNumberSpan::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), basis);
     std::vector<PabloAST *> lex = getInputStreamSet("lex");
     PabloAST * strSpan = getInputStreamSet("strSpan")[0];
-    Var * const nbrMarker = getOutputStreamVar("nbrMarker");
     Var * const nbrLex = getOutputStreamVar("nbrLex");
+    Var * const nbrSpan = getOutputStreamVar("nbrSpan");
+    Var * const nbrErr = getOutputStreamVar("nbrErr");
 
     PabloAST * alleE = pb.createOr(ccc.compileCC(re::makeByte(0x45)), ccc.compileCC(re::makeByte(0x65)));
     PabloAST * allDot = ccc.compileCC(re::makeByte(0x2E));
@@ -214,10 +215,25 @@ void JSONNumberMarker::generatePabloMethod() {
     PabloAST * nondigit = pb.createNot(digit);
     PabloAST * nonDigitNorEe = pb.createAnd(nondigit, pb.createNot(eE));
     PabloAST * advHyphen = pb.createAnd(hyphen, pb.createAdvance(nonDigitNorEe, 1));
-    PabloAST * advHyphenDigit = pb.createAnd(digit, pb.createAdvance(advHyphen, 1));
-    // PabloAST * beginNeg = pb.createLookahead(advHyphenDigit, 1);
 
-    pb.createAssign(pb.createExtract(nbrMarker, pb.getInteger(0)), advHyphenDigit);
+    PabloAST * nonDigitEePlusMinus = pb.createAnd(nonDigitNorEe, pb.createNot(plusMinus));
+    PabloAST * nonDigitEePlusMinusDot = pb.createAnd(nonDigitEePlusMinus, pb.createNot(dot));
+    PabloAST * advDigit = pb.createAnd(digit, pb.createAdvance(nonDigitEePlusMinusDot, 1));
+    PabloAST * beginNbr = pb.createOr(advDigit, advHyphen);
+    pb.createAssign(pb.createExtract(nbrLex, pb.getInteger(0)), beginNbr);
+
+    PabloAST * errDot = pb.createAnd(pb.createAdvance(dot, 1), nondigit);
+    PabloAST * errPlusMinus = pb.createAnd(pb.createAdvance(plusMinus, 1), nondigit);
+    PabloAST * eENotPlusMinus = pb.createAnd(pb.createAdvance(eE, 1), pb.createNot(plusMinus));
+    PabloAST * erreENotPlusMinus = pb.createAnd(eENotPlusMinus, nondigit);
+    PabloAST * err = pb.createOr3(errDot, errPlusMinus, erreENotPlusMinus);
+    pb.createAssign(pb.createExtract(nbrErr, pb.getInteger(0)), err);
+
+    PabloAST * fstPartNbr = pb.createIntrinsicCall(Intrinsic::InclusiveSpan, {beginNbr, digit});
+    PabloAST * sndPartNbr = pb.createIntrinsicCall(Intrinsic::InclusiveSpan, {eE, digit});
+    PabloAST * trdPartNbr = pb.createIntrinsicCall(Intrinsic::InclusiveSpan, {dot, digit});
+    PabloAST * finalNbr = pb.createOr3(fstPartNbr, sndPartNbr, trdPartNbr);
+    pb.createAssign(pb.createExtract(nbrSpan, pb.getInteger(0)), finalNbr);
 }
 
 void ValidateJSONString::generatePabloMethod() {
