@@ -8,6 +8,7 @@
 #include <kernel/basis/s2p_kernel.h>               // for S2PKernel
 #include <kernel/io/stdout_kernel.h>               // for StdOutKernel
 #include <kernel/streamutils/pdep_kernel.h>
+#include <kernel/streamutils/collapse.h>
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
@@ -32,6 +33,8 @@
 #include <iomanip>
 #include <kernel/pipeline/pipeline_builder.h>
 #include "json-kernel.h"
+
+namespace su = kernel::streamutils;
 
 using namespace pablo;
 using namespace pablo::parse;
@@ -119,11 +122,19 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         }
     );
 
-    // 7. Validate objects
+    // 7. Validate rest of the output (check for extraneous chars)
+    const size_t COMBINED_STREAM_COUNT = 14;
+    StreamSet * const allSpans = P->CreateStreamSet(COMBINED_STREAM_COUNT, 1);
+    P->CreateKernelCall<StreamsMerge>(
+        std::vector<StreamSet *>{lexStream, stringSpan, keywordSpan, numberSpan},
+        allSpans
+    );
+    StreamSet * const combinedSpans = su::Collapse(P, allSpans);
+    StreamSet * const extraErr = P->CreateStreamSet(1);
+    P->CreateKernelCall<JSONExtraneousChars>(combinedSpans, extraErr);
 
-    // 8. Validate arrays
-
-    // 9. Validate rest of the output (check for extraneous chars)
+    // 8. Validate objects
+    // 9. Validate arrays
     // 10. Output whether or not it is valid
 
     StreamSet * const outputStream = P->CreateStreamSet(8);
@@ -132,7 +143,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         jsonPabloSrc,
         "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"span", utf8Err},
+            Binding {"span", extraErr},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}

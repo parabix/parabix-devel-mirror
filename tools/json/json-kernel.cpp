@@ -235,3 +235,11 @@ void JSONNumberSpan::generatePabloMethod() {
     PabloAST * finalNbr = pb.createOr3(fstPartNbr, sndPartNbr, trdPartNbr);
     pb.createAssign(pb.createExtract(nbrSpan, pb.getInteger(0)), finalNbr);
 }
+
+void JSONExtraneousChars::generatePabloMethod() {
+    PabloBuilder pb(getEntryScope());
+    PabloAST * combinedSpans = getInputStreamSet("combinedSpans")[0];
+    Var * const nbrErr = getOutputStreamVar("extraErr");
+    PabloAST * extraneousChars = pb.createNot(combinedSpans);
+    pb.createAssign(pb.createExtract(nbrErr, pb.getInteger(0)), extraneousChars);
+}

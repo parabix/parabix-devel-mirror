@@ -86,6 +86,21 @@ protected:
     void generatePabloMethod() override;
 };
 
+class JSONExtraneousChars : public pablo::PabloKernel {
+    public:
+    JSONExtraneousChars(const std::unique_ptr<KernelBuilder> & b,
+                        StreamSet * const combinedSpans,
+                        StreamSet * extraErr)
+    : pablo::PabloKernel(b,
+                         "jsonExtraneousChars",
+                         {Binding{"combinedSpans", combinedSpans}},
+                         {Binding{"extraErr", extraErr}}) {}
+    bool isCachable() const override { return true; }
+    bool hasSignature() const override { return false; }
+protected:
+    void generatePabloMethod() override;
+};
+
 }
 
 #endif
