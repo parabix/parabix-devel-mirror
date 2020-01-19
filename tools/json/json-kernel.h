@@ -86,21 +86,6 @@ protected:
     void generatePabloMethod() override;
 };
 
-class ValidateJSONString : public pablo::PabloKernel {
-public:
-    ValidateJSONString(const std::unique_ptr<KernelBuilder> & b,
-                       StreamSet * const lex,
-                       StreamSet * strCallouts, StreamSet * err)
-    : pablo::PabloKernel(b,
-                         "validateJSONString",
-                         {Binding{"lex", lex}},
-                         {Binding{"strCallouts", strCallouts}, Binding{"err", err}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-protected:
-    void generatePabloMethod() override;
-};
-
 }
 
 #endif

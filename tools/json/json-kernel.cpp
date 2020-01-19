@@ -235,10 +235,3 @@ void JSONNumberSpan::generatePabloMethod() {
     PabloAST * finalNbr = pb.createOr3(fstPartNbr, sndPartNbr, trdPartNbr);
     pb.createAssign(pb.createExtract(nbrSpan, pb.getInteger(0)), finalNbr);
 }
-
-void ValidateJSONString::generatePabloMethod() {
-    PabloBuilder pb(getEntryScope());
-    std::vector<PabloAST *> lex = getInputStreamSet("lex");
-    Var * strCallouts = getOutputStreamVar("strCallouts");
-    Var * err = getOutputStreamVar("err");
-}

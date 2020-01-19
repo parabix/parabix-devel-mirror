@@ -59,19 +59,6 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<S2PKernel>(codeUnitStream, u8basis);
 
-    StreamSet * const u8index = P->CreateStreamSet(1);
-    P->CreateKernelCall<PabloSourceKernel>(
-        parser,
-        jsonPabloSrc,
-        "UTF8_index_8x1",
-        Bindings { // Input Stream Bindings
-            Binding {"source", u8basis}
-        },
-        Bindings { // Output Stream Bindings
-            Binding {"u8index", u8index}
-        }
-    );
-
     // 1. Lexical analysis on basis stream
     StreamSet * const lexStream = P->CreateStreamSet(14);
     P->CreateKernelCall<PabloSourceKernel>(
@@ -117,9 +104,25 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const numberSpan = P->CreateStreamSet(1);
     StreamSet * const numberErr = P->CreateStreamSet(1);
     P->CreateKernelCall<JSONNumberSpan>(u8basis, lexStream, stringSpan, numberLex, numberSpan, numberErr);
+
     // 6. Validate strings
+    StreamSet * const utf8Err = P->CreateStreamSet(1);
+    P->CreateKernelCall<PabloSourceKernel>(
+        parser,
+        jsonPabloSrc,
+        "ValidateUTF8",
+        Bindings { // Input Stream Bindings
+            Binding {"basis", u8basis}
+        },
+        Bindings { // Output Stream Bindings
+            Binding {"utf8Err", utf8Err}
+        }
+    );
+
     // 7. Validate objects
+
     // 8. Validate arrays
+
     // 9. Validate rest of the output (check for extraneous chars)
     // 10. Output whether or not it is valid
 
@@ -129,7 +132,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         jsonPabloSrc,
         "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"span", numberSpan},
+            Binding {"span", utf8Err},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}

@@ -134,121 +134,95 @@ kernel ClassifyBytes :: [BasisBits basis] -> [Lex lex] {
     lex.ws = InFile(temp56)
 }
 
-type U8Index = <i1>[1]
+type UTF8Err = <i1>[1]
 
-kernel UTF8_index_8x1 :: [BasisBits source] -> [U8Index u8index] {
-    and = source[6] & source[7]
-    Byte_c0_ff = InFile(and)
-    nonFinal = Byte_c0_ff
-    if Byte_c0_ff {
-        or = source[2] | source[3]
-        not = ~source[5]
-        and_1 = and & not
-        or_1 = source[1] | or
-        or_2 = source[4] | or_1
-        and_2 = and_1 & or_2
-        Byte_c2_df = InFile(and_2)
-        anyscope = <0>
-        if Byte_c2_df {
-            advance = Advance(Byte_c2_df, 1)
-            anyscope = advance
+kernel ValidateUTF8 :: [BasisBits basis] -> [UTF8Err utf8Err] {
+    utf8Err[0] = <0>
+
+    # If non-ascii, validate UTF-8
+    if basis[7] {
+        suffix = <0>
+        u8_error = <0>
+        u8_FFFE_FFFF = <0>
+        u8anyscope = <0>
+        unibyte = ~basis[7]
+
+        temp2 = basis[5] & ~basis[4]
+        temp4 = basis[2] & ~basis[3]
+        temp5 = basis[1] & ~basis[0]
+        temp7 = basis[5] & basis[4]
+        temp10 = basis[1] & basis[0]
+        temp12 = basis[3] & basis[2]
+        temp13 = basis[1] | basis[0]
+        temp15 = temp12 & temp5
+        temp19 = basis[0] & ~basis[1]
+        temp20 = temp12 & temp19
+        temp21 = basis[3] | basis[2]
+        temp23 = temp12 & temp10
+        temp36 = temp21 | temp13
+        temp49 = basis[5] | basis[4]
+        prefix = basis[7] & basis[6]
+        prefix2 = prefix & ~basis[5]
+        prefix3 = prefix & temp2
+        prefix4 = prefix & temp7
+        suffix = basis[7] & ~basis[6]
+        temp66 = prefix & ~temp49
+        temp67 = temp21 | basis[1]
+        temp68 = temp66 & ~temp67
+        temp69 = basis[2] & temp13
+        temp70 = basis[3] | temp69
+        temp71 = prefix4 & temp70
+        badprefix = temp68 | temp71
+        u8_error = badprefix
+        scope22 = Advance(prefix2)
+        u8anyscope = scope22
+        if prefix3 | prefix4 {
+            xE0 = prefix3 & ~temp36
+            xED = prefix3 & temp20
+            xF0 = prefix4 & ~temp36
+            temp72 = temp4 & ~temp13
+            xF4 = prefix4 & temp72
+            xA0_xBF = suffix & basis[5]
+            x80_x9F = suffix & ~basis[5]
+            x90_xBF = suffix & temp49
+            x80_x8F = suffix & ~temp49
+            xEF = prefix3 & temp23
+            temp73 = suffix & temp7
+            xBF = temp73 & temp23
+            xBE = temp73 & temp15
+
+            scope32 = Advance(prefix3)
+            scope33 = Advance(scope32)
+            scope42 = Advance(prefix4)
+            scope43 = Advance(scope42)
+            scope44 = Advance(scope43)
+
+            E0_F0_scope = Advance(xE0 | xF0)
+            ED_F4_scope = Advance(xED | xF4)
+            xE0_scope = scope32 & E0_F0_scope
+            xED_scope = scope32 & ED_F4_scope
+            xF0_scope = scope42 & E0_F0_scope
+            xF4_scope = scope42 & ED_F4_scope
+            xEF_scope = Advance(xEF)
+
+            u8lastscope = scope22 | scope33 | scope44
+            u8anyscope = u8lastscope | scope32 | scope42 | scope43
+
+            u8error1 = xE0_scope & x80_x9F
+            u8error2 = xED_scope & xA0_xBF
+            u8error3 = xF0_scope & x80_x8F
+            u8error4 = xF4_scope & x90_xBF
+
+            u8_error = u8_error | u8error1 | u8error2 | u8error3 | u8error4
+
+            EF_BF_pending = Advance(xEF_scope & xBF)
+
+            u8_FFFE_FFFF = (EF_BF_pending & (xBE | xBF))
         }
-        or_3 = source[0] | source[1]
-        not_1 = ~source[4]
-        and_3 = source[5] & not_1
-        and_4 = and & and_3
-        Byte_e0_ef = InFile(and_4)
-        EF_invalid = <0>
-        if Byte_e0_ef {
-            advance_1 = Advance(Byte_e0_ef, 1)
-            or_4 = Byte_c0_ff | advance_1
-            nonFinal = or_4
-            advance_2 = Advance(Byte_e0_ef, 2)
-            or_5 = advance_1 | advance_2
-            or_6 = anyscope | or_5
-            anyscope = or_6
-            not_2 = ~source[1]
-            or_7 = or_3 | or
-            not_3 = ~or_7
-            and_5 = and_4 & not_3
-            Byte_e0 = InFile(and_5)
-            advEO = Advance(Byte_e0, 1)
-            not_4 = ~source[6]
-            and_6 = source[7] & not_4
-            and_7 = not & and_6
-            Byte_80_9f = InFile(and_7)
-            E0_invalid = advEO & Byte_80_9f
-            and_8 = source[0] & not_2
-            and_9 = source[2] & source[3]
-            and_10 = and_8 & and_9
-            and_11 = and_4 & and_10
-            Byte_ed = InFile(and_11)
-            advED = Advance(Byte_ed, 1)
-            and_12 = source[5] & and_6
-            Byte_a0_bf = InFile(and_12)
-            ED_invalid = advED & Byte_a0_bf
-            or_8 = E0_invalid | ED_invalid
-            EF_invalid = or_8
-        }
-        not_5 = ~source[3]
-        and_13 = source[4] & source[5]
-        and_14 = and & and_13
-        and_15 = not_5 & and_14
-        and_16 = source[2] & or_3
-        not_6 = ~and_16
-        and_17 = and_15 & not_6
-        Byte_f0_f4 = InFile(and_17)
-        if Byte_f0_f4 {
-            not_7 = ~or_3
-            u8scope42 = Advance(Byte_f0_f4, 1)
-            u8scope43 = Advance(u8scope42, 1)
-            u8scope44 = Advance(u8scope43, 1)
-            or_9 = u8scope42 | u8scope43
-            or_10 = nonFinal | or_9
-            nonFinal = or_10
-            or_11 = u8scope44 | or_9
-            or_12 = anyscope | or_11
-            anyscope = or_12
-            not_8 = ~source[6]
-            or_13 = source[4] | source[5]
-            not_9 = ~or_13
-            and_18 = source[7] & not_8
-            and_19 = not_9 & and_18
-            Byte_80_8f = InFile(and_19)
-            or_14 = or_3 | or
-            not_10 = ~or_14
-            and_20 = and_14 & not_10
-            Byte_f0 = InFile(and_20)
-            advance_3 = Advance(Byte_f0, 1)
-            and_21 = Byte_80_8f & advance_3
-            and_22 = or_13 & and_18
-            Byte_90_bf = InFile(and_22)
-            and_23 = source[2] & not_5
-            and_24 = not_7 & and_23
-            and_25 = and_14 & and_24
-            Byte_f4 = InFile(and_25)
-            advance_4 = Advance(Byte_f4, 1)
-            and_26 = Byte_90_bf & advance_4
-            or_15 = and_21 | and_26
-            or_16 = EF_invalid | or_15
-            EF_invalid = or_16
-        }
-        or_17 = Byte_c2_df | Byte_e0_ef
-        or_18 = Byte_f0_f4 | or_17
-        not_11 = ~source[6]
-        and_27 = source[7] & not_11
-        u8suffix = InFile(and_27)
-        xor = anyscope ^ u8suffix
-        xor_1 = Byte_c0_ff ^ or_18
-        or_19 = EF_invalid | xor
-        or_20 = xor_1 | or_19
-        u8valid = ~or_20
-        and_28 = nonFinal & u8valid
-        nonFinal = and_28
+        u8mismatch = u8anyscope ^ suffix
+        u8_error = u8_error | u8mismatch | u8_FFFE_FFFF
+        utf8Err[0] = u8_error
     }
-    not_12 = ~nonFinal
-    inFile = InFile(not_12)
-    u8index[0] = inFile
 }
 
 type StringMarker = <i1>[1]
