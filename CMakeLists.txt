@@ -25,27 +25,21 @@ option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 
-# Framework build style: default is collection of static libraries
-# option(BUILD_SHARED_LIBS "Build framework as a collection of shared libraries" ON)
-# option(BUILD_SINGLE_SHARED_LIB "Build framework as a single shared library" OFF)
-
-option(ARTIFACT_MODE "Build framework into a single artifact (Single) or multiple artifacts (Multiple)" Multiple)
-option(ARTIFACT_TYPE "Build frameword as shared (Shared) or static (Static) libraries" Static)
+# Build Artifact Configuration
+set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
+set(ARTIFACT_TYPE "Static" CACHE STRING "Build frameword as shared (Shared) or static (Static) libraries")
 
 # Validate framework build style
-set(VALID_BUILD_MODE Single Multiple)
-set(VALID_BUILD_TYPE Shared Static)
+set(VALID_BUILD_MODE "Single" "Multiple")
+set(VALID_BUILD_TYPE "Shared" "Static")
 list(FIND VALID_BUILD_MODE ${ARTIFACT_MODE} __am_index)
 if(__am_index EQUAL -1)
-    message(FATAL_ERROR "BUILD_MODE must be either Single or Multiple")
+    message(FATAL_ERROR "ARTIFACT_MODE must be either Single or Multiple")
 endif()
 list(FIND VALID_BUILD_TYPE ${ARTIFACT_TYPE} __at_index)
 if(__at_index EQUAL -1)
-    message(FATAL_ERROR "BUILD_TYPE must be either Shared or Static")
+    message(FATAL_ERROR "ARTIFACT_TYPE must be either Shared or Static")
 endif()
-
-message(STATUS "Artifact Mode: ${ARTIFACT_MODE}")
-message(STATUS "Artifact Type: ${ARTIFACT_TYPE}")
 
 # Target for single shared library
 set(PARABIX_MONO_TARGET parabix)
