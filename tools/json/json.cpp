@@ -12,6 +12,7 @@
 #include <kernel/streamutils/multiplex.h>
 #include <kernel/scan/scan.h>
 #include <kernel/scan/reader.h>
+#include <kernel/util/linebreak_kernel.h>
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
@@ -138,21 +139,24 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     P->CreateKernelCall<JSONExtraneousChars>(combinedSpans, extraErr);
 
     // 8. Validate objects and arrays
-    {
-        StreamSet * const kwLexCollapsed = su::Collapse(P, keywordLex);
-        StreamSet * const allLex = P->CreateStreamSet(10, 1);
-        P->CreateKernelCall<StreamsMerge>(
-            std::vector<StreamSet *>{su::Select(P, lexStream, su::Range(0, 7)), kwLexCollapsed, numberLex},
-            allLex
-        );
-        StreamSet * const collapsedLex = su::Collapse(P, allLex);
-        StreamSet * const Indices = scan::ToIndices(P, collapsedLex);
-        scan::Reader(P, driver,
-            SCAN_CALLBACK(postproc_validateObjectsAndArrays),
-            codeUnitStream,
-            { Indices },
-            { Indices });
-    }
+    StreamSet * const kwLexCollapsed = su::Collapse(P, keywordLex);
+    StreamSet * const allLex = P->CreateStreamSet(10, 1);
+    P->CreateKernelCall<StreamsMerge>(
+        std::vector<StreamSet *>{su::Select(P, lexStream, su::Range(0, 7)), kwLexCollapsed, numberLex},
+        allLex
+    );
+    StreamSet * const collapsedLex = su::Collapse(P, allLex);
+    auto const LineBreaks = P->CreateStreamSet(1);
+    P->CreateKernelCall<UnixLinesKernelBuilder>(codeUnitStream, LineBreaks, UnterminatedLineAtEOF::Add1);
+    StreamSet * const LineNumbers = scan::LineNumbers(P, collapsedLex, LineBreaks);
+    StreamSet * const LineSpans = scan::LineSpans(P, LineBreaks);
+    StreamSet * const Spans = scan::FilterLineSpans(P, LineNumbers, LineSpans);
+    StreamSet * const Indices = scan::ToIndices(P, collapsedLex);
+    scan::Reader(P, driver,
+        SCAN_CALLBACK(postproc_validateObjectsAndArrays),
+        codeUnitStream,
+        { Indices, Spans },
+        { LineNumbers, Indices });
 
     // 9. Output whether or not it is valid
 
@@ -162,7 +166,7 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         jsonPabloSrc,
         "SpanLocations",
         Bindings { // Input Stream Bindings
-            Binding {"span", extraErr},
+            Binding {"span", LineBreaks},
         },
         Bindings { // Output Stream Bindings
             Binding {"output", outputStream}
