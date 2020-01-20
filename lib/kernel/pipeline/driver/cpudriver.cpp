@@ -263,7 +263,7 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
     };
 
     // compile any uncompiled kernels
-    addModules(Normal, CodeGenOpt::None);
+    addModules(Normal, codegen::BackEndOptLevel);
     addModules(Infrequent, CodeGenOpt::None);
 
     // write/declare the "main" method
