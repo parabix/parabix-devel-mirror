@@ -9,6 +9,9 @@
 #include <kernel/io/stdout_kernel.h>               // for StdOutKernel
 #include <kernel/streamutils/pdep_kernel.h>
 #include <kernel/streamutils/collapse.h>
+#include <kernel/streamutils/multiplex.h>
+#include <kernel/scan/scan.h>
+#include <kernel/scan/reader.h>
 #include <llvm/IR/Function.h>                      // for Function, Function...
 #include <llvm/IR/Module.h>                        // for Module
 #include <llvm/Support/CommandLine.h>              // for ParseCommandLineOp...
@@ -33,6 +36,7 @@
 #include <iomanip>
 #include <kernel/pipeline/pipeline_builder.h>
 #include "json-kernel.h"
+#include "post_process.h"
 
 namespace su = kernel::streamutils;
 
@@ -133,9 +137,24 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
     StreamSet * const extraErr = P->CreateStreamSet(1);
     P->CreateKernelCall<JSONExtraneousChars>(combinedSpans, extraErr);
 
-    // 8. Validate objects
-    // 9. Validate arrays
-    // 10. Output whether or not it is valid
+    // 8. Validate objects and arrays
+    {
+        StreamSet * const kwLexCollapsed = su::Collapse(P, keywordLex);
+        StreamSet * const allLex = P->CreateStreamSet(10, 1);
+        P->CreateKernelCall<StreamsMerge>(
+            std::vector<StreamSet *>{su::Select(P, lexStream, su::Range(0, 7)), kwLexCollapsed, numberLex},
+            allLex
+        );
+        StreamSet * const collapsedLex = su::Collapse(P, allLex);
+        StreamSet * const Indices = scan::ToIndices(P, collapsedLex);
+        scan::Reader(P, driver,
+            SCAN_CALLBACK(postproc_validateObjectsAndArrays),
+            codeUnitStream,
+            { Indices },
+            { Indices });
+    }
+
+    // 9. Output whether or not it is valid
 
     StreamSet * const outputStream = P->CreateStreamSet(8);
     P->CreateKernelCall<PabloSourceKernel>(

@@ -10,6 +10,7 @@ NAME
     json
 SRC
     json.cpp
+    post_process.cpp
     json-kernel.cpp
 DEPS
     grep
