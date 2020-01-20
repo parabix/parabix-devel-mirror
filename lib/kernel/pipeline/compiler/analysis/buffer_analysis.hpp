@@ -470,7 +470,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
-        out << ")\\n" << name << "\"];\n";
+        out << "\\n" << name << "\"];\n";
     }
 
     out << "}\n\n";

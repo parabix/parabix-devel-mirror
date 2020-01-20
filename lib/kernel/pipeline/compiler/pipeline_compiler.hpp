@@ -758,13 +758,12 @@ public:
 
     void computeDataFlowRates(BufferGraph & G);
 
-    enum StridesPerSegmentCalculationType {
-        LowerBound,
+    enum DataflowCalculationType {
         Expected,
         UpperBound
     };
 
-    std::vector<unsigned> calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, const StridesPerSegmentCalculationType type) const;
+    void calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, const DataflowCalculationType type, std::vector<Rational> &bounds) const;
 
     void estimateDataFlowBounds(BufferGraph & G, const std::vector<unsigned> & expected) const ;
 

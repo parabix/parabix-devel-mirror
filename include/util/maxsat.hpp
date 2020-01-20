@@ -1,9 +1,11 @@
 #ifndef MAXSAT_HPP
 #define MAXSAT_HPP
 
+#include <llvm/Support/ErrorHandling.h>
+#include <algorithm>
 #include <vector>
 #include <z3.h>
-#include <llvm/Support/ErrorHandling.h>
+
 
 inline Z3_ast mk_binary_or(Z3_context ctx, Z3_ast in_1, Z3_ast in_2) {
     Z3_ast args[2] = { in_1, in_2 };
@@ -97,9 +99,10 @@ inline void assert_le_one(Z3_context ctx, Z3_solver s, unsigned n, Z3_ast * val)
  * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
  ** ------------------------------------------------------------------------------------------------------------- */
 static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) {
-    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-        return -1;
-    }
+    assert ("initial formula is unsatisfiable!" && (Z3_solver_check(ctx, solver) != Z3_L_FALSE));
+//    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
+//        return -1;
+//    }
     if (LLVM_UNLIKELY(soft.empty())) {
         return 0;
     }
@@ -154,7 +157,7 @@ static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) 
                 std::vector<Z3_ast> aux_array_2(k + 1);
                 Z3_ast * aux_1 = aux_array_1.data();
                 Z3_ast * aux_2 = aux_array_2.data();
-                std::copy(block_vars.begin(), block_vars.begin() + k, aux_array_1.begin());
+                std::copy_n(block_vars.data(), k, aux_array_1.data());
                 unsigned i = 1;
                 for (; k > 1; ++i) {
                     assert (aux_1 != aux_2);
@@ -165,8 +168,7 @@ static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) 
             }
         }
     }
-    llvm_unreachable("unreachable");
-    return -1;
+    return 0;
 }
 
 #endif // MAXSAT_HPP

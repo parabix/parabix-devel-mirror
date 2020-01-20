@@ -863,8 +863,8 @@ ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, Strea
 : SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
 // inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred()}
-,Binding{"SourceCoords", SourceCoords, FixedRate(1)}
-,Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1)}},
+,Binding{"SourceCoords", SourceCoords, FixedRate(1), Deferred()}
+,Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1), Deferred()}},
 // outputs
 {},
 // input scalars
@@ -881,7 +881,6 @@ ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, Strea
 
 void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     Module * const m = b->getModule();
-    BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");
     BasicBlock * const dispatch = b->CreateBasicBlock("dispatch");
     BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
@@ -889,56 +888,71 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
 
     Value * accumulator = b->getScalarField("accumulator_address");
-    Value * const avail = b->getAvailableItemCount("InputStream");
-    Value * matchesProcessed = b->getProcessedItemCount("SourceCoords");
-    Value * matchesAvail = b->getAvailableItemCount("SourceCoords");
+    Value * const inputProcessed = b->getProcessedItemCount("InputStream");
+    Value * const inputAvail = b->getAvailableItemCount("InputStream");
+
+    Value * const matchesProcessed = b->getProcessedItemCount("SourceCoords");
+    Value * const matchesAvail = b->getAvailableItemCount("SourceCoords");
 
     Constant * const sz_ONE = b->getSize(1);
 
+    BasicBlock * const entryBlock = b->GetInsertBlock();
     b->CreateCondBr(b->CreateICmpNE(matchesProcessed, matchesAvail), processMatchCoordinates, coordinatesDone);
 
     b->SetInsertPoint(processMatchCoordinates);
-    PHINode * phiMatchNum = b->CreatePHI(b->getSizeTy(), 2, "matchNum");
+    PHINode * const phiMatchNum = b->CreatePHI(b->getSizeTy(), 2, "matchNum");
     phiMatchNum->addIncoming(matchesProcessed, entryBlock);
 
-    Value * nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
+    Value * const matchRecordStart = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
+    Value * const bufLimit = b->CreateSub(inputAvail, sz_ONE);
+    Value * const truncMatchRecordStart = b->CreateUMin(matchRecordStart, bufLimit);
+    Value * const matchRecordEnd = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_ENDS), phiMatchNum), "matchEndLoad");
 
-    Value * matchRecordStart = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
-    Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_ENDS), phiMatchNum), "matchEndLoad");
-    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(LINE_NUMBERS), phiMatchNum), "matchNumLoad");
+//    // It is possible that the matchRecordEnd position is one past EOF. Make sure not to access past EOF.
 
-    // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
-    // to access past EOF.
-    Value * const bufLimit = b->CreateSub(avail, sz_ONE);
-    matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
-    // matchStart should never be past EOF, but in case it is....
-    //b->CreateAssert(b->CreateICmpULT(matchRecordStart, avail), "match position past EOF");
-    b->CreateCondBr(b->CreateICmpULT(matchRecordStart, avail), dispatch, callFinalizeScan);
+//    Value * const matchRecordEndAtEOF = b->CreateUMin(srcMatchRecordEnd, bufLimit);
+//    Value * const matchRecordEnd = b->CreateSelect(b->isFinal(), srcMatchRecordEnd, matchRecordEndAtEOF);
+    b->CreateLikelyCondBr(b->CreateICmpULT(matchRecordEnd, inputAvail), dispatch, coordinatesDone);
 
     b->SetInsertPoint(dispatch);
-    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);    
     Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
+    Value * const matchRecordNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(LINE_NUMBERS), phiMatchNum), "matchNumLoad");
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
-    Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
+
+    Value * const nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
+    Value * const haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
     b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
 
     b->SetInsertPoint(coordinatesDone);
-    //b->setProcessedItemCount("InputStream", matchRecordEnd);
-    b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
+    PHINode * const finalMatchNum = b->CreatePHI(b->getSizeTy(), 2);
+    finalMatchNum->addIncoming(matchesProcessed, entryBlock);
+    finalMatchNum->addIncoming(phiMatchNum, processMatchCoordinates);
+    finalMatchNum->addIncoming(nextMatchNum, dispatch);
+    PHINode * const finalInputProcessed = b->CreatePHI(b->getSizeTy(), 2);
+    finalInputProcessed->addIncoming(inputProcessed, entryBlock);
+    finalInputProcessed->addIncoming(truncMatchRecordStart, processMatchCoordinates);
+    finalInputProcessed->addIncoming(matchRecordEnd, dispatch);
+
+    b->setProcessedItemCount("ColorizedCoords", finalMatchNum);
+    b->setProcessedItemCount("SourceCoords", finalMatchNum);
+
+    b->setProcessedItemCount("InputStream", finalInputProcessed);
+    b->CreateUnlikelyCondBr(b->isFinal(), callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
-    b->setProcessedItemCount("InputStream", avail);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
-    Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
+    Value * const bufferEnd = b->getRawInputPointer("InputStream", inputAvail);
     b->CreateCall(finalizer, {accumulator, bufferEnd});
     b->CreateBr(scanReturn);
 
     b->SetInsertPoint(scanReturn);
+
 
 }
 
