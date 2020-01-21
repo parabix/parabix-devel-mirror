@@ -159,23 +159,20 @@ jsonFunctionType json_parsing_gen(CPUDriver & driver, std::shared_ptr<PabloParse
         { LineNumbers, Indices });
 
     // 9. Output whether or not it is valid
-
-    StreamSet * const outputStream = P->CreateStreamSet(8);
-    P->CreateKernelCall<PabloSourceKernel>(
-        parser,
-        jsonPabloSrc,
-        "SpanLocations",
-        Bindings { // Input Stream Bindings
-            Binding {"span", LineBreaks},
-        },
-        Bindings { // Output Stream Bindings
-            Binding {"output", outputStream}
-        }
+    StreamSet * const Errors = P->CreateStreamSet(4, 1);
+    P->CreateKernelCall<StreamsMerge>(
+        std::vector<StreamSet *>{keywordErr, utf8Err, numberErr, extraErr},
+        Errors
     );
+    StreamSet * const Errs = su::Collapse(P, Errors);
+    StreamSet * const ErrIndices = scan::ToIndices(P, Errs);
+    StreamSet * const Codes = su::Multiplex(P, Errs);
+    scan::Reader(P, driver,
+        SCAN_CALLBACK(postproc_errorStreamsCallback),
+        codeUnitStream,
+        { ErrIndices, Spans },
+        { LineNumbers, Codes });
 
-    StreamSet * const outputBytes = P->CreateStreamSet(1, 8);
-    P->CreateKernelCall<P2SKernel>(outputStream, outputBytes);
-    P->CreateKernelCall<StdOutKernel>(outputBytes);
     return reinterpret_cast<jsonFunctionType>(P->compile());
 }
 
