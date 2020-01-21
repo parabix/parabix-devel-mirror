@@ -97,8 +97,8 @@ void PipelineCompiler::releaseOwnedBuffers(BuilderRef b) {
                     Constant * const ZERO = b->getInt32(0);
                     b->CreateFree(b->CreateLoad(b->CreateInBoundsGEP(traceData, {ZERO, ZERO})));
                 }
-            }                        
-        }        
+            }
+        }
     }
 }
 
@@ -507,8 +507,11 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     startCycleCounter(b, CycleCounter::BEFORE_COPY);
 
     const auto itemWidth = getItemWidth(buffer->getBaseType());
+    const auto blockWidth = b->getBitBlockWidth();
+    const auto bitsToCopy = round_up_to(itemsToCopy * itemWidth, blockWidth);
+
     Value * const numOfStreams = buffer->getStreamSetCount(b);
-    Value * const bytesPerSteam = b->getSize(itemsToCopy * itemWidth / 8);
+    Value * const bytesPerSteam = b->getSize(bitsToCopy / 8);
     Value * const bytesToCopy = b->CreateMul(bytesPerSteam, numOfStreams);
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -531,7 +534,6 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         std::swap(target, source);
     }
 
-    const auto blockWidth = b->getBitBlockWidth();
     b->CreateMemCpy(target, source, bytesToCopy, blockWidth / 8);
 
     updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);

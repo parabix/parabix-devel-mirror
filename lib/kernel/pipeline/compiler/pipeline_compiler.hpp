@@ -730,10 +730,12 @@ public:
                                                OwningVector<Kernel> & internalKernels,
                                                OwningVector<Binding> & internalBindings);
 
-    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & G,
+    using KernelVertexVec = SmallVector<Relationships::Vertex, 64>;
+
+    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G,
                                   OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings);
 
-    void addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & G,
+    void addPopCountKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G,
                             OwningVector<Kernel> &internalKernels, OwningVector<Binding> &internalBindings);
 
     static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
@@ -763,7 +765,7 @@ public:
         UpperBound
     };
 
-    void calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, const DataflowCalculationType type, std::vector<Rational> &bounds) const;
+    void calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, std::vector<Rational> &bounds) const;
 
     void estimateDataFlowBounds(BufferGraph & G, const std::vector<unsigned> & expected) const ;
 

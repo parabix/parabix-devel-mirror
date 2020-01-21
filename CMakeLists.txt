@@ -22,6 +22,7 @@ enable_testing()
 
 option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
+option(LLVM_PATH "LLVM root directory")
 
 # Framework build style: default is collection of static libraries
 option(BUILD_SHARED_LIBS "Build framework as a collection of shared libraries" ON)
@@ -45,10 +46,12 @@ add_version_info_from_vcs(Parabix_REVISION)
 message(STATUS "Parabix Revision: ${Parabix_REVISION}")
 
 
-
 ###   Import Dependency: LLVM   ###
-
+if (LLVM_PATH)
+find_package(LLVM REQUIRED CONFIG PATHS ${LLVM_PATH} NO_DEFAULT_PATH)
+else()
 find_package(LLVM REQUIRED CONFIG)
+endif()
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION} in: ${LLVM_DIR}")
 set(LLVM_ALL_TARGETS X86)
 llvm_map_components_to_libnames(REQ_LLVM_LIBRARIES ${LLVM_ALL_TARGETS} mcjit native IRReader Linker)
@@ -78,7 +81,6 @@ link_directories(${Boost_LIBRARY_DIRS})
 
 find_package(Z3 REQUIRED)
 include_directories(${Z3_INCLUDE_DIRS})
-message(STATUS "Found Z3_LIBRARIES: ${Z3_LIBRARIES}")
 
 ###   Project Configuration   ###
 
@@ -257,7 +259,7 @@ function(parabix_add_pablo_src NAME)
     foreach(PABLO_FILE ${ARGN})
         list(APPEND FILE_LIST "${CMAKE_CURRENT_SOURCE_DIR}/${PABLO_FILE}")
     endforeach(PABLO_FILE)
-    
+
     add_custom_target(${NAME}
         COMMAND cp ${FILE_LIST} ${PARABIX_OBJECT_CACHE}
         DEPENDS ${ARGN})

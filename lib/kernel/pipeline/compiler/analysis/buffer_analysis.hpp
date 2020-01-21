@@ -116,6 +116,19 @@ void PipelineCompiler::verifyIOStructure() const {
  ** ------------------------------------------------------------------------------------------------------------- */
 BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
+    auto roundUpTo = [](const Rational a, const Rational b) {
+        // m = mod(a, b)
+        Rational n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
+        const auto m = a - Rational{floor(n)} * b;
+        if (LLVM_UNLIKELY(m.numerator() != 0)) {
+            const auto r = (a - m) + b;
+            assert (r.denominator() == 1);
+            return r.numerator();
+        }
+        assert (a.denominator() == 1);
+        return a.numerator();
+    };
+
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
@@ -208,11 +221,43 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             bool dynamic = (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
 
+
+            const auto in = in_edge(streamSet, G);
+            const BufferRateData & producerRate = G[in];
             const auto producer = source(pe, G);
+
+            unsigned lookAhead = 0;
+            unsigned lookBehind = 0;
+            unsigned reflection = 0;
+
+            const Binding & outputBinding = producerRate.Binding;
+            for (const Attribute & attr : outputBinding.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::LookBehind:
+                        lookBehind = std::max(lookBehind, attr.amount());
+                        break;
+                    case AttrId::Delayed:
+                        reflection = std::max(reflection, attr.amount());
+                        break;
+                    default: break;
+                }
+            }
+
+            Rational requiredSizeFactor{1};
+            if (producerRate.Maximum == producerRate.Minimum) {
+                requiredSizeFactor = producerRate.Maximum;
+            }
+
+            assert (producerRate.Maximum >= producerRate.Minimum);
+
+            Rational consumeMin(std::numeric_limits<unsigned>::max());
+            Rational consumeMax(std::numeric_limits<unsigned>::min());
+
             const auto producerPartitionId = KernelPartitionId[producer];
 
             bool linear = requiresLinearAccess(output);
             for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
+
                 const BufferRateData & consumerRate = G[ce];
                 const Binding & input = consumerRate.Binding;
 
@@ -228,14 +273,62 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
                     linear = true;
                 }
+
+                const auto expected = ExpectedNumOfStrides[consumer];
+
+                const auto cMin = consumerRate.Minimum * expected;
+                const auto cMax = consumerRate.Maximum * expected;
+
+                assert (consumerRate.Maximum >= consumerRate.Minimum);
+
+                consumeMin = std::min(consumeMin, cMin);
+                consumeMax = std::max(consumeMax, cMax);
+
+                assert (consumeMax >= consumeMin);
+
+                if (consumerRate.Maximum == consumerRate.Minimum) {
+                    requiredSizeFactor = lcm(requiredSizeFactor, consumerRate.Maximum);
+                }
+
+                const Binding & inputBinding = consumerRate.Binding;
+                // Get output overflow size
+                unsigned tmpLookAhead = 0;
+                for (const Attribute & attr : inputBinding.getAttributes()) {
+                    switch (attr.getKind()) {
+                        case AttrId::LookAhead:
+                            tmpLookAhead = std::max(tmpLookAhead, attr.amount());
+                            break;
+                        case AttrId::LookBehind:
+                            lookBehind = std::max(lookBehind, attr.amount());
+                            break;
+                        default: break;
+                    }
+                }
+
+
+
+                if (consumerRate.Maximum > consumerRate.Minimum) {
+                    tmpLookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
+                }
+                lookAhead = std::max(tmpLookAhead, lookAhead);
             }
 
+            const auto produceMax = producerRate.Maximum * ExpectedNumOfStrides[producer];
+            const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
+
+            bn.LookBehind = lookBehind;
+            bn.LookBehindReflection = reflection;
+            bn.CopyBack = copyBack;
+            bn.LookAhead = lookAhead;
+
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const auto overflowSize = round_up_to(std::max(bn.CopyBack, bn.LookAhead), blockWidth);
-            const auto underflowSize = round_up_to(bn.LookBehind, blockWidth);
-            const auto minRequiredSize = std::max(underflowSize, overflowSize) * 2;
-            const auto requiredSpace = std::max<size_t>(bn.RequiredSpace, minRequiredSize);
-            const auto bufferSize = round_up_to(requiredSpace, blockWidth) * numOfSegments;
+            const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth);
+            const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth);
+            const auto reqSize0 = std::max(produceMax, Rational{2} * consumeMax - consumeMin);
+            const Rational reqSize1{2 * (overflowSize + underflowSize), 1};
+            const auto reqSize2 = std::max(reqSize0, reqSize1);
+            const auto requiredSize = roundUpTo(reqSize2, requiredSizeFactor);
+            const auto bufferSize = round_up_to(requiredSize, blockWidth) * numOfSegments;
 
             Type * const baseType = output.getType();
 
@@ -246,7 +339,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             } else {
                 buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             }
-            bn.Buffer = buffer;            
+            bn.Buffer = buffer;
         }
     }
 
@@ -402,7 +495,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
                             bufferType = 'D'; break;
                         default: llvm_unreachable("unknown streamset type");
                     }
-                    break;                
+                    break;
                 case BufferType::ManagedByKernel:
                     bufferType = 'M';
                     break;

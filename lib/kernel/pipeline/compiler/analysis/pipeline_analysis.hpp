@@ -565,7 +565,7 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
 
     const auto p_in = add_vertex(RelationshipNode(pipelineKernel), G);
     const auto n = kernels.size();
-    SmallVector<Relationships::Vertex, 64> vertex(n);
+    KernelVertexVec vertex(n);
     for (unsigned i = 0; i < n; ++i) {
         const Kernel * K = kernels[i];
         if (LLVM_UNLIKELY(K == pipelineKernel)) {
@@ -596,8 +596,8 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
         addReferenceRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), G);
     }
 
-    addPopCountKernels(b, kernels, G, internalKernels, internalBindings);
-    // addRegionSelectorKernels(b, kernels, G, internalKernels, internalBindings);
+    addPopCountKernels(b, kernels, vertex, G, internalKernels, internalBindings);
+    // addRegionSelectorKernels(b, kernels, vertex, G, internalKernels, internalBindings);
 
     addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputScalarBindings(), G);
     addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputScalarBindings(), G, true);
@@ -619,8 +619,7 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
 
     // Add ordering constraints to ensure the input must be before all kernel invocations
     // and the invocations must come before the output.
-    for (unsigned i = 0; i < n; ++i) {
-        const auto v = vertex[i];
+    for (const auto v : vertex) {
         add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
         add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
     }
@@ -631,7 +630,8 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addRegionSelectorKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, Relationships & G,
+void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex,
+                                                Relationships & G,
                                                 OwningVector<Kernel> & internalKernels,
                                                 OwningVector<Binding> & internalBindings) {
 
@@ -742,6 +742,7 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
             }
             // insert the implicit relationships
             const auto K = G.addOrFind(kernel);
+            vertex.push_back(K);
             Binding * const binding = new Binding("#regionselector", regionSpans);
             internalBindings.emplace_back(binding);
             const auto B = G.addOrFind(binding);
@@ -755,7 +756,7 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addPopCountKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relationships & G,
+void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G,
                                           OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings) {
 
     struct Edge {
@@ -900,6 +901,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
         internalKernels.emplace_back(popCountKernel);
 
         const auto k = G.add(popCountKernel);
+        vertex.push_back(k);
         addConsumerRelationships(PortType::Input, k, popCountKernel->getInputStreamSetBindings(), G, false);
         addProducerRelationships(PortType::Output, k, popCountKernel->getOutputStreamSetBindings(), G);
 

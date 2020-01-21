@@ -5,41 +5,34 @@
 
 namespace kernel {
 
-#if 0
+#if 1
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief partitionIntoFixedRateRegionWithOrderingConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
 
-    using Type = RelationshipNode::RelationshipNodeType;
-
     using BV = dynamic_bitset<>;
 
     struct PartitionNode {
-        Type        Type;
         unsigned    Vertex;
         BV          RateSet;
     };
 
-    using PartitioningGraph = adjacency_list<hash_setS, vecS, bidirectionalS, PartitionNode, RefWrapper<Binding>>;
+    using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionNode>;
     using Vertex = PartitioningGraph::vertex_descriptor;
-    using Edge = PartitioningGraph::edge_descriptor;
 
     using BufferAttributeMap = flat_map<std::pair<Vertex, unsigned>, Vertex>;
-
     using PartialSumMap = flat_map<Vertex, Vertex>;
+
+    using Partition = std::vector<unsigned>;
+    using PartitionMap = std::map<BV, Partition>;
 
     // Convert G into a simpler representation of the graph that we can annotate
 
-    std::vector<unsigned> O;
-    if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
-        report_fatal_error("Pipeline contains a cycle");
-    }
-
     unsigned kernels = 0;
     unsigned streamSets = 0;
-    for (const auto u : O) {
+    for (const auto u : make_iterator_range(vertices(G))) {
         const RelationshipNode & node = G[u];
         switch (node.Type) {
             case RelationshipNode::IsKernel:
@@ -61,19 +54,17 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     unsigned nextKernel = 0;
     unsigned nextStreamSet = kernels;
 
-    auto mapStreamSet = [&](const Relationships::vertex_descriptor u) {
-        const auto f = M.find(streamSet);
+    auto mapStreamSet = [&](const Relationships::vertex_descriptor u) -> Vertex {
+        const auto f = M.find(u);
         if (f == M.end()) {
             const auto id = nextStreamSet++;
             PartitionNode & K = H[id];
-            K.Type = Type::IsRelationship;
             K.Vertex = u;
             M.emplace(u, id);
             return id;
         }
         return f->second;
     };
-
 
     unsigned currentRateId = 0;
 
@@ -88,16 +79,15 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     BufferAttributeMap L;
     BufferAttributeMap D;
 
-    auto checkForExistingEntry = [&](const Vertex streamSet, const unsigned amount, BufferAttributeMap & M) -> Vertex {
+    auto makeAttributeVertex = [&](const Vertex streamSet, const unsigned amount, BufferAttributeMap & M) -> Vertex {
         const auto key = std::make_pair(streamSet, amount);
-        const auto f = L.find(key);
-        if (LLVM_LIKELY(f == L.end())) {
+        const auto f = M.find(key);
+        if (LLVM_LIKELY(f == M.end())) {
             const auto buf = add_vertex(H);
             PartitionNode & B = H[buf];
-            B.Type = Type::IsNil;
             addRateId(B, currentRateId++);
             add_edge(streamSet, buf, H);
-            L.emplace(key, buf);
+            M.emplace(key, buf);
             return buf;
         } else {
             return f->second;
@@ -107,20 +97,26 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     PartialSumMap P;
 
     auto checkForPartialSumEntry = [&](const Vertex streamSet) -> Vertex {
-        const auto key = std::make_pair(streamSet, amount);
-        const auto f = L.find(streamSet);
-        if (LLVM_LIKELY(f == L.end())) {
-            const auto ps = add_vertex(H);
-            PartitionNode & B = H[ps];
-            B.Type = Type::IsNil;
+        const auto f = P.find(streamSet);
+        if (LLVM_LIKELY(f == P.end())) {
+            const auto partialSum = add_vertex(H);
+            PartitionNode & B = H[partialSum];
             addRateId(B, currentRateId++);
-            L.emplace(key, ps);
-            return ps;
+            P.emplace(streamSet, partialSum);
+            return partialSum;
         } else {
             return f->second;
         }
     };
 
+    std::vector<Vertex> O;
+    O.reserve(num_vertices(G));
+    if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
+        report_fatal_error("Cannot lexically order the initial pipeline graph!");
+    }
+
+    // Begin by constructing a graph that represents the I/O relationships
+    // and any partition boundaries.
     for (const auto u : O) {
 
         const RelationshipNode & node = G[u];
@@ -128,38 +124,16 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         if (node.Type == RelationshipNode::IsKernel) {
 
             const auto kernel = nextKernel++;
-
             PartitionNode & K = H[kernel];
-            K.Type = Type::IsKernel;
             K.Vertex = u;
 
             bool partitionRoot = false;
 
             // add in any inputs
-            RelationshipType prior_in{};
-            for (const auto e : make_iterator_range(in_edges(i, G))) {
-                const RelationshipType & port = G[e];
-                assert (prior_in < port);
-                prior_in = port;
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
                 const auto binding = source(e, G);
                 const RelationshipNode & rn = G[binding];
                 if (rn.Type == RelationshipNode::IsBinding) {
-                    Binding & b = rn.Binding;
-                    const ProcessingRate & rate = b.getRate();
-
-                    switch (rate.getKind()) {
-                        case RateId::PartialSum:
-
-
-
-                        case RateId::Greedy:
-                            // A greedy input with a lower bound > 0 cannot safely be included
-                            // in its producers's partition unless its producer is guaranteed
-                            // to generate more data than it consumes.
-                        case RateId::Bounded:
-                            partitionRoot = true;
-                        default: break;
-                    }
 
                     const auto f = first_in_edge(binding, G);
                     assert (G[f].Reason != ReasonType::Reference);
@@ -168,169 +142,178 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                     assert (isa<StreamSet>(G[streamSet].Relationship));
                     auto buffer = mapStreamSet(streamSet);
 
+                    const Binding & b = rn.Binding;
+                    const ProcessingRate & rate = b.getRate();
+
+                    switch (rate.getKind()) {
+                        case RateId::PartialSum:
+                            BEGIN_SCOPED_REGION
+                            const auto partialSum = checkForPartialSumEntry(buffer);
+                            add_edge(partialSum, buffer, H);
+                            END_SCOPED_REGION
+                            break;
+                        case RateId::Greedy:
+                            // A greedy input with a lower bound > 0 cannot safely be included
+                            // in its producers's partition unless its producer is guaranteed
+                            // to generate more data than it consumes.
+                        case RateId::Bounded:
+                            // A bounded rate input always signifies a new partition.
+                            partitionRoot = true;
+                        default: break;
+                    }
+
                     // If we have a lookahead/delay attribute on any stream, create
-                    // a new buffer vertex to represent it.
+                    // a new buffer vertex (with a new rate id) to represent it each
+                    // unique pairing.
                     for (const Attribute & attr : b.getAttributes()) {
                         switch (attr.getKind()) {
                             case AttrId::Delayed:
-                                buffer = checkForExistingEntry(buffer, attr.amount(), D);
+                                buffer = makeAttributeVertex(buffer, attr.amount(), D);
                                 break;
                             case AttrId::LookAhead:
-                                buffer = checkForExistingEntry(buffer, attr.amount(), L);
+                                buffer = makeAttributeVertex(buffer, attr.amount(), L);
                                 break;
                             default: break;
                         }
                     }
 
-                    add_edge(buffer, kernel, b, H);
+                    add_edge(buffer, kernel, H);
                 }
             }
 
-            if (LLVM_UNLIKELY(in_degree(kernel, H) == 0)) {
-                partitionRoot = true;
+            // If this kernel is the root of a new partition or a source kernel,
+            // give it a new rate id.
+            if (partitionRoot || LLVM_UNLIKELY(in_degree(kernel, H) == 0)) {
+                addRateId(K, currentRateId++);
             }
 
-
             // and any outputs
-            RelationshipType prior_out{};
-            for (const auto e : make_iterator_range(out_edges(i, G))) {
-                const RelationshipType & port = G[e];
-                assert (prior_out < port);
-                prior_out = port;
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+
                 const auto binding = target(e, G);
                 const RelationshipNode & rn = G[binding];
 
                 if (rn.Type == RelationshipNode::IsBinding) {
-
 
                     const auto f = out_edge(binding, G);
                     assert (G[f].Reason != ReasonType::Reference);
                     const auto streamSet = target(f, G);
                     assert (G[streamSet].Type == RelationshipNode::IsRelationship);
                     assert (isa<StreamSet>(G[streamSet].Relationship));
-
-                    // Link a relative rate output stream to its output reference stream
-                    Binding & b = rn.Binding;
+                    const auto buffer = mapStreamSet(streamSet);
+                    const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
-                    if (LLVM_UNLIKELY(rate.isRelative())) {
-
-
+                    add_edge(kernel, buffer, H);
+                    switch (rate.getKind()) {
+                        case RateId::PartialSum:
+                            BEGIN_SCOPED_REGION
+                            const auto partialSum = checkForPartialSumEntry(buffer);
+                            add_edge(partialSum, buffer, H);
+                            END_SCOPED_REGION
+                            break;
+                        case RateId::Bounded:
+                            addRateId(H[buffer], currentRateId++);
+                            break;
+                        case RateId::Relative:
+                            // Link a relative rate output stream to its output reference stream
+                            for (const auto f : make_iterator_range(in_edges(binding, G))) {
+                                const RelationshipType & type = G[f];
+                                if (type.Reason == ReasonType::Reference) {
+                                    const auto ref = source(f, G);
+                                    const auto refBuffer = mapStreamSet(ref);
+                                    add_edge(refBuffer, buffer, H);
+                                    goto found_ref;
+                                }
+                            }
+                            llvm_unreachable("could not locate reference buffer?");
+                            found_ref: break;
+                        default: break;
                     }
 
-                    add_edge(kernel, mapStreamSet(streamSet), b, H);
-
+                    // Check the attributes to see whether any impose a partition change
+                    for (const Attribute & attr : b.getAttributes()) {
+                        switch (attr.getKind()) {
+                            case AttrId::Deferred:
+                                // A deferred output rate is closer to an bounded rate than a
+                                // countable rate but a deferred input rate simply means the
+                                // buffer must be dynamic.
+                                addRateId(H[buffer], currentRateId++);
+                                break;
+                            default: break;
+                        }
+                    }
                 }
-
             }
-
         }
-
     }
 
-    // If we have a lookahead attribute on any stream, create a new buffer vertex to represent it.
-    using BufferAttributeMap = flat_map<std::pair<Vertex, unsigned>, Vertex>;
+    assert (nextKernel == kernels);
+    assert (nextStreamSet == streamSets + kernels);
 
-    SmallVector<std::pair<Edge, unsigned>, 8> changes;
+    // Combine all incoming rates sets
 
-    for (const auto u : make_iterator_range(vertices(H))) {
+    BEGIN_SCOPED_REGION
+
+    O.clear();
+    O.reserve(num_vertices(H));
+    if (LLVM_UNLIKELY(!lexical_ordering(H, O))) {
+        report_fatal_error("Cannot lexically order the partition graph!");
+    }
+
+    for (const auto u : O) {
+        PartitionNode & U = H[u];
+        BV & nodeRateSet = U.RateSet;
+        // boost dynamic_bitset will segfault when buffers are of differing lengths.
+        nodeRateSet.resize(currentRateId);
         for (const auto e : make_iterator_range(in_edges(u, H))) {
-            Binding & binding = H[e];
-            if (LLVM_UNLIKELY(binding.hasLookahead())) {
-                const auto la = binding.getLookahead();
-                const auto s = source(e, H);
-                const auto key = std::make_pair(s, la);
-                const auto f = L.find(key);
-                Vertex buf;
-                if (LLVM_LIKELY(f == L.end())) {
-                    buf = add_vertex(H);
-                    PartitionNode & B = H[buf];
-                    B.Type = Type::IsRelationship;
-                    B.Vertex = s;
-                    addRateId(B, currentRateId++);
-                    // link the "lookahead buffer" to the original to allow rate transitivity
-                    add_edge(s, buf, H);
-                    L.emplace(key, buf);
-                } else {
-                    buf = f->second;
-                }
-                changes.emplace_back(e, buf);
-            }
-        }
-        if (LLVM_UNLIKELY(!changes.empty())) {
-            for (const auto e : changes) {
-                Binding & binding = H[e.first];
-                remove_edge(e.first, H);
-                add_edge(u, p.second, binding, H);
-            }
-            changes.clear();
+            const auto v = source(e, H);
+            const PartitionNode & V = H[v];
+            const BV & inputRateSet = V.RateSet;
+            nodeRateSet |= inputRateSet;
         }
     }
 
-    // Patch any relative rate output streams to refer to the appropriate reference stream
+    END_SCOPED_REGION
 
-    for (const auto u : make_iterator_range(vertices(H))) {
-        for (const auto e : make_iterator_range(out_edges(u, H))) {
-            Binding & binding = H[e];
-            const ProcessingRate & rate = binding.getRate();
+    // Now that we've tainted the kernels with any influencing rate ids, sort them into partitions.
+    PartitionMap partitionSets;
+    for (unsigned u = 0; u != kernels; ++u) {
+        const PartitionNode & node = H[u];
+        auto & partition = partitionSets[std::move(node.RateSet)];
+        partition.push_back(node.Vertex);
+    }
 
-            if (LLVM_UNLIKELY(rate.isRelative())) {
+    partitionIds.resize(num_vertices(G), 0);
 
+    const auto n = partitionSets.size();
+    if (LLVM_UNLIKELY(n < 2)) {
+        return n;
+    }
 
-
-
-                const auto la = binding.getLookahead();
-                const auto s = source(e, H);
-                const auto key = std::make_pair(s, la);
-                const auto f = L.find(key);
-                Vertex buf;
-                if (LLVM_LIKELY(f == L.end())) {
-                    buf = add_vertex(H);
-                    PartitionNode & B = H[buf];
-                    B.Type = Type::IsRelationship;
-                    B.Vertex = s;
-                    addRateId(B, currentRateId++);
-                    // link the "lookahead buffer" to the original to allow rate transitivity
-                    add_edge(s, buf, H);
-                    L.emplace(key, buf);
-                } else {
-                    buf = f->second;
-                }
-                changes.emplace_back(e, buf);
-            }
+    unsigned partitionId = 1U;
+    for (auto i = partitionSets.begin();;) {
+        const Partition & A = i->second;
+        for (const auto v : A) {
+            partitionIds[v] = partitionId;
         }
-        for (const auto e : changes) {
-            Binding & binding = H[e.first];
-            remove_edge(e.first, H);
-            add_edge(u, p.second, binding, H);
+        ++partitionId;
+        if (++i == partitionSets.end()) {
+            break;
+        }
+        const Partition & B = i->second;
+        for (const auto u : A) {
+            for (const auto v : B) {
+                assert (u != v);
+                add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+            }
         }
     }
 
+    assert (partitionId == (n + 1U));
 
-//    for (const auto e : make_iterator_range(out_edges(u, G))) {
-//        const auto output = target(e, G);
-//        const RelationshipNode & outputNode = G[output];
-//        if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
-//            const Binding & binding = outputNode.Binding;
-//            const ProcessingRate & rate = binding.getRate();
-//            if (LLVM_UNLIKELY(rate.isRelative())) {
-//                bool found = false;
-//                for (const auto f : make_iterator_range(in_edges(output, G))) {
-//                    const RelationshipType & type = G[f];
-//                    if (type.Reason == ReasonType::Reference) {
-//                        const auto ref = source(f, G);
-//                        mergeRateIds(rateSet[output], rateSet[ref]);
-//                        found = true;
-//                        break;
-//                    }
-//                }
-//                assert (found);
-//            }
-//        }
-//    }
+    printRelationshipGraph(G, errs(), "RESULT");
 
-
-    // If we have a PopCount rate stream, create a new buffer vertex to represent it.
-
+    return n;
 }
 
 #else
