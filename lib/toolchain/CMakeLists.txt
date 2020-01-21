@@ -22,7 +22,7 @@ SRC
     toolchain.cpp
 )
 
-if(BUILD_SHARED_LIBS)
+if(ARTIFACT_TYPE STREQUAL "Shared" AND ARTIFACT_MODE EQUAL "Multiple")
     if(APPLE)
     # The Darwin linker on macOS does not support the --whole-archive flag.
     # Instead it has -all_load which does something similar. On macOS we need
@@ -47,7 +47,7 @@ if(BUILD_SHARED_LIBS)
         -Wl,--whole-archive LLVMSupport -Wl,--no-whole-archive
         ${REQ_LLVM_LIBRARIES})
     endif(APPLE)
-elseif(NOT BUILD_SINGLE_SHARED_LIB)
+elseif(ARTIFACT_MODE STREQUAL "Multiple")
     # Build static libraries
     target_link_libraries(toolchain ${REQ_LLVM_LIBRARIES})
 endif()

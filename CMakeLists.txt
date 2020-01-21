@@ -25,16 +25,24 @@ option(DISABLE_DUAL_ABI "Disable GCC Dual ABI support" OFF)
 option(CARRYPACK_MANAGER "Use CarryPack Manager to reduce space required for carries. For testing only." OFF)
 option(USE_ADDRESS_SANITIZER "Enables use of address sanitizer in debug mode if available" OFF)
 
-# Framework build style: default is collection of static libraries
-option(BUILD_SHARED_LIBS "Build framework as a collection of shared libraries" ON)
-option(BUILD_SINGLE_SHARED_LIB "Build framework as a single shared library" OFF)
+# Build Artifact Configuration
+set(ARTIFACT_MODE "Multiple" CACHE STRING "Build framework into a single artifact (Single) or multiple artifacts (Multiple)")
+set(ARTIFACT_TYPE "Static" CACHE STRING "Build frameword as shared (Shared) or static (Static) libraries")
 
-if(BUILD_SHARED_LIBS AND BUILD_SINGLE_SHARED_LIB)
-    set(BUILD_SHARED_LIBS OFF)
+# Validate framework build style
+set(VALID_BUILD_MODE "Single" "Multiple")
+set(VALID_BUILD_TYPE "Shared" "Static")
+list(FIND VALID_BUILD_MODE ${ARTIFACT_MODE} __am_index)
+if(__am_index EQUAL -1)
+    message(FATAL_ERROR "ARTIFACT_MODE must be either Single or Multiple")
+endif()
+list(FIND VALID_BUILD_TYPE ${ARTIFACT_TYPE} __at_index)
+if(__at_index EQUAL -1)
+    message(FATAL_ERROR "ARTIFACT_TYPE must be either Shared or Static")
 endif()
 
 # Target for single shared library
-set(PARABIX_MONO_TARGET parabix_framework)
+set(PARABIX_MONO_TARGET parabix)
 
 
 # Ensure custom FindXYZ.cmake files are found
@@ -179,7 +187,7 @@ endfunction(parabix_set_library_name)
 
 include(CMakeParseArguments)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND NOT BUILD_SHARED_LIBS)
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ARTIFACT_TYPE STREQUAL "Static")
     set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
 
     # Add assertion debug symbol support checks
@@ -222,16 +230,15 @@ function(parabix_add_module)
     if(NOT ARG_NAME)
         message(FATAL_ERROR "parabix_add_module: A target name is required")
     endif()
-    if(BUILD_SINGLE_SHARED_LIB)
+    if(ARTIFACT_MODE STREQUAL "Single")
         foreach(SRC ${ARG_SRC})
             target_sources(${PARABIX_MONO_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${SRC})
         endforeach()
     else()
-        if(BUILD_SHARED_LIBS)
-            add_library(${ARG_NAME} SHARED ${ARG_SRC})
-            parabix_set_library_name(${ARG_NAME})
-        else() # build static
+        if(ARTIFACT_TYPE STREQUAL "Static")
             add_library(${ARG_NAME} STATIC ${ARG_SRC})
+        else()
+            add_library(${ARG_NAME} SHARED ${ARG_SRC})
         endif()
         parabix_set_library_name(${ARG_NAME})
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
@@ -253,7 +260,7 @@ function(parabix_add_executable)
         message(FATAL_ERROR "parabix_add_executable: A target name is required")
     endif()
     add_executable(${ARG_NAME} ${ARG_SRC})
-    if(BUILD_SINGLE_SHARED_LIB)
+    if(ARTIFACT_MODE STREQUAL "Single")
         target_link_libraries(${ARG_NAME} ${PARABIX_MONO_TARGET})
     else()
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
@@ -278,8 +285,12 @@ endfunction(parabix_add_pablo_src)
 
 ###   Add Subdirectories   ###
 
-if(BUILD_SINGLE_SHARED_LIB)
-    add_library(${PARABIX_MONO_TARGET} SHARED "")
+if(ARTIFACT_MODE STREQUAL "Single")
+    if(ARTIFACT_TYPE STREQUAL "Static")
+        add_library(${PARABIX_MONO_TARGET} STATIC "")
+    else()
+        add_library(${PARABIX_MONO_TARGET} SHARED "")
+    endif()
 endif()
 
 # Framework Libraries
@@ -332,8 +343,8 @@ add_subdirectory(tools/util)
 # Kernel Tests
 add_subdirectory(tests)
 
-# Target definition for single shared library
-if(BUILD_SINGLE_SHARED_LIB)
+# Target definition for single library
+if(ARTIFACT_MODE STREQUAL "Single")
     target_link_libraries(${PARABIX_MONO_TARGET} ${REQ_LLVM_LIBRARIES} ${Boost_LIBRARIES})
 endif()
 
