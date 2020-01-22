@@ -130,8 +130,6 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
         out.flush();
     }
 
-
-
     for (const auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
@@ -441,7 +439,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     P.PartitionCount = numOfPartitions;
 
     // Now fill in all of the remaining kernels subsitute position
-    for (auto i = 0; i != numOfKernels; ++i) {
+    for (unsigned i = 0; i != numOfKernels; ++i) {
         const auto in = kernels[i];
         assert (subsitution[in] == -1U);
         const auto out = P.PipelineInput + i;

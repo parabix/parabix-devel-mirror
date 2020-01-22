@@ -5,8 +5,6 @@
 
 namespace kernel {
 
-#if 1
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief partitionIntoFixedRateRegionWithOrderingConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -14,13 +12,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     using BV = dynamic_bitset<>;
 
-    struct PartitionNode {
-        unsigned    Vertex;
-        BV          RateSet;
-    };
-
-    using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionNode>;
-    using Vertex = PartitioningGraph::vertex_descriptor;
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS, BV>;
+    using Vertex = Graph::vertex_descriptor;
 
     using BufferAttributeMap = flat_map<std::pair<Vertex, unsigned>, Vertex>;
     using PartialSumMap = flat_map<Vertex, Vertex>;
@@ -47,7 +40,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         }
     }
 
-    PartitioningGraph H(kernels + streamSets);
+    Graph H(kernels + streamSets);
 
     flat_map<Relationships::vertex_descriptor, Vertex> M;
 
@@ -58,8 +51,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         const auto f = M.find(u);
         if (f == M.end()) {
             const auto id = nextStreamSet++;
-            PartitionNode & K = H[id];
-            K.Vertex = u;
+            assert (id < (streamSets + kernels));
             M.emplace(u, id);
             return id;
         }
@@ -68,8 +60,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     unsigned currentRateId = 0;
 
-    auto addRateId = [](PartitionNode & pn, const unsigned rateId) {
-       auto & bv = pn.RateSet;
+    auto addRateId = [](BV & bv, const unsigned rateId) {
        if (LLVM_UNLIKELY(rateId >= bv.capacity())) {
            bv.resize(round_up_to(rateId + 1, BV::bits_per_block));
        }
@@ -84,8 +75,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         const auto f = M.find(key);
         if (LLVM_LIKELY(f == M.end())) {
             const auto buf = add_vertex(H);
-            PartitionNode & B = H[buf];
-            addRateId(B, currentRateId++);
+            addRateId(H[buf], currentRateId++);
             add_edge(streamSet, buf, H);
             M.emplace(key, buf);
             return buf;
@@ -100,8 +90,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         const auto f = P.find(streamSet);
         if (LLVM_LIKELY(f == P.end())) {
             const auto partialSum = add_vertex(H);
-            PartitionNode & B = H[partialSum];
-            addRateId(B, currentRateId++);
+            addRateId(H[partialSum], currentRateId++);
             P.emplace(streamSet, partialSum);
             return partialSum;
         } else {
@@ -115,6 +104,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         report_fatal_error("Cannot lexically order the initial pipeline graph!");
     }
 
+    std::vector<Relationships::vertex_descriptor> mappedKernel(kernels);
+
     // Begin by constructing a graph that represents the I/O relationships
     // and any partition boundaries.
     for (const auto u : O) {
@@ -124,8 +115,9 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         if (node.Type == RelationshipNode::IsKernel) {
 
             const auto kernel = nextKernel++;
-            PartitionNode & K = H[kernel];
-            K.Vertex = u;
+            assert (kernel < kernels);
+            mappedKernel[kernel] = u;
+            assert (H[kernel].empty());
 
             bool partitionRoot = false;
 
@@ -153,9 +145,18 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             END_SCOPED_REGION
                             break;
                         case RateId::Greedy:
-                            // A greedy input with a lower bound > 0 cannot safely be included
-                            // in its producers's partition unless its producer is guaranteed
-                            // to generate more data than it consumes.
+                            // A kernel with a greedy input cannot safely be included in its
+                            // producers' partitions unless its producers are guaranteed to
+                            // generate at least as much data as this kernel consumes.
+                            BEGIN_SCOPED_REGION
+                            const auto produced = parent(streamSet, G);
+                            assert (G[produced].Type == RelationshipNode::IsBinding);
+                            const Binding & prodBinding = G[produced].Binding;
+                            const ProcessingRate & prodRate = prodBinding.getRate();
+                            if (prodRate.getLowerBound() >= rate.getLowerBound()) {
+                                break;
+                            }
+                            END_SCOPED_REGION
                         case RateId::Bounded:
                             // A bounded rate input always signifies a new partition.
                             partitionRoot = true;
@@ -181,11 +182,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 }
             }
 
-            // If this kernel is the root of a new partition or a source kernel,
-            // give it a new rate id.
-            if (partitionRoot || LLVM_UNLIKELY(in_degree(kernel, H) == 0)) {
-                addRateId(K, currentRateId++);
-            }
+            assert (!partitionRoot || in_degree(kernel, H) != 0);
 
             // and any outputs
             for (const auto e : make_iterator_range(out_edges(u, G))) {
@@ -229,10 +226,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             found_ref: break;
                         default: break;
                     }
-
                     // Check the attributes to see whether any impose a partition change
                     for (const Attribute & attr : b.getAttributes()) {
                         switch (attr.getKind()) {
+                            case AttrId::Delayed:
                             case AttrId::Deferred:
                                 // A deferred output rate is closer to an bounded rate than a
                                 // countable rate but a deferred input rate simply means the
@@ -243,6 +240,22 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                         }
                     }
                 }
+            }
+
+            // If this kernel is the root of a new partition or a source kernel,
+            // give it a new rate id.
+
+            auto isSourceKernel = [&]() {
+                if (LLVM_UNLIKELY(in_degree(kernel, H) == 0)) {
+                    return out_degree(kernel, H) != 0;
+                }
+                return false;
+            };
+
+            if (partitionRoot || LLVM_UNLIKELY(isSourceKernel())) {
+                BV & node = H[kernel];
+                assert (node.none());
+                addRateId(node, currentRateId++);
             }
         }
     }
@@ -261,26 +274,29 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     }
 
     for (const auto u : O) {
-        PartitionNode & U = H[u];
-        BV & nodeRateSet = U.RateSet;
+        auto & nodeRateSet = H[u];
         // boost dynamic_bitset will segfault when buffers are of differing lengths.
         nodeRateSet.resize(currentRateId);
         for (const auto e : make_iterator_range(in_edges(u, H))) {
             const auto v = source(e, H);
-            const PartitionNode & V = H[v];
-            const BV & inputRateSet = V.RateSet;
+            const auto & inputRateSet = H[v];
             nodeRateSet |= inputRateSet;
         }
     }
 
     END_SCOPED_REGION
 
-    // Now that we've tainted the kernels with any influencing rate ids, sort them into partitions.
+    // Now that we've tainted the kernels with any influencing rates,
+    // cluster them into partitions.
     PartitionMap partitionSets;
     for (unsigned u = 0; u != kernels; ++u) {
-        const PartitionNode & node = H[u];
-        auto & partition = partitionSets[std::move(node.RateSet)];
-        partition.push_back(node.Vertex);
+        BV & node = H[u];
+        assert (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0));
+        if (LLVM_UNLIKELY(node.none())) {
+            continue;
+        }
+        auto & partition = partitionSets[std::move(node)];
+        partition.push_back(mappedKernel[u]);
     }
 
     partitionIds.resize(num_vertices(G), 0);
@@ -290,7 +306,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         return n;
     }
 
-    unsigned partitionId = 1U;
+    // Then provide each partition with a unique id
+    unsigned partitionId = 0U;
     for (auto i = partitionSets.begin();;) {
         const Partition & A = i->second;
         for (const auto v : A) {
@@ -309,279 +326,210 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         }
     }
 
-    assert (partitionId == (n + 1U));
-
-    printRelationshipGraph(G, errs(), "RESULT");
-
+    assert (partitionId == n);
     return n;
 }
 
-#else
+#if 1
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief partitionIntoFixedRateRegionWithOrderingConstraints
+ * @brief generatePartitioningGraph
+ *
+ * The partitioning graph summarizes the buffer graph to indicate what dynamic buffers must be tested /
+ * potentially expanded to satisfy the dataflow requirements of each partition.
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
+void PipelineCompiler::generatePartitioningGraph() const {
 
-    // LLVM BitVector does not have a built-in < comparator
-    using BV = dynamic_bitset<>;
-    using Partition = std::vector<unsigned>;
-    using PartitionMap = std::map<BV, Partition>;
-    using PartialSumKey = std::pair<BV, unsigned>;
-    using PartialSumMap = flat_map<PartialSumKey, unsigned>;
+    struct PartitionNode {
 
-    std::vector<unsigned> O;
-    if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
-        report_fatal_error("Pipeline contains a cycle");
-    }
+    };
 
-    std::vector<BV> rateSet(num_vertices(G));
+//    struct PartitionEdge {
+//        PartitionEdge()  {}
+//        PartitionEdge(const BufferRateData &) {}
+//    };
 
-    PartialSumMap P;
+    using PartitionEdge = RefWrapper<BufferRateData>;
 
-    unsigned currentRateId = 0;
+    using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionNode, PartitionEdge>;
 
-    for (const auto u : O) {
+    using StreamSetMap = flat_map<BufferGraph::vertex_descriptor, PartitioningGraph::vertex_descriptor>;
 
-        const RelationshipNode & node = G[u];
+    // To preserve acyclicity, each partition is represented by an input/output vertex pair.
+    // This ensures that any internal dynamic buffer do not create a self-loop.
 
-        auto mergeRateIds = [](BV & dst, BV & src) {
-            // boost dynamic_bitset will segfault if both buffers are not of equivalent length.
-            if (src.size() < dst.size()) {
-                src.resize(dst.size());
-            } else if (dst.size() < src.size()) {
-                dst.resize(src.size());
+    PartitioningGraph G(PartitionCount * 2);
+
+    StreamSetMap S;
+
+    auto getStreamSetVertex = [&](const BufferGraph::vertex_descriptor streamSet) {
+        const auto f = S.find(streamSet);
+        if (LLVM_UNLIKELY(f == S.end())) {
+            const auto v = add_vertex(G);
+            S.emplace(streamSet, v);
+            return v;
+        }
+        return f->second;
+    };
+#if 0
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "MODEL", "true");
+    Z3_set_param_value(cfg, "proof", "false");
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+    const auto solver = Z3_mk_solver(ctx);
+    Z3_solver_inc_ref(ctx, solver);
+
+    const auto varType = Z3_mk_real_sort(ctx);
+
+    auto constant = [&](const Rational value) {
+        return Z3_mk_real(ctx, value.numerator(), value.denominator());
+    };
+
+    const auto ONE = constant(1);
+
+    auto maximum = [&](const BufferRateData & rate) {
+        return constant(rate.Maximum);
+    };
+
+    auto free_variable = [&]() {
+        auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
+        auto c1 = Z3_mk_ge(ctx, v, ONE);
+        Z3_solver_assert(ctx, solver, c1);
+        return v;
+    };
+
+    std::vector<Z3_ast> VarList(LastStreamSet + 1);
+    std::vector<Rational> kernelRate(LastKernel + 1);
+#endif
+    assert (KernelPartitionId[FirstKernel] == 0);
+
+
+    for (auto start = FirstKernel; start <= LastKernel; ) {
+        // Determine which kernels are in this partition
+        const auto partitionId = KernelPartitionId[start];
+        auto end = start + 1U;
+        for (; end <= LastKernel; ++end) {
+            if (KernelPartitionId[end] != partitionId) {
+                break;
             }
-            dst |= src;
-        };
-
-        BV & nodeRateSet = rateSet[u];
-
-        for (const auto e : make_iterator_range(in_edges(u, G))) {
-            const auto input = source(e, G);
-            // Combine all incoming rates sets
-            BV & inputRateSet = rateSet[input];
-            // assert (inputRateSet.any());
-            mergeRateIds(nodeRateSet, inputRateSet);
         }
 
-        if (node.Type == RelationshipNode::IsKernel) {
-
-             auto addRateId = [](BV & bv, const unsigned rateId) {
-                if (LLVM_UNLIKELY(rateId >= bv.capacity())) {
-                    bv.resize(round_up_to(rateId + 1, BV::bits_per_block));
-                }
-                bv.set(rateId);
-            };
-
-            auto checkForPartialSum = [&](const ProcessingRate & rate, const unsigned bindingNode, BV & updateableRateSet) {
-                if (LLVM_UNLIKELY(rate.isPartialSum())) {
-                    bool found = false;
-                    for (const auto f : make_iterator_range(in_edges(bindingNode, G))) {
-                        const RelationshipType t = G[f];
-                        if (t.Reason == ReasonType::Reference) {
-                            const auto refBuffer = source(f, G);
-                            BV & bindingRateSet = rateSet[bindingNode];
-                            auto key = std::make_pair(bindingRateSet, refBuffer);
-                            const auto p = P.find(key);
-                            unsigned partialSumId;
-                            if (p == P.end()) {
-                                partialSumId = currentRateId++;
-                                P.emplace(key, partialSumId);
-                            } else {
-                                partialSumId = p->second;
-                            }
-                            addRateId(updateableRateSet, partialSumId);
-                            found = true;
-                        }
-                    }
-                    assert (found);
-                }
-            };
+        #ifndef NDEBUG
+        const Rational check{MaximumNumOfStrides[start], MinimumNumOfStrides[start]};
+        for (auto kernel = start + 1; kernel < end; ++kernel) {
+            const Rational check2{MaximumNumOfStrides[kernel], MinimumNumOfStrides[kernel]};
+            assert ("non-synchronous dataflow in same partition?" && (check == check2));
+        }
+        #endif
 
 
-            // Determine whether this kernel is a source kernel; note: it may have
-            // input scalars so we cannot simply test whether its in-degree is 0.
+#if 0
+        // Determine the relative production/consumption of this partition
+        // so that we can correctly size any output buffers upon entering
+        // the partition.
+        Z3_solver_push(ctx, solver);
 
-            bool isSourceKernel = true;
-            for (const auto e : make_iterator_range(in_edges(u, G))) {
-                const auto input = source(e, G);
-                const RelationshipNode & inputNode = G[input];
-                if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
-                    isSourceKernel = false;
-                    break;
+        for (auto kernel = start; kernel < end; ++kernel) {
+
+            // Source kernels always perform exactly one iteration
+            Z3_ast stridesPerSegmentVar;
+            if (in_degree(end, G) == 0) {
+                stridesPerSegmentVar = ONE;
+            } else {
+                stridesPerSegmentVar = free_variable();
+            }
+            VarList[kernel] = stridesPerSegmentVar;
+
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const auto streamSet = source(input, mBufferGraph);
+                const auto producer = parent(streamSet, mBufferGraph);
+                assert ((KernelPartitionId[producer] == partitionId) ^ (producer < start));
+                if (producer >= start) {
+                    const auto fixedRateVal = maximum(inputRate);
+                    const auto consumedRate = multiply(stridesPerSegmentVar, fixedRateVal);
+                    const auto producedRate = VarList[streamSet];
+                    const auto constraint = Z3_mk_eq(ctx, producedRate, consumedRate);
+                    Z3_solver_assert(ctx, solver, constraint);
                 }
             }
 
-            if (isSourceKernel) {
-                bool noOutputStreamSet = true;
-                for (const auto e : make_iterator_range(out_edges(u, G))) {
-                    const auto output = target(e, G);
-                    const RelationshipNode & outputNode = G[output];
-                    if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
-                        noOutputStreamSet = false;
+            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                const auto streamSet = target(output, mBufferGraph);
+                // if we have at least one consumer within the partition, add a variable
+                for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                    const auto consumer = target(e, mBufferGraph);
+                    assert ((KernelPartitionId[consumer] == partitionId) ^ (consumer > end));
+                    if (consumer >= end) {
+                        const auto fixedRateVal = maximum(inputRate);
+                        const auto producedRate = multiply(stridesPerSegmentVar, fixedRateVal);
+                        VarList[streamSet] = producedRate;
                         break;
                     }
                 }
-                if (LLVM_UNLIKELY(noOutputStreamSet)) {
-                    continue;
+            }
+        }
+
+        if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error: unsatisfiable synchronous dataflow graph");
+        }
+
+        const auto model = Z3_solver_get_model(ctx, solver);
+        Z3_model_inc_ref(ctx, model);
+        for (auto kernel = start; kernel < end; ++kernel) {
+            Z3_ast const kernelVar = VarList[kernel];
+            Z3_ast value;
+            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, kernelVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+            }
+            __int64 num, denom;
+            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+            }
+            assert (num > 0);
+            kernelRate[kernel] = Rational{num, denom};
+        }
+        Z3_model_dec_ref(ctx, model);
+        Z3_solver_pop(ctx, solver, 1);
+#endif
+        const auto inputPartition = partitionId * 2;
+        const auto outputPartition = inputPartition | 1;
+
+        for (auto kernel = start; kernel < end; ++kernel) {
+
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const auto streamSet = source(input, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (LLVM_UNLIKELY(isa<DynamicBuffer>(bn.Buffer))) {
+                    const auto buffer = getStreamSetVertex(streamSet);
+                    add_edge(buffer, inputPartition, mBufferGraph[input], G);
                 }
             }
 
-            auto bindingRateRequiresNewPartition = [&](const Binding & binding, const unsigned bindingNode, const bool isInput) {
-                const ProcessingRate & rate = binding.getRate();
-                switch (rate.getKind()) {
-                    // countable
-                    case RateId::Fixed:
-                        // A source kernel produces data without input thus its output(s)
-                        // must begin a new partition even for Fixed rate kernels.
-                        if (isSourceKernel) {
-                            return true;
-                        }
-                        break;
-                    case RateId::Greedy:
-                        // A greedy input with a lower bound > 0 cannot safely be included
-                        // in its producers's partition unless its producer is guaranteed
-                        // to generate more data than it consumes.
-                        return true;
-                    case RateId::PartialSum:
-                        break;
-                    // non-countable
-                    case RateId::Bounded:
-                        return true;
-                    default: break;
-                }
-                // Check the attributes to see whether any impose a partition change
-                for (const Attribute & attr : binding.getAttributes()) {
-                    switch (attr.getKind()) {
-                        case AttrId::Deferred:
-                            // A deferred output rate is closer to an unknown rate than a
-                            // countable rate but a deferred input rate simply means the
-                            // buffer must be dynamic.
-                            if (isInput) {
-                                break;
-                            }
-                        case AttrId::Delayed:
-                        case AttrId::LookAhead:
-                            return true;
-                        default:
-                            break;
-                    }
-                }
-                return false;
-            };
-
-
-
-            // If this kernel has any bounded or unknown input rates, there is a
-            // potential change of rate of dataflow through the kernel.
-            auto startNewPartition = false;
-            for (const auto e : make_iterator_range(in_edges(u, G))) {
-                const auto input = source(e, G);
-                const RelationshipNode & inputNode = G[input];
-                if (LLVM_LIKELY(inputNode.Type == RelationshipNode::IsBinding)) {
-                    const Binding & binding = inputNode.Binding;
-                    checkForPartialSum(binding.getRate(), input, nodeRateSet);
-                    if (LLVM_UNLIKELY(bindingRateRequiresNewPartition(binding, input, true))) {
-                        startNewPartition = true;
-                    }
-                }
-            }
-
-            if (LLVM_UNLIKELY(startNewPartition)) {
-                addRateId(nodeRateSet, currentRateId++);
-            }
-
-            for (const auto e : make_iterator_range(out_edges(u, G))) {
-                const auto output = target(e, G);
-                const RelationshipNode & outputNode = G[output];
-                if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
-                    // inherit all of the kernel rates
-                    BV & outgoingRateSet = rateSet[output];
-                    outgoingRateSet = nodeRateSet;
-                    const Binding & binding = outputNode.Binding;
-                    checkForPartialSum(binding.getRate(), output, outgoingRateSet);
-                    if (bindingRateRequiresNewPartition(binding, output, false)) {
-                        addRateId(outgoingRateSet, currentRateId++);
-                    }
-                }
-            }
-
-            // Fill in any relative rates
-            for (const auto e : make_iterator_range(out_edges(u, G))) {
-                const auto output = target(e, G);
-                const RelationshipNode & outputNode = G[output];
-                if (LLVM_LIKELY(outputNode.Type == RelationshipNode::IsBinding)) {
-                    const Binding & binding = outputNode.Binding;
-                    const ProcessingRate & rate = binding.getRate();
-                    if (LLVM_UNLIKELY(rate.isRelative())) {
-                        bool found = false;
-                        for (const auto f : make_iterator_range(in_edges(output, G))) {
-                            const RelationshipType & type = G[f];
-                            if (type.Reason == ReasonType::Reference) {
-                                const auto ref = source(f, G);
-                                mergeRateIds(rateSet[output], rateSet[ref]);
-                                found = true;
-                                break;
-                            }
-                        }
-                        assert (found);
-                    }
+            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                const auto streamSet = target(output, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (LLVM_UNLIKELY(isa<DynamicBuffer>(bn.Buffer))) {
+                    const auto buffer = getStreamSetVertex(streamSet);
+                    add_edge(outputPartition, buffer, mBufferGraph[output], G);
                 }
             }
         }
+
+
+
+        start = end;
     }
 
-    // Now that we've tainted the kernels with any influencing rate ids, sort them into partitions.
-    PartitionMap partitionSets;
-    for (auto u : O) {
-        const RelationshipNode & node = G[u];
-        if (node.Type == RelationshipNode::IsKernel) {
-            auto & partition = partitionSets[rateSet[u]];
-            partition.push_back(u);
-        }
-    }
+//    const auto firstStreamSet = LastKernel + 1;
+//    const auto lastStreamSet = num_vertices(G);
 
-    partitionIds.resize(num_vertices(G), 0);
-
-    const auto n = partitionSets.size();
-    if (LLVM_UNLIKELY(n < 2)) {
-        return n;
-    }
-
-    unsigned partitionId = 1U;
-    for (auto i = partitionSets.begin();;) {
-        const Partition & A = i->second;
-        for (const auto v : A) {
-            partitionIds[v] = partitionId;
-        }
-        ++partitionId;
-        if (++i == partitionSets.end()) {
-            break;
-        }
-        const Partition & B = i->second;
-        for (const auto u : A) {
-            for (const auto v : B) {
-                add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
-            }
-        }
-    }
-
-    #ifndef NDEBUG
-    // Report a "not a DAG" error if something has gone wrong
-    BEGIN_SCOPED_REGION
-    std::vector<unsigned> __tmp;
-    topological_sort(G, std::back_inserter(__tmp));
-    END_SCOPED_REGION
-    #endif
-
-    assert (partitionId == (n + 1U));
-
-    return n;
+//    Z3_solver_dec_ref(ctx, solver);
+//    Z3_del_context(ctx);
 }
 
 #endif
 
-}
+} // end of namespace kernel
 
 #endif // PARTITIONING_ANALYSIS_HPP

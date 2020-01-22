@@ -274,7 +274,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     linear = true;
                 }
 
-                const auto expected = ExpectedNumOfStrides[consumer];
+                const auto expected = MaximumNumOfStrides[consumer];
 
                 const auto cMin = consumerRate.Minimum * expected;
                 const auto cMax = consumerRate.Maximum * expected;
@@ -313,7 +313,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 lookAhead = std::max(tmpLookAhead, lookAhead);
             }
 
-            const auto produceMax = producerRate.Maximum * ExpectedNumOfStrides[producer];
+            const auto produceMax = producerRate.Maximum * MaximumNumOfStrides[producer];
             const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
 
             bn.LookBehind = lookBehind;
@@ -456,7 +456,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
            "v" << PipelineInput << " [label=\"[" <<
            PipelineInput << "] P_{in}\\n"
            " Partition: " << KernelPartitionId[PipelineInput] << "\\n"
-           " Expected: " << ExpectedNumOfStrides[PipelineInput] << "\\n";
+           " Expected: " << MaximumNumOfStrides[PipelineInput] << "\\n";
     out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -466,14 +466,14 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         out << "v" << i <<
                " [label=\"[" << i << "] " << name << "\\n"
                " Partition: " << KernelPartitionId[i] << "\\n"
-               " Expected: " << ExpectedNumOfStrides[i] << "\\n";
+               " Expected: " << MaximumNumOfStrides[i] << "\\n";
         out << "\" shape=rect, style=rounded, peripheries=2];\n";
     }
 
     out << "v" << PipelineOutput << " [label=\"[" <<
            PipelineOutput << "] P_{out}\\n"
            " Partition: " << KernelPartitionId[PipelineOutput] << "\\n"
-           " Expected: " << ExpectedNumOfStrides[PipelineOutput] << "\\n";
+           " Expected: " << MaximumNumOfStrides[PipelineOutput] << "\\n";
     out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {

@@ -26,7 +26,7 @@
 #include <algorithm>
 #include <queue>
 #include <z3.h>
-
+#include <util/maxsat.hpp>
 
 #define PRINT_DEBUG_MESSAGES
 
@@ -262,11 +262,6 @@ enum class BufferType : unsigned {
 };
 
 ENABLE_ENUM_FLAGS(BufferType)
-
-enum class SymbolicRateType : unsigned {
-    Bounded
-    , Minimum
-};
 
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
@@ -741,8 +736,6 @@ public:
     static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
 
-    unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
-
     bool hasZeroExtendedStream() const;
 
     void determineEvaluationOrderOfKernelIO(const size_t kernelIndex, const BufferGraph &G);
@@ -756,18 +749,22 @@ public:
 
     AddGraph makeAddGraph() const;
 
+// partitioning analysis
+
+    unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
+
+    void generatePartitioningGraph() const;
+
 // dataflow analysis functions
 
     void computeDataFlowRates(BufferGraph & G);
 
-    enum DataflowCalculationType {
-        Expected,
+    enum class DataflowCalculationType {
+        LowerBound,
         UpperBound
     };
 
-    void calculateExpectedNumOfStridesPerSegment(const BufferGraph & G, std::vector<Rational> &bounds) const;
-
-    void estimateDataFlowBounds(BufferGraph & G, const std::vector<unsigned> & expected) const ;
+    std::vector<Rational> calculateNumOfStridesPerSegment(const DataflowCalculationType type, const BufferGraph & G) const;
 
 // synchronization functions
 
@@ -1005,7 +1002,8 @@ protected:
     const PartitionIdVector                     KernelPartitionId;
     const unsigned                              PartitionCount;
 
-    std::vector<unsigned>                       ExpectedNumOfStrides;
+    std::vector<unsigned>                       MinimumNumOfStrides;
+    std::vector<unsigned>                       MaximumNumOfStrides;
 
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
@@ -1219,6 +1217,7 @@ static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const
 #include "buffer_management_logic.hpp"
 #include "termination_logic.hpp"
 #include "consumer_logic.hpp"
+#include "partition_processing_logic.hpp"
 #include "kernel_segment_processing_logic.hpp"
 #include "cycle_counter_logic.hpp"
 #include "pipeline_logic.hpp"
