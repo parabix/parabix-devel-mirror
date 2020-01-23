@@ -10,41 +10,8 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
 
-    const auto lb = calculateNumOfStridesPerSegment(DataflowCalculationType::LowerBound, G);
-    const auto ub = calculateNumOfStridesPerSegment(DataflowCalculationType::UpperBound, G);
+    using Bound = std::array<Rational, 2>;
 
-    unsigned denom_lcm = 1;
-    for (auto kernel = PipelineInput; kernel <= PipelineOutput; ++kernel) {
-        const auto a = lb[kernel];
-        if (a.denominator() != 1) {
-            denom_lcm = boost::lcm(denom_lcm, a.denominator());
-        }
-        const auto b = ub[kernel];
-        if (b.denominator() != 1) {
-            denom_lcm = boost::lcm(denom_lcm, b.denominator());
-        }
-    }
-
-    MinimumNumOfStrides.resize(PipelineOutput + 1);
-    MaximumNumOfStrides.resize(PipelineOutput + 1);
-
-    for (auto kernel = PipelineInput; kernel <= PipelineOutput; ++kernel) {
-        const auto a = lb[kernel] * denom_lcm;
-        assert (a.denominator() == 1);
-        MinimumNumOfStrides[kernel] = a.numerator();
-        const auto b = ub[kernel] * denom_lcm;
-        assert (b.denominator() == 1);
-        MaximumNumOfStrides[kernel] = b.numerator();
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculateExpectedNumOfStridesPerSegment
- ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<KernelCompiler::Rational>
-PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType type,
-                                                  const BufferGraph & G) const {
     const auto cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "MODEL", "true");
     Z3_set_param_value(cfg, "proof", "false");
@@ -70,7 +37,7 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
     };
 
     auto minimum = [&](const BufferRateData & rate) {
-        return constant(std::max(rate.Minimum, Rational{1}));
+        return constant(rate.Minimum);
     };
 
     auto free_variable = [&]() {
@@ -82,16 +49,17 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
 
     auto lower_bounded_variable = [&](const BufferRateData & rate) {
         auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
-        auto c1 = Z3_mk_ge(ctx, v, constant(rate.Minimum));
+        auto c1 = Z3_mk_ge(ctx, v, minimum(rate));
         Z3_solver_assert(ctx, solver, c1);
         return v;
     };
 
     auto bounded_variable = [&](const BufferRateData & rate) {
+        assert (rate.Minimum < rate.Maximum);
         auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
-        auto c1 = Z3_mk_ge(ctx, v, constant(rate.Minimum));
+        auto c1 = Z3_mk_ge(ctx, v, minimum(rate));
         Z3_solver_assert(ctx, solver, c1);
-        auto c2 = Z3_mk_le(ctx, v, constant(rate.Maximum));
+        auto c2 = Z3_mk_le(ctx, v, maximum(rate));
         Z3_solver_assert(ctx, solver, c2);
         return v;
     };
@@ -114,11 +82,14 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
             VarList[kernel] = free_variable();
         }
     }
-#if 0
-    const auto NO_ROOT = std::numeric_limits<unsigned>::max();
-    std::vector<unsigned> partitionRoots(PartitionCount, NO_ROOT);
-#endif
-    std::vector<Z3_ast> assumptions;
+
+    enum {
+        LowerBound = 0,
+        UpperBound = 1,
+        Common = 2
+    };
+
+    std::array<std::vector<Z3_ast>, 3> assumptions;
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
@@ -126,7 +97,6 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
         const auto partitionId = KernelPartitionId[kernel];
 
         unsigned numOfGreedyRates = 0;
-     //   bool hasNonSynchronousInput = false;
 
         for (const auto input : make_iterator_range(in_edges(kernel, G))) {
             const auto buffer = source(input, G);
@@ -139,24 +109,23 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
 
             if (LLVM_LIKELY(rate.isFixed())) {
 
-                const auto fixedRateVal = maximum(inputRate);
+                const auto fixedRateVal = minimum(inputRate);
                 const auto consumedRate = multiply(stridesPerSegmentVar, fixedRateVal);
-                // To consume any data, we must guarantee at least one full stride of work
+                // To consume any data, we want to guarantee at least one full stride of work.
                 const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, fixedRateVal);
-                Z3_solver_assert(ctx, solver, atLeastOneStride);
-                // A partition-local stream must always consume everything
-                Z3_ast constraint = nullptr;
+                assumptions[Common].push_back(atLeastOneStride);
+                // A partition-local stream must *always* consume everything but streams that
+                // cross a partition simply need to produce enough to satisfy its consumer(s)
+                const auto consumeEverything = Z3_mk_eq(ctx, producedRate, consumedRate);
                 const auto producer = parent(buffer, G);
                 if (KernelPartitionId[producer] == partitionId) {
-                    constraint = Z3_mk_eq(ctx, producedRate, consumedRate);
+                    Z3_solver_assert(ctx, solver, consumeEverything);
                 } else {
-                    constraint = Z3_mk_ge(ctx, producedRate, consumedRate);
+                    const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
+                    Z3_solver_assert(ctx, solver, produceEnough);
                     // Assume we can consume all of the data
-                    assumptions.push_back(Z3_mk_eq(ctx, producedRate, consumedRate));
-                    // hasNonSynchronousInput = true;
+                    assumptions[Common].push_back(consumeEverything);
                 }
-                Z3_solver_assert(ctx, solver, constraint);
-
             } else if (LLVM_UNLIKELY(rate.isGreedy())) {
                 ++numOfGreedyRates;
             } else if (LLVM_UNLIKELY(rate.isUnknown())) {
@@ -172,33 +141,26 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
 
                 const auto inputRateVar = bounded_variable(inputRate);
                 const auto consumedRate = multiply(stridesPerSegmentVar, inputRateVar);
-                const auto constraint = Z3_mk_ge(ctx, producedRate, consumedRate);
-                Z3_solver_assert(ctx, solver, constraint);
-                // To consume any data, we must guarantee at least one full stride of work
+                const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
+                Z3_solver_assert(ctx, solver, produceEnough);
+                // To consume any data, we want to guarantee at least one full stride of work
                 const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, maximum(inputRate));
-                Z3_solver_assert(ctx, solver, atLeastOneStride);
-                if (type == DataflowCalculationType::LowerBound) {
-                    assumptions.push_back(Z3_mk_ge(ctx, inputRateVar, average(inputRate)));
-                    assumptions.push_back(Z3_mk_eq(ctx, inputRateVar, maximum(inputRate)));
-                } else {
-                    assumptions.push_back(Z3_mk_le(ctx, inputRateVar, average(inputRate)));
-                    assumptions.push_back(Z3_mk_eq(ctx, consumedRate, minimum(inputRate)));
-                }
-                // hasNonSynchronousInput = true;
+                assumptions[Common].push_back(atLeastOneStride);
+                // Since we are trying to determine the lower and upper bound on the number
+                // of strides per segment, to determine the lower bound we assume that a
+                // kernel consumes the maximum amount of data but produces the minimum.
+                // The upper bound is similar except we consume the minimum and produce
+                // the maximum.
+
+                const auto avgInputRate = average(inputRate);
+
+                assumptions[LowerBound].push_back(Z3_mk_ge(ctx, inputRateVar, avgInputRate));
+                assumptions[LowerBound].push_back(Z3_mk_eq(ctx, inputRateVar, maximum(inputRate)));
+
+                assumptions[UpperBound].push_back(Z3_mk_le(ctx, inputRateVar, avgInputRate));
+                assumptions[UpperBound].push_back(Z3_mk_eq(ctx, consumedRate, minimum(inputRate)));
             }
         }
-#if 0
-        // To reduce the number of soft constraints we add to the formula later when
-        // trying to the maximum number of strides per kernel, we keep just one root
-        // per partition. Because all kernels within the same partition must be
-        // synchronous, all # of strides within a partition will increase together.
-        if (hasNonSynchronousInput) {
-            const auto id = KernelPartitionId[kernel];
-            if (partitionRoots[id] == NO_ROOT) {
-                partitionRoots[id] = kernel;
-            }
-        }
-#endif
 
         // Any kernel with all greedy rates must exhaust its input in a single iteration.
         if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, G))) {
@@ -211,163 +173,127 @@ PipelineCompiler::calculateNumOfStridesPerSegment(const DataflowCalculationType 
             const Binding & binding = outputRate.Binding;
             const ProcessingRate & rate = binding.getRate();
             const auto buffer = target(output, G);
-            if (LLVM_UNLIKELY(rate.isUnknown())) {
-                // TODO: is there  a better way to handle unknown outputs? This
-                // free variable represents the ideal amount of data to transfer
-                // to subsequent kernels but that cannot be determined a priori;
-                // thus this variable isn't very meaningful.
-                VarList[buffer] = lower_bounded_variable(outputRate);
-            } else {
-                Z3_ast outputRateVar;
-                if (LLVM_LIKELY(rate.isFixed())) {
-                    outputRateVar = maximum(outputRate);
-                } else {
-                    outputRateVar = bounded_variable(outputRate);
-                }
+            if (LLVM_LIKELY(rate.isFixed())) {
+                const auto outputRateVar = maximum(outputRate);
                 const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
                 VarList[buffer] = producedRate;
-                if (type == DataflowCalculationType::LowerBound) {
-                    assumptions.push_back(Z3_mk_le(ctx, outputRateVar, average(outputRate)));
-                    assumptions.push_back(Z3_mk_eq(ctx, producedRate, minimum(outputRate)));
-                } else {
-                    assumptions.push_back(Z3_mk_ge(ctx, outputRateVar, average(outputRate)));
-                    assumptions.push_back(Z3_mk_eq(ctx, outputRateVar, maximum(outputRate)));
-                }
+            } else if (LLVM_UNLIKELY(rate.isUnknown())) {
+                // TODO: is there a better way to handle unknown outputs? This
+                // free variable represents the ideal amount of data to transfer
+                // to subsequent kernels but that isn't very meaningful here.
+                VarList[buffer] = lower_bounded_variable(outputRate);
+            } else {
+                const auto outputRateVar = bounded_variable(outputRate);
+                const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
+                VarList[buffer] = producedRate;
+                // Like above, when calculating the lower bound of the number of kernel strides,
+                // we assume we've produced the minimum amount of data and for the upper bound,
+                // the maximum.
+
+                const auto avgOutputRate = average(outputRate);
+                assumptions[LowerBound].push_back(Z3_mk_le(ctx, outputRateVar, avgOutputRate));
+                assumptions[LowerBound].push_back(Z3_mk_eq(ctx, producedRate, minimum(outputRate)));
+
+                assumptions[UpperBound].push_back(Z3_mk_ge(ctx, outputRateVar, avgOutputRate));
+                assumptions[UpperBound].push_back(Z3_mk_eq(ctx, outputRateVar, maximum(outputRate)));
             }
         }
     }
 
-    std::vector<Rational> bounds(PipelineOutput + 1);
-
-    auto update_model = [&]() {
-        const auto model = Z3_solver_get_model(ctx, solver);
-        Z3_model_inc_ref(ctx, model);
-        for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-            Z3_ast const kernelVar = VarList[kernel];
-            Z3_ast value;
-            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, kernelVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
-            }
-            __int64 num, denom;
-            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-            }
-            assert (num > 0);
-            bounds[kernel] = Rational{num, denom};
-        }
-        Z3_model_dec_ref(ctx, model);
-    };
-
-    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
-        report_fatal_error("Unexpected Z3 error: unsatisfiable initial dataflow graph");
-    }
-
-//    Z3_solver_push(ctx, solver);
-    maxsat(ctx, solver, assumptions);
-
-//    errs() << "maxsat=" << m << " of " << assumptions.size() << "\n\n";
-
-//    if (LLVM_UNLIKELY(m < 1)) {
-//        Z3_solver_pop(ctx, solver, 1);
-//    }
-    update_model();
-
-#if 0
-
-    // Filter any identifier that is not a root of some partition
-    partitionRoots.erase(
-        std::remove_if(partitionRoots.begin(), partitionRoots.end(),
-           [](unsigned val) { return val == NO_ROOT; }),
-        partitionRoots.end());
-
-
-//        Z3_params params = Z3_mk_params(ctx);
-//        Z3_params_inc_ref(ctx, params);
-//        Z3_symbol timeout = Z3_mk_string_symbol(ctx, "timeout");
-//        Z3_params_set_uint(ctx, params, timeout, 100);
-//        Z3_solver_set_params(ctx, solver, params);
-//        Z3_params_dec_ref(ctx, params);
-
-    Rational k;
-    unsigned init_val = 0;
-
-    if (type == DataflowCalculationType::LowerBound) {
-        k = Rational{1, 2};
-        init_val = std::numeric_limits<unsigned>::max();
-    } else {
-        k = Rational{2, 1};
-        init_val = std::numeric_limits<unsigned>::min();
-    }
-
-    std::vector<Rational> prior(bounds.size(), init_val);
-
-    unsigned rounds = 0;
-
-    for (;;) {
-
-        assumptions.clear();
-
-        errs() << "------\n";
-
-        if (type == DataflowCalculationType::LowerBound) {
-
-            for (auto kernel : partitionRoots) {
-                assert (kernel != NO_ROOT);
-                const auto a = bounds[kernel];
-                const auto t = prior[kernel];
-                if (a < t) {
-                    const auto r = a * k;
-
-                    errs() << "  K" << kernel << " <= " << r.numerator() << "/" << r.denominator() << "\n";
-
-                    const auto avgStridesPerSegmentVar = VarList[kernel];
-                    assert (a > 0);
-                    const auto constraint = Z3_mk_le(ctx, avgStridesPerSegmentVar, constant(r));
-                    assumptions.push_back(constraint);
-                }
-            }
-
-        } else {
-
-            for (auto kernel : partitionRoots) {
-                assert (kernel != NO_ROOT);
-                const auto a = bounds[kernel];
-                const auto t = prior[kernel];
-                if (a > t) {
-                    const auto r = a * k;
-
-                    errs() << "  K" << kernel << " >= " << r.numerator() << "/" << r.denominator() << "\n";
-
-                    const auto avgStridesPerSegmentVar = VarList[kernel];
-                    assert (a > 0);
-                    const auto constraint = Z3_mk_ge(ctx, avgStridesPerSegmentVar, constant(r));
-                    assumptions.push_back(constraint);
-                }
-            }
-        }
-
-        Z3_solver_push(ctx, solver);
-        const auto m = maxsat(ctx, solver, assumptions);
-        if (m < 1) {
-            if (++rounds == 4) {
-                break;
-            }
-            k = Rational{k.numerator() + 1, k.denominator() + 1};
-        } else {
-            prior.swap(bounds);
-            update_model();
-        }
+    Z3_solver_push(ctx, solver);
+    const auto m = Z3_maxsat(ctx, solver, assumptions[Common]);
+    if (LLVM_UNLIKELY(m < 1)) {
         Z3_solver_pop(ctx, solver, 1);
     }
 
-#endif
+    std::vector<Bound> bounds(PipelineOutput + 1);
+
+    for (;;) {
+
+        for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
+
+            Z3_solver_push(ctx, solver);
+
+            Z3_maxsat(ctx, solver, assumptions[bound]);
+
+            const auto model = Z3_solver_get_model(ctx, solver);
+            Z3_model_inc_ref(ctx, model);
+            for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+                Z3_ast const stridesPerSegmentVar = VarList[kernel];
+                Z3_ast value;
+                if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                    report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+                }
+                __int64 num, denom;
+                if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+                    report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+                }
+                assert (num > 0);
+                bounds[kernel][bound] = Rational{num, denom};
+            }
+            Z3_model_dec_ref(ctx, model);
+
+            Z3_solver_pop(ctx, solver, 1);
+        }
+
+        // If we find a solution but discover that min > max for any bound, we're going to have to
+        // recompute the solution. This unfortunately does discard the learned clauses from the prior
+        // lower/upper bound checks but appears that the amount of duplicate work is relatively small.
+
+        // TODO: is there a way to have "divergent" solvers from the common assumption checks?
+
+        bool done = true;
+        for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+            const Bound & bound = bounds[kernel];
+            if (LLVM_UNLIKELY(bound[LowerBound] > bound[UpperBound])) {
+                const auto stridesPerSegmentVar = VarList[kernel];
+                assumptions[LowerBound].push_back(Z3_mk_le(ctx, stridesPerSegmentVar, constant(bound[UpperBound])));
+                assumptions[UpperBound].push_back(Z3_mk_ge(ctx, stridesPerSegmentVar, constant(bound[LowerBound])));
+                done = false;
+            }
+        }
+
+        if (LLVM_LIKELY(done)) {
+            break;
+        }
+
+    }
+
+    // Scale all numbers up to integers
+
+    unsigned denom_lcm = 1;
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+        const auto a = bounds[kernel][LowerBound];
+        if (a.denominator() != 1) {
+            denom_lcm = boost::lcm(denom_lcm, a.denominator());
+        }
+        const auto b = bounds[kernel][UpperBound];
+        if (b.denominator() != 1) {
+            denom_lcm = boost::lcm(denom_lcm, b.denominator());
+        }
+    }
+
+    // Then write them out
+
+    MinimumNumOfStrides.resize(PipelineOutput + 1);
+    MaximumNumOfStrides.resize(PipelineOutput + 1);
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+        const auto a = bounds[kernel][LowerBound] * denom_lcm;
+        assert (a.denominator() == 1);
+        const auto b = bounds[kernel][UpperBound] * denom_lcm;
+        assert (b.denominator() == 1);
+        assert (a <= b);
+        MinimumNumOfStrides[kernel] = a.numerator();
+        MaximumNumOfStrides[kernel] = b.numerator();
+    }
+
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
 
-    // Z3_finalize_memory();
+    Z3_finalize_memory();
 
-    return bounds;
 }
 
 } // end of kernel namespace

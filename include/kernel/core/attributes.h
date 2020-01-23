@@ -363,6 +363,10 @@ inline Attribute Add1() {
     return Attribute(Attribute::KindId::Add, 1);
 }
 
+inline Attribute Truncate(const unsigned k = 1) {
+    return Attribute(Attribute::KindId::Truncate, k);
+}
+
 inline Attribute RoundUpTo(const unsigned k) {
     return Attribute(Attribute::KindId::RoundUpTo, k);
 }

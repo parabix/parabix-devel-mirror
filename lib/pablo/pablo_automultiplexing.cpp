@@ -509,7 +509,7 @@ void MultiplexingPass::generateCandidateSets(Z3_context ctx, Z3_solver solver, c
         }
         assert (j == M.size());
 
-        if (maxsat(ctx, solver, assumptions) >= 0) {
+        if (Z3_maxsat(ctx, solver, assumptions) >= 0) {
             Z3_model m = Z3_solver_get_model(ctx, solver);
             Z3_model_inc_ref(ctx, m);
             const auto k = add_vertex(mCandidateGraph); assert(k >= V.size());
@@ -882,7 +882,7 @@ inline void MultiplexingPass::multiplexSelectedSets(PabloBlock * const block, St
 
             assert (M.count(ip) == 0);
 
-            const auto satisfied = maxsat(ctx, solver, ordering);
+            const auto satisfied = Z3_maxsat(ctx, solver, ordering);
 
             if (LLVM_UNLIKELY(satisfied >= 0)) {
 

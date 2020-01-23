@@ -212,7 +212,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             addRateId(H[buffer], currentRateId++);
                             break;
                         case RateId::Relative:
-                            // Link a relative rate output stream to its output reference stream
+                            // Link a relative rate output stream to its reference stream
                             for (const auto f : make_iterator_range(in_edges(binding, G))) {
                                 const RelationshipType & type = G[f];
                                 if (type.Reason == ReasonType::Reference) {
@@ -247,7 +247,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
             auto isSourceKernel = [&]() {
                 if (LLVM_UNLIKELY(in_degree(kernel, H) == 0)) {
-                    return out_degree(kernel, H) != 0;
+                    return out_degree(kernel, H) > 0;
                 }
                 return false;
             };
@@ -280,6 +280,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         for (const auto e : make_iterator_range(in_edges(u, H))) {
             const auto v = source(e, H);
             const auto & inputRateSet = H[v];
+            assert ("input rate set cannot be empty!" && inputRateSet.any());
             nodeRateSet |= inputRateSet;
         }
     }
@@ -291,7 +292,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     PartitionMap partitionSets;
     for (unsigned u = 0; u != kernels; ++u) {
         BV & node = H[u];
-        assert (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0));
+        assert ("kernel rate set cannot be empty!" && (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0)));
         if (LLVM_UNLIKELY(node.none())) {
             continue;
         }
@@ -317,6 +318,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         if (++i == partitionSets.end()) {
             break;
         }
+        // and add any constraints between each adjacent partition
         const Partition & B = i->second;
         for (const auto u : A) {
             for (const auto v : B) {
@@ -338,76 +340,41 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
  * The partitioning graph summarizes the buffer graph to indicate what dynamic buffers must be tested /
  * potentially expanded to satisfy the dataflow requirements of each partition.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::generatePartitioningGraph() const {
+PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
-    struct PartitionNode {
+    using BufferVertex = BufferGraph::vertex_descriptor;
 
-    };
+    using Vertex = PartitioningGraph::vertex_descriptor;
+    using Edge = graph_traits<PartitioningGraph>::edge_descriptor;
 
-//    struct PartitionEdge {
-//        PartitionEdge()  {}
-//        PartitionEdge(const BufferRateData &) {}
-//    };
-
-    using PartitionEdge = RefWrapper<BufferRateData>;
-
-    using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitionNode, PartitionEdge>;
-
-    using StreamSetMap = flat_map<BufferGraph::vertex_descriptor, PartitioningGraph::vertex_descriptor>;
+    using StreamSetMap = flat_map<BufferVertex, Vertex>;
 
     // To preserve acyclicity, each partition is represented by an input/output vertex pair.
-    // This ensures that any internal dynamic buffer do not create a self-loop.
+    // This ensures that any internal dynamic buffer do not create a self-loop which would
+    // complicate the pseudo-transitive closure step later.
 
     PartitioningGraph G(PartitionCount * 2);
 
     StreamSetMap S;
 
-    auto getStreamSetVertex = [&](const BufferGraph::vertex_descriptor streamSet) {
+    auto getStreamSetVertex = [&](const BufferVertex streamSet) {
         const auto f = S.find(streamSet);
         if (LLVM_UNLIKELY(f == S.end())) {
             const auto v = add_vertex(G);
+            G[v] = streamSet;
             S.emplace(streamSet, v);
             return v;
         }
         return f->second;
     };
-#if 0
-    const auto cfg = Z3_mk_config();
-    Z3_set_param_value(cfg, "MODEL", "true");
-    Z3_set_param_value(cfg, "proof", "false");
-    const auto ctx = Z3_mk_context(cfg);
-    Z3_del_config(cfg);
-    const auto solver = Z3_mk_solver(ctx);
-    Z3_solver_inc_ref(ctx, solver);
 
-    const auto varType = Z3_mk_real_sort(ctx);
-
-    auto constant = [&](const Rational value) {
-        return Z3_mk_real(ctx, value.numerator(), value.denominator());
-    };
-
-    const auto ONE = constant(1);
-
-    auto maximum = [&](const BufferRateData & rate) {
-        return constant(rate.Maximum);
-    };
-
-    auto free_variable = [&]() {
-        auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
-        auto c1 = Z3_mk_ge(ctx, v, ONE);
-        Z3_solver_assert(ctx, solver, c1);
-        return v;
-    };
-
-    std::vector<Z3_ast> VarList(LastStreamSet + 1);
-    std::vector<Rational> kernelRate(LastKernel + 1);
-#endif
     assert (KernelPartitionId[FirstKernel] == 0);
-
+    assert ((KernelPartitionId[LastKernel] + 1) == PartitionCount);
 
     for (auto start = FirstKernel; start <= LastKernel; ) {
         // Determine which kernels are in this partition
         const auto partitionId = KernelPartitionId[start];
+        assert (partitionId < PartitionCount);
         auto end = start + 1U;
         for (; end <= LastKernel; ++end) {
             if (KernelPartitionId[end] != partitionId) {
@@ -423,86 +390,24 @@ void PipelineCompiler::generatePartitioningGraph() const {
         }
         #endif
 
-
-#if 0
-        // Determine the relative production/consumption of this partition
-        // so that we can correctly size any output buffers upon entering
-        // the partition.
-        Z3_solver_push(ctx, solver);
+        const auto partitionInput = partitionId * 2;
+        const auto partitionOutput = partitionInput | 1;
 
         for (auto kernel = start; kernel < end; ++kernel) {
 
-            // Source kernels always perform exactly one iteration
-            Z3_ast stridesPerSegmentVar;
-            if (in_degree(end, G) == 0) {
-                stridesPerSegmentVar = ONE;
-            } else {
-                stridesPerSegmentVar = free_variable();
-            }
-            VarList[kernel] = stridesPerSegmentVar;
+            G[partitionInput] = start;
+            G[partitionOutput] = end - 1;
 
-            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-                const auto streamSet = source(input, mBufferGraph);
-                const auto producer = parent(streamSet, mBufferGraph);
-                assert ((KernelPartitionId[producer] == partitionId) ^ (producer < start));
-                if (producer >= start) {
-                    const auto fixedRateVal = maximum(inputRate);
-                    const auto consumedRate = multiply(stridesPerSegmentVar, fixedRateVal);
-                    const auto producedRate = VarList[streamSet];
-                    const auto constraint = Z3_mk_eq(ctx, producedRate, consumedRate);
-                    Z3_solver_assert(ctx, solver, constraint);
-                }
-            }
-
-            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-                const auto streamSet = target(output, mBufferGraph);
-                // if we have at least one consumer within the partition, add a variable
-                for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-                    const auto consumer = target(e, mBufferGraph);
-                    assert ((KernelPartitionId[consumer] == partitionId) ^ (consumer > end));
-                    if (consumer >= end) {
-                        const auto fixedRateVal = maximum(inputRate);
-                        const auto producedRate = multiply(stridesPerSegmentVar, fixedRateVal);
-                        VarList[streamSet] = producedRate;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) != Z3_L_TRUE)) {
-            report_fatal_error("Unexpected Z3 error: unsatisfiable synchronous dataflow graph");
-        }
-
-        const auto model = Z3_solver_get_model(ctx, solver);
-        Z3_model_inc_ref(ctx, model);
-        for (auto kernel = start; kernel < end; ++kernel) {
-            Z3_ast const kernelVar = VarList[kernel];
-            Z3_ast value;
-            if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, kernelVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-                report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
-            }
-            __int64 num, denom;
-            if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-                report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-            }
-            assert (num > 0);
-            kernelRate[kernel] = Rational{num, denom};
-        }
-        Z3_model_dec_ref(ctx, model);
-        Z3_solver_pop(ctx, solver, 1);
-#endif
-        const auto inputPartition = partitionId * 2;
-        const auto outputPartition = inputPartition | 1;
-
-        for (auto kernel = start; kernel < end; ++kernel) {
+            const auto minStrides = MinimumNumOfStrides[kernel];
 
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
                 if (LLVM_UNLIKELY(isa<DynamicBuffer>(bn.Buffer))) {
                     const auto buffer = getStreamSetVertex(streamSet);
-                    add_edge(buffer, inputPartition, mBufferGraph[input], G);
+                    const BufferRateData & inputRate = mBufferGraph[input];
+                    const auto maxRate = inputRate.Maximum * minStrides;
+                    add_edge(buffer, partitionInput, maxRate, G);
                 }
             }
 
@@ -511,21 +416,95 @@ void PipelineCompiler::generatePartitioningGraph() const {
                 const BufferNode & bn = mBufferGraph[streamSet];
                 if (LLVM_UNLIKELY(isa<DynamicBuffer>(bn.Buffer))) {
                     const auto buffer = getStreamSetVertex(streamSet);
-                    add_edge(outputPartition, buffer, mBufferGraph[output], G);
+                    const BufferRateData & outputRate = mBufferGraph[output];
+                    const auto maxRate = outputRate.Maximum * minStrides;
+                    add_edge(partitionOutput, buffer, maxRate, G);
                 }
             }
         }
-
-
-
         start = end;
     }
 
-//    const auto firstStreamSet = LastKernel + 1;
-//    const auto lastStreamSet = num_vertices(G);
+    const auto n = num_vertices(G);
+    BitVector encountered(n, false);
+    std::vector<Rational> currentMaxRate(n);
 
-//    Z3_solver_dec_ref(ctx, solver);
-//    Z3_del_context(ctx);
+    // Filter the graph to ensure each input to a partition only captures the largest rate
+    // for each stream set
+    for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
+
+        const auto partitionInput = partitionId * 2;
+
+        bool regenerate = false;
+        for (const auto input : make_iterator_range(in_edges(partitionInput, G))) {
+            const auto streamSet = source(input, G);
+            const Rational maxRate = G[input];
+            if (encountered.test(streamSet)) {
+                currentMaxRate[streamSet] = std::max(currentMaxRate[streamSet], maxRate);
+                regenerate = true;
+            } else {
+                encountered.set(streamSet);
+                currentMaxRate[streamSet] = maxRate;
+            }
+        }
+
+        if (LLVM_UNLIKELY(regenerate)) {
+            clear_in_edges(partitionInput, G);
+            for (const auto streamSet : encountered.set_bits()) {
+                add_edge(streamSet, partitionInput, currentMaxRate[streamSet], G);
+            }
+        }
+
+        encountered.reset();
+    }
+
+    // Compute something similar to a transitive reduction of G; the difference is we'll keep
+    // a transitive edge if and only if it requires more data than its predecessors.
+
+    std::vector<Vertex> ordering;
+    ordering.reserve(num_vertices(G));
+
+    topological_sort(G, std::back_inserter(ordering)); // reverse ordering
+
+    // Simple transitive closure for DAGs
+    for (unsigned u : ordering) {
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto s = source(e, G);
+            for (const auto f : make_iterator_range(out_edges(u, G))) {
+                const auto t = target(f, G);
+                if (edge(s, t, G).second) continue;
+                add_edge(s, t, G[e], G);
+            }
+        }
+    }
+
+    for (unsigned u : ordering) {
+        for (auto e : make_iterator_range(in_edges(u, G))) {
+            const auto s = source(e, G);
+            assert (!encountered.test(s));
+            currentMaxRate[s] = G[e];
+            encountered.set(s);
+        }
+        for (auto e : make_iterator_range(out_edges(u, G))) {
+            remove_in_edge_if(target(e, G), [&](const Edge f) {
+                const auto s = source(f, G);
+                if (encountered.test(s)) {
+                    return G[f] <= currentMaxRate[s];
+                }
+                return false;
+            }, G);
+        }
+        encountered.reset();
+    }
+
+
+    for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
+        const auto partitionInput = partitionId * 2;
+        const auto partitionOutput = partitionInput | 1;
+        add_edge(partitionInput, partitionOutput, 0, G);
+    }
+
+    return G;
 }
 
 #endif

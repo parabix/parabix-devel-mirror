@@ -386,6 +386,8 @@ using OwningVector = std::vector<std::unique_ptr<T>>;
 
 using PartitionIdVector = std::vector<unsigned>;
 
+using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferGraph::vertex_descriptor, Rational>;
+
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
     static constexpr unsigned FirstKernel = 1U;
@@ -753,18 +755,11 @@ public:
 
     unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
 
-    void generatePartitioningGraph() const;
+    PartitioningGraph generatePartitioningGraph() const;
 
 // dataflow analysis functions
 
     void computeDataFlowRates(BufferGraph & G);
-
-    enum class DataflowCalculationType {
-        LowerBound,
-        UpperBound
-    };
-
-    std::vector<Rational> calculateNumOfStridesPerSegment(const DataflowCalculationType type, const BufferGraph & G) const;
 
 // synchronization functions
 
@@ -1136,6 +1131,8 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mInternalBindings(std::move(P.InternalBindings))
 {
     verifyIOStructure();
+
+    generatePartitioningGraph();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

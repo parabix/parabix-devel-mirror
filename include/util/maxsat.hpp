@@ -98,11 +98,8 @@ inline void assert_le_one(Z3_context ctx, Z3_solver s, unsigned n, Z3_ast * val)
 /** ------------------------------------------------------------------------------------------------------------- *
  * Fu & Malik procedure for MaxSAT. This procedure is based on unsat core extraction and the at-most-one constraint.
  ** ------------------------------------------------------------------------------------------------------------- */
-static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) {
-    assert ("initial formula is unsatisfiable!" && (Z3_solver_check(ctx, solver) != Z3_L_FALSE));
-//    if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
-//        return -1;
-//    }
+static int Z3_maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) {
+    assert("initial formula is unsatisfiable!" && (Z3_solver_check(ctx, solver) != Z3_L_FALSE));
     if (LLVM_UNLIKELY(soft.empty())) {
         return 0;
     }
@@ -122,7 +119,7 @@ static int maxsat(Z3_context ctx, Z3_solver solver, std::vector<Z3_ast> & soft) 
         // create assumptions
         for (unsigned i = 0; i < n; i++) {
             // Recall that we asserted (soft_cnstrs[i] \/ aux_vars[i])
-            // So using (NOT aux_vars[i]) as an assumption we are actually forcing the soft_cnstrs[i] to be considered.
+            // So using (NOT aux_vars[i]) as an assumption we are force the soft constraints to be considered.
             assumptions[i] = Z3_mk_not(ctx, aux_vars[i]);
         }
         if (Z3_solver_check_assumptions(ctx, solver, n, assumptions.data()) != Z3_L_FALSE) {

@@ -65,8 +65,8 @@ namespace { // anonymous
 using ReverseTopologicalOrdering = SmallVector<unsigned, 256>;
 
 template <typename Graph>
-void __transitive_closure_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
-    // Simple topological closure for DAGs
+void __transitive_closure_dag(const ReverseTopologicalOrdering & ordering, Graph & G) {
+    // Simple transitive closure for DAGs
     for (unsigned u : ordering) {
         for (const auto e : make_iterator_range(in_edges(u, G))) {
             const auto s = source(e, G);
@@ -81,7 +81,7 @@ void __transitive_closure_dag(ReverseTopologicalOrdering & ordering, Graph & G) 
 }
 
 template <typename Graph>
-void __transitive_reduction_dag(ReverseTopologicalOrdering & ordering, Graph & G) {
+void __transitive_reduction_dag(const ReverseTopologicalOrdering & ordering, Graph & G) {
     using Edge = typename graph_traits<Graph>::edge_descriptor;
     BitVector sources(num_vertices(G), false);
     for (unsigned u : ordering ) {

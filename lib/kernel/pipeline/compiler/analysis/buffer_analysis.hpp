@@ -456,7 +456,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
            "v" << PipelineInput << " [label=\"[" <<
            PipelineInput << "] P_{in}\\n"
            " Partition: " << KernelPartitionId[PipelineInput] << "\\n"
-           " Expected: " << MaximumNumOfStrides[PipelineInput] << "\\n";
+           " Expected: [" << MinimumNumOfStrides[PipelineInput] << ',' << MaximumNumOfStrides[PipelineInput] << "]\\n";
     out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -466,14 +466,14 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         out << "v" << i <<
                " [label=\"[" << i << "] " << name << "\\n"
                " Partition: " << KernelPartitionId[i] << "\\n"
-               " Expected: " << MaximumNumOfStrides[i] << "\\n";
+               " Expected: [" << MinimumNumOfStrides[i] << ',' << MaximumNumOfStrides[i] << "]\\n";
         out << "\" shape=rect, style=rounded, peripheries=2];\n";
     }
 
     out << "v" << PipelineOutput << " [label=\"[" <<
            PipelineOutput << "] P_{out}\\n"
            " Partition: " << KernelPartitionId[PipelineOutput] << "\\n"
-           " Expected: " << MaximumNumOfStrides[PipelineOutput] << "\\n";
+           " Expected: [" << MinimumNumOfStrides[PipelineOutput] << ',' << MaximumNumOfStrides[PipelineOutput] << "]\\n";
     out << "\" shape=rect, style=rounded, peripheries=2];\n";
 
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
