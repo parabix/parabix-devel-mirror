@@ -757,7 +757,7 @@ public:
 
     unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
     PartitioningGraph generatePartitioningGraph() const;
-    void determinePartitionJumpIndices() const;
+    std::vector<unsigned> determinePartitionJumpIndices() const;
 
 // buffer management analysis functions
 
@@ -1013,6 +1013,7 @@ protected:
 
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
+    const std::vector<unsigned>                 mPartitionJumpIndex;
 
     const bool                                  mHasZeroExtendedStream;
     bool                                        mHasThreadLocalPipelineState;
@@ -1133,6 +1134,8 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mBufferGraph(makeBufferGraph(b))
 
 , mPartitioningGraph(generatePartitioningGraph())
+, mPartitionJumpIndex(determinePartitionJumpIndices())
+
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)

@@ -2,7 +2,7 @@
 #define PARTITIONING_ANALYSIS_HPP
 
 #include "../pipeline_compiler.hpp"
-#include <iostream>
+#include <boost/graph/dominator_tree.hpp>
 
 namespace kernel {
 
@@ -500,7 +500,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     }
 
-    // Compute something similar to a transitive reduction of G; the difference is we'll keep
+    // Compute something similar to a transitive reduction of G; the difference is we'll retain
     // a transitive edge if and only if it requires more data than its predecessors.
 
     std::vector<Vertex> ordering;
@@ -539,23 +539,6 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         encountered.reset();
     }
 
-    auto & out = errs();
-
-    out << "digraph \"G\" {\n";
-    for (auto v : make_iterator_range(vertices(G))) {
-        out << "v" << v << " [label=\"" << v << "\"];\n";
-    }
-    for (auto e : make_iterator_range(edges(G))) {
-        const auto s = source(e, G);
-        const auto t = target(e, G);
-        const Rational & r = G[e];
-        out << "v" << s << " -> v" << t <<
-               " [label=\"" << r.numerator() << "/" << r.denominator() << "\"];\n";
-    }
-
-    out << "}\n\n";
-    out.flush();
-
     return G;
 }
 
@@ -563,28 +546,32 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
  * @brief determinePartitionJumpIndices
  *
  * If a partition determines it has insufficient data to execute, identify which partition is the next one to test.
+ * I.e., the one with input from some disjoint path. If none exists, we'll begin jump to "PartitionCount", which
+ * marks the end of the processing loop.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determinePartitionJumpIndices() const {
+std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 
+    using BV = dynamic_bitset<>;
     using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
 
     // Begin by cloning the partitioning graph
-    const auto n = num_vertices(mPartitioningGraph);
-    const auto m = PartitionCount * 2;
-    assert (n >= m);
+    const auto n = std::max<unsigned>(num_vertices(mPartitioningGraph), (PartitionCount + 1));
 
     Graph G(n);
-    for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
-        for (auto e : make_iterator_range(out_edges(partitionId, mPartitioningGraph))) {
+    for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
+        for (const auto e : make_iterator_range(out_edges(partitionId, mPartitioningGraph))) {
             const auto v = target(e, mPartitioningGraph);
             add_edge(partitionId, v, G);
         }
-        for (auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
+        for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
             const auto v = source(e, mPartitioningGraph);
             add_edge(v, partitionId, G);
         }
     }
 
+    BEGIN_SCOPED_REGION
+
+    // Now compute the transitive reduction of the partition relationships
     ReverseTopologicalOrdering ordering;
     ordering.reserve(n);
     topological_sort(G, std::back_inserter(ordering));
@@ -594,12 +581,98 @@ void PipelineCompiler::determinePartitionJumpIndices() const {
     }
     transitive_reduction_dag(ordering, G);
 
+    // Add a special sink node that marks the end of the processing loop.
+    for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
+        if (LLVM_UNLIKELY(out_degree(partitionId, G) == 0)) {
+            add_edge(partitionId, PartitionCount, G);
+        }
+    }
+
+    END_SCOPED_REGION
 
 
+    // Generate the post dominator tree of G. If we do not have enough data to execute
+    // a partition along some branched path, it's possible a post dominator of the paths
+    // was prevented from executing because of some other paths output. If that path was
+    // successfully executed, it may have enough data to process now despite the fact we
+    // had insufficient data on this path.
 
+    BEGIN_SCOPED_REGION
 
+    std::vector<BV> paths(PartitionCount + 1);
+    for (unsigned u = 0, p = 0; u <= PartitionCount; ++u) { // forward topological ordering
+        BV & P = paths[u];
+        P.resize(PartitionCount + 1);
+        for (const auto e : make_iterator_range(in_edges(u, G))) {
+            const auto v = source(e, G);
+            P |= paths[v];
+        }
 
+        for (const auto e : make_iterator_range(out_edges(u, G))) {
+            const auto v = target(e, G);
+            BV & O = paths[v];
+            O = P;
+            O.set(p++);
+        }
+    }
 
+    // ensure the final sink is a sentinal for the subsequent search process
+
+    add_edge(PartitionCount, PartitionCount, G);
+
+    BV M(PartitionCount + 1);
+
+    for (auto u = PartitionCount; u--; ) { // reverse topological ordering
+
+        auto v = u;
+
+        if (LLVM_UNLIKELY(out_degree(u, G) > 1)) {
+
+            for (const auto e : make_iterator_range(out_edges(u, G))) {
+                const auto v = target(e, G);
+                const BV & O = paths[v];
+                M |= O;
+            }
+
+            while (++v <= PartitionCount) {
+                const BV & O = paths[v];
+                if (LLVM_UNLIKELY((O & M) == M)) {
+                    break;
+                }
+            }
+
+            M.reset();
+
+        }
+
+        assert ("an immediate post dominator is guaranteed!" && v <= PartitionCount);
+
+        // v is a post-dominator of u; however, since this graph indicates that we
+        // could not execute u nor any of its branched paths, we search for the
+        // first non-immediate post dominator with an in-degree > 1. We're guaranteed
+        // to find one since the common sink must have an in-degree >= 2.
+
+        v = child(v, G);
+
+        for (;;) {
+            if (LLVM_UNLIKELY(in_degree(v, G) > 1)) {
+                break;
+            }
+            v = child(v, G);
+        }
+
+        clear_out_edges(u, G);
+        add_edge(u, v, G);
+
+    }
+
+    END_SCOPED_REGION
+
+    std::vector<unsigned> jumpIndices(PartitionCount);
+    for (unsigned u = 0; u < PartitionCount; ++u) {
+        jumpIndices[u] = child(u, G);
+    }
+    return jumpIndices;
 
 }
 
