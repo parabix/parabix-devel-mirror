@@ -5,6 +5,11 @@
 
 namespace kernel {
 
+void makePartitionEntryPoints(BuilderRef b) {
+
+
+}
+
 
 }
 

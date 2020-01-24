@@ -862,7 +862,7 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
 ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const SourceCoords, StreamSet * const ColorizedCoords, Scalar * const callbackObject)
 : SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
 // inputs
-{Binding{"InputStream", ByteStream, GreedyRate(), { Deferred(), Truncate(1) } }
+{Binding{"InputStream", ByteStream, GreedyRate(), Deferred() }
 ,Binding{"SourceCoords", SourceCoords, FixedRate(1), Deferred()}
 ,Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1), Deferred()}},
 // outputs
@@ -912,7 +912,7 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
 
 //    Value * const matchRecordEndAtEOF = b->CreateUMin(srcMatchRecordEnd, bufLimit);
 //    Value * const matchRecordEnd = b->CreateSelect(b->isFinal(), srcMatchRecordEnd, matchRecordEndAtEOF);
-    b->CreateLikelyCondBr(b->CreateICmpULT(matchRecordEnd, inputAvail), dispatch, coordinatesDone);
+    b->CreateLikelyCondBr(b->CreateICmpULE(matchRecordEnd, inputAvail), dispatch, coordinatesDone);
 
     b->SetInsertPoint(dispatch);
     Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);    

@@ -2,6 +2,7 @@
 #define PARTITIONING_ANALYSIS_HPP
 
 #include "../pipeline_compiler.hpp"
+#include <iostream>
 
 namespace kernel {
 
@@ -19,7 +20,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     using PartialSumMap = flat_map<Vertex, Vertex>;
 
     using Partition = std::vector<unsigned>;
-    using PartitionMap = std::map<BV, Partition>;
+    using PartitionMap = std::map<BV, unsigned>;
 
     // Convert G into a simpler representation of the graph that we can annotate
 
@@ -58,7 +59,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         return f->second;
     };
 
-    unsigned currentRateId = 0;
+    unsigned nextRateId = 0;
 
     auto addRateId = [](BV & bv, const unsigned rateId) {
        if (LLVM_UNLIKELY(rateId >= bv.capacity())) {
@@ -75,7 +76,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         const auto f = M.find(key);
         if (LLVM_LIKELY(f == M.end())) {
             const auto buf = add_vertex(H);
-            addRateId(H[buf], currentRateId++);
+            addRateId(H[buf], nextRateId++);
             add_edge(streamSet, buf, H);
             M.emplace(key, buf);
             return buf;
@@ -90,7 +91,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         const auto f = P.find(streamSet);
         if (LLVM_LIKELY(f == P.end())) {
             const auto partialSum = add_vertex(H);
-            addRateId(H[partialSum], currentRateId++);
+            addRateId(H[partialSum], nextRateId++);
             P.emplace(streamSet, partialSum);
             return partialSum;
         } else {
@@ -117,7 +118,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             const auto kernel = nextKernel++;
             assert (kernel < kernels);
             mappedKernel[kernel] = u;
-            assert (H[kernel].empty());
+            assert (H[kernel].none());
 
             bool partitionRoot = false;
 
@@ -182,7 +183,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 }
             }
 
-            assert (!partitionRoot || in_degree(kernel, H) != 0);
+            // If this kernel has a variable rate input, it is the root of a new partition
+            if (LLVM_UNLIKELY(partitionRoot)) {
+                addRateId(H[kernel], nextRateId++);
+            }
 
             // and any outputs
             for (const auto e : make_iterator_range(out_edges(u, G))) {
@@ -209,7 +213,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             END_SCOPED_REGION
                             break;
                         case RateId::Bounded:
-                            addRateId(H[buffer], currentRateId++);
+                            addRateId(H[buffer], nextRateId++);
                             break;
                         case RateId::Relative:
                             // Link a relative rate output stream to its reference stream
@@ -234,7 +238,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                                 // A deferred output rate is closer to an bounded rate than a
                                 // countable rate but a deferred input rate simply means the
                                 // buffer must be dynamic.
-                                addRateId(H[buffer], currentRateId++);
+                                addRateId(H[buffer], nextRateId++);
                                 break;
                             default: break;
                         }
@@ -242,21 +246,21 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 }
             }
 
-            // If this kernel is the root of a new partition or a source kernel,
-            // give it a new rate id.
-
-            auto isSourceKernel = [&]() {
-                if (LLVM_UNLIKELY(in_degree(kernel, H) == 0)) {
-                    return out_degree(kernel, H) > 0;
+            // Each output of a source kernel is given a rate not shared by the kernel itself
+            // to ensure its descendents are in a seperate partition. However, the descendents
+            // of a source kernel with two or more outputs that have an equivalent rate ought
+            // to be in the same partition (assuming they have no other inputs from differing
+            // partitions.)
+            if (LLVM_UNLIKELY(in_degree(kernel, H) == 0 && out_degree(kernel, H) != 0)) {
+                // place the source in its own partition
+                addRateId(H[kernel], nextRateId++);
+                const auto sourceKernelRateId = nextRateId++;
+                for (const auto output : make_iterator_range(out_edges(u, H))) {
+                    const auto buffer = target(output, H);
+                    addRateId(H[buffer], sourceKernelRateId);
                 }
-                return false;
-            };
-
-            if (partitionRoot || LLVM_UNLIKELY(isSourceKernel())) {
-                BV & node = H[kernel];
-                assert (node.none());
-                addRateId(node, currentRateId++);
             }
+
         }
     }
 
@@ -264,8 +268,6 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     assert (nextStreamSet == streamSets + kernels);
 
     // Combine all incoming rates sets
-
-    BEGIN_SCOPED_REGION
 
     O.clear();
     O.reserve(num_vertices(H));
@@ -276,7 +278,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     for (const auto u : O) {
         auto & nodeRateSet = H[u];
         // boost dynamic_bitset will segfault when buffers are of differing lengths.
-        nodeRateSet.resize(currentRateId);
+        nodeRateSet.resize(nextRateId);
         for (const auto e : make_iterator_range(in_edges(u, H))) {
             const auto v = source(e, H);
             const auto & inputRateSet = H[v];
@@ -285,41 +287,52 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         }
     }
 
-    END_SCOPED_REGION
+    std::vector<Partition> partitions;
 
+    BEGIN_SCOPED_REGION
+
+    PartitionMap partitionSets;
     // Now that we've tainted the kernels with any influencing rates,
     // cluster them into partitions.
-    PartitionMap partitionSets;
-    for (unsigned u = 0; u != kernels; ++u) {
-        BV & node = H[u];
-        assert ("kernel rate set cannot be empty!" && (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0)));
-        if (LLVM_UNLIKELY(node.none())) {
-            continue;
+    for (const auto u : O) {
+        // We want to obtain all kernels but still maintain the lexical ordering of each partition root
+        if (u < kernels) {
+            BV & node = H[u];
+            assert ("active kernel rate set cannot be empty!" && (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0)));
+            if (LLVM_UNLIKELY(node.none())) continue;
+            auto f = partitionSets.find(node);
+            if (f == partitionSets.end()) {
+                const auto i = partitions.size();
+                partitions.emplace_back();
+                f = partitionSets.emplace(std::move(node), i).first;
+            }
+            Partition & P = partitions[f->second];
+            P.push_back(mappedKernel[u]);
         }
-        auto & partition = partitionSets[std::move(node)];
-        partition.push_back(mappedKernel[u]);
     }
+
+    END_SCOPED_REGION
 
     partitionIds.resize(num_vertices(G), 0);
 
-    const auto n = partitionSets.size();
+    const auto n = partitions.size();
     if (LLVM_UNLIKELY(n < 2)) {
         return n;
     }
 
     // Then provide each partition with a unique id
     unsigned partitionId = 0U;
-    for (auto i = partitionSets.begin();;) {
-        const Partition & A = i->second;
+    for (auto i = partitions.begin();;) {
+        const Partition & A = *i;
         for (const auto v : A) {
             partitionIds[v] = partitionId;
         }
         ++partitionId;
-        if (++i == partitionSets.end()) {
+        if (++i == partitions.end()) {
             break;
         }
         // and add any constraints between each adjacent partition
-        const Partition & B = i->second;
+        const Partition & B = *i;
         for (const auto u : A) {
             for (const auto v : B) {
                 assert (u != v);
@@ -331,8 +344,6 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     assert (partitionId == n);
     return n;
 }
-
-#if 1
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePartitioningGraph
@@ -349,11 +360,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     using StreamSetMap = flat_map<BufferVertex, Vertex>;
 
-    // To preserve acyclicity, each partition is represented by an input/output vertex pair.
-    // This ensures that any internal dynamic buffer do not create a self-loop which would
-    // complicate the pseudo-transitive closure step later.
-
-    PartitioningGraph G(PartitionCount * 2);
+    PartitioningGraph G(PartitionCount);
 
     StreamSetMap S;
 
@@ -368,10 +375,15 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         return f->second;
     };
 
-    assert (KernelPartitionId[FirstKernel] == 0);
-    assert ((KernelPartitionId[LastKernel] + 1) == PartitionCount);
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
-    for (auto start = FirstKernel; start <= LastKernel; ) {
+    assert (KernelPartitionId[firstKernel] == 0);
+    assert ((KernelPartitionId[lastKernel] + 1) == PartitionCount);
+
+    BitVector encountered(num_vertices(mBufferGraph), false);
+
+    for (auto start = firstKernel; start <= lastKernel; ) {
         // Determine which kernels are in this partition
         const auto partitionId = KernelPartitionId[start];
         assert (partitionId < PartitionCount);
@@ -390,79 +402,109 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         }
         #endif
 
-        const auto partitionInput = partitionId * 2;
-        const auto partitionOutput = partitionInput | 1;
+        G[partitionId] = start;
+        assert (degree(partitionId, G) == 0);
 
         for (auto kernel = start; kernel < end; ++kernel) {
-
-            G[partitionInput] = start;
-            G[partitionOutput] = end - 1;
 
             const auto minStrides = MinimumNumOfStrides[kernel];
 
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
-                if (LLVM_UNLIKELY(isa<DynamicBuffer>(bn.Buffer))) {
-                    const auto buffer = getStreamSetVertex(streamSet);
-                    const BufferRateData & inputRate = mBufferGraph[input];
-                    const auto maxRate = inputRate.Maximum * minStrides;
-                    add_edge(buffer, partitionInput, maxRate, G);
+                if (LLVM_LIKELY(isa<StaticBuffer>(bn.Buffer))) {
+                    continue;
+                }
+                const auto buffer = getStreamSetVertex(streamSet);
+                const BufferRateData & inputRate = mBufferGraph[input];
+                const auto maxRate = inputRate.Maximum * minStrides;
+                // any internally used dynamic buffer is treated as an output buffer
+                if (LLVM_UNLIKELY(encountered.test(buffer))) {
+                    add_edge(partitionId, buffer, maxRate, G);
+                } else {
+                    add_edge(buffer, partitionId, maxRate, G);
                 }
             }
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
-                if (LLVM_UNLIKELY(isa<DynamicBuffer>(bn.Buffer))) {
-                    const auto buffer = getStreamSetVertex(streamSet);
-                    const BufferRateData & outputRate = mBufferGraph[output];
-                    const auto maxRate = outputRate.Maximum * minStrides;
-                    add_edge(partitionOutput, buffer, maxRate, G);
+                if (LLVM_LIKELY(isa<StaticBuffer>(bn.Buffer))) {
+                    continue;
                 }
+                const auto buffer = getStreamSetVertex(streamSet);
+                const BufferRateData & outputRate = mBufferGraph[output];
+                const auto maxRate = outputRate.Maximum * minStrides;
+                encountered.set(buffer);
+                add_edge(partitionId, buffer, maxRate, G);
             }
+
         }
+
+        encountered.reset();
+
         start = end;
     }
 
     const auto n = num_vertices(G);
-    BitVector encountered(n, false);
+    encountered.resize(n);
     std::vector<Rational> currentMaxRate(n);
 
     // Filter the graph to ensure each input to a partition only captures the largest rate
     // for each stream set
     for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
 
-        const auto partitionInput = partitionId * 2;
-
-        bool regenerate = false;
-        for (const auto input : make_iterator_range(in_edges(partitionInput, G))) {
+        bool regenerateInput = false;
+        for (const auto input : make_iterator_range(in_edges(partitionId, G))) {
             const auto streamSet = source(input, G);
             const Rational maxRate = G[input];
             if (encountered.test(streamSet)) {
                 currentMaxRate[streamSet] = std::max(currentMaxRate[streamSet], maxRate);
-                regenerate = true;
+                regenerateInput = true;
             } else {
                 encountered.set(streamSet);
                 currentMaxRate[streamSet] = maxRate;
             }
         }
 
-        if (LLVM_UNLIKELY(regenerate)) {
-            clear_in_edges(partitionInput, G);
+        if (LLVM_UNLIKELY(regenerateInput)) {
+            clear_in_edges(partitionId, G);
             for (const auto streamSet : encountered.set_bits()) {
-                add_edge(streamSet, partitionInput, currentMaxRate[streamSet], G);
+                add_edge(streamSet, partitionId, currentMaxRate[streamSet], G);
             }
         }
 
         encountered.reset();
+
+        bool regenerateOutput = false;
+        for (const auto output : make_iterator_range(out_edges(partitionId, G))) {
+            const auto streamSet = target(output, G);
+            const Rational maxRate = G[output];
+            if (encountered.test(streamSet)) {
+                currentMaxRate[streamSet] = std::max(currentMaxRate[streamSet], maxRate);
+                regenerateOutput = true;
+            } else {
+                encountered.set(streamSet);
+                currentMaxRate[streamSet] = maxRate;
+            }
+        }
+
+        if (LLVM_UNLIKELY(regenerateOutput)) {
+            clear_out_edges(partitionId, G);
+            for (const auto streamSet : encountered.set_bits()) {
+                add_edge(partitionId, streamSet, currentMaxRate[streamSet], G);
+            }
+        }
+
+        encountered.reset();
+
     }
 
     // Compute something similar to a transitive reduction of G; the difference is we'll keep
     // a transitive edge if and only if it requires more data than its predecessors.
 
     std::vector<Vertex> ordering;
-    ordering.reserve(num_vertices(G));
+    ordering.reserve(n);
 
     topological_sort(G, std::back_inserter(ordering)); // reverse ordering
 
@@ -497,17 +539,69 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         encountered.reset();
     }
 
+    auto & out = errs();
 
-    for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
-        const auto partitionInput = partitionId * 2;
-        const auto partitionOutput = partitionInput | 1;
-        add_edge(partitionInput, partitionOutput, 0, G);
+    out << "digraph \"G\" {\n";
+    for (auto v : make_iterator_range(vertices(G))) {
+        out << "v" << v << " [label=\"" << v << "\"];\n";
     }
+    for (auto e : make_iterator_range(edges(G))) {
+        const auto s = source(e, G);
+        const auto t = target(e, G);
+        const Rational & r = G[e];
+        out << "v" << s << " -> v" << t <<
+               " [label=\"" << r.numerator() << "/" << r.denominator() << "\"];\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
 
     return G;
 }
 
-#endif
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determinePartitionJumpIndices
+ *
+ * If a partition determines it has insufficient data to execute, identify which partition is the next one to test.
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::determinePartitionJumpIndices() const {
+
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
+
+    // Begin by cloning the partitioning graph
+    const auto n = num_vertices(mPartitioningGraph);
+    const auto m = PartitionCount * 2;
+    assert (n >= m);
+
+    Graph G(n);
+    for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
+        for (auto e : make_iterator_range(out_edges(partitionId, mPartitioningGraph))) {
+            const auto v = target(e, mPartitioningGraph);
+            add_edge(partitionId, v, G);
+        }
+        for (auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
+            const auto v = source(e, mPartitioningGraph);
+            add_edge(v, partitionId, G);
+        }
+    }
+
+    ReverseTopologicalOrdering ordering;
+    ordering.reserve(n);
+    topological_sort(G, std::back_inserter(ordering));
+    transitive_closure_dag(ordering, G);
+    for (auto u = PartitionCount; u < n; ++u) {
+        clear_vertex(u, G);
+    }
+    transitive_reduction_dag(ordering, G);
+
+
+
+
+
+
+
+
+}
 
 } // end of namespace kernel
 

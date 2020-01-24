@@ -44,70 +44,6 @@ bool requiresLinearAccess(const Binding & binding) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief verifyIOStructure
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::verifyIOStructure() const {
-
-
-#if 0
-
-    // verify that the buffer config is valid
-    for (unsigned i = FirstStreamSet; i <= LastStreamSet; ++i) {
-
-        const BufferNode & bn = G[i];
-        const auto pe = in_edge(i, G);
-        const auto producerVertex = source(pe, G);
-        const Kernel * const producer = getKernel(producerVertex);
-        const BufferRateData & producerRate = G[pe];
-        const Binding & output = producerRate.Binding;
-
-
-
-
-        // Type check stream set I/O types.
-        Type * const baseType = output.getType();
-        for (const auto e : make_iterator_range(out_edges(i, G))) {
-            const BufferRateData & consumerRate = G[e];
-            const Binding & input = consumerRate.Binding;
-            if (LLVM_UNLIKELY(baseType != input.getType())) {
-                SmallVector<char, 256> tmp;
-                raw_svector_ostream msg(tmp);
-                msg << producer->getName() << ':' << output.getName()
-                    << " produces a ";
-                baseType->print(msg);
-                const Kernel * const consumer = getKernel(target(e, G));
-                msg << " but "
-                    << consumer->getName() << ':' << input.getName()
-                    << " expects ";
-                input.getType()->print(msg);
-                report_fatal_error(msg.str());
-            }
-        }
-
-        for (const auto ce : make_iterator_range(out_edges(i, G))) {
-            const Binding & input = G[ce].Binding;
-            if (LLVM_UNLIKELY(requiresLinearAccess(input))) {
-                SmallVector<char, 256> tmp;
-                raw_svector_ostream out(tmp);
-                const auto consumer = target(ce, G);
-                out << getKernel(consumer)->getName()
-                    << '.' << input.getName()
-                    << " requires that "
-                    << producer->getName()
-                    << '.' << output.getName()
-                    << " is a Linear buffer.";
-                report_fatal_error(out.str());
-            }
-        }
-
-
-    }
-
-#endif
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
  *
  * Return an acyclic bi-partite graph indicating the I/O relationships between the kernels and their buffers.
@@ -347,6 +283,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     printBufferGraph(G, errs());
     #endif
 
+    verifyIOStructure(G);
+
     return G;
 }
 
@@ -427,6 +365,70 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), G);
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief verifyIOStructure
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::verifyIOStructure(const BufferGraph & G) const {
+
+
+#if 0
+
+    // verify that the buffer config is valid
+    for (unsigned i = FirstStreamSet; i <= LastStreamSet; ++i) {
+
+        const BufferNode & bn = G[i];
+        const auto pe = in_edge(i, G);
+        const auto producerVertex = source(pe, G);
+        const Kernel * const producer = getKernel(producerVertex);
+        const BufferRateData & producerRate = G[pe];
+        const Binding & output = producerRate.Binding;
+
+
+
+
+        // Type check stream set I/O types.
+        Type * const baseType = output.getType();
+        for (const auto e : make_iterator_range(out_edges(i, G))) {
+            const BufferRateData & consumerRate = G[e];
+            const Binding & input = consumerRate.Binding;
+            if (LLVM_UNLIKELY(baseType != input.getType())) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream msg(tmp);
+                msg << producer->getName() << ':' << output.getName()
+                    << " produces a ";
+                baseType->print(msg);
+                const Kernel * const consumer = getKernel(target(e, G));
+                msg << " but "
+                    << consumer->getName() << ':' << input.getName()
+                    << " expects ";
+                input.getType()->print(msg);
+                report_fatal_error(msg.str());
+            }
+        }
+
+        for (const auto ce : make_iterator_range(out_edges(i, G))) {
+            const Binding & input = G[ce].Binding;
+            if (LLVM_UNLIKELY(requiresLinearAccess(input))) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                const auto consumer = target(ce, G);
+                out << getKernel(consumer)->getName()
+                    << '.' << input.getName()
+                    << " requires that "
+                    << producer->getName()
+                    << '.' << output.getName()
+                    << " is a Linear buffer.";
+                report_fatal_error(out.str());
+            }
+        }
+
+
+    }
+
+#endif
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

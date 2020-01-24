@@ -494,9 +494,13 @@ public:
     void generateFinalizeThreadLocalMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b) override;
 
+private:
+
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P);
 
 // internal pipeline state construction functions
+
+public:
 
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
     void generateSingleThreadKernelMethod(BuilderRef b);
@@ -528,7 +532,11 @@ public:
 
     void addTerminationProperties(BuilderRef b, const unsigned kernel);
 
-// inter-kernel functions
+// partitioning codegen functions
+
+
+
+// inter-kernel codegen functions
 
     void readInitialItemCounts(BuilderRef b);
 
@@ -608,7 +616,7 @@ public:
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
 
-// intra-kernel functions
+// intra-kernel codegen functions
 
     Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
     Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
@@ -630,7 +638,7 @@ public:
 
     Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const StreamSetPort port);
 
-// termination functions
+// termination codegen functions
 
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
     Value * isClosed(BuilderRef b, const unsigned inputPort);
@@ -643,7 +651,7 @@ public:
     void updateTerminationSignal(Value * const signal);
     LLVM_READNONE static Constant * getTerminationSignal(BuilderRef b, const TerminationSignal type);
 
-// consumer recording
+// consumer codegen functions
 
     ConsumerGraph makeConsumerGraph() const;
     void addConsumerKernelProperties(BuilderRef b, const unsigned producer);
@@ -654,13 +662,7 @@ public:
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
 
-// buffer analysis/management functions
-
-    void verifyIOStructure() const;
-    BufferGraph makeBufferGraph(BuilderRef b);
-    void initializeBufferGraph(BufferGraph & G) const;
-    void identifyThreadLocalBuffers(BufferGraph & G) const;
-    void computeDataFlow(BufferGraph & G) const;
+// buffer management codegen functions
 
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
@@ -754,8 +756,14 @@ public:
 // partitioning analysis
 
     unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
-
     PartitioningGraph generatePartitioningGraph() const;
+    void determinePartitionJumpIndices() const;
+
+// buffer management analysis functions
+
+    BufferGraph makeBufferGraph(BuilderRef b);
+    void initializeBufferGraph(BufferGraph & G) const;
+    void verifyIOStructure(const BufferGraph & G) const;
 
 // dataflow analysis functions
 
@@ -1004,6 +1012,7 @@ protected:
     const bool                                  PipelineHasTerminationSignal;
 
     const BufferGraph                           mBufferGraph;
+    const PartitioningGraph                     mPartitioningGraph;
 
     const bool                                  mHasZeroExtendedStream;
     bool                                        mHasThreadLocalPipelineState;
@@ -1120,7 +1129,10 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , PartitionCount(P.PartitionCount)
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
+
 , mBufferGraph(makeBufferGraph(b))
+
+, mPartitioningGraph(generatePartitioningGraph())
 , mHasZeroExtendedStream(hasZeroExtendedStream())
 , mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)
@@ -1130,9 +1142,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mInternalKernels(std::move(P.InternalKernels))
 , mInternalBindings(std::move(P.InternalBindings))
 {
-    verifyIOStructure();
-
-    generatePartitioningGraph();
+    determinePartitionJumpIndices();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

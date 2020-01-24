@@ -60,12 +60,10 @@ bool lexical_ordering(const Graph & G, Vec & L) {
     return (traversed == num_edges(G));
 }
 
-namespace { // anonymous
-
 using ReverseTopologicalOrdering = SmallVector<unsigned, 256>;
 
-template <typename Graph>
-void __transitive_closure_dag(const ReverseTopologicalOrdering & ordering, Graph & G) {
+template <typename Vector, typename Graph>
+void transitive_closure_dag(const Vector & ordering, Graph & G) {
     // Simple transitive closure for DAGs
     for (unsigned u : ordering) {
         for (const auto e : make_iterator_range(in_edges(u, G))) {
@@ -80,8 +78,8 @@ void __transitive_closure_dag(const ReverseTopologicalOrdering & ordering, Graph
     }
 }
 
-template <typename Graph>
-void __transitive_reduction_dag(const ReverseTopologicalOrdering & ordering, Graph & G) {
+template <typename Vector, typename Graph>
+void transitive_reduction_dag(const Vector & ordering, Graph & G) {
     using Edge = typename graph_traits<Graph>::edge_descriptor;
     BitVector sources(num_vertices(G), false);
     for (unsigned u : ordering ) {
@@ -97,14 +95,12 @@ void __transitive_reduction_dag(const ReverseTopologicalOrdering & ordering, Gra
     }
 }
 
-} // end of anonymous namespace
-
 template <typename Graph>
 inline void transitive_closure_dag(Graph & G) {
     ReverseTopologicalOrdering ordering;
     ordering.reserve(num_vertices(G));
     topological_sort(G, std::back_inserter(ordering));
-    __transitive_closure_dag(ordering, G);
+    transitive_closure_dag(ordering, G);
 }
 
 template <typename Graph>
@@ -112,8 +108,8 @@ inline void transitive_reduction_dag(Graph & G) {
     ReverseTopologicalOrdering ordering;
     ordering.reserve(num_vertices(G));
     topological_sort(G, std::back_inserter(ordering));
-    __transitive_closure_dag(ordering, G);
-    __transitive_reduction_dag(ordering, G);
+    transitive_closure_dag(ordering, G);
+    transitive_reduction_dag(ordering, G);
 }
 
 template <typename Graph>
