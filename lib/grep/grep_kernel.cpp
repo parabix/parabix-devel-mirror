@@ -560,44 +560,18 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
 
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     GCB = re::resolveUnicodeNames(GCB);
-    if (re::AlgorithmOptionIsSet(GCB_Multiplexing)) {
-        const auto GCB_Sets = re::collectCCs(GCB, cc::Unicode);
-        auto GCB_mpx = std::make_shared<cc::MultiplexedAlphabet>("GCB_mpx", GCB_Sets);
-        GCB = transformCCs(GCB_mpx, GCB);
-        auto GCB_basis = GCB_mpx->getMultiplexedCCs();
-        StreamSet * const GCB_Classes = P->CreateStreamSet(GCB_basis.size());
-        P->CreateKernelCall<CharClassesKernel>(std::move(GCB_basis), Source, GCB_Classes);
-        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-        options->setIndexingTransformer(t, U8index);
-        options->setRE(GCB);
-        options->setSource(GCB_Classes);
-        options->addAlphabet(GCB_mpx, GCB_Classes);
-        options->setResults(GCBstream);
-        options->addExternal("UTF8_index", U8index);
-        P->CreateKernelCall<ICGrepKernel>(std::move(options));
-    } else {
-        std::set<re::Name *> externals;
-        re::gatherNames(GCB, externals);
-        std::map<std::string, kernel::StreamSet *> propertyStreamMap;
-        for (auto e : externals) {
-            auto name = e->getFullName();
-            StreamSet * property = P->CreateStreamSet(1, 1);
-            propertyStreamMap.emplace(name, property);
-            P->CreateKernelCall<UnicodePropertyKernelBuilder>(e, Source, property);
-        }
-        std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
-        options->setIndexingTransformer(t, U8index);
-        options->setSource(Source);
-        options->setResults(GCBstream);
-        options->setRE(GCB);
-        options->addExternal("UTF8_index", U8index);
-        for (const auto & e : externals) {
-            auto name = e->getFullName();
-            const auto f = propertyStreamMap.find(name);
-            if (f != propertyStreamMap.end()) {
-                options->addExternal(name, f->second);
-            }
-        }
-        P->CreateKernelCall<ICGrepKernel>(std::move(options));
-    }
+    const auto GCB_Sets = re::collectCCs(GCB, cc::Unicode);
+    auto GCB_mpx = std::make_shared<cc::MultiplexedAlphabet>("GCB_mpx", GCB_Sets);
+    GCB = transformCCs(GCB_mpx, GCB);
+    auto GCB_basis = GCB_mpx->getMultiplexedCCs();
+    StreamSet * const GCB_Classes = P->CreateStreamSet(GCB_basis.size());
+    P->CreateKernelCall<CharClassesKernel>(std::move(GCB_basis), Source, GCB_Classes);
+    std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
+    options->setIndexingTransformer(t, U8index);
+    options->setRE(GCB);
+    options->setSource(GCB_Classes);
+    options->addAlphabet(GCB_mpx, GCB_Classes);
+    options->setResults(GCBstream);
+    options->addExternal("UTF8_index", U8index);
+    P->CreateKernelCall<ICGrepKernel>(std::move(options));
 }

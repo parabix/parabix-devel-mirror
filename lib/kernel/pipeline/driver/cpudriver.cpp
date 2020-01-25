@@ -72,7 +72,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
     builder.setVerifyModules(false);
     builder.setEngineKind(EngineKind::JIT);
     builder.setTargetOptions(codegen::target_Options);
-    builder.setOptLevel(codegen::OptLevel);
+    builder.setOptLevel(codegen::BackEndOptLevel);
 
     StringMap<bool> HostCPUFeatures;
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {

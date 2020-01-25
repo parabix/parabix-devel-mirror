@@ -21,7 +21,7 @@ enum RE_PrintFlags {
 };
     
 enum RE_AlgorithmFlags {
-    DisableLog2BoundedRepetition, DisableIfHierarchy, DisableMatchStar, GCB_Multiplexing
+    DisableLog2BoundedRepetition, DisableIfHierarchy, DisableMatchStar
 };
     
 bool LLVM_READONLY PrintOptionIsSet(RE_PrintFlags flag);
