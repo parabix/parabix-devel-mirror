@@ -374,19 +374,44 @@ ENABLE_ENUM_FLAGS(CountingType)
 
 using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, unsigned>;
 
-struct RegionData {
-    AttrId   Type;
-    unsigned Stream;
-    RegionData() : Type(AttrId::None), Stream(0) { }
-    RegionData(const AttrId type, const unsigned stream) : Type(type), Stream(stream) { }
-};
-
 template <typename T>
 using OwningVector = std::vector<std::unique_ptr<T>>;
 
 using PartitionIdVector = std::vector<unsigned>;
 
-using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferGraph::vertex_descriptor, Rational>;
+struct PartitionData {
+    unsigned    Kernel;
+    RateId      Type;
+    Rational    MaxRate;
+    unsigned    Reference;
+    BindingRef  Binding;
+
+    PartitionData() {
+
+    }
+
+    PartitionData(const PartitionData & o)
+    : Kernel(o.Kernel), Type(o.Type), MaxRate(o.MaxRate), Reference(o.Reference), Binding(o.Binding) {
+
+    }
+
+    PartitionData(unsigned kernel, RateId type, Rational maxRate, unsigned reference, const BindingRef binding)
+    : Kernel(kernel), Type(type), MaxRate(maxRate), Reference(reference), Binding(binding) {
+
+    }
+};
+
+struct PartitionInput : public PartitionData {
+    unsigned StreamSet;
+
+    PartitionInput(const PartitionData & data, const unsigned streamSet)
+    : PartitionData(data), StreamSet(streamSet) {
+
+    }
+
+};
+
+using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferGraph::vertex_descriptor, PartitionData>;
 
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
@@ -534,7 +559,10 @@ public:
 
 // partitioning codegen functions
 
+    void makePartitionEntryPoints(BuilderRef b);
 
+    void testPartitionInputData(BuilderRef b);
+    void reservePartitionOutputSpace(BuilderRef b);
 
 // inter-kernel codegen functions
 
@@ -758,6 +786,7 @@ public:
     unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
     PartitioningGraph generatePartitioningGraph() const;
     std::vector<unsigned> determinePartitionJumpIndices() const;
+    std::vector<PartitionInput> determinePartitionInputEvaluationOrder(const unsigned partitionId) const;
 
 // buffer management analysis functions
 
@@ -897,6 +926,10 @@ protected:
     Vec<Value *, 16>                            mTruncatedInputBuffer;
     Vec<Value *, 64>                            mLocallyAvailableItems;
     Vec<Value *, 16>                            mTerminationSignals;
+
+    // partition state
+    Vec<Value *, 32>                            mPartitionEntryPoint;
+    unsigned                                    mCurrentPartitionIndex = 0;
 
 
     // kernel state

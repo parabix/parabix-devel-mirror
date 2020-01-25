@@ -1,3 +1,6 @@
+#ifndef PIPELINE_ANALYSIS_HPP
+#define PIPELINE_ANALYSIS_HPP
+
 #include "../pipeline_compiler.hpp"
 #include "lexographic_ordering.hpp"
 #include "../internal/popcount_kernel.h"
@@ -1700,3 +1703,5 @@ bool PipelineCompiler::hasFixedRateLCM() {
 
 
 } // end of namespace
+
+#endif
