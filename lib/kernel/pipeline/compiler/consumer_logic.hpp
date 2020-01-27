@@ -318,7 +318,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const unsigned outputPort, Value * const produced) {
+inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced) {
     Value * initiallyConsumed = produced;
     const Binding & binding = getOutputBinding(outputPort);
     if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::LookBehind))) {

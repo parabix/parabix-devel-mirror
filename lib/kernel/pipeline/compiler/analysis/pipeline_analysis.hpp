@@ -1444,7 +1444,8 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernel, c
     // check any pipeline input first
     if (out_degree(PipelineInput, G)) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto buffer = getInputBufferVertex(kernel, i);
+            const StreamSetPort inputPort{PortType::Input, i};
+            const auto buffer = getInputBufferVertex(kernel, inputPort);
             if (LLVM_UNLIKELY(is_parent(buffer, PipelineInput, G))) {
                 for (unsigned j = 0; j < i; ++j) {
                     add_edge_if_no_induced_cycle(i, j, E);
@@ -1459,7 +1460,8 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernel, c
     // ... and check any pipeline output first
     if (in_degree(PipelineOutput, G)) {
         for (unsigned i = 0; i < numOfOutputs; ++i) {
-            const auto buffer = getOutputBufferVertex(kernel, i);
+            const StreamSetPort outputPort{PortType::Output, i};
+            const auto buffer = getOutputBufferVertex(kernel, outputPort);
             if (LLVM_UNLIKELY(has_child(buffer, PipelineOutput, G))) {
                 const auto k = firstOutput + i;
                 for (unsigned j = 0; j < k; ++j) {
@@ -1476,7 +1478,8 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernel, c
     std::vector<unsigned> D;
     D.reserve(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetBuffer * const buffer = getOutputBuffer(kernel, i);
+        const StreamSetPort outputPort{PortType::Output, i};
+        const StreamSetBuffer * const buffer = getOutputBuffer(kernel, outputPort);
         if (LLVM_UNLIKELY(buffer != nullptr && isa<DynamicBuffer>(buffer))) {
             D.push_back(i);
         }
@@ -1539,12 +1542,12 @@ bool PipelineCompiler::isOpenSystem() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isPipelineInput
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isPipelineInput(const unsigned inputPort) const {
+bool PipelineCompiler::isPipelineInput(const StreamSetPort inputPort) const {
     if (LLVM_LIKELY(in_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
         return false;
     }
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mPipelineIOGraph))) {
-        if (LLVM_LIKELY(mPipelineIOGraph[e] == inputPort)) {
+        if (LLVM_LIKELY(mPipelineIOGraph[e] == inputPort.Number)) {
             return true;
         }
     }
@@ -1554,12 +1557,12 @@ bool PipelineCompiler::isPipelineInput(const unsigned inputPort) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isPipelineOutput
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isPipelineOutput(const unsigned outputPort) const {
+bool PipelineCompiler::isPipelineOutput(const StreamSetPort outputPort) const {
     if (LLVM_LIKELY(out_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
         return false;
     }
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mPipelineIOGraph))) {
-        if (LLVM_LIKELY(mPipelineIOGraph[e] == outputPort)) {
+        if (LLVM_LIKELY(mPipelineIOGraph[e] == outputPort.Number)) {
             return true;
         }
     }
@@ -1679,7 +1682,8 @@ bool PipelineCompiler::hasFixedRateLCM() {
     bool hasFixedRate = false;
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
+        const StreamSetPort inputPort{PortType::Input, i};
+        const Binding & input = getInputBinding(inputPort);
         const ProcessingRate & rate = input.getRate();
         if (LLVM_LIKELY(rate.isFixed())) {
             rateLCM = lcm(rateLCM, rate.getRate());
@@ -1688,7 +1692,8 @@ bool PipelineCompiler::hasFixedRateLCM() {
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
+        const StreamSetPort outputPort{PortType::Output, i};
+        const Binding & output = getOutputBinding(outputPort);
         const ProcessingRate & rate = output.getRate();
         if (LLVM_LIKELY(rate.isFixed())) {
             rateLCM = lcm(rateLCM, rate.getRate());

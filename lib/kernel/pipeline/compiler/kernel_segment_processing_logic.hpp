@@ -408,15 +408,17 @@ inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     Type * const sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
+        const auto inputPort = StreamSetPort{PortType::Input, i};
+        const auto prefix = makeBufferName(mKernelIndex, inputPort);
         mLinearInputItemsPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyAccessible");
-        Type * const bufferTy = getInputBuffer(i)->getPointerType();
+        Type * const bufferTy = getInputBuffer(inputPort)->getPointerType();
         mInputEpochPhi[i] = b->CreatePHI(bufferTy, 2, prefix + "_baseAddress");
     }
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
+        const auto outputPort = StreamSetPort{PortType::Output, i};
+        const auto prefix = makeBufferName(mKernelIndex, outputPort);
         mLinearOutputItemsPhi[i] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyWritable");
     }
     mFixedRateFactorPhi = nullptr;
@@ -569,7 +571,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        Value * const totalCount = getLocallyAvailableItemCount(b, i);
+        Value * const totalCount = getLocallyAvailableItemCount(b, StreamSetPort{PortType::Input, i});
         mUpdatedProcessedPhi[i]->addIncoming(totalCount, exitBlock);
         if (mUpdatedProcessedDeferredPhi[i]) {
             mUpdatedProcessedDeferredPhi[i]->addIncoming(totalCount, exitBlock);

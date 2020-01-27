@@ -108,7 +108,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addTerminationProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const unsigned kernel) {
+inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_t kernel) {
     mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(kernel));
 }
 
@@ -180,7 +180,7 @@ void PipelineCompiler::signalAbnormalTermination(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosed
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned inputPort) {
+Value * PipelineCompiler::isClosed(BuilderRef b, const StreamSetPort inputPort) {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     return hasKernelTerminated(b, producer, false);
@@ -189,7 +189,7 @@ Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned inputPort) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosedNormally
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosedNormally(BuilderRef b, const unsigned inputPort) {
+Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inputPort) {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     const Kernel * const kernel = getKernel(producer);
@@ -255,13 +255,13 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
 
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; i++) {
-        if (isCountableType(mReturnedProcessedItemCountPtr[i], getInputBinding(i))) {
+        if (isCountableType(mReturnedProcessedItemCountPtr[i], getInputBinding(StreamSetPort{PortType::Input, i}))) {
             finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
         }
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        if (isCountableType(mReturnedProducedItemCountPtr[i], getOutputBinding(i))) {
+        if (isCountableType(mReturnedProducedItemCountPtr[i], getOutputBinding(StreamSetPort{PortType::Input, i}))) {
             finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
         }
     }

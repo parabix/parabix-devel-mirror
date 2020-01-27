@@ -122,7 +122,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
             bool partitionRoot = false;
 
-            // add in any inputs
+            // Iterate through the inputs
             for (const auto e : make_iterator_range(in_edges(u, G))) {
                 const auto binding = source(e, G);
                 const RelationshipNode & rn = G[binding];
@@ -183,12 +183,26 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 }
             }
 
-            // If this kernel has a variable rate input, it is the root of a new partition
+            // Check whether any of the kernel attributes require this to be a partition root
+            const Kernel * const kernelObj = node.Kernel;
+            for (const Attribute & attr : kernelObj->getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::CanTerminateEarly:
+                    case AttrId::MustExplicitlyTerminate:
+                    case AttrId::MayFatallyTerminate:
+                        partitionRoot = true;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            // Assign a root of a partition a new id.
             if (LLVM_UNLIKELY(partitionRoot)) {
                 addRateId(H[kernel], nextRateId++);
             }
 
-            // and any outputs
+            // Now iterate through the outputs
             for (const auto e : make_iterator_range(out_edges(u, G))) {
 
                 const auto binding = target(e, G);
@@ -411,57 +425,53 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
-                if (LLVM_LIKELY(isa<StaticBuffer>(bn.Buffer))) {
-                    continue;
-                }
-                const auto buffer = getStreamSetVertex(streamSet);
-                const BufferRateData & inputRate = mBufferGraph[input];
-                const Binding & binding = inputRate.Binding;
-                const ProcessingRate & rate = binding.getRate();
+                if (LLVM_UNLIKELY(bn.NonLocal || isa<DynamicBuffer>(bn.Buffer))) {
+                    const auto buffer = getStreamSetVertex(streamSet);
+                    const BufferRateData & inputRate = mBufferGraph[input];
+                    const Binding & binding = inputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    const auto rateId = rate.getKind();
+                    unsigned reference = 0;
+                    switch (rateId) {
+                        case RateId::PartialSum:
+                        case RateId::Relative:
+                            reference = getReferenceBufferVertex(kernel, inputRate.Port);
+                            break;
+                        default: break;
+                    }
+                    const auto maxRate = inputRate.Maximum * minStrides;
 
-
-                const auto rateId = rate.getKind();
-                unsigned reference = 0;
-                switch (rateId) {
-                    case RateId::PartialSum:
-                    case RateId::Relative:
-                        reference = getReferenceBufferVertex(kernel, inputRate.Port);
-                        break;
-                    default: break;
+                    // To preserve acyclicity, any internally used dynamic buffer is treated as an
+                    // output buffer for the purpose of computing the partitioning graph.
+                    unsigned s = buffer, t = partitionId;
+                    if (LLVM_UNLIKELY(encountered.test(buffer))) {
+                        s = partitionId; t = buffer;
+                    }
+                    add_edge(s, t, PartitionData(kernel, rateId, maxRate, reference, inputRate.Port), G);
                 }
-                const auto maxRate = inputRate.Maximum * minStrides;
-
-                // To preserve acyclicity, any internally used dynamic buffer is treated as an
-                // output buffer for the purpose of computing the partitioning graph.
-                unsigned s = buffer, t = partitionId;
-                if (LLVM_UNLIKELY(encountered.test(buffer))) {
-                    s = partitionId; t = buffer;
-                }
-                add_edge(s, t, PartitionData(kernel, rateId, maxRate, reference, inputRate.Binding), G);
             }
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
-                if (LLVM_LIKELY(isa<StaticBuffer>(bn.Buffer))) {
-                    continue;
+                if (LLVM_UNLIKELY(bn.NonLocal || isa<DynamicBuffer>(bn.Buffer))) {
+                    const auto buffer = getStreamSetVertex(streamSet);
+                    const BufferRateData & outputRate = mBufferGraph[output];
+                    const Binding & binding = outputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    const auto rateId = rate.getKind();
+                    unsigned reference = 0;
+                    switch (rateId) {
+                        case RateId::PartialSum:
+                        case RateId::Relative:
+                            reference = getReferenceBufferVertex(kernel, outputRate.Port);
+                            break;
+                        default: break;
+                    }
+                    const auto maxRate = outputRate.Maximum * minStrides;
+                    encountered.set(buffer);
+                    add_edge(partitionId, buffer, PartitionData(kernel, rateId, maxRate, reference, outputRate.Port), G);
                 }
-                const auto buffer = getStreamSetVertex(streamSet);
-                const BufferRateData & outputRate = mBufferGraph[output];
-                const Binding & binding = outputRate.Binding;
-                const ProcessingRate & rate = binding.getRate();
-                const auto rateId = rate.getKind();
-                unsigned reference = 0;
-                switch (rateId) {
-                    case RateId::PartialSum:
-                    case RateId::Relative:
-                        reference = getReferenceBufferVertex(kernel, outputRate.Port);
-                        break;
-                    default: break;
-                }
-                const auto maxRate = outputRate.Maximum * minStrides;
-                encountered.set(buffer);
-                add_edge(partitionId, buffer, PartitionData(kernel, rateId, maxRate, reference, outputRate.Binding), G);
             }
 
         }
@@ -668,27 +678,32 @@ std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
         }
     }
 
-    // ensure the final sink is a sentinal for the subsequent search process
+    // ensure that the common sink is a sentinal for the subsequent search process
 
     add_edge(PartitionCount, PartitionCount, G);
 
     BV M(PartitionCount + 1);
 
-    for (auto u = PartitionCount; u--; ) { // reverse topological ordering
+    // reverse topological ordering starting at (PartitionCount - 1)
+    for (auto u = PartitionCount; u--; ) {
 
         auto v = u;
 
         if (LLVM_UNLIKELY(out_degree(u, G) > 1)) {
 
-            for (const auto e : make_iterator_range(out_edges(u, G))) {
-                const auto v = target(e, G);
+            assert (M.none());
+
+            for (const auto output : make_iterator_range(out_edges(u, G))) {
+                const auto v = target(output, G);
                 const BV & O = paths[v];
                 M |= O;
             }
 
             while (++v <= PartitionCount) {
                 const BV & O = paths[v];
-                if (LLVM_UNLIKELY((O & M) == M)) {
+                // since each output of partition u is assigned a new rate id,
+                // the only way that M ⊆ O is if v post dominates u.
+                if (LLVM_UNLIKELY(M.is_subset_of(O))) {
                     break;
                 }
             }
@@ -703,6 +718,8 @@ std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
         // that we could not execute u nor any of its branched paths, we search for the
         // first non-immediate post dominator with an in-degree > 1. We're guaranteed
         // to find one since the common sink must have an in-degree >= 2.
+
+        // NOTE: the sole child of the common sink sentinal is itself.
 
         for (;;) {
             v = child(v, G);
@@ -735,7 +752,9 @@ std::vector<PartitionInput> PipelineCompiler::determinePartitionInputEvaluationO
     // Compute the order in which we need to test the partition inputs. Some may be dependent on
     // others (such as popcounts or relative rates).
 
-    using Map = flat_map<unsigned, unsigned>;
+    using Map = flat_map<unsigned, PartitioningGraph::vertex_descriptor>;
+
+    constexpr auto ROOT = 0U;
 
     PartitioningGraph G(1);
     Map M;
@@ -758,7 +777,7 @@ std::vector<PartitionInput> PipelineCompiler::determinePartitionInputEvaluationO
 
         const auto buffer = addOrFind(streamSet);
 
-        add_edge(0, buffer, pd, G);
+        add_edge(ROOT, buffer, pd, G);
 
         switch (pd.Type) {
             case RateId::PartialSum:
@@ -778,7 +797,7 @@ std::vector<PartitionInput> PipelineCompiler::determinePartitionInputEvaluationO
     for (auto v : O) {
         const auto streamSet = G[v];
         for (const auto e : make_iterator_range(in_edges(v, G))) {
-            if (LLVM_LIKELY(source(e, G) == 0)) {
+            if (LLVM_LIKELY(source(e, G) == ROOT)) {
                 eval.emplace_back(G[e], streamSet);
             }
         }

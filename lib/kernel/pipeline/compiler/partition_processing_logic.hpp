@@ -16,7 +16,7 @@ void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
     for (unsigned i = 0; i <= PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock();
     }
-
+    mCurrentPartitionIndex = 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -26,7 +26,15 @@ void PipelineCompiler::testPartitionInputData(BuilderRef b) {
 
     const auto eval = determinePartitionInputEvaluationOrder(mCurrentPartitionIndex);
 
+    for (const PartitionInput & input : eval) {
 
+        Value * const accessible = mLocallyAvailableItems[input.StreamSet];
+
+
+
+
+
+    }
 
 
 }

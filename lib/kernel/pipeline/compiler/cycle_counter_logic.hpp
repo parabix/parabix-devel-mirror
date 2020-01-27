@@ -116,9 +116,10 @@ StreamSetPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned 
         return StreamSetPort{PortType::Output, 0};
     } else {
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const Binding & input = getInputBinding(kernel, i);
+            const auto inputPort = StreamSetPort{PortType::Input, i};
+            const Binding & input = getInputBinding(kernel, inputPort);
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                return StreamSetPort{PortType::Input, i};
+                return inputPort;
             }
         }
         return StreamSetPort{PortType::Input, 0};
@@ -744,12 +745,12 @@ void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordBufferExpansionHistory
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort,
+void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const StreamSetPort outputPort,
                                                     const StreamSetBuffer * const buffer) const {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
         assert (isa<DynamicBuffer>(buffer));
 
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, outputPort});
+        const auto prefix = makeBufferName(mKernelIndex, outputPort);
 
         Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
         Type * const traceDataTy = traceData->getType()->getPointerElementType();
@@ -775,7 +776,7 @@ void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const unsigned
         // new capacity 1
         b->CreateStore(buffer->getCapacity(b), b->CreateGEP(entryArray, {traceIndex, ONE}));
         // produced item count 2
-        Value * const produced = mAlreadyProducedPhi[outputPort];
+        Value * const produced = mAlreadyProducedPhi[outputPort.Number];
         b->CreateStore(produced, b->CreateGEP(entryArray, {traceIndex, TWO}));
 
         // consumer processed item count [3,n)

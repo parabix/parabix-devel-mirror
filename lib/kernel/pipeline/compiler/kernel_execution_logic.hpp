@@ -223,7 +223,8 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
     // calculate or read the item counts (assuming this kernel did not terminate)
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * processed = nullptr;
-        const Binding & input = getInputBinding(i);
+        const auto inputPort = StreamSetPort{PortType::Input, i};
+        const Binding & input = getInputBinding(inputPort);
         const ProcessingRate & rate = input.getRate();
         if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum() || rate.isGreedy())) {
             processed = b->CreateAdd(mAlreadyProcessedPhi[i], mLinearInputItemsPhi[i]);
@@ -231,7 +232,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 assert (mReturnedProcessedItemCountPtr[i]);
                 mProcessedDeferredItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
                 #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
+                const auto prefix = makeBufferName(mKernelIndex, inputPort);
                 debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -264,13 +265,14 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         }
         mProcessedItemCount[i] = processed; assert (processed);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
+        const auto prefix = makeBufferName(mKernelIndex, inputPort);
         debugPrint(b, prefix + "_processed' = %" PRIu64, mProcessedItemCount[i]);
         #endif
     }
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
+        const auto outputPort = StreamSetPort{PortType::Output, i};
+        const Binding & output = getOutputBinding(outputPort);
         const ProcessingRate & rate = output.getRate();
         Value * produced = nullptr;
         if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum())) {
@@ -279,8 +281,8 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 assert (mReturnedProducedItemCountPtr[i]);
                 mProducedDeferredItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
                 #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
-                debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
+                const auto prefix = makeBufferName(mKernelIndex, outputPort);
+                debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     Value * const deferred = mProducedDeferredItemCount[i];

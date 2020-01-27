@@ -32,6 +32,8 @@
 
 #define PRINT_BUFFER_GRAPH
 
+// #define PERMIT_THREAD_LOCAL_BUFFERS
+
 // #define DISABLE_ZERO_EXTEND
 
 // #define DISABLE_INPUT_ZEROING
@@ -265,6 +267,8 @@ ENABLE_ENUM_FLAGS(BufferType)
 
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
+    BufferType Type = BufferType::None;
+    bool NonLocal = false;
     unsigned LookBehind = 0;
     unsigned LookBehindReflection = 0;
     unsigned CopyBack = 0;
@@ -287,8 +291,6 @@ struct BufferNode {
         return (Type & BufferType::External) != BufferType::None;
     }
 
-    BufferType Type = BufferType::None;
-    bool ThreadLocal = false;
 };
 
 inline unsigned InputPort(const StreamSetPort port) {
@@ -380,23 +382,23 @@ using OwningVector = std::vector<std::unique_ptr<T>>;
 using PartitionIdVector = std::vector<unsigned>;
 
 struct PartitionData {
-    unsigned    Kernel;
-    RateId      Type;
-    Rational    MaxRate;
-    unsigned    Reference;
-    BindingRef  Binding;
+    unsigned        Kernel;
+    RateId          Type;
+    Rational        MaxRate;
+    unsigned        Reference;
+    StreamSetPort   Port;
 
-    PartitionData() {
-
-    }
-
-    PartitionData(const PartitionData & o)
-    : Kernel(o.Kernel), Type(o.Type), MaxRate(o.MaxRate), Reference(o.Reference), Binding(o.Binding) {
+    PartitionData() noexcept {
 
     }
 
-    PartitionData(unsigned kernel, RateId type, Rational maxRate, unsigned reference, const BindingRef binding)
-    : Kernel(kernel), Type(type), MaxRate(maxRate), Reference(reference), Binding(binding) {
+    PartitionData(const PartitionData & o) noexcept
+    : Kernel(o.Kernel), Type(o.Type), MaxRate(o.MaxRate), Reference(o.Reference), Port(o.Port) {
+
+    }
+
+    PartitionData(unsigned kernel, RateId type, Rational maxRate, unsigned reference, const StreamSetPort port)  noexcept
+    : Kernel(kernel), Type(type), MaxRate(maxRate), Reference(reference), Port(port) {
 
     }
 };
@@ -555,7 +557,7 @@ public:
     Value * readTerminationSignalFromLocalState(BuilderRef b, Value * const localState) const;
     inline Value * isProcessThread(BuilderRef b, Value * const threadState) const;
 
-    void addTerminationProperties(BuilderRef b, const unsigned kernel);
+    void addTerminationProperties(BuilderRef b, const size_t kernel);
 
 // partitioning codegen functions
 
@@ -576,8 +578,8 @@ public:
     void initializeKernelExitPhis(BuilderRef b);
 
     void determineNumOfLinearStrides(BuilderRef b);
-    void checkForSufficientInputData(BuilderRef b, const unsigned inputPort);
-    void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const unsigned outputPort);
+    void checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort);
+    void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const StreamSetPort outputPort);
     void branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port, Value * const cond, BasicBlock * target, Value * const halting);
     void updatePHINodesForLoopExit(BuilderRef b, Value * halting);
 
@@ -646,20 +648,20 @@ public:
 
 // intra-kernel codegen functions
 
-    Value * getInputStrideLength(BuilderRef b, const unsigned inputPort);
-    Value * getOutputStrideLength(BuilderRef b, const unsigned outputPort);
+    Value * getInputStrideLength(BuilderRef b, const StreamSetPort inputPort);
+    Value * getOutputStrideLength(BuilderRef b, const StreamSetPort outputPort);
     Value * getFirstStrideLength(BuilderRef b, const StreamSetPort port);
     Value * calculateNumOfLinearItems(BuilderRef b, const StreamSetPort port, Value * const adjustment);
-    Value * getAccessibleInputItems(BuilderRef b, const unsigned inputPort, const bool useOverflow = true);
-    Value * getNumOfAccessibleStrides(BuilderRef b, const unsigned inputPort);
-    Value * getNumOfWritableStrides(BuilderRef b, const unsigned outputPort);
-    Value * getWritableOutputItems(BuilderRef b, const unsigned outputPort, const bool useOverflow = true);
-    Value * reserveSufficientCapacity(BuilderRef b, const unsigned outputPort);
-    Value * addLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount) const;
-    Value * subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount);
-    Constant * getLookahead(BuilderRef b, const unsigned inputPort) const;
+    Value * getAccessibleInputItems(BuilderRef b, const StreamSetPort inputPort, const bool useOverflow = true);
+    Value * getNumOfAccessibleStrides(BuilderRef b, const StreamSetPort inputPort);
+    Value * getNumOfWritableStrides(BuilderRef b, const StreamSetPort outputPort);
+    Value * getWritableOutputItems(BuilderRef b, const StreamSetPort outputPort, const bool useOverflow = true);
+    Value * reserveSufficientCapacity(BuilderRef b, const StreamSetPort outputPort);
+    Value * addLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) const;
+    Value * subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount);
+    Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
-    Value * getLocallyAvailableItemCount(BuilderRef b, const unsigned inputPort) const;
+    Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void resetMemoizedFields();
 
     Value * getPartialSumItemCount(BuilderRef b, const StreamSetPort port, Value * const offset = nullptr) const;
@@ -669,8 +671,8 @@ public:
 // termination codegen functions
 
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
-    Value * isClosed(BuilderRef b, const unsigned inputPort);
-    Value * isClosedNormally(BuilderRef b, const unsigned inputPort);
+    Value * isClosed(BuilderRef b, const StreamSetPort inputPort);
+    Value * isClosedNormally(BuilderRef b, const StreamSetPort inputPort);
     Value * initiallyTerminated(BuilderRef b);
     Value * readTerminationSignal(BuilderRef b);
     void writeTerminationSignal(BuilderRef b, Value * const signal);
@@ -685,7 +687,7 @@ public:
     void addConsumerKernelProperties(BuilderRef b, const unsigned producer);
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
-    void initializeConsumedItemCount(BuilderRef b, const unsigned outputPort, Value * const produced);
+    void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
     void readConsumedItemCounts(BuilderRef b);
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
@@ -694,16 +696,15 @@ public:
 
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
-    void allocateOwnedBuffers(BuilderRef b);
+    void allocateOwnedBuffers(BuilderRef b, const bool nonLocal);
     void loadInternalStreamSetHandles(BuilderRef b);
-    void releaseOwnedBuffers(BuilderRef b);
+    void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b);
     LLVM_READNONE bool requiresCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE bool requiresLookAhead(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
-    BufferType getOutputBufferType(const unsigned outputPort) const;
 
     Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtend) const;
     void calculateInputEpochAddresses(BuilderRef b);
@@ -728,7 +729,7 @@ public:
 
     void initializeBufferExpansionHistory(BuilderRef b) const;
     Value * getBufferExpansionCycleCounter(BuilderRef b) const;
-    void recordBufferExpansionHistory(BuilderRef b, const unsigned outputPort, const StreamSetBuffer * const buffer) const;
+    void recordBufferExpansionHistory(BuilderRef b, const StreamSetPort outputPort, const StreamSetBuffer * const buffer) const;
     void printOptionalBufferExpansionHistory(BuilderRef b);
 
     void initializeStridesPerSegment(BuilderRef b) const;
@@ -774,8 +775,8 @@ public:
     TerminationGraph makeTerminationGraph();
     PipelineIOGraph makePipelineIOGraph() const;
     LLVM_READNONE bool isOpenSystem() const;
-    bool isPipelineInput(const unsigned inputPort) const;
-    bool isPipelineOutput(const unsigned outputPort) const;
+    bool isPipelineInput(const StreamSetPort inputPort) const;
+    bool isPipelineOutput(const StreamSetPort outputPort) const;
 
     bool hasFixedRateLCM();
 
@@ -847,23 +848,23 @@ public:
     LLVM_READNONE const StreamSetPort getReference(const size_t kernel, const StreamSetPort port) const;
     const StreamSetPort getReference(const StreamSetPort port) const;
 
-    LLVM_READNONE unsigned getInputBufferVertex(const size_t kernelVertex, const size_t inputPort) const;
-    unsigned getInputBufferVertex(const size_t inputPort) const;
-    StreamSetBuffer * getInputBuffer(const size_t inputPort) const;
-    LLVM_READNONE StreamSetBuffer * getInputBuffer(const size_t kernelVertex, const size_t inputPort) const;
-    LLVM_READNONE const Binding & getInputBinding(const size_t kernelVertex, const size_t inputPort) const;
-    const Binding & getInputBinding(const size_t inputPort) const;
-    LLVM_READNONE const BufferGraph::edge_descriptor getInput(const size_t kernelVertex, const size_t outputPort) const;
-    bool isInputExplicit(const size_t inputPort) const;
-    const Binding & getProducerOutputBinding(const size_t inputPort) const;
+    LLVM_READNONE unsigned getInputBufferVertex(const size_t kernelVertex, const StreamSetPort inputPort) const;
+    unsigned getInputBufferVertex(const StreamSetPort inputPort) const;
+    StreamSetBuffer * getInputBuffer(const StreamSetPort inputPort) const;
+    LLVM_READNONE StreamSetBuffer * getInputBuffer(const size_t kernelVertex, const StreamSetPort inputPort) const;
+    LLVM_READNONE const Binding & getInputBinding(const size_t kernelVertex, const StreamSetPort inputPort) const;
+    const Binding & getInputBinding(const StreamSetPort inputPort) const;
+    LLVM_READNONE const BufferGraph::edge_descriptor getInput(const size_t kernelVertex, const StreamSetPort outputPort) const;
+    bool isInputExplicit(const StreamSetPort inputPort) const;
+    const Binding & getProducerOutputBinding(const StreamSetPort inputPort) const;
 
-    LLVM_READNONE unsigned getOutputBufferVertex(const size_t kernelVertex, const size_t outputPort) const;
-    unsigned getOutputBufferVertex(const size_t outputPort) const;
-    StreamSetBuffer * getOutputBuffer(const size_t outputPort) const;
-    LLVM_READNONE StreamSetBuffer * getOutputBuffer(const size_t kernelVertex, const size_t outputPort) const;
-    LLVM_READNONE const Binding & getOutputBinding(const size_t kernelVertex, const size_t outputPort) const;
-    const Binding & getOutputBinding(const size_t outputPort) const;
-    LLVM_READNONE const BufferGraph::edge_descriptor getOutput(const unsigned kernelVertex, const unsigned outputPort) const;
+    LLVM_READNONE unsigned getOutputBufferVertex(const size_t kernelVertex, const StreamSetPort outputPort) const;
+    unsigned getOutputBufferVertex(const StreamSetPort outputPort) const;
+    StreamSetBuffer * getOutputBuffer(const StreamSetPort outputPort) const;
+    LLVM_READNONE StreamSetBuffer * getOutputBuffer(const size_t kernelVertex, const StreamSetPort outputPort) const;
+    LLVM_READNONE const Binding & getOutputBinding(const size_t kernelVertex, const StreamSetPort outputPort) const;
+    const Binding & getOutputBinding(const StreamSetPort outputPort) const;
+    LLVM_READNONE const BufferGraph::edge_descriptor getOutput(const size_t kernelVertex, const StreamSetPort outputPort) const;
 
     LLVM_READNONE unsigned getNumOfStreamInputs(const unsigned kernel) const;
     LLVM_READNONE unsigned getNumOfStreamOutputs(const unsigned kernel) const;
@@ -930,7 +931,7 @@ protected:
     // partition state
     Vec<Value *, 32>                            mPartitionEntryPoint;
     unsigned                                    mCurrentPartitionIndex = 0;
-
+    Value *                                     mBaseNumOfPartitionStrides;
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;

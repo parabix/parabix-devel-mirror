@@ -41,7 +41,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     Constant * const ONE = b->getSize(1);
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
+        const Binding & input = getInputBinding(StreamSetPort{PortType::Input, i});
         const ProcessingRate & rate = input.getRate();
 
         // TODO: if this streamset has 0 streams, it exists only to have a produced/processed count. Ignore it.
@@ -60,8 +60,9 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             new StoreInst(ConstantPointerNull::get(int8PtrTy), bufferStorage, nextNode);
             mTruncatedInputBuffer.push_back(bufferStorage);
 
-            const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
-            const StreamSetBuffer * const buffer = getInputBuffer(i);
+            const auto inputPort = StreamSetPort{PortType::Input, i};
+            const auto prefix = makeBufferName(mKernelIndex, inputPort);
+            const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
             const auto itemWidth = getItemWidth(buffer->getBaseType());
             Constant * const ITEM_WIDTH = b->getSize(itemWidth);
             const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
@@ -228,9 +229,10 @@ void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
 
         for (unsigned i = 0; i < numOfInputs; ++i) {
             if (mIsInputZeroExtended[i]) {
-                const auto bufferVertex = getInputBufferVertex(i);
+                const auto inputPort = StreamSetPort{PortType::Input, i};
+                const auto bufferVertex = getInputBufferVertex(inputPort);
                 const BufferNode & bn = mBufferGraph[bufferVertex];
-                const Binding & input = getInputBinding(i);
+                const Binding & input = getInputBinding(inputPort);
 
                 const auto itemWidth = getItemWidth(input.getType());
                 Constant * const strideFactor = b->getSize(itemWidth * strideSize / 8);
@@ -302,7 +304,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetBuffer * const buffer = getOutputBuffer(i);
+        const auto outputPort = StreamSetPort{PortType::Output, i};
+        const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
         if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
             // If this stream is either controlled by this kernel or is an external
             // stream, any clearing of data is the responsibility of the owner.
@@ -312,7 +315,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         }
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
+        const auto prefix = makeBufferName(mKernelIndex, outputPort);
         Value * const produced = mFinalProducedPhi[i];
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
@@ -379,7 +382,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         // Zero out any blocks we could potentially touch
 
         Rational strideLength{0};
-        const auto bufferVertex = getOutputBufferVertex(i);
+        const auto bufferVertex = getOutputBufferVertex(outputPort);
         for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
             const Binding & input = rd.Binding;
@@ -419,7 +422,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
+        const Binding & input = getInputBinding(StreamSetPort{PortType::Input, i});
         Value * processed = nullptr;
         if (mUpdatedProcessedDeferredPhi[i]) {
             processed = mUpdatedProcessedDeferredPhi[i];
@@ -443,7 +446,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
+        const Binding & output = getOutputBinding(StreamSetPort{PortType::Output, i});
         Value * produced = mUpdatedProducedPhi[i];
         if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
             const auto & D = output.findAttribute(AttrId::Delayed);
@@ -459,7 +462,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getTotalItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const unsigned inputPort) const {
+Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort inputPort) const {
     const auto bufferVertex = getInputBufferVertex(inputPort);
     return mLocallyAvailableItems[getBufferIndex(bufferVertex)];
 }
@@ -467,7 +470,7 @@ Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount) const {
+Value * PipelineCompiler::addLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) const {
     Constant * const lookAhead = getLookahead(b, inputPort);
     if (LLVM_LIKELY(lookAhead == nullptr)) {
         return itemCount;
@@ -478,7 +481,7 @@ Value * PipelineCompiler::addLookahead(BuilderRef b, const unsigned inputPort, V
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief subtractLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::subtractLookahead(BuilderRef b, const unsigned inputPort, Value * const itemCount) {
+Value * PipelineCompiler::subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) {
     Constant * const lookAhead = getLookahead(b, inputPort);
     if (LLVM_LIKELY(lookAhead == nullptr)) {
         return itemCount;
@@ -498,7 +501,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const unsigned inputPo
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
-Constant * PipelineCompiler::getLookahead(BuilderRef b, const unsigned inputPort) const {
+Constant * PipelineCompiler::getLookahead(BuilderRef b, const StreamSetPort inputPort) const {
     const Binding & input = getInputBinding(inputPort);
     if (LLVM_UNLIKELY(input.hasLookahead())) {
         return b->getSize(input.getLookahead());

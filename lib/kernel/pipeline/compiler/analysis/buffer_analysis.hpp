@@ -157,7 +157,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             bool dynamic = (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
 
-
             const auto in = in_edge(streamSet, G);
             const BufferRateData & producerRate = G[in];
             const auto producer = source(pe, G);
@@ -240,14 +239,19 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                         default: break;
                     }
                 }
-
-
-
                 if (consumerRate.Maximum > consumerRate.Minimum) {
                     tmpLookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
                 }
                 lookAhead = std::max(tmpLookAhead, lookAhead);
             }
+
+            #ifdef PERMIT_THREAD_LOCAL_BUFFERS
+            const auto nonLocal = dynamic;
+            #else
+            const auto nonLocal = true;
+            #endif
+
+            bn.NonLocal = nonLocal;
 
             const auto produceMax = producerRate.Maximum * MaximumNumOfStrides[producer];
             const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
@@ -264,7 +268,14 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             const Rational reqSize1{2 * (overflowSize + underflowSize), 1};
             const auto reqSize2 = std::max(reqSize0, reqSize1);
             const auto requiredSize = roundUpTo(reqSize2, requiredSizeFactor);
-            const auto bufferSize = round_up_to(requiredSize, blockWidth) * numOfSegments;
+
+            #ifdef PERMIT_THREAD_LOCAL_BUFFERS
+            const auto bufferFactor = nonLocal ? numOfSegments : 1U;
+            #else
+            const auto bufferFactor = numOfSegments;
+            #endif
+
+            const auto bufferSize = round_up_to(requiredSize, blockWidth) * bufferFactor;
 
             Type * const baseType = output.getType();
 

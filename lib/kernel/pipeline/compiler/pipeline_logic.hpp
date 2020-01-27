@@ -144,11 +144,11 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         if (i < numOfInputs) {
             port.Type = PortType::Input;
             port.Number = i;
-            e = getInput(kernelIndex, port.Number);
+            e = getInput(kernelIndex, port);
         } else {
             port.Type = PortType::Output;
             port.Number = i - numOfInputs;
-            e = getOutput(kernelIndex, port.Number);
+            e = getOutput(kernelIndex, port);
         }
         const auto prefix = makeBufferName(kernelIndex, port);
         const BufferRateData & br = mBufferGraph[e];
@@ -228,7 +228,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         }
     }
 
-    allocateOwnedBuffers(b);
+    allocateOwnedBuffers(b, true);
     initializeBufferExpansionHistory(b);
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
@@ -541,7 +541,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         }
         mScalarValue[i] = b->CreateCall(getKernelFinalizeFunction(b), params);
     }
-    releaseOwnedBuffers(b);
+    releaseOwnedBuffers(b, true);
     resetInternalBufferHandles();
 }
 
@@ -678,6 +678,7 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
     if (mTarget->hasThreadLocal()) {
+        allocateOwnedBuffers(b, false);
         for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
             if (kernel->hasThreadLocal()) {
@@ -725,6 +726,7 @@ void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
                 b->CreateCall(f, args);
             }
         }
+        releaseOwnedBuffers(b, false);
         // Since all of the nested kernels thread local state is contained within
         // this pipeline thread's thread local state, freeing the pipeline's will
         // also free the inner kernels.

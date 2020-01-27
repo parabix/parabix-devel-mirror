@@ -147,9 +147,17 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
                 const auto consumedRate = multiply(stridesPerSegmentVar, inputRateVar);
                 const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
                 Z3_solver_assert(ctx, solver, produceEnough);
-                // To consume any data, we want to guarantee at least one full stride of work
+
+                // To consume any data, we want to guarantee at least one full stride of work;
+                // however we can only state that only Bounded rates will block on less than
+                // this amount.
                 const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, maximum(inputRate));
-                Z3_solver_assert(ctx, solver, atLeastOneStride);
+                if (rate.isBounded()) {
+                    Z3_solver_assert(ctx, solver, atLeastOneStride);
+                } else {
+                    assumptions[Common].push_back(atLeastOneStride);
+                }
+
                 // Since we are trying to determine the lower and upper bound on the number
                 // of strides per segment, to determine the lower bound we assume that a
                 // kernel consumes the maximum amount of data but produces the minimum.

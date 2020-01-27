@@ -22,8 +22,15 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
         const auto handleName = makeBufferName(index, rd.Port);
         StreamSetBuffer * const buffer = bn.Buffer;
         Type * const handleType = buffer->getHandleType(b);
+
+
+
         if (LLVM_LIKELY(bn.isOwned())) {
-            mTarget->addInternalScalar(handleType, handleName);
+            if (LLVM_UNLIKELY(bn.NonLocal)) {
+                mTarget->addInternalScalar(handleType, handleName);
+            } else {
+                mTarget->addThreadLocalScalar(handleType, handleName);
+            }
         } else {
             mTarget->addNonPersistentScalar(handleType, handleName);
             mTarget->addInternalScalar(buffer->getPointerType(), handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
@@ -56,10 +63,10 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::allocateOwnedBuffers(BuilderRef b) {
+void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, const bool nonLocal) {
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_UNLIKELY(bn.isOwned())) {
+        if (LLVM_UNLIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
             StreamSetBuffer * const buffer = bn.Buffer;
             if (LLVM_LIKELY(bn.isInternal())) {
                 const auto pe = in_edge(i, mBufferGraph);
@@ -78,11 +85,11 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief releaseOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::releaseOwnedBuffers(BuilderRef b) {
+void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
-        StreamSetBuffer * const buffer = bn.Buffer;
-        if (LLVM_LIKELY(bn.isOwned())) {
+        if (LLVM_LIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
+            StreamSetBuffer * const buffer = bn.Buffer;
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
             buffer->releaseBuffer(b);
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
@@ -162,8 +169,9 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
 void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
+        const StreamSetPort inputPort{PortType::Input, i};
+        const Binding & input = getInputBinding(inputPort);
+        const auto prefix = makeBufferName(mKernelIndex, inputPort);
         Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         mInitiallyProcessedItemCount[i] = processed;
         if (input.isDeferred()) {
@@ -172,8 +180,9 @@ void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
+        const StreamSetPort outputPort{PortType::Output, i};
+        const Binding & output = getOutputBinding(outputPort);
+        const auto prefix = makeBufferName(mKernelIndex, outputPort);
         mInitiallyProducedItemCount[i] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount[i]);
@@ -228,8 +237,9 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
 
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
+        const StreamSetPort inputPort{PortType::Input, i};
+        const Binding & input = getInputBinding(inputPort);
+        const auto prefix = makeBufferName(mKernelIndex, inputPort);
         b->setScalarField(prefix + ITEM_COUNT_SUFFIX, getProcessedArg(i));
         if (input.isDeferred()) {
             b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, getProcessedDeferredArg(i));
@@ -238,8 +248,9 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
+        const StreamSetPort outputPort{PortType::Output, i};
+        const Binding & output = getOutputBinding(outputPort);
+        const auto prefix = makeBufferName(mKernelIndex, outputPort);
         b->setScalarField(prefix + ITEM_COUNT_SUFFIX, getProducedArg(i));
         if (output.isDeferred()) {
             b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, getProducedDeferredArg(i));
@@ -253,13 +264,13 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
 void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
         const auto bufferVertex = target(e, mBufferGraph);
-        const auto outputPort = mBufferGraph[e].outputPort();
-        Value * fullyProduced = mFullyProducedItemCount[outputPort];
+        const auto outputPort = mBufferGraph[e].Port;
+        Value * fullyProduced = mFullyProducedItemCount[outputPort.Number];
         mLocallyAvailableItems[getBufferIndex(bufferVertex)] = fullyProduced;
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, outputPort});
-        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[outputPort]);
+        const auto prefix = makeBufferName(mKernelIndex, outputPort);
+        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[outputPort.Number]);
         debugPrint(b, prefix + "_producedΔ = %" PRIu64, producedDelta);
         #endif
     }
@@ -298,7 +309,6 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
  * @brief loadLastGoodVirtualBaseAddressesOfUnownedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b) {
-
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
@@ -312,9 +322,7 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
         StreamSetBuffer * const buffer = bn.Buffer;
         buffer->setBaseAddress(b.get(), vba);
     }
-
 }
-
 
 // TODO: copyback/copyforward ought to reflect exact num of items; not upper bound of space
 
@@ -344,15 +352,6 @@ inline bool PipelineCompiler::requiresLookAhead(const unsigned bufferVertex) con
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCompiler::getLookAhead(const unsigned bufferVertex) const {
     return mBufferGraph[bufferVertex].LookAhead;
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBufferType
- ** ------------------------------------------------------------------------------------------------------------- */
-BufferType PipelineCompiler::getOutputBufferType(const unsigned outputPort) const {
-    const auto bufferVertex = getOutputBufferVertex(outputPort);
-    return mBufferGraph[bufferVertex].Type;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -361,7 +360,8 @@ BufferType PipelineCompiler::getOutputBufferType(const unsigned outputPort) cons
 void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto bufferVertex = getOutputBufferVertex(i);
+        const StreamSetPort outputPort{PortType::Output, i};
+        const auto bufferVertex = getOutputBufferVertex(outputPort);
         const BufferNode & bn = mBufferGraph[bufferVertex];
         if (bn.LookBehind) {
             const StreamSetBuffer * const buffer = bn.Buffer;
@@ -381,7 +381,8 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
 void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto bufferVertex = getOutputBufferVertex(i);
+        const StreamSetPort outputPort{PortType::Output, i};
+        const auto bufferVertex = getOutputBufferVertex(outputPort);
         const BufferNode & bn = mBufferGraph[bufferVertex];
         if (bn.LookBehindReflection) {
             const StreamSetBuffer * const buffer = bn.Buffer;
@@ -401,7 +402,8 @@ void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
 void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto bufferVertex = getOutputBufferVertex(i);
+        const StreamSetPort outputPort{PortType::Output, i};
+        const auto bufferVertex = getOutputBufferVertex(outputPort);
         const BufferNode & bn = mBufferGraph[bufferVertex];
         if (bn.CopyBack) {
             const StreamSetBuffer * const buffer = bn.Buffer;
@@ -426,7 +428,9 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
 
-        const auto bufferVertex = getOutputBufferVertex(i);
+        const StreamSetPort outputPort{PortType::Output, i};
+
+        const auto bufferVertex = getOutputBufferVertex(outputPort);
         const BufferNode & bn = mBufferGraph[bufferVertex];
 
         if (bn.LookAhead) {
@@ -434,19 +438,19 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             const StreamSetBuffer * const buffer = bn.Buffer;
 
             Value * const capacity = buffer->getCapacity(b);
-            Value * const initial = mInitiallyProducedItemCount[i];
-            Value * const produced = mUpdatedProducedPhi[i];
+            Value * const initial = mInitiallyProducedItemCount[outputPort.Number];
+            Value * const produced = mUpdatedProducedPhi[outputPort.Number];
 
             // If we wrote anything and it was not our first write to the buffer ...
             Value * overwroteData = b->CreateICmpUGT(produced, capacity);
-            const Binding & output = getOutputBinding(i);
+            const Binding & output = getOutputBinding(outputPort);
             const ProcessingRate & rate = output.getRate();
             const Rational ONE(1, 1);
             bool mayProduceZeroItems = false;
             if (rate.getLowerBound() < ONE) {
                 mayProduceZeroItems = true;
             } else if (rate.isRelative()) {
-                const Binding & ref = getBinding(getReference(StreamSetPort{PortType::Output, i}));
+                const Binding & ref = getBinding(getReference(outputPort));
                 const ProcessingRate & refRate = ref.getRate();
                 mayProduceZeroItems = (rate.getLowerBound() * refRate.getLowerBound()) < ONE;
             }
@@ -603,35 +607,35 @@ void PipelineCompiler::calculateInputEpochAddresses(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getInputBufferVertex(const size_t inputPort) const {
+inline unsigned PipelineCompiler::getInputBufferVertex(const StreamSetPort inputPort) const {
     return getInputBufferVertex(mKernelIndex, inputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::getInputBufferVertex(const size_t kernelVertex, const size_t inputPort) const {
+unsigned PipelineCompiler::getInputBufferVertex(const size_t kernelVertex, const StreamSetPort inputPort) const {
     return source(getInput(kernelVertex, inputPort), mBufferGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const size_t inputPort) const {
+inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const StreamSetPort inputPort) const {
     return getInputBuffer(mKernelIndex, inputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
-StreamSetBuffer * PipelineCompiler::getInputBuffer(const size_t kernelVertex, const size_t inputPort) const {
+StreamSetBuffer * PipelineCompiler::getInputBuffer(const size_t kernelVertex, const StreamSetPort inputPort) const {
     return mBufferGraph[getInputBufferVertex(kernelVertex, inputPort)].Buffer;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, const size_t inputPort) const {
+const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, const StreamSetPort inputPort) const {
 
     RelationshipGraph::vertex_descriptor v;
     RelationshipGraph::edge_descriptor e;
@@ -641,19 +645,18 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
     if (LLVM_UNLIKELY(kernelVertex == PipelineInput)) {
         graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
-        assert (inputPort < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + inputPort);
+        assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
+        e = *(ei + inputPort.Number);
         v = target(e, mStreamGraph);
     } else {
         graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
-        assert (inputPort < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + inputPort);
+        assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
+        e = *(ei + inputPort.Number);
         v = source(e, mStreamGraph);
     }
 
-    assert (mStreamGraph[e].Type == PortType::Input);
-    assert (mStreamGraph[e].Number == inputPort);
+    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == inputPort);
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;
@@ -662,14 +665,14 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getInputBinding(const size_t inputPort) const {
+inline const Binding & PipelineCompiler::getInputBinding(const StreamSetPort inputPort) const {
     return getInputBinding(mKernelIndex, inputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isInputExplicit
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::isInputExplicit(const size_t inputPort) const {
+inline bool PipelineCompiler::isInputExplicit(const StreamSetPort inputPort) const {
     const auto vertex = getInput(mKernelIndex, inputPort);
     const BufferRateData & rd = mBufferGraph[vertex];
     return rd.Port.Reason == ReasonType::Explicit;
@@ -678,7 +681,7 @@ inline bool PipelineCompiler::isInputExplicit(const size_t inputPort) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getProducerOutputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getProducerOutputBinding(const size_t inputPort) const {
+inline const Binding & PipelineCompiler::getProducerOutputBinding(const StreamSetPort inputPort) const {
     const auto buffer = getInputBufferVertex(inputPort);
     const BufferRateData & br = mBufferGraph[in_edge(buffer, mBufferGraph)];
     return br.Binding;
@@ -687,9 +690,9 @@ inline const Binding & PipelineCompiler::getProducerOutputBinding(const size_t i
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_t kernelVertex, const size_t inputPort) const {
-    assert (inputPort < in_degree(kernelVertex, mBufferGraph));
-    const auto e = *(in_edges(kernelVertex, mBufferGraph).first + inputPort);
+inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_t kernelVertex, const StreamSetPort inputPort) const {
+    assert (inputPort.Number < in_degree(kernelVertex, mBufferGraph));
+    const auto e = *(in_edges(kernelVertex, mBufferGraph).first + inputPort.Number);
     // assert (mBufferGraph[e].inputPort() == inputPort);
     return e;
 }
@@ -697,21 +700,21 @@ inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getOutputBufferVertex(const size_t outputPort) const {
+inline unsigned PipelineCompiler::getOutputBufferVertex(const StreamSetPort outputPort) const {
     return getOutputBufferVertex(mKernelIndex, outputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::getOutputBufferVertex(const size_t kernelVertex, const size_t outputPort) const {
+unsigned PipelineCompiler::getOutputBufferVertex(const size_t kernelVertex, const StreamSetPort outputPort) const {
     return target(getOutput(kernelVertex, outputPort), mBufferGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, const size_t outputPort) const {
+const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, const StreamSetPort outputPort) const {
 
     RelationshipGraph::vertex_descriptor v;
     RelationshipGraph::edge_descriptor e;
@@ -721,19 +724,18 @@ const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, co
     if (LLVM_UNLIKELY(kernelVertex == PipelineOutput)) {
         graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
-        assert (outputPort < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + outputPort);
+        assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
+        e = *(ei + outputPort.Number);
         v = source(e, mStreamGraph);
     } else {
         graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
-        assert (outputPort < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + outputPort);
+        assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
+        e = *(ei + outputPort.Number);
         v = target(e, mStreamGraph);
     }
 
-    assert (mStreamGraph[e].Type == PortType::Output);
-    assert (mStreamGraph[e].Number == outputPort);
+    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == outputPort);
 
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
@@ -743,30 +745,31 @@ const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, co
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getOutputBinding(const size_t outputPort) const {
+inline const Binding & PipelineCompiler::getOutputBinding(const StreamSetPort outputPort) const {
     return getOutputBinding(mKernelIndex, outputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const size_t outputPort) const {
+inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const StreamSetPort outputPort) const {
     return getOutputBuffer(mKernelIndex, outputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
-StreamSetBuffer * PipelineCompiler::getOutputBuffer(const size_t kernelVertex, const size_t outputPort) const {
+StreamSetBuffer * PipelineCompiler::getOutputBuffer(const size_t kernelVertex, const StreamSetPort outputPort) const {
     return mBufferGraph[getOutputBufferVertex(kernelVertex, outputPort)].Buffer;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const BufferGraph::edge_descriptor PipelineCompiler::getOutput(const unsigned kernelVertex, const unsigned outputPort) const {
-    assert (outputPort < out_degree(kernelVertex, mBufferGraph));
-    const auto e = *(out_edges(kernelVertex, mBufferGraph).first + outputPort);
+inline const BufferGraph::edge_descriptor PipelineCompiler::getOutput(const size_t kernelVertex, const StreamSetPort outputPort) const {
+    assert (outputPort.Type == PortType::Output);
+    assert (outputPort.Number < out_degree(kernelVertex, mBufferGraph));
+    const auto e = *(out_edges(kernelVertex, mBufferGraph).first + outputPort.Number);
     // assert (mBufferGraph[e].outputPort() == outputPort);
     return e;
 }
@@ -797,9 +800,9 @@ inline const Binding & PipelineCompiler::getBinding(const StreamSetPort port) co
  ** ------------------------------------------------------------------------------------------------------------- */
 const Binding & PipelineCompiler::getBinding(const unsigned kernel, const StreamSetPort port) const {
     if (port.Type == PortType::Input) {
-        return getInputBinding(kernel, port.Number);
+        return getInputBinding(kernel, port);
     } else if (port.Type == PortType::Output) {
-        return getOutputBinding(kernel, port.Number);
+        return getOutputBinding(kernel, port);
     }
     llvm_unreachable("unknown port binding type!");
 }
