@@ -662,7 +662,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     // Filter the graph to ensure each input to/output from a partition captures only the
     // largest comparable rates for each stream set.
-    for (auto partitionId = 0; partitionId < PartitionCount; ++partitionId) {
+    for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
 
         for (const auto input : make_iterator_range(in_edges(partitionId, G))) {
             const auto streamSet = source(input, G);
