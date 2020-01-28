@@ -16,7 +16,7 @@
 #endif
 #include <unistd.h>
 
-namespace kernels { class KernelBuilder; }
+namespace partition { class KernelBuilder; }
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
 namespace llvm { class Module; }

@@ -43,21 +43,7 @@ void PipelineCompiler::start(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = mTarget->getName();
     #endif
-    if (ExternallySynchronized) {
-        mSegNo = mExternalSegNo;
-        assert ("internally synchronized system was not given an external seg no." && mSegNo);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + " +++ SEGMENT NUM (ext)  %" PRIu64 " +++", mSegNo);
-        #endif
-    } else {
-        // By using an atomic fetch/add here, we gain the ability to dynamically add or
-        // remove threads while still using the segment pipeline parallelism model.
-        Value * const segNoPtr = b->getScalarFieldPtr(CURRENT_LOGICAL_SEGMENT_NUMBER);
-        mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + " +++ SEGMENT NUM (int) %" PRIu64 "+++", mSegNo);
-        #endif
-    }
+    mSegNo = mExternalSegNo;
     mHalted = b->getFalse();
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + " +++ NUM OF STRIDES %" PRIu64 "+++", mNumOfStrides);
@@ -94,6 +80,18 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
     /// KERNEL ENTRY
     /// -------------------------------------------------------------------------------------
+
+    if (!mKernelIsInternallySynchronized) {
+
+        // By using an atomic fetch/add here, we gain the ability to dynamically add or
+        // remove threads while still using the segment pipeline parallelism model.
+        Value * const segNoPtr = b->getScalarFieldPtr(prefix + NEXT_LOGICAL_SEGMENT_SUFFIX);
+        mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
+
+
+    }
+
+
     const auto initialLock = mKernelIsInternallySynchronized ? LockType::ItemCheck : LockType::Segment;
     acquireSynchronizationLock(b, initialLock, CycleCounter::INITIAL);
     #ifdef PRINT_DEBUG_MESSAGES

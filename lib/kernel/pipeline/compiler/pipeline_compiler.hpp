@@ -13,7 +13,6 @@
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/range/adaptor/reversed.hpp>
-//#include <boost/serialization/strong_typedef.hpp>
 #include <boost/math/common_factor_rt.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <llvm/IR/Module.h>
@@ -28,7 +27,7 @@
 #include <z3.h>
 #include <util/maxsat.hpp>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 #define PRINT_BUFFER_GRAPH
 
@@ -39,8 +38,6 @@
 // #define DISABLE_INPUT_ZEROING
 
 // #define DISABLE_OUTPUT_ZEROING
-
-// #define USE_Z3
 
 using namespace boost;
 using namespace boost::math;
@@ -74,8 +71,29 @@ using InitArgTypes = KernelCompiler::InitArgTypes;
 
 #warning create a preallocation phase for kernels to add capacity suggestions
 
-// TODO: replace ints used for port #s with the following
-// BOOST_STRONG_TYPEDEF(unsigned, PortNumber)
+struct StreamSetInputPort {
+    operator StreamSetPort () const noexcept {
+        return StreamSetPort{Type, Number};
+    }
+    explicit StreamSetInputPort(const StreamSetPort port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    static constexpr PortType Type = PortType::Input;
+    const unsigned Number;
+};
+
+struct StreamSetOutputPort {
+    operator StreamSetPort() const noexcept {
+        return StreamSetPort{Type, Number};
+    }
+    explicit StreamSetOutputPort(const StreamSetPort port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    static constexpr PortType Type = PortType::Output;
+    const unsigned Number;
+};
 
 struct RelationshipNode {
 
@@ -470,6 +488,7 @@ const static std::string PIPELINE_THREAD_LOCAL_STATE = "PTL";
 const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
 
 const static std::string ITEM_COUNT_READ_GUARD_SUFFIX = ".LRG";
+const static std::string NEXT_LOGICAL_SEGMENT_SUFFIX = ".NSN";
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";
@@ -760,14 +779,14 @@ public:
 
     using KernelVertexVec = SmallVector<Relationships::Vertex, 64>;
 
-    void addRegionSelectorKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G,
+    void addRegionSelectorKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, Relationships & G,
                                   OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings);
 
-    void addPopCountKernels(BuilderRef b, Kernels & kernels, KernelVertexVec & vertex, Relationships & G,
+    void addPopCountKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, Relationships & G,
                             OwningVector<Kernel> &internalKernels, OwningVector<Binding> &internalBindings);
 
-    static void combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G);
-    static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & kernels, Relationships & G);
+    static void combineDuplicateKernels(BuilderRef b, const Kernels & partition, Relationships & G);
+    static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & partition, Relationships & G);
 
     bool hasZeroExtendedStream() const;
 

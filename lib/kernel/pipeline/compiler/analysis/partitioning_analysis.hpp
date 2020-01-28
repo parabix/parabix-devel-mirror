@@ -2,7 +2,7 @@
 #define PARTITIONING_ANALYSIS_HPP
 
 #include "../pipeline_compiler.hpp"
-#include <boost/graph/dominator_tree.hpp>
+#include "../internal/partitionmetakernel.h"
 
 namespace kernel {
 
@@ -359,6 +359,136 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     return n;
 }
 
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief extractPartitionSubgraphs
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::extractPartitionSubgraphs(Relationships & G,
+                                                 std::vector<unsigned> & partitionIds,
+                                                 const unsigned numOfPartitions) const {
+
+    std::vector<unsigned> O;
+    const auto s = lexical_ordering(G, O);
+    assert (s);
+
+    std::vector<<std::vector<unsigned>> group(numOfPartitions);
+    for (const auto u : O) {
+        const RelationshipNode & node = G[u];
+        switch (node.Type) {
+            case RelationshipNode::IsKernel:
+                group[partitionIds[u]].push_back(u);
+                break;
+            default: break;
+        }
+    }
+
+    for (unsigned i = 0; i < numOfPartitions; ++i) {
+
+        const auto n = group[i].size();
+
+        if (n > 1) {
+
+            RelationshipGraph H(n);
+            flat_map<unsigned, unsigned> M;
+
+            auto map = [&](const unsigned u) -> unsigned {
+                const auto f = M.find(u);
+                if (f == M.end()) {
+                    const auto v = add_vertex(H);
+                    H[v] = G[u];
+                    M.emplace(u, v);
+                    return v;
+                }
+                return f->second;
+            };
+
+
+
+
+            for (const auto kernel : group) {
+
+
+                for (const auto e : make_iterator_range(in_edges(kernel, G))) {
+                    const auto bindingOrScalar = source(e, G);
+                    const auto u = map(bindingOrScalar);
+                    add_edge(u, kernel, G[e], H);
+                    const RelationshipNode & node = G[bindingOrScalar];
+
+                    if (node.Type == RelationshipNode::IsBinding) {
+
+                        for (const auto f : make_iterator_range(in_edges(bindingOrScalar, G))) {
+
+                            const auto streamSet = source(f, G);
+                            const auto v = map(streamSet);
+                            add_edge(v, u, G[f], H);
+                            assert (G[streamSet].Type == RelationshipNode::IsRelationship);
+                            const auto producer = parent(parent(streamSet, G), G);
+                            assert (G[producer].Type == RelationshipNode::IsKernel);
+                            const auto crossesPartition = (partitionIds[producer] != i);
+
+
+
+                        }
+
+
+
+
+
+
+
+
+
+
+
+                    } else if (node.Type == RelationshipNode::IsRelationship) {
+                        const auto producer = parent(bindingOrScalar, G);
+                        assert (G[producer].Type == RelationshipNode::IsKernel);
+                        const auto crossesPartition = (partitionIds[producer] != i);
+                    }
+                }
+
+                for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+                    const auto bindingOrScalar = target(e, G);
+                    const auto u = map(bindingOrScalar);
+                    add_edge(u, kernel, G[e], H);
+                    const RelationshipNode & node = G[bindingOrScalar];
+
+                    if (node.Type == RelationshipNode::IsBinding) {
+                        const auto e1 = out_edge(bindingOrScalar, G);
+                        const auto buffer = target(e1, G);
+                        const auto v = map(buffer);
+                        add_edge(v, u, G[e1], H);
+                        assert (G[buffer].Type == RelationshipNode::IsRelationship);
+                        const auto consumer = child(child(buffer, G), G);
+                        assert (G[consumer].Type == RelationshipNode::IsKernel);
+                        const auto crossesPartition = (partitionIds[consumer] != i);
+
+
+                    } else if (node.Type == RelationshipNode::IsRelationship) {
+                        const auto consumer = child(bindingOrScalar, G);
+                        assert (G[consumer].Type == RelationshipNode::IsKernel);
+                        const auto crossesPartition = (partitionIds[consumer] != i);
+                    }
+                }
+
+
+            }
+
+
+
+
+
+        }
+
+    }
+
+
+
+
+}
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePartitioningGraph

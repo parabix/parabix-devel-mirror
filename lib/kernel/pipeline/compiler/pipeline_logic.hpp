@@ -63,9 +63,6 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // Non-family kernels can be contained within the shared state but family ones
     // must be allocated dynamically.
 
-    if (LLVM_LIKELY(!ExternallySynchronized)) {
-        mTarget->addInternalScalar(b->getSizeTy(), CURRENT_LOGICAL_SEGMENT_NUMBER);
-    }
     Type * const localStateType = getThreadLocalStateType(b);
     if (localStateType->isEmptyTy()) {
         mHasThreadLocalPipelineState = false;
@@ -110,6 +107,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_READ_GUARD_SUFFIX);
         mTarget->addInternalScalar(sizeTy, prefix + CURRENT_LOGICAL_SEGMENT_NUMBER);
     } else {
+        mTarget->addInternalScalar(sizeTy, prefix + NEXT_LOGICAL_SEGMENT_SUFFIX);
         mTarget->addInternalScalar(sizeTy, prefix + LOGICAL_SEGMENT_SUFFIX);
     }
 

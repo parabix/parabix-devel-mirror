@@ -360,6 +360,9 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     std::vector<unsigned> partitionIds;
     const auto numOfPartitions = partitionIntoFixedRateRegionsWithOrderingConstraints(G, partitionIds);
 
+
+
+
     // Compute the lexographical ordering of G
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {

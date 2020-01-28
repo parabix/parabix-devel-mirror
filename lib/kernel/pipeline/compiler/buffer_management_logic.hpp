@@ -656,7 +656,7 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
         v = source(e, mStreamGraph);
     }
 
-    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == inputPort);
+    assert (mStreamGraph[e].Number == inputPort.Number);
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;
@@ -735,7 +735,7 @@ const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, co
         v = target(e, mStreamGraph);
     }
 
-    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == outputPort);
+    assert (mStreamGraph[e].Number == outputPort.Number);
 
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
