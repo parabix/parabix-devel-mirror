@@ -11,6 +11,7 @@
 
 namespace IDISA { class IDISA_Builder; }  // lines 14-14
 namespace llvm { class Value; }
+namespace kernel { class ProgramBuilder; }
 
 namespace kernel {
 
@@ -59,6 +60,19 @@ private:
     const unsigned          mCodeUnitWidth;
 };
 
+class StreamPackKernel final : public MultiBlockKernel {
+public:
 
+    StreamPackKernel(BuilderRef b,
+              StreamSet * const inputSet,
+              StreamSet * const packedOutput);
+protected:
+    void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
+private:
+    unsigned mNumOfStreams;
+    unsigned mInputFieldWidth;
+};
+
+void S2P_ThreeKernelLogic(const std::unique_ptr<ProgramBuilder> & P,StreamSet * byteStream, StreamSet * basisBits);
 }
 #endif

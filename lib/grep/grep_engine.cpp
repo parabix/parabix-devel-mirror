@@ -294,7 +294,8 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
         if (PabloTransposition) {
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else {
-            P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+            S2P_ThreeKernelLogic(P, ByteStream, BasisBits);
+            //P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
         }
         return BasisBits;
     }

@@ -5,7 +5,9 @@
 
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/core/callback.h>
+#include <kernel/core/relationship.h>
 #include <kernel/core/kernel_builder.h>
+#include <kernel/pipeline/pipeline_builder.h>
 #include <pablo/pabloAST.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_pack.h>
@@ -346,5 +348,62 @@ mCodeUnitWidth(codeUnitStream->getFieldWidth()) {
 }
 
 
+StreamPackKernel::StreamPackKernel(BuilderRef b,
+                     StreamSet * const inputSet,
+                     StreamSet * const packedOutput)
+: MultiBlockKernel(b, "StreamPack" + inputSet->shapeString(),
+ {Binding{"inputSet", inputSet, FixedRate(), Principal()}},
+ {Binding{"packedOutput", packedOutput}},
+ {}, {}, {}), mNumOfStreams(inputSet->getNumElements()), mInputFieldWidth(inputSet->getFieldWidth()) {
+    assert(inputSet->getFieldWidth() == 2 * packedOutput->getFieldWidth());
+    assert(2 * inputSet->getNumElements() == packedOutput->getNumElements());
 }
 
+void StreamPackKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfBlocks) {
+    BasicBlock * entry = b->GetInsertBlock();
+    BasicBlock * streamPackLoop = b->CreateBasicBlock("streamPackLoop");
+    BasicBlock * packFinalize = b->CreateBasicBlock("packFinalize");
+    Value * mask = b->simd_himask(mNumOfStreams * 2);
+    Constant * sz_ZERO = b->getSize(0);
+
+    b->CreateBr(streamPackLoop);
+
+    b->SetInsertPoint(streamPackLoop);
+    PHINode * blockOffsetPhi = b->CreatePHI(b->getSizeTy(), 2);
+    blockOffsetPhi->addIncoming(sz_ZERO, entry);
+
+    for (unsigned i = 0; i < mNumOfStreams; i++) {
+        for (unsigned j = 0; j < mInputFieldWidth/2; j++) {
+            Value * s0 = b->loadInputStreamPack("inputSet", b->getInt32(i), b->getInt32(2*j), blockOffsetPhi);
+            Value * s1 = b->loadInputStreamPack("inputSet", b->getInt32(i), b->getInt32(2*j+1), blockOffsetPhi);
+            b->CallPrintRegister("s0[" + std::to_string(i) + "][" + std::to_string(2*j) + "]", s0);
+            b->CallPrintRegister("s1[" + std::to_string(i) + "][" + std::to_string(2*j+1) + "]", s1);
+            Value * p0 = nullptr;
+            Value * p1 = nullptr;
+            s2p_step(b, s0, s1, mask, mNumOfStreams, p0, p1);
+            b->storeOutputStreamPack("packedOutput", b->getInt32(2*i), b->getInt32(j), blockOffsetPhi, p0);
+            b->storeOutputStreamPack("packedOutput", b->getInt32(2*i+1), b->getInt32(j), blockOffsetPhi, p1);
+            b->CallPrintRegister("p0[" + std::to_string(2*i) + "][" + std::to_string(j) + "]", p0);
+            b->CallPrintRegister("p1[" + std::to_string(2*i+1) + "][" + std::to_string(j) + "]", p1);
+        }
+    }
+
+    Value * nextBlk = b->CreateAdd(blockOffsetPhi, b->getSize(1));
+    blockOffsetPhi->addIncoming(nextBlk, streamPackLoop);
+    Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
+
+    b->CreateCondBr(moreToDo, streamPackLoop, packFinalize);
+
+    b->SetInsertPoint(packFinalize);
+}
+
+
+void S2P_ThreeKernelLogic(const std::unique_ptr<ProgramBuilder> & P,
+                     StreamSet * byteStream, StreamSet * basisBits) {
+    StreamSet * even_odd = P->CreateStreamSet(2,4);
+    P->CreateKernelCall<StreamPackKernel>(byteStream, even_odd);
+    StreamSet * pairs = P->CreateStreamSet(4,2);
+    P->CreateKernelCall<StreamPackKernel>(even_odd, pairs);
+    P->CreateKernelCall<StreamPackKernel>(pairs, basisBits);
+}
+}
