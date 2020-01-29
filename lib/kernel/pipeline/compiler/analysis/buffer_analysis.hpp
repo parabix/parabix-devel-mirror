@@ -465,29 +465,28 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         print_rational(b);
     };
 
-    out << "digraph \"" << mTarget->getName() << "\" {\n"
-           "v" << PipelineInput << " [label=\"[" <<
-           PipelineInput << "] P_{in}\\n"
-           " Partition: " << KernelPartitionId[PipelineInput] << "\\n"
-           " Expected: [" << MinimumNumOfStrides[PipelineInput] << ',' << MaximumNumOfStrides[PipelineInput] << "]\\n";
-    out << "\" shape=rect, style=rounded, peripheries=2];\n";
+    auto printVertex = [&](const unsigned v, const StringRef name) {
+        out << "v" << v << " [label=\"[" <<
+                v << "] " << name << "\\n"
+                " Partition: " << KernelPartitionId[v] << "\\n"
+                " Expected: [" << MinimumNumOfStrides[v] << ',' << MaximumNumOfStrides[v] << "]\\n" <<
+                "\" shape=rect, style=rounded, peripheries=2, group=" <<
+                KernelPartitionId[v] <<
+                "];\n";
+    };
+
+    out << "digraph \"" << mTarget->getName() << "\" {\n";
+
+    printVertex(PipelineInput, "P_{in}");
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
         std::string name = kernel->getName();
-        boost::replace_all(name, "\"", "\\\"");
-        out << "v" << i <<
-               " [label=\"[" << i << "] " << name << "\\n"
-               " Partition: " << KernelPartitionId[i] << "\\n"
-               " Expected: [" << MinimumNumOfStrides[i] << ',' << MaximumNumOfStrides[i] << "]\\n";
-        out << "\" shape=rect, style=rounded, peripheries=2];\n";
+        boost::replace_all(name, "\"", "\\\"");       
+        printVertex(i, name);
     }
 
-    out << "v" << PipelineOutput << " [label=\"[" <<
-           PipelineOutput << "] P_{out}\\n"
-           " Partition: " << KernelPartitionId[PipelineOutput] << "\\n"
-           " Expected: [" << MinimumNumOfStrides[PipelineOutput] << ',' << MaximumNumOfStrides[PipelineOutput] << "]\\n";
-    out << "\" shape=rect, style=rounded, peripheries=2];\n";
+    printVertex(PipelineOutput, "P_{out}");
 
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         out << "v" << i << " [shape=record, label=\""
