@@ -504,6 +504,8 @@ StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, S
     P->CreateKernelCall<UnitInsertionExtractionMasks>(insertion_mask, stream01, valid01, p);
     auto spread_mask = P->CreateStreamSet(1);
     FilterByMask(P, valid01, stream01, spread_mask);
+    #warning verify this assertion
+    P->AssertEqualLength(insertion_mask, spread_mask);
     return spread_mask;
 }
 
