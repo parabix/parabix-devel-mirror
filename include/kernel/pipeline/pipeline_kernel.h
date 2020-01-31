@@ -42,13 +42,17 @@ public:
         void * const FunctionPointer;
         const Scalars Args;
 
-        llvm::Constant * Callee;
+        mutable llvm::Constant * Callee;
 
         CallBinding(const std::string Name, llvm::FunctionType * Type, void * FunctionPointer, std::initializer_list<Scalar *> && Args)
         : Name(Name), Type(Type), FunctionPointer(FunctionPointer), Args(Args), Callee(nullptr) { }
     };
 
     using CallBindings = std::vector<CallBinding>;
+
+    using LengthAssertion = std::array<const StreamSet *, 2>;
+
+    using LengthAssertions = std::vector<LengthAssertion>;
 
     bool hasSignature() const final { return true; }
 
@@ -82,6 +86,10 @@ public:
         return mCallBindings;
     }
 
+    const LengthAssertions & getLengthAssertions() const {
+        return mLengthAssertions;
+    }
+
     void addKernelDeclarations(BuilderRef b) final;
 
     std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
@@ -95,7 +103,8 @@ protected:
                    const unsigned numOfThreads, const unsigned numOfSegments,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
-                   Bindings && scalar_inputs, Bindings && scalar_outputs);
+                   Bindings && scalar_inputs, Bindings && scalar_outputs,
+                   LengthAssertions && lengthAssertions);
 
     void addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes & argTypes) const final;
 
@@ -121,9 +130,11 @@ protected:
 
     const unsigned                            mNumOfThreads;
     const unsigned                            mNumOfSegments;
-    const Kernels                             mKernels;
-    CallBindings                              mCallBindings;
     const std::string                         mSignature;
+    const Kernels                             mKernels;
+    const CallBindings                        mCallBindings;
+    const LengthAssertions                    mLengthAssertions;
+
 };
 
 }

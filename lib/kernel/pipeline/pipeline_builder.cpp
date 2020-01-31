@@ -286,7 +286,8 @@ Kernel * PipelineBuilder::makeKernel() {
                            mNumOfThreads, codegen::BufferSegments,
                            std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
-                           std::move(mInputScalars), std::move(mOutputScalars));
+                           std::move(mInputScalars), std::move(mOutputScalars),
+                           std::move(mLengthAssertions));
 
     addKernelProperties(pipeline->getKernels(), pipeline);
 

@@ -146,7 +146,9 @@ public:
                          // stream outputs
                          , {{"matches", matches, FixedRate(), Add1()}}
                          // scalars
-                         , {}, {}) {
+                         , {}, {}
+                         // length assertions
+                         , {}) {
         if (requiresInternalSynchronization) {
             addAttribute(InternallySynchronized());
         }

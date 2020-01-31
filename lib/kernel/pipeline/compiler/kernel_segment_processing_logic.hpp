@@ -61,7 +61,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
     /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(mKernelIndex, mBufferGraph);
-    mMaximumNumOfStrides = MaximumNumOfStrides[mKernelIndex];
+    mMaximumNumOfStrides = ceiling(MaximumNumOfStrides[mKernelIndex]);
 
     const auto prefix = makeKernelName(mKernelIndex);
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", mPipelineEnd);

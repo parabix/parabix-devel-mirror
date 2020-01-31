@@ -355,6 +355,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     }
     assert (partitionId == n);
 
+#if 0
+
     // Now that we've determined which kernels are to be placed into which partition, reorder the
     // kernels within the partitions s.t. (1) those that consume data from another partition are
     // placed as early as possible in the partition and (2) identical kernels are grouped together.
@@ -518,10 +520,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     }
 
+#endif
+
     return n;
 }
-
-
 
 #if 0
 
@@ -702,9 +704,9 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         }
 
         #ifndef NDEBUG
-        const Rational check{MaximumNumOfStrides[start], MinimumNumOfStrides[start]};
+        const auto check = MaximumNumOfStrides[start] / MinimumNumOfStrides[start];
         for (auto kernel = start + 1; kernel < end; ++kernel) {
-            const Rational check2{MaximumNumOfStrides[kernel], MinimumNumOfStrides[kernel]};
+            const auto check2 = MaximumNumOfStrides[kernel] / MinimumNumOfStrides[kernel];
             if (LLVM_UNLIKELY(check != check2)) {
                 report_fatal_error("Kernel " + std::to_string(kernel) + " non-synchronous dataflow in partition " + std::to_string(partitionId) );
             }

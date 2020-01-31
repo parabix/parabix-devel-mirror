@@ -449,7 +449,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 
     using BufferId = StreamSetBuffer::BufferKind;
 
-    auto print_rational = [&out](const Rational & r) {
+    auto print_rational = [&out](const Rational & r) -> raw_ostream & {
         if (r.denominator() > 1) {
             const auto n = r.numerator() / r.denominator();
             const auto p = r.numerator() % r.denominator();
@@ -457,42 +457,21 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         } else {
             out << r.numerator();
         }
+        return out;
     };
 
-    auto rate_range = [&out, print_rational](const Rational & a, const Rational & b) {
+    auto rate_range = [&out, print_rational](const Rational & a, const Rational & b) -> raw_ostream & {
         print_rational(a);
         out << " - ";
         print_rational(b);
+        return out;
     };
 
-    auto printVertex = [&](const unsigned v, const StringRef name) {
-        out << "v" << v << " [label=\"[" <<
-                v << "] " << name << "\\n"
-                " Partition: " << KernelPartitionId[v] << "\\n"
-                " Expected: [" << MinimumNumOfStrides[v] << ',' << MaximumNumOfStrides[v] << "]\\n" <<
-                "\" shape=rect, style=rounded, peripheries=2, group=" <<
-                KernelPartitionId[v] <<
-                "];\n";
-    };
+    auto printStreamSet = [&](const unsigned streamSet) {
+        out << "v" << streamSet << " [shape=record, label=\""
+               << streamSet << "|{";
 
-    out << "digraph \"" << mTarget->getName() << "\" {\n";
-
-    printVertex(PipelineInput, "P_{in}");
-
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        std::string name = kernel->getName();
-        boost::replace_all(name, "\"", "\\\"");       
-        printVertex(i, name);
-    }
-
-    printVertex(PipelineOutput, "P_{out}");
-
-    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
-        out << "v" << i << " [shape=record, label=\""
-               << i << "|{";
-
-        const BufferNode & bn = G[i];
+        const BufferNode & bn = G[streamSet];
         const StreamSetBuffer * const buffer = bn.Buffer;
         if (buffer == nullptr) {
             out << '?';
@@ -557,7 +536,61 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
 
         out << "}}\"];\n";
+
+    };
+
+    auto printVertex = [&](const unsigned v, const StringRef name) {
+        out << "v" << v << " [label=\"[" <<
+                v << "] " << name << "\\n"
+                //" Partition: " << KernelPartitionId[v] << "\\n"
+                " Expected:  ["; print_rational(MinimumNumOfStrides[v]) << ',';
+                                print_rational(MaximumNumOfStrides[v]) << "]\\n"
+                "\" shape=rect, style=rounded, peripheries=2"
+                "];\n";
+
+        for (const auto e : make_iterator_range(out_edges(v, G))) {
+            const auto streamSet = target(e, G);           
+            printStreamSet(streamSet);
+        }
+    };
+
+    bool closePrior = false;
+    auto currentPartition = PartitionCount;
+
+    auto openPartitionLabel = [&](const unsigned partitionId) {
+        out << "subgraph cluster_" << partitionId << " {\n"
+               "label = \"Partition #" << partitionId  << "\""
+               "style=\"rounded\";"
+               "color=\"#028d35\";"
+               "\n";
+        currentPartition = partitionId;
+        closePrior = true;
+    };
+
+    auto closePartitionLabel = [&]() {
+        out << "}\n";
+    };
+
+    out << "digraph \"" << mTarget->getName() << "\" {\n";
+
+    printVertex(PipelineInput, "P_{in}");
+
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const auto partitionId = KernelPartitionId[i];
+        if (partitionId != currentPartition) {
+            if (closePrior) closePartitionLabel();
+            openPartitionLabel(partitionId);
+        }
+
+        const Kernel * const kernel = getKernel(i);
+        std::string name = kernel->getName();
+        boost::replace_all(name, "\"", "\\\"");       
+        printVertex(i, name);
     }
+
+    if (closePrior) closePartitionLabel();
+
+    printVertex(PipelineOutput, "P_{out}");
 
     for (auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);

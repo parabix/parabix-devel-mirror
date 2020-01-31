@@ -18,6 +18,8 @@ public:
     using CallBinding = PipelineKernel::CallBinding;
     using CallBindings = PipelineKernel::CallBindings;
     using NestedBuilders = std::vector<std::shared_ptr<PipelineBuilder>>;
+    using LengthAssertion = PipelineKernel::LengthAssertion;
+    using LengthAssertions = PipelineKernel::LengthAssertions;
 
     BaseDriver & getDriver() { return mDriver;}
 
@@ -68,6 +70,10 @@ public:
 
     void setOutputScalar(const llvm::StringRef name, Scalar * value);
 
+    void AssertEqualLength(const StreamSet * A, const StreamSet * B) {
+        mLengthAssertions.emplace_back(LengthAssertion{{A, B}});
+    }
+
     PipelineBuilder(BaseDriver & driver,
                     Bindings && stream_inputs, Bindings && stream_outputs,
                     Bindings && scalar_inputs, Bindings && scalar_outputs,
@@ -105,6 +111,7 @@ protected:
     Kernels             mKernels;
     CallBindings        mCallBindings;
     NestedBuilders      mNestedBuilders;
+    LengthAssertions    mLengthAssertions;
 };
 
 /** ------------------------------------------------------------------------------------------------------------- *

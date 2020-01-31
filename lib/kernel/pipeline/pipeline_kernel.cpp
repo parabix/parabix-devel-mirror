@@ -70,7 +70,7 @@ void PipelineKernel::linkExternalMethods(BuilderRef b) {
     for (const auto & k : mKernels) {
         k->linkExternalMethods(b);
     }
-    for (CallBinding & call : mCallBindings) {
+    for (const CallBinding & call : mCallBindings) {
         call.Callee = b->LinkFunction(call.Name, call.Type, call.FunctionPointer);
     }
 }
@@ -192,7 +192,8 @@ PipelineKernel::PipelineKernel(BaseDriver & driver,
                                const unsigned numOfThreads, const unsigned numOfSegments,
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
-                               Bindings && scalar_inputs, Bindings && scalar_outputs)
+                               Bindings && scalar_inputs, Bindings && scalar_outputs,
+                               LengthAssertions && lengthAssertions)
 : Kernel(driver.getBuilder(), TypeId::Pipeline,
          [&] () {
              std::string tmp;
@@ -208,9 +209,10 @@ PipelineKernel::PipelineKernel(BaseDriver & driver,
          std::move(scalar_inputs), std::move(scalar_outputs), {})
 , mNumOfThreads(numOfThreads)
 , mNumOfSegments(numOfSegments)
+, mSignature(std::move(signature))
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))
-, mSignature(std::move(signature)) {
+, mLengthAssertions(std::move(lengthAssertions)) {
 
 }
 

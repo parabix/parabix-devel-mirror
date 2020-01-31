@@ -65,6 +65,8 @@ using Scalars = PipelineKernel::Scalars;
 using Kernels = PipelineKernel::Kernels;
 using CallBinding = PipelineKernel::CallBinding;
 using CallRef = RefWrapper<CallBinding>;
+using LengthAssertion = PipelineKernel::LengthAssertion;
+using LengthAssertions = PipelineKernel::LengthAssertions;
 using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
@@ -431,6 +433,8 @@ struct PartitionInput : public PartitionData {
 
 };
 
+using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
+
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferGraph::vertex_descriptor, PartitionData>;
 
 struct PipelineGraphBundle {
@@ -467,6 +471,8 @@ struct PipelineGraphBundle {
 };
 
 using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, int, int>;
+
+using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
 
 enum CycleCounter {
   INITIAL
@@ -817,6 +823,8 @@ public:
 // dataflow analysis functions
 
     void computeDataFlowRates(BufferGraph & G);
+    PartitionConstraintGraph identifyHardPartitionConstraints(BufferGraph & G) const;
+    LengthConstraintGraph identifyLengthEqualityAssertions(BufferGraph & G) const;
 
 // synchronization functions
 
@@ -911,6 +919,8 @@ protected:
 
     const unsigned								mNumOfThreads;
     const unsigned                              mNumOfSegments;
+
+    const LengthAssertions &                    mLengthAssertions;
 
     mutable Allocator                           mAllocator;
 
@@ -1058,8 +1068,8 @@ protected:
     const PartitionIdVector                     KernelPartitionId;
     const unsigned                              PartitionCount;
 
-    std::vector<unsigned>                       MinimumNumOfStrides;
-    std::vector<unsigned>                       MaximumNumOfStrides;
+    std::vector<Rational>                       MinimumNumOfStrides;
+    std::vector<Rational>                       MaximumNumOfStrides;
 
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
@@ -1167,6 +1177,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
 , mNumOfThreads(pipelineKernel->getNumOfThreads())
 , mNumOfSegments(pipelineKernel->getNumOfSegments())
+, mLengthAssertions(pipelineKernel->getLengthAssertions())
 , mStreamGraph(std::move(P.Streams))
 , mScalarGraph(std::move(P.Scalars))
 , LastKernel(P.LastKernel)

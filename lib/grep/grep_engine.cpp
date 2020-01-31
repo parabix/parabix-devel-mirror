@@ -395,6 +395,9 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>(&cc::Unicode);
     auto lengths = getLengthRange(re, &cc::Unicode);
     const auto UnicodeSets = re::collectCCs(re, cc::Unicode, mExternalNames);
+
+    StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
+
     if (UnicodeSets.empty()) {
         // All inputs will be externals.   Do not register a source stream.
         options->setRE(re);
@@ -405,17 +408,16 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         auto mpx_basis = mpx->getMultiplexedCCs();
         StreamSet * const u8CharClasses = P->CreateStreamSet(mpx_basis.size());
         StreamSet * const CharClasses = P->CreateStreamSet(mpx_basis.size());
-        P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);
-        FilterByMask(P, mU8index, u8CharClasses, CharClasses);
+        P->CreateKernelCall<CharClassesKernel>(std::move(mpx_basis), Source, u8CharClasses);  // u8CharClasses length L
+        FilterByMask(P, mU8index, u8CharClasses, CharClasses);   // CharClasses length L'
+        P->AssertEqualLength(CharClasses, MatchResults);
         options->setSource(CharClasses);
         options->addAlphabet(mpx, CharClasses);
     }
-    StreamSet * const MatchResults = P->CreateStreamSet(1, 1);
     options->setResults(MatchResults);
     addExternalStreams(P, options, re, mU8index);
-    P->CreateKernelCall<ICGrepKernel>(std::move(options));
-    StreamSet * u8index1 = P->CreateStreamSet(1, 1);
-    P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
+    P->CreateKernelCall<ICGrepKernel>(std::move(options));  // MatchResults length L'
+
     if (hasComponent(mExternalComponents, Component::MatchStarts)) {
         StreamSet * u8initial = P->CreateStreamSet(1, 1);
         P->CreateKernelCall<LineStartsKernel>(mU8index, u8initial);
@@ -423,7 +425,10 @@ void GrepEngine::UnicodeIndexedGrep(const std::unique_ptr<ProgramBuilder> & P, r
         P->CreateKernelCall<FixedMatchPairsKernel>(lengths.first, MatchResults, MatchPairs);
         SpreadByMask(P, u8initial, MatchPairs, Results);
     } else {
-        SpreadByMask(P, u8index1, MatchResults, Results);
+        StreamSet * u8index1 = P->CreateStreamSet(1, 1);
+        P->CreateKernelCall<AddSentinel>(mU8index, u8index1);
+        SpreadByMask(P, u8index1, MatchResults, Results);   // Results length L
+        P->AssertEqualLength(Source, Results);
     }
 }
 
@@ -649,13 +654,14 @@ void EmitMatchesEngine::grepCodeGen() {
     if (mColoring && !mInvertMatches) {
 
         StreamSet * MatchesByLine = E->CreateStreamSet(1, 1);
-        FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);
+        FilterByMask(E, mLineBreakStream, MatchedLineEnds, MatchesByLine);   // Reduce MatchLineEnds to MatchesByLine as length M (1 per line)
 
         if ((mAfterContext != 0) || (mBeforeContext != 0)) {
             StreamSet * ContextByLine = E->CreateStreamSet(1, 1);
             E->CreateKernelCall<ContextSpan>(MatchesByLine, ContextByLine, mBeforeContext, mAfterContext);
             StreamSet * SelectedLines = E->CreateStreamSet(1, 1);
-            SpreadByMask(E, mLineBreakStream, ContextByLine, SelectedLines);
+            SpreadByMask(E, mLineBreakStream, ContextByLine, SelectedLines);  // Expand from length M to original length L (1 code unit)
+            E->AssertEqualLength(SelectedLines, MatchedLineEnds);
             MatchedLineEnds = SelectedLines;
             MatchesByLine = ContextByLine;
         }
@@ -666,7 +672,8 @@ void EmitMatchesEngine::grepCodeGen() {
         StreamSet * LineStarts = E->CreateStreamSet(1, 1);
         E->CreateKernelCall<LineStartsKernel>(mLineBreakStream, LineStarts);
         StreamSet * MatchedLineStarts = E->CreateStreamSet(1, 1);
-        SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);
+        SpreadByMask(E, LineStarts, MatchesByLine, MatchedLineStarts);  // Expand MatchesBy Line to original length L
+        E->AssertEqualLength(MatchedLineStarts, SourceStream);
 
         StreamSet * Filtered = E->CreateStreamSet(1, 8);
         E->CreateKernelCall<MatchFilterKernel>(MatchedLineStarts, mLineBreakStream, ByteStream, Filtered);

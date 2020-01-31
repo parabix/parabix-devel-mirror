@@ -353,6 +353,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     auto G = generateInitialPipelineGraph(b, pipelineKernel, internalKernels, internalBindings);
 
+    printRelationshipGraph(G, errs(), "G");
+
     // Add ordering constraints to ensure we can keep sequences of kernels with a fixed rates in
     // the same sequence. This will help us to partition the graph later and is useful to determine
     // whether we can bypass a region without testing every kernel.
