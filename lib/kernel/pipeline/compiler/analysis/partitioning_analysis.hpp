@@ -11,16 +11,22 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
 
-    using BV = dynamic_bitset<>;
+    using BitSet = dynamic_bitset<>;
 
-    using Graph = adjacency_list<vecS, vecS, bidirectionalS, BV>;
-    using Vertex = Graph::vertex_descriptor;
+    using GuaranteedConsumptionRates = flat_map<unsigned, Rational>;
+
+    using GuaranteedConsumptionRateGraph = adjacency_list<hash_setS, vecS, bidirectionalS, GuaranteedConsumptionRates>;
+
+    using PartitionTaintGraph = adjacency_list<vecS, vecS, bidirectionalS, BitSet>;
+
+    using PartitionTaintGraph = adjacency_list<vecS, vecS, bidirectionalS, BitSet>;
+    using Vertex = PartitionTaintGraph::vertex_descriptor;
 
     using BufferAttributeMap = flat_map<std::pair<Vertex, unsigned>, Vertex>;
     using PartialSumMap = flat_map<Vertex, Vertex>;
 
     using Partition = std::vector<unsigned>;
-    using PartitionMap = std::map<BV, unsigned>;
+    using PartitionMap = std::map<BitSet, unsigned>;
 
     // Convert G into a simpler representation of the graph that we can annotate
 
@@ -41,7 +47,31 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         }
     }
 
-    Graph H(kernels + streamSets);
+    std::vector<Vertex> orderingOfG;
+    orderingOfG.reserve(num_vertices(G));
+    if (LLVM_UNLIKELY(!lexical_ordering(G, orderingOfG))) {
+        report_fatal_error("Cannot lexically order the initial pipeline graph!");
+    }
+
+
+    std::vector<GuaranteedConsumptionRates> R(streamSets);
+
+    auto merge = [&](GuaranteedConsumptionRates & A, const GuaranteedConsumptionRates & B) {
+        if (LLVM_UNLIKELY(A.empty())) {
+            A = B;
+        } else {
+            for (const auto b : B) {
+                auto f = A.find(b.first);
+                if (f == A.end()) {
+                    A.emplace(b.first, b.second);
+                } else {
+                    f->second = std::max(f->second, b.second);
+                }
+            }
+        }
+    };
+
+    PartitionTaintGraph H(kernels + streamSets);
 
     flat_map<Relationships::vertex_descriptor, Vertex> M;
 
@@ -61,9 +91,9 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     unsigned nextRateId = 0;
 
-    auto addRateId = [](BV & bv, const unsigned rateId) {
+    auto addRateId = [](BitSet & bv, const unsigned rateId) {
        if (LLVM_UNLIKELY(rateId >= bv.capacity())) {
-           bv.resize(round_up_to(rateId + 1, BV::bits_per_block));
+           bv.resize(round_up_to(rateId + 1, BitSet::bits_per_block));
        }
        bv.set(rateId);
     };
@@ -99,13 +129,9 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
         }
     };
 
-    std::vector<Vertex> orderingOfG;
-    orderingOfG.reserve(num_vertices(G));
-    if (LLVM_UNLIKELY(!lexical_ordering(G, orderingOfG))) {
-        report_fatal_error("Cannot lexically order the initial pipeline graph!");
-    }
-
     std::vector<Relationships::vertex_descriptor> mappedKernel(kernels);
+
+    GuaranteedConsumptionRates guaranteed;
 
     // Begin by constructing a graph that represents the I/O relationships
     // and any partition boundaries.
@@ -120,7 +146,59 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             mappedKernel[kernel] = u;
             assert (H[kernel].none());
 
-            bool partitionRoot = false;
+            const Kernel * const kernelObj = node.Kernel;
+
+            guaranteed.clear();
+
+            // Merge all guaranteed input rates into the dominating rate set.
+            for (const auto e : make_iterator_range(in_edges(u, G))) {
+                const auto binding = source(e, G);
+                const RelationshipNode & rn = G[binding];
+                if (rn.Type == RelationshipNode::IsBinding) {
+
+                    const auto f = first_in_edge(binding, G);
+                    assert (G[f].Reason != ReasonType::Reference);
+                    const auto streamSet = source(f, G);
+                    assert (G[streamSet].Type == RelationshipNode::IsRelationship);
+                    assert (isa<StreamSet>(G[streamSet].Relationship));
+                    const auto buffer = mapStreamSet(streamSet);
+
+                    merge(guaranteed, R[buffer - kernels]);
+
+                    const Binding & b = rn.Binding;
+                    const ProcessingRate & rate = b.getRate();
+
+                    switch (rate.getKind()) {
+                        case RateId::Bounded:
+                            if (LLVM_LIKELY(rate.getLowerBound().numerator() == 0)) {
+                                break;
+                            }
+                        case RateId::Fixed:
+                            BEGIN_SCOPED_REGION
+                            const auto L = rate.getLowerBound() * kernelObj->getStride();
+                            const auto f = guaranteed.find(buffer);
+                            if (f == guaranteed.end()) {
+                                guaranteed.emplace(buffer, L);
+                            } else {
+                                f->second = std::max(f->second, L);
+                            }
+                            END_SCOPED_REGION
+                        default: break;
+                    }
+
+                }
+            }
+
+            auto noDominatingConsumptionRate = [&](const Vertex streamSet, const ProcessingRate & rate) -> bool {
+                const auto f = guaranteed.find(streamSet);
+                if (f == guaranteed.end()) {
+                    return true;
+                }
+                const auto required = rate.getUpperBound() * kernelObj->getStride();
+                return f->second >= required;
+            };
+
+            bool isNewPartitionRoot = false;
 
             // Iterate through the inputs
             for (const auto e : make_iterator_range(in_edges(u, G))) {
@@ -140,10 +218,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
                     switch (rate.getKind()) {
                         case RateId::PartialSum:
-                            BEGIN_SCOPED_REGION
-                            const auto partialSum = checkForPartialSumEntry(buffer);
-                            add_edge(partialSum, buffer, H);
-                            END_SCOPED_REGION
+                            if (noDominatingConsumptionRate(streamSet, rate)) {
+                                const auto partialSum = checkForPartialSumEntry(buffer);
+                                add_edge(partialSum, buffer, H);
+                            }
                             break;
                         case RateId::Greedy:
                             // A kernel with a greedy input cannot safely be included in its
@@ -154,13 +232,21 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             assert (G[produced].Type == RelationshipNode::IsBinding);
                             const Binding & prodBinding = G[produced].Binding;
                             const ProcessingRate & prodRate = prodBinding.getRate();
-                            if (prodRate.getLowerBound() >= rate.getLowerBound()) {
-                                break;
+                            if (prodRate.getLowerBound() < rate.getLowerBound()) {
+                                isNewPartitionRoot = true;
                             }
                             END_SCOPED_REGION
+                            break;
                         case RateId::Bounded:
-                            // A bounded rate input always signifies a new partition.
-                            partitionRoot = true;
+                            // A bounded input rate signifies a new partition except
+                            // when there is an alternate path from this kernel to
+                            // the buffer in which the min consumption rate of that
+                            // buffer is >= this bounded rate's maximum.
+                            if (noDominatingConsumptionRate(streamSet, rate)) {
+                                isNewPartitionRoot = true;
+                            }
+                            break;
+
                         default: break;
                     }
 
@@ -184,13 +270,12 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             }
 
             // Check whether any of the kernel attributes require this to be a partition root
-            const Kernel * const kernelObj = node.Kernel;
             for (const Attribute & attr : kernelObj->getAttributes()) {
                 switch (attr.getKind()) {
                     case AttrId::CanTerminateEarly:
                     case AttrId::MustExplicitlyTerminate:
                     case AttrId::MayFatallyTerminate:
-                        partitionRoot = true;
+                        isNewPartitionRoot = true;
                         break;
                     default:
                         break;
@@ -198,9 +283,11 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             }
 
             // Assign a root of a partition a new id.
-            if (LLVM_UNLIKELY(partitionRoot)) {
+            if (LLVM_UNLIKELY(isNewPartitionRoot)) {
                 addRateId(H[kernel], nextRateId++);
             }
+
+            flat_set<Vertex> outputs;
 
             // Now iterate through the outputs
             for (const auto e : make_iterator_range(out_edges(u, G))) {
@@ -219,6 +306,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                     const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
                     add_edge(kernel, buffer, H);
+                    outputs.insert(buffer);
                     switch (rate.getKind()) {
                         case RateId::PartialSum:
                             BEGIN_SCOPED_REGION
@@ -257,7 +345,12 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             default: break;
                         }
                     }
-                }
+                }                
+            }
+
+            // Update the descendents with any new guaranteed rates
+            for (const auto buffer : outputs) {
+                merge(R[buffer - kernels], guaranteed);
             }
 
             // Each output of a source kernel is given a rate not shared by the kernel itself
@@ -310,7 +403,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     for (const auto u : orderingOfH) {
         // We want to obtain all kernels but still maintain the lexical ordering of each partition root
         if (u < kernels) {
-            BV & node = H[u];
+            BitSet & node = H[u];
             assert ("active kernel rate set cannot be empty!" && (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0)));
             if (LLVM_UNLIKELY(node.none())) continue;
             auto f = partitionSets.find(node);

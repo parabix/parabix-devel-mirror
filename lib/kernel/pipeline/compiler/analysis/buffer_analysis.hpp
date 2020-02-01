@@ -178,6 +178,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
             }
 
+            const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
+
             Rational requiredSizeFactor{1};
             if (producerRate.Maximum == producerRate.Minimum) {
                 requiredSizeFactor = producerRate.Maximum;
@@ -196,23 +198,27 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const BufferRateData & consumerRate = G[ce];
                 const Binding & input = consumerRate.Binding;
 
-                // Does this stream cross a partition boundary?
                 const auto consumer = target(ce, G);
-                if (producerPartitionId != KernelPartitionId[consumer]) {
-                    dynamic = true;
-                }
-                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
-                    dynamic = true;
+
+                const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
+                const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
+
+                if (!dynamic) {
+                    // Does this stream cross a partition boundary?
+                    if (producerPartitionId != KernelPartitionId[consumer]) {
+                        dynamic = true;
+                    // Could we consume less data than we produce?
+                    } else if (cMin < pMax) {
+                        dynamic = true;
+                    // Or is the data consumption rate unpredictable despite its type?
+                    } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
+                        dynamic = true;
+                    }
                 }
 
                 if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
                     linear = true;
                 }
-
-                const auto expected = MaximumNumOfStrides[consumer];
-
-                const auto cMin = consumerRate.Minimum * expected;
-                const auto cMax = consumerRate.Maximum * expected;
 
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
 
@@ -253,7 +259,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             bn.NonLocal = nonLocal;
 
-            const auto produceMax = producerRate.Maximum * MaximumNumOfStrides[producer];
             const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
 
             bn.LookBehind = lookBehind;
@@ -264,7 +269,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth);
             const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth);
-            const auto reqSize0 = std::max(produceMax, Rational{2} * consumeMax - consumeMin);
+            const auto reqSize0 = std::max(pMax, Rational{2} * consumeMax - consumeMin);
             const Rational reqSize1{2 * (overflowSize + underflowSize), 1};
             const auto reqSize2 = std::max(reqSize0, reqSize1);
             const auto requiredSize = roundUpTo(reqSize2, requiredSizeFactor);
@@ -462,7 +467,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 
     auto rate_range = [&out, print_rational](const Rational & a, const Rational & b) -> raw_ostream & {
         print_rational(a);
-        out << " - ";
+        out << ",";
         print_rational(b);
         return out;
     };
@@ -571,7 +576,13 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         out << "}\n";
     };
 
-    out << "digraph \"" << mTarget->getName() << "\" {\n";
+    out << "digraph \"" << mTarget->getName() << "\" {\n"
+           "rankdir=tb;"
+           "nodesep=0.5;"
+           "ranksep=1;"           
+           "newrank=true;"
+           "splines=ortho;"
+           "\n";
 
     printVertex(PipelineInput, "P_{in}");
 
@@ -595,11 +606,42 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
     for (auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
-        out << "v" << s << " -> v" << t;
+
+        bool isLocal = true;
+        if (s >= FirstStreamSet) {
+            const auto p = parent(s, G);
+            isLocal = KernelPartitionId[p] == KernelPartitionId[t];
+        }
+
+        out << "v" << s << " -> v" << t <<
+               " [";
         const BufferRateData & pd = G[e];
-        out << " [label=\"#" << pd.Port.Number << ": ";
-        rate_range(pd.Minimum, pd.Maximum);
+        out << "label=\"#" << pd.Port.Number << ": ";
         const Binding & binding = pd.Binding;
+        const ProcessingRate & rate = binding.getRate();
+        switch (rate.getKind()) {
+            case RateId::Fixed:
+                out << "F(";
+                print_rational(pd.Minimum);
+                out << ")";
+                break;
+            case RateId::Bounded:
+                out << "B(";
+                rate_range(pd.Minimum, pd.Maximum);
+                out << ")";
+                break;
+            case RateId::Greedy:
+                out << "G(";
+                print_rational(rate.getLowerBound());
+                out << ",*)";
+                break;
+            case RateId::PartialSum:
+                out << "P(";
+                print_rational(rate.getUpperBound());
+                out << ")";
+                break;
+            default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
+        }
         if (binding.hasAttribute(AttrId::Principal)) {
             out << " [P]";
         }
@@ -608,7 +650,13 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
-        out << "\\n" << name << "\"];\n";
+        out << "\\n" << name << "\"";
+        if (isLocal) {
+            out << " style=dashed";
+        } else if (pd.Minimum != pd.Maximum) {
+            out << " style=bold";
+        }
+        out << "];\n";
     }
 
     out << "}\n\n";
