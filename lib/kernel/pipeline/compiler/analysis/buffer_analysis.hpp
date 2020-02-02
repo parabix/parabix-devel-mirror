@@ -208,7 +208,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                     if (producerPartitionId != KernelPartitionId[consumer]) {
                         dynamic = true;
                     // Could we consume less data than we produce?
-                    } else if (cMin < pMax) {
+                    } else if (consumerRate.Minimum < consumerRate.Maximum) {
                         dynamic = true;
                     // Or is the data consumption rate unpredictable despite its type?
                     } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
@@ -527,7 +527,6 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
                     break;
                 default: llvm_unreachable("unknown buffer type");
             }
-
         }
 
         if (bn.LookBehind) {
@@ -544,64 +543,65 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
 
     };
 
-    auto printVertex = [&](const unsigned v, const StringRef name) {
-        out << "v" << v << " [label=\"[" <<
-                v << "] " << name << "\\n"
+    auto currentPartition = PartitionCount;
+    bool closePartition = false;
+
+    auto checkClosePartitionLabel = [&]() {
+        if (closePartition) {
+            out << "}\n";
+            closePartition = false;
+        }
+    };
+
+    auto checkOpenPartitionLabel = [&](const unsigned kernel) {
+        const auto partitionId = KernelPartitionId[kernel];
+        if (partitionId != currentPartition) {
+            checkClosePartitionLabel();
+            if (LLVM_LIKELY(partitionId != -1U)) {
+                out << "subgraph cluster_" << partitionId << " {\n"
+                       "label = \"Partition #" << partitionId  << "\""
+                       "style=\"rounded\";"
+                       "color=\"#028d35\";"
+                       "\n";
+            }
+            closePartition = true;
+        }        
+        currentPartition = partitionId;
+    };
+
+    auto printKernel = [&](const unsigned kernel, const StringRef name) {
+        checkOpenPartitionLabel(kernel);
+        out << "v" << kernel << " [label=\"[" <<
+                kernel << "] " << name << "\\n"
                 //" Partition: " << KernelPartitionId[v] << "\\n"
-                " Expected:  ["; print_rational(MinimumNumOfStrides[v]) << ',';
-                                print_rational(MaximumNumOfStrides[v]) << "]\\n"
+                " Expected:  ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
+                                print_rational(MaximumNumOfStrides[kernel]) << "]\\n"
                 "\" shape=rect, style=rounded, peripheries=2"
                 "];\n";
 
-        for (const auto e : make_iterator_range(out_edges(v, G))) {
-            const auto streamSet = target(e, G);           
+        for (const auto e : make_iterator_range(out_edges(kernel, G))) {
+            const auto streamSet = target(e, G);
             printStreamSet(streamSet);
         }
     };
 
-    auto currentPartition = PartitionCount;
-
-    auto openPartitionLabel = [&](const unsigned partitionId) {
-        out << "subgraph cluster_" << partitionId << " {\n"
-               "label = \"Partition #" << partitionId  << "\""
-               "style=\"rounded\";"
-               "color=\"#028d35\";"
-               "\n";
-        currentPartition = partitionId;
-    };
-
-    auto closePartitionLabel = [&]() {
-        out << "}\n";
-    };
-
     out << "digraph \"" << mTarget->getName() << "\" {\n"
            "rankdir=tb;"
-           "nodesep=0.5;"
-           "ranksep=1;"           
+           "nodesep=0.25;"
+           "ranksep=0.5;"
            "newrank=true;"
            "splines=ortho;"
            "\n";
 
-
-    openPartitionLabel(KernelPartitionId[PipelineInput]);
-    printVertex(PipelineInput, "P_{in}");
-
+    printKernel(PipelineInput, "P_{in}");
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const auto partitionId = KernelPartitionId[i];
-        if (partitionId != currentPartition) {
-            closePartitionLabel();
-            openPartitionLabel(partitionId);
-        }
         const Kernel * const kernel = getKernel(i);
-        std::string name = kernel->getName();
+        auto name = kernel->getName().str();
         boost::replace_all(name, "\"", "\\\"");       
-        printVertex(i, name);
+        printKernel(i, name);
     }
-    closePartitionLabel();
-
-    openPartitionLabel(KernelPartitionId[PipelineOutput]);
-    printVertex(PipelineOutput, "P_{out}");
-    closePartitionLabel();
+    printKernel(PipelineOutput, "P_{out}");
+    checkClosePartitionLabel();
 
 
     for (auto e : make_iterator_range(edges(G))) {
