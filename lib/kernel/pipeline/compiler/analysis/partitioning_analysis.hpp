@@ -374,61 +374,88 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
     using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
-    const auto n = num_vertices(G);
+    flat_map<unsigned, unsigned> mapping;
+
+    auto mapped =[&](const unsigned u) {
+        const auto f = mapping.find(u); assert (f != mapping.end());
+        return f->second;
+    };
+
+    unsigned n = 0;
+    for (const auto u : make_iterator_range(vertices(G))) {
+        const RelationshipNode & node = G[u];
+        switch (node.Type) {
+            case RelationshipNode::IsKernel:
+                if (LLVM_LIKELY(partitionIds[u] != -1U)) {
+                    mapping.emplace(u, n++);
+                }
+            default: break;
+        }
+    }
+
     ConstraintGraph C(n);
 
     const auto m = partitions.size();
     ConstraintGraph P(m);
 
-    for (const auto kernel : make_iterator_range(vertices(G))) {
+    flat_set<unsigned> inputs;
+
+    for (const auto p : mapping) {
+        const auto kernel = p.first;
+        if (LLVM_LIKELY(partitionIds[kernel] == -1U)) {
+            continue;
+        }
+        const auto u = p.second;
+
         const RelationshipNode & node = G[kernel];
-        if (node.Type == RelationshipNode::IsKernel) {
-            // enumerate the input constraints
-            const auto partitionId = partitionIds[kernel];
-            if (partitionId == -1U) {
-                continue;
-            }
-            for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-                const auto node = source(input, G);
-                const RelationshipNode & rn = G[node];
-                if (rn.Type == RelationshipNode::IsBinding) {
-                    const auto f = first_in_edge(node, G);
-                    assert (G[f].Reason != ReasonType::Reference);
-                    const auto streamSet = source(f, G);
-                    assert (G[streamSet].Type == RelationshipNode::IsRelationship);
-                    assert (isa<StreamSet>(G[streamSet].Relationship));
-                    const auto outputBinding = parent(streamSet, G);
-                    assert (G[outputBinding].Type == RelationshipNode::IsBinding);
-                    const auto output = first_in_edge(outputBinding, G);
-                    assert (G[output].Reason != ReasonType::Reference);
-                    const auto producer = source(output, G);
-                    assert (G[producer].Type == RelationshipNode::IsKernel);
-                    add_edge(producer, kernel, C);
-                } else if (LLVM_UNLIKELY(rn.Type == RelationshipNode::IsKernel)) {
-                    assert (G[input].Reason == ReasonType::OrderingConstraint);
-                    add_edge(node, kernel, C);
-                }
-            }
-            // then summarize any partition constraints
-            for (const auto output : make_iterator_range(in_edges(kernel, C))) {
-                const auto producerPartitionId = partitionIds[source(output, C)];
-                if (partitionId != producerPartitionId && producerPartitionId != -1U) {
-                    add_edge(producerPartitionId, partitionId, P);
+        assert (node.Type == RelationshipNode::IsKernel);
+
+        // enumerate the input constraints
+        const auto partitionId = partitionIds[kernel];
+        assert (partitionId != -1U);
+
+        assert (inputs.empty());
+
+        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+            const auto node = source(input, G);
+            const RelationshipNode & rn = G[node];
+            if (rn.Type == RelationshipNode::IsBinding) {
+                const auto f = first_in_edge(node, G);
+                assert (G[f].Reason != ReasonType::Reference);
+                const auto streamSet = source(f, G);
+                assert (G[streamSet].Type == RelationshipNode::IsRelationship);
+                assert (isa<StreamSet>(G[streamSet].Relationship));
+                const auto outputBinding = parent(streamSet, G);
+                assert (G[outputBinding].Type == RelationshipNode::IsBinding);
+                const auto output = first_in_edge(outputBinding, G);
+                assert (G[output].Reason != ReasonType::Reference);
+                const auto producer = source(output, G);
+                assert (G[producer].Type == RelationshipNode::IsKernel);
+                inputs.insert(producer);
+            } else if (LLVM_UNLIKELY(rn.Type == RelationshipNode::IsKernel)) {
+                assert (G[input].Reason == ReasonType::OrderingConstraint);
+                if (partitionIds[node] != -1U) {
+                    inputs.insert(node);
                 }
             }
         }
+
+        // then summarize any partition constraints
+        for (const auto input : inputs) {
+            add_edge(mapped(input), u, C);
+            const auto producerPartitionId = partitionIds[input];
+            assert (producerPartitionId != -1U);
+            if (partitionId != producerPartitionId) {
+                add_edge(producerPartitionId, partitionId, P);
+            }
+        }
+
+        inputs.clear();
+
     }
 
-    // take the transitive reduction of the partition constraint graph to reduce the number of
-    // edges we'll end up inserting into C.
-
-    printGraph(P, errs(), "P");
-
-    transitive_reduction_dag(P);
-
-    errs() << "C1\n";
-
-    transitive_reduction_dag(C);
+    // Construct an "ordering" for the partitions that attempts to minimize the liveness
+    // of the partition streams.
 
     const auto cfg = Z3_mk_config();
     Z3_set_param_value(cfg, "model", "true");
@@ -438,58 +465,54 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     const auto solver = Z3_mk_optimize(ctx);
     Z3_optimize_inc_ref(ctx, solver);
 
-    flat_map<unsigned, Z3_ast> VarList;
+    Z3_optimize_push(ctx, solver);
 
-    auto get =[&](const unsigned u) {
-        const auto f = VarList.find(u); assert (f != VarList.end());
-        const auto v = f->second; assert (v);
-        return v;
-    };
 
-    const auto varType = Z3_mk_real_sort(ctx);
 
-    for (const auto u : make_iterator_range(vertices(G))) {
-        const RelationshipNode & node = G[u];
-        if (node.Type == RelationshipNode::IsKernel) {
-            const auto var = Z3_mk_fresh_const(ctx, nullptr, varType);
-            VarList.emplace(u, var);
-        }
-    }
 
-    // Ensure no value is equal
-    BEGIN_SCOPED_REGION
-    std::vector<Z3_ast> vars;
-    vars.reserve(VarList.size());
-    for (const auto v : VarList) {
-        vars.push_back(v.second);
-    }
-    Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, vars.size(), vars.data()));
-    END_SCOPED_REGION
+
+    Z3_optimize_pop(ctx, solver);
+
+    // take the transitive reduction of the partition constraint graph to reduce the number of
+    // edges we'll end up inserting into C.
+
+    transitive_reduction_dag(P);
 
     // merge the partition constraints into the constraint graph
     for (const auto e : make_iterator_range(edges(P))) {
         const auto i = source(e, P);
         const auto j = target(e, P);
         assert (i != j);
-        for (const auto u : partitions[i]) {
-            for (const auto v : partitions[j]) {
+        for (const auto x : partitions[i]) {
+            const auto u = mapped(x);
+            for (const auto y : partitions[j]) {
+                const auto v = mapped(y);
                 assert (u != v);
                 add_edge(u, v, C);
             }
         }
     }
 
-    // then take the TR again to reduce the number of Z3 constraints we'll
-    // end up adding
-
-    errs() << "C2\n";
-
     transitive_reduction_dag(C);
+
+
+    std::vector<Z3_ast> vars(n);
+
+    const auto varType = Z3_mk_int_sort(ctx);
+
+    for (const auto u : make_iterator_range(vertices(C))) {
+        vars[u] = Z3_mk_fresh_const(ctx, nullptr, varType);
+    }
+
+    // Ensure no value is equal
+    BEGIN_SCOPED_REGION
+    Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, vars.size(), vars.data()));
+    END_SCOPED_REGION
 
     // create the dependency constraints
     for (const auto e : make_iterator_range(edges(C))) {
-        const auto i = get(source(e, C));
-        const auto j = get(target(e, C));
+        const auto i = vars[source(e, C)];
+        const auto j = vars[target(e, C)];
         Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, i, j));
     }
 
@@ -500,15 +523,11 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
 //    std::map<const StringRef, std::vector<unsigned>> S;
 
-//    for (const auto v : VarList) {
-//        const auto u = v.first;
-//        const RelationshipNode & node = G[u];
+//    for (const auto v : mapping) {
+//        const RelationshipNode & node = G[v.first];
 //        assert (node.Type == RelationshipNode::IsKernel);
-//        if (LLVM_UNLIKELY(node.Kernel == mTarget)) {
-//            continue;
-//        }
 //        const auto sig = node.Kernel->getSignature();
-//        S[sig].push_back(u);
+//        S[sig].push_back(v.second);
 //    }
 
 //    for (const auto k : S) {
@@ -516,9 +535,9 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 //        if (K.size() > 1) {
 //            const auto begin = K.cbegin(), end = K.cend();
 //            for (auto i = begin + 1; i != end; ++i) {
-//                const auto X = get(*i);
+//                const auto X = vars[*i];
 //                for (auto j = begin; j != i; ++j) {
-//                    const auto Y = get(*j);
+//                    const auto Y = vars[*j];
 //                    Z3_ast args1[2] = { X, Y };
 //                    const auto a = Z3_mk_sub(ctx, 2, args1);
 //                    Z3_ast args2[2] = { Y, X };
@@ -533,24 +552,32 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
     END_SCOPED_REGION
 
-    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
+    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution");
     }
 
+    BEGIN_SCOPED_REGION
+    flat_map<unsigned, unsigned> reverse;
+    reverse.reserve(n);
+    for (auto a : mapping) {
+        reverse.emplace(a.second, a.first);
+    }
+    mapping.swap(reverse);
+    END_SCOPED_REGION
 
 
 
-    // add some optimization goals to try minimize the distance between
-    // producers and consumers.
+//    // add some optimization goals to try minimize the distance between
+//    // producers and consumers.
 //    for (const auto e : make_iterator_range(edges(C))) {
 //        const auto u = source(e, C);
 //        const auto v = target(e, C);
-//        if (partitionIds[u] == partitionIds[v]) {
+//        if (partitionIds[mapped(u)] == partitionIds[mapped(v)]) {
 
 //            errs() << "MIN " << u << "," << v << "\n";
 
-//            const auto i = get(u);
-//            const auto j = get(v);
+//            const auto i = vars[u];
+//            const auto j = vars[v];
 //            Z3_ast args[2] = { j, i };
 //            const auto r = Z3_mk_sub(ctx, 2, args);
 //            Z3_optimize_minimize(ctx, solver, r);
@@ -559,31 +586,32 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
 //    }
 
-    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
+    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution 2");
     }
 
 
     // we cannot guarantee that each value will be +1 of its prior one
-    std::vector<std::pair<rational<__int64>, unsigned>> ordering;
-    ordering.reserve(VarList.size());
+    std::vector<std::pair<__int64, unsigned>> ordering;
+    ordering.reserve(vars.size());
 
     const auto model = Z3_optimize_get_model(ctx, solver);
     Z3_model_inc_ref(ctx, model);
-    for (const auto v : VarList) {
+    for (unsigned i = 0; i < n; ++i) {
+        Z3_ast var = vars[i];
         Z3_ast value;
-        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, v.second, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, var, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
         }
-        __int64 num, denom;
-        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+        __int64 num;
+        if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        ordering.emplace_back(num, v.first);
+        ordering[i] = std::make_pair(num, i);
     }
     Z3_model_dec_ref(ctx, model);
 
-    std::vector<rational<__int64>> T(num_vertices(C));
+    std::vector<__int64> T(num_vertices(C));
 
     for (auto a : ordering) {
         T[a.second] = a.first;
@@ -593,9 +621,10 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         const auto u = source(e, C);
         const auto v = target(e, C);
 
-        errs() << u << ":(" << T[u].numerator() << "/" << T[u].denominator() << ")"
+        errs() << "VAL: " <<
+                  u << ":(" << T[u] << ")"
                   " < " <<
-                  v << ":(" << T[v].numerator() << "/" << T[v].denominator() << ")"
+                  v << ":(" << T[v] << ")"
                   "\n";
 
         assert (T[u] < T[v]);
@@ -612,9 +641,9 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     const auto end = ordering.end();
 
     for (auto i = ordering.begin();; ) {
-        const auto u = i->second;
+        const auto u = mapped(i->second);
         if (++i == end) break;
-        const auto v = i->second;
+        const auto v = mapped(i->second);
         add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
     }
 
