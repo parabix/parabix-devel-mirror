@@ -9,15 +9,20 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief partitionIntoFixedRateRegionWithOrderingConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const {
+unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G,
+                                                                                std::vector<unsigned> & partitionIds,
+                                                                                const PipelineKernel * const pipelineKernel) const {
+    const auto partitions = identifyKernelPartitions(G, partitionIds, pipelineKernel);
+    addOrderingConstraintsToPartitionSubgraphs(G, partitionIds, partitions);
+    return partitions.size();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyKernelPartitions
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relationships & G, std::vector<unsigned> & partitionIds, const PipelineKernel * const pipelineKernel) const {
 
     using BitSet = dynamic_bitset<>;
-
-    using GuaranteedConsumptionRates = flat_map<unsigned, Rational>;
-
-    using GuaranteedConsumptionRateGraph = adjacency_list<hash_setS, vecS, bidirectionalS, GuaranteedConsumptionRates>;
-
-    using PartitionTaintGraph = adjacency_list<vecS, vecS, bidirectionalS, BitSet>;
 
     using PartitionTaintGraph = adjacency_list<vecS, vecS, bidirectionalS, BitSet>;
     using Vertex = PartitionTaintGraph::vertex_descriptor;
@@ -52,24 +57,6 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
     if (LLVM_UNLIKELY(!lexical_ordering(G, orderingOfG))) {
         report_fatal_error("Cannot lexically order the initial pipeline graph!");
     }
-
-
-    std::vector<GuaranteedConsumptionRates> R(streamSets);
-
-    auto merge = [&](GuaranteedConsumptionRates & A, const GuaranteedConsumptionRates & B) {
-        if (LLVM_UNLIKELY(A.empty())) {
-            A = B;
-        } else {
-            for (const auto b : B) {
-                auto f = A.find(b.first);
-                if (f == A.end()) {
-                    A.emplace(b.first, b.second);
-                } else {
-                    f->second = std::max(f->second, b.second);
-                }
-            }
-        }
-    };
 
     PartitionTaintGraph H(kernels + streamSets);
 
@@ -131,8 +118,6 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     std::vector<Relationships::vertex_descriptor> mappedKernel(kernels);
 
-    GuaranteedConsumptionRates guaranteed;
-
     // Begin by constructing a graph that represents the I/O relationships
     // and any partition boundaries.
     for (const auto u : orderingOfG) {
@@ -147,57 +132,11 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             assert (H[kernel].none());
 
             const Kernel * const kernelObj = node.Kernel;
-
-            guaranteed.clear();
-
-            // Merge all guaranteed input rates into the dominating rate set.
-            for (const auto e : make_iterator_range(in_edges(u, G))) {
-                const auto binding = source(e, G);
-                const RelationshipNode & rn = G[binding];
-                if (rn.Type == RelationshipNode::IsBinding) {
-
-                    const auto f = first_in_edge(binding, G);
-                    assert (G[f].Reason != ReasonType::Reference);
-                    const auto streamSet = source(f, G);
-                    assert (G[streamSet].Type == RelationshipNode::IsRelationship);
-                    assert (isa<StreamSet>(G[streamSet].Relationship));
-                    const auto buffer = mapStreamSet(streamSet);
-
-                    merge(guaranteed, R[buffer - kernels]);
-
-                    const Binding & b = rn.Binding;
-                    const ProcessingRate & rate = b.getRate();
-
-                    switch (rate.getKind()) {
-                        case RateId::Bounded:
-                            if (LLVM_LIKELY(rate.getLowerBound().numerator() == 0)) {
-                                break;
-                            }
-                        case RateId::Fixed:
-                            BEGIN_SCOPED_REGION
-                            const auto L = rate.getLowerBound() * kernelObj->getStride();
-                            const auto f = guaranteed.find(buffer);
-                            if (f == guaranteed.end()) {
-                                guaranteed.emplace(buffer, L);
-                            } else {
-                                f->second = std::max(f->second, L);
-                            }
-                            END_SCOPED_REGION
-                        default: break;
-                    }
-
-                }
+            if (kernelObj == pipelineKernel) {
+                continue;
             }
 
-            auto noDominatingConsumptionRate = [&](const Vertex streamSet, const ProcessingRate & rate) -> bool {
-                const auto f = guaranteed.find(streamSet);
-                if (f == guaranteed.end()) {
-                    return true;
-                }
-                const auto required = rate.getUpperBound() * kernelObj->getStride();
-                return f->second >= required;
-            };
-
+            // place the pipeline source/sink into a new (isolated) partition
             bool isNewPartitionRoot = false;
 
             // Iterate through the inputs
@@ -218,10 +157,10 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
                     switch (rate.getKind()) {
                         case RateId::PartialSum:
-                            if (noDominatingConsumptionRate(streamSet, rate)) {
-                                const auto partialSum = checkForPartialSumEntry(buffer);
-                                add_edge(partialSum, buffer, H);
-                            }
+                            BEGIN_SCOPED_REGION
+                            const auto partialSum = checkForPartialSumEntry(buffer);
+                            add_edge(partialSum, buffer, H);
+                            END_SCOPED_REGION
                             break;
                         case RateId::Greedy:
                             // A kernel with a greedy input cannot safely be included in its
@@ -238,13 +177,8 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             END_SCOPED_REGION
                             break;
                         case RateId::Bounded:
-                            // A bounded input rate signifies a new partition except
-                            // when there is an alternate path from this kernel to
-                            // the buffer in which the min consumption rate of that
-                            // buffer is >= this bounded rate's maximum.
-                            if (noDominatingConsumptionRate(streamSet, rate)) {
-                                isNewPartitionRoot = true;
-                            }
+                            // A bounded input rate always starts a new partition
+                            isNewPartitionRoot = true;
                             break;
 
                         default: break;
@@ -287,8 +221,6 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                 addRateId(H[kernel], nextRateId++);
             }
 
-            flat_set<Vertex> outputs;
-
             // Now iterate through the outputs
             for (const auto e : make_iterator_range(out_edges(u, G))) {
 
@@ -306,7 +238,6 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                     const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
                     add_edge(kernel, buffer, H);
-                    outputs.insert(buffer);
                     switch (rate.getKind()) {
                         case RateId::PartialSum:
                             BEGIN_SCOPED_REGION
@@ -345,12 +276,7 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
                             default: break;
                         }
                     }
-                }                
-            }
-
-            // Update the descendents with any new guaranteed rates
-            for (const auto buffer : outputs) {
-                merge(R[buffer - kernels], guaranteed);
+                }
             }
 
             // Each output of a source kernel is given a rate not shared by the kernel itself
@@ -359,15 +285,16 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
             // to be in the same partition (assuming they have no other inputs from differing
             // partitions.)
             if (LLVM_UNLIKELY(in_degree(kernel, H) == 0 && out_degree(kernel, H) != 0)) {
-                // place the source in its own partition
+                // place each input source kernel in its own partition
                 addRateId(H[kernel], nextRateId++);
-                const auto sourceKernelRateId = nextRateId++;
-                for (const auto output : make_iterator_range(out_edges(u, H))) {
-                    const auto buffer = target(output, H);
-                    addRateId(H[buffer], sourceKernelRateId);
+                if (LLVM_LIKELY(out_degree(kernel, H) != 0)) {
+                    const auto sourceKernelRateId = nextRateId++;
+                    for (const auto output : make_iterator_range(out_edges(u, H))) {
+                        const auto buffer = target(output, H);
+                        addRateId(H[buffer], sourceKernelRateId);
+                    }
                 }
             }
-
         }
     }
 
@@ -395,227 +322,305 @@ unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(
 
     std::vector<Partition> partitions;
 
+    partitionIds.resize(num_vertices(G), 0);
+
     BEGIN_SCOPED_REGION
 
     PartitionMap partitionSets;
+
     // Now that we've tainted the kernels with any influencing rates,
     // cluster them into partitions.
     for (const auto u : orderingOfH) {
         // We want to obtain all kernels but still maintain the lexical ordering of each partition root
         if (u < kernels) {
             BitSet & node = H[u];
-            assert ("active kernel rate set cannot be empty!" && (node.none() ^ (in_degree(u, H) != 0 || out_degree(u, H) != 0)));
-            if (LLVM_UNLIKELY(node.none())) continue;
-            auto f = partitionSets.find(node);
-            if (f == partitionSets.end()) {
-                const auto i = partitions.size();
-                partitions.emplace_back();
-                f = partitionSets.emplace(std::move(node), i).first;
+            const auto k = mappedKernel[u];
+            assert(node.none() ^ (G[k].Kernel != pipelineKernel));
+            if (LLVM_UNLIKELY(node.none())) {
+                partitionIds[k] = -1U;
+            } else {
+                auto f = partitionSets.find(node);
+                if (f == partitionSets.end()) {
+                    const auto i = partitions.size();
+                    partitions.emplace_back();
+                    f = partitionSets.emplace(std::move(node), i).first;
+                }
+                Partition & P = partitions[f->second];
+                P.push_back(k);
             }
-            Partition & P = partitions[f->second];
-            P.push_back(mappedKernel[u]);
         }
     }
 
     END_SCOPED_REGION
 
-    partitionIds.resize(num_vertices(G), 0);
-
-    const auto n = partitions.size();
-    if (LLVM_UNLIKELY(n < 2)) {
-        return n;
-    }
-
     // Then provide each partition with a unique id
     unsigned partitionId = 0U;
-    for (auto i = partitions.begin();;) {
-        const Partition & A = *i;
+    for (const Partition & A : partitions) {
         for (const auto v : A) {
             partitionIds[v] = partitionId;
         }
         ++partitionId;
-        if (++i == partitions.end()) {
-            break;
-        }
-        // and add any constraints between each adjacent partition
-        const Partition & B = *i;
-        for (const auto u : A) {
-            for (const auto v : B) {
-                assert (u != v);
-                add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+    }
+    assert (partitionId == partitions.size());
+    return partitions;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief extractPartitionSubgraphs
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
+                                                                  const std::vector<unsigned> & partitionIds,
+                                                                  const std::vector<Partition> & partitions) const {
+
+    using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+
+    const auto n = num_vertices(G);
+    ConstraintGraph C(n);
+
+    const auto m = partitions.size();
+    ConstraintGraph P(m);
+
+    for (const auto kernel : make_iterator_range(vertices(G))) {
+        const RelationshipNode & node = G[kernel];
+        if (node.Type == RelationshipNode::IsKernel) {
+            // enumerate the input constraints
+            const auto partitionId = partitionIds[kernel];
+            if (partitionId == -1U) {
+                continue;
+            }
+            for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+                const auto node = source(input, G);
+                const RelationshipNode & rn = G[node];
+                if (rn.Type == RelationshipNode::IsBinding) {
+                    const auto f = first_in_edge(node, G);
+                    assert (G[f].Reason != ReasonType::Reference);
+                    const auto streamSet = source(f, G);
+                    assert (G[streamSet].Type == RelationshipNode::IsRelationship);
+                    assert (isa<StreamSet>(G[streamSet].Relationship));
+                    const auto outputBinding = parent(streamSet, G);
+                    assert (G[outputBinding].Type == RelationshipNode::IsBinding);
+                    const auto output = first_in_edge(outputBinding, G);
+                    assert (G[output].Reason != ReasonType::Reference);
+                    const auto producer = source(output, G);
+                    assert (G[producer].Type == RelationshipNode::IsKernel);
+                    add_edge(producer, kernel, C);
+                } else if (LLVM_UNLIKELY(rn.Type == RelationshipNode::IsKernel)) {
+                    assert (G[input].Reason == ReasonType::OrderingConstraint);
+                    add_edge(node, kernel, C);
+                }
+            }
+            // then summarize any partition constraints
+            for (const auto output : make_iterator_range(in_edges(kernel, C))) {
+                const auto producerPartitionId = partitionIds[source(output, C)];
+                if (partitionId != producerPartitionId && producerPartitionId != -1U) {
+                    add_edge(producerPartitionId, partitionId, P);
+                }
             }
         }
     }
-    assert (partitionId == n);
 
-#if 0
+    // take the transitive reduction of the partition constraint graph to reduce the number of
+    // edges we'll end up inserting into C.
 
-    // Now that we've determined which kernels are to be placed into which partition, reorder the
-    // kernels within the partitions s.t. (1) those that consume data from another partition are
-    // placed as early as possible in the partition and (2) identical kernels are grouped together.
+    printGraph(P, errs(), "P");
 
-    struct ReorderData {
-        unsigned Vertex = 0;
-        unsigned Inputs = 0;
-        unsigned Outputs = 0;
+    transitive_reduction_dag(P);
+
+    errs() << "C1\n";
+
+    transitive_reduction_dag(C);
+
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "model", "true");
+    Z3_set_param_value(cfg, "proof", "false");
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+    const auto solver = Z3_mk_optimize(ctx);
+    Z3_optimize_inc_ref(ctx, solver);
+
+    flat_map<unsigned, Z3_ast> VarList;
+
+    auto get =[&](const unsigned u) {
+        const auto f = VarList.find(u); assert (f != VarList.end());
+        const auto v = f->second; assert (v);
+        return v;
     };
 
-    using ReorderGraph = adjacency_list<vecS, vecS, bidirectionalS, ReorderData>;
+    const auto varType = Z3_mk_real_sort(ctx);
 
-    for (unsigned pId = 0; pId < n; ++pId) {
-        const auto & P = partitions[pId];
-        const auto m = P.size();
-        if (LLVM_UNLIKELY(m < 2)) continue;
-
-        std::vector<unsigned> sortedKernels(P);
-
-        constexpr unsigned STREAM_SET_VERTEX = -1U;
-
-        auto makePartitionReorderGraph = [&]() {
-
-            ReorderGraph H(m);
-            flat_map<unsigned, unsigned> M;
-
-            auto map = [&](const unsigned u) -> unsigned {
-                const auto f = M.find(u);
-                if (f == M.end()) {
-                    const auto v = add_vertex(H);
-                    ReorderData & R = H[v];
-                    R.Vertex = STREAM_SET_VERTEX;
-                    M.emplace(u, v);
-                    return v;
-                }
-                return f->second;
-            };
-
-            assert (sortedKernels.size() == m);
-
-            for (unsigned u = 0; u < m; ++u) {
-                const auto kernel = sortedKernels[u];
-                ReorderData & R = H[u];
-                R.Vertex = kernel;
-                for (const auto e : make_iterator_range(in_edges(kernel, G))) {
-                    const auto bindingOrScalar = source(e, G);
-                    const RelationshipNode & node = G[bindingOrScalar];
-                    if (node.Type == RelationshipNode::IsBinding) {
-                        for (const auto f : make_iterator_range(in_edges(bindingOrScalar, G))) {
-                            const auto streamSet = source(f, G);
-                            add_edge(map(streamSet), u, H);
-                        }
-                    }
-                }
-                for (const auto e : make_iterator_range(out_edges(kernel, G))) {
-                    const auto bindingOrScalar = target(e, G);
-                    const RelationshipNode & node = G[bindingOrScalar];
-                    if (node.Type == RelationshipNode::IsBinding) {
-                        const auto f = out_edge(bindingOrScalar, G);
-                        const auto streamSet = target(f, G);
-                        add_edge(u, map(streamSet), H);
-                    }
-                }
-            }
-            return H;
-        };
-
-        auto H1 = makePartitionReorderGraph();
-
-        // Take the transitive reduction of H1 to ensure we only count the
-        // earliest necessary use of a stream
-
-        transitive_reduction_dag(H1);
-
-        const auto w = num_vertices(H1);
-
-        // count how many (partition) external inputs/outputs we have
-
-        for (unsigned i = 0; i < w; ++i) {
-            const ReorderData & A = H1[i];
-            if (A.Vertex == STREAM_SET_VERTEX) {
-                if (in_degree(i, H1) == 0) {
-                    for (const auto e : make_iterator_range(out_edges(i, H1))) {
-                        const auto j = target(e, H1);
-                        ReorderData & R = H1[j];
-                        assert (R.Vertex != STREAM_SET_VERTEX);
-                        R.Inputs++;
-                    }
-                }
-                if (out_degree(i, H1) == 0) {
-                    for (const auto e : make_iterator_range(in_edges(i, H1))) {
-                        const auto j = source(e, H1);
-                        ReorderData & R = H1[j];
-                        assert (R.Vertex != STREAM_SET_VERTEX);
-                        R.Outputs++;
-                    }
-                }
-            }
+    for (const auto u : make_iterator_range(vertices(G))) {
+        const RelationshipNode & node = G[u];
+        if (node.Type == RelationshipNode::IsKernel) {
+            const auto var = Z3_mk_fresh_const(ctx, nullptr, varType);
+            VarList.emplace(u, var);
         }
-
-        auto find = [&](const unsigned i) -> const ReorderData & {
-            for (unsigned j = 0; j < m; ++j) {
-                const ReorderData & R = H1[j];
-                if (R.Vertex == i) {
-                    return R;
-                }
-            }
-            llvm_unreachable("cannot locate original vertex?");
-        };
-
-        auto signature =[&](const unsigned i) -> StringRef {
-            const RelationshipNode & node = G[i];
-            assert (node.Type == RelationshipNode::IsKernel);
-            return node.Kernel->getSignature();
-        };
-
-        std::stable_sort(sortedKernels.begin(), sortedKernels.end(),
-            [&](const unsigned i, const unsigned j) {
-                const auto & A = find(i);
-                const auto & B = find(j);
-                if (A.Inputs > B.Inputs) {
-                    return true;
-                }
-                if (signature(i) < signature(j)) {
-                    return true;
-                }
-                if (A.Outputs < B.Outputs) {
-                    return true;
-                }
-                return false;
-            });
-
-        // By modifying the sorted order to proritize partition inputs,
-        // H2 may differ from H1.
-        const auto H2 = makePartitionReorderGraph();
-
-        assert (num_vertices(H2) == w);
-
-        std::vector<unsigned> O;
-        O.reserve(w);
-        const auto b = lexical_ordering(H2, O);
-        assert ("cannot lexically order partition?" && b);
-
-        sortedKernels.clear();
-
-        for (unsigned i = 0; i < w; ++i) {
-            const auto & R = H2[O[i]];
-            const auto u = R.Vertex;
-            if (u != STREAM_SET_VERTEX) {
-                sortedKernels.push_back(u);
-            }
-        }
-        assert (sortedKernels.size() == m);
-
-        for (unsigned i = 1; i < m; ++i) {
-            const auto u = sortedKernels[i - 1];
-            const auto v = sortedKernels[i];
-            assert (u != v);
-            add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
-        }
-
     }
 
-#endif
+    // Ensure no value is equal
+    BEGIN_SCOPED_REGION
+    std::vector<Z3_ast> vars;
+    vars.reserve(VarList.size());
+    for (const auto v : VarList) {
+        vars.push_back(v.second);
+    }
+    Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, vars.size(), vars.data()));
+    END_SCOPED_REGION
 
-    return n;
+    // merge the partition constraints into the constraint graph
+    for (const auto e : make_iterator_range(edges(P))) {
+        const auto i = source(e, P);
+        const auto j = target(e, P);
+        assert (i != j);
+        for (const auto u : partitions[i]) {
+            for (const auto v : partitions[j]) {
+                assert (u != v);
+                add_edge(u, v, C);
+            }
+        }
+    }
+
+    // then take the TR again to reduce the number of Z3 constraints we'll
+    // end up adding
+
+    errs() << "C2\n";
+
+    transitive_reduction_dag(C);
+
+    // create the dependency constraints
+    for (const auto e : make_iterator_range(edges(C))) {
+        const auto i = get(source(e, C));
+        const auto j = get(target(e, C));
+        Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, i, j));
+    }
+
+    BEGIN_SCOPED_REGION
+
+//    // Now search through all kernels and try to find any with a matching signature.
+//    // Try to minimize the distance between such kernels.
+
+//    std::map<const StringRef, std::vector<unsigned>> S;
+
+//    for (const auto v : VarList) {
+//        const auto u = v.first;
+//        const RelationshipNode & node = G[u];
+//        assert (node.Type == RelationshipNode::IsKernel);
+//        if (LLVM_UNLIKELY(node.Kernel == mTarget)) {
+//            continue;
+//        }
+//        const auto sig = node.Kernel->getSignature();
+//        S[sig].push_back(u);
+//    }
+
+//    for (const auto k : S) {
+//        const std::vector<unsigned> & K = k.second;
+//        if (K.size() > 1) {
+//            const auto begin = K.cbegin(), end = K.cend();
+//            for (auto i = begin + 1; i != end; ++i) {
+//                const auto X = get(*i);
+//                for (auto j = begin; j != i; ++j) {
+//                    const auto Y = get(*j);
+//                    Z3_ast args1[2] = { X, Y };
+//                    const auto a = Z3_mk_sub(ctx, 2, args1);
+//                    Z3_ast args2[2] = { Y, X };
+//                    const auto b = Z3_mk_sub(ctx, 2, args2);
+//                    const auto c = Z3_mk_ge(ctx, X, Y);
+//                    const auto r = Z3_mk_ite(ctx, c, a, b);
+//                    Z3_optimize_minimize(ctx, solver, r);
+//                }
+//            }
+//        }
+//    }
+
+    END_SCOPED_REGION
+
+    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
+        report_fatal_error("Z3 failed to find a partition ordering solution");
+    }
+
+
+
+
+    // add some optimization goals to try minimize the distance between
+    // producers and consumers.
+//    for (const auto e : make_iterator_range(edges(C))) {
+//        const auto u = source(e, C);
+//        const auto v = target(e, C);
+//        if (partitionIds[u] == partitionIds[v]) {
+
+//            errs() << "MIN " << u << "," << v << "\n";
+
+//            const auto i = get(u);
+//            const auto j = get(v);
+//            Z3_ast args[2] = { j, i };
+//            const auto r = Z3_mk_sub(ctx, 2, args);
+//            Z3_optimize_minimize(ctx, solver, r);
+
+//        }
+
+//    }
+
+    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
+        report_fatal_error("Z3 failed to find a partition ordering solution 2");
+    }
+
+
+    // we cannot guarantee that each value will be +1 of its prior one
+    std::vector<std::pair<rational<__int64>, unsigned>> ordering;
+    ordering.reserve(VarList.size());
+
+    const auto model = Z3_optimize_get_model(ctx, solver);
+    Z3_model_inc_ref(ctx, model);
+    for (const auto v : VarList) {
+        Z3_ast value;
+        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, v.second, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+        }
+        __int64 num, denom;
+        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+        }
+        ordering.emplace_back(num, v.first);
+    }
+    Z3_model_dec_ref(ctx, model);
+
+    std::vector<rational<__int64>> T(num_vertices(C));
+
+    for (auto a : ordering) {
+        T[a.second] = a.first;
+    }
+
+    for (const auto e : make_iterator_range(edges(C))) {
+        const auto u = source(e, C);
+        const auto v = target(e, C);
+
+        errs() << u << ":(" << T[u].numerator() << "/" << T[u].denominator() << ")"
+                  " < " <<
+                  v << ":(" << T[v].numerator() << "/" << T[v].denominator() << ")"
+                  "\n";
+
+        assert (T[u] < T[v]);
+    }
+
+    Z3_optimize_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
+
+    Z3_finalize_memory();
+
+    // Add the final constraints to the graph
+    std::sort(ordering.begin(), ordering.end());
+
+    const auto end = ordering.end();
+
+    for (auto i = ordering.begin();; ) {
+        const auto u = i->second;
+        if (++i == end) break;
+        const auto v = i->second;
+        add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+    }
+
+    printRelationshipGraph(G, errs(), "B");
+
+
 }
 
 #if 0
@@ -780,8 +785,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
 
-    assert (KernelPartitionId[firstKernel] == 0);
-    assert ((KernelPartitionId[lastKernel] + 1) == PartitionCount);
+//    assert (KernelPartitionId[firstKernel] == 0);
+//    assert ((KernelPartitionId[lastKernel] + 1) == PartitionCount);
 
     BitVector encountered(num_vertices(mBufferGraph), false);
 
@@ -1043,12 +1048,11 @@ std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 
     END_SCOPED_REGION
 
-
     // Generate a post dominator tree of G. If we do not have enough data to execute
     // a partition along some branched path, it's possible a post dominator of the paths
     // was prevented from executing because of some other paths output. If that path was
     // successfully executed, it may have enough data to process now despite the fact we
-    // had insufficient data on this path.
+    // produced no new data along this path.
 
     BEGIN_SCOPED_REGION
 

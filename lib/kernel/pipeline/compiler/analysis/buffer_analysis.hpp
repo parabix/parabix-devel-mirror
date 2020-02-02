@@ -559,7 +559,6 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         }
     };
 
-    bool closePrior = false;
     auto currentPartition = PartitionCount;
 
     auto openPartitionLabel = [&](const unsigned partitionId) {
@@ -569,7 +568,6 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
                "color=\"#028d35\";"
                "\n";
         currentPartition = partitionId;
-        closePrior = true;
     };
 
     auto closePartitionLabel = [&]() {
@@ -584,24 +582,27 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
            "splines=ortho;"
            "\n";
 
+
+    openPartitionLabel(KernelPartitionId[PipelineInput]);
     printVertex(PipelineInput, "P_{in}");
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const auto partitionId = KernelPartitionId[i];
         if (partitionId != currentPartition) {
-            if (closePrior) closePartitionLabel();
+            closePartitionLabel();
             openPartitionLabel(partitionId);
         }
-
         const Kernel * const kernel = getKernel(i);
         std::string name = kernel->getName();
         boost::replace_all(name, "\"", "\\\"");       
         printVertex(i, name);
     }
+    closePartitionLabel();
 
-    if (closePrior) closePartitionLabel();
-
+    openPartitionLabel(KernelPartitionId[PipelineOutput]);
     printVertex(PipelineOutput, "P_{out}");
+    closePartitionLabel();
+
 
     for (auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);

@@ -399,7 +399,7 @@ using PipelineIOGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, 
 template <typename T>
 using OwningVector = std::vector<std::unique_ptr<T>>;
 
-using PartitionIdVector = std::vector<unsigned>;
+using Partition = std::vector<unsigned>;
 
 struct PartitionData {
     unsigned        Kernel;
@@ -457,7 +457,7 @@ struct PipelineGraphBundle {
     RelationshipGraph       Scalars;
     OwningVector<Kernel>    InternalKernels;
     OwningVector<Binding>   InternalBindings;
-    PartitionIdVector       KernelPartitionId;
+    Partition       KernelPartitionId;
 
     PipelineGraphBundle(const unsigned n, const unsigned m,
                         OwningVector<Kernel> && internalKernels,
@@ -809,7 +809,18 @@ public:
 
 // partitioning analysis
 
-    unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G, std::vector<unsigned> & partitionIds) const;
+    unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G,
+                                                                  std::vector<unsigned> & partitionIds,
+                                                                  const PipelineKernel * const pipelineKernel) const;
+
+    std::vector<Partition> identifyKernelPartitions(const Relationships & G,
+                                                    std::vector<unsigned> & partitionIds,
+                                                    const PipelineKernel * const pipelineKernel) const;
+
+    void addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
+                                                    const std::vector<unsigned> & partitionIds,
+                                                    const std::vector<Partition> & partitions) const;
+
     PartitioningGraph generatePartitioningGraph() const;
     std::vector<unsigned> determinePartitionJumpIndices() const;
     std::vector<PartitionInput> determinePartitionInputEvaluationOrder(const unsigned partitionId) const;
@@ -1065,7 +1076,7 @@ protected:
     const unsigned                              LastCall;
     const unsigned                              FirstScalar;
     const unsigned                              LastScalar;
-    const PartitionIdVector                     KernelPartitionId;
+    const Partition                             KernelPartitionId;
     const unsigned                              PartitionCount;
 
     std::vector<Rational>                       MinimumNumOfStrides;

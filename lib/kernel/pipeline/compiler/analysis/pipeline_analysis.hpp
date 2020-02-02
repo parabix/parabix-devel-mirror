@@ -358,7 +358,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     // whether we can bypass a region without testing every kernel.
 
     std::vector<unsigned> partitionIds;
-    const auto numOfPartitions = partitionIntoFixedRateRegionsWithOrderingConstraints(G, partitionIds);
+    const auto numOfPartitions = partitionIntoFixedRateRegionsWithOrderingConstraints(G, partitionIds, pipelineKernel);
 
 
 
