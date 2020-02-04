@@ -24,6 +24,7 @@
 
 namespace kernel {
 
+#warning TODO: if an external buffer is marked as managed, have it allocate and manage the buffer but not deallocate it.
 
 inline Rational mod(const Rational & a, const Rational & b) {
     Rational n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
@@ -591,7 +592,6 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
            "nodesep=0.25;"
            "ranksep=0.5;"
            "newrank=true;"
-           "splines=ortho;"
            "\n";
 
     printKernel(PipelineInput, "P_{in}");

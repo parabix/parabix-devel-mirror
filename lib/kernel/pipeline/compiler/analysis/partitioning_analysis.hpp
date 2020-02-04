@@ -382,7 +382,13 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitSet>;
     using EdgeIterator = graph_traits<ConstraintGraph>::edge_iterator;
 
+    unsigned numOfKernels = 0;
+    for (const Partition & P : partitions) {
+        numOfKernels += P.size();
+    }
+
     flat_map<unsigned, unsigned> mapping;
+    mapping.reserve(numOfKernels);
 
     auto from_original =[&](const unsigned u) {
         const auto f = mapping.find(u); assert (f != mapping.end());
@@ -396,60 +402,34 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         return f->second;
     };
 
-    auto printConstraintGraph =[&](const ConstraintGraph & H, const StringRef name = "G") {
+    BEGIN_SCOPED_REGION
 
-        auto & out = errs();
-
-        out << "digraph \"" << name << "\" {\n";
-        for (auto v : make_iterator_range(vertices(H))) {
-            out << "v" << v << " [label=\"" << v << " ";
-            const BitSet & V = H[v];
-            if (V.any()) {
-                char delimiter = '{';
-                for (const auto i : H[v].set_bits()) {
-                    out << delimiter << i;
-                    delimiter = ',';
-                }
-                out << "}";
-            } else {
-                out << "{}";
-            }
-            out << "\"];\n";
-
-        }
-        for (auto e : make_iterator_range(edges(H))) {
-            const auto s = source(e, H);
-            const auto t = target(e, H);
-            out << "v" << s << " -> v" << t << ";\n";
-        }
-
-        out << "}\n\n";
-        out.flush();
-    };
-
-
-    unsigned n = 0;
+    unsigned i = 0;
     for (const auto u : orderingOfG) {
         const RelationshipNode & node = G[u];
         switch (node.Type) {
             case RelationshipNode::IsKernel:
                 if (LLVM_LIKELY(partitionIds[u] != -1U)) {
-                    mapping.emplace(u, n++);
+                    mapping.emplace(u, i++);
                 }
             default: break;
         }
     }
 
+    assert (i == numOfKernels);
+
     // pregenerate the reverse mapping for when we translate the
     // constraint graph back to the original graph G.
-    reverse_mapping.reserve(n);
+    reverse_mapping.reserve(numOfKernels);
     for (auto a : mapping) {
         reverse_mapping.emplace(a.second, a.first);
     }
 
-    const auto m = partitions.size();
-    ConstraintGraph P(m);
-    ConstraintGraph C(n);
+    END_SCOPED_REGION
+
+    const auto numOfPartitions = partitions.size();
+    ConstraintGraph P(numOfPartitions);
+    ConstraintGraph C(numOfKernels);
 
     flat_set<unsigned> inputs;
 
@@ -488,7 +468,8 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         // then write them and any summarized partition constraints
         const auto u = p.second;
         for (const auto input : inputs) {
-            add_edge(from_original(input), u, C);
+            const auto v = from_original(input);
+            add_edge(v, u, C);
             const auto producerPartitionId = partitionIds[input];
             assert (producerPartitionId != -1U);
             if (partitionId != producerPartitionId) {
@@ -504,9 +485,9 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     // constraints we'll add to the formula.
 
     ReverseTopologicalOrdering orderingOfP;
-    orderingOfP.reserve(m);
+    orderingOfP.reserve(numOfPartitions);
     ReverseTopologicalOrdering orderingOfC;
-    orderingOfC.reserve(n);
+    orderingOfC.reserve(numOfKernels);
     topological_sort(P, std::back_inserter(orderingOfP));
     topological_sort(C, std::back_inserter(orderingOfC));
 
@@ -520,7 +501,7 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     // in a way that reflects an optimal answer and prevent any "false" breaks later
     // in the partition skipping logic.
 
-    std::vector<unsigned> mappedPartitionId(n);
+    std::vector<unsigned> mappedPartitionId(numOfKernels);
 
     auto contract_constraint_graph = [&mappedPartitionId](ConstraintGraph & H, const ReverseTopologicalOrdering & O, const bool checkPartition) {
 
@@ -564,7 +545,7 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         return contracted;
     };
 
-    const auto contracted_partitions = contract_constraint_graph(P, orderingOfP, false);
+    const auto contractedPartitions = contract_constraint_graph(P, orderingOfP, false);
 
     // Build a partition mapping that reflects the *original* graph C
 
@@ -576,7 +557,7 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
             }
         }
     }
-    const auto contracted_kernels = contract_constraint_graph(C, orderingOfC, true);
+    const auto contractedKernels = contract_constraint_graph(C, orderingOfC, true);
 
     // Modify the vertex mapping from G to C to reflect the contracted graph C'.
     for (auto i = mapping.begin(); i != mapping.end(); ) {
@@ -604,34 +585,34 @@ found:  ++i;
     const auto solver = Z3_mk_optimize(ctx);
     Z3_optimize_inc_ref(ctx, solver);
 
-    assert (m <= n);
+    assert (numOfPartitions <= numOfKernels);
 
-    std::vector<Z3_ast> vars(n);
+    std::vector<Z3_ast> vars(numOfKernels);
 
     const auto varType = Z3_mk_int_sort(ctx);
 
     Z3_optimize_push(ctx, solver);
 
-    const auto l = (m - contracted_partitions);
+    const auto numOfContractedPartitions = (numOfPartitions - contractedPartitions);
 
     BEGIN_SCOPED_REGION
 
-    std::vector<Z3_ast> temp(l);
+    SmallVector<Z3_ast, 32> contractedVars(numOfContractedPartitions);
 
     const auto lb = Z3_mk_int(ctx, 0, varType);
-    const auto ub = Z3_mk_int(ctx, l, varType);
-    for (unsigned i = 0, j = 0; i < m; ++i) {
+    const auto ub = Z3_mk_int(ctx, numOfContractedPartitions, varType);
+    for (unsigned i = 0, j = 0; i < numOfPartitions; ++i) {
         if (P[i].any()) {
             const auto var = Z3_mk_fresh_const(ctx, nullptr, varType);
             Z3_optimize_assert(ctx, solver, Z3_mk_ge(ctx, var, lb));
             Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, var, ub));
             vars[i] = var;
-            temp[j++] = var;
+            contractedVars[j++] = var;
         }
     }
 
     // ensure no partition is assigned the same position
-    Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, l, temp.data()));
+    Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, numOfContractedPartitions, contractedVars.data()));
 
     // create the dependency constraints
     for (const auto e : make_iterator_range(edges(P))) {
@@ -649,12 +630,12 @@ found:  ++i;
 
     END_SCOPED_REGION
 
-    SmallVector<ConstraintGraph::vertex_descriptor, 32> partition_order(l, -1U);
+    SmallVector<ConstraintGraph::vertex_descriptor, 32> partition_order(numOfContractedPartitions, -1U);
 
     BEGIN_SCOPED_REGION
     const auto model = Z3_optimize_get_model(ctx, solver);
     Z3_model_inc_ref(ctx, model);
-    for (unsigned i = 0; i < m; ++i) {
+    for (unsigned i = 0; i < numOfPartitions; ++i) {
         Z3_ast var = vars[i];
         if (LLVM_UNLIKELY(var == nullptr)) {
             continue;
@@ -667,7 +648,7 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        assert (num >= 0 && num < static_cast<__int64>(l));
+        assert (num >= 0 && num < static_cast<__int64>(numOfContractedPartitions));
         assert (partition_order[num] == -1U);
         partition_order[num] = i;
     }
@@ -678,7 +659,7 @@ found:  ++i;
     Z3_optimize_pop(ctx, solver);
 
     // Rewrite the partition set mapping to reflect the contracted graph C
-    SmallVector<BitSet, 32> nodesInPartition(m);
+    SmallVector<BitSet, 32> nodesInPartition(numOfPartitions);
 
     std::fill(mappedPartitionId.begin(), mappedPartitionId.end(), -1U);
 
@@ -686,9 +667,9 @@ found:  ++i;
         const BitSet & K = P[p];
         assert (K.any());
         for (const auto i : K.set_bits()) {
-            assert (i >= 0 && i < m);
+            assert (i >= 0 && i < numOfPartitions);
             BitSet & nodes = nodesInPartition[i];
-            nodes.resize(n);
+            nodes.resize(numOfKernels);
             assert (nodes.none());
             for (const auto j : partitions[i]) {
                 const auto k = from_original(j);
@@ -696,7 +677,7 @@ found:  ++i;
                 // could cross a partition boundary. This kernel must occur
                 // in the first such partition set.
                if (LLVM_LIKELY(mappedPartitionId[k] == -1U)) {
-                    assert (k >= 0 && k < n);
+                    assert (k >= 0 && k < numOfKernels);
                     nodes.set(k);
                     mappedPartitionId[k] = p;
                }
@@ -706,7 +687,7 @@ found:  ++i;
 
     // construct the kernel verticies
     std::fill(vars.begin(), vars.end(), nullptr);
-    for (unsigned i = 0; i < n; ++i) {
+    for (unsigned i = 0; i < numOfKernels; ++i) {
         if (mappedPartitionId[i] != -1U) {
             vars[i] = Z3_mk_fresh_const(ctx, nullptr, varType);
         }
@@ -714,7 +695,7 @@ found:  ++i;
 
     BEGIN_SCOPED_REGION
     // iterate through the ordered partitions
-    SmallVector<Z3_ast, 32> kernels;
+    SmallVector<Z3_ast, 32> kernelVars(32);
     unsigned start = 0;
 
     for (const auto p : partition_order) {
@@ -728,20 +709,27 @@ found:  ++i;
             const auto end = start + numOfMappedKernels;
             const auto lb = Z3_mk_int(ctx, start, varType);
             const auto ub = Z3_mk_int(ctx, end, varType);
-
-            assert (kernels.empty());
-            // and bound each (contracted) kernel to its given partition
-            for (const auto j : nodes.set_bits()) {
-                const auto var = vars[j]; assert (var);
-                Z3_optimize_assert(ctx, solver, Z3_mk_ge(ctx, var, lb));
-                Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, var, ub));
-                kernels.push_back(var);
+            if (LLVM_UNLIKELY(kernelVars.size() < numOfMappedKernels)) {
+                kernelVars.resize(numOfMappedKernels);
             }
-
-            // whilst ensuring no kernel is assigned the same position
-            Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, kernels.size(), kernels.data()));
-
-            kernels.clear();
+            // and bound each (contracted) kernel to its given partition
+            if (numOfMappedKernels == 1) {
+                const auto j = nodes.find_first();
+                assert (j != -1);
+                const auto var = vars[j]; assert (var);
+                Z3_optimize_assert(ctx, solver, Z3_mk_eq(ctx, var, lb));
+            } else {
+                unsigned k = 0;
+                for (const auto j : nodes.set_bits()) {
+                    const auto var = vars[j]; assert (var);
+                    Z3_optimize_assert(ctx, solver, Z3_mk_ge(ctx, var, lb));
+                    Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, var, ub));
+                    kernelVars[k++] = var;
+                }
+                assert (k == numOfMappedKernels);
+                // whilst ensuring no kernel is assigned the same position
+                Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, numOfMappedKernels, kernelVars.data()));
+            }
             start = end;
 
         }
@@ -779,73 +767,142 @@ found:  ++i;
 
     }
 
+    const auto numOfContractedKernels = numOfKernels - contractedKernels;
+
     BEGIN_SCOPED_REGION
 
     // Now search through all kernels and try to find any with a matching signature.
-    // Try to minimize the distance between such kernels within each partition.
+    // Try to minimize the distance between such kernels. However, since a kernel
+    // cannot escape its partition and each partition will be executed according to
+    // an already determined ordering, rather than adding minimization goals globally,
+    // only encode the rules for the current and prior partition sets. This will
+    // provide the same solution as a brute force attempt with a substantial reduction
+    // in the number of minimization goals.
 
     transitive_closure_dag(orderingOfC, C);
 
-    std::map<const StringRef, SmallVector<unsigned, 2>> S;
-    flat_set<unsigned> group;
+    using SigGraph = adjacency_list<vecS, vecS, directedS, no_property, unsigned>;
 
-    for (const auto & P : partitions) {
-        assert (S.empty());
-        for (const auto i : P) {
+    using SigMap = flat_map<StringRef, SigGraph::vertex_descriptor>;
+
+    SigGraph S(numOfContractedKernels);
+
+    BEGIN_SCOPED_REGION
+
+    std::map<StringRef, flat_set<unsigned>> tempSet;
+
+    SigMap M;
+
+    unsigned partitionNum = 0;
+
+    for (const auto p : partition_order) {
+        const auto & partition = partitions[p];
+        // enumerate all of the kernels in the current partition
+        assert (tempSet.empty());
+        for (const auto i : partition) {
             const RelationshipNode & node = G[i];
             assert (node.Type == RelationshipNode::IsKernel);
-            const auto sig = node.Kernel->getSignature();
-            S[sig].push_back(i);
+            auto sig = node.Kernel->getSignature();
+            tempSet[sig].insert(from_original(i));
         }
-        for (auto k : S) {
-            const auto & kernels = k.second;
-            const auto n = kernels.size();
-            if (LLVM_UNLIKELY(n > 1)) {
+        // then record them into the graph
+        for (const auto & k : tempSet) {
+            auto f = M.find(k.first);
+            if (f == M.end()) {
+                f = M.emplace(k.first, add_vertex(S)).first;
+            }
+            const auto v = f->second;
+            for (const auto u : k.second) {
+                add_edge(v, u, partitionNum, S);
+            }
+        }
+        tempSet.clear();
+        ++partitionNum;
+    }
 
-                group.clear();
-                group.reserve(n);
-                for (unsigned i = 0; i != n; ++i) {
-                    group.insert(from_original(kernels[i]));
-                }
+    END_SCOPED_REGION
 
-                // if these vertices were already contracted, ignore them.
-                const auto l = group.size();
-                if (LLVM_UNLIKELY(l == 1)) {
-                    continue;
-                }
+    // now iterate through the graph and check whether we have any "same kernel"
+    // minimization goals to encode.
 
-                for (unsigned i = 1; i != l; ++i) {
-                    const auto u = *group.nth(i);
-                    const auto X = vars[u];
-                    for (unsigned j = 0; j != i; ++j) {
-                        const auto v = *group.nth(j);
-                        const auto Y = vars[v];
-                        // minimize the absolute diff between X and Y but take the
-                        // graph structure into account to simplify the formula
-                        if (edge(u, v, C).second) {
-                            // u dominates v ⊢ X < Y
-                            Z3_ast args1[2] = { X, Y };
-                            const auto r = Z3_mk_sub(ctx, 2, args1);
-                            Z3_optimize_minimize(ctx, solver, r);
-                        } else if (edge(v, u, C).second) {
-                            // v dominates u ⊢ Y < X
-                            Z3_ast args2[2] = { Y, X };
-                            const auto r = Z3_mk_sub(ctx, 2, args2);
-                            Z3_optimize_minimize(ctx, solver, r);
-                        } else { // neither dominates the other
-                            Z3_ast args1[2] = { X, Y };
-                            const auto a = Z3_mk_sub(ctx, 2, args1);
-                            Z3_ast args2[2] = { Y, X };
-                            const auto b = Z3_mk_sub(ctx, 2, args2);
-                            const auto c = Z3_mk_ge(ctx, X, Y);
-                            const auto r = Z3_mk_ite(ctx, c, a, b);
-                            Z3_optimize_minimize(ctx, solver, r);
-                        }
+    const auto n = num_vertices(S);
+
+    using SigSet = SmallVector<unsigned, 2>;
+
+    SigSet priorSet;
+    SigSet currentSet;
+
+    for (auto sigSet = numOfContractedKernels; sigSet < n; ++sigSet) {
+
+        unsigned partitionId = -1U;
+
+        auto addSigConstraints = [&]() {
+
+            const auto n = currentSet.size();
+            for (unsigned i = 1; i < n; ++i) {
+                const auto u = currentSet[i];
+                const auto X = vars[u];
+                for (unsigned j = 0; j != i; ++j) {
+                    const auto v = currentSet[j];
+                    const auto Y = vars[v];
+
+                    // minimize the absolute diff between X and Y but take the
+                    // graph structure into account to simplify the formula
+                    if (edge(u, v, C).second) {
+                        // u dominates v ⊢ X < Y
+                        Z3_ast args1[2] = { Y, X };
+                        const auto r = Z3_mk_sub(ctx, 2, args1);
+                        Z3_optimize_minimize(ctx, solver, r);
+                    } else if (edge(v, u, C).second) {
+                        // v dominates u ⊢ Y < X
+                        Z3_ast args2[2] = { X, Y };
+                        const auto r = Z3_mk_sub(ctx, 2, args2);
+                        Z3_optimize_minimize(ctx, solver, r);
+                    } else { // neither x nor y dominate the other
+                        Z3_ast args1[2] = { X, Y };
+                        const auto XmY = Z3_mk_sub(ctx, 2, args1);
+                        Z3_ast args2[2] = { Y, X };
+                        const auto YmX = Z3_mk_sub(ctx, 2, args2);
+                        const auto c = Z3_mk_gt(ctx, X, Y);
+                        const auto r = Z3_mk_ite(ctx, c, XmY, YmX);
+                        Z3_optimize_minimize(ctx, solver, r);
                     }
                 }
             }
+            const auto m = priorSet.size();
+            for (unsigned j = 0; j < m; ++j) {
+                const auto v = priorSet[j];
+                const auto Y = vars[v];
+                for (unsigned i = 0; i != n; ++i) {
+                    const auto u = currentSet[i];
+                    const auto X = vars[u];
+                    // PARTITION(u) dominates PARTITION(v) ⊢ X < Y
+                    Z3_ast args1[2] = { Y, X };
+                    const auto r = Z3_mk_sub(ctx, 2, args1);
+                    Z3_optimize_minimize(ctx, solver, r);
+                }
+            }
+
+        };
+
+        for (const auto e : make_iterator_range(out_edges(sigSet, S))) {
+            const unsigned currentPartitionId = S[e];
+            if (currentPartitionId != partitionId) {
+                addSigConstraints();
+                assert (currentPartitionId > partitionId || partitionId == -1U);
+                if ((currentPartitionId - partitionId) > 1) {
+                    priorSet.clear();
+                } else {
+                    priorSet.swap(currentSet);
+                }
+                currentSet.clear();
+            }
+            currentSet.push_back(target(e, S));
         }
-        S.clear();
+        addSigConstraints();
+        priorSet.clear();
+        currentSet.clear();
+
     }
 
     END_SCOPED_REGION
@@ -854,15 +911,17 @@ found:  ++i;
         report_fatal_error("Z3 failed to find a kernel ordering solution");
     }
 
-    const auto count = n - contracted_kernels;
-
-    std::vector<unsigned> ordering(count, -1U);
+    std::vector<unsigned> ordering(numOfContractedKernels);
     #ifndef NDEBUG
-    std::vector<__int64> test(n);
+    std::vector<__int64> test(numOfKernels);
+    #endif
+
+    #ifndef NDEBUG
+    std::fill_n(ordering.begin(), numOfContractedKernels, -1U);
     #endif
     const auto model = Z3_optimize_get_model(ctx, solver);
     Z3_model_inc_ref(ctx, model);
-    for (unsigned i = 0; i < n; ++i) {
+    for (unsigned i = 0; i < numOfKernels; ++i) {
         Z3_ast var = vars[i];
         if (LLVM_UNLIKELY(var == nullptr)) {
             continue;
@@ -875,7 +934,7 @@ found:  ++i;
         if (LLVM_UNLIKELY(Z3_get_numeral_int64(ctx, value, &num) != Z3_L_TRUE)) {
             report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
         }
-        assert (num >= 0 && num < static_cast<__int64>(count));
+        assert (num >= 0 && num < static_cast<__int64>(numOfContractedKernels));
         assert (ordering[num] == -1U);
         ordering[num] = i;
         #ifndef NDEBUG
@@ -909,15 +968,11 @@ found:  ++i;
         auto a = A.set_bits_begin();
         const auto a_end = A.set_bits_end();
 
-        auto x = *a;
         auto u = to_original(*a);
         while (++a != a_end) {
-            const auto y = *a;
             const auto v = to_original(*a);
             add_edge(u, v, RelationshipType{ReasonType::OrderingConstraint}, G);
-
             u = v;
-            x = y;
         }
 
         if ((++i) == end) break;
