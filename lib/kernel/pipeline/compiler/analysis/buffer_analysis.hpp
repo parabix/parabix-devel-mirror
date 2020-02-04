@@ -559,12 +559,13 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
             checkClosePartitionLabel();
             if (LLVM_LIKELY(partitionId != -1U)) {
                 out << "subgraph cluster_" << partitionId << " {\n"
-                       "label = \"Partition #" << partitionId  << "\""
-                       "style=\"rounded\";"
-                       "color=\"#028d35\";"
+                       "label=\"Partition #" << partitionId  << "\";"
+                       "fontcolor=\"red\";"
+                       "style=\"rounded,dashed,bold\";"
+                       "color=\"red\";"
                        "\n";
-            }
-            closePartition = true;
+                closePartition = true;
+            }            
         }        
         currentPartition = partitionId;
     };
@@ -576,7 +577,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
                 //" Partition: " << KernelPartitionId[v] << "\\n"
                 " Expected:  ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
                                 print_rational(MaximumNumOfStrides[kernel]) << "]\\n"
-                "\" shape=rect, style=rounded, peripheries=2"
+                "\" shape=rect,style=rounded,peripheries=2"
                 "];\n";
 
         for (const auto e : make_iterator_range(out_edges(kernel, G))) {
@@ -654,7 +655,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         out << "\\n" << name << "\"";
         if (isLocal) {
             out << " style=dashed";
-        } else if (pd.Minimum != pd.Maximum) {
+        } else if (!isCountable(binding)) {
             out << " style=bold";
         }
         out << "];\n";
