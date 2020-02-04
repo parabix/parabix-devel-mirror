@@ -12,15 +12,25 @@ namespace kernel {
 unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G,
                                                                                 std::vector<unsigned> & partitionIds,
                                                                                 const PipelineKernel * const pipelineKernel) const {
-    const auto partitions = identifyKernelPartitions(G, partitionIds, pipelineKernel);
-    addOrderingConstraintsToPartitionSubgraphs(G, partitionIds, partitions);
+    std::vector<unsigned> orderingOfG;
+    orderingOfG.reserve(num_vertices(G));
+    if (LLVM_UNLIKELY(!lexical_ordering(G, orderingOfG))) {
+        report_fatal_error("Cannot lexically order the initial pipeline graph!");
+    }
+
+
+    const auto partitions = identifyKernelPartitions(G, orderingOfG, partitionIds, pipelineKernel);
+    addOrderingConstraintsToPartitionSubgraphs(G, orderingOfG, partitionIds, partitions);
     return partitions.size();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyKernelPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relationships & G, std::vector<unsigned> & partitionIds, const PipelineKernel * const pipelineKernel) const {
+std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relationships & G,
+                                                                  const std::vector<unsigned> & orderingOfG,
+                                                                  std::vector<unsigned> & partitionIds,
+                                                                  const PipelineKernel * const pipelineKernel) const {
 
     using BitSet = dynamic_bitset<>;
 
@@ -50,12 +60,6 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                 break;
             default: break;
         }
-    }
-
-    std::vector<Vertex> orderingOfG;
-    orderingOfG.reserve(num_vertices(G));
-    if (LLVM_UNLIKELY(!lexical_ordering(G, orderingOfG))) {
-        report_fatal_error("Cannot lexically order the initial pipeline graph!");
     }
 
     PartitionTaintGraph H(kernels + streamSets);
@@ -369,6 +373,7 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
  * @brief extractPartitionSubgraphs
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
+                                                                  const std::vector<unsigned> & orderingOfG,
                                                                   const std::vector<unsigned> & partitionIds,
                                                                   const std::vector<Partition> & partitions) const {
 
@@ -424,7 +429,7 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
 
     unsigned n = 0;
-    for (const auto u : make_iterator_range(vertices(G))) {
+    for (const auto u : orderingOfG) {
         const RelationshipNode & node = G[u];
         switch (node.Type) {
             case RelationshipNode::IsKernel:
@@ -531,7 +536,6 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
         unsigned contracted = 0;
 
-
         // NOTE: since the vertices are already lexically labelled, the label of any
         // descendent of a vertex must be greater than all prior vertices.
 
@@ -543,8 +547,9 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
                         continue;
                     }
                     BitSet & U = H[u];
+                    assert (U.count() == 1);
                     BitSet & V = H[v];
-                    assert (U.find_last() < V.find_first());
+                    assert (U.find_first() < V.find_first());
                     U |= V;
                     V.reset();
                     for (const auto e : make_iterator_range(out_edges(v, H))) {
@@ -559,30 +564,19 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         return contracted;
     };
 
-    printConstraintGraph(P, "P1");
-
     const auto contracted_partitions = contract_constraint_graph(P, orderingOfP, false);
 
-    printConstraintGraph(P, "P2");
-
-    // Build a contracted partition mapping that reflects the *original* graph C
+    // Build a partition mapping that reflects the *original* graph C
 
     for (const auto p : make_iterator_range(vertices(P))) {
         for (const auto i : P[p].set_bits()) {
             for (const auto j : partitions[i]) {
                 const auto k = from_original(j);
-                mappedPartitionId[k] = p;
+                mappedPartitionId[k] = i;
             }
         }
     }
-
-    printConstraintGraph(C, "C1");
-
     const auto contracted_kernels = contract_constraint_graph(C, orderingOfC, true);
-
-    printConstraintGraph(C, "C2");
-
-    errs() << "MAPPING CHANGES:\n";
 
     // Modify the vertex mapping from G to C to reflect the contracted graph C'.
     for (auto i = mapping.begin(); i != mapping.end(); ) {
@@ -590,9 +584,6 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         if (LLVM_UNLIKELY(C[to].none())) {
             for (const auto u : make_iterator_range(vertices(C))) {
                 if (C[u].test(to)) {
-
-                    errs() << "  " << to << " -> " << u << '\n';
-
                     to = u;
                     goto found;
                 }
@@ -686,12 +677,6 @@ found:  ++i;
     // discard the partition solution
     Z3_optimize_pop(ctx, solver);
 
-    errs() << "PARTITION ORDER:";
-    for (unsigned i = 0; i < l; ++i) {
-        errs() << ' ' << partition_order[i];
-    }
-    errs() << '\n';
-
     // Rewrite the partition set mapping to reflect the contracted graph C
     SmallVector<BitSet, 32> nodesInPartition(m);
 
@@ -705,24 +690,17 @@ found:  ++i;
             BitSet & nodes = nodesInPartition[i];
             nodes.resize(n);
             assert (nodes.none());
-
-            errs() << "PARTITION " << i << ':';
-
             for (const auto j : partitions[i]) {
                 const auto k = from_original(j);
                 // Since the partitions may be contracted, a contracted kernel
                 // could cross a partition boundary. This kernel must occur
                 // in the first such partition set.
-                if (LLVM_LIKELY(mappedPartitionId[k] == -1U)) {
-                    errs() << " (" << j << ':' << k << ")";
+               if (LLVM_LIKELY(mappedPartitionId[k] == -1U)) {
                     assert (k >= 0 && k < n);
                     nodes.set(k);
-                    mappedPartitionId[k] = i;
-                }
-
+                    mappedPartitionId[k] = p;
+               }
             }
-
-            errs() << '\n';
         }
     }
 
@@ -752,21 +730,13 @@ found:  ++i;
             const auto ub = Z3_mk_int(ctx, end, varType);
 
             assert (kernels.empty());
-
-            errs() << "IT: PARTITION " << i << " :";
-
             // and bound each (contracted) kernel to its given partition
             for (const auto j : nodes.set_bits()) {
-
-                errs() << ' ' << j;
-
                 const auto var = vars[j]; assert (var);
                 Z3_optimize_assert(ctx, solver, Z3_mk_ge(ctx, var, lb));
                 Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, var, ub));
                 kernels.push_back(var);
             }
-
-            errs() << '\n';
 
             // whilst ensuring no kernel is assigned the same position
             Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, kernels.size(), kernels.data()));
@@ -787,26 +757,26 @@ found:  ++i;
         const auto e = *ei++;
         const auto u = source(e, C);
         const auto v = target(e, C);
+
+        const auto P = vars[u];
+        const auto C = vars[v];
+
         const auto pu = mappedPartitionId[u];
         const auto pv = mappedPartitionId[v];
         // We're already guaranteed that any cross partition dependency will be
         // satisfied.
         if (pu == pv) {
-            const auto P = vars[u];
-            const auto C = vars[v];
-
-
-            errs() << "  " << u << " < " << v << '\n';
-
             Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, P, C));
-            // Add some optimization goals to try minimize the distance between
-            // producers and consumers. By limiting the goals to only the partition
-            // we get a substantive speed-up on complex problems but a potentially
-            // worse solution.
-            Z3_ast args[2] = { C, P };
-            const auto r = Z3_mk_sub(ctx, 2, args);
-            Z3_optimize_minimize(ctx, solver, r);
         }
+
+        // Add some optimization goals to try minimize the distance between
+        // producers and consumers. By limiting the goals to only the partition
+        // we get a substantive speed-up on complex problems but a potentially
+        // worse solution.
+        Z3_ast args[2] = { C, P };
+        const auto r = Z3_mk_sub(ctx, 2, args);
+        Z3_optimize_minimize(ctx, solver, r);
+
     }
 
     BEGIN_SCOPED_REGION
@@ -939,14 +909,15 @@ found:  ++i;
         auto a = A.set_bits_begin();
         const auto a_end = A.set_bits_end();
 
+        auto x = *a;
         auto u = to_original(*a);
         while (++a != a_end) {
+            const auto y = *a;
             const auto v = to_original(*a);
+            add_edge(u, v, RelationshipType{ReasonType::OrderingConstraint}, G);
 
-            errs() << u << " -> " << v << "\n";
-
-            add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
             u = v;
+            x = y;
         }
 
         if ((++i) == end) break;
@@ -957,10 +928,7 @@ found:  ++i;
         assert (B.any());
         const auto b = B.set_bits_begin();
         const auto v = to_original(*b);
-
-        errs() << u << " -> " << v << "  *\n";
-
-        add_edge(u, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, G);
+        add_edge(u, v, RelationshipType{ReasonType::OrderingConstraint}, G);
     }
 
 }

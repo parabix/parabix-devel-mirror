@@ -126,8 +126,8 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                 }
                 rn.Relationship->getType()->print(errs());
 
-                errs() << " ";
-                errs().write_hex(reinterpret_cast<uintptr_t>(rn.Relationship));
+//                out << " ";
+//                out.write_hex(reinterpret_cast<uintptr_t>(rn.Relationship));
         }
         out << "\"];\n";
         out.flush();
@@ -136,36 +136,38 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
     for (const auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
-        out << "v" << s << " -> v" << t << " [label=\"";
+        out << "v" << s << " -> v" << t << " [";
         const RelationshipType & rt = G[e];
-        switch (rt.Type) {
-            case PortType::Input:
-                out << 'I';
-                break;
-            case PortType::Output:
-                out << 'O';
-                break;
+        if (rt.Reason != ReasonType::OrderingConstraint) {
+            out  << "label=\"";
+            switch (rt.Type) {
+                case PortType::Input:
+                    out << 'I';
+                    break;
+                case PortType::Output:
+                    out << 'O';
+                    break;
+            }
+            out << ':' << rt.Number;
+            switch (rt.Reason) {
+                case ReasonType::Explicit:
+                    break;
+                case ReasonType::ImplicitPopCount:
+                    out << " (popcount)";
+                    break;
+                case ReasonType::ImplicitRegionSelector:
+                    out << " (region)";
+                    break;
+                case ReasonType::Reference:
+                    out << " (ref)";
+                    break;
+                default:
+                    llvm_unreachable("invalid or unhandled reason type!");
+                    break;
+            }
+            out << "\"";
         }
-        out << ':' << rt.Number;
-        switch (rt.Reason) {
-            case ReasonType::None:
-                assert (!"reason cannot be None!");
-            case ReasonType::Explicit:
-                break;
-            case ReasonType::ImplicitPopCount:
-                out << " (popcount)";
-                break;
-            case ReasonType::ImplicitRegionSelector:
-                out << " (region)";
-                break;
-            case ReasonType::Reference:
-                out << " (ref)";
-                break;
-            case ReasonType::OrderingConstraint:
-                out << " (ordering constraint)";
-                break;
-        }
-        out << "\"";
+
 
         switch (rt.Reason) {
             case ReasonType::None:

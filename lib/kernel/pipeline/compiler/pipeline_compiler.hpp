@@ -165,14 +165,15 @@ enum class ReasonType : unsigned {
 
 struct RelationshipType : public StreamSetPort {
     ReasonType Reason;
-    explicit RelationshipType()
-    : StreamSetPort(), Reason(ReasonType::None) { }
 
     explicit RelationshipType(PortType type, unsigned number, ReasonType reason = ReasonType::Explicit)
     : StreamSetPort(type, number), Reason(reason) { }
 
     explicit RelationshipType(StreamSetPort port, ReasonType reason = ReasonType::Explicit)
     : StreamSetPort(port), Reason(reason) { }
+
+    explicit RelationshipType(ReasonType reason = ReasonType::None)
+    : StreamSetPort(), Reason(reason) { }
 
     RelationshipType & operator = (const RelationshipType &) = default;
 
@@ -814,10 +815,12 @@ public:
                                                                   const PipelineKernel * const pipelineKernel) const;
 
     std::vector<Partition> identifyKernelPartitions(const Relationships & G,
+                                                    const std::vector<unsigned> & orderingOfG,
                                                     std::vector<unsigned> & partitionIds,
                                                     const PipelineKernel * const pipelineKernel) const;
 
     void addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
+                                                    const std::vector<unsigned> & orderingOfG,
                                                     const std::vector<unsigned> & partitionIds,
                                                     const std::vector<Partition> & partitions) const;
 
