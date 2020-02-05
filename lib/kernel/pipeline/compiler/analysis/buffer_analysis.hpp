@@ -655,7 +655,7 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
         out << "\\n" << name << "\"";
         if (isLocal) {
             out << " style=dashed";
-        } else if (!isCountable(binding)) {
+        } else if (rate.isBounded()) {
             out << " style=bold";
         }
         out << "];\n";

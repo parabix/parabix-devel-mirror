@@ -447,12 +447,23 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     P.PartitionCount = numOfPartitions;
 
     // Now fill in all of the remaining kernels subsitute position
+
+    unsigned inputPartitionId = -1U;
+    unsigned outputPartitionId = -1U;
+
     for (unsigned i = 0; i != numOfKernels; ++i) {
         const auto in = kernels[i];
         assert (subsitution[in] == -1U);
         const auto out = P.PipelineInput + i;
         subsitution[in] = out;
-        P.KernelPartitionId[out] = partitionIds[in];
+        const auto id = artitionIds[in];
+        // renumber the partitions to reflect the selected ordering instead
+        // of the lexical ordering (i.e., the programmer input order)
+        if (id != inputPartitionId) {
+            ++outputPartitionId;
+            inputPartitionId = id;
+        }
+        P.KernelPartitionId[out] = outputPartitionId;
     }
     assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);

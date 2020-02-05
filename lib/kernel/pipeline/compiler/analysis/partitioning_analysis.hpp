@@ -624,6 +624,11 @@ found:  ++i;
         Z3_optimize_minimize(ctx, solver, r);
     }
 
+    // TODO: is there any advantage in one ordering over another? If the the last partition of one cluster
+    // shares the same kernels as the first partition of another and we can schedule one after the other,
+    // this may improve I-Cache utilization.
+
+
     if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution");
     }
@@ -988,6 +993,271 @@ found:  ++i;
 
 }
 
+namespace {
+
+template <typename Graph, typename Key>
+struct GraphMap : public flat_map<Key, graph_traits<Graph>::vertex_descriptor> {
+
+    GraphMap(Graph & G)
+    : G(G) {
+
+    }
+
+    graph_traits<Graph>::vertex_descriptor addOrFind(Key && key) {
+        const auto f = S.find(key);
+        if (LLVM_UNLIKELY(f == S.end())) {
+            const auto v = add_vertex(G);
+            S.emplace(key, v);
+            return v;
+        }
+        return f->second;
+    }
+
+private:
+
+    Graph & G;
+
+};
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generatePartitioningGraph
+ *
+ * The partitioning graph summarizes the buffer graph to indicate what dynamic buffers must be tested /
+ * potentially expanded to satisfy the dataflow requirements of each partition.
+ ** ------------------------------------------------------------------------------------------------------------- */
+PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
+
+    using BufferVertex = BufferGraph::vertex_descriptor;
+    using Vertex = PartitioningGraph::vertex_descriptor;
+    using Edge = graph_traits<PartitioningGraph>::edge_descriptor;
+    using StreamSetMap = flat_map<BufferVertex, Vertex>;
+
+
+    struct Node {
+        enum TypeId {
+            Partition = 0
+            , StreamSet
+            , Fixed
+            , Bounded
+            , PartialSum
+            , Relative
+            , Greedy
+        };
+
+        TypeId Type;
+        unsigned Vertex;
+        Rational Rate;
+
+
+    };
+
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, Node>;
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    assert (KernelPartitionId[firstKernel] == 0);
+    assert ((KernelPartitionId[lastKernel] + 1) == PartitionCount);
+
+    Graph G(PartitionCount);
+
+    flat_map<BufferVertex, Graph::vertex_descriptor> streamSetMap;
+
+    auto addOrFindStreamSet = [&](const BufferVertex streamSet) {
+        const auto f = streamSetMap.find(streamSet);
+        if (LLVM_UNLIKELY(f == streamSetMap.end())) {
+            const auto v = add_vertex(G);
+            Node & N = G[v];
+            N.Type = Node::StreamSet;
+            N.Buffer = streamSet;
+            streamSetMap.emplace(streamSet, v);
+            return v;
+        }
+        return f->second;
+    };
+
+    using RateMap = flat_map<Rational, Graph::vertex_descriptor>;
+
+    using BufferRateMap = flat_map<std::pair<BufferVertex, Rational>, Graph::vertex_descriptor>;
+
+    RateMap fixedRateMap;
+
+    BufferRateMap partialSumRateMap;
+
+    BufferRateMap relativeRateMap;
+
+    RateMap greedyRateMap;
+
+    for (auto start = firstKernel; start <= lastKernel; ) {
+        // Determine which kernels are in this partition
+        const auto partitionId = KernelPartitionId[start];
+        assert (partitionId < PartitionCount);
+        auto end = start + 1U;
+        for (; end <= LastKernel; ++end) {
+            if (KernelPartitionId[end] != partitionId) {
+                break;
+            }
+        }
+
+        for (auto kernel = start; kernel < end; ++kernel) {
+
+            auto addOrFindRate = [&](const Node::TypeId typeId, const Rational fixedRate, RateMap & M) {
+                const auto f = M.find(fixedRate);
+                if (f == M.end()) {
+                    const auto v = add_vertex(G);
+                    Node & N = G[v];
+                    N.Type = typeId;
+                    N.Rate = fixedRate;
+                    M.emplace(key, v);
+                    return v;
+                }
+                return f->second;
+            };
+
+            auto addOrFindBufferRate = [&](const Node::TypeId typeId, const BufferVertex streamSet, const Rational ratio, BufferRateMap & M) {
+                auto key = std::make_pair(streamSet, ratio);
+                const auto f = M.find(key);
+                if (f == M.end()) {
+                    const auto v = add_vertex(G);
+                    Node & N = G[v];
+                    N.Type = typeId;
+                    N.Vertex = streamSet;
+                    N.Rate = ratio;
+                    M.emplace(key, v);
+                    return v;
+                }
+                return f->second;
+            };
+
+            auto link = [&](Vertex u, const Vertex v, Vertex w, const bool input) {
+                if (!input) {
+                    std::swap(u, w);
+                }
+                add_edge(u, v, G);
+                add_edge(v, w, G);
+            };
+
+            auto makeFixedRate = [&](const BufferVertex streamSet, const Rational fixedRate, const bool input) {
+                const auto v = addOrFindRate(Node::Fixed, fixedRate, fixedRateMap);
+                const auto w = addOrFindStreamSet(streamSet);
+                link(partitionId, v, w, input);
+            };
+
+            auto makeBoundedRate = [&](const BufferVertex streamSet, const bool input) {
+                const auto v = add_vertex(G);
+                const auto w = addOrFindStreamSet(streamSet);
+                Node & N = G[v];
+                N.Type = Node::Bounded;
+                link(partitionId, v, w, input);
+            };
+
+            auto makePartialSumRate = [&](const BufferVertex streamSet, const StreamSetPort port, const Rational ratio, const bool input) {
+                const auto reference = getReferenceBufferVertex(kernel, port);
+                const auto v = addOrFindBufferRate(Node::PartialSum, reference, ratio, partialSumRateMap);
+                const auto w = addOrFindStreamSet(streamSet);
+                link(partitionId, v, w, input);
+            };
+
+            auto makeRelativeRate = [&](const BufferVertex streamSet, const StreamSetPort port, const Rational ratio, const bool input) {
+                const auto reference = getReferenceBufferVertex(kernel, port);
+                const auto v = addOrFindBufferRate(Node::Relative, reference, ratio, relativeRateMap);
+                const auto w = addOrFindStreamSet(streamSet);
+                link(partitionId, v, w, input);
+            };
+
+            auto makeGreedyRate = [&](const BufferVertex streamSet,  const Rational lowerBound, const bool input) {
+                const auto v = addOrFindRate(Node::Greedy, lowerBound, greedyRateMap);
+                const auto w = addOrFindStreamSet(streamSet);
+                link(partitionId, v, w, input);
+            };
+
+            const auto minStrides = MinimumNumOfStrides[kernel];
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const auto streamSet = source(input, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (LLVM_UNLIKELY(bn.NonLocal)) {
+
+                    const BufferRateData & inputRate = mBufferGraph[input];
+                    const Binding & binding = inputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    const auto rateId = rate.getKind();
+
+                    switch (rateId) {
+                        case RateId::Fixed:
+                            makeFixedRate(streamSet, inputRate.Maximum * minStrides, true);
+                            break;
+                        case RateId::Bounded:
+                            makeBoundedRate(streamSet, true);
+                            break;
+                        case RateId::PartialSum:
+                            makePartialSumRate(streamSet, rate.getUpperBound(), inputRate.Port, true);
+                            break;
+                        case RateId::Relative:
+                            makeRelativeRate(streamSet, rate.getUpperBound(), inputRate.Port, true);
+                            break;
+                        case RateId::Greedy:
+                            makeGreedyRate(streamSet, inputRate.Minimum * minStrides, true);
+                            break;
+                        default: llvm_unreachable("unhandled input rate type");
+                    }
+                }
+            }
+
+            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                const auto streamSet = target(output, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (LLVM_UNLIKELY(bn.NonLocal)) {
+
+                    const BufferRateData & outputRate = mBufferGraph[output];
+                    const Binding & binding = outputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    const auto rateId = rate.getKind();
+
+                    switch (rateId) {
+                        case RateId::Fixed:
+                            makeFixedRate(streamSet, outputRate.Maximum * minStrides, false);
+                            break;
+                        case RateId::Unknown:
+                            assert (outputRate.Maximum == Rational{0});
+                        case RateId::Bounded:
+                            makeBoundedRate(streamSet, false);
+                            break;
+                        case RateId::PartialSum:
+                            makePartialSumRate(streamSet, rate.getUpperBound(), outputRate.Port, false);
+                            break;
+                        case RateId::Relative:
+                            makeRelativeRate(streamSet, rate.getUpperBound(), outputRate.Port, false);
+                            break;
+                        default: llvm_unreachable("unhandled output rate type");
+                    }
+
+                }
+            }
+
+        }
+        start = end;
+        fixedRateMap.clear();
+        partialSumRateMap.clear();
+        relativeRateMap.clear();
+        greedyRateMap.clear();
+    }
+
+    // Each fixed rate output of a partition is guaranteed to be produced at the same relative rate.
+    // Thus if we have multiple fixed rate inputs from the same partition, we need only test one of them.
+
+
+
+
+
+
+
+    return G;
+}
+
+#if 0
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generatePartitioningGraph
  *
@@ -1045,7 +1315,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
-                if (LLVM_UNLIKELY(bn.NonLocal || isa<DynamicBuffer>(bn.Buffer))) {
+                if (LLVM_UNLIKELY(bn.NonLocal)) {
                     const auto buffer = getStreamSetVertex(streamSet);
                     const BufferRateData & inputRate = mBufferGraph[input];
                     const Binding & binding = inputRate.Binding;
@@ -1074,7 +1344,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
-                if (LLVM_UNLIKELY(bn.NonLocal || isa<DynamicBuffer>(bn.Buffer))) {
+                if (LLVM_UNLIKELY(bn.NonLocal)) {
                     const auto buffer = getStreamSetVertex(streamSet);
                     const BufferRateData & outputRate = mBufferGraph[output];
                     const Binding & binding = outputRate.Binding;
@@ -1223,6 +1493,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     return G;
 }
+
+#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief determinePartitionJumpIndices
