@@ -140,6 +140,22 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         const BufferRateData & producerRate = G[pe];
         const Binding & output = producerRate.Binding;
 
+
+        bool nonLocal = false;
+
+        // Does this stream cross a partition boundary?
+        const auto producer = source(pe, G);
+        const auto producerPartitionId = KernelPartitionId[producer];
+        for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
+            const auto consumer = target(ce, G);
+            if (producerPartitionId != KernelPartitionId[consumer]) {
+                nonLocal = true;
+                break;
+            }
+        }
+
+        bn.NonLocal = nonLocal;
+
         if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
 
             // TODO: If we have an open system, then the input rate to this pipeline cannot
@@ -156,11 +172,10 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             // Similarly if any internal consumer has a deferred rate, we cannot analyze
             // any consumption rates.
 
-            bool dynamic = (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
+            bool dynamic = nonLocal || (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
 
             const auto in = in_edge(streamSet, G);
             const BufferRateData & producerRate = G[in];
-            const auto producer = source(pe, G);
 
             unsigned lookAhead = 0;
             unsigned lookBehind = 0;
@@ -191,8 +206,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
 
-            const auto producerPartitionId = KernelPartitionId[producer];
-
             bool linear = requiresLinearAccess(output);
             for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
 
@@ -204,17 +217,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
                 const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
 
-                if (!dynamic) {
-                    // Does this stream cross a partition boundary?
-                    if (producerPartitionId != KernelPartitionId[consumer]) {
-                        dynamic = true;
-                    // Could we consume less data than we produce?
-                    } else if (consumerRate.Minimum < consumerRate.Maximum) {
-                        dynamic = true;
-                    // Or is the data consumption rate unpredictable despite its type?
-                    } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
-                        dynamic = true;
-                    }
+                // Could we consume less data than we produce?
+                if (consumerRate.Minimum < consumerRate.Maximum) {
+                    dynamic = true;
+                // Or is the data consumption rate unpredictable despite its type?
+                } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
+                    dynamic = true;
                 }
 
                 if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
@@ -252,14 +260,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 lookAhead = std::max(tmpLookAhead, lookAhead);
             }
 
-            #ifdef PERMIT_THREAD_LOCAL_BUFFERS
-            const auto nonLocal = dynamic;
-            #else
-            const auto nonLocal = true;
-            #endif
-
-            bn.NonLocal = nonLocal;
-
             const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
 
             bn.LookBehind = lookBehind;
@@ -293,6 +293,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             }
             bn.Buffer = buffer;
+
+        } else { // is external buffer
+
+
+
         }
     }
 
@@ -359,7 +364,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             assert (rn.Type == RelationshipNode::IsBinding);
             const auto f = first_in_edge(binding, mStreamGraph);
             assert (mStreamGraph[f].Reason != ReasonType::Reference);
-            unsigned streamSet = source(f, mStreamGraph);
+            const auto streamSet = source(f, mStreamGraph);
             assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
             assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
             add_edge(streamSet, i, computeBufferRateBounds(port, rn, streamSet), G);
@@ -376,7 +381,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
             assert (rn.Type == RelationshipNode::IsBinding);
             const auto f = out_edge(binding, mStreamGraph);
             assert (mStreamGraph[f].Reason != ReasonType::Reference);
-            unsigned streamSet = target(f, mStreamGraph);
+            const auto streamSet = target(f, mStreamGraph);
             assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
             assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
             add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), G);
@@ -474,10 +479,13 @@ void PipelineCompiler::printBufferGraph(const BufferGraph & G, raw_ostream & out
     };
 
     auto printStreamSet = [&](const unsigned streamSet) {
-        out << "v" << streamSet << " [shape=record, label=\""
-               << streamSet << "|{";
-
+        out << "v" << streamSet << " [shape=record,";
         const BufferNode & bn = G[streamSet];
+        if (bn.NonLocal) {
+            out << "style=bold,";
+        }
+        out << "label=\"" << streamSet << "|{";
+
         const StreamSetBuffer * const buffer = bn.Buffer;
         if (buffer == nullptr) {
             out << '?';

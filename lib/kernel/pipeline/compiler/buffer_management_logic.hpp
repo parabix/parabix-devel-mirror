@@ -26,11 +26,11 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
 
 
         if (LLVM_LIKELY(bn.isOwned())) {
-            if (LLVM_UNLIKELY(bn.NonLocal)) {
+            //if (LLVM_UNLIKELY(bn.NonLocal)) {
                 mTarget->addInternalScalar(handleType, handleName);
-            } else {
-                mTarget->addThreadLocalScalar(handleType, handleName);
-            }
+            //} else {
+            //    mTarget->addThreadLocalScalar(handleType, handleName);
+            //}
         } else {
             mTarget->addNonPersistentScalar(handleType, handleName);
             mTarget->addInternalScalar(buffer->getPointerType(), handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
@@ -64,9 +64,10 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b) {
  * @brief allocateOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, const bool nonLocal) {
+    if (!nonLocal) return;
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_UNLIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
+        if (LLVM_UNLIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
             StreamSetBuffer * const buffer = bn.Buffer;
             if (LLVM_LIKELY(bn.isInternal())) {
                 const auto pe = in_edge(i, mBufferGraph);
@@ -86,9 +87,10 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, const bool nonLocal) {
  * @brief releaseOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
+    if (!nonLocal) return;
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_LIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
+        if (LLVM_LIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
             StreamSetBuffer * const buffer = bn.Buffer;
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
             buffer->releaseBuffer(b);

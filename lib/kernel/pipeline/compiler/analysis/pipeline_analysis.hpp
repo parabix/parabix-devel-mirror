@@ -456,12 +456,16 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
         assert (subsitution[in] == -1U);
         const auto out = P.PipelineInput + i;
         subsitution[in] = out;
-        const auto id = artitionIds[in];
+        const auto id = partitionIds[in];
         // renumber the partitions to reflect the selected ordering instead
         // of the lexical ordering (i.e., the programmer input order)
         if (id != inputPartitionId) {
-            ++outputPartitionId;
-            inputPartitionId = id;
+            if (LLVM_UNLIKELY(id == -1U)) {
+                outputPartitionId = -1U;
+            } else {
+                ++outputPartitionId;
+                inputPartitionId = id;
+            }
         }
         P.KernelPartitionId[out] = outputPartitionId;
     }
