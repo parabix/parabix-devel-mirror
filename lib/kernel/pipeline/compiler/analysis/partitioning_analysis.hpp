@@ -1043,7 +1043,9 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     StreamSetMap streamSetMap;
 
-    StreamSetMap fixedRateMap;
+    flat_set<Vertex> fixedRateSet;
+
+    flat_set<BufferVertex> visited;
 
     auto priorPartitionId = 0U;
 
@@ -1067,6 +1069,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         N.Type = Node::Partition;
 
         // Each fixed rate of a partition is guaranteed to be consumed/produced at some mutually relative rate.
+        bool makeFixedOutput = true;
+        Vertex fixedOutput = 0;
 
         for (auto kernel = start; kernel < end; ++kernel) {
 
@@ -1075,17 +1079,6 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                 Node & N = G[v];
                 N.Type = typeId;
                 return v;
-            };
-
-            auto getFixedRateNode = [&](const BufferVertex pId) -> Vertex {
-                const auto f = fixedRateMap.find(pId);
-                if (f == fixedRateMap.end()) {
-                    const auto v = makeNode(Node::Fixed);
-                    fixedRateMap.emplace(pId, v);
-                    return v;
-                } else {
-                    return f->second;
-                }
             };
 
             auto makeNodeWithReference = [&](const Node::TypeId typeId, const StreamSetPort port) {
@@ -1103,43 +1096,51 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                 const BufferNode & bn = mBufferGraph[streamSet];
                 if (LLVM_UNLIKELY(bn.NonLocal)) {
 
-                    const BufferRateData & inputRate = mBufferGraph[input];
-                    const Binding & binding = inputRate.Binding;
-                    const ProcessingRate & rate = binding.getRate();
-                    const auto rateId = rate.getKind();
-
-                    Vertex input;
-
-                    switch (rateId) {
-                        case RateId::Fixed:
-                            input = getFixedRateNode(partitionId * 2);
-                            break;
-                        case RateId::Bounded:
-                            input = makeNode(Node::Bounded);
-                            break;
-                        case RateId::PartialSum:
-                            input = makeNodeWithReference(Node::PartialSum, inputRate.Port);
-                            break;
-                        case RateId::Relative:
-                            input = makeNodeWithReference(Node::Relative, inputRate.Port);
-                            break;
-                        case RateId::Greedy:
-                            input = makeNode(Node::Greedy);
-                            break;
-                        default: llvm_unreachable("unhandled input rate type");
-                    }
-
                     const auto f = streamSetMap.find(streamSet);
                     assert (f != streamSetMap.end());
                     const auto src = f->second;
-                    if (!edge(src, input, G).second) {
-                        add_edge(src, input, G);
-                    }
-                    add_edge(input, partitionId, EdgeType{kernel, inputRate.Port}, G);
 
+                    if (visited.insert(src).second) {
+                        const BufferRateData & inputRate = mBufferGraph[input];
+                        const Binding & binding = inputRate.Binding;
+                        const ProcessingRate & rate = binding.getRate();
+                        const auto rateId = rate.getKind();
+
+                        assert (src != fixedOutput);
+
+                        if (rateId == RateId::Fixed) {
+
+                            if (fixedRateSet.insert(src).second) {
+                                const auto fixedInput = makeNode(Node::Fixed);
+                                add_edge(src, fixedInput, G);
+                                add_edge(fixedInput, partitionId, EdgeType{kernel, inputRate.Port}, G);
+                            }
+
+                        } else {
+
+                            Vertex input;
+                            switch (rateId) {
+                                case RateId::Bounded:
+                                    input = makeNode(Node::Bounded);
+                                    break;
+                                case RateId::PartialSum:
+                                    input = makeNodeWithReference(Node::PartialSum, inputRate.Port);
+                                    break;
+                                case RateId::Relative:
+                                    input = makeNodeWithReference(Node::Relative, inputRate.Port);
+                                    break;
+                                case RateId::Greedy:
+                                    input = makeNode(Node::Greedy);
+                                    break;
+                                default: llvm_unreachable("unhandled input rate type");
+                            }
+
+                            add_edge(src, input, G);
+                            add_edge(input, partitionId, EdgeType{kernel, inputRate.Port}, G);
+                        }
+                    }
                 }
             }
-
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
@@ -1151,34 +1152,41 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                     const ProcessingRate & rate = binding.getRate();
                     const auto rateId = rate.getKind();
 
-                    Vertex output;
+                    visited.insert(streamSet);
 
-                    switch (rateId) {
-                        case RateId::Fixed:
-                            output = getFixedRateNode((partitionId * 2) + 1);
-                            break;
-                        case RateId::Unknown:
-                            output = makeNode(Node::Unknown);
-                            break;
-                        case RateId::Bounded:
-                            output = makeNode(Node::Bounded);
-                            break;
-                        case RateId::PartialSum:
-                            output = makeNodeWithReference(Node::PartialSum, outputRate.Port);
-                            break;
-                        case RateId::Relative:
-                            output = makeNodeWithReference(Node::Relative, outputRate.Port);
-                            break;
-                        default: llvm_unreachable("unhandled output rate type");
+                    if (rateId == RateId::Fixed) {
+                        if  (makeFixedOutput) {
+                            fixedOutput = makeNode(Node::Fixed);
+                            add_edge(partitionId, fixedOutput, EdgeType{}, G);
+                            makeFixedOutput = false;
+                        }
+                        streamSetMap.emplace(streamSet, fixedOutput);
+
+                    } else {
+                        Vertex output;
+                        switch (rateId) {
+                            case RateId::Unknown:
+                                output = makeNode(Node::Unknown);
+                                break;
+                            case RateId::Bounded:
+                                output = makeNode(Node::Bounded);
+                                break;
+                            case RateId::PartialSum:
+                                output = makeNodeWithReference(Node::PartialSum, outputRate.Port);
+                                break;
+                            case RateId::Relative:
+                                output = makeNodeWithReference(Node::Relative, outputRate.Port);
+                                break;
+                            default: llvm_unreachable("unhandled output rate type");
+                        }
+                        streamSetMap.emplace(streamSet, output);
+                        add_edge(partitionId, output, EdgeType{kernel, outputRate.Port}, G);
                     }
-
-                    streamSetMap.emplace(streamSet, output);
-                    add_edge(partitionId, output, EdgeType{kernel, outputRate.Port}, G);
-
                 }
             }
-
         }
+        visited.clear();
+        fixedRateSet.clear();
         start = end;
     }
 
