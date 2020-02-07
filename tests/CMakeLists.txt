@@ -27,6 +27,7 @@ parabix_add_kernel_test(meta_tests kernel.streamutils)
 parabix_add_kernel_test(test_scan kernel.basis kernel.scan kernel.unicode)
 parabix_add_kernel_test(test_bit_movement kernel.streamutils)
 parabix_add_kernel_test(index_test kernel.streamutils)
+parabix_add_kernel_test(everynth_tests pablo)
 
 
 # `make kernel-tests` to run all kernel tests

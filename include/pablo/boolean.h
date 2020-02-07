@@ -133,8 +133,8 @@ public:
     }
 protected:
     Ternary(PabloAST * mask, PabloAST * a, PabloAST * b, PabloAST * c, const String * name, Allocator & allocator)
-    : Statement(ClassTypeId::Ternary, a->getType(), {llvm::cast<Integer>(mask), a, b, c}, name, allocator) {
-
+    : Statement(ClassTypeId::Ternary, a->getType(), {mask, a, b, c}, name, allocator) {
+        assert(llvm::isa<Integer>(mask));
     }
 };
 
