@@ -88,6 +88,7 @@ public:
         , InFile
         , AtEOF
         , TerminateAt
+        , EveryNth
         // Statistics operations
         , Count
         // Variable assignments

@@ -14,6 +14,7 @@
 #include <pablo/pablo_kernel.h>
 #include <pablo/pe_advance.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_everynth.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_lookahead.h>
@@ -192,6 +193,12 @@ static void PrintStatement(Statement const * stmt, raw_ostream & out, const bool
             out << "TerminateAt(";
             PrintExpression(s->getExpr(), out);
             out << ", " << std::to_string(s->getSignalCode()) << ")";
+        } else if (const EveryNth * e = dyn_cast<EveryNth>(stmt)) {
+            out << "EveryNth(";
+            out << e->getN()->value();
+            out << ", ";
+            PrintExpression(e->getExpr(), out);
+            out << ")";
         } else {
             out << "???";
         }

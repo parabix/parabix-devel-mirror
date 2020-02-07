@@ -156,4 +156,16 @@ void AssertNE(const std::unique_ptr<kernel::ProgramBuilder> & P, StreamSet * lhs
     P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, rhs, lhs, ptr);
 }
 
+void AssertDebug(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * lhs, kernel::StreamSet * rhs) {
+    using namespace kernel;
+    errs() << "\n\n";
+    P->CreateKernelCall<DebugDisplayKernel>("lhs", lhs);
+    P->CreateKernelCall<DebugDisplayKernel>("rhs", rhs);
+    errs() << "\n\n";
+
+    // return false
+    auto ptr = P->getInputScalar("output");
+    P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, lhs, lhs, ptr);
+}
+
 } // namespace testing

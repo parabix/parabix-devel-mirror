@@ -17,6 +17,7 @@ namespace pablo { class Advance; }
 namespace pablo { class IndexedAdvance; }
 namespace pablo { class AdvanceThenScanThru; }
 namespace pablo { class AdvanceThenScanTo; }
+namespace pablo { class EveryNth; }
 namespace pablo { class And; }
 namespace pablo { class Assign; }
 namespace pablo { class AtEOF; }
@@ -132,6 +133,12 @@ public:
     }
 
     Count * createCount(PabloAST * expr, const String * const name = nullptr);
+
+    EveryNth * createEveryNth(PabloAST * expr, Integer * n, const llvm::StringRef prefix) {
+        return createEveryNth(expr, n, makeName(prefix));
+    }
+
+    EveryNth * createEveryNth(PabloAST * expr, Integer * n, const String * const name = nullptr);
 
     InFile * createInFile(PabloAST * expr, const llvm::StringRef prefix) {
         return createInFile(expr, makeName(prefix));
