@@ -342,15 +342,31 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
         const auto s = source(e, mBufferGraph);
         const auto t = target(e, mBufferGraph);
 
+        const BufferRateData & pd = mBufferGraph[e];
+
         bool isLocal = true;
+        bool isChecked = false;
+        // is this edge from a buffer to a kernel?
         if (s >= FirstStreamSet) {
             const auto p = parent(s, mBufferGraph);
-            isLocal = KernelPartitionId[p] == KernelPartitionId[t];
+            const auto pId = KernelPartitionId[p];
+            const auto tId = KernelPartitionId[t];
+            // does this use of the buffer cross a partition boundary?
+            if (pId != tId) {
+                isLocal = false;
+                // does the consuming partition need to check this buffer?
+                for (const auto f : make_iterator_range(in_edges(tId, mPartitioningGraph))) {
+                    const PartitioningGraphEdge & E = mPartitioningGraph[f];
+                    if (E.Kernel == t && E.Port == pd.Port) {
+                        isChecked = true;
+                        break;
+                    }
+                }
+            }
         }
 
         out << "v" << s << " -> v" << t <<
                " [";
-        const BufferRateData & pd = mBufferGraph[e];
         out << "label=\"#" << pd.Port.Number << ": ";
         const Binding & binding = pd.Binding;
         const ProcessingRate & rate = binding.getRate();
@@ -388,7 +404,7 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
         out << "\\n" << name << "\"";
         if (isLocal) {
             out << " style=dashed";
-        } else if (rate.isBounded()) {
+        } else if (isChecked) {
             out << " style=bold";
         }
         out << "];\n";
