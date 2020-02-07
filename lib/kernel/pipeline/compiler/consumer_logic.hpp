@@ -258,7 +258,7 @@ next:           continue;
 
 #endif
 
-#warning rework consumer logic for external I/O.
+// TODO: rework consumer logic for external I/O.
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeConsumerGraph

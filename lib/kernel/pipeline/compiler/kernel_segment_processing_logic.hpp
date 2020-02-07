@@ -599,7 +599,7 @@ void PipelineCompiler::end(BuilderRef b) {
     // sink).
 
     Value * const terminated = hasPipelineTerminated(b);
-    #warning TODO: remove halted check? see if editd still requires it.
+    // TODO: remove halted check? see if editd still requires it.
     Value * done = b->CreateOr(mHalted, b->CreateIsNotNull(terminated));
     Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
     #ifdef PRINT_DEBUG_MESSAGES

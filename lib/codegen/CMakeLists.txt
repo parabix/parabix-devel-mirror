@@ -13,7 +13,7 @@ DEPS
     ${Boost_LIBRARIES}
 )
 
-if(BUILD_SINGLE_SHARED_LIB)
+if(ARTIFACT_MODE STREQUAL "Single")
     add_dependencies(${PARABIX_MONO_TARGET} recompile-object-cache)
 else()
     add_dependencies(codegen recompile-object-cache)

@@ -27,10 +27,7 @@ public:
         if (mExternalNames.count(name) > 0) return name;
         if (LLVM_LIKELY(name->getDefinition() != nullptr)) {
             RE * xfrm = transform(name->getDefinition());
-            if (name->getType() == Name::Type::ZeroWidth)
-                return makeZeroWidth(name->getFullName(), xfrm);
-            else
-                return makeName(name->getFullName(), xfrm);
+            return xfrm;
         }
         return name;
     }

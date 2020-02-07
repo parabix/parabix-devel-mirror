@@ -4,7 +4,7 @@
 #include "pipeline_compiler.hpp"
 #include <llvm/Support/ErrorHandling.h>
 
-#warning add in assertions to prove whether all countable rate pipeline I/O was satisfied in the single iteration
+// TODO: add in assertions to prove whether all countable rate pipeline I/O was satisfied in the single iteration
 // Is it sufficient to verify symbolic rate of the pipeline matches the rate of the I/O?
 
 
@@ -392,7 +392,7 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const StreamSe
     if (LLVM_UNLIKELY(rate.isPartialSum())) {
         numOfStrides = getMaximumNumOfPartialSumStrides(b, inputPort);
     } else if (LLVM_UNLIKELY(rate.isGreedy())) {
-        #warning this ought to return nullptr
+        // TODO: check whether this ought to return nullptr
         Value * const accessible = mAccessibleInputItems[inputPort.Number];
         numOfStrides = subtractLookahead(b, inputPort, accessible);
     } else {

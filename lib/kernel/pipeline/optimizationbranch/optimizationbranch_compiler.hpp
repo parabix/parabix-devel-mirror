@@ -1095,7 +1095,7 @@ void OptimizationBranchCompiler::generateFinalizeMethod(BuilderRef b) {
  * @brief getFinalOutputScalars
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<Value *> OptimizationBranchCompiler::getFinalOutputScalars(BuilderRef b) {
-    #warning INCOMPLETE!
+    // TODO: IMPLEMENT THIS!
     return std::vector<Value *>{};
 }
 

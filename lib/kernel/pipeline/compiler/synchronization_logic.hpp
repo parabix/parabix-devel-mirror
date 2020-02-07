@@ -32,7 +32,7 @@
 // etc.) Thus to execute a stateful internally synchronized kernel, we must
 // hold both buffer locks until reaching the last partial segment.
 
-#warning Fix cycle counter and serialize option for nested pipelines
+// TODO: Fix cycle counter and serialize option for nested pipelines
 
 namespace kernel {
 

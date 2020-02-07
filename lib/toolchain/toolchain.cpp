@@ -66,9 +66,22 @@ static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::locatio
                                                          cl::desc("Print generated assembly code to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 #endif
 
-static cl::opt<char> OptLevelOption("O", cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] (default = '-O1')"),
-                                    cl::cat(CodeGenOptions), cl::Prefix, cl::ZeroOrMore, cl::init('1'));
 
+// Enable Debug Options to be specified on the command line
+static cl::opt<CodeGenOpt::Level, true>
+OptimizationLevel("optimization-level", cl::location(OptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the front-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
+                             clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
+                  CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
+static cl::opt<CodeGenOpt::Level, true>
+BackEndOptOption("backend-optimization-level", cl::location(BackEndOptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the back-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
+                             clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
+                CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 
 static cl::opt<bool, true> EnableObjectCacheOption("enable-object-cache", cl::location(EnableObjectCache), cl::init(true),
                                                    cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
@@ -132,6 +145,7 @@ static cl::opt<std::string, true> CCTypeOption("ccc-type", cl::location(CCCOptio
                                             cl::desc("The character class compiler"), cl::value_desc("[binary, ternary]"));
 
 CodeGenOpt::Level OptLevel;
+CodeGenOpt::Level BackEndOptLevel;
 
 const char * ObjectCacheDir;
 
@@ -206,13 +220,6 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     target_Options.MCOptions.AsmVerbose = true;
 #endif
-    switch (OptLevelOption) {
-        case '0': OptLevel = CodeGenOpt::None; break;
-        case '1': OptLevel = CodeGenOpt::Less; break;
-        case '2': OptLevel = CodeGenOpt::Default; break;
-        case '3': OptLevel = CodeGenOpt::Aggressive; break;
-        default: report_fatal_error(std::string(1, OptLevelOption) + " is an invalid optimization level.");
-    }
 #ifndef CUDA_ENABLED
     if (NVPTX) {
         report_fatal_error("CUDA compiler is not supported.");

@@ -133,7 +133,7 @@ Marker RE_Compiler::compileCC(CC * const cc, Marker marker, PabloBuilder & pb) {
     if (i < mAlphabets.size()) {
         //llvm::errs() << "Found alphabet: " << i << ", " << mAlphabets[i]->getName() << "\n";
         if (marker.offset() == 0) {
-            nextPos = pb.createAdvance(nextPos, 1);
+            nextPos = pb.createIndexedAdvance(nextPos, mIndexStream, 1);
         }
         return Marker(pb.createAnd(nextPos, mAlphabetCompilers[i]->compileCC(cc, pb)));
     }

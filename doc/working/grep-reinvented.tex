@@ -1,0 +1,108 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+ 
+\usepackage[
+backend=biber,
+style=alphabetic,
+sorting=ynt
+]{biblatex}
+\addbibresource{grep-parabix.bib}
+
+\title{Reinventing Grep with Parabix Technology}
+\begin{document}
+\maketitle
+
+\section{Introduction}
+
+Searching through text files for strings matching a particular
+pattern is a common task in information processing.   
+The software tool grep was developed by Ken Thompson for this
+purpose and made available with Unix Version 4 in 1973.
+\cite{mcilroy1987research}.
+The name grep arises from the g/re/p command of Thomposon's
+ed editor meaning globally search for regular expression and print.
+While Thompson's initial version did not support the regular
+expression features of alternation and grouping, this was
+remedied by the development of egrep by Alfred Aho in 1975 \cite{hume1988tale}.
+Andrew Hume improved egrep performance
+by incorporating the Boyer-Moore algorithm for fixed strings in 1988.
+Free and open source software versions of grep were developed
+by the GNU and BSD projects.   Bitwise parallel NFA simulation 
+was introduced with agrep \cite{wu1992agrep} and nrgrep \cite{navarro2001nr}.   
+
+All of these grep implementations are fundamentally sequential in
+nature, primarily building on automata theory techniques involving
+deterministic or nondeterministic finite automata (NFAs or DFAs).
+In general, the searches proceed byte-at-a-time updating the 
+automaton state (or set of states in the case of NFAs) with each step.
+The byte-at-a-time processing model was well matched to processor
+capabilities at the time of initial grep development, but 
+processors have evolved to be able to process many bytes in parallel 
+using short vector SIMD instructions.   For more than two decades,
+processing 16 bytes at a time has been possible with the Intel 
+SSE instructions, Power PC Altivec instructions or
+ARM Neon instructions.   In the last several years, Intel has further
+increased SIMD register width, first with 32-byte AVX2 technology 
+and most recently with 64-byte AVX-512 technology.   
+
+Parabix technology is a programming framework under development by
+our research group at Simon Fraser University  to take
+advantage of the wide SIMD registers for streaming text processing
+applications such as grep \cite{lin2012parabix}.   Rather than focussing on byte-oriented
+processing, however, it uses the concept of bitwise data parallelism.
+In this model, bit positions within SIMD registers are associated
+with byte positions in input data streams.   With AVX2 technology,
+for example, the goal is to process 256 bytes at a time with the
+256-bit SIMD registers.   We have applied Parabix technology 
+to accelerate Unicode transcoding \cite{cameron2008case}, XML parsing \cite{cameron2011parallel, medforth2013icxml} and regular
+expression search  \cite{cameron2014bitwise}, while other groups have applied related techniques
+to accelerate RNA protein search  \cite{peace2010exact} and JSON parsing \cite{li2017mison} .
+
+As a showcase of the Parabix framework, icgrep is a new grep
+implementation fundamentally built using bitwise data parallel
+techniques.   With our promising performance results in icgrep 1.0 \cite{cameron2015bitwise},
+we have focused on building a fully modern grep with broad
+support of extended regular expression features including 
+the lookaround assertions of Perl-compatible regular expressions
+and the full set of Unicode level 2 regular expression features
+defined by the Unicode consortium \cite{davis2016unicode}.   We believe icgrep is the first
+grep implementation to achieve this level of Unicode support.
+In addition, we have also focused on incorporating educational
+features so that users can explore and display various transformations
+that take placed during regular expression processing and/or 
+Parabix compilation.
+
+From a performance perspective, we have considered three important
+aspects for modern software tools.    One aspect is the
+use of fundamentally parallel algorithms as well as the systematic
+use of SIMD and multicore parallelism.   The second aspect is to
+focus on scalability, that is to arrange to automatically take
+advantage of both available SIMD register width and available
+cores to achieve performance that scales with these resources.
+While there is still considerable work to do in the development of 
+our framework, icgrep does indeed demonstrate such scalability, 
+even for single file search.
+From this perspective, we think that icgrep represents an interesting
+initial data point with respect to software tool scalability.
+Finally, we also have focused on consistent and predictable performance,
+particularly in response to the rise in denial-of-service attacks
+that exploit pathological cases for many existing regular expression
+tools \cite{kirrage2013static}.
+
+While research continues, our goal is to introduce icgrep as
+an important practical contribution that pushes the boundaries
+on both the performance and capability of grep search software.
+As with all open source software projects, we expect to refine
+the software over time and invite collaborators to join our
+effort.
+
+\section{Parabix Regular Expression Matching}
+
+
+\printbibliography
+
+\end{document}
+
+
+
+
