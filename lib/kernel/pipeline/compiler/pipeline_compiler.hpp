@@ -436,7 +436,39 @@ struct PartitionInput : public PartitionData {
 
 using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
 
-using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferGraph::vertex_descriptor, PartitionData>;
+
+struct PartitioningGraphNode {
+    enum TypeId {
+        Partition = 0
+        , Fixed
+        , Bounded
+        , Unknown
+        , PartialSum
+        , Relative
+        , Greedy
+    };
+
+    TypeId Type = TypeId::Partition;
+    unsigned StreamSet = 0; // for non-Fixed rate nodes
+};
+
+struct PartitioningGraphEdge {
+    enum TypeId {
+        IOPort = 0
+        , Channel
+        , Reference
+    };
+
+    TypeId          Type;
+    unsigned        Kernel;
+    StreamSetPort   Port;
+
+
+    PartitioningGraphEdge(unsigned kernel, StreamSetPort port) : Type(IOPort), Kernel(kernel), Port(port) { }
+    PartitioningGraphEdge(TypeId type = IOPort, unsigned kernel = 0, StreamSetPort port = StreamSetPort{}) : Type(type), Kernel(kernel), Port(port) { }
+};
+
+using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
@@ -916,7 +948,7 @@ public:
     LLVM_READNONE const Binding & getBinding(const unsigned kernel, const StreamSetPort port) const;
     LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
 
-    void printBufferGraph(const BufferGraph & G, raw_ostream & out) const;
+    void printBufferGraph(raw_ostream & out) const;
 
     void verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const;
 
@@ -1223,7 +1255,9 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mInternalKernels(std::move(P.InternalKernels))
 , mInternalBindings(std::move(P.InternalBindings))
 {
-    determinePartitionJumpIndices();
+    #ifdef PRINT_BUFFER_GRAPH
+    printBufferGraph(errs());
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
