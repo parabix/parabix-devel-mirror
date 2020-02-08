@@ -2,7 +2,6 @@
 #define PARTITIONING_ANALYSIS_HPP
 
 #include "../pipeline_compiler.hpp"
-#include "../internal/partitionmetakernel.h"
 
 namespace kernel {
 
@@ -1003,6 +1002,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
     using BufferVertex = BufferGraph::vertex_descriptor;
     using PartitioningVertex = PartitioningGraph::vertex_descriptor;
     using BitSet = dynamic_bitset<>; // for is_subset_of
+    using StreamSetMap = flat_map<BufferVertex, PartitioningVertex>;
+    using PartitionVertexMap = flat_map<PartitioningVertex, PartitioningVertex>;
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
@@ -1018,10 +1019,9 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     BEGIN_SCOPED_REGION
 
-    flat_map<BufferVertex, PartitioningVertex> streamSetMap;
-
-    flat_set<PartitioningVertex> fixedRateInputSet;
-
+    StreamSetMap streamSetMap;
+    StreamSetMap fixedRateInputSet;
+    PartitionVertexMap outputToInputMap;
     flat_set<BufferVertex> visited;
 
     auto priorPartitionId = 0U;
@@ -1063,17 +1063,26 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                 // current kernel, ignore the reference.
                 const auto producer = parent(reference, mBufferGraph);
                 if (producer < start) {
+
                     const auto f = streamSetMap.find(reference);
                     assert (f != streamSetMap.end());
-                    const auto u = f->second;
+                    auto u = f->second;
+
+
+                    // u is the output node of the producer but we want to find the matching input
+                    // node for this kernel that consumes it.
+                    if (port.Type == PortType::Input) {
+                        const auto g = outputToInputMap.find(u);
+                        assert (g != outputToInputMap.end());
+                        u = g->second;
+                    }
+
+
                     add_edge(u, v, PartitioningGraphEdge{PartitioningGraphEdge::Reference}, G);
                     requiresAssessment.insert(u);
                 }
                 return v;
             };
-
-
-
 
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
@@ -1090,29 +1099,36 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
                         const auto f = streamSetMap.find(streamSet);
                         assert (f != streamSetMap.end());
-                        const auto src = f->second;
+                        const auto producerOutput = f->second;
+
+                        PartitioningVertex input;
 
                         if (rateId == RateId::Fixed) {
 
                             // Each fixed input rate will be produced at some rate relative to the input partition.
-                            if (fixedRateInputSet.insert(src).second) {
-                                const auto fixedInput = makeNode(PartitioningGraphNode::Fixed, partitionId);
-                                add_edge(src, fixedInput, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
-                                add_edge(fixedInput, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
-                                for (const Attribute & a : binding.getAttributes()) {
-                                    switch (a.getKind()) {
-                                        case AttrId::LookAhead:
-                                            requiresAssessment.insert(fixedInput);
-                                            goto break_1;
-                                        default: break;
-                                    }
+                            const auto f = fixedRateInputSet.find(producerOutput);
+                            const auto alreadyHasFixedInput = (f != fixedRateInputSet.end());
+                            if (alreadyHasFixedInput) {
+                                input = f->second;
+                            } else {
+                                input = makeNode(PartitioningGraphNode::Fixed, partitionId);
+                                fixedRateInputSet.emplace(producerOutput, input);
+                            }
+
+                            for (const Attribute & a : binding.getAttributes()) {
+                                switch (a.getKind()) {
+                                    case AttrId::LookAhead:
+                                        requiresAssessment.insert(input);
+                                        goto break_1;
+                                    default: break;
                                 }
-break_1:                        continue;
+                            }
+break_1:                    if (alreadyHasFixedInput) {
+                                goto skip_edge_insertion;
                             }
 
                         } else {
 
-                            PartitioningVertex input;
                             switch (rateId) {
                                 case RateId::Bounded:
                                     input = makeNode(PartitioningGraphNode::Bounded, streamSet);
@@ -1128,12 +1144,15 @@ break_1:                        continue;
                                     break;
                                 default: llvm_unreachable("unhandled input rate type");
                             }
-                            add_edge(src, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
-                            add_edge(input, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
                         }
+add_input:              add_edge(producerOutput, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
+                        add_edge(input, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
+skip_edge_insertion:    outputToInputMap.emplace(producerOutput, input);
                     }
                 }
             }
+
+            outputToInputMap.clear();
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
@@ -1147,15 +1166,13 @@ break_1:                        continue;
 
                     visited.insert(streamSet);
 
+                    PartitioningVertex output;
+
                     if (rateId == RateId::Fixed) {
 
                         if (makeFixedOutput) {
                             fixedOutput = makeNode(PartitioningGraphNode::Fixed, partitionId);
-                            add_edge(partitionId, fixedOutput, PartitioningGraphEdge{kernel, outputRate.Port}, G);
-                            makeFixedOutput = false;
                         }
-                        streamSetMap.emplace(streamSet, fixedOutput);
-
                         for (const Attribute & a : binding.getAttributes()) {
                             switch (a.getKind()) {
                                 case AttrId::Delayed:
@@ -1165,9 +1182,13 @@ break_1:                        continue;
                                 default: break;
                             }
                         }
-break_2:                continue;
+break_2:                output = fixedOutput;
+                        if (makeFixedOutput) {
+                            makeFixedOutput = false;
+                        } else {
+                            goto no_edge_insertion;
+                        }
                     } else {
-                        PartitioningVertex output;
                         switch (rateId) {
                             case RateId::Unknown:
                                 output = makeNode(PartitioningGraphNode::Unknown, streamSet);
@@ -1183,13 +1204,12 @@ break_2:                continue;
                                 break;
                             default: llvm_unreachable("unhandled output rate type");
                         }
-                        streamSetMap.emplace(streamSet, output);
-                        add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
                     }
+add_output:         add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
+no_edge_insertion:  streamSetMap.emplace(streamSet, output);
                 }
             }
         }
-
         visited.clear();
         fixedRateInputSet.clear();
         start = end;
@@ -1197,9 +1217,81 @@ break_2:                continue;
 
     END_SCOPED_REGION
 
-    // A pure fixed rate path is a
-    // Compute what is effectively the transitive reduction of the pure fixed rate paths,
+    #if 0
 
+    auto printG =[&]() {
+
+        auto & out = errs();
+
+        out << "digraph \"G\" {\n";
+        for (auto v : make_iterator_range(vertices(G))) {
+            out << "v" << v << " [label=\"" << v << ": ";
+            const PartitioningGraphNode & N = G[v];
+
+            switch (N.Type) {
+                case PartitioningGraphNode::Partition:
+                    out << "Partition";
+                    break;
+                case PartitioningGraphNode::Fixed:
+                    out << "Fixed";
+                    break;
+                case PartitioningGraphNode::Bounded:
+                    out << "Bounded";
+                    break;
+                case PartitioningGraphNode::Unknown:
+                    out << "Unknown";
+                    break;
+                case PartitioningGraphNode::PartialSum:
+                    out << "PartialSum";
+                    break;
+                case PartitioningGraphNode::Relative:
+                    out << "Relative";
+                    break;
+                case PartitioningGraphNode::Greedy:
+                    out << "Greedy";
+                    break;
+                default: llvm_unreachable("unhandled node type");
+            }
+            if (N.Type != PartitioningGraphNode::Partition) {
+                out << " {" << N.StreamSet << '}';
+            }
+            out << "\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(G))) {
+            const auto s = source(e, G);
+            const auto t = target(e, G);
+            out << "v" << s << " -> v" << t << " [";
+            const PartitioningGraphEdge & E = G[e];
+            if (E.Type == PartitioningGraphEdge::IOPort) {
+                out << "label=\"";
+
+                out << "[" << E.Kernel << "] #";
+                if (E.Port.Type == PortType::Input) {
+                    out << 'I';
+                } else {
+                    out << 'O';
+                }
+                out << ':' << E.Port.Number << "\"";
+            } else if (E.Type == PartitioningGraphEdge::Channel) {
+                out << "style=bold";
+            } else if (E.Type == PartitioningGraphEdge::Reference) {
+                out << "style=dashed";
+            }
+
+            out << "];\n";
+        }
+
+        out << "}\n\n";
+        out.flush();
+
+    };
+
+    #endif
+
+    // printG();
+
+    // A pure fixed rate path is a one that traverses only fixed rate and partition nodes.
+    // Compute what is effectively the transitive reduction of the pure fixed rate paths.
 
     const auto n = num_vertices(G);
 
@@ -1283,72 +1375,7 @@ break_2:                continue;
         }
     }
 
-    #if 0
-
-    auto & out = errs();
-
-    out << "digraph \"G\" {\n";
-    for (auto v : make_iterator_range(vertices(G))) {
-        out << "v" << v << " [label=\"" << v << ": ";
-        const PartitioningGraphNode & N = G[v];
-
-        switch (N.Type) {
-            case PartitioningGraphNode::Partition:
-                out << "Partition";
-                break;
-            case PartitioningGraphNode::Fixed:
-                out << "Fixed";
-                break;
-            case PartitioningGraphNode::Bounded:
-                out << "Bounded";
-                break;
-            case PartitioningGraphNode::Unknown:
-                out << "Unknown";
-                break;
-            case PartitioningGraphNode::PartialSum:
-                out << "PartialSum";
-                break;
-            case PartitioningGraphNode::Relative:
-                out << "Relative";
-                break;
-            case PartitioningGraphNode::Greedy:
-                out << "Greedy";
-                break;
-            default: llvm_unreachable("unhandled node type");
-        }
-        if (N.Type != PartitioningGraphNode::Partition) {
-            out << " {" << N.StreamSet << '}';
-        }
-        out << "\"];\n";
-    }
-    for (auto e : make_iterator_range(edges(G))) {
-        const auto s = source(e, G);
-        const auto t = target(e, G);
-        out << "v" << s << " -> v" << t << " [";
-        const PartitioningGraphEdge & E = G[e];
-        if (E.Type == PartitioningGraphEdge::IOPort) {
-            out << "label=\"";
-
-            out << "[" << E.Kernel << "] #";
-            if (E.Port.Type == PortType::Input) {
-                out << 'I';
-            } else {
-                out << 'O';
-            }
-            out << ':' << E.Port.Number << "\"";
-        } else if (E.Type == PartitioningGraphEdge::Channel) {
-            out << "style=bold";
-        } else if (E.Type == PartitioningGraphEdge::Reference) {
-            out << "style=dashed";
-        }
-
-        out << "];\n";
-    }
-
-    out << "}\n\n";
-    out.flush();
-
-    #endif
+    // printG();
 
     return G;
 }

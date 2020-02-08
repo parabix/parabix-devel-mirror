@@ -19,12 +19,13 @@ PartitionConstraintGraph PipelineCompiler::identifyHardPartitionConstraints(Buff
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
         const auto partitionId = KernelPartitionId[kernel];
+        assert (partitionId < PartitionCount);
 
         for (const auto input : make_iterator_range(in_edges(kernel, G))) {
             const auto buffer = source(input, G);
             const auto producer = parent(buffer, G);
             const auto producerPartitionId = KernelPartitionId[producer];
-            assert (producerPartitionId <= partitionId);
+            assert (producerPartitionId <= partitionId);            
             if (producerPartitionId != partitionId) {
                 const BufferRateData & inputRate = G[input];
                 const Binding & binding = inputRate.Binding;
@@ -41,6 +42,7 @@ PartitionConstraintGraph PipelineCompiler::identifyHardPartitionConstraints(Buff
                 const auto consumer = target(data, G);
                 const auto consumerPartitionId = KernelPartitionId[consumer];
                 assert (consumerPartitionId >= partitionId);
+                assert (consumerPartitionId < PartitionCount);
                 if (consumerPartitionId != partitionId) {
                     const BufferRateData & outputRate = G[output];
                     const Binding & binding = outputRate.Binding;

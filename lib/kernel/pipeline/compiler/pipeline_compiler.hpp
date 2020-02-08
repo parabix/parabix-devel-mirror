@@ -554,6 +554,8 @@ using Vec = SmallVector<T, n>;
 
 using PortEvalVec = Vec<unsigned, 32>;
 
+using ParamVec = Vec<Value *, 4>;
+
 using ArgVec = Vec<Value *, 64>;
 
 using Allocator = SlabAllocator<>;
@@ -660,8 +662,8 @@ public:
     ArgVec buildKernelCallArgumentList(BuilderRef b);
     void updateProcessedAndProducedItemCounts(BuilderRef b);
     void readReturnedOutputVirtualBaseAddresses(BuilderRef b) const;
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ArgVec &args);
-    Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ParamVec &args);
+    Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ParamVec & args);
 
     void normalCompletionCheck(BuilderRef b);
 
@@ -829,7 +831,7 @@ public:
 
     bool hasZeroExtendedStream() const;
 
-    void determineEvaluationOrderOfKernelIO(const size_t kernelIndex, const BufferGraph &G);
+//    void determineEvaluationOrderOfKernelIO(const size_t kernelIndex, const BufferGraph &G);
     TerminationGraph makeTerminationGraph();
     PipelineIOGraph makePipelineIOGraph() const;
     LLVM_READNONE bool isOpenSystem() const;
@@ -1042,7 +1044,6 @@ protected:
     bool                                        mKernelCanTerminateEarly = false;
     bool                                        mKernelHasAnExplicitFinalPartialStride = false;
 
-    Vec<unsigned, 32>                           mPortEvaluationOrder;
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
 

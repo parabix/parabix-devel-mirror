@@ -132,24 +132,19 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mTarget->addThreadLocalScalar(localStateTy, prefix + KERNEL_THREAD_LOCAL_SUFFIX);
     }
 
-    /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(kernelIndex, mBufferGraph);
 
-    const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
-
-    for (const auto i : mPortEvaluationOrder) {
-        StreamSetPort port{};
-        BufferGraph::edge_descriptor e;
-        if (i < numOfInputs) {
-            port.Type = PortType::Input;
-            port.Number = i;
-            e = getInput(kernelIndex, port);
-        } else {
-            port.Type = PortType::Output;
-            port.Number = i - numOfInputs;
-            e = getOutput(kernelIndex, port);
-        }
-        const auto prefix = makeBufferName(kernelIndex, port);
+    for (const auto e : make_iterator_range(in_edges(kernelIndex, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
+        const auto prefix = makeBufferName(kernelIndex, br.Port);
+        const Binding & binding = br.Binding;
+        if (LLVM_UNLIKELY(binding.isDeferred())) {
+            mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+        }
+        mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
+    }
+    for (const auto e : make_iterator_range(out_edges(kernelIndex, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto prefix = makeBufferName(kernelIndex, br.Port);
         const Binding & binding = br.Binding;
         if (LLVM_UNLIKELY(binding.isDeferred())) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX);

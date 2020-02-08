@@ -14,7 +14,7 @@ namespace kernel {
  * @brief determineNumOfLinearStrides
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+
     // bound the number of strides by the maximum expected
     Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
     mNumOfLinearStrides = b->CreateSub(maxStrides, mCurrentNumOfStrides);
@@ -30,15 +30,19 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))) {
         mBranchToLoopExit = b->getFalse();
     }
-    for (const auto i : mPortEvaluationOrder) {
-        Value * strides = nullptr;
-        if (i < numOfInputs) {
-            checkForSufficientInputData(b, StreamSetPort{PortType::Input, i});
-            strides = getNumOfAccessibleStrides(b, StreamSetPort{PortType::Input, i});
-        } else {            
-            checkForSufficientOutputSpaceOrExpand(b, StreamSetPort{PortType::Output, i - numOfInputs});
-            strides = getNumOfWritableStrides(b, StreamSetPort{PortType::Output, i - numOfInputs});
+    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        checkForSufficientInputData(b, br.Port);
+        Value * const strides = getNumOfAccessibleStrides(b, br.Port);
+        if (strides) {
+            mBoundedKernel = true;
         }
+        mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
+    }
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        checkForSufficientOutputSpaceOrExpand(b, br.Port);
+        Value * const strides = getNumOfWritableStrides(b, br.Port);
         if (strides) {
             mBoundedKernel = true;
         }
@@ -173,9 +177,9 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     // must have enough data based on its already tested inputs and ignore
     // checking whether an input kernel is terminated if a stronger test has
     // already been done. Work out the logic for these tests globally.
-    Value * const accessible = getAccessibleInputItems(b, inputPort);
+    Value * const accessible = getAccessibleInputItems(b, inputPort); assert (accessible);
     Value * const strideLength = getInputStrideLength(b, inputPort);
-    Value * const required = addLookahead(b, inputPort, strideLength);
+    Value * const required = addLookahead(b, inputPort, strideLength); assert (required);
     const auto prefix = makeBufferName(mKernelIndex, inputPort);
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_required = %" PRIu64, required);
@@ -691,17 +695,19 @@ Value * PipelineCompiler::getOutputStrideLength(BuilderRef b, const StreamSetPor
 Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamSetPort port, Value * const offset) const {
     const auto ref = getReference(port);
     assert (ref.Type == PortType::Input);
-    const StreamSetBuffer * const buffer = getInputBuffer(ref);
 
+    const StreamSetBuffer * const buffer = getInputBuffer(ref);
     Value * prior = nullptr;
     if (port.Type == PortType::Input) {
         prior = mAlreadyProcessedPhi[port.Number];
     } else { // if (port.Type == PortType::Output) {
         prior = mAlreadyProducedPhi[port.Number];
     }
+    assert (prior);
 
     Constant * const ZERO = b->getSize(0);
     Value * position = mAlreadyProcessedPhi[ref.Number];
+
     if (offset) {
         if (LLVM_UNLIKELY(mCheckAssertions)) {
             const auto & binding = getBinding(port);

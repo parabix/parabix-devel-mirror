@@ -60,7 +60,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
-    /* mPortEvaluationOrder = */ determineEvaluationOrderOfKernelIO(mKernelIndex, mBufferGraph);
     mMaximumNumOfStrides = ceiling(MaximumNumOfStrides[mKernelIndex]);
 
     const auto prefix = makeKernelName(mKernelIndex);

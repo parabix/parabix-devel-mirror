@@ -586,12 +586,9 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
  * @brief calculateInputEpochAddresses
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::calculateInputEpochAddresses(BuilderRef b) {
-    RelationshipType prior_in{};
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
-        assert (prior_in < rt.Port);
-        prior_in = rt.Port;
         PHINode * processed = nullptr;
         const auto i = rt.Port.Number;
         if (mAlreadyProcessedDeferredPhi[i]) {
@@ -694,9 +691,13 @@ inline const Binding & PipelineCompiler::getProducerOutputBinding(const StreamSe
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_t kernelVertex, const StreamSetPort inputPort) const {
     assert (inputPort.Number < in_degree(kernelVertex, mBufferGraph));
-    const auto e = *(in_edges(kernelVertex, mBufferGraph).first + inputPort.Number);
-    // assert (mBufferGraph[e].inputPort() == inputPort);
-    return e;
+    for (const auto e : make_iterator_range(in_edges(kernelVertex, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        if (br.Port.Number == inputPort.Number) {
+            return e;
+        }
+    }
+    llvm_unreachable("could not find input port");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -771,9 +772,13 @@ StreamSetBuffer * PipelineCompiler::getOutputBuffer(const size_t kernelVertex, c
 inline const BufferGraph::edge_descriptor PipelineCompiler::getOutput(const size_t kernelVertex, const StreamSetPort outputPort) const {
     assert (outputPort.Type == PortType::Output);
     assert (outputPort.Number < out_degree(kernelVertex, mBufferGraph));
-    const auto e = *(out_edges(kernelVertex, mBufferGraph).first + outputPort.Number);
-    // assert (mBufferGraph[e].outputPort() == outputPort);
-    return e;
+    for (const auto e : make_iterator_range(out_edges(kernelVertex, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        if (br.Port.Number == outputPort.Number) {
+            return e;
+        }
+    }
+    llvm_unreachable("could not find output port");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

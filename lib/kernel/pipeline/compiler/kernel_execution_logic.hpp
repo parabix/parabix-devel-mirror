@@ -130,13 +130,11 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(mFixedRateFactorPhi);
     }
 
-    RelationshipType prior_in{};
+    SmallVector<ParamVec, 16> inputs(in_degree(mKernelIndex, mBufferGraph));
 
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
-        assert (prior_in < rt.Port);
-        prior_in = rt.Port;
 
         if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
 
@@ -152,15 +150,17 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                 processed = mAlreadyProcessedPhi[i];
             }
 
+            ParamVec & inputArgs = inputs[i];
+
             const Binding & input = rt.Binding;
             #ifndef NDEBUG
             const auto buffer = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[buffer];
             assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
             #endif
-            args.push_back(mInputEpochPhi[i]);
+            inputArgs.push_back(mInputEpochPhi[i]);
 
-            mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
+            mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, inputArgs);
 
             if (LLVM_UNLIKELY(requiresItemCount(input))) {
                 // calculate how many linear items are from the *deferred* position
@@ -169,18 +169,22 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                     Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
                     inputItems = b->CreateAdd(inputItems, diff);
                 }
-                args.push_back(inputItems); assert (inputItems);
+                inputArgs.push_back(inputItems); assert (inputItems);
             }
         }
     }
 
-    RelationshipType prior_out{};
+    for (ParamVec & inputArgs : inputs) {
+        args.insert(args.end(), inputArgs.begin(), inputArgs.end());
+    }
+
+
+    SmallVector<ParamVec, 16> outputs(out_degree(mKernelIndex, mBufferGraph));
+
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Reason == ReasonType::Explicit);
         assert (rt.Port.Type == PortType::Output);
-        assert (prior_out < rt.Port);
-        prior_out = rt.Port;
         const auto i = rt.Port.Number;
 
         PHINode * const produced = mAlreadyProducedPhi[i];
@@ -188,21 +192,27 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         const BufferNode & bn = mBufferGraph[buffer];
         const Binding & output = rt.Binding;
 
+        ParamVec & outputArgs = outputs[i];
+
         assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
 
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            mReturnedOutputVirtualBaseAddressPtr[i] = addVirtualBaseAddressArg(b, bn.Buffer, args);
+            mReturnedOutputVirtualBaseAddressPtr[i] = addVirtualBaseAddressArg(b, bn.Buffer, outputArgs);
         } else {
-            args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced, nullptr));
+            outputArgs.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced, nullptr));
         }
-        mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, args);
+        mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, outputArgs);
         // TODO:  consider whether we should pass a requested amount to source streams?
         if (requiresItemCount(output)) {
-            args.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
+            outputArgs.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
         }
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            args.push_back(mConsumedItemCount[i]); assert (mConsumedItemCount[i]);
+            outputArgs.push_back(mConsumedItemCount[i]); assert (mConsumedItemCount[i]);
         }
+    }
+
+    for (ParamVec & outputArgs : outputs) {
+        args.insert(args.end(), outputArgs.begin(), outputArgs.end());
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -327,7 +337,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
                                           const bool forceAddressability,
                                           PHINode * const itemCount,
-                                          ArgVec & args) {
+                                          ParamVec & args) {
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
@@ -351,7 +361,7 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
  * @brief addVirtualBaseAddressArg
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer,
-                                                   ArgVec & args) {
+                                                   ParamVec & args) {
     if (LLVM_UNLIKELY(mNumOfVirtualBaseAddresses == mVirtualBaseAddressPtr.size())) {
         auto vba = b->CreateAllocaAtEntryPoint(b->getVoidPtrTy());
         mVirtualBaseAddressPtr.push_back(vba);

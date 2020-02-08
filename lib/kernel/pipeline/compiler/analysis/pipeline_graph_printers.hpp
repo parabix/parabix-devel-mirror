@@ -292,7 +292,7 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
         if (partitionId != currentPartition) {
             checkClosePartitionLabel();
             if (LLVM_LIKELY(partitionId != -1U)) {
-                out << "subgraph cluster_" << partitionId << " {\n"
+                out << "subgraph cluster" << partitionId << " {\n"
                        "label=\"Partition #" << partitionId  << "\";"
                        "fontcolor=\"red\";"
                        "style=\"rounded,dashed,bold\";"
@@ -322,9 +322,10 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
 
     out << "digraph \"" << mTarget->getName() << "\" {\n"
            "rankdir=tb;"
-           "nodesep=0.25;"
+           "nodesep=0.5;"
            "ranksep=0.5;"
            "newrank=true;"
+           // "compound=true;"
            "\n";
 
     printKernel(PipelineInput, "P_{in}");
