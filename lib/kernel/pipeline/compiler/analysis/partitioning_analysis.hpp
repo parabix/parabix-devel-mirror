@@ -1021,7 +1021,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     StreamSetMap streamSetMap;
     StreamSetMap fixedRateInputSet;
-    PartitionVertexMap outputToInputMap;
+    PartitionVertexMap producerOutputToKernelInputMap;
     flat_set<BufferVertex> visited;
 
     auto priorPartitionId = 0U;
@@ -1072,8 +1072,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                     // u is the output node of the producer but we want to find the matching input
                     // node for this kernel that consumes it.
                     if (port.Type == PortType::Input) {
-                        const auto g = outputToInputMap.find(u);
-                        assert (g != outputToInputMap.end());
+                        const auto g = producerOutputToKernelInputMap.find(u);
+                        assert (g != producerOutputToKernelInputMap.end());
                         u = g->second;
                     }
 
@@ -1147,12 +1147,10 @@ break_1:                    if (alreadyHasFixedInput) {
                         }
 add_input:              add_edge(producerOutput, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
                         add_edge(input, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
-skip_edge_insertion:    outputToInputMap.emplace(producerOutput, input);
+skip_edge_insertion:    producerOutputToKernelInputMap.emplace(producerOutput, input);
                     }
                 }
             }
-
-            outputToInputMap.clear();
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
@@ -1208,7 +1206,8 @@ break_2:                output = fixedOutput;
 add_output:         add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
 no_edge_insertion:  streamSetMap.emplace(streamSet, output);
                 }
-            }
+            }            
+            producerOutputToKernelInputMap.clear();
         }
         visited.clear();
         fixedRateInputSet.clear();
@@ -1217,7 +1216,7 @@ no_edge_insertion:  streamSetMap.emplace(streamSet, output);
 
     END_SCOPED_REGION
 
-    #if 0
+    #if 1
 
     auto printG =[&]() {
 
@@ -1287,8 +1286,6 @@ no_edge_insertion:  streamSetMap.emplace(streamSet, output);
     };
 
     #endif
-
-    // printG();
 
     // A pure fixed rate path is a one that traverses only fixed rate and partition nodes.
     // Compute what is effectively the transitive reduction of the pure fixed rate paths.
@@ -1375,7 +1372,7 @@ no_edge_insertion:  streamSetMap.emplace(streamSet, output);
         }
     }
 
-    // printG();
+    printG();
 
     return G;
 }
