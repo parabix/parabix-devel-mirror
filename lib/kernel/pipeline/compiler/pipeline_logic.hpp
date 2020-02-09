@@ -71,9 +71,17 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         mHasThreadLocalPipelineState = true;
     }
 
+    unsigned currentPartitionId = -1U;
+
     addBufferHandlesToPipelineKernel(b, PipelineInput);
     addConsumerKernelProperties(b, PipelineInput);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const auto partitionId = KernelPartitionId[i];
+        if (partitionId != currentPartitionId) {
+            currentPartitionId = partitionId;
+            assert (currentPartitionId != -1U);
+            addPartitionInputItemCounts(b, currentPartitionId);
+        }
         addBufferHandlesToPipelineKernel(b, i);
         addTerminationProperties(b, i);
         addInternalKernelProperties(b, i);

@@ -224,6 +224,11 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
     const Binding & input = getInputBinding(inputPort);
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, lookAhead);
     #ifndef DISABLE_ZERO_EXTEND
+
+    // TODO: if a stream is zero extended but it is produced within the same partition as another
+    // input to this kernel with an equivalent production *and* consumption rate and the stream is
+    // not also zero extended, ignore the zero extension attribute for this stream.
+
     if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
         // switching to a "zeroed buffer". The size of the buffer will be determined by the final

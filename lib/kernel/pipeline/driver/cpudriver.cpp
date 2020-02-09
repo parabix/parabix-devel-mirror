@@ -207,6 +207,13 @@ inline void CPUDriver::preparePassManager() {
 
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
+
+    // TODO: we may be able to reduce unnecessary optimization work by having kernel specific optimization passes.
+
+    // NOTE: we currently require DCE and Mem2Reg for each kernel to eliminate any unnecessary scalar -> value
+    // mappings made by the base KernelCompiler. That could be done in a more focused manner, however, as each
+    // mapping is known.
+
     preparePassManager();
     mCachedKernel.reserve(mUncachedKernel.size());
     for (auto & kernel : mUncachedKernel) {

@@ -402,50 +402,17 @@ using OwningVector = std::vector<std::unique_ptr<T>>;
 
 using Partition = std::vector<unsigned>;
 
-struct PartitionData {
-    unsigned        Kernel;
-    RateId          Type;
-    Rational        MaxRate;
-    unsigned        Reference;
-    StreamSetPort   Port;
-
-    PartitionData() noexcept {
-
-    }
-
-    PartitionData(const PartitionData & o) noexcept
-    : Kernel(o.Kernel), Type(o.Type), MaxRate(o.MaxRate), Reference(o.Reference), Port(o.Port) {
-
-    }
-
-    PartitionData(unsigned kernel, RateId type, Rational maxRate, unsigned reference, const StreamSetPort port)  noexcept
-    : Kernel(kernel), Type(type), MaxRate(maxRate), Reference(reference), Port(port) {
-
-    }
-};
-
-struct PartitionInput : public PartitionData {
-    unsigned StreamSet;
-
-    PartitionInput(const PartitionData & data, const unsigned streamSet)
-    : PartitionData(data), StreamSet(streamSet) {
-
-    }
-
-};
-
 using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
-
 
 struct PartitioningGraphNode {
     enum TypeId {
         Partition = 0
-        , Fixed
         , Bounded
         , Unknown
+        , Fixed
         , PartialSum
-        , Relative
         , Greedy
+        , Relative
     };
 
     TypeId Type = TypeId::Partition;
@@ -453,7 +420,7 @@ struct PartitioningGraphNode {
 };
 
 struct PartitioningGraphEdge {
-    enum TypeId {
+    enum TypeId : unsigned {
         IOPort = 0
         , Channel
         , Reference
@@ -467,6 +434,16 @@ struct PartitioningGraphEdge {
     PartitioningGraphEdge(unsigned kernel, StreamSetPort port) : Type(IOPort), Kernel(kernel), Port(port) { }
     PartitioningGraphEdge(TypeId type = IOPort, unsigned kernel = 0, StreamSetPort port = StreamSetPort{}) : Type(type), Kernel(kernel), Port(port) { }
 };
+
+bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B) {
+    if (static_cast<unsigned>(A.Type) < static_cast<unsigned>(B.Type)) {
+        return true;
+    }
+    if (A.Kernel < B.Kernel) {
+        return true;
+    }
+    return (A.Port < B.Port);
+}
 
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
@@ -490,15 +467,17 @@ struct PipelineGraphBundle {
     RelationshipGraph       Scalars;
     OwningVector<Kernel>    InternalKernels;
     OwningVector<Binding>   InternalBindings;
-    Partition       KernelPartitionId;
+    Partition               KernelPartitionId;
 
-    PipelineGraphBundle(const unsigned n, const unsigned m,
+    PipelineGraphBundle(const unsigned n,
+                        const unsigned m,
+                        const unsigned numOfKernels,
                         OwningVector<Kernel> && internalKernels,
                         OwningVector<Binding> && internalBindings)
     : Streams(n), Scalars(m)
     , InternalKernels(std::move(internalKernels))
     , InternalBindings(std::move(internalBindings))
-    , KernelPartitionId(n, 0) {
+    , KernelPartitionId(numOfKernels) {
 
     }
 };
@@ -531,6 +510,11 @@ const static std::string NEXT_LOGICAL_SEGMENT_SUFFIX = ".NSN";
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";
+
+const static std::string PARTITION_LOGICAL_SEGMENT_NUMBER = ".PLS";
+const static std::string PARTITION_ITEM_COUNT_SUFFIX = ".PIC";
+const static std::string PARTITION_FIXED_RATE_SUFFIX = ".PFR";
+
 
 const static std::string ITERATION_COUNT_SUFFIX = ".ITC";
 const static std::string TERMINATION_PREFIX = "@TERM";
@@ -621,10 +605,12 @@ public:
 
 // partitioning codegen functions
 
+    void addPartitionInputItemCounts(BuilderRef b, const size_t partitionId) const;
     void makePartitionEntryPoints(BuilderRef b);
-
-    void testPartitionInputData(BuilderRef b);
-    void reservePartitionOutputSpace(BuilderRef b);
+    void branchToInitialPartition(BuilderRef b);
+    BasicBlock * getPartitionExitPoint(BuilderRef b);
+    void checkInputDataOnPartitionEntry(BuilderRef b);
+    void checkForPartitionExit(BuilderRef b);
 
 // inter-kernel codegen functions
 
@@ -860,7 +846,6 @@ public:
 
     PartitioningGraph generatePartitioningGraph() const;
     std::vector<unsigned> determinePartitionJumpIndices() const;
-    std::vector<PartitionInput> determinePartitionInputEvaluationOrder(const unsigned partitionId) const;
 
 // buffer management analysis functions
 
@@ -1006,9 +991,8 @@ protected:
     Vec<Value *, 16>                            mTerminationSignals;
 
     // partition state
-    Vec<Value *, 32>                            mPartitionEntryPoint;
-    unsigned                                    mCurrentPartitionIndex = 0;
-    Value *                                     mBaseNumOfPartitionStrides;
+    Vec<BasicBlock *, 32>                       mPartitionEntryPoint;
+    unsigned                                    mCurrentPartitionId = 0;
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;

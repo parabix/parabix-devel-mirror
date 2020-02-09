@@ -17,6 +17,7 @@ void PipelineCompiler::start(BuilderRef b) {
 
     // Create the basic blocks for the loop.
     mPipelineLoop = b->CreateBasicBlock("pipelineLoop");
+    makePartitionEntryPoints(b);
     mPipelineEnd = b->CreateBasicBlock("pipelineEnd");
     if (mCheckAssertions) {
         mRethrowException = b->WriteDefaultRethrowBlock();
@@ -49,6 +50,7 @@ void PipelineCompiler::start(BuilderRef b) {
     debugPrint(b, prefix + " +++ NUM OF STRIDES %" PRIu64 "+++", mNumOfStrides);
     debugPrint(b, prefix + " +++ IS FINAL %" PRIu8 "+++", mIsFinal);
     #endif
+    branchToInitialPartition(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -57,37 +59,37 @@ void PipelineCompiler::start(BuilderRef b) {
 void PipelineCompiler::executeKernel(BuilderRef b) {
 
     resetMemoizedFields();
+
+    BasicBlock * const partitionExit = getPartitionExitPoint(b);
+
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
     mMaximumNumOfStrides = ceiling(MaximumNumOfStrides[mKernelIndex]);
 
     const auto prefix = makeKernelName(mKernelIndex);
-    mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", mPipelineEnd);
-    mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", mPipelineEnd);
-    mKernelTerminationCheck = b->CreateBasicBlock(prefix + "_normalTerminationCheck", mPipelineEnd);
-    mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", mPipelineEnd);
-    mKernelInsufficientIOExit = b->CreateBasicBlock(prefix + "_insufficientIOExit", mPipelineEnd);
-    mKernelLoopExit = b->CreateBasicBlock(prefix + "_loopExit", mPipelineEnd);
+    mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", partitionExit);
+    mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", partitionExit);
+    mKernelTerminationCheck = b->CreateBasicBlock(prefix + "_normalTerminationCheck", partitionExit);
+    mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", partitionExit);
+    mKernelInsufficientIOExit = b->CreateBasicBlock(prefix + "_insufficientIOExit", partitionExit);
+    mKernelLoopExit = b->CreateBasicBlock(prefix + "_loopExit", partitionExit);
     // The phi catch simplifies compilation logic by "forward declaring" the loop exit point.
     // Subsequent optimization phases will collapse it into the correct exit block.
-    mKernelLoopExitPhiCatch = b->CreateBasicBlock(prefix + "_kernelExitPhiCatch", mPipelineEnd);
-    mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", mPipelineEnd);
-    mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", mPipelineEnd);
-    mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", mPipelineEnd);
+    mKernelLoopExitPhiCatch = b->CreateBasicBlock(prefix + "_kernelExitPhiCatch", partitionExit);
+    mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", partitionExit);
+    mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", partitionExit);
+    mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", partitionExit);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL ENTRY
     /// -------------------------------------------------------------------------------------
 
     if (!mKernelIsInternallySynchronized) {
-
         // By using an atomic fetch/add here, we gain the ability to dynamically add or
         // remove threads while still using the segment pipeline parallelism model.
         Value * const segNoPtr = b->getScalarFieldPtr(prefix + NEXT_LOGICAL_SEGMENT_SUFFIX);
         mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
-
-
     }
 
 
@@ -96,6 +98,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, "+++ " + prefix + "_segNo = %" PRIu64, mSegNo);
     #endif
+
+    checkInputDataOnPartitionEntry(b);
+
     readInitialItemCounts(b);
     readConsumedItemCounts(b);
     incrementNumberOfSegmentsCounter(b);
@@ -233,6 +238,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mHalted = mHaltedPhi;
     mPipelineProgress = mNextPipelineProgress;
     releaseSynchronizationLock(b, LockType::Segment);
+
+    checkForPartitionExit(b);
 }
 
 

@@ -205,22 +205,22 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                 }
             }
 
-            // Check whether any of the kernel attributes require this to be a partition root
-            for (const Attribute & attr : kernelObj->getAttributes()) {
-                switch (attr.getKind()) {
-                    case AttrId::CanTerminateEarly:
-                    case AttrId::MustExplicitlyTerminate:
-                    case AttrId::MayFatallyTerminate:
-                        isNewPartitionRoot = true;
-                        break;
-                    default:
-                        break;
-                }
-            }
+            // TODO: currently any kernel K that can terminate early is the root of a new partition. However,
+            // we could include it one of its sources' partition P if and only if there is no divergent path
+            // of kernels S in P for which the consuming partitions of the outputs of S could potentially
+            // execute without any data from all outputs of K.
+
+            // Check whether this kernel could terminate early
+            const auto mayTerminateEarly = kernelObj->canSetTerminateSignal();
 
             // Assign a root of a partition a new id.
-            if (LLVM_UNLIKELY(isNewPartitionRoot)) {
+            if (LLVM_UNLIKELY(isNewPartitionRoot || mayTerminateEarly)) {
                 addRateId(H[kernel], nextRateId++);
+            }
+
+            unsigned termRateId = 0;
+            if (LLVM_UNLIKELY(mayTerminateEarly)) {
+                termRateId = nextRateId++;
             }
 
             // Now iterate through the outputs
@@ -240,6 +240,9 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                     const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
                     add_edge(kernel, buffer, H);
+                    if (LLVM_UNLIKELY(mayTerminateEarly)) {
+                        addRateId(H[buffer], termRateId);
+                    }
                     switch (rate.getKind()) {
                         case RateId::PartialSum:
                             BEGIN_SCOPED_REGION
@@ -264,20 +267,27 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                             llvm_unreachable("could not locate reference buffer?");
                             found_ref: break;
                         default: break;
-                    }
+                    }                    
                     // Check the attributes to see whether any impose a partition change
-                    for (const Attribute & attr : b.getAttributes()) {
-                        switch (attr.getKind()) {
-                            case AttrId::Delayed:
-                            case AttrId::Deferred:
-                                // A deferred output rate is closer to an bounded rate than a
-                                // countable rate but a deferred input rate simply means the
-                                // buffer must be dynamic.
-                                addRateId(H[buffer], nextRateId++);
-                                break;
-                            default: break;
+                    auto hasRateChangeAttribute = [](const Binding & b) {
+                        for (const Attribute & attr : b.getAttributes()) {
+                            switch (attr.getKind()) {
+                                case AttrId::Delayed:
+                                case AttrId::Deferred:
+                                    // A deferred output rate is closer to an bounded rate than a
+                                    // countable rate but a deferred input rate simply means the
+                                    // buffer must be dynamic.
+                                    return true;
+                                default: break;
+                            }
                         }
+                        return false;
+                    };
+
+                    if (LLVM_UNLIKELY(hasRateChangeAttribute(b))) {
+                        addRateId(H[buffer], nextRateId++);
                     }
+
                 }
             }
 
@@ -1021,7 +1031,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     StreamSetMap streamSetMap;
     StreamSetMap fixedRateInputSet;
-    PartitionVertexMap producerOutputToKernelInputMap;
+    PartitionVertexMap partitionOutputToKernelInputMap;
     flat_set<BufferVertex> visited;
 
     auto priorPartitionId = 0U;
@@ -1072,8 +1082,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                     // u is the output node of the producer but we want to find the matching input
                     // node for this kernel that consumes it.
                     if (port.Type == PortType::Input) {
-                        const auto g = producerOutputToKernelInputMap.find(u);
-                        assert (g != producerOutputToKernelInputMap.end());
+                        const auto g = partitionOutputToKernelInputMap.find(u);
+                        assert (g != partitionOutputToKernelInputMap.end());
                         u = g->second;
                     }
 
@@ -1111,7 +1121,8 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                             if (alreadyHasFixedInput) {
                                 input = f->second;
                             } else {
-                                input = makeNode(PartitioningGraphNode::Fixed, partitionId);
+                                const PartitioningGraphNode & S = G[producerOutput];
+                                input = makeNode(PartitioningGraphNode::Fixed, S.StreamSet);
                                 fixedRateInputSet.emplace(producerOutput, input);
                             }
 
@@ -1124,10 +1135,10 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                                 }
                             }
 break_1:                    if (alreadyHasFixedInput) {
-                                goto skip_edge_insertion;
+                                goto skip_edge_1;
                             }
 
-                        } else {
+                        } else { // non-Fixed rate
 
                             switch (rateId) {
                                 case RateId::Bounded:
@@ -1145,9 +1156,9 @@ break_1:                    if (alreadyHasFixedInput) {
                                 default: llvm_unreachable("unhandled input rate type");
                             }
                         }
-add_input:              add_edge(producerOutput, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
+                        add_edge(producerOutput, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
                         add_edge(input, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
-skip_edge_insertion:    producerOutputToKernelInputMap.emplace(producerOutput, input);
+skip_edge_1:            partitionOutputToKernelInputMap.emplace(producerOutput, input);
                     }
                 }
             }
@@ -1184,9 +1195,9 @@ break_2:                output = fixedOutput;
                         if (makeFixedOutput) {
                             makeFixedOutput = false;
                         } else {
-                            goto no_edge_insertion;
+                            goto skip_edge_2;
                         }
-                    } else {
+                    } else { // non-Fixed rate
                         switch (rateId) {
                             case RateId::Unknown:
                                 output = makeNode(PartitioningGraphNode::Unknown, streamSet);
@@ -1203,11 +1214,11 @@ break_2:                output = fixedOutput;
                             default: llvm_unreachable("unhandled output rate type");
                         }
                     }
-add_output:         add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
-no_edge_insertion:  streamSetMap.emplace(streamSet, output);
+                    add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
+skip_edge_2:        streamSetMap.emplace(streamSet, output);
                 }
             }            
-            producerOutputToKernelInputMap.clear();
+            partitionOutputToKernelInputMap.clear();
         }
         visited.clear();
         fixedRateInputSet.clear();
@@ -1290,14 +1301,12 @@ no_edge_insertion:  streamSetMap.emplace(streamSet, output);
     // A pure fixed rate path is a one that traverses only fixed rate and partition nodes.
     // Compute what is effectively the transitive reduction of the pure fixed rate paths.
 
+    BEGIN_SCOPED_REGION
+
     const auto n = num_vertices(G);
-
     std::vector<BitSet> fixedRateCheck(n);
-
     std::vector<PartitioningVertex> fixedInputs;
-
     const auto limit = PartitionCount + requiresAssessment.size();
-
     flat_set<PartitioningVertex> remove;
 
     for (unsigned partition = 0, id = 0; partition < PartitionCount; ++partition) {
@@ -1370,6 +1379,59 @@ no_edge_insertion:  streamSetMap.emplace(streamSet, output);
                 }
             }
         }
+    }
+
+    END_SCOPED_REGION
+
+    // TODO: we could perform one additional level of filtering to determine whether the output rate
+    // of some inputs to a partition are guaranteed to be less than or equal to the other(s).
+
+    // TODO: if two popcount/relative rate streams share the same reference stream and the source data
+    // of one is guaranteed to be produced at an equal (or greater) rate (including the possibility of
+    // early termination), we need only test the other even if they come from different partitions.
+
+
+
+    // Reorder all inputs to ensure that non-Countable rates followed by Fixed then all other Countable
+    // rates are tested in that specific order. Although this does not alter change the graph, it does
+    // simplify later analysis and codegen work by eliminating the possibility that a reference stream
+    // will be tested first.
+
+    using PartitionTypeId = PartitioningGraphNode::TypeId;
+    using PartitionLinkData = std::tuple<unsigned, PartitioningGraphEdge, unsigned>;
+
+    for (unsigned partition = 0; partition < PartitionCount; ++partition) {
+
+        if (in_degree(partition, G) < 2) {
+            continue;
+        }
+
+        auto priorTypeId = PartitioningGraphNode::Bounded;
+        bool reorder = false;
+        for (const auto input : make_iterator_range(in_edges(partition, G))) {
+            const auto j = source(input, G);
+            const PartitioningGraphNode & J = G[j];
+            if (J.Type < priorTypeId) {
+                reorder = true;
+                break;
+            }
+            priorTypeId = J.Type;
+        }
+
+        if (LLVM_UNLIKELY(reorder)) {
+            SmallVector<PartitionLinkData, 8> links;
+            for (const auto input : make_iterator_range(in_edges(partition, G))) {
+                const auto j = source(input, G);
+                const PartitioningGraphNode & J = G[j];
+                links.emplace_back(J.Type, G[input], j);
+            }
+            std::sort(links.begin(), links.end());
+            clear_in_edges(partition, G);
+            for (const PartitionLinkData & data : links) {
+                add_edge(std::get<2>(data), partition, std::get<1>(data), G);
+            }
+        }
+
     }
 
     printG();
@@ -1526,76 +1588,6 @@ std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
         jumpIndices[u] = child(u, G);
     }
     return jumpIndices;
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determinePartitionInputEvaluationOrder
- ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<PartitionInput> PipelineCompiler::determinePartitionInputEvaluationOrder(const unsigned partitionId) const {
-
-#if 0
-
-    // Compute the order in which we need to test the partition inputs. Some may be dependent on
-    // others (such as popcounts or relative rates).
-
-    using Map = flat_map<unsigned, PartitioningGraph::vertex_descriptor>;
-
-    constexpr auto ROOT = 0U;
-
-    PartitioningGraph G(1);
-    Map M;
-
-    auto addOrFind =[&](const unsigned streamSet) {
-        const auto f = M.find(streamSet);
-        if (f == M.end()) {
-            const auto v = add_vertex(G);
-            G[v] = streamSet;
-            M.emplace(streamSet, v);
-            return v;
-        }
-        return f->second;
-    };
-
-    for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
-        const auto streamSet = mPartitioningGraph[source(e, mPartitioningGraph)];
-        assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
-        const PartitionData & pd = mPartitioningGraph[e];
-
-        const auto buffer = addOrFind(streamSet);
-
-        add_edge(ROOT, buffer, pd, G);
-
-        switch (pd.Type) {
-            case RateId::PartialSum:
-            case RateId::Relative:
-                add_edge(addOrFind(pd.Reference), buffer, G);
-                break;
-            default: break;
-        }
-    }
-
-    std::vector<unsigned> O;
-    const auto b = lexical_ordering(G, O);
-    assert ("input data must be acyclic!" && b);
-
-    std::vector<PartitionInput> eval;
-
-    for (auto v : O) {
-        const auto streamSet = G[v];
-        for (const auto e : make_iterator_range(in_edges(v, G))) {
-            if (LLVM_LIKELY(source(e, G) == ROOT)) {
-                eval.emplace_back(G[e], streamSet);
-            }
-        }
-    }
-
-#endif
-
-    std::vector<PartitionInput> eval;
-
-    return eval;
-
 }
 
 } // end of namespace kernel

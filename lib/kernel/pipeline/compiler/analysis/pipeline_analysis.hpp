@@ -249,7 +249,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     // Construct our temporary bundle; it'll
 
-    PipelineGraphBundle P(n, m,
+    PipelineGraphBundle P(n, m, numOfKernels,
                           std::move(internalKernels),
                           std::move(internalBindings));
 
@@ -291,6 +291,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
         }
         P.KernelPartitionId[out] = outputPartitionId;
     }
+
     assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
 
