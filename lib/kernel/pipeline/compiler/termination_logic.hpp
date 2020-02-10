@@ -187,6 +187,14 @@ Value * PipelineCompiler::isClosed(BuilderRef b, const StreamSetPort inputPort) 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isClosed
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned streamSet) {
+    const auto producer = parent(streamSet, mBufferGraph);
+    return hasKernelTerminated(b, producer, false);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosedNormally
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inputPort) {

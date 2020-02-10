@@ -386,7 +386,6 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
                                                                   const std::vector<Partition> & partitions) const {
 
     using BitSet = BitVector;
-
     using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitSet>;
     using EdgeIterator = graph_traits<ConstraintGraph>::edge_iterator;
 
@@ -1013,7 +1012,10 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
     using PartitioningVertex = PartitioningGraph::vertex_descriptor;
     using BitSet = dynamic_bitset<>; // for is_subset_of
     using StreamSetMap = flat_map<BufferVertex, PartitioningVertex>;
+    using FixedInputStreamSetMap = flat_map<std::tuple<BufferVertex, Rational, unsigned>, PartitioningVertex>;
+    using FixedOutputStreamSetMap = flat_map<std::tuple<Rational, unsigned>, PartitioningVertex>;
     using PartitionVertexMap = flat_map<PartitioningVertex, PartitioningVertex>;
+    using TypeId = PartitioningGraphNode::TypeId;
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
@@ -1025,14 +1027,44 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     PartitioningGraph G(PartitionCount);
 
-    flat_set<BufferVertex> requiresAssessment;
+   //  flat_set<BufferVertex> requiresAssessment;
 
     BEGIN_SCOPED_REGION
 
     StreamSetMap streamSetMap;
-    StreamSetMap fixedRateInputSet;
+    flat_map<PartitioningVertex, Rational> fixedOutputProductionRate;
+
+    FixedInputStreamSetMap fixedRateInputSet;
+    FixedOutputStreamSetMap fixedRateOutputSet;
+
+    flat_map<PartitioningVertex, Z3_ast> partialSumRefMap;
+
+    flat_map<PartitioningVertex, Z3_ast> streamSetVariableMap;
+
     PartitionVertexMap partitionOutputToKernelInputMap;
-    flat_set<BufferVertex> visited;
+
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "model", "false");
+    Z3_set_param_value(cfg, "proof", "false");
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
+    const auto solver = Z3_mk_solver(ctx);
+    Z3_solver_inc_ref(ctx, solver);
+
+    const auto varType = Z3_mk_real_sort(ctx);
+
+    auto constant = [&](const Rational value) {
+        return Z3_mk_real(ctx, value.numerator(), value.denominator());
+    };
+
+    const auto ZERO = constant(0);
+
+    auto free_variable = [&]() {
+        auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
+        auto c1 = Z3_mk_ge(ctx, v, ZERO);
+        Z3_solver_assert(ctx, solver, c1);
+        return v;
+    };
 
     auto priorPartitionId = 0U;
 
@@ -1053,12 +1085,11 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
         PartitioningGraphNode & N = G[partitionId];
         N.Type = PartitioningGraphNode::Partition;
 
-        bool makeFixedOutput = true;
-        PartitioningVertex fixedOutput;
+        const auto partitionVar = free_variable();
 
         for (auto kernel = start; kernel < end; ++kernel) {
 
-            auto makeNode = [&](const PartitioningGraphNode::TypeId typeId, const unsigned streamSet) {
+            auto makeNode = [&](const TypeId typeId, const unsigned streamSet) {
                 const auto v = add_vertex(G);
                 PartitioningGraphNode & N = G[v];
                 N.Type = typeId;
@@ -1066,7 +1097,300 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                 return v;
             };
 
-            auto makeNodeWithReference = [&](const PartitioningGraphNode::TypeId typeId, const StreamSetPort port, const unsigned streamSet) {
+            auto makeNodeWithReference = [&](const TypeId typeId, const StreamSetPort port, const unsigned streamSet, Z3_ast const nodeVar) {
+                const auto v = makeNode(typeId, streamSet);
+                const auto reference = getReferenceBufferVertex(kernel, port);
+                // If the producer of our reference stream is within the same partition as the
+                // current kernel, ignore the reference.
+                const auto producer = parent(reference, mBufferGraph);
+                if (producer < start) {
+
+                    const auto f = streamSetMap.find(reference);
+                    assert (f != streamSetMap.end());
+                    auto u = f->second;
+
+                    // u is the output node of the producer but we want to find the matching input
+                    // node for this kernel that consumes it.
+                    if (port.Type == PortType::Input) {
+                        const auto g = partitionOutputToKernelInputMap.find(u);
+                        assert (g != partitionOutputToKernelInputMap.end());
+                        u = g->second;
+                    }
+
+                    const auto g = streamSetVariableMap.find(u);
+                    assert (g != streamSetVariableMap.end());
+                    auto refVar = g->second;
+
+                    if (typeId == TypeId::PartialSum) {
+                        // make a var that represents the number of 1-bits in the ref stream.
+                        const auto h = partialSumRefMap.find(u);
+                        if (h == partialSumRefMap.end()) {
+                            const auto var = free_variable();
+                            Z3_solver_assert(ctx, solver, Z3_mk_le(ctx, var, refVar));
+                            refVar = var;
+                        } else {
+                            refVar = h->second;
+                        }
+                    }
+                    Z3_solver_assert(ctx, solver, Z3_mk_eq(ctx, nodeVar, refVar));
+
+                    add_edge(u, v, PartitioningGraphEdge{PartitioningGraphEdge::Reference}, G);
+                }
+                return v;
+            };
+
+
+
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const auto streamSet = source(input, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (LLVM_UNLIKELY(bn.NonLocal)) {
+                    const auto producer = parent(streamSet, mBufferGraph);
+                    if (producer < start) { // produced by a prior partition
+                        assert (KernelPartitionId[producer] != partitionId);
+                        const BufferRateData & inputRate = mBufferGraph[input];
+                        const Binding & binding = inputRate.Binding;
+                        const ProcessingRate & rate = binding.getRate();
+                        const auto rateId = rate.getKind();
+
+                        const auto f = streamSetMap.find(streamSet);
+                        assert (f != streamSetMap.end());
+                        const auto producerOutput = f->second;
+
+                        const auto g = streamSetVariableMap.find(producerOutput);
+                        assert (g != streamSetVariableMap.end());
+                        auto outputVar = g->second;
+
+                        PartitioningVertex input;
+
+                        Z3_ast inputVar;
+
+                        unsigned lookAhead = 0;
+                        for (const Attribute & a : binding.getAttributes()) {
+                            switch (a.getKind()) {
+                                case AttrId::LookAhead:
+                                    lookAhead = std::max(lookAhead, a.amount());
+                                default: break;
+                            }
+                        }
+                        if (LLVM_UNLIKELY(lookAhead > 0)) {
+                            Z3_ast args[2] = { outputVar, constant(lookAhead) };
+                            outputVar = Z3_mk_sub(ctx, 2, args);
+                        }
+
+                        if (rateId == RateId::Fixed) {
+
+                            const PartitioningGraphNode & S = G[producerOutput];
+
+                            Rational relativeRate;
+                            if (S.Type == TypeId::Fixed) {
+
+                                // Fixed-rate to fixed-rate cross-partition channels are specially treated because
+                                // we can combine multiple tests together whenever we can prove they will have an
+                                // equivalent result.
+
+                                const auto p = fixedOutputProductionRate.find(producerOutput);
+                                assert (p != fixedOutputProductionRate.end());
+                                const auto productionRate = p->second;
+                                const auto consumptionRate = MinimumNumOfStrides[kernel] * inputRate.Minimum;
+                                relativeRate = productionRate / consumptionRate;
+
+                            }
+
+                            const auto key = std::make_tuple(producerOutput, relativeRate, lookAhead);
+                            const auto f = fixedRateInputSet.find(key);
+                            const auto alreadyHasFixedInput = (f != fixedRateInputSet.end());
+                            if (alreadyHasFixedInput) {
+                                input = f->second;
+                            } else {
+                                input = makeNode(TypeId::Fixed, S.StreamSet);
+                                fixedRateInputSet.emplace(key, input);
+
+                                const auto strideSize = constant(inputRate.Minimum);
+                                const auto numOfStrides = Z3_mk_div(ctx, outputVar, strideSize);
+                                Z3_solver_assert(ctx, solver, Z3_mk_le(ctx, partitionVar, numOfStrides));
+                            }
+
+
+                            if (alreadyHasFixedInput) {
+                                goto skip_edge_1;
+                            }
+
+                        } else { // non-Fixed rate
+
+
+
+                            switch (rateId) {
+                                case RateId::Bounded:
+                                    input = makeNode(TypeId::Bounded, streamSet);
+                                    if (LLVM_UNLIKELY(inputRate.Minimum.numerator() > 0)) {
+                                        const auto strideSize = constant(inputRate.Minimum);
+                                        const auto numOfStrides = Z3_mk_div(ctx, outputVar, strideSize);
+                                        Z3_solver_assert(ctx, solver, Z3_mk_le(ctx, partitionVar, numOfStrides));
+                                    }
+                                    break;
+                                case RateId::PartialSum:
+                                    inputVar = free_variable();
+                                    input = makeNodeWithReference(TypeId::PartialSum, inputRate.Port, streamSet, inputVar);
+                                    break;
+                                case RateId::Relative:
+                                    inputVar = free_variable();
+                                    input = makeNodeWithReference(TypeId::Relative, inputRate.Port, streamSet, inputVar);
+                                    break;
+                                case RateId::Greedy:
+                                    input = makeNode(TypeId::Greedy, streamSet);
+                                    inputVar = outputVar;
+                                    break;
+                                default: llvm_unreachable("unhandled input rate type");
+                            }
+                        }
+                        add_edge(producerOutput, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
+                        add_edge(input, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
+skip_edge_1:            streamSetVariableMap.emplace(input, inputVar);
+                        partitionOutputToKernelInputMap.emplace(producerOutput, input);
+                    }
+                }
+            }
+
+            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                const auto streamSet = target(output, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (LLVM_UNLIKELY(bn.NonLocal)) {
+
+                    const BufferRateData & outputRate = mBufferGraph[output];
+                    const Binding & binding = outputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    const auto rateId = rate.getKind();
+
+                    PartitioningVertex output;
+
+                    Z3_ast outputVar;
+
+                    unsigned delay = 0;
+                    bool deferred = false;
+
+                    for (const Attribute & a : binding.getAttributes()) {
+                        switch (a.getKind()) {
+                            case AttrId::Delayed:
+                                delay = std::max(delay, a.amount());
+                                break;
+                            case AttrId::Deferred:
+                                deferred = true;
+                            default: break;
+                        }
+                    }
+
+
+                    if (rateId == RateId::Fixed) {
+
+
+
+
+                        if (LLVM_UNLIKELY(deferred)) {
+                            output = makeNode(TypeId::Fixed, streamSet);
+                            // we don't know how much data will be produced per stride but
+                            // it must be bounded to this.
+                            outputVar = free_variable();
+                            const auto max = Z3_mk_mul(ctx, partitionVar, constant(outputRate.Minimum));
+                            Z3_solver_assert(ctx, solver, Z3_mk_le(ctx, outputVar, max));
+
+                        } else {
+
+                            const auto productionRate = MinimumNumOfStrides[kernel] * outputRate.Minimum;
+                            const auto key = std::make_tuple(productionRate, delay);
+                            const auto f = fixedRateOutputSet.find(key);
+                            const bool alreadyHasFixedOutput = (f != fixedRateOutputSet.end());
+
+                            if (alreadyHasFixedOutput) {
+                                output = f->second;
+                            } else {
+                                output = makeNode(TypeId::Fixed, streamSet);
+                                fixedRateOutputSet.emplace(key, output);
+                                fixedOutputProductionRate.emplace(output, productionRate);
+                                outputVar = Z3_mk_mul(ctx, partitionVar, constant(outputRate.Minimum));
+                            }
+
+                            if (alreadyHasFixedOutput) {
+                                goto skip_edge_2;
+                            }
+                        }
+
+                    } else { // non-Fixed rate
+                        switch (rateId) {
+                            case RateId::Unknown:
+                                output = makeNode(TypeId::Unknown, streamSet);
+                                outputVar = free_variable();
+                                break;
+                            case RateId::Bounded:
+                                output = makeNode(TypeId::Bounded, streamSet);
+                                outputVar = Z3_mk_mul(ctx, partitionVar, constant(outputRate.Maximum));
+
+                                break;
+                            case RateId::PartialSum:
+                                output = makeNodeWithReference(TypeId::PartialSum, outputRate.Port, streamSet);
+                                break;
+                            case RateId::Relative:
+                                output = makeNodeWithReference(TypeId::Relative, outputRate.Port, streamSet);
+                                break;
+                            default: llvm_unreachable("unhandled output rate type");
+                        }
+                    }
+                    add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
+
+                    if (LLVM_UNLIKELY(delay != 0)) {
+                        Z3_ast args[2] = { outputVar, constant(delay) };
+                        outputVar = Z3_mk_sub(ctx, 2, args);
+                    }
+
+
+skip_edge_2:        streamSetMap.emplace(streamSet, output);
+                }
+            }
+            partitionOutputToKernelInputMap.clear();
+        }
+        fixedRateOutputSet.clear();
+        fixedRateInputSet.clear();
+        start = end;
+    }
+
+
+
+    Z3_solver_dec_ref(ctx, solver);
+    Z3_del_context(ctx);
+
+    Z3_finalize_memory();
+
+#if 0
+    auto priorPartitionId = 0U;
+
+    for (auto start = firstKernel; start <= lastKernel; ) {
+        // Determine which kernels are in this partition
+        const auto partitionId = KernelPartitionId[start];
+        assert (priorPartitionId <= partitionId);
+        assert (partitionId < PartitionCount);
+        auto end = start + 1U;
+        for (; end <= LastKernel; ++end) {
+            if (KernelPartitionId[end] != partitionId) {
+                break;
+            }
+        }
+
+        priorPartitionId = partitionId;
+
+        PartitioningGraphNode & N = G[partitionId];
+        N.Type = PartitioningGraphNode::Partition;
+
+        for (auto kernel = start; kernel < end; ++kernel) {
+
+            auto makeNode = [&](const TypeId typeId, const unsigned streamSet) {
+                const auto v = add_vertex(G);
+                PartitioningGraphNode & N = G[v];
+                N.Type = typeId;
+                N.StreamSet = streamSet;
+                return v;
+            };
+
+            auto makeNodeWithReference = [&](const TypeId typeId, const StreamSetPort port, const unsigned streamSet) {
                 const auto v = makeNode(typeId, streamSet);
                 const auto reference = getReferenceBufferVertex(kernel, port);
                 // If the producer of our reference stream is within the same partition as the
@@ -1094,14 +1418,15 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                 return v;
             };
 
+
+
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[streamSet];
                 if (LLVM_UNLIKELY(bn.NonLocal)) {
-
-
-                    if (visited.insert(streamSet).second) {
-
+                    const auto producer = parent(streamSet, mBufferGraph);
+                    if (producer < start) { // produced by a prior partition
+                        assert (KernelPartitionId[producer] != partitionId);
                         const BufferRateData & inputRate = mBufferGraph[input];
                         const Binding & binding = inputRate.Binding;
                         const ProcessingRate & rate = binding.getRate();
@@ -1115,26 +1440,45 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
                         if (rateId == RateId::Fixed) {
 
-                            // Each fixed input rate will be produced at some rate relative to the input partition.
-                            const auto f = fixedRateInputSet.find(producerOutput);
+                            unsigned lookAhead = 0;
+                            for (const Attribute & a : binding.getAttributes()) {
+                                switch (a.getKind()) {
+                                    case AttrId::LookAhead:
+                                        lookAhead = std::max(lookAhead, a.amount());
+                                    default: break;
+                                }
+                            }
+
+                            const PartitioningGraphNode & S = G[producerOutput];
+
+                            Rational relativeRate;
+                            if (S.Type == TypeId::Fixed) {
+
+                                // Fixed-rate to fixed-rate cross-partition channels are specially treated because
+                                // we can combine multiple tests together whenever we can prove they will have an
+                                // equivalent result.
+
+                                const auto p = fixedOutputProductionRate.find(producerOutput);
+                                assert (p != fixedOutputProductionRate.end());
+                                const auto productionRate = p->second;
+                                const auto consumptionRate = MinimumNumOfStrides[kernel] * inputRate.Minimum;
+                                relativeRate = productionRate / consumptionRate;
+
+                            }
+
+                            const auto key = std::make_tuple(producerOutput, relativeRate, lookAhead);
+                            const auto f = fixedRateInputSet.find(key);
                             const auto alreadyHasFixedInput = (f != fixedRateInputSet.end());
                             if (alreadyHasFixedInput) {
                                 input = f->second;
                             } else {
-                                const PartitioningGraphNode & S = G[producerOutput];
-                                input = makeNode(PartitioningGraphNode::Fixed, S.StreamSet);
-                                fixedRateInputSet.emplace(producerOutput, input);
+                                input = makeNode(TypeId::Fixed, S.StreamSet);
+                                fixedRateInputSet.emplace(key, input);
                             }
-
-                            for (const Attribute & a : binding.getAttributes()) {
-                                switch (a.getKind()) {
-                                    case AttrId::LookAhead:
-                                        requiresAssessment.insert(input);
-                                        goto break_1;
-                                    default: break;
-                                }
+                            if (lookAhead) {
+                                requiresAssessment.insert(input);
                             }
-break_1:                    if (alreadyHasFixedInput) {
+                            if (alreadyHasFixedInput) {
                                 goto skip_edge_1;
                             }
 
@@ -1142,16 +1486,16 @@ break_1:                    if (alreadyHasFixedInput) {
 
                             switch (rateId) {
                                 case RateId::Bounded:
-                                    input = makeNode(PartitioningGraphNode::Bounded, streamSet);
+                                    input = makeNode(TypeId::Bounded, streamSet);
                                     break;
                                 case RateId::PartialSum:
-                                    input = makeNodeWithReference(PartitioningGraphNode::PartialSum, inputRate.Port, streamSet);
+                                    input = makeNodeWithReference(TypeId::PartialSum, inputRate.Port, streamSet);
                                     break;
                                 case RateId::Relative:
-                                    input = makeNodeWithReference(PartitioningGraphNode::Relative, inputRate.Port, streamSet);
+                                    input = makeNodeWithReference(TypeId::Relative, inputRate.Port, streamSet);
                                     break;
                                 case RateId::Greedy:
-                                    input = makeNode(PartitioningGraphNode::Greedy, streamSet);
+                                    input = makeNode(TypeId::Greedy, streamSet);
                                     break;
                                 default: llvm_unreachable("unhandled input rate type");
                             }
@@ -1173,43 +1517,62 @@ skip_edge_1:            partitionOutputToKernelInputMap.emplace(producerOutput, 
                     const ProcessingRate & rate = binding.getRate();
                     const auto rateId = rate.getKind();
 
-                    visited.insert(streamSet);
-
                     PartitioningVertex output;
 
                     if (rateId == RateId::Fixed) {
 
-                        if (makeFixedOutput) {
-                            fixedOutput = makeNode(PartitioningGraphNode::Fixed, partitionId);
-                        }
+                        unsigned delay = 0;
+                        bool deferred = false;
+
                         for (const Attribute & a : binding.getAttributes()) {
                             switch (a.getKind()) {
                                 case AttrId::Delayed:
+                                    delay = std::max(delay, a.amount());
+                                    break;
                                 case AttrId::Deferred:
-                                    requiresAssessment.insert(fixedOutput);
-                                    goto break_2;
+                                    deferred = true;
                                 default: break;
                             }
                         }
-break_2:                output = fixedOutput;
-                        if (makeFixedOutput) {
-                            makeFixedOutput = false;
+
+                        if (LLVM_UNLIKELY(deferred)) {
+                            output = makeNode(TypeId::Fixed, streamSet);
+                            requiresAssessment.insert(output);
                         } else {
-                            goto skip_edge_2;
+
+                            const auto productionRate = MinimumNumOfStrides[kernel] * outputRate.Minimum;
+                            const auto key = std::make_tuple(productionRate, delay);
+                            const auto f = fixedRateOutputSet.find(key);
+                            const bool alreadyHasFixedOutput = (f != fixedRateOutputSet.end());
+
+                            if (alreadyHasFixedOutput) {
+                                output = f->second;
+                            } else {
+                                output = makeNode(TypeId::Fixed, streamSet);
+                                fixedRateOutputSet.emplace(key, output);
+                                fixedOutputProductionRate.emplace(output, productionRate);
+                            }
+                            if (LLVM_UNLIKELY(delay != 0)) {
+                                requiresAssessment.insert(output);
+                            }
+                            if (alreadyHasFixedOutput) {
+                                goto skip_edge_2;
+                            }
                         }
+
                     } else { // non-Fixed rate
                         switch (rateId) {
                             case RateId::Unknown:
-                                output = makeNode(PartitioningGraphNode::Unknown, streamSet);
+                                output = makeNode(TypeId::Unknown, streamSet);
                                 break;
                             case RateId::Bounded:
-                                output = makeNode(PartitioningGraphNode::Bounded, streamSet);
+                                output = makeNode(TypeId::Bounded, streamSet);
                                 break;
                             case RateId::PartialSum:
-                                output = makeNodeWithReference(PartitioningGraphNode::PartialSum, outputRate.Port, streamSet);
+                                output = makeNodeWithReference(TypeId::PartialSum, outputRate.Port, streamSet);
                                 break;
                             case RateId::Relative:
-                                output = makeNodeWithReference(PartitioningGraphNode::Relative, outputRate.Port, streamSet);
+                                output = makeNodeWithReference(TypeId::Relative, outputRate.Port, streamSet);
                                 break;
                             default: llvm_unreachable("unhandled output rate type");
                         }
@@ -1217,14 +1580,14 @@ break_2:                output = fixedOutput;
                     add_edge(partitionId, output, PartitioningGraphEdge{kernel, outputRate.Port}, G);
 skip_edge_2:        streamSetMap.emplace(streamSet, output);
                 }
-            }            
+            }
             partitionOutputToKernelInputMap.clear();
         }
-        visited.clear();
+        fixedRateOutputSet.clear();
         fixedRateInputSet.clear();
         start = end;
     }
-
+#endif
     END_SCOPED_REGION
 
     #if 1
@@ -1298,6 +1661,10 @@ skip_edge_2:        streamSetMap.emplace(streamSet, output);
 
     #endif
 
+    printG();
+
+#if 0
+
     // A pure fixed rate path is a one that traverses only fixed rate and partition nodes.
     // Compute what is effectively the transitive reduction of the pure fixed rate paths.
 
@@ -1320,7 +1687,7 @@ skip_edge_2:        streamSetMap.emplace(streamSet, output);
         for (const auto input : make_iterator_range(in_edges(partition, G))) {
             const auto j = source(input, G);
             const PartitioningGraphNode & J = G[j];
-            if (J.Type == PartitioningGraphNode::Fixed && fixedRateCheck[j].any()) {
+            if (J.Type == TypeId::Fixed && fixedRateCheck[j].any()) {
                 fixedInputs.push_back(j);
                 P |= fixedRateCheck[j];
             }
@@ -1358,7 +1725,7 @@ skip_edge_2:        streamSetMap.emplace(streamSet, output);
         for (const auto output : make_iterator_range(out_edges(partition, G))) {
             const auto j = target(output, G);
             const PartitioningGraphNode & J = G[j];
-            if (J.Type == PartitioningGraphNode::Fixed) {
+            if (J.Type == TypeId::Fixed) {
                 BitSet & O = fixedRateCheck[j];
                 O = P;
                 if (requiresAssessment.count(j))  {
@@ -1368,7 +1735,7 @@ skip_edge_2:        streamSetMap.emplace(streamSet, output);
                 for (const auto input : make_iterator_range(out_edges(j, G))) {
                     const auto k = target(input, G);
                     const PartitioningGraphNode & K = G[k];
-                    if (K.Type == PartitioningGraphNode::Fixed) {
+                    if (K.Type == TypeId::Fixed) {
                         BitSet & I = fixedRateCheck[k];
                         I = O;
                         if (requiresAssessment.count(k))  {
@@ -1383,22 +1750,19 @@ skip_edge_2:        streamSetMap.emplace(streamSet, output);
 
     END_SCOPED_REGION
 
-    // TODO: we could perform one additional level of filtering to determine whether the output rate
-    // of some inputs to a partition are guaranteed to be less than or equal to the other(s).
+#endif
 
-    // TODO: if two popcount/relative rate streams share the same reference stream and the source data
-    // of one is guaranteed to be produced at an equal (or greater) rate (including the possibility of
-    // early termination), we need only test the other even if they come from different partitions.
+    // TODO: perform one additional level of filtering to determine whether the output rate of
+    // some inputs to a partition are guaranteed to be less than or equal to the other(s).
 
 
 
     // Reorder all inputs to ensure that non-Countable rates followed by Fixed then all other Countable
-    // rates are tested in that specific order. Although this does not alter change the graph, it does
-    // simplify later analysis and codegen work by eliminating the possibility that a reference stream
-    // will be tested first.
+    // rates are tested in that specific order. Although this does not modify the graph, it does simplify
+    // later analysis and codegen work by eliminating the possibility that a reference stream will be
+    // labelled first.
 
-    using PartitionTypeId = PartitioningGraphNode::TypeId;
-    using PartitionLinkData = std::tuple<unsigned, PartitioningGraphEdge, unsigned>;
+    using PartitionLinkData = std::tuple<TypeId, PartitioningGraphEdge, PartitioningGraph::vertex_descriptor>;
 
     for (unsigned partition = 0; partition < PartitionCount; ++partition) {
 
@@ -1406,7 +1770,7 @@ skip_edge_2:        streamSetMap.emplace(streamSet, output);
             continue;
         }
 
-        auto priorTypeId = PartitioningGraphNode::Bounded;
+        auto priorTypeId = TypeId::Bounded;
         bool reorder = false;
         for (const auto input : make_iterator_range(in_edges(partition, G))) {
             const auto j = source(input, G);
@@ -1528,7 +1892,6 @@ std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
     }
 
     // ensure that the common sink is a sentinal for the subsequent search process
-
     add_edge(PartitionCount, PartitionCount, G);
 
     BV M(PartitionCount + 1);

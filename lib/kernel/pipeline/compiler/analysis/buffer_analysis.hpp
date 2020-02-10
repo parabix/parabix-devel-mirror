@@ -23,11 +23,6 @@
 
 namespace kernel {
 
-inline Rational mod(const Rational & a, const Rational & b) {
-    Rational n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
-    return a - Rational{floor(n)} * b;
-}
-
 bool requiresLinearAccess(const Binding & binding) {
     if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Linear))) {
         return true;
@@ -299,93 +294,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     return G;
 }
 
-#if 0
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief initializeBufferGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
-
-    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
-
-
-
-    for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
-        const RelationshipNode & node = mStreamGraph[i];
-        const Kernel * const kernel = node.Kernel; assert (kernel);
-
-        auto computeBufferRateBounds = [&](const RelationshipType port,
-                                           const RelationshipNode & bindingNode,
-                                           const unsigned streamSet) {
-            assert (bindingNode.Type == RelationshipNode::IsBinding);
-            const Binding & binding = bindingNode.Binding;
-            const ProcessingRate & rate = binding.getRate();
-            Rational lb{rate.getLowerBound()};
-            Rational ub{rate.getUpperBound()};
-            if (LLVM_UNLIKELY(rate.isGreedy())) {
-                if (LLVM_UNLIKELY(port.Type == PortType::Output)) {
-                    SmallVector<char, 0> tmp;
-                    raw_svector_ostream out(tmp);
-                    out << "Greedy rate cannot be applied an output port: "
-                        << kernel->getName() << "." << binding.getName();
-                    report_fatal_error(out.str());
-                }
-                const auto e = in_edge(streamSet, G);
-                const BufferRateData & producerBr = G[e];
-                ub = std::max(lb, producerBr.Maximum);
-            } else {
-                const auto strideLength = kernel->getStride();
-                if (LLVM_UNLIKELY(rate.isRelative())) {
-                    const Binding & ref = getBinding(getReference(i, port));
-                    const ProcessingRate & refRate = ref.getRate();
-                    lb *= refRate.getLowerBound();
-                    ub *= refRate.getUpperBound();
-                }
-                lb *= strideLength;
-                ub *= strideLength;
-            }
-            return BufferRateData{port, binding, lb, ub};
-        };
-
-        // add in any inputs
-        RelationshipType prior_in{};
-        for (const auto e : make_iterator_range(in_edges(i, mStreamGraph))) {
-            const RelationshipType & port = mStreamGraph[e];
-            assert (prior_in < port);
-            prior_in = port;
-            const auto binding = source(e, mStreamGraph);
-            const RelationshipNode & rn = mStreamGraph[binding];
-            assert (rn.Type == RelationshipNode::IsBinding);
-            const auto f = first_in_edge(binding, mStreamGraph);
-            assert (mStreamGraph[f].Reason != ReasonType::Reference);
-            const auto streamSet = source(f, mStreamGraph);
-            assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
-            assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-            add_edge(streamSet, i, computeBufferRateBounds(port, rn, streamSet), G);
-        }
-
-        // and any outputs
-        RelationshipType prior_out{};
-        for (const auto e : make_iterator_range(out_edges(i, mStreamGraph))) {
-            const RelationshipType & port = mStreamGraph[e];
-            assert (prior_out < port);
-            prior_out = port;
-            const auto binding = target(e, mStreamGraph);
-            const RelationshipNode & rn = mStreamGraph[binding];
-            assert (rn.Type == RelationshipNode::IsBinding);
-            const auto f = out_edge(binding, mStreamGraph);
-            assert (mStreamGraph[f].Reason != ReasonType::Reference);
-            const auto streamSet = target(f, mStreamGraph);
-            assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
-            assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-            add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), G);
-        }
-    }
-}
-
-#endif
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -505,8 +413,6 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
         ordering.reserve(numOfPorts);
         lexical_ordering(E, ordering);
 
-
-
         for (const auto k : ordering) {
             const auto e = E[k];
             const RelationshipType & port = mStreamGraph[e];
@@ -535,146 +441,6 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
         }
     }
 }
-
-#if 0
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief determineEvaluationOrderOfKernelIO
- *
- * Returns a lexographically sorted list of ports s.t. the inputs will be ordered as close as possible (baring
- * any constraints) to the kernel's original I/O ordering.
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernel, const BufferGraph & G) {
-
-    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
-
-    const auto numOfInputs = in_degree(kernel, G);
-    const auto numOfOutputs = out_degree(kernel, G);
-    const auto firstOutput = numOfInputs;
-    const auto numOfPorts = numOfInputs + numOfOutputs;
-
-
-    Graph E(numOfPorts);
-
-    // enumerate the input relations
-
-    SmallVector<unsigned, 16> zext(numOfInputs);
-
-    for (const auto e : make_iterator_range(in_edges(kernel, G))) {
-        const BufferRateData & bd = G[e];
-        const Binding & input = bd.Binding;
-        const ProcessingRate & rate = input.getRate();
-        if (rate.hasReference()) {
-            const StreamSetPort ref = getReference(kernel, bd.Port);
-            assert ("input stream cannot refer to an output stream" && ref.Type == PortType::Input);
-            add_edge(ref.Number, bd.Port.Number, E);
-        }
-        if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
-            zext.push_back(bd.Port.Number);
-        }
-    }
-    assert (std::is_sorted(zext.begin(), zext.end()));
-
-    // and then enumerate the output relations
-    for (const auto e : make_iterator_range(out_edges(kernel, G))) {
-        const BufferRateData & bd = G[e];
-        const Binding & output = bd.Binding;
-        const ProcessingRate & rate = output.getRate();
-        if (rate.hasReference()) {
-            StreamSetPort ref = getReference(kernel, bd.Port);
-            if (LLVM_UNLIKELY(ref.Type == PortType::Output)) {
-                ref.Number += firstOutput;
-            }
-            add_edge(ref.Number, bd.Port.Number + firstOutput, E);
-        }
-    }
-
-    // check any zeroextended inputs last
-    const auto n = zext.size();
-    if (LLVM_UNLIKELY(n > 0)) {
-        zext.push_back(numOfInputs); // sentinal
-        for (unsigned i = 0, j = 0; i < numOfInputs; ++i) {
-            if (zext[j] == i) {
-                ++j;
-                continue;
-            } else {
-                for (unsigned k = 0; k < n; ++k) {
-                    const auto t = zext[k];
-                    if (i == t) continue;
-                    add_edge_if_no_induced_cycle(i, zext[k], E);
-                }
-            }
-        }
-    }
-
-    // check any pipeline input first
-    if (out_degree(PipelineInput, G)) {
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const StreamSetPort inputPort{PortType::Input, i};
-            const auto buffer = getInputBufferVertex(kernel, inputPort);
-            if (LLVM_UNLIKELY(is_parent(buffer, PipelineInput, G))) {
-                for (unsigned j = 0; j < i; ++j) {
-                    add_edge_if_no_induced_cycle(i, j, E);
-                }
-                for (unsigned j = i + 1; j < numOfPorts; ++j) {
-                    add_edge_if_no_induced_cycle(i, j, E);
-                }
-            }
-        }
-    }
-
-    // ... and check any pipeline output first
-    if (in_degree(PipelineOutput, G)) {
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
-            const StreamSetPort outputPort{PortType::Output, i};
-            const auto buffer = getOutputBufferVertex(kernel, outputPort);
-            if (LLVM_UNLIKELY(has_child(buffer, PipelineOutput, G))) {
-                const auto k = firstOutput + i;
-                for (unsigned j = 0; j < k; ++j) {
-                    add_edge_if_no_induced_cycle(k, j, E);
-                }
-                for (unsigned j = k + 1; j < numOfPorts; ++j) {
-                    add_edge_if_no_induced_cycle(k, j, E);
-                }
-            }
-        }
-    }
-
-    // check any dynamic buffer last
-    std::vector<unsigned> D;
-    D.reserve(numOfOutputs);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const StreamSetBuffer * const buffer = getOutputBuffer(kernel, outputPort);
-        if (LLVM_UNLIKELY(buffer != nullptr && isa<DynamicBuffer>(buffer))) {
-            D.push_back(i);
-        }
-    }
-
-    for (const auto i : D) {
-        for (unsigned j = 0; j < numOfInputs; ++j) {
-            add_edge_if_no_induced_cycle(j, firstOutput + i, E);
-        }
-        auto Dj = D.begin();
-        for (unsigned j = 0; j < numOfOutputs; ++j) {
-            if (*Dj == j) {
-                ++Dj;
-            } else {
-                add_edge_if_no_induced_cycle(firstOutput + j, firstOutput + i, E);
-            }
-        }
-        assert (Dj == D.end());
-    }
-
-    // TODO: add additional constraints on input ports to indicate the ones
-    // likely to have fewest number of strides?
-    mPortEvaluationOrder.clear();
-    if (LLVM_UNLIKELY(!lexical_ordering(E, mPortEvaluationOrder))) {
-        report_fatal_error(mKernel->getName() + " has cyclic port dependencies.");
-    }
-}
-
-#endif
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyIOStructure
@@ -738,6 +504,40 @@ void PipelineCompiler::verifyIOStructure(const BufferGraph & G) const {
 
 #endif
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief mayHaveNonLinearIO
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::mayHaveNonLinearIO(const unsigned kernel) const {
+
+    // If this kernel has I/O that crosses a partition boundary and the
+    // buffer itself is not guaranteed to be linear then this kernel
+    // may have non-linear I/O. A kernel with non-linear I/O may not be
+    // able to execute its full segment without splitting the work across
+    // two or more linear sub-segments.
+
+    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+        const auto streamSet = source(input, mBufferGraph);
+        const BufferNode & node = mBufferGraph[streamSet];
+        if (LLVM_UNLIKELY(node.Buffer->isLinear())) {
+            continue;
+        }
+        if (node.NonLocal) {
+            return true;
+        }
+    }
+    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+        const auto streamSet = target(output, mBufferGraph);
+        const BufferNode & node = mBufferGraph[streamSet];
+        if (LLVM_UNLIKELY(node.Buffer->isLinear())) {
+            continue;
+        }
+        if (node.NonLocal) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }

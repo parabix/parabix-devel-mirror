@@ -407,16 +407,18 @@ using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
 struct PartitioningGraphNode {
     enum TypeId {
         Partition = 0
-        , Bounded
-        , Unknown
-        , Fixed
-        , PartialSum
+        , Bounded        
+        , Fixed        
         , Greedy
-        , Relative
+        , Unknown
+        , PartialSum
+        , Relative // <-- must be last
     };
 
     TypeId Type = TypeId::Partition;
-    unsigned StreamSet = 0; // for non-Fixed rate nodes
+    unsigned StreamSet = 0;
+
+    PartitioningGraphNode() = default;
 };
 
 struct PartitioningGraphEdge {
@@ -436,9 +438,7 @@ struct PartitioningGraphEdge {
 };
 
 bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B) {
-    if (static_cast<unsigned>(A.Type) < static_cast<unsigned>(B.Type)) {
-        return true;
-    }
+    assert (A.Type == B.Type);
     if (A.Kernel < B.Kernel) {
         return true;
     }
@@ -718,6 +718,7 @@ public:
 
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
     Value * isClosed(BuilderRef b, const StreamSetPort inputPort);
+    Value * isClosed(BuilderRef b, const unsigned streamSet);
     Value * isClosedNormally(BuilderRef b, const StreamSetPort inputPort);
     Value * initiallyTerminated(BuilderRef b);
     Value * readTerminationSignal(BuilderRef b);
@@ -852,6 +853,7 @@ public:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void verifyIOStructure(const BufferGraph & G) const;
+    LLVM_READNONE bool mayHaveNonLinearIO(const unsigned kernel) const;
 
 // dataflow analysis functions
 
