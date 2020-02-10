@@ -318,8 +318,8 @@ private:
     void parseExpression(std::vector<std::unique_ptr<ast::Node>> & accumList) {
         auto token = mTokenizer.emit();
         assertNotEOF(token);
-        if (llvm::isa<Char>(token)) {
-            auto ch = llvm::cast<Char>(std::move(token));
+        if (llvm::isa<Char>(token.get())) {
+            auto* ch = llvm::cast<Char>(token.get());
             switch (ch->value) {
             case '(':
                 parseGroup(accumList);
@@ -330,8 +330,8 @@ private:
             default:
                 llvm::report_fatal_error("stream parse error: unexpected token '" + std::string(1, ch->value) + "'");
             }
-        } else if (llvm::isa<Val>(token)) {
-            auto val = llvm::cast<Val>(std::move(token));
+        } else if (llvm::isa<Val>(token.get())) {
+            auto* val = llvm::cast<Val>(token.get());
             accumList.emplace_back(new ast::Digit(val->value));
         } else {
             llvm::report_fatal_error("stream parse error: unexpected token type");
@@ -355,7 +355,7 @@ private:
     void parseRep(std::vector<std::unique_ptr<ast::Node>> & accumList) {
         mTokenizer.expectNumber();
         auto token = mTokenizer.emit();
-        auto num = llvm::unique_dyn_cast<Number>(token);
+        auto* num = llvm::cast<Number>(token.get());
         auto closer = mTokenizer.emit();
         assertChar(closer, '}');
         if (accumList.size() == 0) {
