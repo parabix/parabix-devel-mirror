@@ -407,16 +407,16 @@ using PartitionConstraintGraph = adjacency_matrix<undirectedS>;
 struct PartitioningGraphNode {
     enum TypeId {
         Partition = 0
-        , Bounded        
+        , Variable
         , Fixed        
-        , Greedy
-        , Unknown
+        , Greedy        
         , PartialSum
         , Relative // <-- must be last
     };
 
     TypeId Type = TypeId::Partition;
     unsigned StreamSet = 0;
+    unsigned Delay = 0;
 
     PartitioningGraphNode() = default;
 };
@@ -431,7 +431,6 @@ struct PartitioningGraphEdge {
     TypeId          Type;
     unsigned        Kernel;
     StreamSetPort   Port;
-
 
     PartitioningGraphEdge(unsigned kernel, StreamSetPort port) : Type(IOPort), Kernel(kernel), Port(port) { }
     PartitioningGraphEdge(TypeId type = IOPort, unsigned kernel = 0, StreamSetPort port = StreamSetPort{}) : Type(type), Kernel(kernel), Port(port) { }
