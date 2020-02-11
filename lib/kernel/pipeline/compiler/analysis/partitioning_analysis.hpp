@@ -1018,6 +1018,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
     using BitSet = dynamic_bitset<>;
     using TypeId = PartitioningGraphNode::TypeId;
     using InEdgeIterator = graph_traits<PartitioningGraph>::in_edge_iterator;
+    using PartitionVertexMap = flat_map<PartitioningVertex, PartitioningVertex>;
 
     const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
@@ -1105,6 +1106,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
     FixedInputStreamSetMap fixedRateInputSet;
     FixedOutputStreamSetMap fixedRateOutputSet;
 
+    PartitionVertexMap partitionOutputToKernelInputMap;
 
     auto priorPartitionId = 0U;
 
@@ -1147,6 +1149,12 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                     const auto f = streamSetMap.find(reference);
                     assert (f != streamSetMap.end());
                     auto u = f->second;
+                    // u is the output node of the producer but we want to find the matching input
+                    // node for this kernel that consumes it.
+                    const auto g = partitionOutputToKernelInputMap.find(u);
+                    if (g != partitionOutputToKernelInputMap.end()) {
+                        u = g->second;
+                    }
                     add_edge(u, v, PartitioningGraphEdge{PartitioningGraphEdge::Reference}, G);
                 }
                 return v;
@@ -1202,7 +1210,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                             const auto f = fixedRateInputSet.find(key);
                             const auto alreadyHasFixedInput = (f != fixedRateInputSet.end());
                             if (alreadyHasFixedInput) {
-                                continue;
+                                goto skip_edge_1;
                             } else {
                                 input = makeNode(TypeId::Fixed, S.StreamSet, lookAhead);
                                 fixedRateInputSet.emplace(key, input);
@@ -1228,6 +1236,7 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                         }
                         add_edge(producerOutput, input, PartitioningGraphEdge{PartitioningGraphEdge::Channel}, G);
                         add_edge(input, partitionId, PartitioningGraphEdge{kernel, inputRate.Port}, G);
+skip_edge_1:            partitionOutputToKernelInputMap.emplace(producerOutput, input);
                     }
                 }
             }
@@ -1257,7 +1266,6 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
                             default: break;
                         }
                     }
-
 
                     if (rateId == RateId::Fixed) {
 
@@ -1299,6 +1307,7 @@ skip_edge_2:        // -----------------
                     streamSetMap.emplace(streamSet, output);
                 }
             }
+            partitionOutputToKernelInputMap.clear();
         }
         fixedRateOutputSet.clear();
         fixedRateInputSet.clear();
