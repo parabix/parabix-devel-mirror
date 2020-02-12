@@ -776,7 +776,7 @@ void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const StreamSe
         // new capacity 1
         b->CreateStore(buffer->getCapacity(b), b->CreateGEP(entryArray, {traceIndex, ONE}));
         // produced item count 2
-        Value * const produced = mAlreadyProducedPhi[outputPort.Number];
+        Value * const produced = mAlreadyProducedPhi(outputPort);
         b->CreateStore(produced, b->CreateGEP(entryArray, {traceIndex, TWO}));
 
         // consumer processed item count [3,n)
@@ -1303,7 +1303,18 @@ void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigne
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
-        recordItemCountDeltas(b, mFullyProducedItemCount, mInitiallyProducedItemCount, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
+        const auto n = out_degree(mKernelIndex, mBufferGraph);
+        if (LLVM_UNLIKELY(n == 0)) {
+            return;
+        }
+        Vec<Value *> current(n);
+        Vec<Value *> prior(n);
+        for (unsigned i = 0; i != n; ++i) {
+            const StreamSetPort port(PortType::Output, i);
+            current[i] = mFullyProducedItemCount(port);
+            prior[i] = mInitiallyProducedItemCount(port);
+        }
+        recordItemCountDeltas(b, current, prior, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
 }
 
@@ -1330,7 +1341,18 @@ void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned k
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
-        recordItemCountDeltas(b, mInitiallyProducedItemCount, mConsumedItemCount, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
+        const auto n = out_degree(mKernelIndex, mBufferGraph);
+        if (LLVM_UNLIKELY(n == 0)) {
+            return;
+        }
+        Vec<Value *> current(n);
+        Vec<Value *> prior(n);
+        for (unsigned i = 0; i != n; ++i) {
+            const StreamSetPort port(PortType::Output, i);
+            current[i] = mInitiallyProducedItemCount(port);
+            prior[i] = mConsumedItemCount(port);
+        }
+        recordItemCountDeltas(b, current, prior, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
 
@@ -1346,13 +1368,10 @@ void PipelineCompiler::printUnconsumedItemCounts(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
-template <typename VecA, typename VecB>
-void PipelineCompiler::recordItemCountDeltas(BuilderRef b, const VecA & current, const VecB & prior, const StringRef suffix) const {
-
-    const auto n = out_degree(mKernelIndex, mBufferGraph);
-    if (LLVM_UNLIKELY(n == 0)) {
-        return;
-    }
+void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
+                                             const Vec<Value *> & current,
+                                             const Vec<Value *> & prior,
+                                             const StringRef suffix) const {
 
     const auto fieldName = (makeKernelName(mKernelIndex) + suffix).str();
     Value * const trace = b->getScalarFieldPtr(fieldName);

@@ -142,15 +142,14 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             PHINode * processed = nullptr;
             bool deferred = false;
 
-            const auto i = rt.Port.Number;
-            if (mAlreadyProcessedDeferredPhi[i]) {
-                processed = mAlreadyProcessedDeferredPhi[i];
+            if (mAlreadyProcessedDeferredPhi(rt.Port)) {
+                processed = mAlreadyProcessedDeferredPhi(rt.Port);
                 deferred = true;
             } else {
-                processed = mAlreadyProcessedPhi[i];
+                processed = mAlreadyProcessedPhi(rt.Port);
             }
 
-            ParamVec & inputArgs = inputs[i];
+            ParamVec & inputArgs = inputs[rt.Port.Number];
 
             const Binding & input = rt.Binding;
             #ifndef NDEBUG
@@ -158,15 +157,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             const BufferNode & bn = mBufferGraph[buffer];
             assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
             #endif
-            inputArgs.push_back(mInputEpochPhi[i]);
+            inputArgs.push_back(mInputEpochPhi(rt.Port));
 
-            mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, inputArgs);
+            mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, inputArgs);
 
             if (LLVM_UNLIKELY(requiresItemCount(input))) {
                 // calculate how many linear items are from the *deferred* position
-                Value * inputItems = mLinearInputItemsPhi[i];
+                Value * inputItems = mLinearInputItemsPhi(rt.Port);
                 if (deferred) {
-                    Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
+                    Value * diff = b->CreateSub(mAlreadyProcessedPhi(rt.Port), mAlreadyProcessedDeferredPhi(rt.Port));
                     inputItems = b->CreateAdd(inputItems, diff);
                 }
                 inputArgs.push_back(inputItems); assert (inputItems);
@@ -187,7 +186,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         assert (rt.Port.Type == PortType::Output);
         const auto i = rt.Port.Number;
 
-        PHINode * const produced = mAlreadyProducedPhi[i];
+        PHINode * const produced = mAlreadyProducedPhi(rt.Port);
         const auto buffer = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         const Binding & output = rt.Binding;
@@ -197,17 +196,17 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
 
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            mReturnedOutputVirtualBaseAddressPtr[i] = addVirtualBaseAddressArg(b, bn.Buffer, outputArgs);
+            mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, bn.Buffer, outputArgs);
         } else {
             outputArgs.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced, nullptr));
         }
-        mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, outputArgs);
+        mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, outputArgs);
         // TODO:  consider whether we should pass a requested amount to source streams?
         if (requiresItemCount(output)) {
-            outputArgs.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
+            outputArgs.push_back(mLinearOutputItemsPhi(rt.Port));  assert (mLinearOutputItemsPhi(rt.Port));
         }
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            outputArgs.push_back(mConsumedItemCount[i]); assert (mConsumedItemCount[i]);
+            outputArgs.push_back(mConsumedItemCount(rt.Port)); assert (mConsumedItemCount(rt.Port));
         }
     }
 
@@ -237,16 +236,16 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         const Binding & input = getInputBinding(inputPort);
         const ProcessingRate & rate = input.getRate();
         if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum() || rate.isGreedy())) {
-            processed = b->CreateAdd(mAlreadyProcessedPhi[i], mLinearInputItemsPhi[i]);
-            if (mAlreadyProcessedDeferredPhi[i]) {
-                assert (mReturnedProcessedItemCountPtr[i]);
-                mProcessedDeferredItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
+            processed = b->CreateAdd(mAlreadyProcessedPhi(inputPort), mLinearInputItemsPhi(inputPort));
+            if (mAlreadyProcessedDeferredPhi(inputPort)) {
+                assert (mReturnedProcessedItemCountPtr(inputPort));
+                mProcessedDeferredItemCount(inputPort) = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = makeBufferName(mKernelIndex, inputPort);
                 debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    Value * const deferred = mProcessedDeferredItemCount[i];
+                    Value * const deferred = mProcessedDeferredItemCount(inputPort);
                     Value * const isDeferred = b->CreateICmpULE(deferred, processed);
                     Value * const isFinal = mIsFinalInvocationPhi;
                     // TODO: workaround now for ScanMatch; if it ends with a match on a
@@ -264,8 +263,8 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 }
             }
         } else if (rate.isBounded() || rate.isUnknown()) {
-            assert (mReturnedProcessedItemCountPtr[i]);
-            processed = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
+            assert (mReturnedProcessedItemCountPtr(inputPort));
+            processed = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
         } else {
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
@@ -273,7 +272,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 << " has an " << "input" << " rate that is not properly handled by the PipelineKernel";
             report_fatal_error(out.str());
         }
-        mProcessedItemCount[i] = processed; assert (processed);
+        mProcessedItemCount(inputPort) = processed; assert (processed);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, inputPort);
         debugPrint(b, prefix + "_processed' = %" PRIu64, mProcessedItemCount[i]);
@@ -286,16 +285,16 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         const ProcessingRate & rate = output.getRate();
         Value * produced = nullptr;
         if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum())) {
-            produced = b->CreateAdd(mAlreadyProducedPhi[i], mLinearOutputItemsPhi[i]);
-            if (mAlreadyProducedDeferredPhi[i]) {
-                assert (mReturnedProducedItemCountPtr[i]);
-                mProducedDeferredItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
+            produced = b->CreateAdd(mAlreadyProducedPhi(outputPort), mLinearOutputItemsPhi(outputPort));
+            if (mAlreadyProducedDeferredPhi(outputPort)) {
+                assert (mReturnedProducedItemCountPtr(outputPort));
+                mProducedDeferredItemCount(outputPort) = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = makeBufferName(mKernelIndex, outputPort);
                 debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    Value * const deferred = mProducedDeferredItemCount[i];
+                    Value * const deferred = mProducedDeferredItemCount(outputPort);
                     Value * const isDeferred = b->CreateICmpULE(deferred, produced);
                     Value * const isFinal = mIsFinalInvocationPhi;
                     // TODO: workaround now for ScanMatch; if it ends with a match on a
@@ -313,8 +312,8 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 }
             }
         } else if (rate.isBounded() || rate.isUnknown()) {
-            assert (mReturnedProducedItemCountPtr[i]);
-            produced = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
+            assert (mReturnedProducedItemCountPtr(outputPort));
+            produced = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
         } else {
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
@@ -326,7 +325,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
         debugPrint(b, prefix + "_produced' = %" PRIu64, produced);
         #endif
-        mProducedItemCount[i] = produced;
+        mProducedItemCount(outputPort) = produced;
     }
 
 }

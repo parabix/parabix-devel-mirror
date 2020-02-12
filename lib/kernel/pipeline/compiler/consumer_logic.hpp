@@ -340,15 +340,15 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const St
 void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mConsumerGraph))) {
         const ConsumerEdge & c = mConsumerGraph[e];
-        const auto port = c.Port;
         const auto streamSet = target(e, mConsumerGraph);
         Value * consumed = nullptr;
+        const StreamSetPort port(PortType::Output, c.Port);
         if (LLVM_UNLIKELY(out_degree(streamSet, mConsumerGraph) == 0)) {
             // This stream either has no consumers or we've proven that its consumption rate
             // is identical to its production rate.
-            consumed = mInitiallyProducedItemCount[port];
+            consumed = mInitiallyProducedItemCount(port);
         } else {
-            const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, port});
+            const auto prefix = makeBufferName(mKernelIndex, port);
             Value * ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
             if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
                 Constant * const ZERO = b->getInt32(0);
@@ -356,7 +356,7 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
             }
             consumed = b->CreateLoad(ptr);
         }
-        mConsumedItemCount[port] = consumed; assert (consumed);
+        mConsumedItemCount(port) = consumed; assert (consumed);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, port});
         debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
@@ -375,8 +375,8 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
         const ConsumerNode & cn = mConsumerGraph[buffer];
         if (LLVM_LIKELY(cn.PhiNode == nullptr)) {
             const ConsumerEdge & c = mConsumerGraph[e];
-            const auto inputPort = c.Port;
-            const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, inputPort});
+            const StreamSetPort port(PortType::Input, c.Port);
+            const auto prefix = makeBufferName(mKernelIndex, port);
             PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
             consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
             cn.PhiNode = consumedPhi;
@@ -391,11 +391,12 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
         //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
         const ConsumerEdge & c = mConsumerGraph[e];
-        Value * processed = mFullyProcessedItemCount[c.Port];
+        const StreamSetPort port(PortType::Input, c.Port);
+        Value * processed = mFullyProcessedItemCount(port);
         // To support the lookbehind attribute, we need to withhold the items from
         // our consumed count and rely on the initial buffer underflow to access any
         // items before the start of the physical buffer.
-        const Binding & input = getBinding(StreamSetPort{PortType::Input, c.Port});
+        const Binding & input = getBinding(port);
         if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
             const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
             ConstantInt * const amount = b->getSize(lookBehind.amount());

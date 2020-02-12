@@ -507,6 +507,48 @@ void PipelineCompiler::verifyIOStructure(const BufferGraph & G) const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructInputPortMappings
+ ** ------------------------------------------------------------------------------------------------------------- */
+BufferPortMap PipelineCompiler::constructInputPortMappings() const {
+    size_t n = 0;
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        n += in_degree(i, mBufferGraph);
+    }
+    BufferPortMap M;
+    M.reserve(n);
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        const auto hint = M.nth(M.size());
+        for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+            const BufferRateData & input = mBufferGraph[e];
+            M.emplace_hint_unique(hint, i, input.Port.Number);
+        }
+    }
+    assert (M.size() == n);
+    return M;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructOutputPortMappings
+ ** ------------------------------------------------------------------------------------------------------------- */
+BufferPortMap PipelineCompiler::constructOutputPortMappings() const {
+    size_t n = 0;
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        n += out_degree(i, mBufferGraph);
+    }
+    BufferPortMap M;
+    M.reserve(n);
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        const auto hint = M.nth(M.size());
+        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const BufferRateData & output = mBufferGraph[e];
+            M.emplace_hint_unique(hint, i, output.Port.Number);
+        }
+    }
+    assert (M.size() == n);
+    return M;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief mayHaveNonLinearIO
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::mayHaveNonLinearIO(const unsigned kernel) const {
@@ -518,6 +560,12 @@ bool PipelineCompiler::mayHaveNonLinearIO(const unsigned kernel) const {
     // two or more linear sub-segments.
 
     for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+        const BufferRateData & rateData = mBufferGraph[input];
+        // Switching from the input stream to a "null stream" will require
+        // two linear sub-segments.
+        if (LLVM_UNLIKELY(rateData.ZeroExtended)) {
+            return true;
+        }
         const auto streamSet = source(input, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
         if (LLVM_UNLIKELY(node.Buffer->isLinear())) {

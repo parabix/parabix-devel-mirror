@@ -41,12 +41,13 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     Constant * const ONE = b->getSize(1);
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(StreamSetPort{PortType::Input, i});
+        const StreamSetPort port(PortType::Input, i);
+        const Binding & input = getInputBinding(port);
         const ProcessingRate & rate = input.getRate();
 
         // TODO: if this streamset has 0 streams, it exists only to have a produced/processed count. Ignore it.
 
-        inputBaseAddress[i] = mInputEpoch[i];
+        inputBaseAddress[i] = mInputEpoch(port);
 
         assert (inputBaseAddress[i]);
 
@@ -76,10 +77,10 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
 
 
-            Value * const tooMany = b->CreateICmpULT(accessibleItems[i], mAccessibleInputItems[i]);
+            Value * const tooMany = b->CreateICmpULT(accessibleItems[i], mAccessibleInputItems(port));
             Value * computeMask = tooMany;
-            if (mIsInputZeroExtended[i]) {
-                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended[i]));
+            if (mIsInputZeroExtended(port)) {
+                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended(port)));
             }
             BasicBlock * const entryBlock = b->GetInsertBlock();
             b->CreateUnlikelyCondBr(computeMask, maskedInput, selectedInput);
@@ -100,15 +101,15 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             ExternalBuffer tmp(b, input.getType(), true, 0);
 
-            Value * const start = b->CreateLShr(mAlreadyProcessedPhi[i], LOG_2_BLOCK_WIDTH);
+            Value * const start = b->CreateLShr(mAlreadyProcessedPhi(port), LOG_2_BLOCK_WIDTH);
 
             DataLayout DL(b->getModule());
-            Value * const startPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, start);
+            Value * const startPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, start);
             Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
             Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
 
             Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
-            Value * const limitPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, limit);
+            Value * const limitPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, limit);
             Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
 
             Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
@@ -123,17 +124,17 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             if (stridesPerSegment != 1 || input.isDeferred()) {
                 if (input.isDeferred()) {
-                    initial = b->CreateLShr(mAlreadyProcessedDeferredPhi[i], LOG_2_BLOCK_WIDTH);
-                    initialPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, initial);
+                    initial = b->CreateLShr(mAlreadyProcessedDeferredPhi(port), LOG_2_BLOCK_WIDTH);
+                    initialPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, initial);
                     initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
                 }
                 // if a kernel reads in multiple strides of data per segment, we may be able to
                 // copy over a portion of it with a single memcpy.
                 Value * endPtrInt = startPtrInt;
                 if (stridesPerSegment  != 1) {
-                    end = b->CreateAdd(mAlreadyProcessedPhi[i], accessibleItems[i]);
+                    end = b->CreateAdd(mAlreadyProcessedPhi(port), accessibleItems[i]);
                     end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                    Value * const endPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], ZERO, end);
+                    Value * const endPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, end);
                     endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                 }
                 fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
@@ -167,13 +168,13 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
             streamIndex->addIncoming(ZERO, loopEntryBlock);
 
-            Value * inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch[i], streamIndex, end);
+            Value * inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), streamIndex, end);
             Value * outputPtr = tmp.getStreamBlockPtr(b, maskedEpoch, streamIndex, end);
 
             if (itemWidth > 1) {
                 Value * const endPtr = inputPtr;
                 Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
-                inputPtr = tmp.getStreamPackPtr(b, mInputEpoch[i], streamIndex, end, packIndex);
+                inputPtr = tmp.getStreamPackPtr(b, mInputEpoch(port), streamIndex, end, packIndex);
                 Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
                 Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
                 b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
@@ -203,7 +204,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             b->SetInsertPoint(selectedInput);
             PHINode * const finalEpoch = b->CreatePHI(bufferType, 2);
-            finalEpoch->addIncoming(mInputEpoch[i], entryBlock);
+            finalEpoch->addIncoming(mInputEpoch(port), entryBlock);
             finalEpoch->addIncoming(maskedEpoch, maskedInputLoop);
 
             inputBaseAddress[i] = finalEpoch;
@@ -228,11 +229,11 @@ void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
         Value * const numOfStrides = b->CreateUMax(mNumOfLinearStrides, ONE);
 
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            if (mIsInputZeroExtended[i]) {
-                const auto inputPort = StreamSetPort{PortType::Input, i};
-                const auto bufferVertex = getInputBufferVertex(inputPort);
+            const StreamSetPort port{PortType::Input, i};
+            if (mIsInputZeroExtended(port)) {
+                const auto bufferVertex = getInputBufferVertex(port);
                 const BufferNode & bn = mBufferGraph[bufferVertex];
-                const Binding & input = getInputBinding(inputPort);
+                const Binding & input = getInputBinding(port);
 
                 const auto itemWidth = getItemWidth(input.getType());
                 Constant * const strideFactor = b->getSize(itemWidth * strideSize / 8);
@@ -253,7 +254,7 @@ void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
                 } else if (fieldWidth > 8) {
                     requiredBytes = b->CreateMul(requiredBytes, b->getSize(fieldWidth / 8));
                 }
-                requiredBytes = b->CreateSelect(mIsInputZeroExtended[i], requiredBytes, ZERO);
+                requiredBytes = b->CreateSelect(mIsInputZeroExtended(port), requiredBytes, ZERO);
                 requiredSpace = b->CreateUMax(requiredSpace, requiredBytes);
             }
         }
@@ -304,8 +305,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto outputPort = StreamSetPort{PortType::Output, i};
-        const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
+        const StreamSetPort port{PortType::Output, i};
+        const StreamSetBuffer * const buffer = getOutputBuffer(port);
         if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
             // If this stream is either controlled by this kernel or is an external
             // stream, any clearing of data is the responsibility of the owner.
@@ -315,8 +316,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         }
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
-        const auto prefix = makeBufferName(mKernelIndex, outputPort);
-        Value * const produced = mFinalProducedPhi[i];
+        const auto prefix = makeBufferName(mKernelIndex, port);
+        Value * const produced = mFinalProducedPhi(port);
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
         Value * packIndex = nullptr;
@@ -382,7 +383,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         // Zero out any blocks we could potentially touch
 
         Rational strideLength{0};
-        const auto bufferVertex = getOutputBufferVertex(outputPort);
+        const auto bufferVertex = getOutputBufferVertex(port);
         for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
             const Binding & input = rd.Binding;
@@ -422,15 +423,16 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(StreamSetPort{PortType::Input, i});
+        const StreamSetPort port{PortType::Input, i};
+        const Binding & input = getInputBinding(port);
         Value * processed = nullptr;
-        if (mUpdatedProcessedDeferredPhi[i]) {
-            processed = mUpdatedProcessedDeferredPhi[i];
+        if (mUpdatedProcessedDeferredPhi(port)) {
+            processed = mUpdatedProcessedDeferredPhi(port);
         } else {
-            processed = mUpdatedProcessedPhi[i];
+            processed = mUpdatedProcessedPhi(port);
         }
         processed = truncateBlockSize(b, input, processed);
-        mFullyProcessedItemCount[i] = processed;
+        mFullyProcessedItemCount(port) = processed;
     }
 }
 
@@ -446,8 +448,9 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(StreamSetPort{PortType::Output, i});
-        Value * produced = mUpdatedProducedPhi[i];
+        const StreamSetPort port{PortType::Output, i};
+        const Binding & output = getOutputBinding(port);
+        Value * produced = mUpdatedProducedPhi(port);
         if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
             const auto & D = output.findAttribute(AttrId::Delayed);
             Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
@@ -455,7 +458,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
             produced = b->CreateSelect(terminated, produced, delayed);
         }
         produced = truncateBlockSize(b, output, produced);
-        mFullyProducedItemCount[i]->addIncoming(produced, mKernelLoopExitPhiCatch);
+        mFullyProducedItemCount(port)->addIncoming(produced, mKernelLoopExitPhiCatch);
     }
 }
 
@@ -596,61 +599,6 @@ Value * PipelineCompiler::getThreadLocalHandlePtr(BuilderRef b, const unsigned k
         handle = b->CreatePointerCast(handle, localStateTy->getPointerTo());
     }
     return handle;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief reset
- ** ------------------------------------------------------------------------------------------------------------- */
-namespace {
-template <typename Vec>
-inline void reset(Vec & vec, const size_t n) {
-    vec.resize(n);
-    std::fill_n(vec.begin(), n, nullptr);
-}
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief resetMemoizedFields
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::resetMemoizedFields() {       
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
-    reset(mIsInputZeroExtended, numOfInputs);
-    reset(mInitiallyProcessedItemCount, numOfInputs);
-    reset(mInitiallyProcessedDeferredItemCount, numOfInputs);
-    reset(mAlreadyProcessedPhi, numOfInputs);
-    reset(mAlreadyProcessedDeferredPhi, numOfInputs);
-    reset(mInputEpoch, numOfInputs);
-    reset(mInputEpochPhi, numOfInputs);
-    reset(mFirstInputStrideLength, numOfInputs);
-    reset(mAccessibleInputItems, numOfInputs);
-    reset(mLinearInputItemsPhi, numOfInputs);
-    reset(mReturnedProcessedItemCountPtr, numOfInputs);
-    reset(mProcessedItemCount, numOfInputs);
-    reset(mProcessedDeferredItemCount, numOfInputs);
-    reset(mFinalProcessedPhi, numOfInputs);
-    reset(mUpdatedProcessedPhi, numOfInputs);
-    reset(mUpdatedProcessedDeferredPhi, numOfInputs);
-    reset(mFullyProcessedItemCount, numOfInputs);
-    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
-    reset(mInitiallyProducedItemCount, numOfOutputs);
-    reset(mInitiallyProducedDeferredItemCount, numOfOutputs);
-    reset(mAlreadyProducedPhi, numOfOutputs);
-    reset(mAlreadyProducedDeferredPhi, numOfOutputs);
-    reset(mFirstOutputStrideLength, numOfOutputs);
-    reset(mWritableOutputItems, numOfOutputs);
-    reset(mConsumedItemCount, numOfOutputs);
-    reset(mLinearOutputItemsPhi, numOfOutputs);    
-    reset(mReturnedOutputVirtualBaseAddressPtr, numOfOutputs);
-    reset(mReturnedProducedItemCountPtr, numOfOutputs);
-    reset(mProducedItemCount, numOfOutputs);
-    reset(mProducedDeferredItemCount, numOfOutputs);
-    reset(mFinalProducedPhi, numOfOutputs);
-    reset(mUpdatedProducedPhi, numOfOutputs);
-    reset(mUpdatedProducedDeferredPhi, numOfOutputs);
-    reset(mFullyProducedItemCount, numOfOutputs);
-    mNumOfAddressableItemCount = 0;
-    mNumOfVirtualBaseAddresses = 0;
-    mHasClosedInputStream = nullptr;
 }
 
 }

@@ -296,6 +296,7 @@ struct BufferNode {
     unsigned LookAhead = 0;
     unsigned RequiredSpace = 0;
 
+
     bool isOwned() const {
         return (Type & BufferType::Unowned) == BufferType::None;
     }
@@ -330,6 +331,7 @@ struct BufferRateData {
     BindingRef Binding;
     Rational Minimum;
     Rational Maximum;
+    bool ZeroExtended = false;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -459,8 +461,8 @@ struct PipelineGraphBundle {
     unsigned LastCall = 0;
     unsigned FirstScalar = 0;
     unsigned LastScalar = 0;
-
     unsigned PartitionCount = 0;
+    bool HasZeroExtendedStream = false;
 
     RelationshipGraph       Streams;
     RelationshipGraph       Scalars;
@@ -513,7 +515,7 @@ const static std::string DEBUG_FD = ".DFd";
 const static std::string PARTITION_LOGICAL_SEGMENT_NUMBER = ".PLS";
 const static std::string PARTITION_ITEM_COUNT_SUFFIX = ".PIC";
 const static std::string PARTITION_FIXED_RATE_SUFFIX = ".PFR";
-
+const static std::string PARTITION_TERMINATION_SIGNAL_SUFFIX = ".PTS";
 
 const static std::string ITERATION_COUNT_SUFFIX = ".ITC";
 const static std::string TERMINATION_PREFIX = "@TERM";
@@ -546,10 +548,63 @@ using Allocator = SlabAllocator<>;
 template <typename T>
 using OwningVec = std::vector<std::unique_ptr<T>>;
 
+using BufferPortMap = flat_set<std::pair<unsigned, unsigned>>;
+
 #define BEGIN_SCOPED_REGION {
 #define END_SCOPED_REGION }
 
 class PipelineCompiler final : public KernelCompiler {
+
+	template<typename T>
+	struct InputPortVec {
+	public:
+        InputPortVec(PipelineCompiler * const pc)
+		: mPC(*pc)
+        , mVec(pc->mAllocator.allocate<T>(pc->mInputPortSet.size())) {
+            #ifndef NDEBUG
+            std::memset(mVec, 0, sizeof(T) * pc->mInputPortSet.size());
+            #endif
+		}
+        BOOST_FORCEINLINE
+        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
+			return mVec[mPC.getInputPortIndex(kernel, port)];
+		}
+        BOOST_FORCEINLINE
+        T & operator()(const StreamSetPort port) const {
+            return operator()(mPC.mKernelIndex, port);
+		}
+	private:
+		const PipelineCompiler & mPC;
+		T * const mVec;
+	};
+
+	template<typename T> friend struct InputPortVec;
+
+	template<typename T>
+	struct OutputPortVec {
+	public:
+        OutputPortVec(PipelineCompiler * const pc)
+		: mPC(*pc)
+        , mVec(pc->mAllocator.allocate<T>(pc->mOutputPortSet.size())) {
+            #ifndef NDEBUG
+            std::memset(mVec, 0, sizeof(T) * pc->mOutputPortSet.size());
+            #endif
+		}
+        BOOST_FORCEINLINE
+        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
+            return mVec[mPC.getOutputPortIndex(kernel, port)];
+		}
+        BOOST_FORCEINLINE
+        T & operator()(const StreamSetPort port) const {
+			return operator()(mPC.mKernelIndex, port);
+		}
+	private:
+		const PipelineCompiler & mPC;
+		T * const mVec;
+	};
+
+	template<typename T> friend struct OutputPortVec;
+
 public:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel);
@@ -707,7 +762,6 @@ public:
     Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
-    void resetMemoizedFields();
 
     Value * getPartialSumItemCount(BuilderRef b, const StreamSetPort port, Value * const offset = nullptr) const;
 
@@ -758,6 +812,10 @@ public:
     unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
     bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
 
+	LLVM_READNONE unsigned getInputPortIndex(const unsigned kernel, StreamSetPort port) const;
+
+	LLVM_READNONE unsigned getOutputPortIndex(const unsigned kernel, StreamSetPort port) const;
+
 // cycle counter functions
 
     void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
@@ -792,8 +850,9 @@ public:
     void printUnconsumedItemCounts(BuilderRef b) const;
 
     void addItemCountDeltaProperties(BuilderRef b, unsigned kernel, const StringRef suffix) const;
-    template <typename VecA, typename VecB>
-    void recordItemCountDeltas(BuilderRef b, const VecA & current, const VecB & prior, const StringRef suffix) const;
+
+    void recordItemCountDeltas(BuilderRef b, const Vec<Value *> & current, const Vec<Value *> & prior, const StringRef suffix) const;
+
     void printItemCountDeltas(BuilderRef b, const StringRef title, const StringRef suffix) const;
 
 // pipeline analysis functions
@@ -815,9 +874,7 @@ public:
     static void combineDuplicateKernels(BuilderRef b, const Kernels & partition, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & partition, Relationships & G);
 
-    bool hasZeroExtendedStream() const;
 
-//    void determineEvaluationOrderOfKernelIO(const size_t kernelIndex, const BufferGraph &G);
     TerminationGraph makeTerminationGraph();
     PipelineIOGraph makePipelineIOGraph() const;
     LLVM_READNONE bool isOpenSystem() const;
@@ -852,6 +909,9 @@ public:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void verifyIOStructure(const BufferGraph & G) const;
+    BufferPortMap constructInputPortMappings() const;
+    BufferPortMap constructOutputPortMappings() const;
+    size_t getIndexOf(const size_t kernel, const StreamSetPort port) const;
     LLVM_READNONE bool mayHaveNonLinearIO(const unsigned kernel) const;
 
 // dataflow analysis functions
@@ -859,6 +919,10 @@ public:
     void computeDataFlowRates(BufferGraph & G);
     PartitionConstraintGraph identifyHardPartitionConstraints(BufferGraph & G) const;
     LengthConstraintGraph identifyLengthEqualityAssertions(BufferGraph & G) const;
+
+// zero extension analysis function
+
+    bool hasZeroExtendedStreams(BufferGraph & G) const;
 
 // synchronization functions
 
@@ -947,6 +1011,8 @@ public:
 
 protected:
 
+	Allocator									mAllocator;
+
     const bool                       			mCheckAssertions;
     const bool                                  mTraceProcessedProducedItemCounts;
     const bool                       			mTraceIndividualConsumedItemCounts;
@@ -955,132 +1021,6 @@ protected:
     const unsigned                              mNumOfSegments;
 
     const LengthAssertions &                    mLengthAssertions;
-
-    mutable Allocator                           mAllocator;
-
-    size_t                                      mKernelIndex = 0;
-    const Kernel *                              mKernel = nullptr;
-    Value *                                     mKernelHandle = nullptr;
-
-    // pipeline state
-    Value *                                     mZeroExtendBuffer = nullptr;
-    Value *                                     mZeroExtendSpace = nullptr;
-    Value *                                     mSegNo = nullptr;
-    Value *                                     mHalted = nullptr;
-    PHINode *                                   mMadeProgressInLastSegment = nullptr;
-    Value *                                     mPipelineProgress = nullptr;
-    PHINode *                                   mNextPipelineProgress = nullptr;
-    Value *                                     mCurrentThreadTerminationSignalPtr = nullptr;
-    BasicBlock *                                mPipelineLoop = nullptr;
-    BasicBlock *                                mKernelEntry = nullptr;
-    BasicBlock *                                mKernelLoopEntry = nullptr;
-    BasicBlock *                                mKernelLoopCall = nullptr;
-    BasicBlock *                                mKernelTerminationCheck = nullptr;
-    BasicBlock *                                mKernelInitiallyTerminated = nullptr;
-    BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
-    BasicBlock *                                mKernelTerminated = nullptr;
-    BasicBlock *                                mKernelInsufficientIOExit = nullptr;
-    BasicBlock *                                mKernelLoopExit = nullptr;
-    BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
-    BasicBlock *                                mKernelExit = nullptr;
-    BasicBlock *                                mPipelineEnd = nullptr;
-    BasicBlock *                                mRethrowException = nullptr;
-    Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
-    Vec<AllocaInst *, 8>                        mVirtualBaseAddressPtr;
-    Vec<Value *, 16>                            mTruncatedInputBuffer;
-    Vec<Value *, 64>                            mLocallyAvailableItems;
-    Vec<Value *, 16>                            mTerminationSignals;
-
-    // partition state
-    Vec<BasicBlock *, 32>                       mPartitionEntryPoint;
-    unsigned                                    mCurrentPartitionId = 0;
-
-    // kernel state
-    Value *                                     mTerminatedInitially = nullptr;
-    PHINode *                                   mInsufficientIOHaltingPhi = nullptr;
-    PHINode *                                   mHaltingPhi = nullptr;
-    PHINode *                                   mHaltedPhi = nullptr;
-    PHINode *                                   mCurrentNumOfStrides = nullptr;
-    Value *                                     mUpdatedNumOfStrides = nullptr;
-    PHINode *                                   mTotalNumOfStrides = nullptr;
-    PHINode *                                   mHasProgressedPhi = nullptr;
-    PHINode *                                   mAlreadyProgressedPhi = nullptr;
-    PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
-    PHINode *                                   mTerminatedSignalPhi = nullptr;
-    PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;
-    PHINode *                                   mTerminatedAtExitPhi = nullptr;
-    PHINode *                                   mTotalNumOfStridesAtExitPhi = nullptr;
-    Value *                                     mLastPartialSegment = nullptr;
-    Value *                                     mNumOfLinearStrides = nullptr;
-    PHINode *                                   mFixedRateFactorPhi = nullptr;
-    PHINode *                                   mIsFinalInvocationPhi = nullptr;
-    Value *                                     mHasClosedInputStream = nullptr;
-
-    unsigned                                    mMaximumNumOfStrides = 0;
-
-    Rational                                    mFixedRateLCM;
-    Value *                                     mTerminatedExplicitly = nullptr;
-    Value *                                     mBranchToLoopExit = nullptr;
-
-    Value *                                     mKernelAssertionName = nullptr;
-
-    bool                                        mBoundedKernel = false;
-    bool                                        mKernelIsInternallySynchronized = false;
-    bool                                        mKernelCanTerminateEarly = false;
-    bool                                        mKernelHasAnExplicitFinalPartialStride = false;
-
-    unsigned                                    mNumOfAddressableItemCount = 0;
-    unsigned                                    mNumOfVirtualBaseAddresses = 0;
-
-    Vec<Value *>                                mIsInputZeroExtended;
-    PHINode *                                   mZeroExtendBufferPhi = nullptr;
-
-    Vec<Value *>                                mInitiallyProcessedItemCount; // *before* entering the kernel
-    Vec<Value *>                                mInitiallyProcessedDeferredItemCount;
-    Vec<PHINode *>                              mAlreadyProcessedPhi; // entering the segment loop
-    Vec<PHINode *>                              mAlreadyProcessedDeferredPhi;
-    Vec<Value *>                                mInputEpoch;
-    Vec<PHINode *>                              mInputEpochPhi;
-    Vec<Value *>                                mFirstInputStrideLength;
-    Vec<Value *>                                mAccessibleInputItems;
-    Vec<PHINode *>                              mLinearInputItemsPhi;
-    Vec<Value *>                                mReturnedProcessedItemCountPtr; // written by the kernel
-    Vec<Value *>                                mProcessedItemCount; // exiting the segment loop
-    Vec<Value *>                                mProcessedDeferredItemCount;
-    Vec<PHINode *>                              mFinalProcessedPhi; // exiting after termination
-    Vec<PHINode *>                              mInsufficientIOProcessedPhi; // exiting insufficient io
-    Vec<PHINode *>                              mInsufficientIOProcessedDeferredPhi;
-    Vec<PHINode *>                              mUpdatedProcessedPhi; // exiting the kernel
-    Vec<PHINode *>                              mUpdatedProcessedDeferredPhi;
-    Vec<Value *>                                mFullyProcessedItemCount; // *after* exiting the kernel
-
-    Vec<Value *>                                mInitiallyProducedItemCount; // *before* entering the kernel
-    Vec<Value *>                                mInitiallyProducedDeferredItemCount;
-    Vec<PHINode *>                              mAlreadyProducedPhi; // entering the segment loop
-    Vec<Value *>                                mAlreadyProducedDelayedPhi;
-    Vec<PHINode *>                              mAlreadyProducedDeferredPhi;
-    Vec<Value *>                                mFirstOutputStrideLength;
-    Vec<Value *>                                mWritableOutputItems;
-    Vec<Value *>                                mConsumedItemCount;
-    Vec<PHINode *>                              mLinearOutputItemsPhi;
-    Vec<Value *>                                mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
-    Vec<Value *>                                mReturnedProducedItemCountPtr; // written by the kernel
-    Vec<Value *>                                mProducedItemCount; // exiting the segment loop
-    Vec<Value *>                                mProducedDeferredItemCount;
-    Vec<PHINode *>                              mFinalProducedPhi; // exiting after termination
-    Vec<PHINode *>                              mInsufficientIOProducedPhi; // exiting insufficient io
-    Vec<PHINode *>                              mInsufficientIOProducedDeferredPhi;
-    Vec<PHINode *>                              mUpdatedProducedPhi; // exiting the kernel
-    Vec<PHINode *>                              mUpdatedProducedDeferredPhi;
-    Vec<PHINode *>                              mFullyProducedItemCount; // *after* exiting the kernel
-
-    // cycle counter state
-    std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
-
-    // debug state
-    Value *                                     mThreadId;
-    Value *                                     mDebugFileName;
-    Value *                                     mDebugFdPtr;
 
     // analysis state
     const RelationshipGraph                     mStreamGraph;
@@ -1109,6 +1049,8 @@ protected:
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
     const std::vector<unsigned>                 mPartitionJumpIndex;
+    const BufferPortMap                         mInputPortSet;
+    const BufferPortMap                         mOutputPortSet;
 
     const bool                                  mHasZeroExtendedStream;
     bool                                        mHasThreadLocalPipelineState;
@@ -1117,14 +1059,141 @@ protected:
 
     Vec<Value *>                                mScalarValue;
     const PipelineIOGraph                       mPipelineIOGraph;
+    Vec<Value *, 16>                            mTerminationSignals;
     const TerminationGraph                      mTerminationGraph;
     const AddGraph                              mAddGraph;
+
+    // pipeline state
+    unsigned                                    mKernelIndex = 0;
+    const Kernel *                              mKernel = nullptr;
+    Value *                                     mKernelHandle = nullptr;
+
+    Value *                                     mZeroExtendBuffer = nullptr;
+    Value *                                     mZeroExtendSpace = nullptr;
+    Value *                                     mSegNo = nullptr;
+    Value *                                     mHalted = nullptr;
+    PHINode *                                   mMadeProgressInLastSegment = nullptr;
+    Value *                                     mPipelineProgress = nullptr;
+    PHINode *                                   mNextPipelineProgress = nullptr;
+    Value *                                     mCurrentThreadTerminationSignalPtr = nullptr;
+    BasicBlock *                                mPipelineLoop = nullptr;
+    BasicBlock *                                mKernelEntry = nullptr;
+    BasicBlock *                                mKernelLoopEntry = nullptr;
+    BasicBlock *                                mKernelLoopCall = nullptr;
+    BasicBlock *                                mKernelTerminationCheck = nullptr;
+    BasicBlock *                                mKernelInitiallyTerminated = nullptr;
+    BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
+    BasicBlock *                                mKernelTerminated = nullptr;
+    BasicBlock *                                mKernelInsufficientIOExit = nullptr;
+    BasicBlock *                                mKernelLoopExit = nullptr;
+    BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
+    BasicBlock *                                mKernelExit = nullptr;
+    BasicBlock *                                mPipelineEnd = nullptr;
+    BasicBlock *                                mRethrowException = nullptr;
+
+    Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
+    Vec<AllocaInst *, 8>                        mVirtualBaseAddressPtr;
+    Vec<Value *, 16>                            mTruncatedInputBuffer;
+    Vec<Value *, 64>                            mLocallyAvailableItems;
+
+    // partition state
+    Vec<BasicBlock *, 32>                       mPartitionEntryPoint;
+    unsigned                                    mCurrentPartitionId = 0;
+
+    // kernel state
+    Value *                                     mTerminatedInitially = nullptr;
+    PHINode *                                   mInsufficientIOHaltingPhi = nullptr;
+    PHINode *                                   mHaltingPhi = nullptr;
+    PHINode *                                   mHaltedPhi = nullptr;
+    PHINode *                                   mCurrentNumOfStrides = nullptr;
+    Value *                                     mUpdatedNumOfStrides = nullptr;
+    PHINode *                                   mTotalNumOfStrides = nullptr;
+    PHINode *                                   mHasProgressedPhi = nullptr;
+    PHINode *                                   mAlreadyProgressedPhi = nullptr;
+    PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
+    PHINode *                                   mTerminatedSignalPhi = nullptr;
+    PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;
+    PHINode *                                   mTerminatedAtExitPhi = nullptr;
+    PHINode *                                   mTotalNumOfStridesAtExitPhi = nullptr;
+    Value *                                     mLastPartialSegment = nullptr;
+    Value *                                     mNumOfLinearStrides = nullptr;
+    PHINode *                                   mFixedRateFactorPhi = nullptr;
+    PHINode *                                   mIsFinalInvocationPhi = nullptr;
+
+    unsigned                                    mMaximumNumOfStrides = 0;
+
+    Rational                                    mFixedRateLCM;
+    Value *                                     mTerminatedExplicitly = nullptr;
+    Value *                                     mBranchToLoopExit = nullptr;
+
+    Value *                                     mKernelAssertionName = nullptr;
+
+    bool                                        mBoundedKernel = false;
+    bool                                        mKernelIsInternallySynchronized = false;
+    bool                                        mKernelCanTerminateEarly = false;
+    bool                                        mKernelHasAnExplicitFinalPartialStride = false;
+
+    unsigned                                    mNumOfAddressableItemCount = 0;
+    unsigned                                    mNumOfVirtualBaseAddresses = 0;
+
+    PHINode *                                   mZeroExtendBufferPhi = nullptr;
+
+    InputPortVec<Value *>                       mInitiallyProcessedItemCount; // *before* entering the kernel
+	InputPortVec<Value *>                       mInitiallyProcessedDeferredItemCount;
+	InputPortVec<PHINode *>                     mAlreadyProcessedPhi; // entering the segment loop
+	InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
+	InputPortVec<Value *>                       mInputEpoch;
+	InputPortVec<Value *>                       mIsInputZeroExtended;
+	InputPortVec<PHINode *>                     mInputEpochPhi;
+	InputPortVec<Value *>                       mFirstInputStrideLength;
+	InputPortVec<Value *>                       mAccessibleInputItems;
+	InputPortVec<PHINode *>                     mLinearInputItemsPhi;
+	InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
+	InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
+	InputPortVec<Value *>                       mProcessedDeferredItemCount;
+	InputPortVec<PHINode *>                     mFinalProcessedPhi; // exiting after termination
+	InputPortVec<PHINode *>                     mInsufficientIOProcessedPhi; // exiting insufficient io
+	InputPortVec<PHINode *>                     mInsufficientIOProcessedDeferredPhi;
+	InputPortVec<PHINode *>                     mUpdatedProcessedPhi; // exiting the kernel
+	InputPortVec<PHINode *>                     mUpdatedProcessedDeferredPhi;
+	InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
+
+    OutputPortVec<Value *>                      mInitiallyProducedItemCount; // *before* entering the kernel
+	OutputPortVec<Value *>                      mInitiallyProducedDeferredItemCount;
+	OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
+	OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
+	OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
+	OutputPortVec<Value *>                      mFirstOutputStrideLength;
+	OutputPortVec<Value *>                      mWritableOutputItems;
+	OutputPortVec<Value *>                      mConsumedItemCount;
+	OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
+	OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
+	OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
+	OutputPortVec<Value *>                      mProducedItemCount; // exiting the segment loop
+	OutputPortVec<Value *>                      mProducedDeferredItemCount;
+	OutputPortVec<PHINode *>                    mFinalProducedPhi; // exiting after termination
+	OutputPortVec<PHINode *>                    mInsufficientIOProducedPhi; // exiting insufficient io
+	OutputPortVec<PHINode *>                    mInsufficientIOProducedDeferredPhi;
+	OutputPortVec<PHINode *>                    mUpdatedProducedPhi; // exiting the kernel
+	OutputPortVec<PHINode *>                    mUpdatedProducedDeferredPhi;
+	OutputPortVec<PHINode *>                    mFullyProducedItemCount; // *after* exiting the kernel
+
+    // cycle counter state
+    std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
+
+    // debug state
+    Value *                                     mThreadId;
+    Value *                                     mDebugFileName;
+    Value *                                     mDebugFdPtr;
+
+    // misc.
 
     OwningVec<StreamSetBuffer>                  mInternalBuffers;
     OwningVec<Kernel>                           mInternalKernels;
     OwningVec<Binding>                          mInternalBindings;
 
 };
+
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
 
@@ -1224,6 +1293,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , LastScalar(P.LastScalar)
 , KernelPartitionId(std::move(P.KernelPartitionId))
 , PartitionCount(P.PartitionCount)
+
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
 
@@ -1232,14 +1302,62 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mPartitioningGraph(generatePartitioningGraph())
 , mPartitionJumpIndex(determinePartitionJumpIndices())
 
-, mHasZeroExtendedStream(hasZeroExtendedStream())
+, mInputPortSet(constructInputPortMappings())
+, mOutputPortSet(constructOutputPortMappings())
+// TODO: refactor to remove the following const cast
+, mHasZeroExtendedStream(hasZeroExtendedStreams(const_cast<BufferGraph &>(mBufferGraph)))
+
 , mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)
 , mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
 , mAddGraph(makeAddGraph())
+
+, mInitiallyProcessedItemCount(this)
+, mInitiallyProcessedDeferredItemCount(this)
+, mAlreadyProcessedPhi(this)
+, mAlreadyProcessedDeferredPhi(this)
+, mInputEpoch(this)
+, mIsInputZeroExtended(this)
+, mInputEpochPhi(this)
+, mFirstInputStrideLength(this)
+, mAccessibleInputItems(this)
+, mLinearInputItemsPhi(this)
+, mReturnedProcessedItemCountPtr(this)
+, mProcessedItemCount(this)
+, mProcessedDeferredItemCount(this)
+, mFinalProcessedPhi(this)
+, mInsufficientIOProcessedPhi(this)
+, mInsufficientIOProcessedDeferredPhi(this)
+, mUpdatedProcessedPhi(this)
+, mUpdatedProcessedDeferredPhi(this)
+, mFullyProcessedItemCount(this)
+
+, mInitiallyProducedItemCount(this)
+, mInitiallyProducedDeferredItemCount(this)
+, mAlreadyProducedPhi(this)
+, mAlreadyProducedDelayedPhi(this)
+, mAlreadyProducedDeferredPhi(this)
+, mFirstOutputStrideLength(this)
+, mWritableOutputItems(this)
+, mConsumedItemCount(this)
+, mLinearOutputItemsPhi(this)
+, mReturnedOutputVirtualBaseAddressPtr(this)
+, mReturnedProducedItemCountPtr(this)
+, mProducedItemCount(this)
+, mProducedDeferredItemCount(this)
+, mFinalProducedPhi(this)
+, mInsufficientIOProducedPhi(this)
+, mInsufficientIOProducedDeferredPhi(this)
+, mUpdatedProducedPhi(this)
+, mUpdatedProducedDeferredPhi(this)
+, mFullyProducedItemCount(this)
+
 , mInternalKernels(std::move(P.InternalKernels))
 , mInternalBindings(std::move(P.InternalBindings))
+
+
+
 {
     #ifdef PRINT_BUFFER_GRAPH
     printBufferGraph(errs());

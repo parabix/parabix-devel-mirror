@@ -217,6 +217,7 @@ Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inp
  * @brief updateTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::updateTerminationSignal(Value * const signal) {
+    assert (mKernelIndex < mTerminationSignals.size());
     mTerminationSignals[mKernelIndex] = signal;
 }
 
@@ -258,27 +259,32 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
         return isCountable(binding);
     };
 
-    Vec<Value *> finalProcessed(mProcessedItemCount);
-    Vec<Value *> finalProduced(mProducedItemCount);
-
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    Vec<Value *> finalProcessed(numOfInputs);
     for (unsigned i = 0; i < numOfInputs; i++) {
-        if (isCountableType(mReturnedProcessedItemCountPtr[i], getInputBinding(StreamSetPort{PortType::Input, i}))) {
-            finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
+        const StreamSetPort port (PortType::Input, i);
+        finalProcessed[i] = mProcessedItemCount(port);
+        if (isCountableType(mReturnedProcessedItemCountPtr(port), getInputBinding(port))) {
+            finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr(port));
         }
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    Vec<Value *> finalProduced(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        if (isCountableType(mReturnedProducedItemCountPtr[i], getOutputBinding(StreamSetPort{PortType::Input, i}))) {
-            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
+        const StreamSetPort port (PortType::Output, i);
+        finalProduced[i] = mProducedItemCount(port);
+        if (isCountableType(mReturnedProducedItemCountPtr(port), getOutputBinding(port))) {
+            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr(port));
         }
     }
     BasicBlock * const exitBlock = b->GetInsertBlock();
     for (unsigned i = 0; i < numOfInputs; i++) {
-        mFinalProcessedPhi[i]->addIncoming(finalProcessed[i], exitBlock);
+        const StreamSetPort port (PortType::Input, i);
+        mFinalProcessedPhi(port)->addIncoming(finalProcessed[i], exitBlock);
     }
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        mFinalProducedPhi[i]->addIncoming(finalProduced[i], exitBlock);
+        const StreamSetPort port (PortType::Output, i);
+        mFinalProducedPhi(port)->addIncoming(finalProduced[i], exitBlock);
     }
 }
 

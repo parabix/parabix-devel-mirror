@@ -72,7 +72,7 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
     // the final exit loop condition.
     mPartitionEntryPoint.resize(PartitionCount + 1);
     for (unsigned i = 0; i <= PartitionCount; ++i) {
-        mPartitionEntryPoint[i] = b->CreateBasicBlock("P" + std::to_string(i));
+        mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }    
 }
 
@@ -121,38 +121,6 @@ inline void PipelineCompiler::checkInputDataOnPartitionEntry(BuilderRef b) {
 
     using TypeId = PartitioningGraphNode::TypeId;
 
-//    struct PartitioningGraphNode {
-//        enum TypeId {
-//            Partition = 0
-//            , Bounded
-//            , Unknown
-//            , Fixed
-//            , PartialSum
-//            , Greedy
-//            , Relative
-//        };
-
-//        TypeId Type = TypeId::Partition;
-//        unsigned StreamSet = 0; // for non-Fixed rate nodes
-//    };
-
-//    struct PartitioningGraphEdge {
-//        enum TypeId : unsigned {
-//            IOPort = 0
-//            , Channel
-//            , Reference
-//        };
-
-//        TypeId          Type;
-//        unsigned        Kernel;
-//        StreamSetPort   Port;
-
-
-//        PartitioningGraphEdge(unsigned kernel, StreamSetPort port) : Type(IOPort), Kernel(kernel), Port(port) { }
-//        PartitioningGraphEdge(TypeId type = IOPort, unsigned kernel = 0, StreamSetPort port = StreamSetPort{}) : Type(type), Kernel(kernel), Port(port) { }
-//    };
-
-
 #if 0
 
     Value * numOfStrides = nullptr;
@@ -165,24 +133,19 @@ inline void PipelineCompiler::checkInputDataOnPartitionEntry(BuilderRef b) {
 
         const PartitioningGraphEdge & E = mPartitioningGraph[e];
         assert (KernelPartitionId[E.Kernel] == partitionId);
-        Value * const processed = b->getScalarFieldPtr(getPartitionPortName(partitionId, E));
+        Value * const processedPtr = b->getScalarFieldPtr(getPartitionPortName(partitionId, E));
+        Value * const processed = b->CreateLoad(processedPtr);
 
         Value * const unread = b->CreateSub(available, processed);
 
-        // scan through all consumers of this to see whether there is a lookahead relationship
-        unsigned lookAhead = 0;
-
-        for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
-            if (KernelPartitionId[kernel] == partitionId) {
+        const Binding & binding = getBinding(E.Kernel, E.Port);
+        const ProcessingRate & rate = binding.getRate();
 
 
 
 
-            }
-        }
 
-
-
+        const auto lookAhead = node.Delay;
 
 
 

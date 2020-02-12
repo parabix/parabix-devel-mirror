@@ -133,7 +133,7 @@ inline const Binding & getReferenceBinding(const Kernel * const kernel, const St
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addReferenceRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, Relationships & G) {
+void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, Relationships & G) {
     const auto n = array.size();
     if (LLVM_UNLIKELY(n == 0)) {
         return;
@@ -156,6 +156,16 @@ inline void addReferenceRelationships(const PortType portType, const unsigned in
             }
             const Binding & ref = getReferenceBinding(kernel, refPort);
             assert (isa<StreamSet>(ref.getRelationship()));
+            if (LLVM_UNLIKELY(rate.isRelative() && ref.getRate().isFixed())) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream msg(tmp);
+                msg << "Reference of a Relative-rate stream "
+                    << kernel->getName()
+                    << "."
+                    << item.getName()
+                    << " cannot refer to a Fixed-rate stream";
+                report_fatal_error(msg.str());
+            }
             // To preserve acyclicity, reference bindings always point to the binding that refers to it.
             // To simplify later I/O lookup, the edge stores the info of the reference port.
             add_edge(G.find(&ref), G.find(&item), RelationshipType{refPort, ReasonType::Reference}, G);
@@ -378,7 +388,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     transcribe(bindings, P.Streams);
     copy_out_edges(bindings, P.Streams, RelationshipNode::IsBinding);
 
-    // create the scalar graph
+     // create the scalar graph
     transcribe(kernels, P.Scalars);
     copy_in_edges(kernels, P.Scalars, RelationshipNode::IsRelationship);
     copy_out_edges(kernels, P.Scalars, RelationshipNode::IsRelationship);
@@ -389,7 +399,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     transcribe(scalars, P.Scalars);
 
-    printRelationshipGraph(P.Streams, errs(), "Streams");
+//    printRelationshipGraph(P.Streams, errs(), "Streams");
 //    printRelationshipGraph(P.Scalars, errs(), "Scalars");
 
     return P;
@@ -831,7 +841,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Kerne
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief combineDuplicateKernels
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G) {
+void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G) /*static*/ {
 
     using StreamSetVector = std::vector<std::pair<unsigned, StreamSetPort>>;
     using ScalarVector = std::vector<unsigned>;
@@ -1013,7 +1023,7 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelineKernel,
                                                   const unsigned p_in, const unsigned p_out,
-                                                  const Kernels & kernels, Relationships & G) {
+                                                  const Kernels & kernels, Relationships & G) /*static*/ {
 
     flat_set<unsigned> visited;
     std::queue<unsigned> pending;
@@ -1142,78 +1152,7 @@ inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort po
     return getReference(mKernelIndex, port);
 }
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasZeroExtendedStream
- *
- * Determine whether there are any zero extend attributes on any kernel and verify that every kernel with
- * zero extend attributes have at least one input that is not transitively dependent on a zero extended
- * input stream.
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::hasZeroExtendedStream() const {
 
-    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
-
-    bool hasZeroExtendedStream = false;
-
-    #ifndef DISABLE_ZERO_EXTEND
-
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const RelationshipNode & rn = mStreamGraph[i];
-        assert (rn.Type == RelationshipNode::IsKernel);
-        const Kernel * const kernel = rn.Kernel; assert (kernel);
-        const auto numOfInputs = in_degree(i, mStreamGraph);
-
-        Graph G(numOfInputs + 1);
-
-        // enumerate the input relations
-        for (const auto e : make_iterator_range(in_edges(i, mStreamGraph))) {
-            const auto k = source(e, mStreamGraph);
-            const RelationshipNode & rn = mStreamGraph[k];
-            assert (rn.Type == RelationshipNode::IsBinding);
-            const Binding & input = rn.Binding;
-            const RelationshipType & port = mStreamGraph[e];
-
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::ZeroExtended))) {
-                add_edge(port.Number, numOfInputs, G);
-                if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Principal))) {
-                    report_fatal_error(kernel->getName() + "." + input.getName() +
-                                       " cannot have both ZeroExtend and Principal attributes");
-                }
-            }
-            if (LLVM_UNLIKELY(in_degree(k, mStreamGraph) != 1)) {
-                graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
-                std::tie(ei, ei_end) = in_edges(k, mStreamGraph);
-                assert (std::distance(ei, ei_end) == 2);
-                const auto f = *(ei + 1);
-                const RelationshipType & ref = mStreamGraph[f];
-                assert (ref.Reason == ReasonType::Reference);
-                add_edge(ref.Number, port.Number, G);
-            }
-        }
-
-        if (LLVM_LIKELY(in_degree(numOfInputs, G) == 0)) {
-            continue;
-        }
-
-        if (LLVM_UNLIKELY(in_degree(numOfInputs, G) == numOfInputs)) {
-            report_fatal_error(kernel->getName() + " requires at least one non-zero-extended input");
-        }
-
-        // Identify all transitive dependencies on zero-extended inputs
-        transitive_closure_dag(G);
-
-        if (LLVM_UNLIKELY(in_degree(numOfInputs, G) == numOfInputs)) {
-            report_fatal_error(kernel->getName() + " requires at least one non-zero-extended input"
-                                                   " that does not refer to a zero-extended input");
-        }
-
-        hasZeroExtendedStream = true;
-    }
-
-    #endif
-
-    return hasZeroExtendedStream;
-}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineIOGraph

@@ -207,8 +207,9 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
 
             // TODO: currently any kernel K that can terminate early is the root of a new partition. However,
             // we could include it one of its sources' partition P if and only if there is no divergent path
-            // of kernels S in P for which the consuming partitions of the outputs of S could potentially
-            // execute without any data from all outputs of K.
+            // of kernels S in P for which *all* consumers of the outputs of S are controlled by an output of
+            // K.
+
 
             // Check whether this kernel could terminate early
             const auto mayTerminateEarly = kernelObj->canSetTerminateSignal();
@@ -1316,8 +1317,6 @@ skip_edge_2:        // -----------------
 
     END_SCOPED_REGION
 
-    printG();
-
     const auto n = num_vertices(G);
     const auto m = num_edges(G) + PartitionCount;
 
@@ -1347,11 +1346,16 @@ skip_edge_2:        // -----------------
         };
 
         auto getPartialSumId = [&](const unsigned v, BitSet & B) {
+            // Since PopCount kernels are Fixed rate kernels, it is
+            // quite possible they will be internal to the partition.
+            // Thus we cannot assume we'll find a reference edge when
+            // searching for it unlike Relative rate kernels (which are
+            // prohibited from being relative to a fixed rate.)
             for (const auto input : make_iterator_range(in_edges(v, G))) {
                 if (G[input].Type == PartitioningGraphEdge::Reference) {
                     const auto p = source(input, G);
                     const auto f = partialSumId.find(p);
-                    unsigned pId;
+                    unsigned pId;                   
                     if (f == partialSumId.end()) {
                         assert ((id + 1) < m);
                         const auto sId = id++;
@@ -1374,7 +1378,7 @@ skip_edge_2:        // -----------------
 
             for (const auto input : make_iterator_range(in_edges(partition, G))) {
                 const auto buffer = source(input, G);
-                const PartitioningGraphNode & N = G[buffer];
+                const PartitioningGraphNode & N = G[buffer];                
                 BitSet & B = rateSet[buffer];
                 for (const auto e : make_iterator_range(in_edges(buffer, G))) {
                     const PartitioningGraphEdge & E = G[e];
@@ -1388,7 +1392,19 @@ skip_edge_2:        // -----------------
                             assert (!rateSet[i].empty());
                             B |= rateSet[i];
                         } else if (N.Type == TypeId::Variable || N.Delay) {
+                            assert (id < m);
                             B.set(id++);
+                        } else if (N.Type == TypeId::Greedy) {
+                            // conservatively we cannot ignore a greedy rate that has a
+                            // non-zero minimum data requirement
+                            const PartitioningGraphEdge & S = G[input];
+                            const Binding & binding = getBinding(S.Kernel, S.Port);
+                            const ProcessingRate & rate = binding.getRate();
+                            assert (rate.isGreedy());
+                            if (rate.getLowerBound() > 0 || N.Delay) {
+                                assert (id < m);
+                                B.set(id++);
+                            }
                         }
                         break;
                     }
@@ -1422,7 +1438,6 @@ skip_edge_2:        // -----------------
                 }, G);
 
             }
-
         }
 
         for (const auto output : make_iterator_range(out_edges(partition, G))) {

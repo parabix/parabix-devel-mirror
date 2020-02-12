@@ -398,7 +398,11 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
             out << " [P]";
         }
         if (binding.hasAttribute(AttrId::ZeroExtended)) {
-            out << " [Z]";
+            if (pd.ZeroExtended) {
+                out << " [Z]";
+            } else {
+                out << " [z&#x336;]";
+            }
         }
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
