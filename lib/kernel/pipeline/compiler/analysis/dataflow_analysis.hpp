@@ -427,7 +427,7 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
 
 }
 
-#if 0
+#if 1
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinkedIOPorts
@@ -437,7 +437,7 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
  * entails that by knowing the initial value of one we can compute the latter.
  *
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::identifyLinkedIOPorts() const {
+void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
 
     using BitSet = dynamic_bitset<>;
     using Vertex = BufferGraph::vertex_descriptor;
@@ -450,12 +450,21 @@ void PipelineCompiler::identifyLinkedIOPorts() const {
 
     unsigned nextRateId = 0;
 
+
+
     flat_map<Vertex, unsigned> partialSumRefId;
     flat_map<StreamSetPort, RefWrapper<BitSet>> relativeRefId;
 
-    Graph G(LastStreamSet + 1);
+    Graph H(LastStreamSet + 1);
 
-    const auto n = PartitionCount + (LastStreamSet - FirstStreamSet) + 1;
+    auto addRateId = [](BitSet & bv, const unsigned rateId) {
+       if (rateId >= bv.capacity()) {
+           const auto m = round_up_to(rateId + 1, BitSet::bits_per_block);
+           errs() << rateId << " -> " << m << "\n";
+           bv.resize(m);
+       }
+       bv.set(rateId);
+    };
 
     for (auto start = firstKernel; start <= lastKernel; ) {
         // Determine which kernels are in this partition
@@ -467,21 +476,18 @@ void PipelineCompiler::identifyLinkedIOPorts() const {
             }
         }
 
-        assert (nextRateId < n);
         const auto partRateId = nextRateId++;
 
         for (auto kernel = start; kernel < end; ++kernel) {
 
             BitSet K;
-            K.resize(n);
-            K.set(partRateId);
+            addRateId(K, partRateId);
 
             auto getPartialSumRefId = [&] (const StreamSetPort port) {
                 const auto refPort = getReference(kernel, port);
                 const auto ref = getInputBufferVertex(kernel, refPort);
                 const auto f = partialSumRefId.find(ref);
                 if (f == partialSumRefId.end()) {
-                    assert (nextRateId < n);
                     const auto id = nextRateId++;
                     partialSumRefId.emplace(ref, id);
                     return id;
@@ -496,60 +502,106 @@ void PipelineCompiler::identifyLinkedIOPorts() const {
                 return f->second.get();
             };
 
-            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-                const BufferRateData & data = mBufferGraph[input];
+            for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+                const BufferRateData & data = G[input];
                 const Binding & binding = data.Binding;
                 const ProcessingRate & rate = binding.getRate();
                 const auto streamSet = source(input, G);
-                const auto output = in_edge(streamSet, G);
-                const auto e = add_edge(streamSet, kernel, G).first;
-                BitSet & S = G[e];
-                S = G[output];
+                const auto output = in_edge(streamSet, H);
+                const auto e = add_edge(streamSet, kernel, H).first;
+                BitSet & S = H[e];
+                S = H[output];
+                addRateId(S, partRateId);
                 switch (rate.getKind()) {
                     case RateId::Bounded:
                     case RateId::Greedy:
-                        assert (nextRateId < n);
-                        S.set(nextRateId++);
+                        addRateId(S, nextRateId++);
                         break;
                     case RateId::PartialSum:
-                        S.set(getPartialSumRefId(data.Port));
+                        addRateId(S, getPartialSumRefId(data.Port));
                         break;
                     case RateId::Relative:
                         S |= getRelativeRefSet(data.Port);
                     default: break;
                 }
-                relativeRefId.emplace(port, S);
+                relativeRefId.emplace(data.Port, S);
                 K |= S;
             }
 
-            for (const auto output : make_iterator_range(out_edges(kernel, GmBufferGraph))) {
-                const BufferRateData & data = mBufferGraph[output];
+            for (const auto output : make_iterator_range(out_edges(kernel, G))) {
+                const BufferRateData & data = G[output];
                 const Binding & binding = data.Binding;
                 const ProcessingRate & rate = binding.getRate();
                 const auto streamSet = target(output, G);
-                const auto e = add_edge(kernel, streamSet, G).first;
-                BitSet & S = G[e];
+                const auto e = add_edge(kernel, streamSet, H).first;
+                BitSet & S = H[e];
                 S = K;
                 switch (rate.getKind()) {
                     case RateId::Bounded:
                     case RateId::Unknown:
-                        assert (nextRateId < n);
-                        S.set(nextRateId++);
+                        addRateId(S, nextRateId++);
                         break;
                     case RateId::PartialSum:
-                        S.set(getPartialSumRefId(data.Port));
+                        addRateId(S, getPartialSumRefId(data.Port));
                         break;
                     case RateId::Relative:
                         S |= getRelativeRefSet(data.Port);
                     default: break;
                 }
-                relativeRefId.emplace(port, S);
+                relativeRefId.emplace(data.Port, S);
             }
             relativeRefId.clear();
         }
+        start = end;
     }
 
     LinkedIOMap M;
+    unsigned nextPortNum = 0;
+
+    auto getPortNumber = [&](BitSet & B) {
+        if (nextRateId >= B.capacity()) {
+            B.resize(nextRateId);
+        }
+        const auto f = M.find(B);
+        if (f == M.end()) {
+            const auto id = nextPortNum++;
+            M.emplace(std::move(B), id);
+            return id;
+        }
+        return f->second;
+    };
+
+    using GInIter = graph_traits<BufferGraph>::in_edge_iterator;
+    using GOutIter = graph_traits<BufferGraph>::out_edge_iterator;
+
+    using HInIter = graph_traits<Graph>::in_edge_iterator;
+    using HOutIter = graph_traits<Graph>::out_edge_iterator;
+
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        GInIter ei, ei_end;
+        std::tie(ei, ei_end) = in_edges(kernel, G);
+        HInIter fi, fi_end;
+        std::tie(fi, fi_end) = in_edges(kernel, H);
+
+        for (; ei != ei_end; ++ei, ++fi) {
+            assert (fi != fi_end);
+            BufferRateData & br = G[*ei];
+            br.LinkedPortId = getPortNumber(H[*fi]);
+        }
+
+        GOutIter ej, ej_end;
+        std::tie(ej, ej_end) = out_edges(kernel, G);
+        HOutIter fj, fj_end;
+        std::tie(fj, fj_end) = out_edges(kernel, H);
+
+        for (; ej != ej_end; ++ej, ++fj) {
+            assert (fj != fj_end);
+            BufferRateData & br = G[*ej];
+            br.LinkedPortId = getPortNumber(H[*fj]);
+        }
+    }
 
 
 }

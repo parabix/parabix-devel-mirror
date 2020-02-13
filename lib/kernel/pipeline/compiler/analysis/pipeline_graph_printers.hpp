@@ -393,6 +393,7 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
                 break;
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
+        out << " {" << pd.LinkedPortId << "}";
         if (binding.hasAttribute(AttrId::Principal)) {
             out << " [P]";
         }

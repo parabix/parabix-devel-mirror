@@ -26,6 +26,7 @@
 #include <queue>
 #include <z3.h>
 #include <util/maxsat.hpp>
+#include <assert.h>
 
 // #define PRINT_DEBUG_MESSAGES
 
@@ -296,7 +297,6 @@ struct BufferNode {
     unsigned LookAhead = 0;
     unsigned RequiredSpace = 0;
 
-
     bool isOwned() const {
         return (Type & BufferType::Unowned) == BufferType::None;
     }
@@ -332,6 +332,7 @@ struct BufferRateData {
     Rational Minimum;
     Rational Maximum;
     bool ZeroExtended = false;
+    unsigned LinkedPortId = 0;
 
     unsigned inputPort() const {
         return InputPort(Port);
@@ -913,8 +914,8 @@ public:
     void verifyIOStructure(const BufferGraph & G) const;
     BufferPortMap constructInputPortMappings() const;
     BufferPortMap constructOutputPortMappings() const;
-    size_t getIndexOf(const size_t kernel, const StreamSetPort port) const;
     LLVM_READNONE bool mayHaveNonLinearIO(const unsigned kernel) const;
+    void identifyLinkedIOPorts(BufferGraph & G) const;
 
 // dataflow analysis functions
 

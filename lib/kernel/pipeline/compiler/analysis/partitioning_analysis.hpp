@@ -347,7 +347,6 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             if (LLVM_UNLIKELY(node.none())) {
                 partitionIds.emplace(k, -1U);
             } else {
-
                 auto f = partitionSets.find(node);
                 unsigned id;
                 if (f == partitionSets.end()) {
@@ -360,6 +359,8 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             }
         }
     }
+
+    assert (partitionIds.size() == kernels);
 
     return nextPartitionId;
 }
@@ -476,11 +477,10 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
         for (const auto input : inputs) {
             const auto v = from_original(input);
             add_edge(v, u, C);
-            const auto f = partitionIds.find(u);
+            const auto f = partitionIds.find(input);
             assert (f != partitionIds.end());
             const auto producerPartitionId = f->second;
-            assert (producerPartitionId != -1U);
-            if (partitionId != producerPartitionId) {
+            if (partitionId != producerPartitionId && producerPartitionId != -1U) {
                 add_edge(producerPartitionId, partitionId, P);
             }
         }

@@ -61,6 +61,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
+    identifyLinkedIOPorts(G);
     computeDataFlowRates(G);
 
     SmallFlatSet<BufferGraph::vertex_descriptor, 16> E;
@@ -132,7 +133,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         const BufferRateData & producerRate = G[pe];
         const Binding & output = producerRate.Binding;
 
-
         bool nonLocal = false;
 
         // Does this stream cross a partition boundary?
@@ -145,8 +145,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 break;
             }
         }
-
-        bn.NonLocal = nonLocal;
 
         if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
 
@@ -216,7 +214,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
                     dynamic = true;
                 }
-
                 if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
                     linear = true;
                 }
@@ -259,6 +256,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bn.CopyBack = copyBack;
             bn.LookAhead = lookAhead;
 
+            // if this buffer is "stateful", we cannot make it thread local
+            if (lookAhead || reflection || copyBack || lookAhead) {
+                nonLocal = true;
+            }
+
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth);
             const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth);
@@ -285,8 +287,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             }
             bn.Buffer = buffer;
-
         }
+        bn.NonLocal = nonLocal;
     }
 
     verifyIOStructure(G);
