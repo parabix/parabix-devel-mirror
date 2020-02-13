@@ -5,7 +5,6 @@
 
 namespace kernel {
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyHardPartitionConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -427,6 +426,135 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
     #endif
 
 }
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyLinkedIOPorts
+ *
+ * Some I/O ports will always have an identical item count (relative to some known constant) throughout the
+ * lifetime of the program. E.g., any partition local edge must be between two fixed rate I/O ports, which
+ * entails that by knowing the initial value of one we can compute the latter.
+ *
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifyLinkedIOPorts() const {
+
+    using BitSet = dynamic_bitset<>;
+    using Vertex = BufferGraph::vertex_descriptor;
+    using LinkedIOMap = std::map<BitSet, unsigned>;
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BitSet>;
+
+
+    const auto firstKernel = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
+
+    unsigned nextRateId = 0;
+
+    flat_map<Vertex, unsigned> partialSumRefId;
+    flat_map<StreamSetPort, RefWrapper<BitSet>> relativeRefId;
+
+    Graph G(LastStreamSet + 1);
+
+    const auto n = PartitionCount + (LastStreamSet - FirstStreamSet) + 1;
+
+    for (auto start = firstKernel; start <= lastKernel; ) {
+        // Determine which kernels are in this partition
+        const auto partitionId = KernelPartitionId[start];
+        auto end = start + 1U;
+        for (; end <= LastKernel; ++end) {
+            if (KernelPartitionId[end] != partitionId) {
+                break;
+            }
+        }
+
+        assert (nextRateId < n);
+        const auto partRateId = nextRateId++;
+
+        for (auto kernel = start; kernel < end; ++kernel) {
+
+            BitSet K;
+            K.resize(n);
+            K.set(partRateId);
+
+            auto getPartialSumRefId = [&] (const StreamSetPort port) {
+                const auto refPort = getReference(kernel, port);
+                const auto ref = getInputBufferVertex(kernel, refPort);
+                const auto f = partialSumRefId.find(ref);
+                if (f == partialSumRefId.end()) {
+                    assert (nextRateId < n);
+                    const auto id = nextRateId++;
+                    partialSumRefId.emplace(ref, id);
+                    return id;
+                }
+                return f->second;
+            };
+
+            auto getRelativeRefSet = [&] (const StreamSetPort port) -> const BitSet & {
+                const auto refPort = getReference(kernel, port);
+                const auto f = relativeRefId.find(refPort);
+                assert (f != relativeRefId.end());
+                return f->second.get();
+            };
+
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const BufferRateData & data = mBufferGraph[input];
+                const Binding & binding = data.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                const auto streamSet = source(input, G);
+                const auto output = in_edge(streamSet, G);
+                const auto e = add_edge(streamSet, kernel, G).first;
+                BitSet & S = G[e];
+                S = G[output];
+                switch (rate.getKind()) {
+                    case RateId::Bounded:
+                    case RateId::Greedy:
+                        assert (nextRateId < n);
+                        S.set(nextRateId++);
+                        break;
+                    case RateId::PartialSum:
+                        S.set(getPartialSumRefId(data.Port));
+                        break;
+                    case RateId::Relative:
+                        S |= getRelativeRefSet(data.Port);
+                    default: break;
+                }
+                relativeRefId.emplace(port, S);
+                K |= S;
+            }
+
+            for (const auto output : make_iterator_range(out_edges(kernel, GmBufferGraph))) {
+                const BufferRateData & data = mBufferGraph[output];
+                const Binding & binding = data.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                const auto streamSet = target(output, G);
+                const auto e = add_edge(kernel, streamSet, G).first;
+                BitSet & S = G[e];
+                S = K;
+                switch (rate.getKind()) {
+                    case RateId::Bounded:
+                    case RateId::Unknown:
+                        assert (nextRateId < n);
+                        S.set(nextRateId++);
+                        break;
+                    case RateId::PartialSum:
+                        S.set(getPartialSumRefId(data.Port));
+                        break;
+                    case RateId::Relative:
+                        S |= getRelativeRefSet(data.Port);
+                    default: break;
+                }
+                relativeRefId.emplace(port, S);
+            }
+            relativeRefId.clear();
+        }
+    }
+
+    LinkedIOMap M;
+
+
+}
+
+#endif
 
 } // end of kernel namespace
 

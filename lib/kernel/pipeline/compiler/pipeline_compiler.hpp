@@ -857,6 +857,8 @@ public:
 
 // pipeline analysis functions
 
+    using KernelPartitionIds = flat_map<Relationships::vertex_descriptor, unsigned>;
+
     PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
     Relationships generateInitialPipelineGraph(BuilderRef b,
                                                PipelineKernel * const pipelineKernel,
@@ -888,18 +890,18 @@ public:
 // partitioning analysis
 
     unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G,
-                                                                  std::vector<unsigned> & partitionIds,
+                                                                  KernelPartitionIds & partitionIds,
                                                                   const PipelineKernel * const pipelineKernel) const;
 
-    std::vector<Partition> identifyKernelPartitions(const Relationships & G,
+    unsigned identifyKernelPartitions(const Relationships &G,
                                                     const std::vector<unsigned> & orderingOfG,
-                                                    std::vector<unsigned> & partitionIds,
-                                                    const PipelineKernel * const pipelineKernel) const;
+                                                    const PipelineKernel * const pipelineKernel,
+                                                    KernelPartitionIds & partitionIds) const;
 
     void addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
                                                     const std::vector<unsigned> & orderingOfG,
-                                                    const std::vector<unsigned> & partitionIds,
-                                                    const std::vector<Partition> & partitions) const;
+                                                    const KernelPartitionIds & partitionIds,
+                                                    const unsigned numOfPartitions) const;
 
     PartitioningGraph generatePartitioningGraph() const;
     std::vector<unsigned> determinePartitionJumpIndices() const;

@@ -191,7 +191,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     // the same sequence. This will help us to partition the graph later and is useful to determine
     // whether we can bypass a region without testing every kernel.
 
-    std::vector<unsigned> partitionIds;
+    KernelPartitionIds partitionIds;
     const auto numOfPartitions = partitionIntoFixedRateRegionsWithOrderingConstraints(G, partitionIds, pipelineKernel);
 
 
@@ -280,17 +280,18 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     // Now fill in all of the remaining kernels subsitute position
 
-    unsigned inputPartitionId = -1U;
-    unsigned outputPartitionId = -1U;
-
+    auto inputPartitionId = -1U;
+    auto outputPartitionId = -1U;
     for (unsigned i = 0; i != numOfKernels; ++i) {
         const auto in = kernels[i];
         assert (subsitution[in] == -1U);
         const auto out = P.PipelineInput + i;
         subsitution[in] = out;
-        const auto id = partitionIds[in];
+        const auto f = partitionIds.find(in);
+        assert (f != partitionIds.end());
+        const auto id = f->second;
         // renumber the partitions to reflect the selected ordering instead
-        // of the lexical ordering (i.e., the programmer input order)
+        // of the lexical (program input) ordering
         if (id != inputPartitionId) {
             if (LLVM_UNLIKELY(id == -1U)) {
                 outputPartitionId = -1U;
@@ -399,7 +400,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     transcribe(scalars, P.Scalars);
 
-//    printRelationshipGraph(P.Streams, errs(), "Streams");
+    printRelationshipGraph(P.Streams, errs(), "Streams");
 //    printRelationshipGraph(P.Scalars, errs(), "Scalars");
 
     return P;

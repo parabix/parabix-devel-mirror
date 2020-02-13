@@ -80,20 +80,19 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
                             write(rate.getLowerBound(), out);
                             break;
                         case KindId::PopCount:
-                            out << 'P';
+                            out << "Pop";
                             break;
                         case KindId::NegatedPopCount:
-                            out << 'N';
+                            out << "Neg";
                             break;
                         case KindId::Relative:
                             out << 'R';
                             break;
                         case KindId::PartialSum:
-                            out << 'S';
+                            out << 'P';
                             break;
                         case KindId::__Count: llvm_unreachable("");
                     }
-                    out << "  " << binding.getName();
                 }
                 break;
             case RelationshipNode::IsCallee:

@@ -9,37 +9,34 @@ namespace kernel {
  * @brief partitionIntoFixedRateRegionWithOrderingConstraints
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCompiler::partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G,
-                                                                                std::vector<unsigned> & partitionIds,
+                                                                                KernelPartitionIds & partitionIds,
                                                                                 const PipelineKernel * const pipelineKernel) const {
     std::vector<unsigned> orderingOfG;
     orderingOfG.reserve(num_vertices(G));
     if (LLVM_UNLIKELY(!lexical_ordering(G, orderingOfG))) {
         report_fatal_error("Cannot lexically order the initial pipeline graph!");
-    }
-
-
-    const auto partitions = identifyKernelPartitions(G, orderingOfG, partitionIds, pipelineKernel);
-    addOrderingConstraintsToPartitionSubgraphs(G, orderingOfG, partitionIds, partitions);
-    return partitions.size();
+    }    
+    const auto numOfPartitions = identifyKernelPartitions(G, orderingOfG, pipelineKernel, partitionIds);
+    addOrderingConstraintsToPartitionSubgraphs(G, orderingOfG, partitionIds, numOfPartitions);
+    return numOfPartitions;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyKernelPartitions
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relationships & G,
-                                                                  const std::vector<unsigned> & orderingOfG,
-                                                                  std::vector<unsigned> & partitionIds,
-                                                                  const PipelineKernel * const pipelineKernel) const {
+unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
+                                                const std::vector<unsigned> & orderingOfG,
+                                                const PipelineKernel * const pipelineKernel,
+                                                KernelPartitionIds & partitionIds) const {
 
     using BitSet = dynamic_bitset<>;
 
-    using PartitionTaintGraph = adjacency_list<vecS, vecS, bidirectionalS, BitSet>;
+    using PartitionTaintGraph = adjacency_list<vecS, vecS, bidirectionalS, BitSet, RelationshipType>;
     using Vertex = PartitionTaintGraph::vertex_descriptor;
 
     using BufferAttributeMap = flat_map<std::pair<Vertex, unsigned>, Vertex>;
     using PartialSumMap = flat_map<Vertex, Vertex>;
 
-    using Partition = std::vector<unsigned>;
     using PartitionMap = std::map<BitSet, unsigned>;
 
     // Convert G into a simpler representation of the graph that we can annotate
@@ -201,7 +198,7 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                         }
                     }
 
-                    add_edge(buffer, kernel, H);
+                    add_edge(buffer, kernel, G[e], H);
                 }
             }
 
@@ -240,7 +237,7 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                     const auto buffer = mapStreamSet(streamSet);
                     const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
-                    add_edge(kernel, buffer, H);
+                    add_edge(kernel, buffer, G[e], H);
                     if (LLVM_UNLIKELY(mayTerminateEarly)) {
                         addRateId(H[buffer], termRateId);
                     }
@@ -248,7 +245,7 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                         case RateId::PartialSum:
                             BEGIN_SCOPED_REGION
                             const auto partialSum = checkForPartialSumEntry(buffer);
-                            add_edge(partialSum, buffer, H);
+                            add_edge(partialSum, buffer, RelationshipType{}, H);
                             END_SCOPED_REGION
                             break;
                         case RateId::Bounded:
@@ -261,7 +258,7 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
                                 if (type.Reason == ReasonType::Reference) {
                                     const auto ref = source(f, G);
                                     const auto refBuffer = mapStreamSet(ref);
-                                    add_edge(refBuffer, buffer, H);
+                                    add_edge(refBuffer, buffer, RelationshipType{}, H);
                                     goto found_ref;
                                 }
                             }
@@ -333,13 +330,11 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
         }
     }
 
-    std::vector<Partition> partitions;
-
-    partitionIds.resize(num_vertices(G), 0);
-
-    BEGIN_SCOPED_REGION
-
     PartitionMap partitionSets;
+
+    unsigned nextPartitionId = 0;
+
+    partitionIds.reserve(kernels);
 
     // Now that we've tainted the kernels with any influencing rates,
     // cluster them into partitions.
@@ -350,32 +345,23 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
             const auto k = mappedKernel[u];
             assert(node.none() ^ (G[k].Kernel != pipelineKernel));
             if (LLVM_UNLIKELY(node.none())) {
-                partitionIds[k] = -1U;
+                partitionIds.emplace(k, -1U);
             } else {
+
                 auto f = partitionSets.find(node);
+                unsigned id;
                 if (f == partitionSets.end()) {
-                    const auto i = partitions.size();
-                    partitions.emplace_back();
-                    f = partitionSets.emplace(std::move(node), i).first;
+                    id = nextPartitionId++;
+                    partitionSets.emplace(std::move(node), id);
+                } else {
+                    id = f->second;
                 }
-                Partition & P = partitions[f->second];
-                P.push_back(k);
+                partitionIds.emplace(k, id);
             }
         }
     }
 
-    END_SCOPED_REGION
-
-    // Then provide each partition with a unique id
-    unsigned partitionId = 0U;
-    for (const Partition & A : partitions) {
-        for (const auto v : A) {
-            partitionIds[v] = partitionId;
-        }
-        ++partitionId;
-    }
-    assert (partitionId == partitions.size());
-    return partitions;
+    return nextPartitionId;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -383,18 +369,31 @@ std::vector<Partition> PipelineCompiler::identifyKernelPartitions(const Relation
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
                                                                   const std::vector<unsigned> & orderingOfG,
-                                                                  const std::vector<unsigned> & partitionIds,
-                                                                  const std::vector<Partition> & partitions) const {
+                                                                  const KernelPartitionIds & partitionIds,
+                                                                  const unsigned numOfPartitions) const {
 
     using BitSet = BitVector;
-    using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitSet>;
+    using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitSet, no_property>;
     using EdgeIterator = graph_traits<ConstraintGraph>::edge_iterator;
 
-    unsigned numOfKernels = 0;
-    for (const Partition & P : partitions) {
-        numOfKernels += P.size();
+    std::vector<unsigned> kernels;
+    for (const auto u : orderingOfG) {
+        const RelationshipNode & node = G[u];
+        switch (node.Type) {
+            case RelationshipNode::IsKernel:
+                BEGIN_SCOPED_REGION
+                const auto f = partitionIds.find(u);
+                assert (f != partitionIds.end());
+                const auto id = f->second;
+                if (LLVM_LIKELY(id != -1U)) {
+                    kernels.push_back(u);
+                }
+                END_SCOPED_REGION
+            default: break;
+        }
     }
 
+    const auto numOfKernels = kernels.size();
     flat_map<unsigned, unsigned> mapping;
     mapping.reserve(numOfKernels);
 
@@ -413,15 +412,8 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     BEGIN_SCOPED_REGION
 
     unsigned i = 0;
-    for (const auto u : orderingOfG) {
-        const RelationshipNode & node = G[u];
-        switch (node.Type) {
-            case RelationshipNode::IsKernel:
-                if (LLVM_LIKELY(partitionIds[u] != -1U)) {
-                    mapping.emplace(u, i++);
-                }
-            default: break;
-        }
+    for (const auto u : kernels) {
+        mapping.emplace(u, i++);
     }
 
     assert (i == numOfKernels);
@@ -435,18 +427,16 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
 
     END_SCOPED_REGION
 
-    const auto numOfPartitions = partitions.size();
     ConstraintGraph P(numOfPartitions);
     ConstraintGraph C(numOfKernels);
 
     flat_set<unsigned> inputs;
 
-    for (const auto p : mapping) {
-        const auto kernel = p.first;
-        const auto partitionId = partitionIds[kernel];
-        assert (partitionId != -1U);
+    for (const auto kernel : kernels) {
+        const RelationshipNode & K = G[kernel];
+        assert (K.Type == RelationshipNode::IsKernel);
         assert (inputs.empty());
-        assert (G[kernel].Type == RelationshipNode::IsKernel);
+
 
         // enumerate the input constraints
         for (const auto input : make_iterator_range(in_edges(kernel, G))) {
@@ -467,18 +457,28 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
                 inputs.insert(producer);
             } else if (LLVM_UNLIKELY(rn.Type == RelationshipNode::IsKernel)) {
                 assert (G[input].Reason == ReasonType::OrderingConstraint);
-                if (partitionIds[node] != -1U) {
+                const auto f = partitionIds.find(node);
+                assert (f != partitionIds.end());
+                const auto partitionId = f->second;
+                if (LLVM_UNLIKELY(partitionId != -1U)) {
                     inputs.insert(node);
                 }
             }
         }
 
         // then write them and any summarized partition constraints
-        const auto u = p.second;
+        const auto f = partitionIds.find(kernel);
+        assert (f != partitionIds.end());
+        const auto partitionId = f->second;
+
+        assert (partitionId != -1U);
+        const auto u = from_original(kernel);
         for (const auto input : inputs) {
             const auto v = from_original(input);
             add_edge(v, u, C);
-            const auto producerPartitionId = partitionIds[input];
+            const auto f = partitionIds.find(u);
+            assert (f != partitionIds.end());
+            const auto producerPartitionId = f->second;
             assert (producerPartitionId != -1U);
             if (partitionId != producerPartitionId) {
                 add_edge(producerPartitionId, partitionId, P);
@@ -556,6 +556,15 @@ void PipelineCompiler::addOrderingConstraintsToPartitionSubgraphs(Relationships 
     const auto contractedPartitions = contract_constraint_graph(P, orderingOfP, false);
 
     // Build a partition mapping that reflects the *original* graph C
+
+    std::vector<Partition> partitions(numOfPartitions);
+    for (const auto u : kernels) {
+        const auto f = partitionIds.find(u);
+        assert (f != partitionIds.end());
+        const auto partitionId = f->second;
+        assert (partitionId < numOfPartitions);
+        partitions[partitionId].push_back(u);
+    }
 
     for (const auto p : make_iterator_range(vertices(P))) {
         for (const auto i : P[p].set_bits()) {
