@@ -70,6 +70,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
     mMaximumNumOfStrides = ceiling(MaximumNumOfStrides[mKernelIndex]);
+    mMayHaveNonLinearIO = mayHaveNonLinearIO(mKernelIndex);
 
     const auto prefix = makeKernelName(mKernelIndex);
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", partitionExit);
@@ -299,45 +300,58 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         b->CreateLikelyCondBr(notFinal, mKernelLoopExit, mKernelTerminated);
         mTerminatedSignalPhi->addIncoming(mIsFinalInvocationPhi, entryBlock);
 
-    } else if (mBoundedKernel) {
-
-        const auto prefix = makeKernelName(mKernelIndex);
-        BasicBlock * const ioBoundsCheck = b->CreateBasicBlock(prefix + "_boundsCheck", mKernelTerminated);
+    } else if (mIsBounded) {
 
         for (unsigned i = 0; i < numOfInputs; ++i) {
-			const auto port = StreamSetPort{ PortType::Input, i };
-            mAlreadyProcessedPhi(port)->addIncoming(mProcessedItemCount(port), ioBoundsCheck);
-            if (mAlreadyProcessedDeferredPhi(port)) {
-                mAlreadyProcessedDeferredPhi(port)->addIncoming(mProcessedDeferredItemCount(port), ioBoundsCheck);
-            }
+            const auto port = StreamSetPort{ PortType::Input, i };
             mFinalProcessedPhi(port)->addIncoming(mProcessedItemCount(port), entryBlock);
         }
 
         for (unsigned i = 0; i < numOfOutputs; ++i) {
-			const auto port = StreamSetPort{ PortType::Output, i };
-            mAlreadyProducedPhi(port)->addIncoming(mProducedItemCount(port), ioBoundsCheck);
-            if (mAlreadyProducedDeferredPhi(port)) {
-                mAlreadyProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), ioBoundsCheck);
-            }
+            const auto port = StreamSetPort{ PortType::Output, i };
             mFinalProducedPhi(port)->addIncoming(mProducedItemCount(port), entryBlock);
         }
 
-        Value * const notFinal = b->CreateIsNull(mIsFinalInvocationPhi);
-        b->CreateLikelyCondBr(notFinal, ioBoundsCheck, mKernelTerminated);
-
         mTerminatedSignalPhi->addIncoming(mIsFinalInvocationPhi, entryBlock);
 
-        b->SetInsertPoint(ioBoundsCheck);
+        Value * const notFinal = b->CreateIsNull(mIsFinalInvocationPhi);
 
-        // bound the number of strides by the maximum expected
-        Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
-        Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
-        b->CreateCondBr(done, mKernelLoopExit, mKernelLoopEntry);
+        if (mMayHaveNonLinearIO) {
+            const auto prefix = makeKernelName(mKernelIndex);
+            BasicBlock * const ioBoundsCheck = b->CreateBasicBlock(prefix + "_boundsCheck", mKernelTerminated);
 
-        mAlreadyProgressedPhi->addIncoming(i1_TRUE, ioBoundsCheck);
-        mExecutedAtLeastOncePhi->addIncoming(i1_TRUE, ioBoundsCheck);
-        mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
+            for (unsigned i = 0; i < numOfInputs; ++i) {
+                const auto port = StreamSetPort{ PortType::Input, i };
+                mAlreadyProcessedPhi(port)->addIncoming(mProcessedItemCount(port), ioBoundsCheck);
+                if (mAlreadyProcessedDeferredPhi(port)) {
+                    mAlreadyProcessedDeferredPhi(port)->addIncoming(mProcessedDeferredItemCount(port), ioBoundsCheck);
+                }
+            }
 
+            for (unsigned i = 0; i < numOfOutputs; ++i) {
+                const auto port = StreamSetPort{ PortType::Output, i };
+                mAlreadyProducedPhi(port)->addIncoming(mProducedItemCount(port), ioBoundsCheck);
+                if (mAlreadyProducedDeferredPhi(port)) {
+                    mAlreadyProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), ioBoundsCheck);
+                }
+            }
+
+            b->CreateLikelyCondBr(notFinal, ioBoundsCheck, mKernelTerminated);
+
+            b->SetInsertPoint(ioBoundsCheck);
+
+            // bound the number of strides by the maximum expected
+            Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
+            Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
+            b->CreateCondBr(done, mKernelLoopExit, mKernelLoopEntry);
+
+            mAlreadyProgressedPhi->addIncoming(i1_TRUE, ioBoundsCheck);
+            mExecutedAtLeastOncePhi->addIncoming(i1_TRUE, ioBoundsCheck);
+            mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
+
+        } else {
+            b->CreateLikelyCondBr(notFinal, mKernelLoopExit, mKernelTerminated);
+        }
     } else { // just exit the loop
         b->CreateBr(mKernelLoopExit);
     }
@@ -360,10 +374,13 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     }
 
     mTerminatedAtLoopExitPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
-    mHasProgressedPhi->addIncoming(i1_TRUE, exitBlock);
     mHaltingPhi->addIncoming(mHalted, exitBlock);
-    mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, exitBlock);
-
+    mHasProgressedPhi->addIncoming(i1_TRUE, exitBlock);
+    if (mMayHaveNonLinearIO) {
+        mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, exitBlock);
+    } else {
+        mTotalNumOfStrides->addIncoming(mNumOfLinearStrides, exitBlock);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -395,15 +412,19 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
             mAlreadyProducedDeferredPhi(mKernelIndex, port)->addIncoming(mInitiallyProducedDeferredItemCount(mKernelIndex, port), mKernelEntry);
         }
     }
-    // Since we may loop and call the kernel again, we want to mark that we've progressed
-    // if we execute any kernel even if we could not complete a full segment.
-    const auto prefix = makeKernelName(mKernelIndex);
-    mAlreadyProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_madeProgress");
-    mAlreadyProgressedPhi->addIncoming(mPipelineProgress, mKernelEntry);
-    mExecutedAtLeastOncePhi = b->CreatePHI(boolTy, 2, prefix + "_executedAtLeastOnce");
-    mExecutedAtLeastOncePhi->addIncoming(b->getFalse(), mKernelEntry);
-    mCurrentNumOfStrides = b->CreatePHI(sizeTy, 2, prefix + "_currentNumOfStrides");
-    mCurrentNumOfStrides->addIncoming(b->getSize(0), mKernelEntry);
+
+    if (mMayHaveNonLinearIO) {
+        // Since we may loop and call the kernel again, we want to mark that we've progressed
+        // if we execute any kernel even if we could not complete a full segment.
+        const auto prefix = makeKernelName(mKernelIndex);
+        mAlreadyProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_madeProgress");
+        mAlreadyProgressedPhi->addIncoming(mPipelineProgress, mKernelEntry);
+        mExecutedAtLeastOncePhi = b->CreatePHI(boolTy, 2, prefix + "_executedAtLeastOnce");
+        mExecutedAtLeastOncePhi->addIncoming(b->getFalse(), mKernelEntry);
+        mCurrentNumOfStrides = b->CreatePHI(sizeTy, 2, prefix + "_currentNumOfStrides");
+        mCurrentNumOfStrides->addIncoming(b->getSize(0), mKernelEntry);
+    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -441,7 +462,8 @@ inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
 inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
     b->SetInsertPoint(mKernelTerminated);
     Type * const sizeTy = b->getSizeTy();
-    mTerminatedSignalPhi = b->CreatePHI(sizeTy, 2);
+    const auto prefix = makeKernelName(mKernelIndex);
+    mTerminatedSignalPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedSignal");
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 		const auto port = StreamSetPort{ PortType::Input, i };
@@ -513,7 +535,6 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         }
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mTerminatedAtLoopExitPhi->addIncoming(mTerminatedInitially, exitBlock);
-        mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
         mHaltingPhi->addIncoming(mInsufficientIOHaltingPhi, exitBlock);
         const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
         for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -531,7 +552,13 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
                 mUpdatedProducedDeferredPhi(port)->addIncoming(mAlreadyProducedDeferredPhi(port), exitBlock);
             }
         }
-        mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
+        if (mMayHaveNonLinearIO) {
+            mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
+            mHasProgressedPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
+        } else {
+            mTotalNumOfStrides->addIncoming(b->getSize(0), exitBlock);
+            mHasProgressedPhi->addIncoming(mPipelineProgress, exitBlock);
+        }
         b->CreateBr(mKernelLoopExit);
     }
 }
@@ -546,11 +573,9 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     mTerminatedAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtKernelExit");
     mTerminatedAtExitPhi->addIncoming(mTerminatedInitially, mKernelInitiallyTerminatedPhiCatch);
     mTerminatedAtExitPhi->addIncoming(mTerminatedAtLoopExitPhi, mKernelLoopExitPhiCatch);
-
-    mTotalNumOfStridesAtExitPhi = b->CreatePHI(sizeTy, 2);
+    mTotalNumOfStridesAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtExit");
     mTotalNumOfStridesAtExitPhi->addIncoming(b->getSize(0), mKernelInitiallyTerminatedPhiCatch);
     mTotalNumOfStridesAtExitPhi->addIncoming(mTotalNumOfStrides, mKernelLoopExitPhiCatch);
-
     IntegerType * const boolTy = b->getInt1Ty();
     mHaltedPhi = b->CreatePHI(boolTy, 2, prefix + "_haltedAtKernelExit");
     mHaltedPhi->addIncoming(mHalted, mKernelInitiallyTerminatedPhiCatch);
@@ -579,9 +604,13 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
 inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mTerminatedAtLoopExitPhi->addIncoming(mTerminatedSignalPhi, exitBlock);
-    mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
     mHaltingPhi->addIncoming(mHalted, exitBlock);
-    mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
+    mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
+    if (mMayHaveNonLinearIO) {
+        mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
+    } else {
+        mTotalNumOfStrides->addIncoming(mNumOfLinearStrides, exitBlock);
+    }
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 		const auto port = StreamSetPort{ PortType::Input, i };

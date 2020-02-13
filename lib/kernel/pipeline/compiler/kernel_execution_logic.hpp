@@ -23,7 +23,11 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CreateMProtect(mKernelHandle, CBuilder::Protect::NONE);
     }
 
-    mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
+    if (mMayHaveNonLinearIO) {
+        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
+    } else {
+        mUpdatedNumOfStrides = mNumOfLinearStrides;
+    }
 
     Value * releaseLock = nullptr;
 

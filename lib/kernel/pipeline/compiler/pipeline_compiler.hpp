@@ -414,7 +414,7 @@ struct PartitioningGraphNode {
         , Fixed        
         , Greedy        
         , PartialSum
-        , Relative // <-- must be last
+        , Relative
     };
 
     TypeId Type = TypeId::Partition;
@@ -1131,7 +1131,8 @@ protected:
 
     Value *                                     mKernelAssertionName = nullptr;
 
-    bool                                        mBoundedKernel = false;
+    bool                                        mMayHaveNonLinearIO = false;
+    bool                                        mIsBounded = false;
     bool                                        mKernelIsInternallySynchronized = false;
     bool                                        mKernelCanTerminateEarly = false;
     bool                                        mKernelHasAnExplicitFinalPartialStride = false;

@@ -17,7 +17,11 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     // bound the number of strides by the maximum expected
     Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
-    mNumOfLinearStrides = b->CreateSub(maxStrides, mCurrentNumOfStrides);
+    if (mMayHaveNonLinearIO) {
+        mNumOfLinearStrides = b->CreateSub(maxStrides, mCurrentNumOfStrides);
+    } else {
+        mNumOfLinearStrides = maxStrides;
+    }
 
     // If this kernel does not have an explicit do final segment, then we want to know whether this stride will
     // be the final stride of the kernel. (i.e., that it will be flagged as terminated after executing the kernel
@@ -26,16 +30,16 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     // left to process (either due to some data being divided across a buffer boundary or because another stream
     // has less data (relatively speaking) than the closed stream.
 
-    mBoundedKernel = false;
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))) {
         mBranchToLoopExit = b->getFalse();
     }
+    mIsBounded = false;
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
         checkForSufficientInputData(b, br.Port);
         Value * const strides = getNumOfAccessibleStrides(b, br.Port);
         if (strides) {
-            mBoundedKernel = true;
+            mIsBounded = true;
         }
         mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
     }
@@ -43,9 +47,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         const BufferRateData & br = mBufferGraph[e];
         checkForSufficientOutputSpaceOrExpand(b, br.Port);
         Value * const strides = getNumOfWritableStrides(b, br.Port);
-        if (strides) {
-            mBoundedKernel = true;
-        }
         mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
     }
 
@@ -109,7 +110,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
 
-    if (mBoundedKernel) {
+    if (mIsBounded) {
 
         const auto prefix = makeKernelName(mKernelIndex);
         BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
@@ -629,6 +630,9 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
 		const StreamSetPort port{ PortType::Output, i };
         const Binding & output = getOutputBinding(port);
         const ProcessingRate & rate = output.getRate();
+
+        errs() << mKernelIndex << ") " << mKernel->getName() << "." << output.getName() << "\n";
+
         Value * writable = mWritableOutputItems(port);
         if (rate.isPartialSum()) {
             writable = mFirstOutputStrideLength(port);

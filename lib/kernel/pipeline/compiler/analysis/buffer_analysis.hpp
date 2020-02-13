@@ -23,7 +23,10 @@
 
 namespace kernel {
 
-bool requiresLinearAccess(const Binding & binding) {
+bool requiresLinearAccess(const Kernel * const kernel, const Binding & binding) {
+    if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InternallySynchronized))) {
+        return true;
+    }
     if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::Linear))) {
         return true;
     }
@@ -129,14 +132,14 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
         BufferNode & bn = G[streamSet];
-        const auto pe = in_edge(streamSet, G);
-        const BufferRateData & producerRate = G[pe];
+        const auto producerOutput = in_edge(streamSet, G);
+        const BufferRateData & producerRate = G[producerOutput];
         const Binding & output = producerRate.Binding;
 
         bool nonLocal = false;
 
         // Does this stream cross a partition boundary?
-        const auto producer = source(pe, G);
+        const auto producer = source(producerOutput, G);
         const auto producerPartitionId = KernelPartitionId[producer];
         for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
             const auto consumer = target(ce, G);
@@ -163,9 +166,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             // any consumption rates.
 
             bool dynamic = nonLocal || (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
-
-            const auto in = in_edge(streamSet, G);
-            const BufferRateData & producerRate = G[in];
 
             unsigned lookAhead = 0;
             unsigned lookBehind = 0;
@@ -196,7 +196,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
 
-            bool linear = requiresLinearAccess(output);
+            bool linear = requiresLinearAccess(getKernel(producer), output);
             for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
 
                 const BufferRateData & consumerRate = G[ce];
@@ -214,10 +214,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
                     dynamic = true;
                 }
-                if (LLVM_UNLIKELY(linear || requiresLinearAccess(input))) {
+                if (LLVM_UNLIKELY(requiresLinearAccess(getKernel(consumer), input))) {
                     linear = true;
                 }
-
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
 
                 consumeMin = std::min(consumeMin, cMin);
@@ -258,7 +257,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             // if this buffer is "stateful", we cannot make it thread local
             if (lookAhead || reflection || copyBack || lookAhead) {
-                nonLocal = true;
+                nonLocal = true;                
+            }
+            // if this buffer is a local buffer, linearity of data is implied
+            if (!nonLocal) {
+                linear = false;
             }
 
             // calculate overflow (copyback) and fascimile (copyforward) space

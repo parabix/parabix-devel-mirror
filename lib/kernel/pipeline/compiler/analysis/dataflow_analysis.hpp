@@ -459,11 +459,18 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
 
     auto addRateId = [](BitSet & bv, const unsigned rateId) {
        if (rateId >= bv.capacity()) {
-           const auto m = round_up_to(rateId + 1, BitSet::bits_per_block);
-           errs() << rateId << " -> " << m << "\n";
-           bv.resize(m);
+           bv.resize(round_up_to(rateId + 1, BitSet::bits_per_block));
        }
        bv.set(rateId);
+    };
+
+    auto combine = [](BitSet & dst, BitSet & src) {
+       if (LLVM_UNLIKELY(dst.size() < src.size())) {
+           dst.resize(src.size());
+       } else if (LLVM_UNLIKELY(src.size() < dst.size())) {
+           src.resize(dst.size());
+       }
+       dst |= src;
     };
 
     for (auto start = firstKernel; start <= lastKernel; ) {
@@ -482,6 +489,7 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
 
             BitSet K;
             addRateId(K, partRateId);
+            BitSet F = K;
 
             auto getPartialSumRefId = [&] (const StreamSetPort port) {
                 const auto refPort = getReference(kernel, port);
@@ -495,13 +503,14 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
                 return f->second;
             };
 
-            auto getRelativeRefSet = [&] (const StreamSetPort port) -> const BitSet & {
+            auto getRelativeRefSet = [&] (const StreamSetPort port) -> BitSet & {
                 const auto refPort = getReference(kernel, port);
                 const auto f = relativeRefId.find(refPort);
                 assert (f != relativeRefId.end());
                 return f->second.get();
             };
 
+            bool hasInputFixedRate = false;
             for (const auto input : make_iterator_range(in_edges(kernel, G))) {
                 const BufferRateData & data = G[input];
                 const Binding & binding = data.Binding;
@@ -512,20 +521,25 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
                 BitSet & S = H[e];
                 S = H[output];
                 addRateId(S, partRateId);
-                switch (rate.getKind()) {
-                    case RateId::Bounded:
-                    case RateId::Greedy:
-                        addRateId(S, nextRateId++);
-                        break;
-                    case RateId::PartialSum:
-                        addRateId(S, getPartialSumRefId(data.Port));
-                        break;
-                    case RateId::Relative:
-                        S |= getRelativeRefSet(data.Port);
-                    default: break;
+                if (rate.getKind() == RateId::Fixed) {
+                    combine(F, S);
+                    hasInputFixedRate = true;
+                } else {
+                    switch (rate.getKind()) {
+                        case RateId::Bounded:
+                        case RateId::Greedy:
+                            addRateId(S, nextRateId++);
+                            break;
+                        case RateId::PartialSum:
+                            addRateId(S, getPartialSumRefId(data.Port));
+                            break;
+                        case RateId::Relative:
+                            combine(S, getRelativeRefSet(data.Port));
+                        default: break;
+                    }
+                    relativeRefId.emplace(data.Port, S);
                 }
-                relativeRefId.emplace(data.Port, S);
-                K |= S;
+                combine(K, S);
             }
 
             for (const auto output : make_iterator_range(out_edges(kernel, G))) {
@@ -535,20 +549,26 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
                 const auto streamSet = target(output, G);
                 const auto e = add_edge(kernel, streamSet, H).first;
                 BitSet & S = H[e];
-                S = K;
-                switch (rate.getKind()) {
-                    case RateId::Bounded:
-                    case RateId::Unknown:
-                        addRateId(S, nextRateId++);
-                        break;
-                    case RateId::PartialSum:
-                        addRateId(S, getPartialSumRefId(data.Port));
-                        break;
-                    case RateId::Relative:
-                        S |= getRelativeRefSet(data.Port);
-                    default: break;
+                if (rate.getKind() == RateId::Fixed && hasInputFixedRate) {
+                    S = F;
+                } else {
+                    S = K;
+                    switch (rate.getKind()) {
+                        case RateId::Bounded:
+                        case RateId::Unknown:
+                            addRateId(S, nextRateId++);
+                            break;
+                        case RateId::PartialSum:
+                            addRateId(S, getPartialSumRefId(data.Port));
+                            break;
+                        case RateId::Relative:
+                            combine(S, getRelativeRefSet(data.Port));
+                        default: break;
+                    }
+                    relativeRefId.emplace(data.Port, S);
                 }
-                relativeRefId.emplace(data.Port, S);
+
+
             }
             relativeRefId.clear();
         }
