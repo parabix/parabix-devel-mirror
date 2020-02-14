@@ -622,14 +622,10 @@ Value * DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Val
         // make sure the new capacity is at least 2x the current capacity and a multiple of it
         Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
         Value * newCapacity = b->CreateAdd(unconsumedChunks, requiredChunks);
-        #ifdef NDEBUG
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        #endif
             Value * const check = b->CreateICmpUGE(newCapacity, capacity);
             b->CreateAssert(check, "unnecessary buffer expansion occurred");
-        #ifdef NDEBUG
         }
-        #endif
         newCapacity = b->CreateRoundUp(newCapacity, capacity);
 
         Value * const totalBytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);

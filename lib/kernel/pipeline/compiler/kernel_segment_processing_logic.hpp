@@ -74,6 +74,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     const auto prefix = makeKernelName(mKernelIndex);
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", partitionExit);
+    mKernelCheckOutputSpace = b->CreateBasicBlock(prefix + "_checkOutputSpace", partitionExit);
     mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", partitionExit);
     mKernelTerminationCheck = b->CreateBasicBlock(prefix + "_normalTerminationCheck", partitionExit);
     mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", partitionExit);
@@ -120,7 +121,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     // Set up some PHI nodes early to simplify accumulating their incoming values.
     initializeKernelLoopEntryPhis(b);
-    initializeKernelCallPhis(b);
+    initializeKernelCheckOutputSpacePhis(b);
     initializeKernelTerminatedPhis(b);
     initializeKernelInsufficientIOExitPhis(b);
     initializeKernelLoopExitPhis(b);
@@ -133,7 +134,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     b->SetInsertPoint(mKernelLoopEntry);
     determineNumOfLinearStrides(b);
     prepareLocalZeroExtendSpace(b);
-    calculateItemCounts(b);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL CALL
@@ -428,10 +428,10 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initializeKernelCallPhis
+ * @brief initializeKernelCheckOutputSpacePhis
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::initializeKernelCallPhis(BuilderRef b) {
-    b->SetInsertPoint(mKernelLoopCall);
+inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b) {
+    b->SetInsertPoint(mKernelCheckOutputSpace);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     Type * const sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < numOfInputs; ++i) {

@@ -138,6 +138,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
         bool nonLocal = false;
 
+        // TODO: any kernel with a greedy rate input requires that all of its
+        // incoming buffers are linear
+
         // Does this stream cross a partition boundary?
         const auto producer = source(producerOutput, G);
         const auto producerPartitionId = KernelPartitionId[producer];

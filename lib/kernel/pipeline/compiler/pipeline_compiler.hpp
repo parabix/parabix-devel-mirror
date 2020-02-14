@@ -672,7 +672,7 @@ public:
     void readInitialItemCounts(BuilderRef b);
 
     void initializeKernelLoopEntryPhis(BuilderRef b);
-    void initializeKernelCallPhis(BuilderRef b);
+    void initializeKernelCheckOutputSpacePhis(BuilderRef b);
     void initializeKernelTerminatedPhis(BuilderRef b);
     void initializeKernelInsufficientIOExitPhis(BuilderRef b);
     void initializeKernelLoopExitPhis(BuilderRef b);
@@ -1082,6 +1082,7 @@ protected:
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
+    BasicBlock *                                mKernelCheckOutputSpace = nullptr;
     BasicBlock *                                mKernelLoopCall = nullptr;
     BasicBlock *                                mKernelTerminationCheck = nullptr;
     BasicBlock *                                mKernelInitiallyTerminated = nullptr;
@@ -1167,8 +1168,8 @@ protected:
 	OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
 	OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
 	OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
-	OutputPortVec<Value *>                      mFirstOutputStrideLength;
-	OutputPortVec<Value *>                      mWritableOutputItems;
+    OutputPortVec<Value *>                      mFirstOutputStrideLength;
+    OutputPortVec<Value *>                      mWritableOutputItems;
 	OutputPortVec<Value *>                      mConsumedItemCount;
 	OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
 	OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
