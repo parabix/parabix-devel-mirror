@@ -122,9 +122,7 @@ public:
 
     virtual llvm::Value * getStreamLogicalBasePtr(BuilderPtr b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
 
-    virtual llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
-
-    virtual void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const = 0;
+    virtual void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
 
     static llvm::Type * resolveType(BuilderPtr b, llvm::Type * const streamSetType);
 
@@ -182,13 +180,11 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const override;
 
-    llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     void setBaseAddress(BuilderPtr b, llvm::Value * addr) const override;
 
     llvm::Value * getOverflowAddress(BuilderPtr b) const override;
-
-    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
 
 private:
 
@@ -254,9 +250,7 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
-    llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
-
-    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     size_t getCapacity() const {
         return mCapacity;
@@ -270,7 +264,7 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    enum Field {BaseAddress, Capacity, PriorBaseAddress};
+    enum Field { BaseAddress, Capacity, PriorAddress, InitialAddress, ActualCapacity };
 
 public:
 
@@ -292,9 +286,7 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
-    llvm::Value * reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
-
-    void linearizeBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     size_t getInitialCapacity() const {
         return mInitialCapacity;

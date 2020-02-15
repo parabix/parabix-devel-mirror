@@ -64,8 +64,8 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     calculateItemCounts(b);
 
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        checkForSufficientOutputSpaceOrExpand(b, br.Port);
+        const BufferRateData & output = mBufferGraph[e];
+        ensureSufficientOutputSpace(b, output.Port);
     }
 
     // When tracing blocking I/O, test all I/O streams but do not execute the
@@ -293,39 +293,15 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief checkForSufficientOutputSpaceOrExpand
+ * @brief ensureSufficientOutputSpace
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::checkForSufficientOutputSpaceOrExpand(BuilderRef b, const StreamSetPort outputPort) {
-
+void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort  outputPort) {
     const auto bufferVertex = getOutputBufferVertex(outputPort);
     const BufferNode & bn = mBufferGraph[bufferVertex];
-    // Any buffer that is managed by a nested kernel will be a dynamic buffer (or otherwise capable
-    // of producing the output for any given input.) Just ignore them.
-    Value * writable = nullptr;
     if (LLVM_UNLIKELY(bn.isUnowned())) {
-        writable = nullptr;
-    } else {
-        const StreamSetBuffer * const buffer = bn.Buffer;
-        if (LLVM_UNLIKELY(isa<DynamicBuffer>(buffer))) {
-            writable = reserveSufficientCapacity(b, outputPort);
-        } else if (mCheckAssertions) {
-            writable = getWritableOutputItems(b, outputPort);
-            Value * const required = mLinearOutputItemsPhi(outputPort);
-            Value * const enough = b->CreateICmpUGE(writable, required);
-            const  Binding & binding = getOutputBinding(outputPort);
-            b->CreateAssert(enough, "%s.%s: requires space for %" PRIu64 " items but only has %" PRIu64,
-                            mKernelAssertionName,
-                            b->GetString(binding.getName()),
-                            required, writable);
-        }
-    }    
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief reserveSufficientCapacity
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const StreamSetPort outputPort) {
-    const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
+        return;
+    }
+    const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
     Value * const consumed = mConsumedItemCount(outputPort); assert (consumed);
     Value * const required = mLinearOutputItemsPhi(outputPort);
@@ -343,7 +319,6 @@ Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const StreamSe
     #endif
 
     Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
-    BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer", mKernelLoopCall);
     BasicBlock * const expanded = b->CreateBasicBlock("expanded", mKernelLoopCall);
 
@@ -362,7 +337,10 @@ Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const StreamSe
     // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
     // which could result in free'ing the "old" buffer twice.
 
-    Value * const newlyWritable = buffer->reserveCapacity(b, produced, consumed, required, copyBack);
+    buffer->reserveCapacity(b, produced, consumed, required, copyBack);
+
+    Value * const remaining2 = buffer->getLinearlyWritableItems(b, produced, consumed, overflowItems);
+
     recordBufferExpansionHistory(b, outputPort, buffer);
     if (cycleCounterAccumulator) {
         Value * const cycleCounterEnd = b->CreateReadCycleCounter();
@@ -372,21 +350,16 @@ Value * PipelineCompiler::reserveSufficientCapacity(BuilderRef b, const StreamSe
     }
 
     const Binding & binding = getOutputBinding(outputPort);
-    Value * const hasEnoughSpace2 = b->CreateICmpULE(required, newlyWritable);
+    Value * const hasEnoughSpace2 = b->CreateICmpULE(required, remaining2);
     b->CreateAssert(hasEnoughSpace2,
                     "%s: failed to expand the buffer correctly. "
                     "Requires %" PRIu64 " items but only has %" PRIu64,
                     b->GetString(binding.getName()),
-                    required, newlyWritable);
+                    required, remaining2);
 
-    BasicBlock * const expandBufferExit = b->GetInsertBlock();
     b->CreateBr(expanded);
 
     b->SetInsertPoint(expanded);
-    PHINode * const writable = b->CreatePHI(b->getSizeTy(), 2);
-    writable->addIncoming(remaining, entryBlock);
-    writable->addIncoming(newlyWritable, expandBufferExit);
-    return writable;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

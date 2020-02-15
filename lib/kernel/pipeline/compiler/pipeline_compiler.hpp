@@ -362,6 +362,8 @@ struct BufferRateData {
 
 using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
 
+using BufferVertexSet = SmallFlatSet<BufferGraph::vertex_descriptor, 32>;
+
 struct ConsumerNode {
     mutable Value * Consumed = nullptr;
     mutable PHINode * PhiNode = nullptr;
@@ -680,13 +682,9 @@ public:
 
     void determineNumOfLinearStrides(BuilderRef b);
     void checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort);
-    void checkForSufficientOutputSpaceOrExpand(BuilderRef b, const StreamSetPort outputPort);
+    void ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort outputPort);
     void branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port, Value * const cond, BasicBlock * target, Value * const halting);
     void updatePHINodesForLoopExit(BuilderRef b, Value * halting);
-
-    // internally synchronized kernels are blindly provided with their item counts and the
-    // expectation that they'll correctly handle their linear data.
-    void determineLinearlyAccessibleStrides(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
     Value * calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
@@ -757,7 +755,6 @@ public:
     Value * getNumOfAccessibleStrides(BuilderRef b, const StreamSetPort inputPort);
     Value * getNumOfWritableStrides(BuilderRef b, const StreamSetPort outputPort);
     Value * getWritableOutputItems(BuilderRef b, const StreamSetPort outputPort, const bool useOverflow = true);
-    Value * reserveSufficientCapacity(BuilderRef b, const StreamSetPort outputPort);
     Value * addLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) const;
     Value * subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
@@ -912,6 +909,7 @@ public:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void verifyIOStructure(const BufferGraph & G) const;
+    BufferVertexSet identifyLinearBuffers(const BufferGraph & G) const;
     BufferPortMap constructInputPortMappings() const;
     BufferPortMap constructOutputPortMappings() const;
     LLVM_READNONE bool mayHaveNonLinearIO(const unsigned kernel) const;
