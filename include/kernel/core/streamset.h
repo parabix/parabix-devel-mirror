@@ -230,7 +230,7 @@ public:
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
-    enum Field { BaseAddress, InitialAddress };
+    enum Field { BaseAddress, EffectiveCapacity, ConcreteAddress };
 
     void allocateBuffer(BuilderPtr b) override;
 
@@ -264,7 +264,7 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    enum Field { BaseAddress, Capacity, PriorAddress, InitialAddress, ActualCapacity };
+    enum Field { BaseAddress, Capacity, PriorAddress, ConcreteAddress };
 
 public:
 

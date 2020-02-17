@@ -246,7 +246,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 mProcessedDeferredItemCount(inputPort) = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = makeBufferName(mKernelIndex, inputPort);
-                debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
+                debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount(inputPort));
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     Value * const deferred = mProcessedDeferredItemCount(inputPort);
@@ -279,7 +279,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         mProcessedItemCount(inputPort) = processed; assert (processed);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, inputPort);
-        debugPrint(b, prefix + "_processed' = %" PRIu64, mProcessedItemCount[i]);
+        debugPrint(b, prefix + "_processed' = %" PRIu64, mProcessedItemCount(inputPort));
         #endif
     }
 
@@ -295,7 +295,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 mProducedDeferredItemCount(outputPort) = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto prefix = makeBufferName(mKernelIndex, outputPort);
-                debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount[i]);
+                debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount(outputPort));
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     Value * const deferred = mProducedDeferredItemCount(outputPort);

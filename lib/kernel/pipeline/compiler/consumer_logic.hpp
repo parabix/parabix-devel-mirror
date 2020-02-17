@@ -358,7 +358,7 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
         }
         mConsumedItemCount(port) = consumed; assert (consumed);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, port});
+        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, c.Port});
         debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
         #endif
     }

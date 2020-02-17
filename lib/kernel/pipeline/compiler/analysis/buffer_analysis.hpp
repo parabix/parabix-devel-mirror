@@ -140,6 +140,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             }
         }
 
+
         if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
 
             // TODO: If we have an open system, then the input rate to this pipeline cannot
@@ -158,6 +159,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             bool dynamic = nonLocal || (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
 
+            // if this buffer is a local buffer, linearity of data is implied
+            const auto linear = nonLocal ? MustBeLinear.count(streamSet) : false;
+
             unsigned lookAhead = 0;
             unsigned lookBehind = 0;
             unsigned reflection = 0;
@@ -175,7 +179,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
             }
 
-            const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
+            auto maxStrides = MaximumNumOfStrides[producer];
+            if (linear) {
+                maxStrides += Rational{1,1};
+            }
+
+            const auto pMax = producerRate.Maximum * maxStrides;
 
             Rational requiredSizeFactor{1};
             if (producerRate.Maximum == producerRate.Minimum) {
@@ -241,9 +250,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bn.LookBehindReflection = reflection;
             bn.CopyBack = copyBack;
             bn.LookAhead = lookAhead;
-
-            // if this buffer is a local buffer, linearity of data is implied
-            const auto linear = nonLocal ? MustBeLinear.count(streamSet) : false;
 
             // if this buffer is "stateful", we cannot make it *thread* local
             if (lookAhead || reflection || copyBack || lookAhead) {
@@ -540,13 +546,16 @@ BufferVertexSet PipelineCompiler::identifyLinearBuffers(const BufferGraph & G) c
 
         auto requiresLinearAccess = [](const Binding & binding) {
             for (const Attribute & attr : binding.getAttributes()) {
-                case AttrId::Linear:
-                case AttrId::Deferred:
-                    return true;
-                case AttrId::LookBehind:
-                    if (LLVM_UNLIKELY(attr.amount() == 0)) {
+                switch(attr.getKind()) {
+                    case AttrId::Linear:
+                    case AttrId::Deferred:
                         return true;
-                    }
+                    case AttrId::LookBehind:
+                        if (LLVM_UNLIKELY(attr.amount() == 0)) {
+                            return true;
+                        }
+                    default: break;
+                }
             }
             return false;
         };
@@ -646,7 +655,7 @@ bool PipelineCompiler::mayHaveNonLinearIO(const unsigned kernel) const {
     #ifndef NDEBUG
     // Sanity test: any kernel that is internally synchronized cannot
     // have more than one subsegment iteration per segment.
-    const Kernel * const kernelObj = getKernel(i);
+    const Kernel * const kernelObj = getKernel(kernel);
     const bool nonInternallySynchronized =
             !kernelObj->hasAttribute(AttrId::InternallySynchronized);
     #endif

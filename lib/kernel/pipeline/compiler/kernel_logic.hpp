@@ -92,7 +92,8 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             // the truncated input stream.
 
             #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, prefix + " truncating item count from %" PRIu64 " to %" PRIu64, mAccessibleInputItems[i], accessibleItems[i]);
+            debugPrint(b, prefix + " truncating item count from %" PRIu64 " to %" PRIu64,
+                       mAccessibleInputItems(inputPort), accessibleItems[i]);
             #endif
 
             // TODO: if we can prove that this will be the last kernel invocation that will ever touch this stream)

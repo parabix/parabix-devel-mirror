@@ -311,14 +311,16 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
         copyBack = b->getSize(size);
     }
 
+    Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
+
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, outputPort);
     debugPrint(b, prefix + "_produced = %" PRIu64, produced);
     debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
     debugPrint(b, prefix + "_required = %" PRIu64, required);
+    debugPrint(b, prefix + "_remaining = %" PRIu64, remaining);
     #endif
 
-    Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
     BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer", mKernelLoopCall);
     BasicBlock * const expanded = b->CreateBasicBlock("expanded", mKernelLoopCall);
 
@@ -339,7 +341,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
 
     buffer->reserveCapacity(b, produced, consumed, required, copyBack);
 
-    Value * const remaining2 = buffer->getLinearlyWritableItems(b, produced, consumed, overflowItems);
+//    Value * const remaining2 = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
 
     recordBufferExpansionHistory(b, outputPort, buffer);
     if (cycleCounterAccumulator) {
@@ -349,13 +351,13 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
         b->CreateStore(accum, cycleCounterAccumulator);
     }
 
-    const Binding & binding = getOutputBinding(outputPort);
-    Value * const hasEnoughSpace2 = b->CreateICmpULE(required, remaining2);
-    b->CreateAssert(hasEnoughSpace2,
-                    "%s: failed to expand the buffer correctly. "
-                    "Requires %" PRIu64 " items but only has %" PRIu64,
-                    b->GetString(binding.getName()),
-                    required, remaining2);
+//    const Binding & binding = getOutputBinding(outputPort);
+//    Value * const hasEnoughSpace2 = b->CreateICmpULE(required, remaining2);
+//    b->CreateAssert(hasEnoughSpace2,
+//                    "%s: failed to expand the buffer correctly. "
+//                    "Requires %" PRIu64 " items but only has %" PRIu64,
+//                    b->GetString(binding.getName()),
+//                    required, remaining2);
 
     b->CreateBr(expanded);
 

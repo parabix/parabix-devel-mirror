@@ -188,7 +188,7 @@ void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelIndex, outputPort);
         mInitiallyProducedItemCount(mKernelIndex, outputPort) = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount[i]);
+        debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount(outputPort));
         #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
@@ -274,7 +274,7 @@ void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, outputPort);
-        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[outputPort.Number]);
+        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount(outputPort));
         debugPrint(b, prefix + "_producedΔ = %" PRIu64, producedDelta);
         #endif
     }

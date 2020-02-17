@@ -839,11 +839,58 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
     };
 
     auto enumerate = [&](const Bindings & bindings) {
+        #ifndef NDEBUG
+        if (LLVM_UNLIKELY(mSharedHandle == nullptr && bindings.size() > 0)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << getName() << " was given an empty state but was assigned I/O bindings.";
+            report_fatal_error(out.str());
+        }
+        #endif
         for (const auto & binding : bindings) {
             assert (sharedIndex < sharedCount);
-            indices[1] = b->getInt32(sharedIndex++);
+            indices[1] = b->getInt32(sharedIndex);
+            #ifndef NDEBUG
+            PointerType * const statePtrTy = cast<PointerType>(mSharedHandle->getType());
+            StructType * const stateTy = cast<StructType>(statePtrTy->getPointerElementType());
+            Type * elemTy = stateTy->getStructElementType(sharedIndex);
+
+            SmallVector<unsigned, 8> structIndex;
+
+            std::function<bool(Type*)> checkType = [&](const Type * ty) {
+                if (const StructType * structTy = dyn_cast<StructType>(ty)) {
+                    for (unsigned i = 0; i < structTy->getStructNumElements(); ++i) {
+                        structIndex.push_back(i);
+                        if (checkType(structTy->getStructElementType(i))) {
+                            return true;
+                        }
+                        structIndex.pop_back();
+                    }
+                }
+                return !ty->isSized();
+            };
+
+            if (LLVM_UNLIKELY(checkType(elemTy))) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << "Shared handle type for " <<
+                       getName() << "." << binding.getName() <<
+                       " is not a sized type: element ";
+                char joiner = '[';
+                assert (structIndex.size() > 0);
+                for (auto i : structIndex) {
+                    out << joiner << i;
+                    elemTy = elemTy->getStructElementType(i);
+                    joiner = ',';
+                }
+                out << "] is a ";
+                elemTy->print(out);
+                report_fatal_error(out.str());
+            }
+            #endif
             Value * const scalar = b->CreateInBoundsGEP(mSharedHandle, indices);
             addToScalarFieldMap(binding.getName(), scalar, binding.getType());
+            ++sharedIndex;
         }
     };
 
