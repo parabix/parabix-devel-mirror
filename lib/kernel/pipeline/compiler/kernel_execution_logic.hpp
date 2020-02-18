@@ -23,12 +23,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CreateMProtect(mKernelHandle, CBuilder::Protect::NONE);
     }
 
-    if (mMayHaveNonLinearIO) {
-        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
-    } else {
-        mUpdatedNumOfStrides = mNumOfLinearStrides;
-    }
-
     Value * releaseLock = nullptr;
 
     if (mKernelIsInternallySynchronized) {
@@ -105,7 +99,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
-
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
 
@@ -118,7 +111,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
     }
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
-    if (LLVM_LIKELY(!Kernel::requiresExplicitPartialFinalStride(mKernel))) {
+    if (LLVM_LIKELY(!mHasExplicitFinalPartialStride)) {
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
     }
     // If a kernel is internally synchronized, pass the segno to
@@ -156,12 +149,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             ParamVec & inputArgs = inputs[rt.Port.Number];
 
             const Binding & input = rt.Binding;
-            #ifndef NDEBUG
+
             const auto buffer = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[buffer];
+
+            #ifndef NDEBUG
             assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
             #endif
-            inputArgs.push_back(mInputEpochPhi(rt.Port));
+
+            inputArgs.push_back(getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed, mIsInputZeroExtended(rt.Port)));
 
             mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, inputArgs);
 

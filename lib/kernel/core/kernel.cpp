@@ -45,11 +45,27 @@ const static auto THREAD_LOCAL_SUFFIX = "_thread_local";
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief requiresExplicitPartialFinalStride
  ** ------------------------------------------------------------------------------------------------------------- */
-/* static */ bool Kernel::requiresExplicitPartialFinalStride(const Kernel * const kernel) {
-    if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InternallySynchronized))) {
+bool Kernel::requiresExplicitPartialFinalStride() const {
+    if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
         return false;
     }
-    return true;
+    const auto m = getNumOfStreamOutputs();
+    for (unsigned i = 0; i < m; ++i) {
+        const Binding & output = getOutputStreamSetBinding(i);
+        for (const Attribute & attr : output.getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::Add:
+                case AttrId::Delayed:
+                    if (LLVM_LIKELY(attr.amount() > 0)) {
+                        return true;
+                    }
+                case AttrId::Deferred:
+                    return true;
+                default: break;
+            }
+        }
+    }
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -417,7 +433,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
         fields.push_back(getThreadLocalStateType()->getPointerTo());  // handle
     }
     fields.push_back(sizeTy); // numOfStrides
-    if (LLVM_LIKELY(!requiresExplicitPartialFinalStride(this))) {
+    if (LLVM_LIKELY(!requiresExplicitPartialFinalStride())) {
         fields.push_back(b->getInt1Ty()); // isFinal
     }
     if (LLVM_UNLIKELY(supportsInternalSynchronization())) {
@@ -508,7 +524,7 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
             setNextArgName("thread_local");
         }
         setNextArgName("numOfStrides");
-        if (LLVM_LIKELY(!requiresExplicitPartialFinalStride(this))) {
+        if (LLVM_LIKELY(!requiresExplicitPartialFinalStride())) {
             setNextArgName("isFinal");
         }
         if (hasAttribute(AttrId::InternallySynchronized)) {
@@ -674,7 +690,18 @@ Function * Kernel::addFinalizeDeclaration(BuilderRef b) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) const {
 
-    const auto suppliedArgs = 1U + (isStateful() ? 1U : 0U) + (hasThreadLocal() ? 1U : 0U);
+    auto suppliedArgs = 1U;
+    if (LLVM_LIKELY(isStateful())) {
+        suppliedArgs += 1;
+    }
+    if (hasThreadLocal()) {
+        suppliedArgs += 1;
+    }
+    const auto hasIsFinalParam = !requiresExplicitPartialFinalStride();
+    if (LLVM_LIKELY(hasIsFinalParam)) {
+        suppliedArgs += 1;
+    }
+
 
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(b, false); assert (doSegment);
@@ -734,7 +761,6 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     };
 
     SmallVector<Value *, 16> segmentArgs(doSegment->arg_size());
-    segmentArgs[suppliedArgs - 1] = b->getSize(1); // numOfStrides
     for (unsigned i = 0; i < numOfDoSegArgs; ++i) {
         segmentArgs[suppliedArgs + i] = nextArg();
     }
@@ -752,16 +778,20 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     END_SCOPED_REGION
     assert (isStateful() || sharedHandle == nullptr);
 
+    auto suppliedArgCount = 0U;
     if (LLVM_LIKELY(isStateful())) {
-        assert ((hasThreadLocal() && suppliedArgs == 3) || (!hasThreadLocal() && suppliedArgs == 2));
-        segmentArgs[0] = sharedHandle;
+        segmentArgs[suppliedArgCount++] = sharedHandle;
     }
     Value * threadLocalHandle = nullptr;
-    if (LLVM_UNLIKELY(hasThreadLocal())) {
+    if (hasThreadLocal()) {
         threadLocalHandle = initializeThreadLocalInstance(b, sharedHandle);
-        assert ((isStateful() && suppliedArgs == 3) || (!isStateful() && suppliedArgs == 2));
-        segmentArgs[suppliedArgs - 2] = threadLocalHandle;
+        segmentArgs[suppliedArgCount++] = threadLocalHandle;
     }
+    segmentArgs[suppliedArgCount++] = b->getSize(1); // numOfStrides
+    if (LLVM_LIKELY(hasIsFinalParam)) {
+        segmentArgs[suppliedArgCount++] = b->getTrue();
+    }
+    assert (suppliedArgCount == suppliedArgs);
 
     #ifdef NDEBUG
     const bool ea = true;

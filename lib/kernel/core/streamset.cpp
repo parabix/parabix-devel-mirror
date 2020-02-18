@@ -208,31 +208,31 @@ void ExternalBuffer::releaseBuffer(BuilderPtr /* b */) const {
 
 void ExternalBuffer::setBaseAddress(BuilderPtr b, Value * const addr) const {
     assert (mHandle && "has not been set prior to calling setBaseAddress");
-    Value * const p = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(BaseAddress)});
+    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(BaseAddress)});
     b->CreateStore(b->CreatePointerBitCastOrAddrSpaceCast(addr, getPointerType()), p);
 }
 
 Value * ExternalBuffer::getBaseAddress(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getBaseAddress");
-    Value * const p = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(BaseAddress)});
+    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(BaseAddress)});
     return b->CreateLoad(p);
 }
 
 Value * ExternalBuffer::getOverflowAddress(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getBaseAddress");
-    Value * const p = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(Capacity)});
+    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
     return b->CreateLoad(p);
 }
 
 void ExternalBuffer::setCapacity(BuilderPtr b, Value * const capacity) const {
     assert (mHandle && "has not been set prior to calling setCapacity");
-    Value *  const p = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(Capacity)});
+    Value *  const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
     b->CreateStore(b->CreateZExt(capacity, b->getSizeTy()), p);
 }
 
 Value * ExternalBuffer::getCapacity(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getCapacity");
-    Value * const p = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(Capacity)});
+    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
     return b->CreateLoad(p);
 }
 
@@ -295,11 +295,6 @@ Value * InternalBuffer::getRawItemPointer(BuilderPtr b, Value * const streamInde
 
 Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
     if (mLinear) {
-
-        Value * const check = b->CreateICmpULE(fromPosition, totalItems);
-        b->CreateAssert(check, "linear buffer produced is less than its processed position.");
-
-
         return b->CreateSub(totalItems, fromPosition);
     } else {
         Value * const capacity = getCapacity(b);
@@ -314,10 +309,6 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const f
 Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const consumedItems, Value * overflowItems) const {
     Value * const capacity = getCapacity(b);
     if (LLVM_UNLIKELY(mLinear)) {
-
-        Value * const check = b->CreateICmpULE(fromPosition, capacity);
-        b->CreateAssert(check, "linear buffer capacity is less than its written position.");
-
         return b->CreateSub(capacity, fromPosition);
     } else {
         Value * const unconsumedItems = b->CreateSub(fromPosition, consumedItems);
@@ -356,8 +347,7 @@ void StaticBuffer::allocateBuffer(BuilderPtr b) {
     indices[1] = b->getInt32(BaseAddress);
     Value * const handle = getHandle();
     assert (handle && "has not been set prior to calling allocateBuffer");
-    const auto requiredSize = (mCapacity + mUnderflow + mOverflow);
-    Constant * const size = b->getSize(requiredSize);
+    Constant * const size = b->getSize(mCapacity + mUnderflow + mOverflow);
     Value * const buffer = addUnderflow(b, b->CreateCacheAlignedMalloc(mType, size, mAddressSpace), mUnderflow);
     Value * const baseAddressField = b->CreateInBoundsGEP(handle, indices);
     b->CreateStore(buffer, baseAddressField);
@@ -415,7 +405,8 @@ void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
 
 Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
     Value * const ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(BaseAddress)});
-    return b->CreateLoad(ptr);
+    Value * const addr = b->CreateLoad(ptr);
+    return addr;
 }
 
 void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const {
@@ -552,14 +543,6 @@ void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consu
         }
 
         b->CreateCall(func, { myHandle, produced, consumed, required });
-
-    } else {
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            Value * const writeable = getLinearlyWritableItems(b, produced, consumed, overflowItems);
-            Value * const enough = b->CreateICmpUGE(writeable, required);
-            b->CreateAssert(enough, "static buffer requires space for %" PRIu64 " items but only has %" PRIu64,
-                            required, writeable);
-        }
     }
 #endif
 }
@@ -934,16 +917,9 @@ StaticBuffer::StaticBuffer(BuilderPtr b, Type * const type,
                            const size_t capacity, const size_t overflowSize, const size_t underflowSize,
                            const bool linear, const unsigned AddressSpace)
 : InternalBuffer(BufferKind::StaticBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
-, mCapacity(capacity / b->getBitBlockWidth()) {
+, mCapacity(capacity) {
     #ifndef NDEBUG
-    assert ("static buffer cannot have 0 capacity" && mCapacity);
-    const auto m = b->getBitBlockWidth() / getItemWidth(type);
-    assert ("static buffer capacity must be a multiple of bitblock width"
-            && (capacity % m) == 0);
-    assert ("static buffer overflow must be a multiple of bitblock width"
-            && (overflowSize % m) == 0);
-    assert ("static buffer underflow must be a multiple of bitblock width"
-            && (underflowSize % m) == 0);
+    assert ("static buffer cannot have 0 capacity" && capacity);
     assert ("static buffer capacity must be at least twice its max(underflow, overflow)"
             && (capacity >= (std::max(underflowSize, overflowSize) * 2)));
     #endif
@@ -953,16 +929,9 @@ DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
                              const size_t initialCapacity, const size_t overflowSize, const size_t underflowSize,
                              const bool linear, const unsigned AddressSpace)
 : InternalBuffer(BufferKind::DynamicBuffer, b, type, overflowSize, underflowSize, linear, AddressSpace)
-, mInitialCapacity(initialCapacity / b->getBitBlockWidth()) {
+, mInitialCapacity(initialCapacity) {
     #ifndef NDEBUG
-    assert ("dynamic buffer cannot have 0 initial capacity" && mInitialCapacity);
-    const auto m = b->getBitBlockWidth() / getItemWidth(type);
-    assert ("dynamic buffer capacity must be a multiple of bitblock width"
-            && (initialCapacity % m) == 0);
-    assert ("dynamic buffer overflow must be a multiple of bitblock width"
-            && (overflowSize % m) == 0);
-    assert ("dynamic buffer underflow must be a multiple of bitblock width"
-            && (underflowSize % m) == 0);
+    assert ("dynamic buffer cannot have 0 initial capacity" && initialCapacity);
     assert ("dynamic buffer initial capacity must be at least twice its max(underflow, overflow)"
             && (initialCapacity >= (std::max(underflowSize, overflowSize) * 2)));
     #endif
@@ -971,7 +940,7 @@ DynamicBuffer::DynamicBuffer(BuilderPtr b, Type * const type,
 inline InternalBuffer::InternalBuffer(const BufferKind k, BuilderPtr b, Type * const baseType,
                                       const size_t overflowSize, const size_t underflowSize,
                                       const bool linear, const unsigned AddressSpace)
-: StreamSetBuffer(k, b, baseType, overflowSize, underflowSize, linear, AddressSpace, alignment) {
+: StreamSetBuffer(k, b, baseType, overflowSize, underflowSize, linear, AddressSpace) {
 
 }
 
@@ -981,13 +950,12 @@ inline StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderPtr b, Type *
 : mBufferKind(k)
 , mHandle(nullptr)
 , mType(resolveType(b, baseType))
-, mOverflow(overflowSize / b->getBitBlockWidth())
-, mUnderflow(underflowSize / b->getBitBlockWidth())
+, mOverflow(overflowSize)
+, mUnderflow(underflowSize)
 , mAddressSpace(AddressSpace)
 , mBaseType(baseType)
 , mLinear(linear) {
-    assert ((overflowSize % b->getBitBlockWidth()) == 0);
-    assert ((underflowSize % b->getBitBlockWidth()) == 0);
+
 }
 
 StreamSetBuffer::~StreamSetBuffer() { }

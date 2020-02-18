@@ -302,49 +302,84 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
     if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
         report_fatal_error("Z3 failed to find a solution to the core dataflow graph");
     }
-
     Z3_solver_push(ctx, solver);
+
     const auto m = Z3_maxsat(ctx, solver, assumptions[Common]);
-    if (LLVM_UNLIKELY(m < 1)) {
+
+    if (LLVM_UNLIKELY(m == 0)) {
         Z3_solver_pop(ctx, solver, 1);
         Z3_solver_check(ctx, solver);
     }
 
+    // Use the initial solution as a default for both the upper and lower bounds incase
+    // there are no upper or lower bound assumptions.
+
     std::vector<Bound> current(PipelineOutput + 1);
+
+    const auto model = Z3_solver_get_model(ctx, solver);
+    Z3_model_inc_ref(ctx, model);
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        Z3_ast const stridesPerSegmentVar = VarList[kernel];
+        Z3_ast value;
+        if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+        }
+
+        __int64 num, denom;
+        if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+            report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+        }
+        assert (num > 0);
+
+        const auto r = Rational{num, denom};
+        for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
+            current[kernel][bound] = r;
+        }
+    }
+
+    Z3_model_dec_ref(ctx, model);
+
+    // Now check whether any of the upper/lower bound assumptions alter the results
 
     for (;;) {
 
         for (unsigned bound = LowerBound; bound <= UpperBound; ++bound) {
 
+            const auto & A = assumptions[bound];
+
+            if (LLVM_UNLIKELY(A.empty())) continue;
+
             Z3_solver_push(ctx, solver);
-            const auto m = Z3_maxsat(ctx, solver, assumptions[bound]);
-            if (LLVM_UNLIKELY(m < 1)) {
-                Z3_solver_pop(ctx, solver, 1);
-                Z3_solver_check(ctx, solver);
-            }
 
-            const auto model = Z3_solver_get_model(ctx, solver);
-            Z3_model_inc_ref(ctx, model);
-            for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+            const auto m = Z3_maxsat(ctx, solver, A);
 
-                Z3_ast const stridesPerSegmentVar = VarList[kernel];
-                Z3_ast value;
-                if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
-                    report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+            if (LLVM_LIKELY(m != 0)) {
+
+                const auto model = Z3_solver_get_model(ctx, solver);
+                Z3_model_inc_ref(ctx, model);
+                for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+                    Z3_ast const stridesPerSegmentVar = VarList[kernel];
+                    Z3_ast value;
+                    if (LLVM_UNLIKELY(Z3_model_eval(ctx, model, stridesPerSegmentVar, Z3_L_TRUE, &value) != Z3_L_TRUE)) {
+                        report_fatal_error("Unexpected Z3 error when attempting to obtain value from model!");
+                    }
+
+                    __int64 num, denom;
+                    if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
+                        report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
+                    }
+                    assert (num > 0);
+                    current[kernel][bound] = Rational{num, denom};
                 }
+                Z3_model_dec_ref(ctx, model);
 
-                __int64 num, denom;
-                if (LLVM_UNLIKELY(Z3_get_numeral_rational_int64(ctx, value, &num, &denom) != Z3_L_TRUE)) {
-                    report_fatal_error("Unexpected Z3 error when attempting to convert model value to number!");
-                }
-                assert (num > 0);
-                current[kernel][bound] = Rational{num, denom};
             }
-            Z3_model_dec_ref(ctx, model);
 
             Z3_solver_pop(ctx, solver, 1);
         }
-
 
 
         // If we find a solution but discover that min > max for any bound, we're going to have to
@@ -372,7 +407,6 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
-
     Z3_finalize_memory();
 
     const auto & b = current[firstKernel];
@@ -399,7 +433,6 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
         MinimumNumOfStrides[kernel] = r[LowerBound];
         MaximumNumOfStrides[kernel] = r[UpperBound];
     }
-
 
     #ifndef NDEBUG
     for (auto start = firstKernel; start <= lastKernel; ) {

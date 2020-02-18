@@ -578,6 +578,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     if (zeroExtended) {
         // prepareLocalZeroExtendSpace guarantees this will be large enough to satisfy the kernel
         ExternalBuffer tmp(b, binding.getType(), true, buffer->getAddressSpace());
+        assert (mHasZeroExtendedStream);
         assert (mZeroExtendBufferPhi);
         Value * zeroExtension = b->CreatePointerCast(mZeroExtendBufferPhi, bufferType);
         zeroExtension = tmp.getStreamBlockPtr(b, zeroExtension, ZERO, b->CreateNeg(blockIndex));
@@ -585,7 +586,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     }
     return b->CreatePointerCast(address, bufferType);
 }
-
+#if 0
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateInputEpochAddresses
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -602,10 +603,15 @@ void PipelineCompiler::calculateInputEpochAddresses(BuilderRef b) {
         const auto buffer = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         assert (isFromCurrentFunction(b, bn.Buffer->getHandle()));
+        Value * ze = mIsInputZeroExtended(rt.Port);
+        if (ze) {
+            errs() << source(e, mBufferGraph) << "\n";
+        }
+
         mInputEpoch(rt.Port) = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed, mIsInputZeroExtended(rt.Port));
     }
 }
-
+#endif
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */

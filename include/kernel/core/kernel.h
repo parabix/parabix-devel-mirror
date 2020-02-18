@@ -432,7 +432,7 @@ protected:
 
     static bool isLocalBuffer(const Binding & output);
 
-    static bool requiresExplicitPartialFinalStride(const Kernel * const kernel);
+    bool requiresExplicitPartialFinalStride() const;
 
     LLVM_READNONE bool hasFixedRate() const;
 

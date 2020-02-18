@@ -23,6 +23,11 @@
 
 namespace kernel {
 
+inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
+    assert (is_power_2(y));
+    return (((x - 1) | (y - 1)) + 1) / y;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineBufferGraph
  *
@@ -32,26 +37,12 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
-    auto roundUpTo = [](const Rational a, const Rational b) {
-        // m = mod(a, b)
-        Rational n(a.numerator() * b.denominator(), b.numerator() * a.denominator());
-        const auto m = a - Rational{floor(n)} * b;
-        if (LLVM_UNLIKELY(m.numerator() != 0)) {
-            const auto r = (a - m) + b;
-            assert (r.denominator() == 1);
-            return r.numerator();
-        }
-        assert (a.denominator() == 1);
-        return a.numerator();
-    };
-
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
     identifyLinkedIOPorts(G);
     computeDataFlowRates(G);
-    const auto MustBeLinear = identifyLinearBuffers(G);
-
+    identifyLinearBuffers(G);
 
     // Identify all External I/O buffers
     SmallFlatSet<BufferGraph::vertex_descriptor, 16> IsExternal;
@@ -126,9 +117,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
         bool nonLocal = false;
 
-        // TODO: any kernel with a greedy rate input requires that all of its
-        // incoming buffers are linear
-
         // Does this stream cross a partition boundary?
         const auto producer = source(producerOutput, G);
         const auto producerPartitionId = KernelPartitionId[producer];
@@ -159,9 +147,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             bool dynamic = nonLocal || (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
 
-            // if this buffer is a local buffer, linearity of data is implied
-            const auto linear = nonLocal ? MustBeLinear.count(streamSet) : false;
-
             unsigned lookAhead = 0;
             unsigned lookBehind = 0;
             unsigned reflection = 0;
@@ -179,19 +164,13 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
             }
 
-            auto maxStrides = MaximumNumOfStrides[producer];
-            if (linear) {
-                maxStrides += Rational{1,1};
-            }
-
-            const auto pMax = producerRate.Maximum * maxStrides;
-
-            Rational requiredSizeFactor{1};
-            if (producerRate.Maximum == producerRate.Minimum) {
-                requiredSizeFactor = producerRate.Maximum;
-            }
+            const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
 
             assert (producerRate.Maximum >= producerRate.Minimum);
+
+            if (producerRate.Minimum< producerRate.Maximum) {
+                nonLocal = true;
+            }
 
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
@@ -208,7 +187,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
-                    dynamic = true;
+                    dynamic = true;                    
                 // Or is the data consumption rate unpredictable despite its type?
                 } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
                     dynamic = true;
@@ -219,10 +198,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 consumeMax = std::max(consumeMax, cMax);
 
                 assert (consumeMax >= consumeMin);
-
-                if (consumerRate.Maximum == consumerRate.Minimum) {
-                    requiredSizeFactor = lcm(requiredSizeFactor, consumerRate.Maximum);
-                }
 
                 const Binding & inputBinding = consumerRate.Binding;
                 // Get output overflow size
@@ -252,17 +227,18 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bn.LookAhead = lookAhead;
 
             // if this buffer is "stateful", we cannot make it *thread* local
-            if (lookAhead || reflection || copyBack || lookAhead) {
+            if (dynamic || lookAhead || reflection || copyBack || lookAhead) {
                 nonLocal = true;                
             }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth);
-            const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth);
-            const auto reqSize0 = std::max(pMax, Rational{2} * consumeMax - consumeMin);
-            const Rational reqSize1{2 * (overflowSize + underflowSize), 1};
-            const auto reqSize2 = std::max(reqSize0, reqSize1);
-            const auto requiredSize = roundUpTo(reqSize2, requiredSizeFactor);
+            const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth) / blockWidth;
+            const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;
+            const auto reqSize0 = round_up_to(ceiling(std::max((consumeMax * Rational{2}) - consumeMin, pMax)), blockWidth) / blockWidth;
+            const auto reqSize1 = 2 * (overflowSize + underflowSize);
+            const auto requiredSize = std::max(reqSize0, reqSize1);
+
+            Type * const baseType = output.getType();
 
             #ifdef PERMIT_THREAD_LOCAL_BUFFERS
             const auto bufferFactor = nonLocal ? numOfSegments : 1U;
@@ -270,12 +246,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             const auto bufferFactor = numOfSegments;
             #endif
 
-            const auto bufferSize = round_up_to(requiredSize, blockWidth) * bufferFactor;
-
-            Type * const baseType = output.getType();
+            const auto bufferSize = requiredSize * bufferFactor;
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
+            // if this buffer is a local buffer, linearity of data is implied
+            const auto linear = nonLocal && bn.Linear;
             if (dynamic) {
                 buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             } else {
@@ -506,9 +482,7 @@ void PipelineCompiler::verifyIOStructure(const BufferGraph & G) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-BufferVertexSet PipelineCompiler::identifyLinearBuffers(const BufferGraph & G) const {
-
-    BufferVertexSet MustBeLinear;
+void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
 
     // Any kernel that is internally synchronized or has a greedy rate input
     // requires that all of its inputs are linear.
@@ -531,7 +505,8 @@ BufferVertexSet PipelineCompiler::identifyLinearBuffers(const BufferGraph & G) c
         if (LLVM_UNLIKELY(mustBeLinear)) {
             for (const auto e : make_iterator_range(in_edges(i, G))) {
                 const auto streamSet = source(e, G);
-                MustBeLinear.insert(streamSet);
+                BufferNode & N = G[streamSet];
+                N.Linear = true;
             }
         }
     }
@@ -574,7 +549,8 @@ BufferVertexSet PipelineCompiler::identifyLinearBuffers(const BufferGraph & G) c
            }
         }
         if (LLVM_UNLIKELY(mustBeLinear)) {
-            MustBeLinear.insert(streamSet);
+            BufferNode & N = G[streamSet];
+            N.Linear = true;
         }
     }
 
@@ -589,14 +565,13 @@ BufferVertexSet PipelineCompiler::identifyLinearBuffers(const BufferGraph & G) c
                     BEGIN_SCOPED_REGION
                     const auto binding = source(e, mStreamGraph);
                     const auto streamSet = parent(binding, mStreamGraph);
-                    MustBeLinear.insert(streamSet);
+                    BufferNode & N = G[streamSet];
+                    N.Linear = true;
                     END_SCOPED_REGION
                 default: break;
             }
         }
     }
-
-    return MustBeLinear;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

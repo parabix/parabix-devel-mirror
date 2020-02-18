@@ -291,6 +291,7 @@ struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     BufferType Type = BufferType::None;
     bool NonLocal = false;
+    bool Linear = false;
     unsigned LookBehind = 0;
     unsigned LookBehindReflection = 0;
     unsigned CopyBack = 0;
@@ -740,7 +741,7 @@ public:
 
     void replacePhiCatchBlocksWith(BasicBlock * const loopExit, BasicBlock * const initiallyTerminatedExit);
 
-    void validateSegmentExecution(BuilderRef b);
+    void validateSegmentExecution(BuilderRef b) const;
 
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
@@ -909,7 +910,8 @@ public:
     BufferGraph makeBufferGraph(BuilderRef b);
     void initializeBufferGraph(BufferGraph & G) const;
     void verifyIOStructure(const BufferGraph & G) const;
-    BufferVertexSet identifyLinearBuffers(const BufferGraph & G) const;
+    void identifyLinearBuffers(BufferGraph & G) const;
+    void identifyNonLocalBuffers(BufferGraph & G) const;
     BufferPortMap constructInputPortMappings() const;
     BufferPortMap constructOutputPortMappings() const;
     LLVM_READNONE bool mayHaveNonLinearIO(const unsigned kernel) const;
@@ -1134,7 +1136,7 @@ protected:
     bool                                        mIsBounded = false;
     bool                                        mKernelIsInternallySynchronized = false;
     bool                                        mKernelCanTerminateEarly = false;
-    bool                                        mKernelHasAnExplicitFinalPartialStride = false;
+    bool                                        mHasExplicitFinalPartialStride = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;

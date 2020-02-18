@@ -259,6 +259,9 @@ function(parabix_add_executable)
     else()
         target_link_libraries(${ARG_NAME} ${ARG_DEPS})
     endif()
+    if(ARTIFACT_MODE STREQUAL "Single")
+        target_link_libraries(${ARG_NAME} ${Z3_LIBRARIES})
+    endif()
 endfunction(parabix_add_executable)
 
 # Creates a pablo source target which copies pablo source files to the parabix

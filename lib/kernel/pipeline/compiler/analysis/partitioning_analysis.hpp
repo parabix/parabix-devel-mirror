@@ -1369,7 +1369,9 @@ skip_edge_2:        // -----------------
                         assert ((id + 1) < m);
                         const auto sId = id++;
                         P.set(sId);
-                        rateSet[p].set(sId);
+                        auto & R = rateSet[p];
+                        R.resize(m);
+                        R.set(sId);
                         pId = id++;
                         partialSumId.emplace(p, pId);
                     } else {
@@ -1467,48 +1469,7 @@ skip_edge_2:        // -----------------
 
     }
 
-    // Reorder all inputs to ensure that non-Countable rates followed by Fixed then all other Countable
-    // rates are tested in that specific order. Although this does not modify the graph, it does simplify
-    // later analysis and codegen work by eliminating the possibility that a reference stream will be
-    // labelled first.
-
-//    using PartitionLinkData = std::tuple<TypeId, PartitioningGraphEdge, PartitioningGraph::vertex_descriptor>;
-
-//    for (unsigned partition = 0; partition < PartitionCount; ++partition) {
-
-//        if (in_degree(partition, G) < 2) {
-//            continue;
-//        }
-
-//        auto priorTypeId = TypeId::Bounded;
-//        bool reorder = false;
-//        for (const auto input : make_iterator_range(in_edges(partition, G))) {
-//            const auto j = source(input, G);
-//            const PartitioningGraphNode & J = G[j];
-//            if (J.Type < priorTypeId) {
-//                reorder = true;
-//                break;
-//            }
-//            priorTypeId = J.Type;
-//        }
-
-//        if (LLVM_UNLIKELY(reorder)) {
-//            SmallVector<PartitionLinkData, 8> links;
-//            for (const auto input : make_iterator_range(in_edges(partition, G))) {
-//                const auto j = source(input, G);
-//                const PartitioningGraphNode & J = G[j];
-//                links.emplace_back(J.Type, G[input], j);
-//            }
-//            std::sort(links.begin(), links.end());
-//            clear_in_edges(partition, G);
-//            for (const PartitionLinkData & data : links) {
-//                add_edge(std::get<2>(data), partition, std::get<1>(data), G);
-//            }
-//        }
-
-//    }
-
-    printG();
+    // printG();
 
     return G;
 }

@@ -229,10 +229,10 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         }
     }
     mNumOfStrides = nextArg();
-    if (LLVM_UNLIKELY(Kernel::requiresExplicitPartialFinalStride(mTarget))) {
+    if (LLVM_UNLIKELY(mTarget->requiresExplicitPartialFinalStride())) {
         mIsFinal = b->CreateIsNull(mNumOfStrides);
     } else {
-        mIsFinal = nextArg();
+        mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
     }
     const auto fixedRateLCM = mTarget->getFixedRateLCM();
     mExternalSegNo = nullptr;
@@ -469,7 +469,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         props.push_back(mThreadLocalHandle); assert (mThreadLocalHandle);
     }
     props.push_back(mNumOfStrides); assert (mNumOfStrides);
-    if (LLVM_UNLIKELY(!Kernel::requiresExplicitPartialFinalStride(mTarget))) {
+    if (LLVM_UNLIKELY(!mTarget->requiresExplicitPartialFinalStride())) {
         props.push_back(mIsFinal);
     }
     if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
@@ -612,7 +612,7 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
             b->CreateStore(vba, mUpdatableOutputBaseVirtualAddressPtr[i]);
         }
         if (mUpdatableProducedOutputItemPtr[i]) {
-            Value * const items= b->CreateLoad(mProducedOutputItemPtr[i]);
+            Value * const items = b->CreateLoad(mProducedOutputItemPtr[i]);
             b->CreateStore(items, mUpdatableProducedOutputItemPtr[i]);
         }
     }

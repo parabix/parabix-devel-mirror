@@ -400,7 +400,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     transcribe(scalars, P.Scalars);
 
-    printRelationshipGraph(P.Streams, errs(), "Streams");
+//    printRelationshipGraph(P.Streams, errs(), "Streams");
 //    printRelationshipGraph(P.Scalars, errs(), "Scalars");
 
     return P;

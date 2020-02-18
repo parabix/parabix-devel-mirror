@@ -68,9 +68,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
-    mKernelHasAnExplicitFinalPartialStride = Kernel::requiresExplicitPartialFinalStride(mKernel);
+    mHasExplicitFinalPartialStride = mKernel->requiresExplicitPartialFinalStride();
     mMaximumNumOfStrides = ceiling(MaximumNumOfStrides[mKernelIndex]);
-    mMayHaveNonLinearIO = mayHaveNonLinearIO(mKernelIndex);
+    mMayHaveNonLinearIO = mHasExplicitFinalPartialStride || mayHaveNonLinearIO(mKernelIndex);
 
     const auto prefix = makeKernelName(mKernelIndex);
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", partitionExit);
@@ -242,6 +242,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     // chain the progress state so that the next one carries on from this one
     mHalted = mHaltedPhi;
     mPipelineProgress = mNextPipelineProgress;
+    // if (LLVM_UNLIKELY(mCheckAssertions)) {
+        validateSegmentExecution(b);
+    // }
     releaseSynchronizationLock(b, LockType::Segment);
 
     checkForPartitionExit(b);
@@ -273,6 +276,35 @@ void PipelineCompiler::replacePhiCatchBlocksWith(BasicBlock * const loopExit, Ba
     mKernelInitiallyTerminatedPhiCatch->eraseFromParent();
     mKernelInitiallyTerminatedPhiCatch = initiallyTerminatedExit;
 }
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief validateSegmentExecution
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::validateSegmentExecution(BuilderRef b) const {
+
+    ConstantInt * lb = b->getSize(floor(MinimumNumOfStrides[mKernelIndex]));
+    ConstantInt * ub = b->getSize(ceiling(MaximumNumOfStrides[mKernelIndex]));
+    Value * const notTooFew = b->CreateICmpUGE(mTotalNumOfStridesAtExitPhi, lb);
+    Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+    Value * const notTooFew2 = b->CreateOr(terminated, notTooFew);
+
+    Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStridesAtExitPhi, ub);
+    Value * const withinRange = b->CreateAnd(notTooFew2, notTooMany);
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "* terminated = %" PRIu8, b->CreateZExtOrTrunc(terminated, b->getInt8Ty()));
+    #endif
+
+    //%s:
+    b->CreateAssert(withinRange, " processed %" PRIu64 " strides but expected [%" PRIu64 ",%" PRIu64 "]",
+                    // mKernelAssertionName,
+                    mTotalNumOfStridesAtExitPhi,
+                    lb, ub);
+
+}
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief normalCompletionCheck

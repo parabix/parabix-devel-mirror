@@ -1791,6 +1791,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
     }
     bool modified = false;
     DenseSet<Value *> S;
+    bool discoveredStaticFailure = false;
 
 //    #ifdef HAS_ADDRESS_SANITIZER
 //    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
@@ -1846,7 +1847,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                         assert (ci.getNumArgOperands() >= 5);
                         bool remove = false;
                         Value * const check = ci.getOperand(0);
-                        Constant * static_check = nullptr;
+                        Constant * static_check = nullptr;                        
                         if (isa<Constant>(check)) {
                             static_check = cast<Constant>(check);
                         } else if (LLVM_LIKELY(isa<ICmpInst>(check))) {
@@ -1855,9 +1856,10 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                             Value * const op1 = icmp->getOperand(1);
                             if (LLVM_UNLIKELY(isa<Constant>(op0) && isa<Constant>(op1))) {
                                 static_check = ConstantExpr::getICmp(icmp->getPredicate(), cast<Constant>(op0), cast<Constant>(op1));
+                                ci.setOperand(0, static_check);
                             }
-                        }
-                        if (static_check) {
+                        }                        
+                        if (static_check) {                                                        
                             if (LLVM_UNLIKELY(static_check->isNullValue())) {
                                 // show any static failures with their compilation context
                                 auto extract = [](const Value * a) -> const char * {
@@ -1898,9 +1900,10 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                     }
                                 }
                                 __report_failure(name, fmt.str().data(), trace, n);
-                                exit(-1);
+                                discoveredStaticFailure = true;
+                            } else {
+                                remove = true;
                             }
-                            remove = true;
                         } else if (LLVM_UNLIKELY(S.count(check))) {
                             // a duplicate check will never be executed if true
                             remove = true;
@@ -1964,6 +1967,9 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         }
     }
 
+    if (LLVM_UNLIKELY(discoveredStaticFailure)) {
+        exit(-1);
+    }
 
     return modified;
 }
