@@ -150,14 +150,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
             const Binding & input = rt.Binding;
 
-            const auto buffer = source(e, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[buffer];
-
-            #ifndef NDEBUG
-            assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
-            #endif
-
-            inputArgs.push_back(getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed, mIsInputZeroExtended(rt.Port)));
+            inputArgs.push_back(mInputEpochPhi(rt.Port));
 
             mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, inputArgs);
 

@@ -586,11 +586,12 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     }
     return b->CreatePointerCast(address, bufferType);
 }
-#if 0
+
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateInputEpochAddresses
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::calculateInputEpochAddresses(BuilderRef b) {
+void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
@@ -603,15 +604,11 @@ void PipelineCompiler::calculateInputEpochAddresses(BuilderRef b) {
         const auto buffer = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         assert (isFromCurrentFunction(b, bn.Buffer->getHandle()));
-        Value * ze = mIsInputZeroExtended(rt.Port);
-        if (ze) {
-            errs() << source(e, mBufferGraph) << "\n";
-        }
-
-        mInputEpoch(rt.Port) = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed, mIsInputZeroExtended(rt.Port));
+        Value * const zeroExtend = mIsInputZeroExtended(rt.Port);
+        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed, zeroExtend);
     }
 }
-#endif
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */

@@ -690,7 +690,10 @@ public:
     void calculateItemCounts(BuilderRef b);
     Value * calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     Value * calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
-    void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddress);
+    void zeroInputAfterFinalItemCount(BuilderRef b,
+                                      const Vec<Value *> & accessibleItems,
+                                      const Vec<Value *> &inputBaseAddress,
+                                      Vec<Value *> &truncatedBaseAddress);
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
     Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
@@ -806,7 +809,7 @@ public:
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
 
     Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtend) const;
-    void calculateInputEpochAddresses(BuilderRef b);
+    void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
 
     unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
     bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
@@ -1121,6 +1124,7 @@ protected:
     PHINode *                                   mTotalNumOfStridesAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
+    Value *                                     mHasZeroExtendedInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
 

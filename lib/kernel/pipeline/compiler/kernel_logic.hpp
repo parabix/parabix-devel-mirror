@@ -30,7 +30,10 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief zeroInputAfterFinalItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddress) {
+void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b,
+                                                    const Vec<Value *> & accessibleItems,
+                                                    const Vec<Value *> & inputBaseAddress,
+                                                    Vec<Value *> & truncatedBaseAddress) {
 
     const auto numOfInputs = accessibleItems.size();
     const auto blockWidth = b->getBitBlockWidth();
@@ -47,9 +50,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
         // TODO: if this streamset has 0 streams, it exists only to have a produced/processed count. Ignore it.
 
-        inputBaseAddress[i] = mInputEpoch(port);
-
-        assert (inputBaseAddress[i]);
+        truncatedBaseAddress[i] = inputBaseAddress[i];
 
         #ifndef DISABLE_INPUT_ZEROING
         if (LLVM_LIKELY(rate.isFixed())) {
@@ -104,13 +105,15 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             Value * const start = b->CreateLShr(mAlreadyProcessedPhi(port), LOG_2_BLOCK_WIDTH);
 
+            Value * const inputAddress = inputBaseAddress[i];
+
             DataLayout DL(b->getModule());
-            Value * const startPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, start);
+            Value * const startPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, start);
             Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
             Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
 
             Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
-            Value * const limitPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, limit);
+            Value * const limitPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, limit);
             Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
 
             Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
@@ -126,7 +129,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             if (stridesPerSegment != 1 || input.isDeferred()) {
                 if (input.isDeferred()) {
                     initial = b->CreateLShr(mAlreadyProcessedDeferredPhi(port), LOG_2_BLOCK_WIDTH);
-                    initialPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, initial);
+                    initialPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, initial);
                     initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
                 }
                 // if a kernel reads in multiple strides of data per segment, we may be able to
@@ -135,7 +138,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 if (stridesPerSegment  != 1) {
                     end = b->CreateAdd(mAlreadyProcessedPhi(port), accessibleItems[i]);
                     end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                    Value * const endPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), ZERO, end);
+                    Value * const endPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, end);
                     endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                 }
                 fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
@@ -169,13 +172,13 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
             streamIndex->addIncoming(ZERO, loopEntryBlock);
 
-            Value * inputPtr = tmp.getStreamBlockPtr(b, mInputEpoch(port), streamIndex, end);
+            Value * inputPtr = tmp.getStreamBlockPtr(b, inputAddress, streamIndex, end);
             Value * outputPtr = tmp.getStreamBlockPtr(b, maskedEpoch, streamIndex, end);
 
             if (itemWidth > 1) {
                 Value * const endPtr = inputPtr;
                 Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
-                inputPtr = tmp.getStreamPackPtr(b, mInputEpoch(port), streamIndex, end, packIndex);
+                inputPtr = tmp.getStreamPackPtr(b, inputAddress, streamIndex, end, packIndex);
                 Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
                 Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
                 b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
@@ -205,10 +208,10 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             b->SetInsertPoint(selectedInput);
             PHINode * const finalEpoch = b->CreatePHI(bufferType, 2);
-            finalEpoch->addIncoming(mInputEpoch(port), entryBlock);
+            finalEpoch->addIncoming(inputAddress, entryBlock);
             finalEpoch->addIncoming(maskedEpoch, maskedInputLoop);
 
-            inputBaseAddress[i] = finalEpoch;
+            truncatedBaseAddress[i] = finalEpoch;
         }
         #endif
     }

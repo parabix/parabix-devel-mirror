@@ -61,6 +61,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mNumOfAddressableItemCount = 0;
     mNumOfVirtualBaseAddresses = 0;
 
+    mHasZeroExtendedInput = nullptr;
+
     assert (mKernelIndex >= FirstKernel);
     assert (mKernelIndex <= LastKernel);
 

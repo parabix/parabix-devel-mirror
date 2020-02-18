@@ -7,6 +7,8 @@
 // TODO: add in assertions to prove whether all countable rate pipeline I/O was satisfied in the single iteration
 // Is it sufficient to verify symbolic rate of the pipeline matches the rate of the I/O?
 
+// TODO: if a popcount ref stream is zero extended, the current partial sum replacement would not work correctly
+// since the equivalent for it would be to repeat the final number infinitely.
 
 namespace kernel {
 
@@ -93,20 +95,21 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 
+    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
+
     // --- lambda function start
     auto phiOutItemCounts = [&](const Vec<Value *> & accessibleItems,
-                               //const Vec<Value *> & inputEpoch,
+                               const Vec<Value *> & inputVirtualBaseAddress,
                                const Vec<Value *> & writableItems,
                                Value * const fixedRateFactor,
                                Constant * const terminationSignal) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
-        const auto numOfInputs = accessibleItems.size();
         for (unsigned i = 0; i < numOfInputs; ++i) {
 			const auto port = StreamSetPort{ PortType::Input, i };
             mLinearInputItemsPhi(port)->addIncoming(accessibleItems[i], exitBlock);
-//            mInputEpochPhi(port)->addIncoming(inputEpoch[i], exitBlock);
+            mInputEpochPhi(port)->addIncoming(inputVirtualBaseAddress[i], exitBlock);
         }
-        const auto numOfOutputs = writableItems.size();
         for (unsigned i = 0; i < numOfOutputs; ++i) {
 			const auto port = StreamSetPort{ PortType::Output, i };
             mLinearOutputItemsPhi(port)->addIncoming(writableItems[i], exitBlock);
@@ -118,13 +121,16 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     };
     // --- lambda function end
 
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
+
     Vec<Value *> accessibleItems(numOfInputs);
 
-    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
+    Vec<Value *> inputVirtualBaseAddress(numOfInputs);
+
     Vec<Value *> writableItems(numOfOutputs);
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+
+    getInputVirtualBaseAddresses(b, inputVirtualBaseAddress);
 
     if (mIsBounded) {
 
@@ -163,18 +169,44 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
             // and we will perform fewer than the maximum number of strides.
             isFinal = b->CreateAnd(isFinal, partialSegment);
         }
-        b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
+
+        if (mHasZeroExtendedInput) {
+            BasicBlock * const checkFinal =
+                    b->CreateBasicBlock(prefix + "_checkFinal", mKernelLoopCall);
+            BasicBlock * const enteringNonFinalZeroExtendedSegment =
+                    b->CreateBasicBlock(prefix + "_enteringNonFinalZeroExtended", mKernelLoopCall);
+
+            Value * const finalOrZeroExtended = b->CreateOr(mHasZeroExtendedInput, isFinal);
+            b->CreateUnlikelyCondBr(finalOrZeroExtended, checkFinal, enteringNonFinalSegment);
+
+            b->SetInsertPoint(checkFinal);
+            b->CreateCondBr(isFinal, enteringFinalStride, enteringNonFinalZeroExtendedSegment);
+
+
+
+
+        } else {
+            b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
+        }
+
+
 
         /// -------------------------------------------------------------------------------------
         /// KERNEL ENTERING FINAL STRIDE
         /// -------------------------------------------------------------------------------------
 
         b->SetInsertPoint(enteringFinalStride);
+        if (mHasZeroExtendedInput) {
+
+
+        }
+
+
         Value * const finalFactor = calculateFinalItemCounts(b, accessibleItems, writableItems);
-//        Vec<Value *> inputEpochPhi(numOfInputs);
-//        zeroInputAfterFinalItemCount(b, accessibleItems, inputEpochPhi);
+        Vec<Value *> truncatedVirtualBaseAddress(numOfInputs);
+        zeroInputAfterFinalItemCount(b, accessibleItems, inputVirtualBaseAddress, truncatedVirtualBaseAddress);
         Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-        phiOutItemCounts(accessibleItems, /* inputEpochPhi, */ writableItems, finalFactor, completed);
+        phiOutItemCounts(accessibleItems, truncatedVirtualBaseAddress, writableItems, finalFactor, completed);
         b->CreateBr(mKernelCheckOutputSpace);
 
         /// -------------------------------------------------------------------------------------
@@ -185,11 +217,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     }
 
     Value * const nonFinalFactor = calculateNonFinalItemCounts(b, accessibleItems, writableItems);
-//    Vec<Value *> inputEpoch(numOfInputs);
-//    for (unsigned  i = 0; i < numOfInputs; ++i) {
-//        inputEpoch[i] = mInputEpoch(StreamSetPort{PortType::Input, i});
-//    }
-    phiOutItemCounts(accessibleItems, /* inputEpoch, */ writableItems, nonFinalFactor, unterminated);
+    phiOutItemCounts(accessibleItems, inputVirtualBaseAddress, writableItems, nonFinalFactor, unterminated);
     b->CreateBr(mKernelCheckOutputSpace);
 
     b->SetInsertPoint(mKernelCheckOutputSpace);
@@ -270,6 +298,11 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
         Value * const exhausted = b->CreateICmpUGE(processed, available);
         Value * const useZeroExtend = b->CreateAnd(closed, exhausted);
         mIsInputZeroExtended(mKernelIndex, inputPort) = useZeroExtend;
+        if (LLVM_LIKELY(mHasZeroExtendedInput == nullptr)) {
+            mHasZeroExtendedInput = useZeroExtend;
+        } else {
+            mHasZeroExtendedInput = b->CreateOr(mHasZeroExtendedInput, useZeroExtend);
+        }
         accessible = b->CreateSelect(useZeroExtend, MAX_INT, accessible);
     }
     #endif
