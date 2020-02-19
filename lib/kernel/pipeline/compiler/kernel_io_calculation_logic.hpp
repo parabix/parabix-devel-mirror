@@ -103,19 +103,23 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
                                const Vec<Value *> & inputVirtualBaseAddress,
                                const Vec<Value *> & writableItems,
                                Value * const fixedRateFactor,
+                               Value * const numOfReportedStrides,
                                Constant * const terminationSignal) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         for (unsigned i = 0; i < numOfInputs; ++i) {
 			const auto port = StreamSetPort{ PortType::Input, i };
             mLinearInputItemsPhi(port)->addIncoming(accessibleItems[i], exitBlock);
-            mInputEpochPhi(port)->addIncoming(inputVirtualBaseAddress[i], exitBlock);
+            mInputVirtualBaseAddressPhi(port)->addIncoming(inputVirtualBaseAddress[i], exitBlock);
         }
         for (unsigned i = 0; i < numOfOutputs; ++i) {
 			const auto port = StreamSetPort{ PortType::Output, i };
             mLinearOutputItemsPhi(port)->addIncoming(writableItems[i], exitBlock);
         }
-        if (fixedRateFactor) { assert (mFixedRateFactorPhi);
+        if (mFixedRateFactorPhi) { assert (fixedRateFactor);
             mFixedRateFactorPhi->addIncoming(fixedRateFactor, exitBlock);
+        }
+        if (mReportedNumOfStridesPhi) {
+            mReportedNumOfStridesPhi->addIncoming(numOfReportedStrides, exitBlock);
         }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
     };
@@ -124,7 +128,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 
     Vec<Value *> accessibleItems(numOfInputs);
 
-    Vec<Value *> inputVirtualBaseAddress(numOfInputs);
+    Vec<Value *> inputVirtualBaseAddress(numOfInputs, nullptr);
 
     Vec<Value *> writableItems(numOfOutputs);
 
@@ -132,81 +136,61 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 
     getInputVirtualBaseAddresses(b, inputVirtualBaseAddress);
 
+
+
+    assert ("unbounded zero extended input?" && ((mHasZeroExtendedInput == nullptr) || mIsBounded));
+
     if (mIsBounded) {
 
         const auto prefix = makeKernelName(mKernelIndex);
         BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
         BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
-        Value * isFinal = nullptr;
+        Value * const isFinal = determineIsFinal(b);
 
-        if (mHasExplicitFinalPartialStride) {
-            isFinal = b->CreateIsNull(mNumOfLinearStrides);
-        } else {
-            // Check whether any stream is fully consumed; if so, we cannot execute any further segments
-            for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
-                const BufferRateData & br =  mBufferGraph[e];
-                if (LLVM_UNLIKELY(br.ZeroExtended)) {
-                    continue;
-                }
-                Value * const closed = isClosed(b, br.Port);
-                Value * fullyConsumed = closed;
-                if (mMayHaveNonLinearIO) {
-                    Value * const processed = mAlreadyProcessedPhi(br.Port);
-                    Value * const accessible = mAccessibleInputItems(br.Port);
-                    Value * const total = b->CreateAdd(processed, accessible);
-                    Value * const avail = mLocallyAvailableItems[getBufferIndex(source(e, mBufferGraph))];
-                    fullyConsumed = b->CreateAnd(closed, b->CreateICmpEQ(total, avail));
-                }
-                if (isFinal) {
-                    isFinal = b->CreateOr(isFinal, fullyConsumed);
-                } else {
-                    isFinal = fullyConsumed;
-                }
-            }
-            assert (isFinal && "non-zero-extended stream is required");
-            Value * const partialSegment = b->CreateICmpNE(mUpdatedNumOfStrides, b->getSize(mMaximumNumOfStrides));
-            // If isFinal is true then at least one of the streams will be fully consumed during this invocation
-            // and we will perform fewer than the maximum number of strides.
-            isFinal = b->CreateAnd(isFinal, partialSegment);
-        }
+        Vec<Value *> zeroExtendedInputVirtualBaseAddress(numOfInputs, nullptr);
+
+        BasicBlock * nonZeroExtendExit = nullptr;
+        BasicBlock * zeroExtendExit = nullptr;
+
+        /// -------------------------------------------------------------------------------------
+        /// HANDLE ZERO EXTENSION
+        /// -------------------------------------------------------------------------------------
 
         if (mHasZeroExtendedInput) {
             BasicBlock * const checkFinal =
-                    b->CreateBasicBlock(prefix + "_checkFinal", mKernelLoopCall);
-            BasicBlock * const enteringNonFinalZeroExtendedSegment =
-                    b->CreateBasicBlock(prefix + "_enteringNonFinalZeroExtended", mKernelLoopCall);
+                b->CreateBasicBlock(prefix + "_checkFinal", enteringNonFinalSegment);
+            Value * const isFinalOrZeroExtended = b->CreateOr(mHasZeroExtendedInput, isFinal);
+            nonZeroExtendExit = b->GetInsertBlock();
+            b->CreateUnlikelyCondBr(isFinalOrZeroExtended, checkFinal, enteringNonFinalSegment);
 
-            Value * const finalOrZeroExtended = b->CreateOr(mHasZeroExtendedInput, isFinal);
-            b->CreateUnlikelyCondBr(finalOrZeroExtended, checkFinal, enteringNonFinalSegment);
-
-            b->SetInsertPoint(checkFinal);
-            b->CreateCondBr(isFinal, enteringFinalStride, enteringNonFinalZeroExtendedSegment);
-
-
-
+            b->SetInsertPoint(checkFinal);            
+            Value * const zeroExtendSpace = allocateLocalZeroExtensionSpace(b, enteringNonFinalSegment);
+            getZeroExtendedInputVirtualBaseAddresses(b, inputVirtualBaseAddress, zeroExtendSpace, zeroExtendedInputVirtualBaseAddress);
+            zeroExtendExit = b->GetInsertBlock();
+            b->CreateCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
 
         } else {
             b->CreateUnlikelyCondBr(isFinal, enteringFinalStride, enteringNonFinalSegment);
         }
-
-
 
         /// -------------------------------------------------------------------------------------
         /// KERNEL ENTERING FINAL STRIDE
         /// -------------------------------------------------------------------------------------
 
         b->SetInsertPoint(enteringFinalStride);
-        if (mHasZeroExtendedInput) {
+        Value * fixedItemFactor, * maxNumOfOutputStrides;
 
-
-        }
-
-
-        Value * const finalFactor = calculateFinalItemCounts(b, accessibleItems, writableItems);
+        std::tie(fixedItemFactor, maxNumOfOutputStrides) = calculateFinalItemCounts(b, accessibleItems, writableItems);
+        // if we have a potentially zero-extended buffer, use that; otherwise select the normal buffer
         Vec<Value *> truncatedVirtualBaseAddress(numOfInputs);
-        zeroInputAfterFinalItemCount(b, accessibleItems, inputVirtualBaseAddress, truncatedVirtualBaseAddress);
+        for (unsigned i = 0; i != numOfInputs; ++i) {
+            Value * const ze = zeroExtendedInputVirtualBaseAddress[i];
+            Value * const vba = inputVirtualBaseAddress[i];
+            truncatedVirtualBaseAddress[i] = ze ? ze : vba;
+        }
+        zeroInputAfterFinalItemCount(b, accessibleItems, truncatedVirtualBaseAddress);
         Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-        phiOutItemCounts(accessibleItems, truncatedVirtualBaseAddress, writableItems, finalFactor, completed);
+        phiOutItemCounts(accessibleItems, truncatedVirtualBaseAddress, writableItems, fixedItemFactor, maxNumOfOutputStrides, completed);
         b->CreateBr(mKernelCheckOutputSpace);
 
         /// -------------------------------------------------------------------------------------
@@ -214,13 +198,61 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         /// -------------------------------------------------------------------------------------
 
         b->SetInsertPoint(enteringNonFinalSegment);
+        if (mHasZeroExtendedInput) {
+            for (unsigned i = 0; i != numOfInputs; ++i) {
+                Value * const ze = zeroExtendedInputVirtualBaseAddress[i];
+                if (ze) {
+                    PHINode * const phi = b->CreatePHI(ze->getType(), 2);
+                    phi->addIncoming(inputVirtualBaseAddress[i], nonZeroExtendExit);
+                    phi->addIncoming(ze, zeroExtendExit);
+                    inputVirtualBaseAddress[i] = phi;
+                }
+            }
+        }
     }
 
     Value * const nonFinalFactor = calculateNonFinalItemCounts(b, accessibleItems, writableItems);
-    phiOutItemCounts(accessibleItems, inputVirtualBaseAddress, writableItems, nonFinalFactor, unterminated);
+    phiOutItemCounts(accessibleItems, inputVirtualBaseAddress, writableItems, nonFinalFactor, mNumOfLinearStrides, unterminated);
     b->CreateBr(mKernelCheckOutputSpace);
 
     b->SetInsertPoint(mKernelCheckOutputSpace);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determineIsFinal
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
+    if (mHasExplicitFinalPartialStride) {
+        return b->CreateIsNull(mNumOfLinearStrides);
+    } else {
+        // Check whether any stream is fully consumed; if so, we cannot execute any further segments
+        Value * isFinal = nullptr;
+        for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+            const BufferRateData & br =  mBufferGraph[e];            
+            if (LLVM_UNLIKELY(br.ZeroExtended)) {
+                continue;
+            }            
+            Value * const closed = isClosed(b, br.Port);
+            Value * fullyConsumed = closed;
+            if (mMayHaveNonLinearIO) {
+                Value * const processed = mAlreadyProcessedPhi(br.Port);
+                Value * const accessible = mAccessibleInputItems(br.Port);
+                Value * const total = b->CreateAdd(processed, accessible);
+                Value * const avail = mLocallyAvailableItems[getBufferIndex(source(e, mBufferGraph))];
+                fullyConsumed = b->CreateAnd(closed, b->CreateICmpEQ(total, avail));
+            }
+            if (isFinal) {
+                isFinal = b->CreateOr(isFinal, fullyConsumed);
+            } else {
+                isFinal = fullyConsumed;
+            }
+        }
+        assert (isFinal && "non-zero-extended stream is required");
+        Value * const partialSegment = b->CreateICmpNE(mUpdatedNumOfStrides, b->getSize(mMaximumNumOfStrides));
+        // If isFinal is true then at least one of the streams will be fully consumed during this invocation
+        // and we will perform fewer than the maximum number of strides.
+        return b->CreateAnd(isFinal, partialSegment);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -280,7 +312,6 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
     const Binding & input = rateData.Binding;
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, lookAhead);
     #ifndef DISABLE_ZERO_EXTEND
-
     // TODO: if a stream is zero extended but it is produced within the same partition as another
     // input to this kernel with an equivalent production *and* consumption rate and the stream is
     // not also zero extended, ignore the zero extension attribute for this stream.
@@ -378,8 +409,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
 
     buffer->reserveCapacity(b, produced, consumed, required, copyBack);
 
-//    Value * const remaining2 = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
-
     recordBufferExpansionHistory(b, outputPort, buffer);
     if (cycleCounterAccumulator) {
         Value * const cycleCounterEnd = b->CreateReadCycleCounter();
@@ -387,15 +416,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
         Value * const accum = b->CreateAdd(b->CreateLoad(cycleCounterAccumulator), duration);
         b->CreateStore(accum, cycleCounterAccumulator);
     }
-
-//    const Binding & binding = getOutputBinding(outputPort);
-//    Value * const hasEnoughSpace2 = b->CreateICmpULE(required, remaining2);
-//    b->CreateAssert(hasEnoughSpace2,
-//                    "%s: failed to expand the buffer correctly. "
-//                    "Requires %" PRIu64 " items but only has %" PRIu64,
-//                    b->GetString(binding.getName()),
-//                    required, remaining2);
-
     b->CreateBr(expanded);
 
     b->SetInsertPoint(expanded);
@@ -515,7 +535,7 @@ Value * PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *>
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief calculateFinalItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
+std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
     const auto numOfInputs = accessibleItems.size();
 
     auto summarizeItemCountAdjustment = [](const Binding & binding, int k) {
@@ -707,7 +727,10 @@ Value * PipelineCompiler::calculateFinalItemCounts(BuilderRef b, Vec<Value *> & 
         debugPrint(b, prefix + ".writable' = %" PRIu64, writableItems[i]);
         #endif
     }
-    return minFixedRateFactor;
+    if (LLVM_UNLIKELY(maxNumOfOutputStrides == nullptr)) {
+        maxNumOfOutputStrides = mNumOfLinearStrides;
+    }
+    return std::make_pair(minFixedRateFactor, maxNumOfOutputStrides);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

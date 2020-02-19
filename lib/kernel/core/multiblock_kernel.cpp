@@ -34,7 +34,7 @@ using Rational = ProcessingRate::Rational;
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiBlockKernel::generateKernelMethod(BuilderRef b) {
-    generateMultiBlockLogic(b, b->CreateSelect(b->isFinal(), b->getSize(1), b->getNumOfStrides()));
+    generateMultiBlockLogic(b, b->getNumOfStrides());
 }
 
 // MULTI-BLOCK KERNEL CONSTRUCTOR

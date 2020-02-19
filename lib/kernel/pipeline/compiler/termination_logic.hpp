@@ -180,7 +180,7 @@ void PipelineCompiler::signalAbnormalTermination(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosed
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosed(BuilderRef b, const StreamSetPort inputPort) {
+Value * PipelineCompiler::isClosed(BuilderRef b, const StreamSetPort inputPort) const {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     return hasKernelTerminated(b, producer, false);
@@ -189,7 +189,7 @@ Value * PipelineCompiler::isClosed(BuilderRef b, const StreamSetPort inputPort) 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosed
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned streamSet) {
+Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned streamSet) const {
     const auto producer = parent(streamSet, mBufferGraph);
     return hasKernelTerminated(b, producer, false);
 }
@@ -197,7 +197,7 @@ Value * PipelineCompiler::isClosed(BuilderRef b, const unsigned streamSet) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isClosedNormally
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inputPort) {
+Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inputPort) const {
     const auto buffer = getInputBufferVertex(inputPort);
     const auto producer = parent(buffer, mBufferGraph);
     const Kernel * const kernel = getKernel(producer);

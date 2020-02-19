@@ -28,7 +28,7 @@
 #include <util/maxsat.hpp>
 #include <assert.h>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 #define PRINT_BUFFER_GRAPH
 
@@ -541,10 +541,6 @@ const static std::string LAST_GOOD_VIRTUAL_BASE_ADDRESS = ".LGA";
 template <typename T, unsigned n = 16>
 using Vec = SmallVector<T, n>;
 
-using PortEvalVec = Vec<unsigned, 32>;
-
-using ParamVec = Vec<Value *, 4>;
-
 using ArgVec = Vec<Value *, 64>;
 
 using Allocator = SlabAllocator<>;
@@ -688,25 +684,25 @@ public:
     void updatePHINodesForLoopExit(BuilderRef b, Value * halting);
 
     void calculateItemCounts(BuilderRef b);
+    Value * determineIsFinal(BuilderRef b) const;
     Value * calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
-    Value * calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
+    std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     void zeroInputAfterFinalItemCount(BuilderRef b,
                                       const Vec<Value *> & accessibleItems,
-                                      const Vec<Value *> &inputBaseAddress,
-                                      Vec<Value *> &truncatedBaseAddress);
+                                      Vec<Value *> &inputBaseAddress);
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
     Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
     Value * noMoreOutputData(BuilderRef b, const unsigned outputPort);
 
-    void prepareLocalZeroExtendSpace(BuilderRef b);
+    Value * allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlock * const insertBefore) const;
 
     void writeKernelCall(BuilderRef b);
     ArgVec buildKernelCallArgumentList(BuilderRef b);
     void updateProcessedAndProducedItemCounts(BuilderRef b);
     void readReturnedOutputVirtualBaseAddresses(BuilderRef b) const;
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ParamVec &args);
-    Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ParamVec & args);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ArgVec &args);
+    Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args);
 
     void normalCompletionCheck(BuilderRef b);
 
@@ -772,9 +768,9 @@ public:
 // termination codegen functions
 
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
-    Value * isClosed(BuilderRef b, const StreamSetPort inputPort);
-    Value * isClosed(BuilderRef b, const unsigned streamSet);
-    Value * isClosedNormally(BuilderRef b, const StreamSetPort inputPort);
+    Value * isClosed(BuilderRef b, const StreamSetPort inputPort) const;
+    Value * isClosed(BuilderRef b, const unsigned streamSet) const;
+    Value * isClosedNormally(BuilderRef b, const StreamSetPort inputPort) const;
     Value * initiallyTerminated(BuilderRef b);
     Value * readTerminationSignal(BuilderRef b);
     void writeTerminationSignal(BuilderRef b, Value * const signal);
@@ -808,8 +804,9 @@ public:
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
 
-    Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position, Value * const zeroExtend) const;
+    Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
+    void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
 
     unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
     bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
@@ -986,7 +983,6 @@ public:
     LLVM_READNONE const Binding & getInputBinding(const size_t kernelVertex, const StreamSetPort inputPort) const;
     const Binding & getInputBinding(const StreamSetPort inputPort) const;
     LLVM_READNONE const BufferGraph::edge_descriptor getInput(const size_t kernelVertex, const StreamSetPort outputPort) const;
-    bool isInputExplicit(const StreamSetPort inputPort) const;
     const Binding & getProducerOutputBinding(const StreamSetPort inputPort) const;
 
     LLVM_READNONE unsigned getOutputBufferVertex(const size_t kernelVertex, const StreamSetPort outputPort) const;
@@ -1126,6 +1122,7 @@ protected:
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
+    PHINode *                                   mReportedNumOfStridesPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
 
     unsigned                                    mMaximumNumOfStrides = 0;
@@ -1153,7 +1150,7 @@ protected:
 	InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
 	InputPortVec<Value *>                       mInputEpoch;
 	InputPortVec<Value *>                       mIsInputZeroExtended;
-	InputPortVec<PHINode *>                     mInputEpochPhi;
+	InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
 	InputPortVec<Value *>                       mFirstInputStrideLength;
 	InputPortVec<Value *>                       mAccessibleInputItems;
 	InputPortVec<PHINode *>                     mLinearInputItemsPhi;
@@ -1328,7 +1325,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mAlreadyProcessedDeferredPhi(this)
 , mInputEpoch(this)
 , mIsInputZeroExtended(this)
-, mInputEpochPhi(this)
+, mInputVirtualBaseAddressPhi(this)
 , mFirstInputStrideLength(this)
 , mAccessibleInputItems(this)
 , mLinearInputItemsPhi(this)
@@ -1459,5 +1456,6 @@ static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const
 #include "scalar_logic.hpp"
 #include "synchronization_logic.hpp"
 #include "debug_messages.hpp"
+#include "codegen/buffer_manipulation_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

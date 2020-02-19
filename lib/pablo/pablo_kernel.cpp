@@ -235,6 +235,10 @@ void PabloKernel::generateFinalizeMethod(BuilderRef b) {
     mPabloCompiler = nullptr;
 }
 
+bool PabloKernel::requiresExplicitPartialFinalStride() const {
+    return true;
+}
+
 String * PabloKernel::makeName(const llvm::StringRef prefix) const {
     return mSymbolTable->makeString(prefix);
 }

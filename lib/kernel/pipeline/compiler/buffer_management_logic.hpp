@@ -559,10 +559,9 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
  * Returns the address of the "zeroth" item of the (logically-unbounded) stream set.
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
-                                const Binding & binding,
-                                const StreamSetBuffer * const buffer,
-                                Value * const position,
-                                Value * const zeroExtended) const {
+                                                const Binding & binding,
+                                                const StreamSetBuffer * const buffer,
+                                                Value * const position) const {
     assert ("buffer cannot be null!" && buffer);
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
@@ -575,21 +574,12 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
                         b->GetString(binding.getName()));
     }
     Value * address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
-    if (zeroExtended) {
-        // prepareLocalZeroExtendSpace guarantees this will be large enough to satisfy the kernel
-        ExternalBuffer tmp(b, binding.getType(), true, buffer->getAddressSpace());
-        assert (mHasZeroExtendedStream);
-        assert (mZeroExtendBufferPhi);
-        Value * zeroExtension = b->CreatePointerCast(mZeroExtendBufferPhi, bufferType);
-        zeroExtension = tmp.getStreamBlockPtr(b, zeroExtension, ZERO, b->CreateNeg(blockIndex));
-        address = b->CreateSelect(zeroExtended, zeroExtension, address);
-    }
     return b->CreatePointerCast(address, bufferType);
 }
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculateInputEpochAddresses
+ * @brief getInputVirtualBaseAddresses
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const {
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
@@ -604,8 +594,7 @@ void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> &
         const auto buffer = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         assert (isFromCurrentFunction(b, bn.Buffer->getHandle()));
-        Value * const zeroExtend = mIsInputZeroExtended(rt.Port);
-        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed, zeroExtend);
+        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed);
     }
 }
 
@@ -672,15 +661,6 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const Binding & PipelineCompiler::getInputBinding(const StreamSetPort inputPort) const {
     return getInputBinding(mKernelIndex, inputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isInputExplicit
- ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::isInputExplicit(const StreamSetPort inputPort) const {
-    const auto vertex = getInput(mKernelIndex, inputPort);
-    const BufferRateData & rd = mBufferGraph[vertex];
-    return rd.Port.Reason == ReasonType::Explicit;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

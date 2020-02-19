@@ -202,6 +202,8 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
     b->CreateCondBr(done, popCountLoop, popCountExit);
 
     b->SetInsertPoint(popCountExit);
+
+
 }
 
 // TODO: is a lookbehind window of 1 sufficient here?

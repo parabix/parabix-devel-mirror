@@ -62,6 +62,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mNumOfVirtualBaseAddresses = 0;
 
     mHasZeroExtendedInput = nullptr;
+    mZeroExtendBufferPhi = nullptr;
 
     assert (mKernelIndex >= FirstKernel);
     assert (mKernelIndex <= LastKernel);
@@ -135,7 +136,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     b->SetInsertPoint(mKernelLoopEntry);
     determineNumOfLinearStrides(b);
-    prepareLocalZeroExtendSpace(b);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL CALL
@@ -285,25 +285,24 @@ void PipelineCompiler::replacePhiCatchBlocksWith(BasicBlock * const loopExit, Ba
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::validateSegmentExecution(BuilderRef b) const {
 
-    ConstantInt * lb = b->getSize(floor(MinimumNumOfStrides[mKernelIndex]));
-    ConstantInt * ub = b->getSize(ceiling(MaximumNumOfStrides[mKernelIndex]));
-    Value * const notTooFew = b->CreateICmpUGE(mTotalNumOfStridesAtExitPhi, lb);
-    Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-    Value * const notTooFew2 = b->CreateOr(terminated, notTooFew);
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
 
-    Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStridesAtExitPhi, ub);
-    Value * const withinRange = b->CreateAnd(notTooFew2, notTooMany);
+        ConstantInt * lb = b->getSize(floor(MinimumNumOfStrides[mKernelIndex]));
+        ConstantInt * ub = b->getSize(ceiling(MaximumNumOfStrides[mKernelIndex]));
+        Value * const notTooFew = b->CreateICmpUGE(mTotalNumOfStridesAtExitPhi, lb);
+        Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+        Value * const notTooFew2 = b->CreateOr(terminated, notTooFew);
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "* terminated = %" PRIu8, b->CreateZExtOrTrunc(terminated, b->getInt8Ty()));
-    #endif
+        Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStridesAtExitPhi, ub);
+        Value * const withinRange = b->CreateAnd(notTooFew2, notTooMany);
 
-    //%s:
-    b->CreateAssert(withinRange, " processed %" PRIu64 " strides but expected [%" PRIu64 ",%" PRIu64 "]",
-                    // mKernelAssertionName,
-                    mTotalNumOfStridesAtExitPhi,
-                    lb, ub);
+        b->CreateAssert(withinRange,
+                        "%s: processed %" PRIu64 " strides but expected [%" PRIu64 ",%" PRIu64 "]",
+                        mKernelAssertionName,
+                        mTotalNumOfStridesAtExitPhi,
+                        lb, ub);
 
+    }
 }
 
 
@@ -473,7 +472,7 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
         const auto prefix = makeBufferName(mKernelIndex, inputPort);
         mLinearInputItemsPhi(inputPort) = b->CreatePHI(sizeTy, 2, prefix + "_linearlyAccessible");
         Type * const bufferTy = getInputBuffer(inputPort)->getPointerType();
-        mInputEpochPhi(inputPort) = b->CreatePHI(bufferTy, 2, prefix + "_baseAddress");
+        mInputVirtualBaseAddressPhi(inputPort) = b->CreatePHI(bufferTy, 2, prefix + "_baseAddress");
     }
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
@@ -486,6 +485,11 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
     const auto prefix = makeKernelName(mKernelIndex);
     if (LLVM_LIKELY(hasFixedRateLCM())) {
         mFixedRateFactorPhi = b->CreatePHI(sizeTy, 2, prefix + "_fixedRateFactor");
+    }    
+    if (mHasExplicitFinalPartialStride) {
+        mReportedNumOfStridesPhi = nullptr;
+    } else {
+        mReportedNumOfStridesPhi = b->CreatePHI(sizeTy, 2, prefix + "_reportedNumOfLinearStrides");
     }
     mIsFinalInvocationPhi = b->CreatePHI(sizeTy, 2, prefix + "_isFinalPhi");
 }

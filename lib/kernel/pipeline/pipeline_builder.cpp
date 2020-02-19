@@ -21,6 +21,8 @@ using namespace boost::container;
 
 namespace kernel {
 
+using Scalars = PipelineKernel::Scalars;
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief compile()
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -54,73 +56,10 @@ using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, VertexType, unsign
 using Vertex = Graph::vertex_descriptor;
 using Map = flat_map<const Relationship *, Vertex>;
 
-inline Relationship * getRelationship(not_null<Relationship *> r) {
-    return r.get();
-}
-
-inline Relationship * getRelationship(const Binding & b) {
-    return getRelationship(b.getRelationship());
-}
-
 template <typename Graph>
 inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
     assert (out_degree(u, G) == 1);
     return *out_edges(u, G).first;
-}
-
-void enumerateProducerBindings(const VertexType type, const Vertex producerVertex, const Bindings & bindings, Graph & G, Map & M, const Kernels & K) {
-    const auto n = bindings.size();
-
-
-    for (unsigned i = 0; i < n; ++i) {
-        Relationship * const rel = getRelationship(bindings[i]);
-        if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
-        const auto f = M.find(rel);
-        if (LLVM_UNLIKELY(f != M.end())) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            const auto existingProducer = target(out_edge(f->second, G), G);
-            out << "Both " << K[existingProducer]->getName() <<
-                   " and " << K[producerVertex]->getName() <<
-                   " produce the same stream.";
-            report_fatal_error(out.str());
-        }
-        const auto bufferVertex = add_vertex(type, G);
-        M.emplace(rel, bufferVertex);
-        add_edge(bufferVertex, producerVertex, i, G); // buffer -> producer ordering
-    }
-}
-
-template <typename Array>
-void enumerateConsumerBindings(const VertexType type, const Vertex consumerVertex, const Array & array, Graph & G, Map & M, const Kernels & K) {
-    const auto n = array.size();
-    for (unsigned i = 0; i < n; ++i) {
-        Relationship * const rel = getRelationship(array[i]);
-        assert ("relationship cannot be null!" && rel);
-        if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
-        const auto f = M.find(rel);
-        if (LLVM_UNLIKELY(f == M.end())) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            if (consumerVertex < K.size()) {
-                const Kernel * const consumer = K[consumerVertex];
-                const Binding & input = ((type == VertexType::Scalar)
-                                           ? consumer->getInputScalarBinding(i)
-                                           : consumer->getInputStreamSetBinding(i));
-                out << "input " << i << " (" << input.getName() << ") of ";
-                out << "kernel " << consumer->getName();
-            } else { // TODO: function calls should retain name
-                out << "argument " << i << " of ";
-                out << "function call " << (consumerVertex - K.size() + 1);
-            }
-            out << " is not a constant, produced by a kernel or an input to the pipeline";
-            report_fatal_error(out.str());
-        }
-        const auto bufferVertex = f->second;
-        assert (bufferVertex < num_vertices(G));
-        assert (G[bufferVertex] == type);
-        add_edge(consumerVertex, bufferVertex, i, G); // consumer -> buffer ordering
-    }
 }
 
 inline char getRelationshipType(const VertexType type) {
@@ -221,23 +160,124 @@ Kernel * PipelineBuilder::makeKernel() {
     Map M;
 
 
-    enumerateProducerBindings(VertexType::Scalar, pipelineInput, mInputScalars, G, M, mKernels);
-    enumerateProducerBindings(VertexType::StreamSet, pipelineInput, mInputStreamSets, G, M, mKernels);
+    auto enumerateProducerBindings = [&](const VertexType type, const Vertex producer, const Bindings & bindings) {
+        const auto n = bindings.size();
+        for (unsigned i = 0; i < n; ++i) {
+            Relationship * const rel = bindings[i].getRelationship();
+            if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
+            const auto f = M.find(rel);
+            if (LLVM_UNLIKELY(f != M.end())) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                const auto existingProducer = target(out_edge(f->second, G), G);
+                out << bindings[i].getName() << " is ";
+                if (LLVM_UNLIKELY(existingProducer == pipelineInput)) {
+                    out << "an input to the pipeline";
+                } else {
+                    out << "produced by " << mKernels[existingProducer - firstKernel]->getName();
+                }
+                out << " and ";
+                if (LLVM_UNLIKELY(producer == pipelineOutput)) {
+                    out << "an output of the pipeline";
+                } else {
+                    out << "produced by " << mKernels[producer - firstKernel]->getName();
+                }
+                out << ".";
+                report_fatal_error(out.str());
+            }
+            const auto bufferVertex = add_vertex(type, G);
+            M.emplace(rel, bufferVertex);
+            add_edge(bufferVertex, producer, i, G); // buffer -> producer ordering
+        }
+    };
+
+    enumerateProducerBindings(VertexType::Scalar, pipelineInput, mInputScalars);
+    enumerateProducerBindings(VertexType::StreamSet, pipelineInput, mInputStreamSets);
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const Kernel * const k = mKernels[i];
-        enumerateProducerBindings(VertexType::Scalar, firstKernel + i, k->getOutputScalarBindings(), G, M, mKernels);
-        enumerateProducerBindings(VertexType::StreamSet, firstKernel + i, k->getOutputStreamSetBindings(), G, M, mKernels);
+        enumerateProducerBindings(VertexType::Scalar, firstKernel + i, k->getOutputScalarBindings());
+        enumerateProducerBindings(VertexType::StreamSet, firstKernel + i, k->getOutputStreamSetBindings());
     }
+
+    struct RelationshipVector {
+        size_t size() const {
+            if (LLVM_LIKELY(mUseBindings)) {
+                return mBindings->size();
+            } else {
+                return mArgs->size();
+            }
+        }
+
+        Relationship * getRelationship(unsigned i) const {
+            if (LLVM_LIKELY(mUseBindings)) {
+                return (*mBindings)[i].getRelationship();
+            } else {
+                return (*mArgs)[i];
+            }
+        }
+
+        RelationshipVector(const Bindings & bindings)
+        : mUseBindings(true)
+        , mBindings(&bindings) {
+
+        }
+
+        RelationshipVector(const Scalars & args)
+        : mUseBindings(false)
+        , mArgs(&args) {
+
+        }
+
+    private:
+        const bool mUseBindings;
+        union {
+        const Bindings * const mBindings;
+        const Scalars * const mArgs;
+        };
+    };
+
+    auto enumerateConsumerBindings = [&](const VertexType type, const Vertex consumerVertex, const RelationshipVector array) {
+        const auto n = array.size();
+        for (unsigned i = 0; i < n; ++i) {
+            Relationship * const rel = array.getRelationship(i);
+            assert ("relationship cannot be null!" && rel);
+            if (LLVM_UNLIKELY(isa<ScalarConstant>(rel))) continue;
+            const auto f = M.find(rel);
+            if (LLVM_UNLIKELY(f == M.end())) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                if (consumerVertex < firstCall) {
+                    const Kernel * const consumer = mKernels[consumerVertex - firstKernel];
+                    const Binding & input = ((type == VertexType::Scalar)
+                                               ? consumer->getInputScalarBinding(i)
+                                               : consumer->getInputStreamSetBinding(i));
+                    out << "input " << i << " (" << input.getName() << ") of ";
+                    out << "kernel " << consumer->getName();
+                } else { // TODO: function calls should retain name
+                    out << "argument " << i << " of ";
+                    out << "function call " << (consumerVertex - mKernels.size() + 1);
+                }
+                out << " is not a constant, produced by a kernel or an input to the pipeline";
+                report_fatal_error(out.str());
+            }
+            const auto bufferVertex = f->second;
+            assert (bufferVertex < num_vertices(G));
+            assert (G[bufferVertex] == type);
+            add_edge(consumerVertex, bufferVertex, i, G); // consumer -> buffer ordering
+        }
+    };
+
+
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const Kernel * const k = mKernels[i];
-        enumerateConsumerBindings(VertexType::Scalar, firstKernel + i, k->getInputScalarBindings(), G, M, mKernels);
-        enumerateConsumerBindings(VertexType::StreamSet, firstKernel + i, k->getInputStreamSetBindings(), G, M, mKernels);
+        enumerateConsumerBindings(VertexType::Scalar, firstKernel + i, k->getInputScalarBindings());
+        enumerateConsumerBindings(VertexType::StreamSet, firstKernel + i, k->getInputStreamSetBindings());
     }
     for (unsigned i = 0; i < numOfCalls; ++i) {
-        enumerateConsumerBindings(VertexType::Scalar, firstCall + i, mCallBindings[i].Args, G, M, mKernels);
+        enumerateConsumerBindings(VertexType::Scalar, firstCall + i, mCallBindings[i].Args);
     }
-    enumerateConsumerBindings(VertexType::Scalar, pipelineOutput, mOutputScalars, G, M, mKernels);
-    enumerateConsumerBindings(VertexType::StreamSet, pipelineOutput, mOutputStreamSets, G, M, mKernels);
+    enumerateConsumerBindings(VertexType::Scalar, pipelineOutput, mOutputScalars);
+    enumerateConsumerBindings(VertexType::StreamSet, pipelineOutput, mOutputStreamSets);
 
     std::string signature;
     signature.reserve(1024);

@@ -7,19 +7,16 @@ namespace kernel {
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief filterUnnecessaryZeroExtendAttributes
+ * @brief hasZeroExtendedStreams
  *
  * Determine whether there are any zero extend attributes on any kernel and verify that every kernel with
  * zero extend attributes have at least one input that is not transitively dependent on a zero extended
  * input stream.
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::hasZeroExtendedStreams(BufferGraph & G) const {
-
-    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
-
     bool hasZeroExtendedStream = false;
-
     #ifndef DISABLE_ZERO_EXTEND
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
 
     std::queue<PartitioningGraph::vertex_descriptor> Q;
 

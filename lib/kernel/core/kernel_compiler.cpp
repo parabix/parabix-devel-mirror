@@ -231,6 +231,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     mNumOfStrides = nextArg();
     if (LLVM_UNLIKELY(mTarget->requiresExplicitPartialFinalStride())) {
         mIsFinal = b->CreateIsNull(mNumOfStrides);
+        mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
     } else {
         mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
     }

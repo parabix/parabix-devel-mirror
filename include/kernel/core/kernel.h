@@ -432,7 +432,7 @@ protected:
 
     static bool isLocalBuffer(const Binding & output);
 
-    bool requiresExplicitPartialFinalStride() const;
+    virtual bool requiresExplicitPartialFinalStride() const;
 
     LLVM_READNONE bool hasFixedRate() const;
 
@@ -589,8 +589,6 @@ protected:
     void RepeatDoBlockLogic(BuilderRef b);
 
     virtual void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingItems);
-
-
 
     BlockOrientedKernel(BuilderRef b,
                         std::string && kernelName,

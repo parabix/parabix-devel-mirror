@@ -110,6 +110,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
     }
+    if (LLVM_LIKELY(mHasExplicitFinalPartialStride)) {
+
+#error here
+
+    } else {
+
+
+    }
+
     args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
     if (LLVM_LIKELY(!mHasExplicitFinalPartialStride)) {
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
@@ -127,11 +136,9 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(mFixedRateFactorPhi);
     }
 
-    SmallVector<ParamVec, 16> inputs(in_degree(mKernelIndex, mBufferGraph));
-
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
-        const BufferRateData & rt = mBufferGraph[e];
-        assert (rt.Port.Type == PortType::Input);
+    for (unsigned i = 0; i < numOfInputs; ++i) {
+        const auto vertex = getInput(mKernelIndex, StreamSetPort(PortType::Input, i));
+        const BufferRateData & rt = mBufferGraph[vertex];
 
         if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
 
@@ -146,13 +153,11 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                 processed = mAlreadyProcessedPhi(rt.Port);
             }
 
-            ParamVec & inputArgs = inputs[rt.Port.Number];
-
             const Binding & input = rt.Binding;
 
-            inputArgs.push_back(mInputEpochPhi(rt.Port));
+            args.push_back(mInputVirtualBaseAddressPhi(rt.Port));
 
-            mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, inputArgs);
+            mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, args);
 
             if (LLVM_UNLIKELY(requiresItemCount(input))) {
                 // calculate how many linear items are from the *deferred* position
@@ -161,20 +166,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                     Value * diff = b->CreateSub(mAlreadyProcessedPhi(rt.Port), mAlreadyProcessedDeferredPhi(rt.Port));
                     inputItems = b->CreateAdd(inputItems, diff);
                 }
-                inputArgs.push_back(inputItems); assert (inputItems);
+                args.push_back(inputItems); assert (inputItems);
             }
         }
     }
 
-    for (ParamVec & inputArgs : inputs) {
-        args.insert(args.end(), inputArgs.begin(), inputArgs.end());
-    }
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const auto vertex = getOutput(mKernelIndex, StreamSetPort(PortType::Output, i));
+        const BufferRateData & rt = mBufferGraph[vertex];
 
-
-    SmallVector<ParamVec, 16> outputs(out_degree(mKernelIndex, mBufferGraph));
-
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Reason == ReasonType::Explicit);
         assert (rt.Port.Type == PortType::Output);
         const auto i = rt.Port.Number;
@@ -184,27 +184,21 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         const BufferNode & bn = mBufferGraph[buffer];
         const Binding & output = rt.Binding;
 
-        ParamVec & outputArgs = outputs[i];
-
         assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
 
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, bn.Buffer, outputArgs);
+            mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, bn.Buffer, args);
         } else {
-            outputArgs.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced, nullptr));
+            args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced));
         }
-        mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, outputArgs);
+        mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, args);
         // TODO:  consider whether we should pass a requested amount to source streams?
         if (requiresItemCount(output)) {
-            outputArgs.push_back(mLinearOutputItemsPhi(rt.Port));  assert (mLinearOutputItemsPhi(rt.Port));
+            args.push_back(mLinearOutputItemsPhi(rt.Port));  assert (mLinearOutputItemsPhi(rt.Port));
         }
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            outputArgs.push_back(mConsumedItemCount(rt.Port)); assert (mConsumedItemCount(rt.Port));
+            args.push_back(mConsumedItemCount(rt.Port)); assert (mConsumedItemCount(rt.Port));
         }
-    }
-
-    for (ParamVec & outputArgs : outputs) {
-        args.insert(args.end(), outputArgs.begin(), outputArgs.end());
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
@@ -329,7 +323,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
                                           const bool forceAddressability,
                                           PHINode * const itemCount,
-                                          ParamVec & args) {
+                                          ArgVec & args) {
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
@@ -352,8 +346,7 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addVirtualBaseAddressArg
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer,
-                                                   ParamVec & args) {
+Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args) {
     if (LLVM_UNLIKELY(mNumOfVirtualBaseAddresses == mVirtualBaseAddressPtr.size())) {
         auto vba = b->CreateAllocaAtEntryPoint(b->getVoidPtrTy());
         mVirtualBaseAddressPtr.push_back(vba);
