@@ -313,15 +313,17 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 
     mLocallyAvailableItems.resize(numOfBuffers, nullptr);
 
+    // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
 
         const auto buffer = target(e, mBufferGraph);
-        const auto inputPort = mBufferGraph[e].inputPort();
-        Value * const available = getAvailableInputItems(inputPort);
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
+        Value * const available = getAvailableInputItems(inputPort.Number);
         mLocallyAvailableItems[getBufferIndex(buffer)] = available;
         mConsumerGraph[buffer].Consumed = available;
 
-        Value * const inPtr = getProcessedInputItemsPtr(inputPort);
+        Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
         Value * const processed = b->CreateLoad(inPtr);
 
         for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
@@ -333,11 +335,12 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         }
     }
 
+    // NOTE: all inputs of PipelineOutput node are outputs of the PipelineKernel
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto buffer = source(e, mBufferGraph);
-        const auto outputPort = mBufferGraph[e].outputPort();
-
-        Value * outPtr = getProducedOutputItemsPtr(outputPort);
+        const StreamSetPort outputPort = mBufferGraph[e].Port;
+        assert (outputPort.Type == PortType::Input);
+        Value * outPtr = getProducedOutputItemsPtr(outputPort.Number);
         Value * const produced = b->CreateLoad(outPtr);
 
         for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {

@@ -298,7 +298,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
         }
         const BufferNode & bn = mBufferGraph[streamSet];
         const BufferRateData & rd = mBufferGraph[e];
-        assert ((rd.Port.Type == PortType::Output) ^ (producer == PipelineInput));
+        assert (rd.Port.Type == PortType::Output);
         const auto name = makeBufferName(producer, rd.Port) + CONSUMED_ITEM_COUNT_SUFFIX;
 
         // If we're tracing the consumer item counts, we need to store one for each
@@ -480,7 +480,7 @@ inline void PipelineCompiler::readExternalConsumerItemCounts(BuilderRef b) {
         if (LLVM_LIKELY(bn.isOwned())) {
             const auto p = in_edge(buffer, mBufferGraph);
             const BufferRateData & rd = mBufferGraph[p];
-            Value * const consumed = getConsumedOutputItems(rd.outputPort()); assert (consumed);
+            Value * const consumed = getConsumedOutputItems(rd.Port.Number); assert (consumed);
             const auto producer = source(p, mBufferGraph);
             const auto name = makeBufferName(producer, rd.Port);
             b->setScalarField(name + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
@@ -495,7 +495,7 @@ inline void PipelineCompiler::writeExternalConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferRateData & rd = mBufferGraph[e];
-        Value * const ptr = getProcessedInputItemsPtr(rd.inputPort());
+        Value * const ptr = getProcessedInputItemsPtr(rd.Port.Number);
         const ConsumerNode & cn = mConsumerGraph[streamSet];
         b->CreateStore(cn.Consumed, ptr);
     }

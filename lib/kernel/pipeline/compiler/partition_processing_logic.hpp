@@ -67,13 +67,13 @@ inline void PipelineCompiler::addPartitionInputItemCounts(BuilderRef b, const si
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePartitionEntryPoints
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
-    // Make one basic block for each partition and one that will branch into
-    // the final exit loop condition.
+inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {    
+    mPipelineLoop = b->CreateBasicBlock("PipelineLoop");
     mPartitionEntryPoint.resize(PartitionCount + 1);
     for (unsigned i = 0; i <= PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
-    }    
+    }
+    mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -119,9 +119,9 @@ inline void PipelineCompiler::checkInputDataOnPartitionEntry(BuilderRef b) {
     }
     mCurrentPartitionId = partitionId;
 
-    using TypeId = PartitioningGraphNode::TypeId;
-
 #if 0
+
+    using TypeId = PartitioningGraphNode::TypeId;
 
     Value * numOfStrides = nullptr;
 

@@ -436,7 +436,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     if (LLVM_LIKELY(!requiresExplicitPartialFinalStride())) {
         fields.push_back(b->getInt1Ty()); // isFinal
     }
-    if (LLVM_UNLIKELY(supportsInternalSynchronization())) {
+    if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
         fields.push_back(sizeTy); // external segNo for any internal synchronization
     }
     if (LLVM_LIKELY(hasFixedRate())) {
@@ -1001,41 +1001,6 @@ std::string Kernel::getStringHash(const StringRef str) {
     out.flush();
 
     return buffer;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief supportsInternalSynchronization
- ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::supportsInternalSynchronization() const {
-    if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
-        if (LLVM_UNLIKELY(canSetTerminateSignal())) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << getName() <<
-                   " cannot be internally synchronized and be permitted to terminate early";
-            report_fatal_error(out.str());
-        }
-
-        auto checkValidRate = [this](const Binding & binding) {
-            if (LLVM_LIKELY(isCountable(binding) && !isLocalBuffer(binding))) return;
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << getName() << ":" << binding.getName() <<
-                   " must be a non-local non-deferred countable rate"
-                   " to support internal synchronization";
-            report_fatal_error(out.str());
-        };
-
-        for (const Binding & input : mInputStreamSets) {
-            checkValidRate(input);
-        }
-
-        for (const Binding & output : mOutputStreamSets) {
-            checkValidRate(output);
-        }
-        return true;
-    }
-    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

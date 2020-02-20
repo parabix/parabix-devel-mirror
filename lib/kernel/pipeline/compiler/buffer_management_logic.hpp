@@ -636,21 +636,13 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
 
     assert (kernelVertex != PipelineOutput);
 
-    if (LLVM_UNLIKELY(kernelVertex == PipelineInput)) {
-        graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
-        std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
-        assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + inputPort.Number);
-        v = target(e, mStreamGraph);
-    } else {
-        graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
-        std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
-        assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + inputPort.Number);
-        v = source(e, mStreamGraph);
-    }
+    graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
+    std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
+    assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
+    e = *(ei + inputPort.Number);
+    v = source(e, mStreamGraph);
 
-    assert (mStreamGraph[e].Number == inputPort.Number);
+    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == inputPort);
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;
@@ -710,21 +702,13 @@ const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, co
 
     assert (kernelVertex != PipelineInput);
 
-    if (LLVM_UNLIKELY(kernelVertex == PipelineOutput)) {
-        graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
-        std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
-        assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + outputPort.Number);
-        v = source(e, mStreamGraph);
-    } else {
-        graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
-        std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
-        assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
-        e = *(ei + outputPort.Number);
-        v = target(e, mStreamGraph);
-    }
+    graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
+    std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
+    assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
+    e = *(ei + outputPort.Number);
+    v = target(e, mStreamGraph);
 
-    assert (mStreamGraph[e].Number == outputPort.Number);
+    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == outputPort);
 
     const RelationshipNode & rn = mStreamGraph[v];
     assert (rn.Type == RelationshipNode::IsBinding);

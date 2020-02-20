@@ -195,8 +195,6 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     const auto numOfPartitions = partitionIntoFixedRateRegionsWithOrderingConstraints(G, partitionIds, pipelineKernel);
 
 
-
-
     // Compute the lexographical ordering of G
     std::vector<unsigned> O;
     if (LLVM_UNLIKELY(!lexical_ordering(G, O))) {
@@ -302,9 +300,12 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
         }
         P.KernelPartitionId[out] = outputPartitionId;
     }
-
     assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
+
+    P.KernelPartitionId[P.PipelineInput] = 0;
+    P.KernelPartitionId[P.PipelineOutput] = numOfPartitions - 1;
+
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {
         assert (subsitution[streamSets[i]] == -1U);
@@ -434,8 +435,13 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
     }
     const auto p_out = add_vertex(RelationshipNode(pipelineKernel), G);
 
-    addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputStreamSetBindings(), G);
-    addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputStreamSetBindings(), G, true);
+    // From the pipeline's perspective, a pipeline input node "produces" the inputs of the pipeline and a
+    // pipeline output node "consumes" its outputs. Internally this means the inputs and outputs of the
+    // pipeline are inverted from its external view but this change simplifies the analysis considerably
+    // by permitting the compiler's internal graphs to acyclic.
+
+    addProducerRelationships(PortType::Output, p_in, pipelineKernel->getInputStreamSetBindings(), G);
+    addConsumerRelationships(PortType::Input, p_out, pipelineKernel->getOutputStreamSetBindings(), G, true);
 
     for (unsigned i = 0; i < n; ++i) {
         addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputStreamSetBindings(), G);
@@ -454,8 +460,8 @@ Relationships PipelineCompiler::generateInitialPipelineGraph(BuilderRef b, Pipel
     addPopCountKernels(b, kernels, vertex, G, internalKernels, internalBindings);
     // addRegionSelectorKernels(b, kernels, vertex, G, internalKernels, internalBindings);
 
-    addProducerRelationships(PortType::Input, p_in, pipelineKernel->getInputScalarBindings(), G);
-    addConsumerRelationships(PortType::Output, p_out, pipelineKernel->getOutputScalarBindings(), G, true);
+    addProducerRelationships(PortType::Output, p_in, pipelineKernel->getInputScalarBindings(), G);
+    addConsumerRelationships(PortType::Input, p_out, pipelineKernel->getOutputScalarBindings(), G, true);
     for (unsigned i = 0; i < n; ++i) {
         addProducerRelationships(PortType::Output, vertex[i], kernels[i]->getOutputScalarBindings(), G);
     }

@@ -87,14 +87,10 @@ private:
 
 using Bindings = std::vector<Binding>;
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isCountable
  ** ------------------------------------------------------------------------------------------------------------- */
 LLVM_READNONE inline bool isCountable(const Binding & binding) {
-    if (LLVM_UNLIKELY(binding.isDeferred())) {
-        return false;
-    }
     const ProcessingRate & rate = binding.getRate();
     switch (rate.getKind()) {
         case ProcessingRate::KindId::Fixed:
@@ -112,9 +108,6 @@ LLVM_READNONE inline bool isCountable(const Binding & binding) {
  * @brief isNonFixedCountable
  ** ------------------------------------------------------------------------------------------------------------- */
 LLVM_READNONE inline bool isNonFixedCountable(const Binding & binding) {
-    if (LLVM_UNLIKELY(binding.isDeferred())) {
-        return false;
-    }
     const ProcessingRate & rate = binding.getRate();
     switch (rate.getKind()) {
         case ProcessingRate::KindId::PopCount:

@@ -286,11 +286,11 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
         }
     };
 
-    auto checkOpenPartitionLabel = [&](const unsigned kernel) {
+    auto checkOpenPartitionLabel = [&](const unsigned kernel, const bool ignorePartition) {
         const auto partitionId = KernelPartitionId[kernel];
-        if (partitionId != currentPartition) {
+        if (partitionId != currentPartition || ignorePartition) {
             checkClosePartitionLabel();
-            if (LLVM_LIKELY(partitionId != -1U)) {
+            if (LLVM_LIKELY(!ignorePartition)) {
                 out << "subgraph cluster" << partitionId << " {\n"
                        "label=\"Partition #" << partitionId  << "\";"
                        "fontcolor=\"red\";"
@@ -298,13 +298,13 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
                        "color=\"red\";"
                        "\n";
                 closePartition = true;
+                currentPartition = partitionId;
             }
-        }
-        currentPartition = partitionId;
+        }        
     };
 
-    auto printKernel = [&](const unsigned kernel, const StringRef name) {
-        checkOpenPartitionLabel(kernel);
+    auto printKernel = [&](const unsigned kernel, const StringRef name, const bool ignorePartition) {
+        checkOpenPartitionLabel(kernel, ignorePartition);
         out << "v" << kernel << " [label=\"[" <<
                 kernel << "] " << name << "\\n"
                 //" Partition: " << KernelPartitionId[v] << "\\n"
@@ -327,16 +327,14 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
            // "compound=true;"
            "\n";
 
-    printKernel(PipelineInput, "P_{in}");
+    printKernel(PipelineInput, "P_{in}", true);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernel = getKernel(i);
         auto name = kernel->getName().str();
         boost::replace_all(name, "\"", "\\\"");
-        printKernel(i, name);
+        printKernel(i, name, false);
     }
-    printKernel(PipelineOutput, "P_{out}");
-    checkClosePartitionLabel();
-
+    printKernel(PipelineOutput, "P_{out}", true);
 
     for (auto e : make_iterator_range(edges(mBufferGraph))) {
         const auto s = source(e, mBufferGraph);

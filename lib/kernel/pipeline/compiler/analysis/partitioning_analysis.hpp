@@ -131,10 +131,10 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             mappedKernel[kernel] = u;
             assert (H[kernel].none());
 
-            const Kernel * const kernelObj = node.Kernel;
-            if (kernelObj == pipelineKernel) {
-                continue;
-            }
+//            const Kernel * const kernelObj = node.Kernel;
+//            if (kernelObj == pipelineKernel) {
+//                continue;
+//            }
 
             bool isNewPartitionRoot = false;
 
@@ -208,8 +208,12 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             // K.
 
 
-            // Check whether this kernel could terminate early
-            const auto mayTerminateEarly = kernelObj->canSetTerminateSignal();
+            // Check whether this (internal) kernel could terminate early
+            const Kernel * const kernelObj = node.Kernel;
+            bool mayTerminateEarly = false;
+            if (kernelObj != pipelineKernel) {
+                mayTerminateEarly = kernelObj->canSetTerminateSignal();
+            }
 
             // Assign a root of a partition a new id.
             if (LLVM_UNLIKELY(isNewPartitionRoot || mayTerminateEarly)) {
@@ -294,10 +298,11 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             // of a source kernel with two or more outputs that have an equivalent rate ought
             // to be in the same partition (assuming they have no other inputs from differing
             // partitions.)
+
             if (LLVM_UNLIKELY(in_degree(kernel, H) == 0 && out_degree(kernel, H) != 0)) {
                 // place each input source kernel in its own partition
                 addRateId(H[kernel], nextRateId++);
-                if (LLVM_LIKELY(out_degree(kernel, H) != 0)) {
+                if (kernelObj != pipelineKernel) {
                     const auto sourceKernelRateId = nextRateId++;
                     for (const auto output : make_iterator_range(out_edges(u, H))) {
                         const auto buffer = target(output, H);
@@ -308,8 +313,9 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
         }
     }
 
+    // Note: it's possible some stream sets are produced but never consumed
+    assert (nextStreamSet <= (streamSets + kernels));
     assert (nextKernel == kernels);
-    assert (nextStreamSet == streamSets + kernels);
 
     // Combine all incoming rates sets
     std::vector<Vertex> orderingOfH;
@@ -325,7 +331,6 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
         for (const auto e : make_iterator_range(in_edges(u, H))) {
             const auto v = source(e, H);
             const auto & inputRateSet = H[v];
-            assert ("input rate set cannot be empty!" && inputRateSet.any());
             nodeRateSet |= inputRateSet;
         }
     }
@@ -343,7 +348,6 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
         if (u < kernels) {
             BitSet & node = H[u];
             const auto k = mappedKernel[u];
-            assert(node.none() ^ (G[k].Kernel != pipelineKernel));
             if (LLVM_UNLIKELY(node.none())) {
                 partitionIds.emplace(k, -1U);
             } else {

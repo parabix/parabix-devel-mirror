@@ -41,11 +41,14 @@ void BlockKernelCompiler::generateMultiBlockLogic(BuilderRef b, Value * const nu
         doFinalBlock = b->CreateBasicBlock(getName() + "_doFinalBlock");
         segmentDone = b->CreateBasicBlock(getName() + "_segmentDone");
         b->CreateUnlikelyCondBr(mIsFinal, doFinalBlock, mStrideLoopBody);
+    } else {
+        b->CreateBr(mStrideLoopBody);
     }
 
     /// BLOCK BODY
 
     b->SetInsertPoint(mStrideLoopBody);
+    mStrideLoopTarget = nullptr;
     if (hasFinalBlock && b->supportsIndirectBr()) {
         Value * const baseTarget = BlockAddress::get(segmentDone);
         mStrideLoopTarget = b->CreatePHI(baseTarget->getType(), 2, "strideTarget");
@@ -129,7 +132,7 @@ void BlockKernelCompiler::incrementCountableItemCounts(BuilderRef b) {
     const auto stride = mTarget->getStride();
 
     for (const Binding & input : getInputStreamSetBindings()) {
-        if (isCountable(input)) {
+        if (isCountable(input) && !input.isDeferred()) {
             const ProcessingRate & rate = input.getRate();
             Value * offset = nullptr;
             if (rate.isFixed()) {
@@ -144,7 +147,7 @@ void BlockKernelCompiler::incrementCountableItemCounts(BuilderRef b) {
     }
     // Update the produced item counts
     for (const Binding & output : getOutputStreamSetBindings()) {
-        if (isCountable(output)) {
+        if (isCountable(output) && !output.isDeferred()) {
             const ProcessingRate & rate = output.getRate();
             Value * offset = nullptr;
             if (rate.isFixed()) {

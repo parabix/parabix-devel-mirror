@@ -417,6 +417,9 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
         Type * const doubleTy = b->getDoubleTy();
         Constant * const fOneHundred = ConstantFP::get(doubleTy, 100.0);
 
+        Constant * const I = b->getInt8('I');
+        Constant * const O = b->getInt8('O');
+
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
             const auto prefix = makeKernelName(i);
@@ -439,8 +442,8 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 } else {
                     args.push_back(remainingLines);
                 }
-                args.push_back(b->getInt8('I'));
-                const auto inputPort = binding.inputPort();
+                args.push_back(I);
+                const auto inputPort = binding.Port.Number;
                 args.push_back(b->getInt32(inputPort));
                 const Binding & ref = binding.Binding;
 
@@ -473,8 +476,8 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
                 } else {
                     args.push_back(remainingLines);
                 }
-                args.push_back(b->getInt8('O'));
-                const auto outputPort = binding.outputPort();
+                args.push_back(O);
+                const auto outputPort = binding.Port.Number;
                 args.push_back(b->getInt32(outputPort));
                 const Binding & ref = binding.Binding;
                 args.push_back(b->GetString(ref.getName()));
@@ -920,13 +923,13 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
 
                     expansionArgs[2] = b->getInt32(i);
                     expansionArgs[3] = b->GetString(getKernel(i)->getName());
-                    const auto outputPort = br.outputPort();
+                    const auto outputPort = br.Port.Number;
                     expansionArgs[4] = b->getInt32(outputPort);
                     const Binding & binding = br.Binding;
                     expansionArgs[5] = b->GetString(binding.getName());
                     expansionArgs[6] = b->getInt32(buffer);
 
-                    const auto prefix = makeBufferName(i, StreamSetPort{PortType::Output, outputPort});
+                    const auto prefix = makeBufferName(i, br.Port);
                     Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
 
                     Value * const traceArrayField = b->CreateGEP(traceData, {ZERO, ZERO});

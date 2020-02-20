@@ -112,42 +112,4 @@ inline void transitive_reduction_dag(Graph & G) {
     transitive_reduction_dag(ordering, G);
 }
 
-template <typename Graph>
-bool add_edge_if_no_induced_cycle(const typename graph_traits<Graph>::vertex_descriptor s,
-                                  const typename graph_traits<Graph>::vertex_descriptor t,
-                                  Graph & G) {
-    // If s-t exists, skip adding this edge
-    if (edge(s, t, G).second || s == t) {
-        return s != t;
-    }
-
-    // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
-    if (in_degree(s, G) > 0) {
-        BitVector V(num_vertices(G));
-        std::queue<typename graph_traits<Graph>::vertex_descriptor> Q;
-        // do a BFS to search for a t-s path
-        Q.push(t);
-        for (;;) {
-            const auto u = Q.front();
-            Q.pop();
-            for (auto e : make_iterator_range(out_edges(u, G))) {
-                const auto v = target(e, G);
-                if (LLVM_UNLIKELY(v == s)) {
-                    // we found a t-s path
-                    return false;
-                }
-                if (LLVM_LIKELY(!V.test(v))) {
-                    V.set(v);
-                    Q.push(v);
-                }
-            }
-            if (Q.empty()) {
-                break;
-            }
-        }
-    }
-    add_edge(s, t, G);
-    return true;
-}
-
 #endif // LEXOGRAPHIC_ORDERING_HPP

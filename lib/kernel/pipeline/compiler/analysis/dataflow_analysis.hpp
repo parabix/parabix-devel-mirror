@@ -154,6 +154,11 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
         return Z3_mk_mul(ctx, 2, args);
     };
 
+    #warning This does not calculate the initial lookahead/delay implications.
+
+    // Instead of trying to reason about lookahead/delay, we could have internal buffers
+    // "reset" at the start of each partition.
+
     const auto firstKernel = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
     const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
 

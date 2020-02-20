@@ -110,19 +110,14 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
     }
-    if (LLVM_LIKELY(mHasExplicitFinalPartialStride)) {
 
-#error here
-
+    if (mHasExplicitFinalPartialStride) {
+        args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
     } else {
-
-
-    }
-
-    args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
-    if (LLVM_LIKELY(!mHasExplicitFinalPartialStride)) {
+        args.push_back(mReportedNumOfStridesPhi); assert (mReportedNumOfStridesPhi);
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
     }
+
     // If a kernel is internally synchronized, pass the segno to
     // allow the kernel to initialize its current "position"
     if (mKernelIsInternallySynchronized) {
@@ -137,8 +132,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     }
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto vertex = getInput(mKernelIndex, StreamSetPort(PortType::Input, i));
-        const BufferRateData & rt = mBufferGraph[vertex];
+        const auto port = getInput(mKernelIndex, StreamSetPort(PortType::Input, i));
+        const BufferRateData & rt = mBufferGraph[port];
 
         if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
 
@@ -172,15 +167,14 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     }
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto vertex = getOutput(mKernelIndex, StreamSetPort(PortType::Output, i));
-        const BufferRateData & rt = mBufferGraph[vertex];
+        const auto port = getOutput(mKernelIndex, StreamSetPort(PortType::Output, i));
+        const BufferRateData & rt = mBufferGraph[port];
 
         assert (rt.Port.Reason == ReasonType::Explicit);
         assert (rt.Port.Type == PortType::Output);
-        const auto i = rt.Port.Number;
 
         PHINode * const produced = mAlreadyProducedPhi(rt.Port);
-        const auto buffer = target(e, mBufferGraph);
+        const auto buffer = target(port, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         const Binding & output = rt.Binding;
 

@@ -681,7 +681,15 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         }
     }
 
-    Value * maxNumOfOutputStrides = nullptr;
+    Value * maxNumOfOutputStrides = mNumOfLinearStrides;
+    if (mHasExplicitFinalPartialStride) {
+        maxNumOfOutputStrides = b->getSize(1);
+    } else if (minFixedRateFactor) {
+        Value * a = b->CreateIsNotNull(minFixedRateFactor);
+        a = b->CreateZExt(a, b->getSizeTy());
+        maxNumOfOutputStrides = b->CreateAdd(maxNumOfOutputStrides, a);
+    }
+
     const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
 		const StreamSetPort port{ PortType::Output, i };
@@ -693,16 +701,6 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
             const auto factor = rate.getRate() / mFixedRateLCM;
             writable = b->CreateCeilUMulRate(minFixedRateFactor, factor);
         } else {
-            if (maxNumOfOutputStrides == nullptr) {
-                Constant * ONE = b->getSize(0);
-                // The number of output strides is one more than the total number of
-                // *full* input strides.
-                if (mHasExplicitFinalPartialStride) {
-                    maxNumOfOutputStrides = ONE;
-                } else {
-                    maxNumOfOutputStrides = b->CreateAdd(mNumOfLinearStrides, ONE);
-                }
-            }
             writable = calculateNumOfLinearItems(b, port, maxNumOfOutputStrides);
         }
 
@@ -726,9 +724,6 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
         debugPrint(b, prefix + ".writable' = %" PRIu64, writableItems[i]);
         #endif
-    }
-    if (LLVM_UNLIKELY(maxNumOfOutputStrides == nullptr)) {
-        maxNumOfOutputStrides = mNumOfLinearStrides;
     }
     return std::make_pair(minFixedRateFactor, maxNumOfOutputStrides);
 }

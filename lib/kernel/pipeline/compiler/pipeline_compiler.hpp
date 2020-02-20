@@ -316,16 +316,6 @@ struct BufferNode {
 
 };
 
-inline unsigned InputPort(const StreamSetPort port) {
-    assert (port.Type == PortType::Input);
-    return port.Number;
-}
-
-inline unsigned OutputPort(const StreamSetPort port) {
-    assert (port.Type == PortType::Output);
-    return port.Number;
-}
-
 struct BufferRateData {
 
     RelationshipType Port;
@@ -334,14 +324,6 @@ struct BufferRateData {
     Rational Maximum;
     bool ZeroExtended = false;
     unsigned LinkedPortId = 0;
-
-    unsigned inputPort() const {
-        return InputPort(Port);
-    }
-
-    unsigned outputPort() const {
-        return OutputPort(Port);
-    }
 
     bool operator < (const BufferRateData & rn) const {
         if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {
@@ -687,9 +669,7 @@ public:
     Value * determineIsFinal(BuilderRef b) const;
     Value * calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
-    void zeroInputAfterFinalItemCount(BuilderRef b,
-                                      const Vec<Value *> & accessibleItems,
-                                      Vec<Value *> &inputBaseAddress);
+    void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddresses);
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
     Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
@@ -914,7 +894,8 @@ public:
     void identifyNonLocalBuffers(BufferGraph & G) const;
     BufferPortMap constructInputPortMappings() const;
     BufferPortMap constructOutputPortMappings() const;
-    LLVM_READNONE bool mayHaveNonLinearIO(const unsigned kernel) const;
+    bool mayHaveNonLinearIO() const;
+    bool supportsInternalSynchronization() const;
     void identifyLinkedIOPorts(BufferGraph & G) const;
 
 // dataflow analysis functions
@@ -1096,7 +1077,7 @@ protected:
 
     Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 8>                        mVirtualBaseAddressPtr;
-    Vec<Value *, 16>                            mTruncatedInputBuffer;
+    Vec<AllocaInst *, 16>                       mTruncatedInputBuffer;
     Vec<Value *, 64>                            mLocallyAvailableItems;
 
     // partition state
@@ -1141,6 +1122,7 @@ protected:
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
+    unsigned                                    mNumOfTruncatedInputBuffers = 0;
 
     PHINode *                                   mZeroExtendBufferPhi = nullptr;
 

@@ -164,12 +164,18 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
             }
 
+            const auto pMin = producerRate.Minimum * MinimumNumOfStrides[producer];
             const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
 
             assert (producerRate.Maximum >= producerRate.Minimum);
 
             if (producerRate.Minimum< producerRate.Maximum) {
                 nonLocal = true;
+            }
+
+            bool effectivelyLinear = true;
+            if (pMin != pMax) {
+                effectivelyLinear = false;
             }
 
             Rational consumeMin(std::numeric_limits<unsigned>::max());
@@ -184,6 +190,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
                 const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
                 const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
+
+                if (cMin != cMax) {
+                    effectivelyLinear = false;
+                }
+
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
@@ -250,8 +261,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
-            // if this buffer is a local buffer, linearity of data is implied
-            const auto linear = nonLocal && bn.Linear;
+            const auto linear = bn.Linear & !effectivelyLinear;
             if (dynamic) {
                 buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             } else {
@@ -273,8 +283,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, RelationshipGraph::edge_descriptor>;
+    using Vertex = graph_traits<Graph>::vertex_descriptor;
 
-    for (unsigned i = PipelineInput; i <= PipelineOutput; ++i) {
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
         const RelationshipNode & node = mStreamGraph[i];
         const Kernel * const kernelObj = node.Kernel; assert (kernelObj);
 
@@ -315,6 +326,10 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
 
         const auto numOfInputs = in_degree(i, mStreamGraph);
         const auto numOfPorts = numOfInputs + out_degree(i, mStreamGraph);
+
+        if (numOfPorts == 0) {
+            continue;
+        }
 
         Graph E(numOfPorts);
 
@@ -378,8 +393,46 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
                 }
             }
         }
+
+        BitVector V(numOfPorts);
+        std::queue<Vertex> Q;
+
+        auto add_edge_if_no_induced_cycle = [&](const Vertex s, const Vertex t) {
+            // If s-t exists, skip adding this edge
+            if (LLVM_UNLIKELY(edge(s, t, E).second || s == t)) {
+                return;
+            }
+
+            // If G is a DAG and there is a t-s path, adding s-t will induce a cycle.
+            if (in_degree(s, E) > 0) {
+                // do a BFS to search for a t-s path
+                V.reset();
+                assert (Q.empty());
+                Q.push(t);
+                for (;;) {
+                    const auto u = Q.front();
+                    Q.pop();
+                    for (auto e : make_iterator_range(out_edges(u, E))) {
+                        const auto v = target(e, E);
+                        if (LLVM_UNLIKELY(v == s)) {
+                            // we found a t-s path
+                            return;
+                        }
+                        if (LLVM_LIKELY(!V.test(v))) {
+                            V.set(v);
+                            Q.push(v);
+                        }
+                    }
+                    if (Q.empty()) {
+                        break;
+                    }
+                }
+            }
+            add_edge(s, t, E);
+        };
+
         for (unsigned j = 1; j < numOfPorts; ++j) {
-            add_edge_if_no_induced_cycle(j - 1, j, E);
+            add_edge_if_no_induced_cycle(j - 1, j);
         }
 
         SmallVector<Graph::vertex_descriptor, 16> ordering;
@@ -389,7 +442,6 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
         for (const auto k : ordering) {
             const auto e = E[k];
             const RelationshipType & port = mStreamGraph[e];
-
             if (port.Type == PortType::Input) {
                 const auto binding = source(e, mStreamGraph);
                 const RelationshipNode & rn = mStreamGraph[binding];
@@ -490,6 +542,12 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
         const Kernel * const kernelObj = getKernel(i);
         bool mustBeLinear = false;
         if (LLVM_UNLIKELY(kernelObj->hasAttribute(AttrId::InternallySynchronized))) {
+            // An internally synchronized kernel requires that all I/O is linear
+            for (const auto e : make_iterator_range(out_edges(i, G))) {
+                const auto streamSet = target(e, G);
+                BufferNode & N = G[streamSet];
+                N.Linear = true;
+            }
             mustBeLinear = true;
         } else {
             for (const auto e : make_iterator_range(in_edges(i, G))) {
@@ -619,7 +677,7 @@ BufferPortMap PipelineCompiler::constructOutputPortMappings() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief mayHaveNonLinearIO
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::mayHaveNonLinearIO(const unsigned kernel) const {
+bool PipelineCompiler::mayHaveNonLinearIO() const {
 
     // If this kernel has I/O that crosses a partition boundary and the
     // buffer itself is not guaranteed to be linear then this kernel
@@ -627,45 +685,51 @@ bool PipelineCompiler::mayHaveNonLinearIO(const unsigned kernel) const {
     // able to execute its full segment without splitting the work across
     // two or more linear sub-segments.
 
-    #ifndef NDEBUG
-    // Sanity test: any kernel that is internally synchronized cannot
-    // have more than one subsegment iteration per segment.
-    const Kernel * const kernelObj = getKernel(kernel);
-    const bool nonInternallySynchronized =
-            !kernelObj->hasAttribute(AttrId::InternallySynchronized);
-    #endif
-
-
-    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-        const BufferRateData & rateData = mBufferGraph[input];
-        // Switching from the input stream to a "null stream" will require
-        // two linear sub-segments.
-        if (LLVM_UNLIKELY(rateData.ZeroExtended)) {
-            return true;
-        }
+    bool noCountableInput = true;
+    for (const auto input : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
         const auto streamSet = source(input, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
-        if (LLVM_UNLIKELY(node.Buffer->isLinear())) {
-            continue;
+        if (node.Linear) {
+            // To safely ensure we can determine the maximum number of strides
+            // before invoking the kernel, we require at least one countable
+            // input. NOTE: the PopCount reference is guaranteed to be linear.
+            const BufferRateData & rateData = mBufferGraph[input];
+            if (isCountable(rateData.Binding)) {
+                noCountableInput = false;
+            }
         }
-        assert (nonInternallySynchronized);
-        if (node.NonLocal) {            
+        if (node.NonLocal) {
             return true;
         }
     }
-    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+    for (const auto output : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
         const auto streamSet = target(output, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
-        if (LLVM_UNLIKELY(node.Buffer->isLinear())) {
-            continue;
-        }
-        assert (nonInternallySynchronized);
-        if (node.NonLocal) {            
+        if (node.NonLocal || !node.Linear) {
             return true;
         }
+    }
+    return noCountableInput;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief supportsInternalSynchronization
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::supportsInternalSynchronization() const {
+    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
+        if (LLVM_UNLIKELY(mMayHaveNonLinearIO)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "PipelineCompiler error: " <<
+                   mKernel->getName() << " is internally synchronized"
+                   " but permits non-linear I/O.";
+            report_fatal_error(out.str());
+        }
+        return true;
     }
     return false;
 }
+
 
 }
 

@@ -1767,12 +1767,12 @@ struct RemoveRedundantAssertionsPass : public ModulePass {
     static char ID;
     RemoveRedundantAssertionsPass() : ModulePass(ID) { }
 
-    void getAnalysisUsage(AnalysisUsage &AU) const override {
-//        #ifdef HAS_ADDRESS_SANITIZER
-//        AU.addRequired<DominatorTree>();
-//        AU.addRequired<AliasAnalysis>();
-//        AU.addPreserved<AliasAnalysis>();
-//        #endif
+    void getAnalysisUsage(AnalysisUsage & AU) const override {
+        #ifdef HAS_ADDRESS_SANITIZER
+        AU.addRequired<DominatorTreeWrapperPass>();
+        AU.addRequired<AAResultsWrapperPass>();
+        AU.addPreserved<AAResultsWrapperPass>();
+        #endif
     }
 
     virtual bool runOnModule(Module &M) override;
@@ -1790,59 +1790,68 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         return false;
     }
     bool modified = false;
-    DenseSet<Value *> S;
+    DenseSet<Value *> assertions;
     bool discoveredStaticFailure = false;
 
-//    #ifdef HAS_ADDRESS_SANITIZER
-//    Function * const isPoisoned = M->getFunction("__asan_region_is_poisoned");
-//    DenseSet<CallInst *> alreadyTested;
-//    AliasAnalysis & AA = getAnalysis<AliasAnalysis>();
-//    #endif
+    #ifdef HAS_ADDRESS_SANITIZER
+    Function * const isPoisoned = M.getFunction("__asan_region_is_poisoned");
+    DenseSet<CallInst *> isPoisonedCalls;
+    #endif
 
     for (Function & F : M) {
 
-        //DominatorTree & DT = getAnalysis<DominatorTree>(F);
+        // ignore declarations
+        if (F.empty()) continue;
 
-        S.clear();
+        #ifdef HAS_ADDRESS_SANITIZER
+        DominatorTree & DT = getAnalysis<DominatorTreeWrapperPass>(F).getDomTree();
+        AAResults & AA = getAnalysis<AAResultsWrapperPass>(F).getAAResults();
+        isPoisonedCalls.clear();
+        #endif
+
+        assertions.clear();
         // scan through each instruction and remove any trivially true or redundant assertions.
         for (auto & B : F) {
             for (auto i = B.begin(); i != B.end(); ) {
                 Instruction & inst = *i;
                 if (LLVM_UNLIKELY(isa<CallInst>(inst))) {
                     CallInst & ci = cast<CallInst>(inst);
-
-
-
                     // if we're using address sanitizer, try to determine whether we're
                     // rechecking the same address
-//                    #ifdef HAS_ADDRESS_SANITIZER
-//                    if (ci.getCalledFunction() == isPoisoned) {
-//                        bool alreadyProven = false;
-//                        ConstantInt * const length = dyn_cast<ConstantInt>(ci.getArgOperand(1));
-//                        if (length) {
-//                            Value * const ptr = ci.getArgOperand(0);
-//                            for (CallInst * prior : alreadyTested) {
-//                                if (DT.dominates(prior, &ci)) {
-//                                    Value * const priorPtr = prior->getArgOperand(0);
-//                                    ConstantInt * const priorLength = cast<ConstantInt>(prior->getArgOperand(1));
-//                                    const auto result = AA.alias(ptr, length->getLimitedValue(), priorPtr, priorLength->getLimitedValue());
-//                                    if (LLVM_UNLIKELY(result == AliasResult::MustAlias)) {
-//                                        alreadyProven = true;
-//                                        break;
-//                                    }
-//                                }
-//                            }
-//                        }
-//                        if (alreadyProven) {
-//                            PointerType * const voidPtrTy = IntegerType::getInt8PtrTy(M.getContext());
-//                            i = ci.replaceAllUsesWith(ConstantPointerNull::get(voidPtrTy));
-//                            modified = true;
-//                        } else {
-//                            alreadyTested.insert(&ci);
-//                        }
-//                        continue;
-//                    }
-//                    #endif
+                    #ifdef HAS_ADDRESS_SANITIZER
+                    if (ci.getCalledFunction() == isPoisoned) {
+                        bool alreadyProven = false;
+                        // To support non-constant lengths, we'd need a way of proving whether one
+                        // length is (symbolically) always less than or equal to another or v.v..
+                        ConstantInt * const length = dyn_cast<ConstantInt>(ci.getArgOperand(1));
+                        if (length) {
+                            Value * const ptr = ci.getArgOperand(0);
+                            for (CallInst * prior : isPoisonedCalls) {
+                                if (DT.dominates(prior, &ci)) {
+                                    Value * const priorPtr = prior->getArgOperand(0);
+                                    ConstantInt * const priorLength = cast<ConstantInt>(prior->getArgOperand(1));
+                                    const auto result = AA.alias(ptr, length->getLimitedValue(), priorPtr, priorLength->getLimitedValue());
+                                    if (LLVM_UNLIKELY(result == AliasResult::MustAlias)) {
+                                        alreadyProven = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (alreadyProven) {
+                                // __asan_region_is_poisoned returns the address of first poisoned
+                                // byte to indicate failure. Replace any dominated checks with null
+                                // to indicate success.
+                                PointerType * const voidPtrTy = cast<PointerType>(isPoisoned->getReturnType());
+                                ci.replaceAllUsesWith(ConstantPointerNull::get(voidPtrTy));
+                                modified = true;
+                            } else {
+                                isPoisonedCalls.insert(&ci);
+                            }
+                        }
+                        ++i;
+                        continue;
+                    }
+                    #endif
                     if (ci.getCalledFunction() == assertFunc) {
                         assert (ci.getNumArgOperands() >= 5);
                         bool remove = false;
@@ -1859,7 +1868,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 ci.setOperand(0, static_check);
                             }
                         }                        
-                        if (static_check) {                                                        
+                        if (static_check) {
                             if (LLVM_UNLIKELY(static_check->isNullValue())) {
                                 // show any static failures with their compilation context
                                 auto extract = [](const Value * a) -> const char * {
@@ -1904,11 +1913,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                             } else {
                                 remove = true;
                             }
-                        } else if (LLVM_UNLIKELY(S.count(check))) {
+                        } else if (LLVM_UNLIKELY(assertions.count(check))) {
                             // a duplicate check will never be executed if true
                             remove = true;
                         } else {
-                            S.insert(check);
+                            assertions.insert(check);
                         }
                         if (LLVM_UNLIKELY(remove)) {
                             i = ci.eraseFromParent();
@@ -1922,12 +1931,12 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         }
 
         // if we have any runtime assertions, replace the calls to each with an invoke.
-        if (LLVM_UNLIKELY(S.empty())) continue;
+        if (LLVM_UNLIKELY(assertions.empty())) continue;
 
         // Gather all assertions from the appropriate users of S.
         SmallVector<CallInst *, 64> assertList;
-        assertList.reserve(S.size());
-        for (Value * s : S) {
+        assertList.reserve(assertions.size());
+        for (Value * s : assertions) {
             for (User * u : s->users()) {
                 if (isa<CallInst>(u)) {
                     CallInst * const c = cast<CallInst>(u);
@@ -1938,8 +1947,8 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                 }
             }
         }
-        assert (assertList.size() == S.size());
-        S.clear();
+        assert (assertList.size() == assertions.size());
+        assertions.clear();
 
         CBuilder builder(M.getContext());
         builder.setModule(&M);

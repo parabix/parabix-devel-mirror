@@ -224,6 +224,8 @@ public:
         return mThreadLocalStateType  != nullptr;
     }
 
+    virtual bool requiresExplicitPartialFinalStride() const;
+
     unsigned getStride() const { return mStride; }
 
     void setStride(const unsigned stride) { mStride = stride; }
@@ -432,8 +434,6 @@ protected:
 
     static bool isLocalBuffer(const Binding & output);
 
-    virtual bool requiresExplicitPartialFinalStride() const;
-
     LLVM_READNONE bool hasFixedRate() const;
 
     LLVM_READNONE Rational getFixedRateLCM() const;
@@ -455,10 +455,6 @@ protected:
     virtual void generateFinalizeThreadLocalMethod(BuilderRef) { }
 
     virtual void generateFinalizeMethod(BuilderRef) { }
-
-private:
-
-    LLVM_READNONE bool supportsInternalSynchronization() const;
 
 protected:
 
