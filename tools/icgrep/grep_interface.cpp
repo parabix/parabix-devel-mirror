@@ -99,7 +99,7 @@ static cl::opt<BinaryFilesMode, true> BinaryFilesOption("binary-files", cl::desc
                                                      cl::values(clEnumValN(Binary, "binary", "Report match/non-match without printing matches."),
                                                                 clEnumValN(WithoutMatch, "without-match", "Always report as non-matching."),
                                                                 clEnumValN(Text, "text", "Treat binary files as text.")
-                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(Text));
+                                                                CL_ENUM_VAL_SENTINEL), cl::cat(Input_Options), cl::location(BinaryFilesFlag), cl::init(WithoutMatch));
     
 
     

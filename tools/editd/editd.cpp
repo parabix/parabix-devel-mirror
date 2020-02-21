@@ -15,6 +15,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/raw_ostream.h>
 #include <kernel/basis/s2p_kernel.h>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/core/idisa_target.h>

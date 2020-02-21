@@ -29,13 +29,15 @@ public:
                StreamSet * const breaks,
                StreamSet * const matches)
     : MultiBlockKernel(b
-                       , "gitignoreC"
+                       , "gitignoreC" + std::to_string(codegen::SegmentSize)
                        // inputs
                        , {{"BasisBits", BasisBits}, {"u8index", u8index}, {"breaks", breaks}}
                        // outputs
                        , {{"matches", matches, FixedRate(), Add1()}}
                        // scalars
-                       , {}, {}, {}) { }
+                       , {}, {}, {}) {
+        setStride(codegen::SegmentSize);
+    }
 
 
     bool hasFamilyName() const override { return true; }
@@ -47,9 +49,8 @@ protected:
         Value * const source = b->CreatePointerCast(b->getRawInputPointer("breaks", processed), int8PtrTy);
         Value * const produced = b->getProducedItemCount("matches");
         Value * const target = b->CreatePointerCast(b->getRawOutputPointer("matches", produced), int8PtrTy);
-        const auto blockSize = b->getBitBlockWidth() / 8;
-        Value * const toCopy = b->CreateMul(numOfStrides, b->getSize(blockSize));
-        b->CreateMemCpy(target, source, toCopy, blockSize);
+        Value * const toCopy = b->CreateMul(numOfStrides, b->getSize(codegen::SegmentSize));
+        b->CreateMemCpy(target, source, toCopy, b->getBitBlockWidth() / 8);
     }
 
 };
@@ -74,8 +75,8 @@ public:
                          , [&]() -> std::string {
                             std::string tmp;
                             raw_string_ostream out(tmp);
-                            out << "gitignore" << (outerKernel == nullptr ? 'R' : 'N');
-                            out.write_hex(patterns.size());
+                            out << "gitignore" << codegen::SegmentSize << (outerKernel == nullptr ? 'R' : 'N');
+                            out.write_hex(patterns.size());                            
                             out.flush();
                             return tmp;
                          }()
@@ -218,7 +219,6 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
                                               patterns, mCaseInsensitive, mBreakCC,
                                               mNumOfThreads > 1);
     }
-    kernel->setStride(codegen::SegmentSize);
 
     mGrepDriver.generateUncachedKernels();
     mGrepDriver.addKernel(kernel);
