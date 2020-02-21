@@ -181,7 +181,6 @@ inline void CPUDriver::preparePassManager() {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
     #endif
         mPassManager->add(createRemoveRedundantAssertionsPass());
-        mPassManager->add(createDeadCodeEliminationPass());
         mPassManager->add(createCFGSimplificationPass());
     #ifdef NDEBUG
     }

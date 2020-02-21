@@ -979,8 +979,7 @@ found:  ++i;
 
     Z3_optimize_dec_ref(ctx, solver);
     Z3_del_context(ctx);
-
-    Z3_finalize_memory();
+    Z3_reset_memory();
 
     // Add the final constraints to the graph
     const auto end = ordering.end();

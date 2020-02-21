@@ -363,19 +363,18 @@ inline unsigned PipelineCompiler::getLookAhead(const unsigned bufferVertex) cons
  * @brief writeLookBehindLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const auto bufferVertex = getOutputBufferVertex(outputPort);
-        const BufferNode & bn = mBufferGraph[bufferVertex];
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookBehind) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
-            Value * const produced = mAlreadyProducedPhi(mKernelIndex, outputPort);
+            const BufferRateData & br = mBufferGraph[e];
+            Value * const produced = mAlreadyProducedPhi(mKernelIndex, br.Port);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Constant * const underflow = b->getSize(bn.LookBehind);
             Value * const needsCopy = b->CreateICmpULT(producedOffset, underflow);
-            copy(b, CopyMode::LookBehind, needsCopy, i, bn.Buffer, bn.LookBehind);
+            copy(b, CopyMode::LookBehind, needsCopy, br.Port, bn.Buffer, bn.LookBehind);
         }
     }
 }
@@ -384,19 +383,18 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
  * @brief writeLookBehindReflectionLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const auto bufferVertex = getOutputBufferVertex(outputPort);
-        const BufferNode & bn = mBufferGraph[bufferVertex];
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookBehindReflection) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
-            Value * const produced = mAlreadyProducedPhi(mKernelIndex, outputPort);
+            const BufferRateData & br = mBufferGraph[e];
+            Value * const produced = mAlreadyProducedPhi(mKernelIndex, br.Port);
             Constant * const reflection = b->getSize(bn.LookBehindReflection);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const needsCopy = b->CreateICmpULT(producedOffset, reflection);
-            copy(b, CopyMode::LookBehindReflection, needsCopy, i, bn.Buffer, bn.LookBehindReflection);
+            copy(b, CopyMode::LookBehindReflection, needsCopy, br.Port, bn.Buffer, bn.LookBehindReflection);
         }
     }
 }
@@ -405,22 +403,21 @@ void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
  * @brief writeCopyBackLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const auto bufferVertex = getOutputBufferVertex(outputPort);
-        const BufferNode & bn = mBufferGraph[bufferVertex];
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.CopyBack) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
-            Value * const alreadyProduced = mAlreadyProducedPhi(mKernelIndex, outputPort);
+            const BufferRateData & br = mBufferGraph[e];
+            Value * const alreadyProduced = mAlreadyProducedPhi(mKernelIndex, br.Port);
             Value * const priorOffset = b->CreateURem(alreadyProduced, capacity);
-            Value * const produced = mProducedItemCount(mKernelIndex, outputPort);
+            Value * const produced = mProducedItemCount(mKernelIndex, br.Port);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
             Value * const needsCopy = b->CreateAnd(nonCapacityAlignedWrite, wroteToOverflow);
-            copy(b, CopyMode::CopyBack, needsCopy, i, buffer, bn.CopyBack);
+            copy(b, CopyMode::CopyBack, needsCopy, br.Port, buffer, bn.CopyBack);
         }
     }
 }
@@ -431,32 +428,26 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
 void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
     // Unless we modified the portion of data that ought to be reflected in the overflow region, do not copy
     // any data. To do so would incur extra writes and pollute the cache with potentially unnecessary data.
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-
-        const StreamSetPort outputPort{PortType::Output, i};
-
-        const auto bufferVertex = getOutputBufferVertex(outputPort);
-        const BufferNode & bn = mBufferGraph[bufferVertex];
-
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookAhead) {
-
             const StreamSetBuffer * const buffer = bn.Buffer;
-
             Value * const capacity = buffer->getCapacity(b);
-            Value * const initial = mInitiallyProducedItemCount(outputPort);
-            Value * const produced = mUpdatedProducedPhi(outputPort);
+            const BufferRateData & br = mBufferGraph[e];
+            Value * const initial = mInitiallyProducedItemCount(br.Port);
+            Value * const produced = mUpdatedProducedPhi(br.Port);
 
             // If we wrote anything and it was not our first write to the buffer ...
             Value * overwroteData = b->CreateICmpUGT(produced, capacity);
-            const Binding & output = getOutputBinding(outputPort);
+            const Binding & output = getOutputBinding(br.Port);
             const ProcessingRate & rate = output.getRate();
             const Rational ONE(1, 1);
             bool mayProduceZeroItems = false;
             if (rate.getLowerBound() < ONE) {
                 mayProduceZeroItems = true;
             } else if (rate.isRelative()) {
-                const Binding & ref = getBinding(getReference(outputPort));
+                const Binding & ref = getBinding(getReference(br.Port));
                 const ProcessingRate & refRate = ref.getRate();
                 mayProduceZeroItems = (rate.getLowerBound() * refRate.getLowerBound()) < ONE;
             }
@@ -483,7 +474,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             // the overflow. Should be enough just to have a "copyback flag" phi node to say it that was the
             // last thing it did to the buffer.
 
-            copy(b, CopyMode::LookAhead, needsCopy, i, buffer, bn.LookAhead);
+            copy(b, CopyMode::LookAhead, needsCopy, br.Port, buffer, bn.LookAhead);
         }
     }
 }
@@ -492,7 +483,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
  * @brief writeOverflowCopy
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
-                            const unsigned outputPort, const StreamSetBuffer * const buffer,
+                            const StreamSetPort outputPort, const StreamSetBuffer * const buffer,
                             const unsigned itemsToCopy) {
 
     auto makeSuffix = [](CopyMode mode) {
@@ -500,12 +491,12 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
             case CopyMode::LookAhead: return "LookAhead";
             case CopyMode::CopyBack: return "CopyBack";
             case CopyMode::LookBehind: return "LookBehind";
-            case CopyMode::LookBehindReflection: return "LookBehindReflection";
+            case CopyMode::LookBehindReflection: return "Reflection";
         }
         llvm_unreachable("unknown copy mode!");
     };
 
-    const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, outputPort}) + "_copy" + makeSuffix(mode);
+    const auto prefix = makeBufferName(mKernelIndex, outputPort) + "_copy" + makeSuffix(mode);
 
     BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
@@ -551,6 +542,28 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     b->CreateBr(copyExit);
 
     b->SetInsertPoint(copyExit);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prepareLinearBuffers
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::prepareLinearBuffers(BuilderRef b) const {
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
+        if (buffer->isLinear()) {
+            const BufferRateData & br = mBufferGraph[e];
+            Value * const produced = mInitiallyProducedItemCount(br.Port);
+            Value * const consumed = mConsumedItemCount(br.Port);
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = makeBufferName(mKernelIndex, br.Port);
+            debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, produced);
+            debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
+            #endif
+            buffer->prepareLinearBuffer(b, produced, consumed);
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

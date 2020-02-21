@@ -137,8 +137,8 @@ Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel,
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
 
-    Value * hard = mIsFinal;
-    Value * soft = b->getTrue();
+    Value * hard = nullptr;
+    Value * soft = nullptr;
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
     Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
@@ -154,12 +154,27 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
         // however, a kernel that can terminate with a fatal error, may not necessarily do so.
         // otherwise its a soft termination and all must agree that the pipeline has terminated
         if (mTerminationGraph[e]) {
-            hard = b->CreateOr(hard, b->CreateICmpEQ(signal, fatal));
+            Value * const final = b->CreateICmpEQ(signal, fatal);
+            if (hard) {
+                hard = b->CreateOr(hard, final);
+            } else {
+                hard = final;
+            }
         }
-        soft = b->CreateAnd(soft, b->CreateICmpNE(signal, unterminated));
+        Value * const final = b->CreateICmpNE(signal, unterminated);
+        if (soft) {
+            soft = b->CreateAnd(soft, final);
+        } else {
+            soft = final;
+        }
     }
 
-    return b->CreateSelect(hard, fatal, b->CreateSelect(soft, aborted, unterminated));
+    assert (soft);
+    Value * signal = b->CreateSelect(soft, aborted, unterminated);
+    if (hard) {
+        signal = b->CreateSelect(hard, fatal, signal);
+    }
+    return signal;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

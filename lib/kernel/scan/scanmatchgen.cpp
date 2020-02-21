@@ -862,6 +862,90 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
 ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const SourceCoords, StreamSet * const ColorizedCoords, Scalar * const callbackObject)
 : SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
 // inputs
+{Binding{"InputStream", ByteStream, GreedyRate(), Deferred()},
+    Binding{"SourceCoords", SourceCoords, FixedRate(1)}, Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1)}},
+                        // outputs
+{},
+                        // input scalars
+{Binding{"accumulator_address", callbackObject}},
+                        // output scalars
+{},
+                        // kernel state
+{}) {
+    setStride(1);
+    addAttribute(SideEffecting());
+}
+
+// TO DO:  investigate add linebreaks as input:  set consumed by the last linebreak?
+
+void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
+    Module * const m = b->getModule();
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    BasicBlock * const processMatchCoordinates = b->CreateBasicBlock("processMatchCoordinates");
+    BasicBlock * const dispatch = b->CreateBasicBlock("dispatch");
+    BasicBlock * const coordinatesDone = b->CreateBasicBlock("coordinatesDone");
+    BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
+    BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
+
+    Value * accumulator = b->getScalarField("accumulator_address");
+    Value * const avail = b->getAvailableItemCount("InputStream");
+    Value * matchesProcessed = b->getProcessedItemCount("SourceCoords");
+    Value * matchesAvail = b->getAvailableItemCount("SourceCoords");
+
+    Constant * const sz_ONE = b->getSize(1);
+
+    b->CreateCondBr(b->CreateICmpNE(matchesProcessed, matchesAvail), processMatchCoordinates, coordinatesDone);
+
+    b->SetInsertPoint(processMatchCoordinates);
+    PHINode * phiMatchNum = b->CreatePHI(b->getSizeTy(), 2, "matchNum");
+    phiMatchNum->addIncoming(matchesProcessed, entryBlock);
+
+    Value * nextMatchNum = b->CreateAdd(phiMatchNum, sz_ONE);
+
+    Value * matchRecordStart = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_STARTS), phiMatchNum), "matchStartLoad");
+    Value * matchRecordEnd = b->CreateLoad(b->getRawInputPointer("ColorizedCoords", b->getInt32(LINE_ENDS), phiMatchNum), "matchEndLoad");
+    Value * matchRecordNum = b->CreateLoad(b->getRawInputPointer("SourceCoords", b->getInt32(LINE_NUMBERS), phiMatchNum), "matchNumLoad");
+
+    // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
+    // to access past EOF.
+    Value * const bufLimit = b->CreateSub(avail, sz_ONE);
+    matchRecordEnd = b->CreateUMin(matchRecordEnd, bufLimit);
+    // matchStart should never be past EOF, but in case it is....
+    //b->CreateAssert(b->CreateICmpULT(matchRecordStart, avail), "match position past EOF");
+    b->CreateCondBr(b->CreateICmpULT(matchRecordStart, avail), dispatch, callFinalizeScan);
+
+    b->SetInsertPoint(dispatch);
+    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+    Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
+    Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
+    auto argi = dispatcher->arg_begin();
+    const auto matchRecNumArg = &*(argi++);
+    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
+    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
+    Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
+    phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
+    b->CreateCondBr(haveMoreMatches, processMatchCoordinates, coordinatesDone);
+
+    b->SetInsertPoint(coordinatesDone);
+    //b->setProcessedItemCount("InputStream", matchRecordEnd);
+    b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
+
+    b->SetInsertPoint(callFinalizeScan);
+    b->setProcessedItemCount("InputStream", avail);
+    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
+    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    b->CreateBr(scanReturn);
+
+    b->SetInsertPoint(scanReturn);
+
+}
+
+#if 0
+
+ColorizedReporter::ColorizedReporter(BuilderRef b, StreamSet * ByteStream, StreamSet * const SourceCoords, StreamSet * const ColorizedCoords, Scalar * const callbackObject)
+: SegmentOrientedKernel(b, "colorizedReporter" + std::to_string(SourceCoords->getNumElements()) + std::to_string(ColorizedCoords->getNumElements()),
+// inputs
 {Binding{"InputStream", ByteStream, GreedyRate(), Deferred() }
 ,Binding{"SourceCoords", SourceCoords, FixedRate(1), Deferred()}
 ,Binding{"ColorizedCoords", ColorizedCoords, FixedRate(1), Deferred()}},
@@ -955,5 +1039,7 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
 
 
 }
+
+#endif
 
 }

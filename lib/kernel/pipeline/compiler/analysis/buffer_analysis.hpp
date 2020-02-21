@@ -164,7 +164,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 }
             }
 
-            const auto pMin = producerRate.Minimum * MinimumNumOfStrides[producer];
+//            const auto pMin = producerRate.Minimum * MinimumNumOfStrides[producer];
             const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
 
             assert (producerRate.Maximum >= producerRate.Minimum);
@@ -173,10 +173,13 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 nonLocal = true;
             }
 
-            bool effectivelyLinear = true;
-            if (pMin != pMax) {
-                effectivelyLinear = false;
-            }
+            // TODO: dataflow analysis must take lookahead/delay into account to permit
+            // this optimization.
+
+//            bool isNonLinear = false;
+//            if (pMin != pMax) {
+//                isNonLinear = true;
+//            }
 
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
@@ -191,10 +194,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
                 const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
 
-                if (cMin != cMax) {
-                    effectivelyLinear = false;
-                }
-
+//                if (cMin != cMax) {
+//                    isNonLinear = true;
+//                }
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
@@ -261,7 +263,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
-            const auto linear = bn.Linear & !effectivelyLinear;
+            const auto linear = bn.Linear; // & isNonLinear
             if (dynamic) {
                 buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             } else {

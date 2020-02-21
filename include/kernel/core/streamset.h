@@ -75,6 +75,8 @@ public:
 
     size_t getOverflowCapacity(BuilderPtr b) const;
 
+    bool isEmptySet() const;
+
     virtual ~StreamSetBuffer() = 0;
 
     llvm::Value * getHandle() const {
@@ -121,6 +123,8 @@ public:
     virtual llvm::Value * getRawItemPointer(BuilderPtr b, llvm::Value * streamIndex, llvm::Value * absolutePosition) const;
 
     virtual llvm::Value * getStreamLogicalBasePtr(BuilderPtr b, llvm::Value * baseAddress, llvm::Value * const streamIndex, llvm::Value * blockIndex) const = 0;
+
+    virtual void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const = 0;
 
     virtual void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
 
@@ -179,6 +183,8 @@ public:
     llvm::Value * getCapacity(BuilderPtr b) const override;
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const override;
+
+    void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
 
     void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
@@ -250,6 +256,8 @@ public:
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
+    void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
+
     void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 
     size_t getCapacity() const {
@@ -285,6 +293,8 @@ public:
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
+
+    void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const override;
 
     void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
 

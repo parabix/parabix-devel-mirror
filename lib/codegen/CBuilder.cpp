@@ -13,6 +13,7 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Metadata.h>
 #include <llvm/IR/Dominators.h>
+#include <llvm/Transforms/Utils/Local.h>
 #include <llvm/ADT/DenseSet.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/Format.h>
@@ -26,10 +27,13 @@
 #include <boost/format.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <cxxabi.h>
-
 #ifdef HAS_ADDRESS_SANITIZER
 #include <llvm/Analysis/AliasAnalysis.h>
 #endif
+
+#ifdef ENABLE_ASSERTION_TRACE
+
+// TODO: look into "backtrace_pcinfo"
 
 #if defined(__i386__)
 typedef uint32_t unw_word_t;
@@ -45,6 +49,7 @@ static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
 #elif defined(HAS_EXECINFO)
 #include <execinfo.h>
 static_assert(sizeof(void *) == sizeof(uintptr_t), "");
+#endif
 #endif
 
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -1111,9 +1116,37 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
 
         restoreIP(ip);
     }
-    #ifndef NDEBUG
+    #ifdef ENABLE_ASSERTION_TRACE
     SmallVector<unw_word_t, 64> stack;
-    #if defined(HAS_EXECINFO)
+    #if defined(HAS_MACH_VM_TYPES)
+    for (;;) {
+        unsigned int n;
+        _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
+        if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
+            while (n >= 1 && stack[n - 1] == 0) {
+                n -= 1;
+            }
+            stack.set_size(n);
+            break;
+        }
+        stack.reserve(n * 2);
+    }
+    #elif defined(HAS_LIBUNWIND)
+    unw_context_t context;
+    // Initialize cursor to current frame for local unwinding.
+    unw_getcontext(&context);
+    unw_cursor_t cursor;
+    unw_init_local(&cursor, &context);
+    // Unwind frames one by one, going up the frame stack.
+    while (unw_step(&cursor) > 0) {
+        unw_word_t pc;
+        unw_get_reg(&cursor, UNW_REG_IP, &pc);
+        if (pc == 0) {
+            break;
+        }
+        stack.push_back(pc);
+    }
+    #elif defined(HAS_EXECINFO)
     for (;;) {
         const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
         if (LLVM_LIKELY(n < (int)stack.capacity())) {
@@ -1123,7 +1156,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         stack.reserve(n * 2);
     }
     #endif
-    const unsigned FIRST_NON_ASSERT = 2;
+    constexpr unsigned FIRST_NON_ASSERT = 2;
     Constant * trace = nullptr;
     ConstantInt * depth = nullptr;
     if (LLVM_UNLIKELY(stack.size() < FIRST_NON_ASSERT)) {
@@ -1819,7 +1852,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                     // if we're using address sanitizer, try to determine whether we're
                     // rechecking the same address
                     #ifdef HAS_ADDRESS_SANITIZER
-                    if (ci.getCalledFunction() == isPoisoned) {
+                    if (ci.getCalledFunction() == isPoisoned) { assert (isPoisoned);
                         bool alreadyProven = false;
                         // To support non-constant lengths, we'd need a way of proving whether one
                         // length is (symbolically) always less than or equal to another or v.v..
@@ -1850,7 +1883,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                         }
                         ++i;
                         continue;
-                    }
+                    } else
                     #endif
                     if (ci.getCalledFunction() == assertFunc) {
                         assert (ci.getNumArgOperands() >= 5);
@@ -1901,11 +1934,11 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                                 const char * const argC = extract(arg); assert (argC);
                                                 fmt % argC;
                                             } else {
-                                                fmt % "<unknown>";
+                                                fmt % "<unknown constant type>";
                                             }
                                         }
                                     } else {
-                                        fmt % "<any>";
+                                        fmt % "<any value>";
                                     }
                                 }
                                 __report_failure(name, fmt.str().data(), trace, n);
@@ -1921,6 +1954,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                         }
                         if (LLVM_UNLIKELY(remove)) {
                             i = ci.eraseFromParent();
+                            RecursivelyDeleteTriviallyDeadInstructions(check);
                             modified = true;
                             continue;
                         }
@@ -1933,10 +1967,14 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         // if we have any runtime assertions, replace the calls to each with an invoke.
         if (LLVM_UNLIKELY(assertions.empty())) continue;
 
-        // Gather all assertions from the appropriate users of S.
+        // Gather all assertions function calls from the remaining conditions
         SmallVector<CallInst *, 64> assertList;
         assertList.reserve(assertions.size());
         for (Value * s : assertions) {
+            // It's possible (but unlikely) that the assertion condition is
+            // used for some purpose other than the assertion call; scan
+            // through and find each. We know, however, there must be exactly
+            // one assertion call for each condition.
             for (User * u : s->users()) {
                 if (isa<CallInst>(u)) {
                     CallInst * const c = cast<CallInst>(u);
@@ -1950,6 +1988,8 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
         assert (assertList.size() == assertions.size());
         assertions.clear();
 
+
+        // Replace the assertion function with a "try/throw" block
         CBuilder builder(M.getContext());
         builder.setModule(&M);
         builder.SetInsertPoint(&F.front());

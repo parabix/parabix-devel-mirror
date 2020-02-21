@@ -28,9 +28,9 @@
 #include <util/maxsat.hpp>
 #include <assert.h>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
-#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -662,8 +662,8 @@ public:
     void determineNumOfLinearStrides(BuilderRef b);
     void checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort);
     void ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort outputPort);
-    void branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port, Value * const cond, BasicBlock * target, Value * const halting);
-    void updatePHINodesForLoopExit(BuilderRef b, Value * halting);
+    void branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port, Value * const cond, BasicBlock * target);
+    void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
     Value * determineIsFinal(BuilderRef b) const;
@@ -693,7 +693,7 @@ public:
     void writeLookBehindLogic(BuilderRef b);
     void writeLookBehindReflectionLogic(BuilderRef b);
     enum class CopyMode { CopyBack, LookAhead, LookBehind, LookBehindReflection };
-    void copy(BuilderRef b, const CopyMode mode, Value * cond, const unsigned outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy);
+    void copy(BuilderRef b, const CopyMode mode, Value * cond, const StreamSetPort outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy);
 
 
     void computeFullyProcessedItemCounts(BuilderRef b);
@@ -784,6 +784,7 @@ public:
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
 
+    void prepareLinearBuffers(BuilderRef b) const;
     Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
@@ -1075,9 +1076,9 @@ protected:
     BasicBlock *                                mPipelineEnd = nullptr;
     BasicBlock *                                mRethrowException = nullptr;
 
-    Vec<AllocaInst *, 32>                       mAddressableItemCountPtr;
-    Vec<AllocaInst *, 8>                        mVirtualBaseAddressPtr;
-    Vec<AllocaInst *, 16>                       mTruncatedInputBuffer;
+    Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
+    Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
+    Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
     Vec<Value *, 64>                            mLocallyAvailableItems;
 
     // partition state
@@ -1086,9 +1087,6 @@ protected:
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
-    PHINode *                                   mInsufficientIOHaltingPhi = nullptr;
-    PHINode *                                   mHaltingPhi = nullptr;
-    PHINode *                                   mHaltedPhi = nullptr;
     PHINode *                                   mCurrentNumOfStrides = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     PHINode *                                   mTotalNumOfStrides = nullptr;

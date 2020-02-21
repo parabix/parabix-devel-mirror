@@ -111,6 +111,14 @@ size_t StreamSetBuffer::getOverflowCapacity(BuilderPtr b) const {
     return mOverflow * b->getBitBlockWidth();
 }
 
+bool StreamSetBuffer::isEmptySet() const {
+    size_t count = 1;
+    if (isa<ArrayType>(getBaseType())) {
+        count = getBaseType()->getArrayNumElements();
+    }
+    return count == 0;
+}
+
 
 /**
  * @brief getRawItemPointer
@@ -265,6 +273,10 @@ inline void ExternalBuffer::assertValidBlockIndex(BuilderPtr b, Value * blockInd
     }
 }
 
+void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */) const {
+    /* do nothing */
+}
+
 void ExternalBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
     unsupported("reserveCapacity", "External");
 }
@@ -417,134 +429,55 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     return b->CreateInBoundsGEP(getBaseAddress(b), b->getSize(mCapacity));
 }
 
-void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems) const  {
-#if 1
+void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const {
     if (mLinear) {
-        SmallVector<char, 200> buf;
-        raw_svector_ostream name(buf);
-
-        assert ("unspecified module" && b.get() && b->getModule());
-
-        name << "__StaticLinearBuffer_reserveCapacity_";
-
-        Type * ty = getBaseType();
-        const auto streamCount = ty->getArrayNumElements();
-        name << streamCount << 'x';
-        ty = ty->getArrayElementType();
-        ty = ty->getVectorElementType();
-        const auto itemWidth = ty->getIntegerBitWidth();
-        name << itemWidth
-             << '_' << mUnderflow
-             << '_' << mOverflow
-             << '_' << mAddressSpace;
-
-        Value * const myHandle = getHandle();
-
-        Module * const m = b->getModule();
-        Function * func = m->getFunction(name.str());
-        if (func == nullptr) {
-
-            const auto ip = b->saveIP();
-
-            LLVMContext & C = m->getContext();
-            IntegerType * const sizeTy = b->getSizeTy();
-            FunctionType * funcTy = FunctionType::get(b->getVoidTy(), {myHandle->getType(), sizeTy, sizeTy, sizeTy}, false);
-            func = Function::Create(funcTy, Function::InternalLinkage, name.str(), m);
-
-            b->SetInsertPoint(BasicBlock::Create(C, "entry", func));
-
-            auto arg = func->arg_begin();
-            auto nextArg = [&]() {
-                assert (arg != func->arg_end());
-                Value * const v = &*arg;
-                std::advance(arg, 1);
-                return v;
-            };
-
-            Value * const handle = nextArg();
-            handle->setName("handle");
-            Value * const produced = nextArg();
-            produced->setName("produced");
-            Value * const consumed = nextArg();
-            consumed->setName("consumed");
-            Value * const required = nextArg();
-            required->setName("required");
-            assert (arg == func->arg_end());
-
-            setHandle(handle);
-
-            const auto blockWidth = b->getBitBlockWidth();
-            assert (is_power_2(blockWidth));
-            const auto blockSize = blockWidth / 8;
-
-            ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
-            Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
-
-            FixedArray<Value *, 2> indices;
-            indices[0] = b->getInt32(0);
-            indices[1] = b->getInt32(EffectiveCapacity);
-            Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
-            Value * const capacity = b->CreateLoad(capacityField);
-            Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
-
-            indices[1] = b->getInt32(BaseAddress);
-            Value * const virtualBaseField = b->CreateInBoundsGEP(handle, indices);
-            Value * const virtualBase = b->CreateLoad(virtualBaseField);
-            assert (virtualBase->getType()->getPointerElementType() == mType);
-
-            DataLayout DL(b->getModule());
-            Type * const intPtrTy = DL.getIntPtrType(virtualBase->getType());
-
-            indices[1] = b->getInt32(ConcreteAddress);
-            Value * const actualBufferStartField = b->CreateInBoundsGEP(handle, indices);
-            Value * const bufferStart = b->CreateLoad(actualBufferStartField);
-            Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
-            BasicBlock * const copyBack = BasicBlock::Create(C, "copyBack", func);
-            BasicBlock * const updateBaseAddress = BasicBlock::Create(C, "updateBaseAddress", func);
-            Value * const noCopy = b->CreateICmpEQ(producedChunks, consumedChunks);
-            b->CreateLikelyCondBr(noCopy, updateBaseAddress, copyBack);
-
-            b->SetInsertPoint(copyBack);
-            Value * const unreadDataPtr = b->CreateInBoundsGEP(virtualBase, consumedChunks);
-            Value * const unconsumedChunks = b->CreateSub(producedChunks, consumedChunks);
-
-            //if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-                Value * const requiredCapacity = b->CreateAdd(produced, required);
-                Value * const requiredChunks = b->CreateCeilUDiv(requiredCapacity, BLOCK_WIDTH);
-                Value * const chunksToOverwrite = b->CreateSub(requiredChunks, consumedChunks);
-                Value * const overwriteUpToPtr = b->CreateInBoundsGEP(bufferStart, chunksToOverwrite);
-                Value * const canCopy = b->CreateICmpULE(overwriteUpToPtr, unreadDataPtr);
-                // unlike linear dynamic buffers, a linear static buffer requires that we can always copy
-                // the data back within the same buffer.
-                b->CreateAssert(canCopy, "Static linear buffer cannot copy the unconsumed items without expansion.");
-            //}
-
-            Value * const bytesToCopy = b->CreateMul(unconsumedChunks, CHUNK_SIZE);
-            b->CreateMemCpy(bufferStart, unreadDataPtr, bytesToCopy, blockSize);
-            b->CreateBr(updateBaseAddress);
-
-            b->SetInsertPoint(updateBaseAddress);
-            Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
-            b->CreateStore(newBaseAddress, virtualBaseField);
-
-            // how many item chunks between the virtual base address and the actual buffer start address?
-            Value * const bufferInt = b->CreatePtrToInt(virtualBase, intPtrTy);
-            Value * const dataStartInt = b->CreatePtrToInt(bufferStart, intPtrTy);
-            Value * firstItemOffset = b->CreateSub(dataStartInt, bufferInt);
-            firstItemOffset = b->CreateUDiv(firstItemOffset, CHUNK_SIZE);
-            Value * const discarded = b->CreateSub(consumedChunks, firstItemOffset);
-            Value * const effectiveCapacity = b->CreateAdd(capacity, discarded);
-
-            b->CreateStore(effectiveCapacity, capacityField);
-            b->CreateRetVoid();
-
-            b->restoreIP(ip);
-            setHandle(myHandle);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            Value * const fullyConsumed = b->CreateICmpEQ(produced, consumed);
+            b->CreateAssert(fullyConsumed, "Linear static buffer was not fully consumed.");
         }
 
-        b->CreateCall(func, { myHandle, produced, consumed, required });
+        const auto blockWidth = b->getBitBlockWidth();
+        assert (is_power_2(blockWidth));
+
+        ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
+        Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
+
+        FixedArray<Value *, 2> indices;
+        indices[0] = b->getInt32(0);
+        indices[1] = b->getInt32(EffectiveCapacity);
+        Value * const capacityField = b->CreateInBoundsGEP(mHandle, indices);
+        Value * const capacity = b->CreateLoad(capacityField);
+        Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
+
+        indices[1] = b->getInt32(BaseAddress);
+        Value * const virtualBaseField = b->CreateInBoundsGEP(mHandle, indices);
+        Value * const virtualBase = b->CreateLoad(virtualBaseField);
+        assert (virtualBase->getType()->getPointerElementType() == mType);
+
+        DataLayout DL(b->getModule());
+        Type * const intPtrTy = DL.getIntPtrType(virtualBase->getType());
+
+        indices[1] = b->getInt32(ConcreteAddress);
+        Value * const actualBufferStartField = b->CreateInBoundsGEP(mHandle, indices);
+        Value * const bufferStart = b->CreateLoad(actualBufferStartField);
+        Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
+        b->CreateStore(newBaseAddress, virtualBaseField);
+
+        // how many item chunks between the virtual base address and the actual buffer start address?
+        Value * const bufferInt = b->CreatePtrToInt(virtualBase, intPtrTy);
+        Value * const dataStartInt = b->CreatePtrToInt(bufferStart, intPtrTy);
+        Value * firstItemOffset = b->CreateSub(dataStartInt, bufferInt);
+        firstItemOffset = b->CreateUDiv(firstItemOffset, CHUNK_SIZE);
+        Value * const discarded = b->CreateSub(consumedChunks, firstItemOffset);
+        Value * const effectiveCapacity = b->CreateAdd(capacity, discarded);
+
+        b->CreateStore(effectiveCapacity, capacityField);
+
     }
-#endif
+}
+
+void StaticBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
+    /* do nothing */
 }
 
 // Dynamic Buffer
@@ -647,6 +580,10 @@ Value * DynamicBuffer::getCapacity(BuilderPtr b) const {
 
 void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Dynamic");
+}
+
+void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */) const {
+    /* do nothing */
 }
 
 void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value * const consumed, Value * const required, Constant * const overflowItems) const {

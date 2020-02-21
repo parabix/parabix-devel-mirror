@@ -87,7 +87,7 @@ link_directories(${Boost_LIBRARY_DIRS})
 
 ###   Import Dependency: Z3   ###
 
-find_package(Z3 REQUIRED)
+find_package(Z3 REQUIRED) # libz3-dev
 include_directories(${Z3_INCLUDE_DIRS})
 
 ###   Project Configuration   ###
@@ -178,28 +178,38 @@ endfunction(parabix_set_library_name)
 
 include(CMakeParseArguments)
 
-if (CMAKE_BUILD_TYPE STREQUAL "Debug" AND ARTIFACT_TYPE STREQUAL "Static")
-    set(CMAKE_POSITION_INDEPENDENT_CODE OFF)
-
-    # Add assertion debug symbol support checks
-    include(CheckIncludeFileCXX)
-    CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
-    IF (HAS_MACH_VM_TYPES)
-      SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")
-    ELSE()
-      UNSET(LIBUNWIND_FOUND CACHE)
-      find_package(Libunwind)
-      IF (LIBUNWIND_FOUND)
-        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
-        include_directories(${LIBUNWIND_INCLUDE_DIR})
-        target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})
-      ELSE()
-        CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
-        IF (HAS_EXECINFO)
-           SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    ###   Import Dependency: DWARF   ###
+    find_package(LibDwarf) # libelf-dev libdwarf-dev
+    if (LIBDWARF_FOUND)
+        # Add assertion debug symbol support checks
+        include(CheckIncludeFileCXX)
+        CHECK_INCLUDE_FILE_CXX(mach/vm_types.h HAS_MACH_VM_TYPES)
+        IF (HAS_MACH_VM_TYPES)
+          SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_MACH_VM_TYPES")          
+        ELSE()
+          UNSET(LIBUNWIND_FOUND CACHE)
+          find_package(Libunwind)
+          IF (LIBUNWIND_FOUND)
+            SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_LIBUNWIND")
+            include_directories(${LIBUNWIND_INCLUDE_DIR})
+            target_link_libraries(CodeGen ${LIBUNWIND_LIBRARIES})            
+          ELSE()
+            CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+            IF (HAS_EXECINFO)
+               SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DHAS_EXECINFO")
+            ELSE()
+                UNSET(LIBDWARF_FOUND)
+            ENDIF()
+          ENDIF()
         ENDIF()
-      ENDIF()
-    ENDIF()
+        if (LIBDWARF_FOUND)
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${LIBDWARF_DEFINITIONS} -DENABLE_ASSERTION_TRACE")
+            include_directories("${LIBDWARF_INCLUDE_DIRS}")
+            link_directories(${LIBDWARF_LIBRARIES})
+        endif()
+    endif()
+
 endif()
 
 # Release & Debug flags

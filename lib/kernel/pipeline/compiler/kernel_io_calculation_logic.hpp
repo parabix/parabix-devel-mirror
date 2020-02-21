@@ -76,13 +76,9 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     // When tracing blocking I/O, test all I/O streams but do not execute the
     // kernel if any stream is insufficient.
     if (mBranchToLoopExit) {
-        BasicBlock * const noStreamIsInsufficient = b->CreateBasicBlock("", mKernelLoopCall);
+        BasicBlock * const noStreamIsInsufficient = b->CreateBasicBlock("", mKernelCheckOutputSpace);
         b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientIOExit, noStreamIsInsufficient);
-
-        BasicBlock * const exitBlock = b->GetInsertBlock();
-        mInsufficientIOHaltingPhi->addIncoming(mHalted, exitBlock);
-
-        updatePHINodesForLoopExit(b, mHalted);
+        updatePHINodesForLoopExit(b);
         b->SetInsertPoint(noStreamIsInsufficient);
     }
 
@@ -143,8 +139,8 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     if (mIsBounded) {
 
         const auto prefix = makeKernelName(mKernelIndex);
-        BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelLoopCall);
-        BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelLoopCall);
+        BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelCheckOutputSpace);
+        BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelCheckOutputSpace);
         Value * const isFinal = determineIsFinal(b);
 
         Vec<Value *> zeroExtendedInputVirtualBaseAddress(numOfInputs, nullptr);
@@ -222,7 +218,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
  * @brief determineIsFinal
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
-    if (mHasExplicitFinalPartialStride) {
+    if (mHasExplicitFinalPartialStride || mMayHaveNonLinearIO) {
         return b->CreateIsNull(mNumOfLinearStrides);
     } else {
         // Check whether any stream is fully consumed; if so, we cannot execute any further segments
@@ -283,9 +279,8 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         #endif
         sufficientInput = b->CreateOr(hasEnough, closed);
     }
-    Value * const halting = isPipelineInput(inputPort) ? b->getTrue() : mHalted;
     BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelCheckOutputSpace);
-    branchToTargetOrLoopExit(b, inputPort, sufficientInput, target, halting);
+    branchToTargetOrLoopExit(b, inputPort, sufficientInput, target);
     mAccessibleInputItems(mKernelIndex, inputPort) = accessible;
 }
 
@@ -381,16 +376,17 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
 
     Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
 
-    #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, outputPort);
+
+    #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_produced = %" PRIu64, produced);
     debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
     debugPrint(b, prefix + "_required = %" PRIu64, required);
     debugPrint(b, prefix + "_remaining = %" PRIu64, remaining);
     #endif
 
-    BasicBlock * const expandBuffer = b->CreateBasicBlock("expandBuffer", mKernelLoopCall);
-    BasicBlock * const expanded = b->CreateBasicBlock("expanded", mKernelLoopCall);
+    BasicBlock * const expandBuffer = b->CreateBasicBlock(prefix + "_expandBuffer", mKernelCheckOutputSpace);
+    BasicBlock * const expanded = b->CreateBasicBlock(prefix + "_expandedBuffer", mKernelCheckOutputSpace);
 
     Value * const hasEnoughSpace = b->CreateICmpULE(required, remaining);
     b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
@@ -682,7 +678,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
     }
 
     Value * maxNumOfOutputStrides = mNumOfLinearStrides;
-    if (mHasExplicitFinalPartialStride) {
+    if (mHasExplicitFinalPartialStride || mMayHaveNonLinearIO) {
         maxNumOfOutputStrides = b->getSize(1);
     } else if (minFixedRateFactor) {
         Value * a = b->CreateIsNotNull(minFixedRateFactor);
@@ -1002,8 +998,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const StreamSe
  * @brief branchToTargetOrLoopExit
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port,
-                                                Value * const cond, BasicBlock * const target,
-                                                Value * const halting) {
+                                                Value * const cond, BasicBlock * const target) {
 
     BasicBlock * recordBlockedIO = nullptr;
     BasicBlock * insufficentIO = mKernelInsufficientIOExit;
@@ -1043,27 +1038,19 @@ void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, const StreamSetPor
         anyInsufficient->addIncoming(insufficient, entryBlock);
         anyInsufficient->addIncoming(b->getTrue(), exitBlock);
         mBranchToLoopExit = anyInsufficient;
-        PHINode * const halted = b->CreatePHI(boolTy, 2);
-        halted->addIncoming(mHalted, entryBlock);
-        halted->addIncoming(halting, exitBlock);
-        mHalted = halted;
-
     } else {
-
-        BasicBlock * const exitBlock = b->GetInsertBlock();
-        mInsufficientIOHaltingPhi->addIncoming(halting, exitBlock);
         b->SetInsertPoint(target);
     }
+
 
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updatePHINodesForLoopExit
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b, Value * halting) {
+void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b) {
 
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    mHaltingPhi->addIncoming(halting, exitBlock);
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 		const StreamSetPort port(PortType::Input, i);

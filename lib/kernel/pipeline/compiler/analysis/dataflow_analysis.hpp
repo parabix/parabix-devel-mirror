@@ -412,7 +412,7 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
 
     Z3_solver_dec_ref(ctx, solver);
     Z3_del_context(ctx);
-    Z3_finalize_memory();
+    Z3_reset_memory();
 
     const auto & b = current[firstKernel];
     auto g = gcd(b[LowerBound], b[UpperBound]);
