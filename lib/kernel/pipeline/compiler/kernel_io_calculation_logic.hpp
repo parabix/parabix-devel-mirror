@@ -25,6 +25,8 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mNumOfLinearStrides = maxStrides;
     }
 
+    mFixedRateLCM = getFixedRateLCM(mKernel);
+
     // If this kernel does not have an explicit do final segment, then we want to know whether this stride will
     // be the final stride of the kernel. (i.e., that it will be flagged as terminated after executing the kernel
     // code.) For this to occur, at least one of the inputs must be closed and we must pass all of the data from
@@ -132,16 +134,14 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 
     getInputVirtualBaseAddresses(b, inputVirtualBaseAddress);
 
-
-
     assert ("unbounded zero extended input?" && ((mHasZeroExtendedInput == nullptr) || mIsBounded));
 
-    if (mIsBounded) {
+    if (LLVM_LIKELY(in_degree(mKernelIndex, mBufferGraph) > 0)) {
 
         const auto prefix = makeKernelName(mKernelIndex);
         BasicBlock * const enteringNonFinalSegment = b->CreateBasicBlock(prefix + "_nonFinalSegment", mKernelCheckOutputSpace);
         BasicBlock * const enteringFinalStride = b->CreateBasicBlock(prefix + "_finalStride", mKernelCheckOutputSpace);
-        Value * const isFinal = determineIsFinal(b);
+        Value * const isFinal = determineIsFinal(b); assert (isFinal);
 
         Vec<Value *> zeroExtendedInputVirtualBaseAddress(numOfInputs, nullptr);
 
@@ -159,7 +159,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
             nonZeroExtendExit = b->GetInsertBlock();
             b->CreateUnlikelyCondBr(isFinalOrZeroExtended, checkFinal, enteringNonFinalSegment);
 
-            b->SetInsertPoint(checkFinal);            
+            b->SetInsertPoint(checkFinal);
             Value * const zeroExtendSpace = allocateLocalZeroExtensionSpace(b, enteringNonFinalSegment);
             getZeroExtendedInputVirtualBaseAddresses(b, inputVirtualBaseAddress, zeroExtendSpace, zeroExtendedInputVirtualBaseAddress);
             zeroExtendExit = b->GetInsertBlock();
@@ -215,27 +215,92 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief checkForSufficientInputData
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort) {
+    Value * const accessible = getAccessibleInputItems(b, inputPort); assert (accessible);
+    Value * const strideLength = getInputStrideLength(b, inputPort);
+    Value * const required = addLookahead(b, inputPort, strideLength); assert (required);
+    const auto prefix = makeBufferName(mKernelIndex, inputPort);
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_required = %" PRIu64, required);
+    #endif
+    Value * const hasEnough = b->CreateICmpUGE(accessible, required);
+    Value * const closed = isClosed(b, inputPort);
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_closed = %" PRIu8, closed);
+    #endif
+    Value * const sufficientInput = b->CreateOr(hasEnough, closed);
+
+    BasicBlock * const hasInputData = b->CreateBasicBlock(prefix + "_hasInputData", mKernelCheckOutputSpace);
+
+    BasicBlock * recordBlockedIO = nullptr;
+    BasicBlock * insufficentIO = mKernelInsufficientIOExit;
+
+    if (mBranchToLoopExit) {
+        recordBlockedIO = b->CreateBasicBlock(prefix + "_recordBlockedIO", mKernelInsufficientIOExit);
+        insufficentIO = recordBlockedIO;
+    }
+
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+
+
+    Value * test = sufficientInput;
+    Value * insufficient = mBranchToLoopExit;
+    if (mBranchToLoopExit) {
+        // do not record the block if this not the first execution of the
+        // kernel but ensure that the system knows at least one failed.
+        test = b->CreateOr(sufficientInput, mExecutedAtLeastOncePhi);
+        insufficient = b->CreateOr(mBranchToLoopExit, b->CreateNot(sufficientInput));
+    }
+
+    b->CreateLikelyCondBr(test, hasInputData, insufficentIO);
+
+    // When tracing blocking I/O, test all I/O streams but do not execute
+    // the kernel if any stream is insufficient.
+    if (mBranchToLoopExit) {
+        b->SetInsertPoint(recordBlockedIO);
+        recordBlockingIO(b, inputPort);
+        BasicBlock * const exitBlock = b->GetInsertBlock();
+        b->CreateBr(hasInputData);
+
+        b->SetInsertPoint(hasInputData);
+        IntegerType * const boolTy = b->getInt1Ty();
+
+        PHINode * const anyInsufficient = b->CreatePHI(boolTy, 2);
+        anyInsufficient->addIncoming(insufficient, entryBlock);
+        anyInsufficient->addIncoming(b->getTrue(), exitBlock);
+        mBranchToLoopExit = anyInsufficient;
+    } else {
+        b->SetInsertPoint(hasInputData);
+    }
+
+    mAccessibleInputItems(mKernelIndex, inputPort) = accessible;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief determineIsFinal
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
-    if (mHasExplicitFinalPartialStride || mMayHaveNonLinearIO) {
-        return b->CreateIsNull(mNumOfLinearStrides);
-    } else {
-        // Check whether any stream is fully consumed; if so, we cannot execute any further segments
+    if (LLVM_LIKELY(mIsBounded)) {
+        return b->CreateIsNull(mNumOfLinearStrides, "isFinal");
+    } else { // check whether any stream is fully consumed; if so, we cannot execute any further segments
         Value * isFinal = nullptr;
         for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
-            const BufferRateData & br =  mBufferGraph[e];            
+            const BufferRateData & br =  mBufferGraph[e];
             if (LLVM_UNLIKELY(br.ZeroExtended)) {
                 continue;
-            }            
+            }
             Value * const closed = isClosed(b, br.Port);
+            assert (closed);
             Value * fullyConsumed = closed;
-            if (mMayHaveNonLinearIO) {
+            if (LLVM_LIKELY(mMayHaveNonLinearIO)) {
                 Value * const processed = mAlreadyProcessedPhi(br.Port);
                 Value * const accessible = mAccessibleInputItems(br.Port);
                 Value * const total = b->CreateAdd(processed, accessible);
-                Value * const avail = mLocallyAvailableItems[getBufferIndex(source(e, mBufferGraph))];
-                fullyConsumed = b->CreateAnd(closed, b->CreateICmpEQ(total, avail));
+                Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+                Value * const exhausted = b->CreateICmpEQ(total, avail);
+                fullyConsumed = b->CreateAnd(closed, exhausted);
             }
             if (isFinal) {
                 isFinal = b->CreateOr(isFinal, fullyConsumed);
@@ -244,44 +309,13 @@ Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
             }
         }
         assert (isFinal && "non-zero-extended stream is required");
-        Value * const partialSegment = b->CreateICmpNE(mUpdatedNumOfStrides, b->getSize(mMaximumNumOfStrides));
-        // If isFinal is true then at least one of the streams will be fully consumed during this invocation
-        // and we will perform fewer than the maximum number of strides.
-        return b->CreateAnd(isFinal, partialSegment);
+        if (mHasExplicitFinalPartialStride) {
+            Value * const noMoreStrides = b->CreateIsNull(mNumOfLinearStrides);
+            isFinal = b->CreateAnd(isFinal, noMoreStrides);
+        }
+        isFinal->setName("isFinal");
+        return isFinal;
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief checkForSufficientInputData
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort) {
-    // TODO: we could eliminate some checks if we can prove a particular input
-    // must have enough data based on its already tested inputs and ignore
-    // checking whether an input kernel is terminated if a stronger test has
-    // already been done. Work out the logic for these tests globally.
-    Value * const accessible = getAccessibleInputItems(b, inputPort); assert (accessible);
-    Value * const strideLength = getInputStrideLength(b, inputPort);
-    Value * const required = addLookahead(b, inputPort, strideLength); assert (required);
-    const auto prefix = makeBufferName(mKernelIndex, inputPort);
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, prefix + "_required = %" PRIu64, required);
-    #endif
-    const Binding & input = getInputBinding(inputPort);
-    const ProcessingRate & rate = input.getRate();
-    Value * sufficientInput = nullptr;
-    if (LLVM_UNLIKELY(rate.isGreedy())) {
-        sufficientInput = b->CreateICmpUGE(accessible, required);
-    } else {
-        Value * const hasEnough = b->CreateICmpUGE(accessible, required);
-        Value * const closed = isClosed(b, inputPort);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_closed = %" PRIu8, closed);
-        #endif
-        sufficientInput = b->CreateOr(hasEnough, closed);
-    }
-    BasicBlock * const target = b->CreateBasicBlock(prefix + "_hasInputData", mKernelCheckOutputSpace);
-    branchToTargetOrLoopExit(b, inputPort, sufficientInput, target);
-    mAccessibleInputItems(mKernelIndex, inputPort) = accessible;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -306,11 +340,8 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
 
     const Binding & input = rateData.Binding;
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, lookAhead);
-    #ifndef DISABLE_ZERO_EXTEND
-    // TODO: if a stream is zero extended but it is produced within the same partition as another
-    // input to this kernel with an equivalent production *and* consumption rate and the stream is
-    // not also zero extended, ignore the zero extension attribute for this stream.
 
+    #ifndef DISABLE_ZERO_EXTEND
     if (LLVM_UNLIKELY(rateData.ZeroExtended)) {
         // To zero-extend an input stream, we must first exhaust all input for this stream before
         // switching to a "zeroed buffer". The size of the buffer will be determined by the final
@@ -332,6 +363,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
         accessible = b->CreateSelect(useZeroExtend, MAX_INT, accessible);
     }
     #endif
+
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeBufferName(mKernelIndex, inputPort);
     debugPrint(b, prefix + "_available = %" PRIu64, available);
@@ -654,20 +686,20 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
                     Value * const z = b->CreateCeilUMulRate(y, r);
                     calculated = b->CreateSelect(isClosedNormally(b, inputPort), z, calculated);
                 }
-                if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    Value * const accessible = accessibleItems[i];
-                    Value * correctItemCount = b->CreateICmpULE(calculated, accessible);
-                    Value * const zeroExtended = mIsInputZeroExtended(mKernelIndex, inputPort);
-                    if (LLVM_UNLIKELY(zeroExtended != nullptr)) {
-                        correctItemCount = b->CreateOr(correctItemCount, zeroExtended);
-                    }
-                    b->CreateAssert(correctItemCount,
-                                    "%s.%s: final calculated rate item count (%" PRIu64 ") "
-                                    "exceeds accessible item count (%" PRIu64 ")",
-                                    mKernelAssertionName,
-                                    b->GetString(input.getName()),
-                                    calculated, accessible);
-                }
+//                if (LLVM_UNLIKELY(mCheckAssertions)) {
+//                    Value * const accessible = accessibleItems[i];
+//                    Value * correctItemCount = b->CreateICmpULE(calculated, accessible);
+//                    Value * const zeroExtended = mIsInputZeroExtended(mKernelIndex, inputPort);
+//                    if (LLVM_UNLIKELY(zeroExtended != nullptr)) {
+//                        correctItemCount = b->CreateOr(correctItemCount, zeroExtended);
+//                    }
+//                    b->CreateAssert(correctItemCount,
+//                                    "%s.%s: final calculated rate item count (%" PRIu64 ") "
+//                                    "exceeds accessible item count (%" PRIu64 ")",
+//                                    mKernelAssertionName,
+//                                    b->GetString(input.getName()),
+//                                    calculated, accessible);
+//                }
                 accessibleItems[i] = calculated;
             }
             #ifdef PRINT_DEBUG_MESSAGES
@@ -956,17 +988,7 @@ Value * PipelineCompiler::getFirstStrideLength(BuilderRef b, const StreamSetPort
         assert ("kernel cannot have a greedy output rate" && port.Type != PortType::Output);
         const Rational lb = rate.getLowerBound(); // * mKernel->getStride();
         const auto ilb = floor(lb);
-        Value * firstBound = b->getSize(ilb);
-        if (LLVM_UNLIKELY(ilb > 0)) {
-            Constant * const ZERO = b->getSize(0);
-            firstBound = b->CreateSelect(isClosed(b, port), ZERO, firstBound);
-        }
-        if (mMayHaveNonLinearIO) {
-            Constant * const subsequentBound = b->getSize(ceiling(lb) + 1);
-            return b->CreateSelect(mExecutedAtLeastOncePhi, subsequentBound, firstBound);
-        } else {
-            return firstBound;
-        }
+        return b->getSize(ilb);
     } else if (rate.isRelative()) {
         Value * const baseRate = getFirstStrideLength(b, getReference(port));
         return b->CreateMulRate(baseRate, rate.getRate());
@@ -991,58 +1013,6 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const StreamSe
         return b->CreateMulRate(baseCount, rate.getRate());
     }
     llvm_unreachable("unexpected rate type");
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief branchToTargetOrLoopExit
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port,
-                                                Value * const cond, BasicBlock * const target) {
-
-    BasicBlock * recordBlockedIO = nullptr;
-    BasicBlock * insufficentIO = mKernelInsufficientIOExit;
-
-    if (mBranchToLoopExit) {
-        const auto prefix = makeBufferName(mKernelIndex, port);
-        recordBlockedIO = b->CreateBasicBlock(prefix + "_recordBlockedIO", mKernelInsufficientIOExit);
-        insufficentIO = recordBlockedIO;
-    }
-
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-
-
-    Value * test = cond;
-    Value * insufficient = mBranchToLoopExit;
-    if (mBranchToLoopExit) {
-        // do not record the block if this not the first execution of the
-        // kernel but ensure that the system knows at least one failed.
-        test = b->CreateOr(cond, mExecutedAtLeastOncePhi);
-        insufficient = b->CreateOr(mBranchToLoopExit, b->CreateNot(cond));
-    }
-
-    b->CreateLikelyCondBr(test, target, insufficentIO);
-
-    // When tracing blocking I/O, test all I/O streams but do not execute
-    // the kernel if any stream is insufficient.
-    if (mBranchToLoopExit) {
-        b->SetInsertPoint(recordBlockedIO);
-        recordBlockingIO(b, port);
-        BasicBlock * const exitBlock = b->GetInsertBlock();
-        b->CreateBr(target);
-
-        b->SetInsertPoint(target);
-        IntegerType * const boolTy = b->getInt1Ty();
-
-        PHINode * const anyInsufficient = b->CreatePHI(boolTy, 2);
-        anyInsufficient->addIncoming(insufficient, entryBlock);
-        anyInsufficient->addIncoming(b->getTrue(), exitBlock);
-        mBranchToLoopExit = anyInsufficient;
-    } else {
-        b->SetInsertPoint(target);
-    }
-
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -69,53 +69,18 @@ bool Kernel::requiresExplicitPartialFinalStride() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasFixedRate
+ * @brief hasFixedRateInput
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::hasFixedRate() const {
+bool Kernel::hasFixedRateInput() const {
     const auto n = getNumOfStreamInputs();
     for (unsigned i = 0; i < n; ++i) {
         const Binding & input = getInputStreamSetBinding(i);
         const ProcessingRate & rate = input.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            return true;
-        }
-    }
-    const auto m = getNumOfStreamOutputs();
-    for (unsigned i = 0; i < m; ++i) {
-        const Binding & output = getOutputStreamSetBinding(i);
-        const ProcessingRate & rate = output.getRate();
         if (LLVM_LIKELY(rate.isFixed())) {
             return true;
         }
     }
     return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getFixedRateLCM
- ** ------------------------------------------------------------------------------------------------------------- */
-Rational Kernel::getFixedRateLCM() const {
-    Rational rateLCM(1);
-    bool hasFixedRate = false;
-    const auto n = getNumOfStreamInputs();
-    for (unsigned i = 0; i < n; ++i) {
-        const Binding & input = getInputStreamSetBinding(i);
-        const ProcessingRate & rate = input.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            rateLCM = lcm(rateLCM, rate.getRate());
-            hasFixedRate = true;
-        }
-    }
-    const auto m = getNumOfStreamOutputs();
-    for (unsigned i = 0; i < m; ++i) {
-        const Binding & output = getOutputStreamSetBinding(i);
-        const ProcessingRate & rate = output.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            rateLCM = lcm(rateLCM, rate.getRate());
-            hasFixedRate = true;
-        }
-    }
-    return hasFixedRate ? rateLCM : Rational{0};
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -439,7 +404,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
         fields.push_back(sizeTy); // external segNo for any internal synchronization
     }
-    if (LLVM_LIKELY(hasFixedRate())) {
+    if (LLVM_LIKELY(hasFixedRateInput())) {
         fields.push_back(sizeTy); // fixedRateFactor
     }
     for (unsigned i = 0; i < n; ++i) {
@@ -530,7 +495,7 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
         if (hasAttribute(AttrId::InternallySynchronized)) {
             setNextArgName("externalSegNo");
         }
-        if (LLVM_LIKELY(hasFixedRate())) {
+        if (LLVM_LIKELY(hasFixedRateInput())) {
             setNextArgName("fixedRateFactor");
         }
         for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {

@@ -76,8 +76,14 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
  * @brief getTotalItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort inputPort) const {
-    const auto bufferVertex = getInputBufferVertex(inputPort);
-    return mLocallyAvailableItems[getBufferIndex(bufferVertex)];
+    return mLocallyAvailableItems[getBufferIndex(getInputBufferVertex(inputPort))];
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getTotalItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort outputPort, Value * const available) {
+    mLocallyAvailableItems[getBufferIndex(getOutputBufferVertex(outputPort))] = available;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

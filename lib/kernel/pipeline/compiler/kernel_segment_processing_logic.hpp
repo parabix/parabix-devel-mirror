@@ -252,7 +252,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         // validateSegmentExecution(b);
     }
     releaseSynchronizationLock(b, LockType::Segment);
-
     checkForPartitionExit(b);
 }
 
@@ -418,10 +417,10 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
         const auto port = StreamSetPort{PortType::Input, i};
         const auto prefix = makeBufferName(mKernelIndex, port);
         mAlreadyProcessedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProcessed");
-        mAlreadyProcessedPhi(port)->addIncoming(mInitiallyProcessedItemCount(mKernelIndex, port), mKernelEntry);
+        mAlreadyProcessedPhi(port)->addIncoming(mInitiallyProcessedItemCount(port), mKernelEntry);
         if (mInitiallyProcessedDeferredItemCount(port)) {
             mAlreadyProcessedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProcessedDeferred");
-            mAlreadyProcessedDeferredPhi(port)->addIncoming(mInitiallyProcessedDeferredItemCount(mKernelIndex, port), mKernelEntry);
+            mAlreadyProcessedDeferredPhi(port)->addIncoming(mInitiallyProcessedDeferredItemCount(port), mKernelEntry);
         }
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
@@ -430,9 +429,9 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelIndex, port);
         mAlreadyProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProduced");
         mAlreadyProducedPhi(port)->addIncoming(mInitiallyProducedItemCount(port), mKernelEntry);
-        if (mInitiallyProducedDeferredItemCount(mKernelIndex, port)) {
+        if (mInitiallyProducedDeferredItemCount(port)) {
             mAlreadyProducedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProducedDeferred");
-            mAlreadyProducedDeferredPhi(mKernelIndex, port)->addIncoming(mInitiallyProducedDeferredItemCount(mKernelIndex, port), mKernelEntry);
+            mAlreadyProducedDeferredPhi(port)->addIncoming(mInitiallyProducedDeferredItemCount(port), mKernelEntry);
         }
     }
 
@@ -473,7 +472,7 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
     }
     mFixedRateFactorPhi = nullptr;
     const auto prefix = makeKernelName(mKernelIndex);
-    if (LLVM_LIKELY(hasFixedRateLCM())) {
+    if (LLVM_LIKELY(mKernel->hasFixedRateInput())) {
         mFixedRateFactorPhi = b->CreatePHI(sizeTy, 2, prefix + "_fixedRateFactor");
     }    
     if (mHasExplicitFinalPartialStride) {
@@ -521,8 +520,6 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelIndex);
     IntegerType * const sizeTy = b->getSizeTy();
     IntegerType * const boolTy = b->getInt1Ty();
-    mTerminatedAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtLoopExit");
-    mHasProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgressAtLoopExit");
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
 		const auto port = StreamSetPort{ PortType::Input, i };
@@ -541,6 +538,8 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
             mUpdatedProducedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessedDeferredAtLoopExit");
         }
     }
+    mTerminatedAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtLoopExit");
+    mHasProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgressAtLoopExit");
     mTotalNumOfStrides = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtLoopExit");
 }
 

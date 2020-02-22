@@ -431,9 +431,12 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
 
 void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const {
     if (mLinear) {
+
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            Value * const fullyConsumed = b->CreateICmpEQ(produced, consumed);
-            b->CreateAssert(fullyConsumed, "Linear static buffer was not fully consumed.");
+            Value * const remaining = b->CreateSub(produced, consumed);
+            Constant * const capacity = b->getSize(mCapacity * b->getBitBlockWidth());
+            Value * const isFull = b->CreateICmpULE(remaining, capacity);
+            b->CreateAssert(isFull, "Linear static buffer is full on netry.");
         }
 
         const auto blockWidth = b->getBitBlockWidth();

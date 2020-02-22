@@ -1159,8 +1159,6 @@ inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort po
     return getReference(mKernelIndex, port);
 }
 
-
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePipelineIOGraph
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -1326,39 +1324,6 @@ AddGraph PipelineCompiler::makeAddGraph() const {
 
     return G;
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasFixedRateLCM
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::hasFixedRateLCM() {
-    Rational rateLCM(1);
-    bool hasFixedRate = false;
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const StreamSetPort inputPort{PortType::Input, i};
-        const Binding & input = getInputBinding(inputPort);
-        const ProcessingRate & rate = input.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            rateLCM = lcm(rateLCM, rate.getRate());
-            hasFixedRate = true;
-        }
-    }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const Binding & output = getOutputBinding(outputPort);
-        const ProcessingRate & rate = output.getRate();
-        if (LLVM_LIKELY(rate.isFixed())) {
-            rateLCM = lcm(rateLCM, rate.getRate());
-            hasFixedRate = true;
-        }
-    }
-    if (LLVM_LIKELY(hasFixedRate)) {
-        mFixedRateLCM = rateLCM;
-    }
-    return hasFixedRate;
-}
-
 
 } // end of namespace
 

@@ -278,6 +278,8 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         b->SetInsertPoint(kernelExit);
     }
     resetInternalBufferHandles();
+
+    simplifyPhiNodes(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -292,8 +294,44 @@ inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
         generateMultiThreadKernelMethod(b);
     }
     resetInternalBufferHandles();
+    simplifyPhiNodes(b);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief simplifyPhiNodes
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
+
+    Function * const f = b->GetInsertBlock()->getParent();
+
+    for (BasicBlock & bb : f->getBasicBlockList()) {
+        Instruction * inst = &bb.getInstList().front();
+        while (inst) {
+            if (isa<PHINode>(inst)) {
+                PHINode * const phi = cast<PHINode>(inst);
+                inst = inst->getNextNode();
+
+                bool remove = true;
+                assert (phi && phi->getNumIncomingValues() > 0);
+                Value * const value = phi->getIncomingValue(0);
+                const auto n = phi->getNumIncomingValues();
+                for (unsigned i = 1; i != n; ++i) {
+                    if (LLVM_LIKELY(phi->getIncomingValue(i) != value)) {
+                        remove = false;
+                        break;
+                    }
+                }
+                if (remove) {
+                    phi->replaceAllUsesWith(value);
+                    RecursivelyDeleteDeadPHINode(phi);
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readPipelineIOItemCounts
@@ -308,10 +346,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 
     // Would a simple "reset" be enough?
 
-
-    const auto numOfBuffers = num_vertices(mBufferGraph) - PipelineOutput;
-
-    mLocallyAvailableItems.resize(numOfBuffers, nullptr);
+    mLocallyAvailableItems.resize(LastStreamSet - FirstStreamSet + 1);
 
     // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
@@ -320,8 +355,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         const StreamSetPort inputPort = mBufferGraph[e].Port;
         assert (inputPort.Type == PortType::Output);
         Value * const available = getAvailableInputItems(inputPort.Number);
-        mLocallyAvailableItems[getBufferIndex(buffer)] = available;
-        mConsumerGraph[buffer].Consumed = available;
+        setLocallyAvailableItemCount(b, inputPort, available);
 
         Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
         Value * const processed = b->CreateLoad(inPtr);

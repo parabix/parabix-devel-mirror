@@ -18,6 +18,8 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Transforms/Utils/Local.h>
+#include <llvm/IR/ValueMap.h>
 #include <llvm/ADT/STLExtras.h>
 #include <llvm/ADT/BitVector.h>
 #include <util/slab_allocator.h>
@@ -605,6 +607,8 @@ private:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P);
 
+    void simplifyPhiNodes(BuilderRef b) const;
+
 // internal pipeline state construction functions
 
 public:
@@ -662,7 +666,6 @@ public:
     void determineNumOfLinearStrides(BuilderRef b);
     void checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort);
     void ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort outputPort);
-    void branchToTargetOrLoopExit(BuilderRef b, const StreamSetPort port, Value * const cond, BasicBlock * target);
     void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
@@ -739,7 +742,9 @@ public:
     Value * subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
+
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
+    void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
     Value * getPartialSumItemCount(BuilderRef b, const StreamSetPort port, Value * const offset = nullptr) const;
 
@@ -862,8 +867,6 @@ public:
     LLVM_READNONE bool isOpenSystem() const;
     bool isPipelineInput(const StreamSetPort inputPort) const;
     bool isPipelineOutput(const StreamSetPort outputPort) const;
-
-    bool hasFixedRateLCM();
 
     AddGraph makeAddGraph() const;
 
@@ -1079,7 +1082,8 @@ protected:
     Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
     Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
-    Vec<Value *, 64>                            mLocallyAvailableItems;
+
+    Vec<Value *,      128>                      mLocallyAvailableItems;
 
     // partition state
     Vec<BasicBlock *, 32>                       mPartitionEntryPoint;
@@ -1126,8 +1130,8 @@ protected:
 
     InputPortVec<Value *>                       mInitiallyProcessedItemCount; // *before* entering the kernel
 	InputPortVec<Value *>                       mInitiallyProcessedDeferredItemCount;
-	InputPortVec<PHINode *>                     mAlreadyProcessedPhi; // entering the segment loop
-	InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
+    InputPortVec<PHINode *>                     mAlreadyProcessedPhi; // entering the segment loop
+    InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
 	InputPortVec<Value *>                       mInputEpoch;
 	InputPortVec<Value *>                       mIsInputZeroExtended;
 	InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
@@ -1146,9 +1150,9 @@ protected:
 
     OutputPortVec<Value *>                      mInitiallyProducedItemCount; // *before* entering the kernel
 	OutputPortVec<Value *>                      mInitiallyProducedDeferredItemCount;
-	OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
+    OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
 	OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
-	OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
+    OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
     OutputPortVec<Value *>                      mFirstOutputStrideLength;
     OutputPortVec<Value *>                      mWritableOutputItems;
 	OutputPortVec<Value *>                      mConsumedItemCount;

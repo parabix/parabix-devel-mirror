@@ -267,10 +267,9 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const auto bufferVertex = target(e, mBufferGraph);
         const auto outputPort = mBufferGraph[e].Port;
-        Value * fullyProduced = mFullyProducedItemCount(mKernelIndex, outputPort);
-        mLocallyAvailableItems[getBufferIndex(bufferVertex)] = fullyProduced;
+        Value * const fullyProduced = mFullyProducedItemCount(outputPort);
+        setLocallyAvailableItemCount(b, outputPort, fullyProduced);
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelIndex, outputPort);
@@ -681,6 +680,7 @@ inline const Binding & PipelineCompiler::getProducerOutputBinding(const StreamSe
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_t kernelVertex, const StreamSetPort inputPort) const {
+    assert (inputPort.Type == PortType::Input);
     assert (inputPort.Number < in_degree(kernelVertex, mBufferGraph));
     for (const auto e : make_iterator_range(in_edges(kernelVertex, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
@@ -801,7 +801,9 @@ const Binding & PipelineCompiler::getBinding(const unsigned kernel, const Stream
  * @brief getOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCompiler::getBufferIndex(const unsigned bufferVertex) const {
-    return bufferVertex - (PipelineOutput + 1);
+    assert (bufferVertex >= FirstStreamSet);
+    assert (bufferVertex <= LastStreamSet);
+    return bufferVertex - FirstStreamSet;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

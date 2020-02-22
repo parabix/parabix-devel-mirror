@@ -434,9 +434,7 @@ protected:
 
     static bool isLocalBuffer(const Binding & output);
 
-    LLVM_READNONE bool hasFixedRate() const;
-
-    LLVM_READNONE Rational getFixedRateLCM() const;
+    LLVM_READNONE bool hasFixedRateInput() const;
 
     virtual void addInternalProperties(BuilderRef) { }
 

@@ -199,6 +199,28 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getFixedRateLCM
+ ** ------------------------------------------------------------------------------------------------------------- */
+Rational KernelCompiler::getFixedRateLCM(const Kernel * const target) const {
+    Rational rateLCM(1);
+    bool first = true;
+    const auto n = target->getNumOfStreamInputs();
+    for (unsigned i = 0; i < n; ++i) {
+        const Binding & input = target->getInputStreamSetBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            if (first) {
+                rateLCM = rate.getRate();
+                first = false;
+            } else {
+                rateLCM = lcm(rateLCM, rate.getRate());
+            }
+        }
+    }
+    return rateLCM;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief setDoSegmentProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *> args) {
@@ -234,14 +256,15 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
     } else {
         mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
-    }
-    const auto fixedRateLCM = mTarget->getFixedRateLCM();
+    }    
     mExternalSegNo = nullptr;
     if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
         mExternalSegNo = nextArg();
     }
     mFixedRateFactor = nullptr;
-    if (LLVM_LIKELY(fixedRateLCM.numerator() != 0)) {
+    Rational fixedRateLCM{0};
+    if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
+        fixedRateLCM = getFixedRateLCM(mTarget);
         mFixedRateFactor = nextArg();
     }
 
@@ -415,12 +438,11 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// ----------------------------------------------------
         Value * writable = nullptr;
         if (requiresItemCount(output)) {
-            writable = nextArg(); assert (writable);
-        } else {
-            assert (mFixedRateFactor);
+            writable = nextArg();
+            assert (writable && writable->getType() == sizeTy);
+        } else if (mFixedRateFactor) {
             writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
         }
-        assert (writable && writable->getType() == sizeTy);
         mWritableOutputItems[i] = writable;
         if (LLVM_UNLIKELY(isLocal)) {
             Value * const consumed = nextArg();
@@ -442,13 +464,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     mTerminationSignalPtr = nullptr;
     if (canTerminate) {
         mTerminationSignalPtr = b->getScalarFieldPtr(TERMINATION_SIGNAL);
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            Value * const unterminated =
-                b->CreateICmpEQ(b->CreateLoad(mTerminationSignalPtr), b->getSize(KernelBuilder::TerminationCode::None));
-            b->CreateAssert(unterminated, getName() + ".doSegment was called after termination?");
-        }
     }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -476,7 +492,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
     if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
         props.push_back(mExternalSegNo);
     }
-    if (LLVM_LIKELY(mTarget->hasFixedRate())) {
+    if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
         props.push_back(mFixedRateFactor); // fixedRateFactor
     }
 
