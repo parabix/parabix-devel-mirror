@@ -25,6 +25,7 @@ using PortType = Kernel::PortType;
 
 const static auto INITIALIZE_SUFFIX = "_Initialize";
 const static auto INITIALIZE_THREAD_LOCAL_SUFFIX = "_InitializeThreadLocal";
+const static auto ALLOCATE_INTERNAL_STREAMSETS_SUFFIX = "_AllocateInternalStreamSets";
 const static auto DO_SEGMENT_SUFFIX = "_DoSegment";
 const static auto FINALIZE_THREAD_LOCAL_SUFFIX = "_FinalizeThreadLocal";
 const static auto FINALIZE_SUFFIX = "_Finalize";
@@ -103,7 +104,7 @@ bool Kernel::canSetTerminateSignal() const {
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<KernelCompiler> Kernel::instantiateKernelCompiler(BuilderRef /* b */) const noexcept {
-    return llvm::make_unique<KernelCompiler>(const_cast<Kernel *>(this));
+    return make_unique<KernelCompiler>(const_cast<Kernel *>(this));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -372,6 +373,79 @@ Function * Kernel::addInitializeThreadLocalDeclaration(BuilderRef b) const {
         assert (func);
     }
     return func;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool Kernel::hasInternalStreamSets() const {
+    for (const Binding & output : mOutputStreamSets) {
+        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getAllocateInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+Function * Kernel::getAllocateInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration) const {
+    const Module * const module = b->getModule();
+    SmallVector<char, 256> tmp;
+    Function * f = module->getFunction(concat(getName(), ALLOCATE_INTERNAL_STREAMSETS_SUFFIX, tmp));
+    if (LLVM_UNLIKELY(f == nullptr && alwayReturnDeclaration)) {
+        f = addAllocateInternalStreamSetsDeclaration(b);
+    }
+    return f;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addAllocateInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+Function * Kernel::addAllocateInternalStreamSetsDeclaration(BuilderRef b) const {
+    Function * func = nullptr;
+    if (hasInternalStreamSets()) {
+        SmallVector<char, 256> tmp;
+        const auto funcName = concat(getName(), ALLOCATE_INTERNAL_STREAMSETS_SUFFIX, tmp);
+        Module * const m = b->getModule();
+        func = m->getFunction(funcName);
+        if (LLVM_LIKELY(func == nullptr)) {
+
+            SmallVector<Type *, 2> params;
+            if (LLVM_LIKELY(isStateful())) {
+                params.push_back(getSharedStateType()->getPointerTo());
+            }
+            params.push_back(b->getSizeTy());
+
+            PointerType * const retTy = getThreadLocalStateType()->getPointerTo();
+            FunctionType * const funcType = FunctionType::get(b->getVoidTy(), params, false);
+            func = Function::Create(funcType, GlobalValue::ExternalLinkage, funcName, m);
+            func->setCallingConv(CallingConv::C);
+            func->setDoesNotRecurse();
+
+            auto arg = func->arg_begin();
+            auto setNextArgName = [&](const StringRef name) {
+                assert (arg != func->arg_end());
+                arg->setName(name);
+                std::advance(arg, 1);
+            };
+            if (LLVM_LIKELY(isStateful())) {
+                setNextArgName("shared");
+            }
+            setNextArgName("maximumNumOfStrides");
+            assert (arg == func->arg_end());
+        }
+        assert (func);
+    }
+    return func;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    #error here
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -752,11 +826,22 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         threadLocalHandle = initializeThreadLocalInstance(b, sharedHandle);
         segmentArgs[suppliedArgCount++] = threadLocalHandle;
     }
-    segmentArgs[suppliedArgCount++] = b->getSize(1); // numOfStrides
+    Value * const ONE = b->getSize(1);
+    segmentArgs[suppliedArgCount++] = ONE; // numOfStrides
     if (LLVM_LIKELY(hasIsFinalParam)) {
         segmentArgs[suppliedArgCount++] = b->getTrue();
     }
     assert (suppliedArgCount == suppliedArgs);
+
+    if (LLVM_LIKELY(hasInternalStreamSets())) {
+        Function * const allocInternal = getAllocateInternalStreamSetsFunction(b, true);
+        SmallVector<Value *, 2> allocArgs;
+        if (LLVM_LIKELY(isStateful())) {
+            allocArgs.push_back(sharedHandle);
+        }
+        allocArgs.push_back(ONE);
+        b->CreateCall(allocInternal, allocArgs);
+    }
 
     #ifdef NDEBUG
     const bool ea = true;
@@ -836,7 +921,7 @@ Value * Kernel::createInstance(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::initializeInstance(BuilderRef b, llvm::ArrayRef<Value *> args) const {
+void Kernel::initializeInstance(BuilderRef b, ArrayRef<Value *> args) const {
     assert (args.size() == getNumOfScalarInputs() + 1);
     assert (args[0] && "cannot initialize before creation");
     assert (args[0]->getType()->getPointerElementType() == getSharedStateType());
@@ -863,7 +948,7 @@ Value * Kernel::initializeThreadLocalInstance(BuilderRef b, Value * const handle
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief finalizeThreadLocalInstance
  ** ------------------------------------------------------------------------------------------------------------- */
-void Kernel::finalizeThreadLocalInstance(BuilderRef b, llvm::ArrayRef<Value *> args) const {
+void Kernel::finalizeThreadLocalInstance(BuilderRef b, ArrayRef<Value *> args) const {
     assert (args.size() == (isStateful() ? 2 : 1));
     Function * const init = getFinalizeThreadLocalFunction(b); assert (init);
     b->CreateCall(init, args);

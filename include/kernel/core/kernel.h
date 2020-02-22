@@ -386,6 +386,12 @@ protected:
 
     llvm::Function * addInitializeThreadLocalDeclaration(BuilderRef b) const;
 
+    LLVM_READNONE virtual bool hasInternalStreamSets() const;
+
+    llvm::Function * getAllocateInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addAllocateInternalStreamSetsDeclaration(BuilderRef b) const;
+
     llvm::Function * addDoSegmentDeclaration(BuilderRef b) const;
 
     std::vector<llvm::Type *> getDoSegmentFields(BuilderRef b) const;
@@ -447,6 +453,8 @@ protected:
     virtual void generateInitializeMethod(BuilderRef) { }
 
     virtual void generateInitializeThreadLocalMethod(BuilderRef) { }
+
+    virtual void generateAllocateInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
 
     virtual void generateKernelMethod(BuilderRef) = 0;
 

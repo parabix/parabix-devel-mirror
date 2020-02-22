@@ -598,6 +598,7 @@ public:
     void constructStreamSetBuffers(BuilderRef b) override;
     void generateInitializeMethod(BuilderRef b);
     void generateInitializeThreadLocalMethod(BuilderRef b);
+    void generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides);
     void generateKernelMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
     void generateFinalizeThreadLocalMethod(BuilderRef b);

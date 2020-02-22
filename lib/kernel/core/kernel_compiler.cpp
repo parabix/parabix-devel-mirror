@@ -199,6 +199,31 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callAllocateInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void KernelCompiler::callAllocateInternalStreamSets(BuilderRef b) {
+    if (LLVM_UNLIKELY(mTarget->hasInternalStreamSets())) {
+        b->setCompiler(this);
+        assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
+        mCurrentMethod = mTarget->getAllocateInternalStreamSetsFunction(b);
+        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        auto arg = mCurrentMethod->arg_begin();
+        auto nextArg = [&]() {
+            assert (arg != mCurrentMethod->arg_end());
+            Value * const v = &*arg;
+            std::advance(arg, 1);
+            return v;
+        };
+        if (LLVM_LIKELY(mTarget->isStateful())) {
+            setHandle(nextArg());
+        }
+        Value * const expectedNumOfStrides = nextArg();
+        mTarget->generateAllocateInternalStreamSetsMethod(b, expectedNumOfStrides);
+        b->CreateRetVoid();
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFixedRateLCM
  ** ------------------------------------------------------------------------------------------------------------- */
 Rational KernelCompiler::getFixedRateLCM(const Kernel * const target) const {

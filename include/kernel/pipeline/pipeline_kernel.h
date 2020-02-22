@@ -112,6 +112,10 @@ protected:
 
     void linkExternalMethods(BuilderRef b) final;
 
+    LLVM_READNONE bool hasInternalStreamSets() const final;
+
+    void generateAllocateInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+
     void addAdditionalFunctions(BuilderRef b) final;
 
     void addInternalProperties(BuilderRef b) final;

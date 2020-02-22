@@ -29,14 +29,14 @@ public:
                StreamSet * const breaks,
                StreamSet * const matches)
     : MultiBlockKernel(b
-                       , "gitignoreC" + std::to_string(codegen::SegmentSize)
+                       , "gitignoreC"
                        // inputs
                        , {{"BasisBits", BasisBits}, {"u8index", u8index}, {"breaks", breaks}}
                        // outputs
                        , {{"matches", matches, FixedRate(), Add1()}}
                        // scalars
                        , {}, {}, {}) {
-        setStride(codegen::SegmentSize);
+
     }
 
 
@@ -49,7 +49,7 @@ protected:
         Value * const source = b->CreatePointerCast(b->getRawInputPointer("breaks", processed), int8PtrTy);
         Value * const produced = b->getProducedItemCount("matches");
         Value * const target = b->CreatePointerCast(b->getRawOutputPointer("matches", produced), int8PtrTy);
-        Value * const toCopy = b->CreateMul(numOfStrides, b->getSize(codegen::SegmentSize));
+        Value * const toCopy = b->CreateMul(numOfStrides, b->getSize(getStride()));
         b->CreateMemCpy(target, source, toCopy, b->getBitBlockWidth() / 8);
     }
 
@@ -75,7 +75,7 @@ public:
                          , [&]() -> std::string {
                             std::string tmp;
                             raw_string_ostream out(tmp);
-                            out << "gitignore" << codegen::SegmentSize << (outerKernel == nullptr ? 'R' : 'N');
+                            out << "gitignore" << (outerKernel == nullptr ? 'R' : 'N');
                             out.write_hex(patterns.size());                            
                             out.flush();
                             return tmp;

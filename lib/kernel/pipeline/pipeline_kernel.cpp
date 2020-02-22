@@ -64,6 +64,20 @@ void PipelineKernel::addKernelDeclarations(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineKernel::hasInternalStreamSets() const {
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    COMPILER->generateAllocateInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief linkExternalMethods
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::linkExternalMethods(BuilderRef b) {
@@ -181,7 +195,7 @@ void PipelineKernel::setOutputScalarAt(const unsigned i, Scalar * const value) {
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
 std::unique_ptr<KernelCompiler> PipelineKernel::instantiateKernelCompiler(BuilderRef b) const noexcept {
-    return llvm::make_unique<PipelineCompiler>(b, const_cast<PipelineKernel *>(this));
+    return make_unique<PipelineCompiler>(b, const_cast<PipelineKernel *>(this));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -198,7 +212,7 @@ PipelineKernel::PipelineKernel(BaseDriver & driver,
          [&] () {
              std::string tmp;
              tmp.reserve(32);
-             llvm::raw_string_ostream name(tmp);
+             raw_string_ostream name(tmp);
              name << 'P' << numOfThreads
                   << 'B' << numOfSegments
                   << '_' << Kernel::getStringHash(signature);

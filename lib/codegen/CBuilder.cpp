@@ -27,20 +27,23 @@
 #include <boost/format.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <cxxabi.h>
+
 #ifdef HAS_ADDRESS_SANITIZER
 #include <llvm/Analysis/AliasAnalysis.h>
 #endif
 
-#ifdef ENABLE_ASSERTION_TRACE
-
-// TODO: look into "backtrace_pcinfo"
-
 #if defined(__i386__)
-typedef uint32_t unw_word_t;
 #define PRISz PRId32
 #else
-typedef uint64_t unw_word_t;
 #define PRISz PRId64
+#endif
+
+#ifdef ENABLE_ASSERTION_TRACE
+// TODO: look into "backtrace_pcinfo"
+#if defined(__i386__)
+typedef uint32_t unw_word_t;
+#else
+typedef uint64_t unw_word_t;
 #endif
 #if defined(HAS_LIBUNWIND)
 #define UNW_LOCAL_ONLY

@@ -357,6 +357,8 @@ public:
 
     void callGenerateInitializeThreadLocalMethod(BuilderRef b);
 
+    void callAllocateInternalStreamSets(BuilderRef b);
+
     std::vector<llvm::Value *> getDoSegmentProperties(BuilderRef b) const;
 
     void setDoSegmentProperties(BuilderRef b, const llvm::ArrayRef<llvm::Value *> args);

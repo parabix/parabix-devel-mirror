@@ -283,6 +283,13 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    #error here
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
