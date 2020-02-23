@@ -45,9 +45,8 @@ RE * resolveModesAndExternalSymbols(RE * r, bool globallyCaseInsensitive) {
         r = UCD::toNFD(r);
         r = UCD::addClusterMatches(r);
         r = UCD::addEquivalentCodepoints(r);
-    } else {
-        r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     }
+    r = resolveCaseInsensitiveMode(r, globallyCaseInsensitive);
     r = expandBoundaryAssertions(r);
     r = simplifyAssertions(r);
     //r = lookaheadPromotion(r);
