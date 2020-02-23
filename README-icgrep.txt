@@ -9,7 +9,8 @@ command line options.
 
 icgrep 1.0 is designed to offer substantial Unicode support, meeting
 all the Unicode Level 1 requirements of UTS #18, the Unicode
-Technical Standard for regular expressions. 
+Technical Standard for regular expressions.  Development of icgrep 2.0 is
+on track to meet the Unicode level 2 requirements of UTS #18.
 
 Normal usage to find lines in a file f matching a regexp r is:
 icgrep r f
@@ -21,32 +22,31 @@ To read the regexp to be matched from file regexpf use the command:
 
 icgrep -f regexpf f
 
-See http://parabix.costar.sfu.ca/wiki/ICgrep for more information.
 
 BUILD
 
-To build icgrep, you need an installed LLVM system providing the
-core libraries.  Currently, we are using LLVM 3.8.0 available
-from http://releases.llvm.org/download.html 
+To build icgrep, you need a development environment that meets
+several requirements.
+-  A modern C++ compiler supporting C++ 11.
+-  The cmake build system version 2.8 or better.
+-  Boost libraries version 1.61 or better.
+-  Standard C++ development tools including git, C++, etc.
+-  An LLVM system version 3.9 or better.
 
-Boost development libraries are required.  Install via a suitable 
-command for your OS, for example"
-sudo apt-get install libboost-all-dev
+Clone parabix-devel from the repository:
+git clone https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel.git
 
+Create a build subdirectory
+cd parabix-devel
+mkdir build
 
-To build LLVM,
-(L1) open a terminal window, create parabix-devel/llvm-build and cd to that directory
-(L2) enter the following command to build the makefiles
-cmake -DCMAKE_INSTALL_PREFIX=../libllvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_BUILD_TOOLS=OFF -DLLVM_BUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release ../llvm-3.8.0.src
-(L3) Still in the llvm-build directory, enter the commands "make" and then "make install"
+Create the makefiles
+cmake -DCMAKE_BUILD_TYPE=Release
 
-Using the installed LLVM, building icgrep uses the CMake build
-system generator.
-(IC1)  open a terminal window, create parabix-devel/icgrep-build and cd to that directory
-(IC2)  enter the following command to build the makefiles
-cmake -DCMAKE_PREFIX_PATH=../libllvm -DCMAKE_BUILD_TYPE=Release ../icgrep
-(IC3) Enter the command "make"
+Note: if you have built/installed a custom LLVM version, you may need
+to override cmake's default search path.
+
+cmake -DCMAKE_PREFIX_PATH=path/to/libllvm -DCMAKE_BUILD_TYPE=Release ..
 
 LLVM files are governed by the LLVM Release License in LLVM-LICENSE.txt.
 icgrep is governed by Open Software License 3.0 in OSL-3.0.txt.
-
