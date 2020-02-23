@@ -56,11 +56,21 @@ public:
     virtual ~MatchAccumulator() {}
     virtual void accumulate_match(const size_t lineNum, char * line_start, char * line_end) = 0;
     virtual void finalize_match(char * buffer_end) {}  // default: no op
+    virtual unsigned getFileCount() {return 1;}  // default: return 1 for single file
+    virtual size_t getFileStartPos(unsigned fileNo) {return 0;}
+    virtual void setBatchLineNumber(unsigned fileNo, size_t batchLine) {}  // default: no op
 };
 
 extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineNum, char * line_start, char * line_end);
 
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end);
+
+extern "C" unsigned get_file_count_wrapper(intptr_t accum_addr);
+
+extern "C" size_t get_file_start_pos_wrapper(intptr_t accum_addr, unsigned fileNo);
+
+extern "C" void set_batch_line_number_wrapper(intptr_t accum_addr, unsigned fileNo, size_t batchLine);
+
 
 class GrepEngine {
     enum class FileStatus {Pending, GrepComplete, PrintComplete};
@@ -128,7 +138,7 @@ protected:
     void U8indexedGrep(const std::unique_ptr<kernel::ProgramBuilder> &P, re::RE * re, kernel::StreamSet * Source, kernel::StreamSet * Results);
     void UnicodeIndexedGrep(const std::unique_ptr<kernel::ProgramBuilder> &P, re::RE * re, kernel::StreamSet * Source, kernel::StreamSet * Results);
     kernel::StreamSet * grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
-    virtual uint64_t doGrep(const std::string & fileName, std::ostringstream & strm);
+    virtual uint64_t doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm);
     int32_t openFile(const std::string & fileName, std::ostringstream & msgstrm);
 
     std::string linePrefix(std::string fileName);
@@ -153,10 +163,12 @@ protected:
     NullCharMode mNullMode;
     BaseDriver & mGrepDriver;
     void * mMainMethod;
+    void * mBatchMethod;
 
     std::atomic<unsigned> mNextFileToGrep;
     std::atomic<unsigned> mNextFileToPrint;
-    std::vector<boost::filesystem::path> inputPaths;
+    std::vector<boost::filesystem::path> mInputPaths;
+    std::vector<std::vector<std::string>> mFileGroups;
     std::vector<std::ostringstream> mResultStrs;
     std::vector<FileStatus> mFileStatus;
     bool grepMatchFound;
@@ -186,34 +198,51 @@ protected:
 class EmitMatch : public MatchAccumulator {
     friend class EmitMatchesEngine;
 public:
-    EmitMatch(std::string linePrefix, bool showLineNumbers, bool showContext, bool initialTab, std::ostringstream & strm)
-        : mLinePrefix(linePrefix),
+    EmitMatch(bool showFileNames, bool showLineNumbers, bool showContext, bool initialTab)
+        : mShowFileNames(showFileNames),
         mShowLineNumbers(showLineNumbers),
         mContextGroups(showContext),
         mInitialTab(initialTab),
+        mCurrentFile(0),
         mLineCount(0),
         mLineNum(0),
-        mTerminated(true),
-        mResultStr(strm) {}
+        mTerminated(true) {}
+    void prepareBatch (const std::vector<std::string> & fileNames);
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
     void finalize_match(char * buffer_end) override;
+    void setFileLabel(std::string fileLabel);
+    void setStringStream(std::ostringstream * s);
+    unsigned getFileCount() override;
+    size_t getFileStartPos(unsigned fileNo) override;
+    void setBatchLineNumber(unsigned fileNo, size_t batchLine) override;
 protected:
-    std::string mLinePrefix;
+    bool mShowFileNames;
     bool mShowLineNumbers;
     bool mContextGroups;
     bool mInitialTab;
+    unsigned mCurrentFile;
     size_t mLineCount;
     size_t mLineNum;
     bool mTerminated;
-    std::ostringstream & mResultStr;
+    // An EmitMatch object may be defined to work with a single buffer for a
+    // batch of files concatenated together.  The following vectors hold information
+    // for each file in the batch, namely, its name, its starting code unit
+    // position in the batch and its starting line number within the batch.
+    std::vector<std::string> mFileNames;
+    std::vector<size_t> mFileStartPositions;
+    std::vector<size_t> mFileStartLineNumbers;
+    std::string mLinePrefix;
+    std::ostringstream * mResultStr;
+    char * mBatchBuffer;
 };
 
 class EmitMatchesEngine final : public GrepEngine {
 public:
     EmitMatchesEngine(BaseDriver & driver);
+    void grepPipeline(const std::unique_ptr<kernel::ProgramBuilder> &P, kernel::StreamSet * ByteStream);
     void grepCodeGen() override;
 private:
-    uint64_t doGrep(const std::string & fileName, std::ostringstream & strm) override;
+    uint64_t doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) override;
 };
 
 class CountOnlyEngine final : public GrepEngine {
