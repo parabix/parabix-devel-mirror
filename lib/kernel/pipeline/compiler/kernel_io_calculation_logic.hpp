@@ -275,7 +275,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         b->SetInsertPoint(hasInputData);
     }
 
-    mAccessibleInputItems(mKernelIndex, inputPort) = accessible;
+    mAccessibleInputItems(inputPort) = accessible;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -324,7 +324,7 @@ Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
 Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetPort inputPort, const bool useOverflow) {
     const StreamSetBuffer * const buffer = getInputBuffer(inputPort);
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
-    Value * const processed = mAlreadyProcessedPhi(mKernelIndex, inputPort);
+    Value * const processed = mAlreadyProcessedPhi(inputPort);
     Value * lookAhead = nullptr;
     if (LLVM_LIKELY(useOverflow)) {
         const auto size = getLookAhead(getInputBufferVertex(inputPort));

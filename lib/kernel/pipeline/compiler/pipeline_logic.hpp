@@ -229,9 +229,6 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         }
     }
 
-    allocateOwnedBuffers(b, true);
-    initializeBufferExpansionHistory(b);
-
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -278,15 +275,6 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         b->SetInsertPoint(kernelExit);
     }
     resetInternalBufferHandles();
-
-    simplifyPhiNodes(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateAllocateInternalStreamSetsMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
-    #error here
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -301,43 +289,6 @@ inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
         generateMultiThreadKernelMethod(b);
     }
     resetInternalBufferHandles();
-    simplifyPhiNodes(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief simplifyPhiNodes
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
-
-    Function * const f = b->GetInsertBlock()->getParent();
-
-    for (BasicBlock & bb : f->getBasicBlockList()) {
-        Instruction * inst = &bb.getInstList().front();
-        while (inst) {
-            if (isa<PHINode>(inst)) {
-                PHINode * const phi = cast<PHINode>(inst);
-                inst = inst->getNextNode();
-
-                bool remove = true;
-                assert (phi && phi->getNumIncomingValues() > 0);
-                Value * const value = phi->getIncomingValue(0);
-                const auto n = phi->getNumIncomingValues();
-                for (unsigned i = 1; i != n; ++i) {
-                    if (LLVM_LIKELY(phi->getIncomingValue(i) != value)) {
-                        remove = false;
-                        break;
-                    }
-                }
-                if (remove) {
-                    phi->replaceAllUsesWith(value);
-                    RecursivelyDeleteDeadPHINode(phi);
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -363,6 +314,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         assert (inputPort.Type == PortType::Output);
         Value * const available = getAvailableInputItems(inputPort.Number);
         setLocallyAvailableItemCount(b, inputPort, available);
+        initializeConsumedItemCount(b, inputPort, available);
 
         Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
         Value * const processed = b->CreateLoad(inPtr);
@@ -588,6 +540,49 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     }
     releaseOwnedBuffers(b, true);
     resetInternalBufferHandles();
+    simplifyPhiNodes(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief simplifyPhiNodes
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
+
+    // LLVM is not aggressive enough with how it deals with phi nodes. To ensure that
+    // we collapse every phi node in which all incoming values are identical into the
+    // incoming value, we execute the following mini optimization pass.
+
+    // TODO: check the newer versions of LLVM to see if any can do this now.
+
+    Function * const f = b->GetInsertBlock()->getParent();
+
+    for (BasicBlock & bb : f->getBasicBlockList()) {
+        Instruction * inst = &bb.getInstList().front();
+        while (inst) {
+            if (isa<PHINode>(inst)) {
+                PHINode * const phi = cast<PHINode>(inst);
+                inst = inst->getNextNode();
+
+                bool remove = true;
+                assert (phi && phi->getNumIncomingValues() > 0);
+                Value * const value = phi->getIncomingValue(0);
+                const auto n = phi->getNumIncomingValues();
+                for (unsigned i = 1; i != n; ++i) {
+                    if (LLVM_LIKELY(phi->getIncomingValue(i) != value)) {
+                        remove = false;
+                        break;
+                    }
+                }
+                if (remove) {
+                    phi->replaceAllUsesWith(value);
+                    RecursivelyDeleteDeadPHINode(phi);
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
 }
 
 enum : unsigned {
@@ -723,7 +718,6 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
     if (mTarget->hasThreadLocal()) {
-        allocateOwnedBuffers(b, false);
         for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
             const Kernel * const kernel = getKernel(i);
             if (kernel->hasThreadLocal()) {
@@ -737,6 +731,25 @@ void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
                 b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
             }
         }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    allocateOwnedBuffers(b, expectedNumOfStrides, true);
+    initializeBufferExpansionHistory(b);
+    resetInternalBufferHandles();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateThreadLocalInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    if (mTarget->hasThreadLocal()) {
+        allocateOwnedBuffers(b, expectedNumOfStrides, false);
+        resetInternalBufferHandles();
     }
 }
 

@@ -19,12 +19,10 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
         }
         mKernelHandle = handle;
     }
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << mKernelIndex << "." << mKernel->getName();
-        mKernelAssertionName = b->GetString(out.str());
-    }
+    SmallVector<char, 256> tmp;
+    raw_svector_ostream out(tmp);
+    out << mKernelIndex << "." << mKernel->getName();
+    mKernelAssertionName = b->GetString(out.str());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

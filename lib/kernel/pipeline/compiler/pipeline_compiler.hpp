@@ -32,7 +32,7 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -597,8 +597,9 @@ public:
     void addPipelineKernelProperties(BuilderRef b);
     void constructStreamSetBuffers(BuilderRef b) override;
     void generateInitializeMethod(BuilderRef b);
+    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides);
     void generateInitializeThreadLocalMethod(BuilderRef b);
-    void generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides);
+    void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides);
     void generateKernelMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
     void generateFinalizeThreadLocalMethod(BuilderRef b);
@@ -780,7 +781,7 @@ public:
 
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
-    void allocateOwnedBuffers(BuilderRef b, const bool nonLocal);
+    void allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal);
     void loadInternalStreamSetHandles(BuilderRef b);
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
@@ -794,9 +795,6 @@ public:
     Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
-
-    unsigned hasBoundedLookBehind(const unsigned bufferVertex) const;
-    bool hasUnboundedLookBehind(const unsigned bufferVertex) const;
 
 	LLVM_READNONE unsigned getInputPortIndex(const unsigned kernel, StreamSetPort port) const;
 
@@ -862,12 +860,7 @@ public:
     static void combineDuplicateKernels(BuilderRef b, const Kernels & partition, Relationships & G);
     static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & partition, Relationships & G);
 
-
     TerminationGraph makeTerminationGraph();
-    PipelineIOGraph makePipelineIOGraph() const;
-    LLVM_READNONE bool isOpenSystem() const;
-    bool isPipelineInput(const StreamSetPort inputPort) const;
-    bool isPipelineOutput(const StreamSetPort outputPort) const;
 
     AddGraph makeAddGraph() const;
 
@@ -902,6 +895,8 @@ public:
     bool mayHaveNonLinearIO() const;
     bool supportsInternalSynchronization() const;
     void identifyLinkedIOPorts(BufferGraph & G) const;
+
+    void printBufferGraph(raw_ostream & out) const;
 
 // dataflow analysis functions
 
@@ -988,15 +983,6 @@ public:
     LLVM_READNONE const Binding & getBinding(const unsigned kernel, const StreamSetPort port) const;
     LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
 
-    void printBufferGraph(raw_ostream & out) const;
-
-    void verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const;
-
-    void verifyOutputItemCount(BuilderRef b, Value * produced, const unsigned outputPort) const;
-
-    void itemCountSanityCheck(BuilderRef b, const Binding & binding, const std::string & pastLabel,
-                              Value * const itemCount, Value * const expected) const;
-
 protected:
 
 	Allocator									mAllocator;
@@ -1046,7 +1032,6 @@ protected:
     const ConsumerGraph                         mConsumerGraph;
 
     Vec<Value *>                                mScalarValue;
-    const PipelineIOGraph                       mPipelineIOGraph;
     Vec<Value *, 16>                            mTerminationSignals;
     const TerminationGraph                      mTerminationGraph;
     const AddGraph                              mAddGraph;
@@ -1300,7 +1285,6 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 
 , mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)
-, mPipelineIOGraph(makePipelineIOGraph())
 , mTerminationGraph(makeTerminationGraph())
 , mAddGraph(makeAddGraph())
 

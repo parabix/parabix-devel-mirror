@@ -378,6 +378,7 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
             const StreamSetPort port(PortType::Input, c.Port);
             const auto prefix = makeBufferName(mKernelIndex, port);
             PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
+            assert (cn.Consumed);
             consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
             cn.PhiNode = consumedPhi;
         }

@@ -1160,67 +1160,6 @@ inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort po
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePipelineIOGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
-
-    PipelineIOGraph G((PipelineOutput - PipelineInput) + 1);
-    for (const auto p : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const auto buffer = target(p, mBufferGraph);
-        for (const auto c : make_iterator_range(out_edges(buffer, mBufferGraph))) {
-            const auto consumer = target(c, mBufferGraph);
-            const BufferRateData & cr = mBufferGraph[c];
-            add_edge(PipelineInput, consumer, cr.Port.Number, G);
-        }
-    }
-    for (const auto c : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const auto buffer = source(c, mBufferGraph);
-        const auto p = in_edge(buffer, mBufferGraph);
-        const auto producer = source(p, mBufferGraph);
-        const BufferRateData & pr = mBufferGraph[p];
-        add_edge(producer, PipelineOutput, pr.Port.Number, G);
-    }
-    return G;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isOpenSystem
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isOpenSystem() const {
-    return out_degree(PipelineInput, mPipelineIOGraph) != 0 || in_degree(PipelineOutput, mPipelineIOGraph) != 0;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isPipelineInput
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isPipelineInput(const StreamSetPort inputPort) const {
-    if (LLVM_LIKELY(in_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
-        return false;
-    }
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mPipelineIOGraph))) {
-        if (LLVM_LIKELY(mPipelineIOGraph[e] == inputPort.Number)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isPipelineOutput
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isPipelineOutput(const StreamSetPort outputPort) const {
-    if (LLVM_LIKELY(out_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
-        return false;
-    }
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mPipelineIOGraph))) {
-        if (LLVM_LIKELY(mPipelineIOGraph[e] == outputPort.Number)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeAddGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 AddGraph PipelineCompiler::makeAddGraph() const {

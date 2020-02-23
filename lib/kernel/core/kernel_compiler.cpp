@@ -56,7 +56,9 @@ void KernelCompiler::generateKernel(BuilderRef b) {
     mTarget->constructStateTypes(b);
     mTarget->addKernelDeclarations(b);
     callGenerateInitializeMethod(b);
+    callGenerateAllocateSharedInternalStreamSets(b);
     callGenerateInitializeThreadLocalMethod(b);
+    callGenerateAllocateThreadLocalInternalStreamSets(b);
     callGenerateDoSegmentMethod(b);
     callGenerateFinalizeThreadLocalMethod(b);
     callGenerateFinalizeMethod(b);
@@ -192,20 +194,19 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
         mThreadLocalHandle = b->CreateCacheAlignedMalloc(mTarget->getThreadLocalStateType());
         initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
         mTarget->generateInitializeThreadLocalMethod(b);
-        Value * const retVal = mThreadLocalHandle;
-        b->CreateRet(retVal);
+        b->CreateRet(mThreadLocalHandle);
         clearInternalStateAfterCodeGen();
     }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief callAllocateInternalStreamSets
+ * @brief callAllocateSharedInternalStreamSets
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void KernelCompiler::callAllocateInternalStreamSets(BuilderRef b) {
+inline void KernelCompiler::callGenerateAllocateSharedInternalStreamSets(BuilderRef b) {
     if (LLVM_UNLIKELY(mTarget->hasInternalStreamSets())) {
         b->setCompiler(this);
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
-        mCurrentMethod = mTarget->getAllocateInternalStreamSetsFunction(b);
+        mCurrentMethod = mTarget->getAllocateSharedInternalStreamSetsFunction(b);
         b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
         auto arg = mCurrentMethod->arg_begin();
         auto nextArg = [&]() {
@@ -218,8 +219,38 @@ inline void KernelCompiler::callAllocateInternalStreamSets(BuilderRef b) {
             setHandle(nextArg());
         }
         Value * const expectedNumOfStrides = nextArg();
-        mTarget->generateAllocateInternalStreamSetsMethod(b, expectedNumOfStrides);
+        initializeScalarMap(b, InitializeScalarMapOptions::SkipThreadLocal);
+        mTarget->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
         b->CreateRetVoid();
+        clearInternalStateAfterCodeGen();
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief callAllocateThreadLocalInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void KernelCompiler::callGenerateAllocateThreadLocalInternalStreamSets(BuilderRef b) {
+    if (LLVM_UNLIKELY(mTarget->hasInternalStreamSets() && mTarget->hasThreadLocal())) {
+        b->setCompiler(this);
+        assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
+        mCurrentMethod = mTarget->getAllocateThreadLocalInternalStreamSetsFunction(b);
+        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        auto arg = mCurrentMethod->arg_begin();
+        auto nextArg = [&]() {
+            assert (arg != mCurrentMethod->arg_end());
+            Value * const v = &*arg;
+            std::advance(arg, 1);
+            return v;
+        };
+        if (LLVM_LIKELY(mTarget->isStateful())) {
+            setHandle(nextArg());
+        }
+        setThreadLocalHandle(nextArg());
+        Value * const expectedNumOfStrides = nextArg();
+        initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
+        mTarget->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
+        b->CreateRetVoid();
+        clearInternalStateAfterCodeGen();
     }
 }
 
@@ -1147,18 +1178,7 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
     for (const auto & buffer : mStreamSetOutputBuffers) {
         buffer->setHandle(nullptr);
     }
-//    mUpdatableProcessedInputItemPtr.clear();
-//    mProcessedInputItemPtr.clear();
-//    mAccessibleInputItems.clear();
-//    mAvailableInputItems.clear();
-//    mPopCountRateArray.clear();
-//    mNegatedPopCountRateArray.clear();
-//    mUpdatableOutputBaseVirtualAddressPtr.clear();
-//    mUpdatableProducedOutputItemPtr.clear();
-//    mProducedOutputItemPtr.clear();
-//    mInitiallyProducedOutputItems.clear();
-//    mWritableOutputItems.clear();
-//    mConsumedOutputItems.clear();
+
     mScalarFieldMap.clear();
 }
 

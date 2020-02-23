@@ -63,8 +63,44 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, const bool nonLocal) {
+void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal) {
     if (!nonLocal) return;
+
+    assert (expectedNumOfStrides);
+
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        Value * const valid = b->CreateIsNotNull(expectedNumOfStrides);
+        b->CreateAssert(valid,
+           "%s: expected number of strides for internally allocated buffers is 0",
+           b->GetString(mTarget->getName()));
+    }
+
+    // recursively allocate any internal buffers for the nested kernels, giving them the correct
+    // num of strides it should expect to perform
+    for (auto i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernelObj = getKernel(i);
+        if (LLVM_UNLIKELY(kernelObj->hasInternalStreamSets())) {
+            if (nonLocal && !kernelObj->hasThreadLocal()) {
+                continue;
+            }
+            setActiveKernel(b, i);
+            SmallVector<Value *, 3> params;
+            if (LLVM_LIKELY(kernelObj->isStateful())) {
+                params.push_back(mKernelHandle);
+            }
+            Function * allocInternal = nullptr;
+            if (nonLocal) {
+                allocInternal = kernelObj->getAllocateThreadLocalInternalStreamSetsFunction(b, true);
+                params.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
+            } else {
+                allocInternal = kernelObj->getAllocateSharedInternalStreamSetsFunction(b, true);
+            }
+            params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, MaximumNumOfStrides[i]));
+            b->CreateCall(allocInternal, params);
+        }
+    }
+
+    // ... then allocate this pipeline's internal buffers
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
         if (LLVM_UNLIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
@@ -78,7 +114,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, const bool nonLocal) {
                 buffer->setHandle(handle);
             }
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
-            buffer->allocateBuffer(b);
+            buffer->allocateBuffer(b, expectedNumOfStrides);
         }
     }
 }
@@ -646,8 +682,6 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
     RelationshipGraph::vertex_descriptor v;
     RelationshipGraph::edge_descriptor e;
 
-    assert (kernelVertex != PipelineOutput);
-
     graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
     std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
     assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
@@ -712,8 +746,6 @@ const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, co
 
     RelationshipGraph::vertex_descriptor v;
     RelationshipGraph::edge_descriptor e;
-
-    assert (kernelVertex != PipelineInput);
 
     graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
     std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);

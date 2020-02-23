@@ -71,10 +71,17 @@ bool PipelineKernel::hasInternalStreamSets() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateAllocateInternalStreamSetsMethod
+ * @brief generateAllocateSharedInternalStreamSetsMethod
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineKernel::generateAllocateInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
-    COMPILER->generateAllocateInternalStreamSetsMethod(b, expectedNumOfStrides);
+void PipelineKernel::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    COMPILER->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateThreadLocalInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+    COMPILER->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

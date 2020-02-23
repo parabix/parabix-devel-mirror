@@ -382,15 +382,19 @@ protected:
 
     llvm::Function * addInitializeDeclaration(BuilderRef b) const;
 
+    LLVM_READNONE virtual bool hasInternalStreamSets() const;
+
+    llvm::Function * getAllocateSharedInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
+
+    llvm::Function * addAllocateSharedInternalStreamSetsDeclaration(BuilderRef b) const;
+
     llvm::Function * getInitializeThreadLocalFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
     llvm::Function * addInitializeThreadLocalDeclaration(BuilderRef b) const;
 
-    LLVM_READNONE virtual bool hasInternalStreamSets() const;
+    llvm::Function * getAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 
-    llvm::Function * getAllocateInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
-
-    llvm::Function * addAllocateInternalStreamSetsDeclaration(BuilderRef b) const;
+    llvm::Function * addAllocateThreadLocalInternalStreamSetsDeclaration(BuilderRef b) const;
 
     llvm::Function * addDoSegmentDeclaration(BuilderRef b) const;
 
@@ -454,7 +458,9 @@ protected:
 
     virtual void generateInitializeThreadLocalMethod(BuilderRef) { }
 
-    virtual void generateAllocateInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+    virtual void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+
+    virtual void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
 
     virtual void generateKernelMethod(BuilderRef) = 0;
 

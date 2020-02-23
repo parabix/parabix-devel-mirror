@@ -87,7 +87,7 @@ public:
         mHandle = handle;
     }
 
-    virtual void allocateBuffer(BuilderPtr b) = 0;
+    virtual void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) = 0;
 
     virtual void releaseBuffer(BuilderPtr b) const = 0;
 
@@ -164,7 +164,7 @@ public:
 
     ExternalBuffer(BuilderPtr b, llvm::Type * const type, const bool linear, const unsigned AddressSpace);
 
-    void allocateBuffer(BuilderPtr b) override;
+    void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
     void releaseBuffer(BuilderPtr b) const override;
 
@@ -236,9 +236,9 @@ public:
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
-    enum Field { BaseAddress, EffectiveCapacity, ConcreteAddress };
+    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress };
 
-    void allocateBuffer(BuilderPtr b) override;
+    void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
     void releaseBuffer(BuilderPtr b) const override;
 
@@ -272,7 +272,7 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    enum Field { BaseAddress, Capacity, PriorAddress, ConcreteAddress };
+    enum Field { BaseAddress, Capacity, PriorAddress, MallocedAddress };
 
 public:
 
@@ -284,7 +284,7 @@ public:
                   const size_t overflowSize, const size_t underflowSize,
                   const bool linear, const unsigned AddressSpace);
 
-    void allocateBuffer(BuilderPtr b) override;
+    void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
     void releaseBuffer(BuilderPtr b) const override;
 
