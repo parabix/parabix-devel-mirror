@@ -39,20 +39,8 @@
 #endif
 
 #ifdef ENABLE_ASSERTION_TRACE
-// TODO: look into "backtrace_pcinfo"
-#if defined(__i386__)
-typedef uint32_t unw_word_t;
-#else
-typedef uint64_t unw_word_t;
-#endif
-#if defined(HAS_LIBUNWIND)
-#define UNW_LOCAL_ONLY
-#include <libunwind.h>
-static_assert(sizeof(unw_word_t) <= sizeof(uintptr_t), "");
-#elif defined(HAS_EXECINFO)
 #include <execinfo.h>
-static_assert(sizeof(void *) == sizeof(uintptr_t), "");
-#endif
+#include <backtrace.h>
 #endif
 
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -1029,6 +1017,28 @@ void __report_failure(const char * name, const char * fmt, const uintptr_t * tra
     va_end(args);
 }
 
+#ifdef ENABLE_ASSERTION_TRACE
+
+struct pc_data {
+    const char * Function;
+    const char * Filename;
+    size_t       LineNo;
+};
+
+extern "C" int libbacktrace_full_callback(void *data, uintptr_t /*pc*/, const char *filename, int lineno, const char *function) {
+    pc_data * d = static_cast<pc_data*>(data);
+    d->Filename = filename;
+    d->Function = function;
+    d->LineNo = lineno;
+    return 0;
+}
+
+extern "C" void libbacktrace_error_callback(void* /*data*/, const char* /*msg*/, int /*errnum*/) noexcept {
+    // Do nothing, just return.
+}
+
+#endif
+
 void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::initializer_list<Value *> params) {
 
     if (LLVM_UNLIKELY(isa<Constant>(assertion))) {
@@ -1040,8 +1050,17 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     Module * const m = getModule();
     LLVMContext & C = getContext();
     Type * const stackTy = IntegerType::get(C, sizeof(uintptr_t) * 8);
+
+    IntegerType * const int32Ty = getInt32Ty();
+
     PointerType * const stackPtrTy = stackTy->getPointerTo();
     PointerType * const int8PtrTy = getInt8PtrTy();
+
+    FixedArray<Type *, 3> fields;
+    fields[0] = int8PtrTy;
+    fields[1] = int8PtrTy;
+    fields[2] = int32Ty;
+    StructType * const structTy = StructType::create(C, fields);
 
     Function * assertFunc = m->getFunction("assert");
     if (LLVM_UNLIKELY(assertFunc == nullptr)) {
@@ -1120,36 +1139,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         restoreIP(ip);
     }
     #ifdef ENABLE_ASSERTION_TRACE
-    SmallVector<unw_word_t, 64> stack;
-    #if defined(HAS_MACH_VM_TYPES)
-    for (;;) {
-        unsigned int n;
-        _thread_stack_pcs(reinterpret_cast<vm_address_t *>(stack.data()), stack.capacity(), &n, 1);
-        if (LLVM_UNLIKELY(n < stack.capacity() || stack[n - 1] == 0)) {
-            while (n >= 1 && stack[n - 1] == 0) {
-                n -= 1;
-            }
-            stack.set_size(n);
-            break;
-        }
-        stack.reserve(n * 2);
-    }
-    #elif defined(HAS_LIBUNWIND)
-    unw_context_t context;
-    // Initialize cursor to current frame for local unwinding.
-    unw_getcontext(&context);
-    unw_cursor_t cursor;
-    unw_init_local(&cursor, &context);
-    // Unwind frames one by one, going up the frame stack.
-    while (unw_step(&cursor) > 0) {
-        unw_word_t pc;
-        unw_get_reg(&cursor, UNW_REG_IP, &pc);
-        if (pc == 0) {
-            break;
-        }
-        stack.push_back(pc);
-    }
-    #elif defined(HAS_EXECINFO)
+    SmallVector<uintptr_t, 64> stack;
     for (;;) {
         const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
         if (LLVM_LIKELY(n < (int)stack.capacity())) {
@@ -1158,7 +1148,6 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         }
         stack.reserve(n * 2);
     }
-    #endif
     constexpr unsigned FIRST_NON_ASSERT = 2;
     Constant * trace = nullptr;
     ConstantInt * depth = nullptr;
@@ -1167,6 +1156,30 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         depth = getInt32(0);
     } else {
         const auto n = stack.size() - FIRST_NON_ASSERT;
+
+        SmallVector<Constant *, 32> items;
+
+        for (size_t i = 0; i != n; ++i) {
+            const auto pc = stack[i];
+            const auto f = mBacktraceSymbols.find(pc);
+            Constant * symbol = nullptr;
+            if (f == mBacktraceSymbols.end()) {
+                backtrace_state * const state = ::backtrace_create_state(nullptr, 0,&libbacktrace_error_callback, nullptr);
+                pc_data data;
+                ::backtrace_pcinfo(state, pc, &libbacktrace_full_callback, &libbacktrace_error_callback, &data);
+                FixedArray<Constant *, 3> values;
+                values[0] = GetString(data.Filename);
+                values[1] = GetString(data.Function);
+                values[2] = getSize(data.LineNo);
+                symbol = ConstantStruct::get(structTy, values);
+                mBacktraceSymbols.insert(std::make_pair(pc, symbol));
+            } else {
+                symbol = f->second;
+            }
+            items.push_back(symbol);
+        }
+
+        // search for a duplicate within the known globals
         for (GlobalVariable & gv : m->getGlobalList()) {
             Type * const ty = gv.getValueType();
             if (ty->isArrayTy() && ty->getArrayElementType() == stackTy && ty->getArrayNumElements() == n) {
@@ -1185,7 +1198,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
             }
         }
         if (LLVM_LIKELY(trace == nullptr)) {
-            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<unw_word_t>(stack.data() + FIRST_NON_ASSERT, n));
+            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<size_t>(stack.data() + FIRST_NON_ASSERT, n));
             trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
         }
         trace = ConstantExpr::getPointerCast(trace, stackPtrTy);

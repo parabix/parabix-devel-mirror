@@ -15,6 +15,9 @@
 #include <llvm/IR/Function.h>
 #endif
 #include <unistd.h>
+#ifdef ENABLE_ASSERTION_TRACE
+#include <llvm/ADT/DenseMap.h>
+#endif
 
 namespace partition { class KernelBuilder; }
 namespace llvm { class Function; }
@@ -52,6 +55,9 @@ public:
     void setModule(llvm::Module * module) {
         mModule = module;
         ClearInsertionPoint();
+        #ifdef ENABLE_ASSERTION_TRACE
+        mBacktraceSymbols.clear();
+        #endif
     }
 
     // UDiv and URem with optimization for division by power-of-2 constants
@@ -499,6 +505,9 @@ protected:
     codegen::VirtualDriver *        mDriver;
     llvm::LLVMContext               mContext;
     const std::string               mTriple;
+    #ifdef ENABLE_ASSERTION_TRACE
+    llvm::DenseMap<uintptr_t, llvm::Constant *> mBacktraceSymbols;
+    #endif
 };
 
 template <typename ExternalFunctionType>
