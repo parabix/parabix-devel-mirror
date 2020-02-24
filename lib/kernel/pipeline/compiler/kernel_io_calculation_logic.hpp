@@ -17,14 +17,6 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
-    // bound the number of strides by the maximum expected
-    Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
-    if (mMayHaveNonLinearIO) {
-        mNumOfLinearStrides = b->CreateSub(maxStrides, mCurrentNumOfStrides);
-    } else {
-        mNumOfLinearStrides = maxStrides;
-    }
-
     mFixedRateLCM = getFixedRateLCM(mKernel);
 
     // If this kernel does not have an explicit do final segment, then we want to know whether this stride will
@@ -42,14 +34,15 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         checkForSufficientInputData(b, br.Port);
     }
 
-    mIsBounded = false;
+    mNumOfLinearStrides = nullptr;
     for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
         Value * const strides = getNumOfAccessibleStrides(b, br.Port);
-        if (strides) {
-            mIsBounded = true;
-        }
         mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
+    }
+    mIsBounded = (mNumOfLinearStrides != nullptr);
+    if (mNumOfLinearStrides == nullptr) {
+        mNumOfLinearStrides = b->getSize(1);
     }
 
     if (mMayHaveNonLinearIO) {
@@ -105,12 +98,12 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
                                Constant * const terminationSignal) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         for (unsigned i = 0; i < numOfInputs; ++i) {
-			const auto port = StreamSetPort{ PortType::Input, i };
+            const auto port = StreamSetPort{ PortType::Input, i };
             mLinearInputItemsPhi(port)->addIncoming(accessibleItems[i], exitBlock);
             mInputVirtualBaseAddressPhi(port)->addIncoming(inputVirtualBaseAddress[i], exitBlock);
         }
         for (unsigned i = 0; i < numOfOutputs; ++i) {
-			const auto port = StreamSetPort{ PortType::Output, i };
+            const auto port = StreamSetPort{ PortType::Output, i };
             mLinearOutputItemsPhi(port)->addIncoming(writableItems[i], exitBlock);
         }
         if (mFixedRateFactorPhi) { assert (fixedRateFactor);
@@ -212,6 +205,9 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     b->CreateBr(mKernelCheckOutputSpace);
 
     b->SetInsertPoint(mKernelCheckOutputSpace);
+    if (mReportedNumOfStridesPhi) {
+        mNumOfLinearStrides = mReportedNumOfStridesPhi;
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -230,6 +226,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_closed = %" PRIu8, closed);
     #endif
+
     Value * const sufficientInput = b->CreateOr(hasEnough, closed);
 
     BasicBlock * const hasInputData = b->CreateBasicBlock(prefix + "_hasInputData", mKernelCheckOutputSpace);
@@ -272,6 +269,9 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         anyInsufficient->addIncoming(b->getTrue(), exitBlock);
         mBranchToLoopExit = anyInsufficient;
     } else {
+        if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
+            mExhaustedPipelineInputPhi->addIncoming(b->getTrue(), entryBlock);
+        }
         b->SetInsertPoint(hasInputData);
     }
 
@@ -457,6 +457,12 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPo
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
     Value * const consumed = mConsumedItemCount(outputPort); assert (consumed);
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelIndex, outputPort);
+    debugPrint(b, prefix + "_produced = %" PRIu64, produced);
+    debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
+    debugPrint(b, prefix + "_capacity = %" PRIu64, buffer->getCapacity(b));
+    #endif
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         Value * const sanityCheck = b->CreateICmpULE(consumed, produced);
         b->CreateAssert(sanityCheck,
@@ -474,8 +480,6 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPo
     }
     Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, copyBack);
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, outputPort);
-    debugPrint(b, prefix + "_produced = %" PRIu64, produced);
     debugPrint(b, prefix + "_writable = %" PRIu64, writable);
     #endif
     return writable;
@@ -582,8 +586,8 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
     };
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-		const auto inputPort = StreamSetPort{ PortType::Input, i };
-		Value * accessible = mAccessibleInputItems(inputPort);
+        const auto inputPort = StreamSetPort{ PortType::Input, i };
+        Value * accessible = mAccessibleInputItems(inputPort);
         const Binding & input = getInputBinding(inputPort);
         const auto k = summarizeItemCountAdjustment(input, 0);
         if (LLVM_UNLIKELY(k != 0)) {
@@ -619,7 +623,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * accessible = accessibleItems[i];
-		const auto inputPort = StreamSetPort{ PortType::Input, i };		
+        const auto inputPort = StreamSetPort{ PortType::Input, i };
         if (LLVM_UNLIKELY(mIsInputZeroExtended(mKernelIndex, inputPort) != nullptr)) {
             // If this input stream is zero extended, the current input items will be MAX_INT.
             // However, since we're now in the final stride, so we can bound the stream to:
@@ -720,7 +724,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
 
     const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const StreamSetPort port{ PortType::Output, i };
+        const StreamSetPort port{ PortType::Output, i };
         const Binding & output = getOutputBinding(port);
         const ProcessingRate & rate = output.getRate();
 
@@ -1023,7 +1027,7 @@ void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-		const StreamSetPort port(PortType::Input, i);
+        const StreamSetPort port(PortType::Input, i);
         mUpdatedProcessedPhi(port)->addIncoming(mAlreadyProcessedPhi(port), exitBlock);
         if (mUpdatedProcessedDeferredPhi(port)) {
             mUpdatedProcessedDeferredPhi(port)->addIncoming(mAlreadyProcessedDeferredPhi(port), exitBlock);
@@ -1031,8 +1035,8 @@ void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b) {
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const StreamSetPort port(PortType::Output, i);
-		mUpdatedProducedPhi(port)->addIncoming(mAlreadyProducedPhi(port), exitBlock);
+        const StreamSetPort port(PortType::Output, i);
+        mUpdatedProducedPhi(port)->addIncoming(mAlreadyProducedPhi(port), exitBlock);
         if (mUpdatedProducedDeferredPhi(port)) {
             mUpdatedProducedDeferredPhi(port)->addIncoming(mAlreadyProducedDeferredPhi(port), exitBlock);
         }

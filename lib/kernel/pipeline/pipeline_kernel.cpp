@@ -66,7 +66,7 @@ void PipelineKernel::addKernelDeclarations(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasInternalStreamSets
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineKernel::hasInternalStreamSets() const {
+bool PipelineKernel::allocatesInternalStreamSets() const {
     return true;
 }
 
@@ -131,9 +131,10 @@ void PipelineKernel::addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes 
                 n += 1;
             }
             if (LLVM_LIKELY(kernel->hasFamilyName())) {
-                unsigned m = 2;
+                const auto k = kernel->allocatesInternalStreamSets() ? 1 : 0;
+                unsigned m = 2 + k;
                 if (LLVM_UNLIKELY(kernel->hasThreadLocal())) {
-                    m = 4;
+                    m = 4 + k;
                 }
                 n += m;
             }

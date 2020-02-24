@@ -32,7 +32,7 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
-#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -398,8 +398,8 @@ struct PartitioningGraphNode {
     enum TypeId {
         Partition = 0
         , Variable
-        , Fixed        
-        , Greedy        
+        , Fixed
+        , Greedy
         , PartialSum
         , Relative
     };
@@ -539,55 +539,55 @@ using BufferPortMap = flat_set<std::pair<unsigned, unsigned>>;
 
 class PipelineCompiler final : public KernelCompiler {
 
-	template<typename T>
-	struct InputPortVec {
-	public:
+    template<typename T>
+    struct InputPortVec {
+    public:
         InputPortVec(PipelineCompiler * const pc)
-		: mPC(*pc)
+        : mPC(*pc)
         , mVec(pc->mAllocator.allocate<T>(pc->mInputPortSet.size())) {
             #ifndef NDEBUG
             std::memset(mVec, 0, sizeof(T) * pc->mInputPortSet.size());
             #endif
-		}
+        }
         BOOST_FORCEINLINE
         LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
-			return mVec[mPC.getInputPortIndex(kernel, port)];
-		}
+            return mVec[mPC.getInputPortIndex(kernel, port)];
+        }
         BOOST_FORCEINLINE
         T & operator()(const StreamSetPort port) const {
             return operator()(mPC.mKernelIndex, port);
-		}
-	private:
-		const PipelineCompiler & mPC;
-		T * const mVec;
-	};
+        }
+    private:
+        const PipelineCompiler & mPC;
+        T * const mVec;
+    };
 
-	template<typename T> friend struct InputPortVec;
+    template<typename T> friend struct InputPortVec;
 
-	template<typename T>
-	struct OutputPortVec {
-	public:
+    template<typename T>
+    struct OutputPortVec {
+    public:
         OutputPortVec(PipelineCompiler * const pc)
-		: mPC(*pc)
+        : mPC(*pc)
         , mVec(pc->mAllocator.allocate<T>(pc->mOutputPortSet.size())) {
             #ifndef NDEBUG
             std::memset(mVec, 0, sizeof(T) * pc->mOutputPortSet.size());
             #endif
-		}
+        }
         BOOST_FORCEINLINE
         LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
             return mVec[mPC.getOutputPortIndex(kernel, port)];
-		}
+        }
         BOOST_FORCEINLINE
         T & operator()(const StreamSetPort port) const {
-			return operator()(mPC.mKernelIndex, port);
-		}
-	private:
-		const PipelineCompiler & mPC;
-		T * const mVec;
-	};
+            return operator()(mPC.mKernelIndex, port);
+        }
+    private:
+        const PipelineCompiler & mPC;
+        T * const mVec;
+    };
 
-	template<typename T> friend struct OutputPortVec;
+    template<typename T> friend struct OutputPortVec;
 
 public:
 
@@ -776,6 +776,7 @@ public:
     void readConsumedItemCounts(BuilderRef b);
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
+    Value * exhaustedPipelineInput(BuilderRef b);
 
 // buffer management codegen functions
 
@@ -796,9 +797,9 @@ public:
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
 
-	LLVM_READNONE unsigned getInputPortIndex(const unsigned kernel, StreamSetPort port) const;
+    LLVM_READNONE unsigned getInputPortIndex(const unsigned kernel, StreamSetPort port) const;
 
-	LLVM_READNONE unsigned getOutputPortIndex(const unsigned kernel, StreamSetPort port) const;
+    LLVM_READNONE unsigned getOutputPortIndex(const unsigned kernel, StreamSetPort port) const;
 
 // cycle counter functions
 
@@ -863,6 +864,8 @@ public:
     TerminationGraph makeTerminationGraph();
 
     AddGraph makeAddGraph() const;
+
+    void identifyPipelineInputs();
 
 // partitioning analysis
 
@@ -944,7 +947,9 @@ public:
 
     Value * getFamilyFunctionFromKernelState(BuilderRef b, Type * const type, const std::string &suffix) const;
     Value * getKernelInitializeFunction(BuilderRef b) const;
+    Value * getKernelAllocateSharedInternalStreamSetsFunction(BuilderRef b) const;
     Value * getKernelInitializeThreadLocalFunction(BuilderRef b) const;
+    Value * getKernelAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b) const;
     Value * getKernelDoSegmentFunction(BuilderRef b) const;
     Value * getKernelFinalizeThreadLocalFunction(BuilderRef b) const;
     Value * getKernelFinalizeFunction(BuilderRef b) const;
@@ -985,7 +990,7 @@ public:
 
 protected:
 
-	Allocator									mAllocator;
+    Allocator									mAllocator;
 
     const bool                       			mCheckAssertions;
     const bool                                  mTraceProcessedProducedItemCounts;
@@ -1044,7 +1049,7 @@ protected:
     Value *                                     mZeroExtendBuffer = nullptr;
     Value *                                     mZeroExtendSpace = nullptr;
     Value *                                     mSegNo = nullptr;
-    Value *                                     mHalted = nullptr;
+    Value *                                     mExhaustedInput = nullptr;
     PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;
     PHINode *                                   mNextPipelineProgress = nullptr;
@@ -1082,6 +1087,9 @@ protected:
     PHINode *                                   mTotalNumOfStrides = nullptr;
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
+    PHINode *                                   mAlreadyExhaustedPipelineInputPhi = nullptr;
+    PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
+    PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
     PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
     PHINode *                                   mTerminatedSignalPhi = nullptr;
     PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;
@@ -1093,6 +1101,8 @@ protected:
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mReportedNumOfStridesPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
+
+    BitVector                                   mHasPipelineInput;
 
     unsigned                                    mMaximumNumOfStrides = 0;
 
@@ -1115,44 +1125,44 @@ protected:
     PHINode *                                   mZeroExtendBufferPhi = nullptr;
 
     InputPortVec<Value *>                       mInitiallyProcessedItemCount; // *before* entering the kernel
-	InputPortVec<Value *>                       mInitiallyProcessedDeferredItemCount;
+    InputPortVec<Value *>                       mInitiallyProcessedDeferredItemCount;
     InputPortVec<PHINode *>                     mAlreadyProcessedPhi; // entering the segment loop
     InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
-	InputPortVec<Value *>                       mInputEpoch;
-	InputPortVec<Value *>                       mIsInputZeroExtended;
-	InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
-	InputPortVec<Value *>                       mFirstInputStrideLength;
-	InputPortVec<Value *>                       mAccessibleInputItems;
-	InputPortVec<PHINode *>                     mLinearInputItemsPhi;
-	InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
-	InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
-	InputPortVec<Value *>                       mProcessedDeferredItemCount;
-	InputPortVec<PHINode *>                     mFinalProcessedPhi; // exiting after termination
-	InputPortVec<PHINode *>                     mInsufficientIOProcessedPhi; // exiting insufficient io
-	InputPortVec<PHINode *>                     mInsufficientIOProcessedDeferredPhi;
-	InputPortVec<PHINode *>                     mUpdatedProcessedPhi; // exiting the kernel
-	InputPortVec<PHINode *>                     mUpdatedProcessedDeferredPhi;
-	InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
+    InputPortVec<Value *>                       mInputEpoch;
+    InputPortVec<Value *>                       mIsInputZeroExtended;
+    InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
+    InputPortVec<Value *>                       mFirstInputStrideLength;
+    InputPortVec<Value *>                       mAccessibleInputItems;
+    InputPortVec<PHINode *>                     mLinearInputItemsPhi;
+    InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
+    InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
+    InputPortVec<Value *>                       mProcessedDeferredItemCount;
+    InputPortVec<PHINode *>                     mFinalProcessedPhi; // exiting after termination
+    InputPortVec<PHINode *>                     mInsufficientIOProcessedPhi; // exiting insufficient io
+    InputPortVec<PHINode *>                     mInsufficientIOProcessedDeferredPhi;
+    InputPortVec<PHINode *>                     mUpdatedProcessedPhi; // exiting the kernel
+    InputPortVec<PHINode *>                     mUpdatedProcessedDeferredPhi;
+    InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
 
     OutputPortVec<Value *>                      mInitiallyProducedItemCount; // *before* entering the kernel
-	OutputPortVec<Value *>                      mInitiallyProducedDeferredItemCount;
+    OutputPortVec<Value *>                      mInitiallyProducedDeferredItemCount;
     OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
-	OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
+    OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
     OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
     OutputPortVec<Value *>                      mFirstOutputStrideLength;
     OutputPortVec<Value *>                      mWritableOutputItems;
-	OutputPortVec<Value *>                      mConsumedItemCount;
-	OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
-	OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
-	OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
-	OutputPortVec<Value *>                      mProducedItemCount; // exiting the segment loop
-	OutputPortVec<Value *>                      mProducedDeferredItemCount;
-	OutputPortVec<PHINode *>                    mFinalProducedPhi; // exiting after termination
-	OutputPortVec<PHINode *>                    mInsufficientIOProducedPhi; // exiting insufficient io
-	OutputPortVec<PHINode *>                    mInsufficientIOProducedDeferredPhi;
-	OutputPortVec<PHINode *>                    mUpdatedProducedPhi; // exiting the kernel
-	OutputPortVec<PHINode *>                    mUpdatedProducedDeferredPhi;
-	OutputPortVec<PHINode *>                    mFullyProducedItemCount; // *after* exiting the kernel
+    OutputPortVec<Value *>                      mConsumedItemCount;
+    OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
+    OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
+    OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
+    OutputPortVec<Value *>                      mProducedItemCount; // exiting the segment loop
+    OutputPortVec<Value *>                      mProducedDeferredItemCount;
+    OutputPortVec<PHINode *>                    mFinalProducedPhi; // exiting after termination
+    OutputPortVec<PHINode *>                    mInsufficientIOProducedPhi; // exiting insufficient io
+    OutputPortVec<PHINode *>                    mInsufficientIOProducedDeferredPhi;
+    OutputPortVec<PHINode *>                    mUpdatedProducedPhi; // exiting the kernel
+    OutputPortVec<PHINode *>                    mUpdatedProducedDeferredPhi;
+    OutputPortVec<PHINode *>                    mFullyProducedItemCount; // *after* exiting the kernel
 
     // cycle counter state
     std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;

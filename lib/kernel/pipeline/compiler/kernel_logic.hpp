@@ -150,10 +150,21 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getKernelInitializeFunction(BuilderRef b) const {    
+Value * PipelineCompiler::getKernelInitializeFunction(BuilderRef b) const {
     Function * const init = mKernel->getInitializeFunction(b);
     assert (!mKernel->hasFamilyName());
     return init;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getKernelAllocateSharedInternalStreamSetsFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getKernelAllocateSharedInternalStreamSetsFunction(BuilderRef b) const {
+    Function * const term = mKernel->getAllocateSharedInternalStreamSetsFunction(b, false);
+    if (mKernel->hasFamilyName()) {
+        return getFamilyFunctionFromKernelState(b, term->getType(), ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+    }
+    return term;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -165,6 +176,17 @@ Value * PipelineCompiler::getKernelInitializeThreadLocalFunction(BuilderRef b) c
         return getFamilyFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
     return init;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getKernelAllocateThreadLocalInternalStreamSetsFunction
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getKernelAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b) const {
+    Function * const term = mKernel->getAllocateThreadLocalInternalStreamSetsFunction(b, false);
+    if (mKernel->hasFamilyName()) {
+        return getFamilyFunctionFromKernelState(b, term->getType(), ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+    }
+    return term;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -203,7 +203,7 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
  * @brief callAllocateSharedInternalStreamSets
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void KernelCompiler::callGenerateAllocateSharedInternalStreamSets(BuilderRef b) {
-    if (LLVM_UNLIKELY(mTarget->hasInternalStreamSets())) {
+    if (LLVM_UNLIKELY(mTarget->allocatesInternalStreamSets())) {
         b->setCompiler(this);
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = mTarget->getAllocateSharedInternalStreamSetsFunction(b);
@@ -230,7 +230,7 @@ inline void KernelCompiler::callGenerateAllocateSharedInternalStreamSets(Builder
  * @brief callAllocateThreadLocalInternalStreamSets
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void KernelCompiler::callGenerateAllocateThreadLocalInternalStreamSets(BuilderRef b) {
-    if (LLVM_UNLIKELY(mTarget->hasInternalStreamSets() && mTarget->hasThreadLocal())) {
+    if (LLVM_UNLIKELY(mTarget->allocatesInternalStreamSets() && mTarget->hasThreadLocal())) {
         b->setCompiler(this);
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = mTarget->getAllocateThreadLocalInternalStreamSetsFunction(b);
@@ -312,7 +312,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
     } else {
         mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
-    }    
+    }
     mExternalSegNo = nullptr;
     if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
         mExternalSegNo = nextArg();

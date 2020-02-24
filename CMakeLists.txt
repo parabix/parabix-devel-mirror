@@ -179,14 +179,16 @@ endfunction(parabix_set_library_name)
 include(CMakeParseArguments)
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    find_package(Backtrace)
-    if (${Backtrace_FOUND})
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_ASSERTION_TRACE")
-        message("Enabling Assertion Traces")
-        include_directories(${Backtrace_INCLUDE_DIRS})
-        target_link_libraries(CodeGen "${Backtrace_LIBRARIES}")
-        target_link_libraries(CodeGen "${CMAKE_DL_LIBS}")
-
+    include(CheckIncludeFileCXX)
+    CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
+    if (HAS_EXECINFO)
+        ###   Import Dependency: DWARF   ###
+        find_package(LibDwarf) # libelf-dev libdwarf-dev
+        if (LIBDWARF_FOUND)
+            include_directories(${LIBDWARF_INCLUDE_DIRS})
+            link_directories(${LIBDWARF_LIBRARIES})
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_ASSERTION_TRACE")
+        endif()
     endif()
 endif()
 

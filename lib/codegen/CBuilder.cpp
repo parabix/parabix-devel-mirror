@@ -38,9 +38,16 @@
 #define PRISz PRId64
 #endif
 
+#define ENABLE_ASSERTION_TRACE
+
 #ifdef ENABLE_ASSERTION_TRACE
+//#include <dwarf.h>
+//#include <libdwarf.h>
+//#include <libelf.h>
+//#include <link.h>
+//#include <dlfcn.h>
 #include <execinfo.h>
-#include <backtrace.h>
+//#include <cxxabi.h>
 #endif
 
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)
@@ -1017,24 +1024,34 @@ void __report_failure(const char * name, const char * fmt, const uintptr_t * tra
     va_end(args);
 }
 
-#ifdef ENABLE_ASSERTION_TRACE
+#if 0
 
-struct pc_data {
-    const char * Function;
-    const char * Filename;
-    size_t       LineNo;
-};
+Constant * resolve(CBuilder & b, void * addr) {
 
-extern "C" int libbacktrace_full_callback(void *data, uintptr_t /*pc*/, const char *filename, int lineno, const char *function) {
-    pc_data * d = static_cast<pc_data*>(data);
-    d->Filename = filename;
-    d->Function = function;
-    d->LineNo = lineno;
-    return 0;
-}
+    Dl_info symbol_info;
+    link_map * linkmap;
 
-extern "C" void libbacktrace_error_callback(void* /*data*/, const char* /*msg*/, int /*errnum*/) noexcept {
-    // Do nothing, just return.
+    const auto r = dladdr1(addr, &symbol_info, reinterpret_cast<void **>(&linkmap), RTLD_DL_LINKMAP);
+
+    if (r == 0) {
+        return nullptr;
+    }
+
+    Constant * functionName = nullptr;
+
+    if (symbol_info.dli_sname) {
+        char * buffer = malloc(256);
+        buffer = abi::__cxa_demangle(symbol_info.dli_sname, buffer, 256, nullptr);
+        functionName = b.GetString(buffer);
+        free(buffer);
+    }
+
+    if (symbol_info.dli_fname) {
+
+
+    }
+
+
 }
 
 #endif
@@ -1139,14 +1156,14 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
         restoreIP(ip);
     }
     #ifdef ENABLE_ASSERTION_TRACE
-    SmallVector<uintptr_t, 64> stack;
+    SmallVector<uintptr_t, 64> stack(64);
     for (;;) {
-        const auto n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
-        if (LLVM_LIKELY(n < (int)stack.capacity())) {
+        const size_t n = backtrace(reinterpret_cast<void **>(stack.data()), stack.capacity());
+        if (LLVM_LIKELY(n < stack.capacity())) {
             stack.set_size(n);
             break;
         }
-        stack.reserve(n * 2);
+        stack.resize(n * 2);
     }
     constexpr unsigned FIRST_NON_ASSERT = 2;
     Constant * trace = nullptr;
@@ -1157,27 +1174,38 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     } else {
         const auto n = stack.size() - FIRST_NON_ASSERT;
 
-        SmallVector<Constant *, 32> items;
+        #if 0
+
+        SmallVector<Constant *, 32> symbols(n);
 
         for (size_t i = 0; i != n; ++i) {
             const auto pc = stack[i];
             const auto f = mBacktraceSymbols.find(pc);
             Constant * symbol = nullptr;
             if (f == mBacktraceSymbols.end()) {
-                backtrace_state * const state = ::backtrace_create_state(nullptr, 0,&libbacktrace_error_callback, nullptr);
-                pc_data data;
-                ::backtrace_pcinfo(state, pc, &libbacktrace_full_callback, &libbacktrace_error_callback, &data);
-                FixedArray<Constant *, 3> values;
-                values[0] = GetString(data.Filename);
-                values[1] = GetString(data.Function);
-                values[2] = getSize(data.LineNo);
-                symbol = ConstantStruct::get(structTy, values);
-                mBacktraceSymbols.insert(std::make_pair(pc, symbol));
+
+
+
+//                backtrace_state * const state = ::backtrace_create_state(nullptr, 0,&libbacktrace_error_callback, nullptr);
+//                pc_data data;
+//                ::backtrace_pcinfo(state, pc, &libbacktrace_full_callback, &libbacktrace_error_callback, &data);
+//                FixedArray<Constant *, 3> values;
+//                values[0] = GetString(data.Filename);
+//                values[1] = GetString(data.Function);
+//                values[2] = getSize(data.LineNo);
+//                symbol = ConstantStruct::get(structTy, values);
+//                mBacktraceSymbols.insert(std::make_pair(pc, symbol));
             } else {
                 symbol = f->second;
             }
-            items.push_back(symbol);
+            symbols[i] = nullptr;
         }
+
+
+
+
+
+        #endif
 
         // search for a duplicate within the known globals
         for (GlobalVariable & gv : m->getGlobalList()) {
@@ -1198,7 +1226,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
             }
         }
         if (LLVM_LIKELY(trace == nullptr)) {
-            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<size_t>(stack.data() + FIRST_NON_ASSERT, n));
+            Constant * const initializer = ConstantDataArray::get(getContext(), ArrayRef<uintptr_t>(stack.data() + FIRST_NON_ASSERT, n));
             trace = new GlobalVariable(*m, initializer->getType(), true, GlobalVariable::InternalLinkage, initializer);
         }
         trace = ConstantExpr::getPointerCast(trace, stackPtrTy);
@@ -1905,7 +1933,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                         assert (ci.getNumArgOperands() >= 5);
                         bool remove = false;
                         Value * const check = ci.getOperand(0);
-                        Constant * static_check = nullptr;                        
+                        Constant * static_check = nullptr;
                         if (isa<Constant>(check)) {
                             static_check = cast<Constant>(check);
                         } else if (LLVM_LIKELY(isa<ICmpInst>(check))) {
@@ -1916,7 +1944,7 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 static_check = ConstantExpr::getICmp(icmp->getPredicate(), cast<Constant>(op0), cast<Constant>(op1));
                                 ci.setOperand(0, static_check);
                             }
-                        }                        
+                        }
                         if (static_check) {
                             if (LLVM_UNLIKELY(static_check->isNullValue())) {
                                 // show any static failures with their compilation context

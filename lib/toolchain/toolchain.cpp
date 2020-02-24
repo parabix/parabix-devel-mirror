@@ -184,7 +184,6 @@ const cl::OptionCategory * LLVM_READONLY codegen_flags() {
 }
 
 bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
-    if (flag == DebugFlags::EnableAsserts) return true;
     return DebugOptions.isSet(flag);
 }
 

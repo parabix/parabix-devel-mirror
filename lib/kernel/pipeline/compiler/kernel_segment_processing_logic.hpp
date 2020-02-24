@@ -38,7 +38,9 @@ void PipelineCompiler::start(BuilderRef b) {
     b->SetInsertPoint(mPipelineLoop);
     mMadeProgressInLastSegment = b->CreatePHI(b->getInt1Ty(), 2);
     mMadeProgressInLastSegment->addIncoming(b->getTrue(), entryBlock);
-    mPipelineProgress = b->getFalse();
+    Constant * const FALSE = b->getFalse();
+    mPipelineProgress = FALSE;
+    mExhaustedInput = FALSE;
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = mTarget->getName();
     #endif
@@ -67,10 +69,11 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     BasicBlock * const partitionExit = getPartitionExitPoint(b);
 
-    mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();    
+    mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
     mHasExplicitFinalPartialStride = mKernel->requiresExplicitPartialFinalStride();
     mMayHaveNonLinearIO = mayHaveNonLinearIO();
     mKernelIsInternallySynchronized = supportsInternalSynchronization();
+    identifyPipelineInputs();
 
     mMaximumNumOfStrides = ceiling(MaximumNumOfStrides[mKernelIndex]);
 
@@ -287,24 +290,24 @@ void PipelineCompiler::replacePhiCatchBlocksWith(BasicBlock * const loopExit, Ba
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::validateSegmentExecution(BuilderRef b) const {
 
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+//    if (LLVM_UNLIKELY(mCheckAssertions)) {
 
-        ConstantInt * lb = b->getSize(floor(MinimumNumOfStrides[mKernelIndex]));
-        ConstantInt * ub = b->getSize(ceiling(MaximumNumOfStrides[mKernelIndex]));
-        Value * const notTooFew = b->CreateICmpUGE(mTotalNumOfStridesAtExitPhi, lb);
-        Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-        Value * const notTooFew2 = b->CreateOr(terminated, notTooFew);
+//        ConstantInt * lb = b->getSize(floor(MinimumNumOfStrides[mKernelIndex]));
+//        ConstantInt * ub = b->getSize(ceiling(MaximumNumOfStrides[mKernelIndex]));
+//        Value * const notTooFew = b->CreateICmpUGE(mTotalNumOfStridesAtExitPhi, lb);
+//        Value * const terminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+//        Value * const notTooFew2 = b->CreateOr(terminated, notTooFew);
 
-        Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStridesAtExitPhi, ub);
-        Value * const withinRange = b->CreateAnd(notTooFew2, notTooMany);
+//        Value * const notTooMany = b->CreateICmpULE(mTotalNumOfStridesAtExitPhi, ub);
+//        Value * const withinRange = b->CreateAnd(notTooFew2, notTooMany);
 
-        b->CreateAssert(withinRange,
-                        "%s: processed %" PRIu64 " strides but expected [%" PRIu64 ",%" PRIu64 "]",
-                        mKernelAssertionName,
-                        mTotalNumOfStridesAtExitPhi,
-                        lb, ub);
+//        b->CreateAssert(withinRange,
+//                        "%s: processed %" PRIu64 " strides but expected [%" PRIu64 ",%" PRIu64 "]",
+//                        mKernelAssertionName,
+//                        mTotalNumOfStridesAtExitPhi,
+//                        lb, ub);
 
-    }
+//    }
 }
 
 
@@ -340,37 +343,30 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         Value * const notFinal = b->CreateIsNull(mIsFinalInvocationPhi);
 
         if (mMayHaveNonLinearIO) {
-            const auto prefix = makeKernelName(mKernelIndex);            
-            BasicBlock * const ioBoundsCheck = b->CreateBasicBlock(prefix + "_boundsCheck", mKernelTerminated);
 
             for (unsigned i = 0; i < numOfInputs; ++i) {
                 const auto port = StreamSetPort{ PortType::Input, i };
-                mAlreadyProcessedPhi(port)->addIncoming(mProcessedItemCount(port), ioBoundsCheck);
+                mAlreadyProcessedPhi(port)->addIncoming(mProcessedItemCount(port), entryBlock);
                 if (mAlreadyProcessedDeferredPhi(port)) {
-                    mAlreadyProcessedDeferredPhi(port)->addIncoming(mProcessedDeferredItemCount(port), ioBoundsCheck);
+                    mAlreadyProcessedDeferredPhi(port)->addIncoming(mProcessedDeferredItemCount(port), entryBlock);
                 }
             }
 
             for (unsigned i = 0; i < numOfOutputs; ++i) {
                 const auto port = StreamSetPort{ PortType::Output, i };
-                mAlreadyProducedPhi(port)->addIncoming(mProducedItemCount(port), ioBoundsCheck);
+                mAlreadyProducedPhi(port)->addIncoming(mProducedItemCount(port), entryBlock);
                 if (mAlreadyProducedDeferredPhi(port)) {
-                    mAlreadyProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), ioBoundsCheck);
+                    mAlreadyProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), entryBlock);
                 }
             }
 
-            b->CreateLikelyCondBr(notFinal, ioBoundsCheck, mKernelTerminated);
+            b->CreateLikelyCondBr(notFinal, mKernelLoopEntry, mKernelTerminated);
 
-            b->SetInsertPoint(ioBoundsCheck);
+            mAlreadyProgressedPhi->addIncoming(i1_TRUE, entryBlock);
+            mExecutedAtLeastOncePhi->addIncoming(i1_TRUE, entryBlock);
+            mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, entryBlock);
 
-            // bound the number of strides by the maximum expected
-            Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
-            Value * const done = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
-            b->CreateCondBr(done, mKernelLoopExit, mKernelLoopEntry);
-
-            mAlreadyProgressedPhi->addIncoming(i1_TRUE, ioBoundsCheck);
-            mExecutedAtLeastOncePhi->addIncoming(i1_TRUE, ioBoundsCheck);
-            mCurrentNumOfStrides->addIncoming(mUpdatedNumOfStrides, ioBoundsCheck);
+            return;
 
         } else {
             b->CreateLikelyCondBr(notFinal, mKernelLoopExit, mKernelTerminated);
@@ -379,29 +375,27 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         b->CreateBr(mKernelLoopExit);
     }
 
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-
     for (unsigned i = 0; i < numOfInputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Input, i };
-		mUpdatedProcessedPhi(port)->addIncoming(mProcessedItemCount(port), exitBlock);
+        const auto port = StreamSetPort{ PortType::Input, i };
+        mUpdatedProcessedPhi(port)->addIncoming(mProcessedItemCount(port), entryBlock);
         if (mUpdatedProcessedDeferredPhi(port)) {
-            mUpdatedProcessedDeferredPhi(port)->addIncoming(mProcessedDeferredItemCount(port), exitBlock);
+            mUpdatedProcessedDeferredPhi(port)->addIncoming(mProcessedDeferredItemCount(port), entryBlock);
         }
     }
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Output, i };
-        mUpdatedProducedPhi(port)->addIncoming(mProducedItemCount(port), exitBlock);
+        const auto port = StreamSetPort{ PortType::Output, i };
+        mUpdatedProducedPhi(port)->addIncoming(mProducedItemCount(port), entryBlock);
         if (mUpdatedProducedDeferredPhi(port)) {
-            mUpdatedProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), exitBlock);
+            mUpdatedProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), entryBlock);
         }
     }
 
-    mTerminatedAtLoopExitPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
-    mHasProgressedPhi->addIncoming(i1_TRUE, exitBlock);
+    mTerminatedAtLoopExitPhi->addIncoming(mIsFinalInvocationPhi, entryBlock);
+    mHasProgressedPhi->addIncoming(i1_TRUE, entryBlock);
     if (mMayHaveNonLinearIO) {
-        mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, exitBlock);
+        mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, entryBlock);
     } else {
-        mTotalNumOfStrides->addIncoming(mNumOfLinearStrides, exitBlock);
+        mTotalNumOfStrides->addIncoming(mNumOfLinearStrides, entryBlock);
     }
 }
 
@@ -474,7 +468,7 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
     const auto prefix = makeKernelName(mKernelIndex);
     if (LLVM_LIKELY(mKernel->hasFixedRateInput())) {
         mFixedRateFactorPhi = b->CreatePHI(sizeTy, 2, prefix + "_fixedRateFactor");
-    }    
+    }
     if (mHasExplicitFinalPartialStride) {
         mReportedNumOfStridesPhi = nullptr;
     } else {
@@ -493,13 +487,13 @@ inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
     mTerminatedSignalPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedSignal");
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Input, i };
+        const auto port = StreamSetPort{ PortType::Input, i };
         const auto prefix = makeBufferName(mKernelIndex, port);
         mFinalProcessedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_finalProcessed");
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Output, i };
+        const auto port = StreamSetPort{ PortType::Output, i };
         const auto prefix = makeBufferName(mKernelIndex, port);
         mFinalProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_finalProduced");
     }
@@ -509,7 +503,13 @@ inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
  * @brief initializeKernelInsufficientIOExitPhis
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelInsufficientIOExitPhis(BuilderRef b) {
-
+    mExhaustedPipelineInputPhi = nullptr;
+    if (LLVM_UNLIKELY(mHasPipelineInput.any())) {
+        b->SetInsertPoint(mKernelInsufficientIOExit);
+        const auto prefix = makeKernelName(mKernelIndex);
+        IntegerType * const boolTy = b->getInt1Ty();
+        mExhaustedPipelineInputPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInput");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -522,7 +522,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     IntegerType * const boolTy = b->getInt1Ty();
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Input, i };
+        const auto port = StreamSetPort{ PortType::Input, i };
         const auto prefix = makeBufferName(mKernelIndex, port);
         mUpdatedProcessedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessedAtLoopExit");
         if (mAlreadyProcessedDeferredPhi(port)) {
@@ -531,7 +531,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Output, i };
+        const auto port = StreamSetPort{ PortType::Output, i };
         const auto prefix = makeBufferName(mKernelIndex, port);
         mUpdatedProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_updatedProducedAtLoopExit");
         if (mAlreadyProducedDeferredPhi(port)) {
@@ -541,6 +541,9 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     mTerminatedAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtLoopExit");
     mHasProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgressAtLoopExit");
     mTotalNumOfStrides = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtLoopExit");
+    if (mExhaustedPipelineInputPhi) {
+        mExhaustedPipelineInputAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInputAtLoopExit");
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -605,11 +608,18 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
 
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Output, i };
+        const auto port = StreamSetPort{ PortType::Output, i };
         const auto prefix = makeBufferName(mKernelIndex, port);
         PHINode * const fullyProduced = b->CreatePHI(sizeTy, 2, prefix + "_fullyProducedAtKernelExit");
         fullyProduced->addIncoming(mInitiallyProducedItemCount(port), mKernelInitiallyTerminatedPhiCatch);
         mFullyProducedItemCount(port) = fullyProduced;
+    }
+
+    if (LLVM_UNLIKELY(mExhaustedPipelineInputPhi)) {
+        PHINode * const phi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedPipelineInputAtKernelExit");
+        phi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedPhiCatch);
+        phi->addIncoming(mExhaustedPipelineInputPhi, mKernelLoopExitPhiCatch);
+        mExhaustedInput = phi;
     }
 }
 
@@ -627,7 +637,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     }
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Input, i };
+        const auto port = StreamSetPort{ PortType::Input, i };
         Value * const totalCount = getLocallyAvailableItemCount(b, port);
         mUpdatedProcessedPhi(port)->addIncoming(totalCount, exitBlock);
         if (mUpdatedProcessedDeferredPhi(port)) {
@@ -636,7 +646,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     }
     const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-		const auto port = StreamSetPort{ PortType::Output, i };
+        const auto port = StreamSetPort{ PortType::Output, i };
         mUpdatedProducedPhi(port)->addIncoming(mFinalProducedPhi(port), exitBlock);
         if (mUpdatedProducedDeferredPhi(port)) {
             mUpdatedProducedDeferredPhi(port)->addIncoming(mFinalProducedPhi(port), exitBlock);
@@ -665,31 +675,40 @@ void PipelineCompiler::end(BuilderRef b) {
     // TODO: if we determine that all of the pipeline I/O is consumed in one invocation of the
     // pipeline, we can avoid testing at the end whether its terminated.
 
-    Value * const terminated = hasPipelineTerminated(b);
+    Value * terminated = nullptr;
 
-    // TODO: remove halted check? see if editd still requires it.
-    Value * done = b->CreateIsNotNull(terminated);
-    Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, mTarget->getName() + "+++ pipeline end %" PRIu64 " +++", mSegNo);
-    #endif
-
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        b->CreateAssert(b->CreateOr(mMadeProgressInLastSegment, progressedOrFinished),
-            "Dead lock detected: pipeline could not progress after two iterations");
-    }
-
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    mMadeProgressInLastSegment->addIncoming(progressedOrFinished, exitBlock);
     if (ExternallySynchronized) {
-        done = b->getTrue();
-    }
-    b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
+        b->CreateBr(mPipelineEnd);
+    } else {
 
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, mTarget->getName() + "+++ pipeline end %" PRIu64 " +++", mSegNo);
+        #endif
+
+        terminated = hasPipelineTerminated(b);
+        Value * done = b->CreateIsNotNull(terminated);
+
+        if (LLVM_UNLIKELY(mCheckAssertions)) {
+            Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
+            Value * const live = b->CreateOr(mMadeProgressInLastSegment, progressedOrFinished);
+            b->CreateAssert(live, "Dead lock detected: pipeline could not progress after two iterations");
+        }
+
+        //Value * const exhausted = exhaustedPipelineInput(b);
+        if (mExhaustedInput) {
+            done = b->CreateOr(done, mExhaustedInput);
+        }
+        BasicBlock * const exitBlock = b->GetInsertBlock();
+        mMadeProgressInLastSegment->addIncoming(mPipelineProgress, exitBlock);
+        b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
+    }
     b->SetInsertPoint(mPipelineEnd);
+
+
     writeExternalConsumedItemCounts(b);
     writeExternalProducedItemCounts(b);
     if (mCurrentThreadTerminationSignalPtr) {
+        assert ("externally synchronized kernels cannot have a termination signal" && terminated);
         b->CreateStore(terminated, mCurrentThreadTerminationSignalPtr);
     }
     // free any truncated input buffers

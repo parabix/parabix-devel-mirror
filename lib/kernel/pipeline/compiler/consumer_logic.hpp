@@ -502,6 +502,26 @@ inline void PipelineCompiler::writeExternalConsumedItemCounts(BuilderRef b) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief exhaustedPipelineInput
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::exhaustedPipelineInput(BuilderRef b) {
+    Value * result = nullptr;
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const ConsumerNode & cn = mConsumerGraph[streamSet];
+        Value * const consumed = cn.Consumed;
+        Value * const avail = mLocallyAvailableItems[getBufferIndex(streamSet)];
+        Value * const exhausted = b->CreateICmpEQ(consumed, avail);
+        if (result) {
+            result = b->CreateOr(exhausted, result);
+        } else {
+            result = exhausted;
+        }
+    }
+    return result;
+}
+
 
 }
 

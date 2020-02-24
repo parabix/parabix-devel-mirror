@@ -75,48 +75,49 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
            b->GetString(mTarget->getName()));
     }
 
+    b->CallPrintInt("INIT: " + getName() + "_expectedNumOfStrides", expectedNumOfStrides);
+
     // recursively allocate any internal buffers for the nested kernels, giving them the correct
     // num of strides it should expect to perform
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernelObj = getKernel(i);
-        if (LLVM_UNLIKELY(kernelObj->hasInternalStreamSets())) {
-            if (nonLocal && !kernelObj->hasThreadLocal()) {
-                continue;
+        if (LLVM_UNLIKELY(kernelObj->allocatesInternalStreamSets())) {
+            if (nonLocal || kernelObj->hasThreadLocal()) {
+                setActiveKernel(b, i);
+                assert (mKernel == kernelObj);
+                SmallVector<Value *, 3> params;
+                if (LLVM_LIKELY(kernelObj->isStateful())) {
+                    params.push_back(mKernelHandle);
+                }
+                Value * func = nullptr;
+                if (nonLocal) {
+                    func = getKernelAllocateSharedInternalStreamSetsFunction(b);
+                } else {
+                    func = getKernelAllocateThreadLocalInternalStreamSetsFunction(b);
+                    params.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
+                }
+                params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, MaximumNumOfStrides[i]));
+                b->CreateCall(func, params);
             }
-            setActiveKernel(b, i);
-            SmallVector<Value *, 3> params;
-            if (LLVM_LIKELY(kernelObj->isStateful())) {
-                params.push_back(mKernelHandle);
+        }
+        // and allocate any output buffers
+        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const auto j = target(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[j];
+            if (LLVM_UNLIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
+                StreamSetBuffer * const buffer = bn.Buffer;
+                if (LLVM_LIKELY(bn.isInternal())) {
+                    const BufferRateData & rd = mBufferGraph[e];
+                    const auto handleName = makeBufferName(i, rd.Port);
+                    Value * const handle = b->getScalarFieldPtr(handleName);
+                    buffer->setHandle(handle);
+                }
+                assert (isFromCurrentFunction(b, buffer->getHandle(), false));
+                buffer->allocateBuffer(b, expectedNumOfStrides);
             }
-            Function * allocInternal = nullptr;
-            if (nonLocal) {
-                allocInternal = kernelObj->getAllocateThreadLocalInternalStreamSetsFunction(b, true);
-                params.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
-            } else {
-                allocInternal = kernelObj->getAllocateSharedInternalStreamSetsFunction(b, true);
-            }
-            params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, MaximumNumOfStrides[i]));
-            b->CreateCall(allocInternal, params);
         }
     }
 
-    // ... then allocate this pipeline's internal buffers
-    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
-        const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_UNLIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
-            StreamSetBuffer * const buffer = bn.Buffer;
-            if (LLVM_LIKELY(bn.isInternal())) {
-                const auto pe = in_edge(i, mBufferGraph);
-                const auto p = source(pe, mBufferGraph);
-                const BufferRateData & rd = mBufferGraph[pe];
-                const auto handleName = makeBufferName(p, rd.Port);
-                Value * const handle = b->getScalarFieldPtr(handleName);
-                buffer->setHandle(handle);
-            }
-            assert (isFromCurrentFunction(b, buffer->getHandle(), false));
-            buffer->allocateBuffer(b, expectedNumOfStrides);
-        }
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -850,26 +851,26 @@ inline const Kernel * PipelineCompiler::getKernel(const unsigned index) const {
  * @brief getInputPortIndex
  ** ------------------------------------------------------------------------------------------------------------- */
 BOOST_FORCEINLINE unsigned PipelineCompiler::getInputPortIndex(const unsigned kernel, const StreamSetPort port) const {
-	assert (port.Type == PortType::Input);
-	const auto key = std::pair<unsigned, unsigned>(kernel, port.Number);
-	const auto f = mInputPortSet.lower_bound(key);
-	assert(f != mInputPortSet.end() && *f == key);
-	const auto i = f - mInputPortSet.begin();
-	assert(mInputPortSet.nth(i) == f);
-	return i;
+    assert (port.Type == PortType::Input);
+    const auto key = std::pair<unsigned, unsigned>(kernel, port.Number);
+    const auto f = mInputPortSet.lower_bound(key);
+    assert(f != mInputPortSet.end() && *f == key);
+    const auto i = f - mInputPortSet.begin();
+    assert(mInputPortSet.nth(i) == f);
+    return i;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputPortIndex
  ** ------------------------------------------------------------------------------------------------------------- */
 BOOST_FORCEINLINE unsigned PipelineCompiler::getOutputPortIndex(const unsigned kernel, const StreamSetPort port) const {
-	assert(port.Type == PortType::Output);
-	const auto key = std::pair<unsigned, unsigned>(kernel, port.Number);
-	const auto f = mOutputPortSet.lower_bound(key);
-	assert(f != mOutputPortSet.end() && *f == key);
-	const auto i = f - mOutputPortSet.begin();
-	assert(mOutputPortSet.nth(i) == f);
-	return i;
+    assert(port.Type == PortType::Output);
+    const auto key = std::pair<unsigned, unsigned>(kernel, port.Number);
+    const auto f = mOutputPortSet.lower_bound(key);
+    assert(f != mOutputPortSet.end() && *f == key);
+    const auto i = f - mOutputPortSet.begin();
+    assert(mOutputPortSet.nth(i) == f);
+    return i;
 }
 
 

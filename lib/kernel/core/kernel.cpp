@@ -314,6 +314,7 @@ Function * Kernel::addInitializeDeclaration(BuilderRef b) const {
         for (const Binding & binding : mInputScalars) {
             setNextArgName(binding.getName());
         }
+        // TODO: name family args?
     }
     return initFunc;
 }
@@ -381,12 +382,7 @@ Function * Kernel::addInitializeThreadLocalDeclaration(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasInternalStreamSets
  ** ------------------------------------------------------------------------------------------------------------- */
-bool Kernel::hasInternalStreamSets() const {
-//    for (const Binding & output : mOutputStreamSets) {
-//        if (LLVM_UNLIKELY(isLocalBuffer(output))) {
-//            return true;
-//        }
-//    }
+bool Kernel::allocatesInternalStreamSets() const {
     return false;
 }
 
@@ -408,7 +404,7 @@ Function * Kernel::getAllocateSharedInternalStreamSetsFunction(BuilderRef b, con
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addAllocateSharedInternalStreamSetsDeclaration(BuilderRef b) const {
     Function * func = nullptr;
-    if (hasInternalStreamSets()) {
+    if (allocatesInternalStreamSets()) {
         SmallVector<char, 256> tmp;
         const auto funcName = concat(getName(), ALLOCATE_SHARED_INTERNAL_STREAMSETS_SUFFIX, tmp);
         Module * const m = b->getModule();
@@ -468,7 +464,7 @@ Function * Kernel::getAllocateThreadLocalInternalStreamSetsFunction(BuilderRef b
  ** ------------------------------------------------------------------------------------------------------------- */
 Function * Kernel::addAllocateThreadLocalInternalStreamSetsDeclaration(BuilderRef b) const {
     Function * func = nullptr;
-    if (hasInternalStreamSets() && hasThreadLocal()) {
+    if (allocatesInternalStreamSets() && hasThreadLocal()) {
         SmallVector<char, 256> tmp;
         const auto funcName = concat(getName(), ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_SUFFIX, tmp);
         Module * const m = b->getModule();
@@ -897,7 +893,8 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     }
     assert (suppliedArgCount == suppliedArgs);
 
-    if (LLVM_LIKELY(hasInternalStreamSets())) {
+    // allocate any internal stream sets
+    if (LLVM_LIKELY(allocatesInternalStreamSets())) {
         Function * const allocInternal = getAllocateSharedInternalStreamSetsFunction(b, true);
         SmallVector<Value *, 2> allocArgs;
         if (LLVM_LIKELY(isStateful())) {
@@ -905,6 +902,16 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         }
         allocArgs.push_back(ONE);
         b->CreateCall(allocInternal, allocArgs);
+        if (hasThreadLocal()) {
+            Function * const allocInternal = getAllocateThreadLocalInternalStreamSetsFunction(b, false);
+            SmallVector<Value *, 3> allocArgs;
+            if (LLVM_LIKELY(isStateful())) {
+                allocArgs.push_back(sharedHandle);
+            }
+            allocArgs.push_back(threadLocalHandle);
+            allocArgs.push_back(ONE);
+            b->CreateCall(allocInternal, allocArgs);
+        }
     }
 
     #ifdef NDEBUG
@@ -1075,8 +1082,16 @@ Value * Kernel::constructFamilyKernels(BuilderRef b, InitArgs & hostArgs, const 
     END_SCOPED_REGION
 
     if (LLVM_LIKELY(hasFamilyName())) {
-        if (hasThreadLocal()) {
+        const auto tl = hasThreadLocal();
+        const auto ai = allocatesInternalStreamSets();
+        if (ai) {
+            addHostArg(getAllocateSharedInternalStreamSetsFunction(b));
+        }
+        if (tl) {
             addHostArg(getInitializeThreadLocalFunction(b));
+            if (ai) {
+                addHostArg(getAllocateThreadLocalInternalStreamSetsFunction(b));
+            }
         }
         addHostArg(getDoSegmentFunction(b));
         if (hasThreadLocal()) {

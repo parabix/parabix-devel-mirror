@@ -38,7 +38,7 @@ inline void destroyStateObject(BuilderRef b, Value * ptr) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateImplicitKernels(BuilderRef b) {
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));        
+        Kernel * const kernel = const_cast<Kernel *>(getKernel(i));
         if (LLVM_LIKELY(kernel->isGenerated())) {
             kernel->ensureLoaded();
             continue;
@@ -106,8 +106,6 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     // we can calculate the item count and num of strides from the input item counts.
     // With the inclusion of InternallySynchronized attributes for PipelineKernels, this is
     // no longer true and the test requires greater precision.
-
-
 
 
     const auto prefix = makeKernelName(kernelIndex);
@@ -306,6 +304,8 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 
     mLocallyAvailableItems.resize(LastStreamSet - FirstStreamSet + 1);
 
+    mKernelIndex = PipelineInput;
+
     // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
 
@@ -327,6 +327,8 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
             b->CreateStore(processed, ptr);
         }
     }
+
+    mKernelIndex = PipelineOutput;
 
     // NOTE: all inputs of PipelineOutput node are outputs of the PipelineKernel
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
@@ -421,6 +423,16 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         if (mTarget->hasThreadLocal()) {
             threadLocal[i] = mTarget->initializeThreadLocalInstance(b, initialSharedState);
             assert (isFromCurrentFunction(b, threadLocal[i]));
+            if (LLVM_LIKELY(mTarget->allocatesInternalStreamSets())) {
+                Function * const allocInternal = mTarget->getAllocateThreadLocalInternalStreamSetsFunction(b, false);
+                SmallVector<Value *, 3> allocArgs;
+                if (LLVM_LIKELY(mTarget->isStateful())) {
+                    allocArgs.push_back(initialSharedState);
+                }
+                allocArgs.push_back(threadLocal[i]);
+                allocArgs.push_back(b->getSize(1));
+                b->CreateCall(allocInternal, allocArgs);
+            }
         }
         threadState[i] = allocateThreadState(b, processThreadId);
         FixedArray<Value *, 2> indices;
@@ -429,6 +441,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         threadIdPtr[i] = b->CreateInBoundsGEP(pthreads, indices);
         b->CreatePThreadCreateCall(threadIdPtr[i], nullVoidPtrVal, threadFunc, threadState[i]);
     }
+
 
     // execute the process thread
     assert (isFromCurrentFunction(b, initialThreadLocal));
@@ -747,10 +760,12 @@ void PipelineCompiler::generateAllocateSharedInternalStreamSetsMethod(BuilderRef
  * @brief generateAllocateThreadLocalInternalStreamSetsMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
+#if 0
     if (mTarget->hasThreadLocal()) {
         allocateOwnedBuffers(b, expectedNumOfStrides, false);
         resetInternalBufferHandles();
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

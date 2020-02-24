@@ -1264,6 +1264,25 @@ AddGraph PipelineCompiler::makeAddGraph() const {
     return G;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief processesPipelineInput
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifyPipelineInputs() {
+    mHasPipelineInput.reset();
+    mHasPipelineInput.resize(in_degree(mKernelIndex, mBufferGraph));
+
+    if (LLVM_LIKELY(out_degree(PipelineInput, mBufferGraph) > 0)) {
+        for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+            const auto streamSet = source(e, mBufferGraph);
+            const auto producer = parent(streamSet, mBufferGraph);
+            if (LLVM_UNLIKELY(producer == PipelineInput)) {
+                const BufferRateData & br = mBufferGraph[e];
+                mHasPipelineInput.set(br.Port.Number);
+            }
+        }
+    }
+}
+
 } // end of namespace
 
 #endif

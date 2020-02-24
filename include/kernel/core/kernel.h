@@ -382,7 +382,7 @@ protected:
 
     llvm::Function * addInitializeDeclaration(BuilderRef b) const;
 
-    LLVM_READNONE virtual bool hasInternalStreamSets() const;
+    LLVM_READNONE virtual bool allocatesInternalStreamSets() const;
 
     llvm::Function * getAllocateSharedInternalStreamSetsFunction(BuilderRef b, const bool alwayReturnDeclaration = true) const;
 

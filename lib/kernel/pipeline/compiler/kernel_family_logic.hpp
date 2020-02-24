@@ -14,8 +14,15 @@ void PipelineCompiler::addFamilyKernelProperties(BuilderRef b, const unsigned in
         PointerType * const voidPtrTy = b->getVoidPtrTy();
         const auto prefix = makeKernelName(index);
         const auto tl = kernel->hasThreadLocal();
+        const auto ai = kernel->allocatesInternalStreamSets();
+        if (ai) {
+            mTarget->addInternalScalar(voidPtrTy, prefix + ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+        }
         if (tl) {
             mTarget->addInternalScalar(voidPtrTy, prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+            if (ai) {
+                mTarget->addInternalScalar(voidPtrTy, prefix + ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+            }
         }
         mTarget->addInternalScalar(voidPtrTy, prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
         if (tl) {
@@ -58,8 +65,15 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
             }
             if (LLVM_LIKELY(kernel->hasFamilyName())) {
                 const auto tl = kernel->hasThreadLocal();
+                const auto ai = kernel->allocatesInternalStreamSets();
+                if (ai) {
+                    readNextScalar(prefix + ALLOCATE_SHARED_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                }
                 if (tl) {
                     readNextScalar(prefix + INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+                    if (ai) {
+                        readNextScalar(prefix + ALLOCATE_THREAD_LOCAL_INTERNAL_STREAMSETS_FUNCTION_POINTER_SUFFIX);
+                    }
                 }
                 readNextScalar(prefix + DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
                 if (tl) {

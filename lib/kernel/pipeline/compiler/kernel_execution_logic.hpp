@@ -50,6 +50,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeKernelName(mKernelIndex);
     debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
+    debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocationPhi);
     debugHalt(b);
     #endif
     startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
@@ -111,10 +112,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
     }
 
-    if (mHasExplicitFinalPartialStride) {
-        args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
-    } else {
-        args.push_back(mReportedNumOfStridesPhi); assert (mReportedNumOfStridesPhi);
+    args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
+    if (!mHasExplicitFinalPartialStride) {
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
     }
 

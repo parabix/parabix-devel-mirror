@@ -234,6 +234,9 @@ Value * ExternalBuffer::getOverflowAddress(BuilderPtr b) const {
 
 void ExternalBuffer::setCapacity(BuilderPtr b, Value * const capacity) const {
     assert (mHandle && "has not been set prior to calling setCapacity");
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(capacity, "External buffer capacity cannot be 0.");
+    }
     Value *  const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
     b->CreateStore(b->CreateZExt(capacity, b->getSizeTy()), p);
 }
@@ -359,6 +362,10 @@ void StaticBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplier
     assert (handle && "has not been set prior to calling allocateBuffer");
     Value * size = b->CreateMul(capacityMultiplier, b->getSize(mCapacity));
 
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(size, "Static buffer capacity cannot be 0.");
+    }
+
     indices[1] = b->getInt32(EffectiveCapacity);
     Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
     b->CreateStore(size, capacityField);
@@ -435,7 +442,7 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
             Value * const remaining = b->CreateSub(produced, consumed);
             Constant * const capacity = b->getSize(mCapacity * b->getBitBlockWidth());
             Value * const isFull = b->CreateICmpULE(remaining, capacity);
-            b->CreateAssert(isFull, "Linear static buffer is full on netry.");
+            b->CreateAssert(isFull, "Linear static buffer is full on entry.");
         }
 
         const auto blockWidth = b->getBitBlockWidth();
@@ -471,7 +478,21 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
         Value * firstItemOffset = b->CreateSub(dataStartInt, bufferInt);
         firstItemOffset = b->CreateUDiv(firstItemOffset, CHUNK_SIZE);
         Value * const discarded = b->CreateSub(consumedChunks, firstItemOffset);
+
+
+        b->CallPrintInt("consumed", consumedChunks);
+        b->CallPrintInt("firstItemOffset", firstItemOffset);
+
+        b->CallPrintInt("capacity", capacity);
+        b->CallPrintInt("discarded", discarded);
+
         Value * const effectiveCapacity = b->CreateAdd(capacity, discarded);
+
+        b->CallPrintInt("effectiveCapacity", effectiveCapacity);
+
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            b->CreateAssert(effectiveCapacity, "effectiveCapacity cannot be 0.");
+        }
 
         b->CreateStore(effectiveCapacity, capacityField);
 
@@ -509,6 +530,10 @@ void DynamicBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplie
 
     Value * const handle = getHandle();
     Value * size = b->CreateMul(capacityMultiplier, b->getSize(mInitialCapacity));
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        b->CreateAssert(size, "Dynamic buffer capacity cannot be 0.");
+    }
 
     indices[1] = b->getInt32(Capacity);
     Value * const capacityField = b->CreateInBoundsGEP(handle, indices);

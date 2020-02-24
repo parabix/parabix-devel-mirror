@@ -118,7 +118,7 @@ inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_
 Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally) const {
     // any pipeline input streams are considered produced by the P_{in} vertex.
     if (LLVM_UNLIKELY(kernel == PipelineInput)) {
-        return b->getTrue();
+        return mIsFinal;
     } else {
         assert (kernel != PipelineOutput);
         Value * const terminated = mTerminationSignals[kernel];
@@ -168,13 +168,13 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
             soft = final;
         }
     }
-
     assert (soft);
     Value * signal = b->CreateSelect(soft, aborted, unterminated);
     if (hard) {
         signal = b->CreateSelect(hard, fatal, signal);
     }
     return signal;
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
