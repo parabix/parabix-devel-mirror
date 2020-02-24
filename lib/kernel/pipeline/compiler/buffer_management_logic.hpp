@@ -75,8 +75,6 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
            b->GetString(mTarget->getName()));
     }
 
-    b->CallPrintInt("INIT: " + getName() + "_expectedNumOfStrides", expectedNumOfStrides);
-
     // recursively allocate any internal buffers for the nested kernels, giving them the correct
     // num of strides it should expect to perform
     for (auto i = FirstKernel; i <= LastKernel; ++i) {

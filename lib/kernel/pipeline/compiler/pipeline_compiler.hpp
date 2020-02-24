@@ -30,9 +30,9 @@
 #include <util/maxsat.hpp>
 #include <assert.h>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -1090,6 +1090,7 @@ protected:
     PHINode *                                   mAlreadyExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
+    Value *                                     mExhaustedPipelineInputAtExit = nullptr;
     PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
     PHINode *                                   mTerminatedSignalPhi = nullptr;
     PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;

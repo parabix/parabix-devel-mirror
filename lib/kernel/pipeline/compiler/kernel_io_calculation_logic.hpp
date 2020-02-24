@@ -269,8 +269,12 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         anyInsufficient->addIncoming(b->getTrue(), exitBlock);
         mBranchToLoopExit = anyInsufficient;
     } else {
-        if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
-            mExhaustedPipelineInputPhi->addIncoming(b->getTrue(), entryBlock);
+        if (mExhaustedPipelineInputPhi) {
+            Value * exhausted = mExhaustedInput;
+            if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
+                exhausted = b->getTrue();
+            }
+            mExhaustedPipelineInputPhi->addIncoming(exhausted, entryBlock);
         }
         b->SetInsertPoint(hasInputData);
     }

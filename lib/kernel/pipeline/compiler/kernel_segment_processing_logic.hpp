@@ -63,6 +63,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mHasZeroExtendedInput = nullptr;
     mZeroExtendBufferPhi = nullptr;
+    mExhaustedPipelineInputAtExit = mExhaustedInput;
 
     assert (mKernelIndex >= FirstKernel);
     assert (mKernelIndex <= LastKernel);
@@ -251,6 +252,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     #endif
     // chain the progress state so that the next one carries on from this one
     mPipelineProgress = mNextPipelineProgress;
+    mExhaustedInput = mExhaustedPipelineInputAtExit;
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         // validateSegmentExecution(b);
     }
@@ -396,6 +398,9 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         mTotalNumOfStrides->addIncoming(mUpdatedNumOfStrides, entryBlock);
     } else {
         mTotalNumOfStrides->addIncoming(mNumOfLinearStrides, entryBlock);
+    }
+    if (mExhaustedPipelineInputAtLoopExitPhi) {
+        mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, entryBlock);
     }
 }
 
@@ -581,6 +586,9 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         mTotalNumOfStrides->addIncoming(b->getSize(0), exitBlock);
         mHasProgressedPhi->addIncoming(mPipelineProgress, exitBlock);
     }
+    if (mExhaustedPipelineInputAtLoopExitPhi) {
+        mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
+    }
     b->CreateBr(mKernelLoopExit);
 }
 
@@ -618,8 +626,8 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     if (LLVM_UNLIKELY(mExhaustedPipelineInputPhi)) {
         PHINode * const phi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedPipelineInputAtKernelExit");
         phi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedPhiCatch);
-        phi->addIncoming(mExhaustedPipelineInputPhi, mKernelLoopExitPhiCatch);
-        mExhaustedInput = phi;
+        phi->addIncoming(mExhaustedPipelineInputAtLoopExitPhi, mKernelLoopExitPhiCatch);
+        mExhaustedPipelineInputAtExit = phi;
     }
 }
 
@@ -630,6 +638,9 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mTerminatedAtLoopExitPhi->addIncoming(mTerminatedSignalPhi, exitBlock);
     mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
+    if (mExhaustedPipelineInputAtLoopExitPhi) {
+        mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
+    }
     if (mMayHaveNonLinearIO) {
         mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
     } else {
