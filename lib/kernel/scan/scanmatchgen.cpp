@@ -999,7 +999,7 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     b->CreateLikelyCondBr(b->CreateICmpULE(matchRecordEnd, inputAvail), dispatch, coordinatesDone);
 
     b->SetInsertPoint(dispatch);
-    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);    
+    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
     Value * const startPtr = b->getRawInputPointer("InputStream", matchRecordStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchRecordEnd);
     auto argi = dispatcher->arg_begin();

@@ -46,16 +46,11 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     }
 
     if (mMayHaveNonLinearIO) {
-        Value * numOfOutputStrides = mNumOfLinearStrides;
         for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
             const BufferRateData & br = mBufferGraph[e];
             Value * const strides = getNumOfWritableStrides(b, br.Port);
-            numOfOutputStrides = b->CreateUMin(numOfOutputStrides, strides);
+            mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
         }
-        Value * const anyInput = b->CreateIsNotNull(mNumOfLinearStrides);
-        Value * const noOutput = b->CreateIsNull(numOfOutputStrides);
-        Value * const fullyExpand = b->CreateAnd(anyInput, noOutput);
-        mNumOfLinearStrides = b->CreateSelect(fullyExpand, mNumOfLinearStrides, numOfOutputStrides);
         mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
     } else {
         mUpdatedNumOfStrides = mNumOfLinearStrides;
@@ -205,9 +200,6 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     b->CreateBr(mKernelCheckOutputSpace);
 
     b->SetInsertPoint(mKernelCheckOutputSpace);
-    if (mReportedNumOfStridesPhi) {
-        mNumOfLinearStrides = mReportedNumOfStridesPhi;
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -535,7 +527,7 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const StreamSetP
         numOfStrides = getMaximumNumOfPartialSumStrides(b, outputPort);
     } else {
         Value * const writable = getWritableOutputItems(b, outputPort);
-        mWritableOutputItems(mKernelIndex, outputPort) = writable;
+        mWritableOutputItems(outputPort) = writable;
         Value * const strideLength = getOutputStrideLength(b, outputPort);
         numOfStrides = b->CreateUDiv(writable, strideLength);
     }
@@ -717,13 +709,10 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         }
     }
 
-    Value * maxNumOfOutputStrides = mNumOfLinearStrides;
-    if (mHasExplicitFinalPartialStride || mMayHaveNonLinearIO) {
-        maxNumOfOutputStrides = b->getSize(1);
-    } else if (minFixedRateFactor) {
-        Value * a = b->CreateIsNotNull(minFixedRateFactor);
-        a = b->CreateZExt(a, b->getSizeTy());
-        maxNumOfOutputStrides = b->CreateAdd(maxNumOfOutputStrides, a);
+    Constant * const ONE = b->getSize(1);
+    Value * maxNumOfOutputStrides = ONE;
+    if (!mHasExplicitFinalPartialStride && minFixedRateFactor) {
+        maxNumOfOutputStrides = b->CreateAdd(mNumOfLinearStrides, ONE);
     }
 
     const auto numOfOutputs = writableItems.size();
@@ -800,9 +789,9 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamSetPo
     const StreamSetBuffer * const buffer = getInputBuffer(ref);
     Value * prior = nullptr;
     if (port.Type == PortType::Input) {
-        prior = mAlreadyProcessedPhi(mKernelIndex, port);
+        prior = mAlreadyProcessedPhi(port);
     } else { // if (port.Type == PortType::Output) {
-        prior = mAlreadyProducedPhi(mKernelIndex, port);
+        prior = mAlreadyProducedPhi(port);
     }
     assert (prior);
 
@@ -823,6 +812,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const StreamSetPo
 
     Value * const currentPtr = buffer->getRawItemPointer(b, ZERO, position);
     Value * current = b->CreateLoad(currentPtr);
+
     if (mBranchToLoopExit) {
         current = b->CreateSelect(mBranchToLoopExit, prior, current);
     }
@@ -906,6 +896,9 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     Value * const baseAddress = buffer->getRawItemPointer(b, ZERO, baseOffset);
     BasicBlock * const popCountEntry = b->GetInsertBlock();
     Value * const initialStrideCount = b->CreateMul(mNumOfLinearStrides, STEP);
+
+    b->CallPrintInt("initialStrideCount", initialStrideCount);
+
     if (peekableItemCount) {
         Value * const hasNonOverflowStride = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
         b->CreateLikelyCondBr(hasNonOverflowStride, popCountLoop, popCountLoopExit);
@@ -923,6 +916,9 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
 
     Value * const strideIndex = b->CreateSub(numOfStrides, STEP);
+
+    b->CallPrintInt("strideIndex", strideIndex);
+
     Value * const ptr = b->CreateInBoundsGEP(baseAddress, strideIndex);
     Value * const requiredItems = b->CreateLoad(ptr);
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);

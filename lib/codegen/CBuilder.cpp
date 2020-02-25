@@ -65,7 +65,7 @@ extern "C" void free_debug_wrapper(void * ptr) {
     }
 }
 
-Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const Twine Name) {
     if (ConstantInt * const c = dyn_cast<ConstantInt>(divisor)) {
         const auto d = c->getZExtValue();
         assert ("CreateURem divisor cannot be 0!" && d);
@@ -83,7 +83,7 @@ Value * CBuilder::CreateURem(Value * const number, Value * const divisor, const 
     return Insert(BinaryOperator::CreateURem(number, divisor), Name);
 }
 
-Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const Twine Name) {
     if (ConstantInt * c = dyn_cast<ConstantInt>(divisor)) {
         const auto d = c->getZExtValue();
         assert ("CreateUDiv divisor cannot be 0!" && d);
@@ -101,7 +101,7 @@ Value * CBuilder::CreateUDiv(Value * const number, Value * const divisor, const 
     return Insert(BinaryOperator::CreateUDiv(number, divisor), Name);
 }
 
-Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, const Twine Name) {
     assert (number->getType() == divisor->getType());
     if (LLVM_LIKELY(isa<Constant>(divisor))) {
         if (LLVM_UNLIKELY(cast<Constant>(divisor)->isOneValue())) {
@@ -115,7 +115,7 @@ Value * CBuilder::CreateCeilUDiv(Value * const number, Value * const divisor, co
     return CreateAdd(quot, CreateZExt(CreateIsNotNull(rem), intTy), Name);
 }
 
-Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, const Twine Name) {
     if (isa<ConstantInt>(divisor)) {
         const auto d = cast<ConstantInt>(divisor)->getZExtValue();
         if (is_power_2(d)) {
@@ -125,7 +125,7 @@ Value * CBuilder::CreateRoundDown(Value * const number, Value * const divisor, c
     return CreateMul(CreateUDiv(number, divisor), divisor, Name);
 }
 
-Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine & Name) {
+Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, const Twine Name) {
     if (isa<ConstantInt>(divisor)) {
         const auto d = cast<ConstantInt>(divisor)->getZExtValue();
         if (is_power_2(d)) {
@@ -138,14 +138,14 @@ Value * CBuilder::CreateRoundUp(Value * const number, Value * const divisor, con
 }
 
 
-Value * CBuilder::CreateSaturatingAdd(Value * const a, Value * const b, const Twine &Name) {
+Value * CBuilder::CreateSaturatingAdd(Value * const a, Value * const b, const Twine Name) {
     // TODO: this seems to be an intrinsic in later versions of LLVM. Determine which.
     Value * const c = CreateAdd(a, b);
     Constant * const max = Constant::getAllOnesValue(a->getType());
     return CreateSelect(CreateICmpULT(c, a), max, c, Name);
 }
 
-Value * CBuilder::CreateSaturatingSub(Value * const a, Value * const b, const Twine &Name) {
+Value * CBuilder::CreateSaturatingSub(Value * const a, Value * const b, const Twine Name) {
     // TODO: this seems to be an intrinsic in later versions of LLVM. Determine which.
     Value * const c = CreateSub(a, b);
     Constant * const min = Constant::getNullValue(a->getType());
@@ -283,7 +283,7 @@ Function * CBuilder::GetPrintf() {
 }
 
 CallInst * CBuilder::__CreatePrintfCall(Value * const format, std::initializer_list<Value *> args) {
-    SmallVector<Value *, 1> argVals(2);
+    SmallVector<Value *, 8> argVals(1);
     argVals[0] = format;
     argVals.append(args);
     return CreateCall(GetPrintf(), argVals);
@@ -300,7 +300,7 @@ Function * CBuilder::GetDprintf() {
 }
 
 CallInst * CBuilder::__CreateDprintfCall(Value * const fd, Value * const format, std::initializer_list<Value *> args) {
-    SmallVector<Value *, 8> argVals(2);
+    SmallVector<Value *, 9> argVals(2);
     argVals[0] = fd;
     argVals[1] = format;
     argVals.append(args);
@@ -1264,7 +1264,7 @@ void CBuilder::CreateExit(const int exitCode) {
     CreateCall(exit, getInt32(exitCode));
 }
 
-AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine & Name) {
+AllocaInst * CBuilder::CreateAllocaAtEntryPoint(Type * Ty, Value * ArraySize, const Twine Name) {
 
     auto BB = GetInsertBlock();
     auto F = BB->getParent();
@@ -1312,57 +1312,57 @@ Value * CBuilder::CreatePopcount(Value * bits) {
     return CreateCall(ctpopFunc, bits);
 }
 
-Value * CBuilder::CreateCountForwardZeroes(Value * value, const bool guaranteedNonZero) {
+Value * CBuilder::CreateCountForwardZeroes(Value * value, const Twine Name, const no_conversion<bool> guaranteedNonZero) {
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountForwardZeroes: value cannot be zero!");
     }
     Value * cttzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::cttz, value->getType());
-    return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)});
+    return CreateCall(cttzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
-Value * CBuilder::CreateCountReverseZeroes(Value * value, const bool guaranteedNonZero) {
+Value * CBuilder::CreateCountReverseZeroes(Value * value, const Twine Name, const no_conversion<bool> guaranteedNonZero) {
     if (LLVM_UNLIKELY(guaranteedNonZero && codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CreateAssert(value, "CreateCountReverseZeroes: value cannot be zero!");
     }
     Value * ctlzFunc = Intrinsic::getDeclaration(getModule(), Intrinsic::ctlz, value->getType());
-    return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)});
+    return CreateCall(ctlzFunc, {value, getInt1(guaranteedNonZero)}, Name);
 }
 
-Value * CBuilder::CreateResetLowestBit(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateResetLowestBit(Value * bits, const Twine Name) {
     return CreateAnd(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)), Name);
 }
 
-Value * CBuilder::CreateIsolateLowestBit(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateIsolateLowestBit(Value * bits, const Twine Name) {
     return CreateAnd(bits, CreateNeg(bits), Name);
 }
 
-Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateMaskToLowestBitInclusive(Value * bits, const Twine Name) {
     return CreateXor(bits, CreateSub(bits, ConstantInt::get(bits->getType(), 1)), Name);
 }
 
-Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits, const Twine & Name) {
+Value * CBuilder::CreateMaskToLowestBitExclusive(Value * bits, const Twine Name) {
     return CreateAnd(CreateSub(bits, ConstantInt::get(bits->getType(), 1)), CreateNot(bits), Name);
 }
 
-Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos, const Twine & Name) {
+Value * CBuilder::CreateZeroHiBitsFrom(Value * bits, Value * pos, const Twine Name) {
     Type * Ty = bits->getType();
     Constant * one = Constant::getIntegerValue(Ty, APInt(Ty->getScalarSizeInBits(), 1));
     Value * mask = CreateSub(CreateShl(one, pos), one);
     return CreateAnd(bits, mask, Name);
 }
 
-Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length, const Twine & Name) {
+Value * CBuilder::CreateExtractBitField(Value * bits, Value * start, Value * length, const Twine Name) {
     Constant * One = ConstantInt::get(bits->getType(), 1);
     return CreateAnd(CreateLShr(bits, start), CreateSub(CreateShl(One, length), One), Name);
 }
 
-Value * CBuilder::CreateCeilLog2(Value * value, const Twine & Name) {
+Value * CBuilder::CreateCeilLog2(Value * value, const Twine Name) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     Value * m = CreateCountReverseZeroes(CreateSub(value, ConstantInt::get(ty, 1)));
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth()), m, Name);
 }
 
-Value * CBuilder::CreateLog2(Value * value, const Twine & Name) {
+Value * CBuilder::CreateLog2(Value * value, const Twine Name) {
     IntegerType * ty = cast<IntegerType>(value->getType());
     Value * m = CreateCountReverseZeroes(value);
     return CreateSub(ConstantInt::get(m->getType(), ty->getBitWidth() - 1), m, Name);
@@ -1395,21 +1395,21 @@ LoadInst * CBuilder::CreateLoad(Value *Ptr, const char * Name) {
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
-LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine & Name) {
+LoadInst * CBuilder::CreateLoad(Value * Ptr, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
-LoadInst * CBuilder::CreateLoad(Type * Ty, Value *Ptr, const Twine & Name) {
+LoadInst * CBuilder::CreateLoad(Type * Ty, Value *Ptr, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Ty), "CreateLoad");
     }
     return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
 }
 
-LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name) {
+LoadInst * CBuilder::CreateLoad(Value * Ptr, bool isVolatile, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         CheckAddress(Ptr, ConstantExpr::getSizeOf(Ptr->getType()->getPointerElementType()), "CreateLoad");
     }
@@ -1441,7 +1441,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
     return LI;
 }
 
-LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine & Name) {
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
@@ -1453,7 +1453,7 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine 
     return LI;
 }
 
-LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolatile, const Twine & Name) {
+LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolatile, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
@@ -1525,8 +1525,8 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
         CheckAddress(Dst, Size, "CreateMemCpy: Dst");
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = DL.getIntPtrType(getContext());
-        Value * intSrc = CreatePtrToInt(Src, intPtrTy);
-        Value * intDst = CreatePtrToInt(Dst, intPtrTy);
+        Value * const intSrc = CreatePtrToInt(Src, intPtrTy);
+        Value * const intDst = CreatePtrToInt(Dst, intPtrTy);
         // If the call to this intrinisic has an alignment value that is not 0 or 1, then the caller
         // guarantees that both the source and destination pointers are aligned to that boundary.
         if (Align > 1) {
@@ -1534,9 +1534,10 @@ CallInst * CBuilder::CreateMemCpy(Value *Dst, Value *Src, Value *Size, unsigned 
             CreateAssertZero(CreateURem(intSrc, align), "CreateMemCpy: Src is misaligned");
             CreateAssertZero(CreateURem(intDst, align), "CreateMemCpy: Dst is misaligned");
         }
-        Value * intSize = CreateZExtOrTrunc(Size, intPtrTy);
-        Value * nonOverlapping = CreateOr(CreateICmpULT(CreateAdd(intSrc, intSize), intDst),
-                                          CreateICmpULT(CreateAdd(intDst, intSize), intSrc));
+        Value * const intSize = CreateZExtOrTrunc(Size, intPtrTy);
+        Value * const srcEndsBeforeDst = CreateICmpULE(CreateAdd(intSrc, intSize), intDst);
+        Value * const dstEndsBeforeSrc = CreateICmpULE(CreateAdd(intDst, intSize), intSrc);
+        Value * const nonOverlapping = CreateOr(srcEndsBeforeDst, dstEndsBeforeSrc);
         CreateAssert(nonOverlapping, "CreateMemCpy: overlapping ranges is undefined");
     }
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(7, 0, 0)
@@ -1585,7 +1586,7 @@ CallInst * CBuilder::CreateMemCmp(Value * Ptr1, Value * Ptr2, Value * Num) {
     return CreateCall(f, {Ptr1, Ptr2, Num});
 }
 
-Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine & Name) {
+Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");
@@ -1597,7 +1598,7 @@ Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine & Na
     return IRBuilder<>::CreateExtractElement(Vec, Idx, Name);
 }
 
-Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, const Twine & Name) {
+Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, const Twine Name) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         if (LLVM_UNLIKELY(!Vec->getType()->isVectorTy())) {
             report_fatal_error("CreateExtractElement: Vec argument is not a vector type");

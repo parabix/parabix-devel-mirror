@@ -299,15 +299,15 @@ LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, const char * Name) {
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
-LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, const Twine & Name) {
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, const Twine  Name) {
     return IRBuilder<>::CreateLoad(Ptr, Name);
 }
 
-LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Type * Ty, Value * Ptr, const Twine & Name) {
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Type * Ty, Value * Ptr, const Twine  Name) {
     return IRBuilder<>::CreateLoad(Ty, Ptr, Name);
 }
 
-LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, bool isVolatile, const Twine & Name) {
+LoadInst * IDISA_NVPTX20_Builder::CreateLoad(Value * Ptr, bool isVolatile, const Twine  Name) {
     return IRBuilder<>::CreateLoad(Ptr, isVolatile, Name);
 }
 

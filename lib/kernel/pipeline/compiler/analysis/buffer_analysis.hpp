@@ -200,7 +200,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
-                    dynamic = true;                    
+                    dynamic = true;
                 // Or is the data consumption rate unpredictable despite its type?
                 } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
                     dynamic = true;
@@ -232,17 +232,20 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 lookAhead = std::max(tmpLookAhead, lookAhead);
             }
 
-            const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
+            auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
+
+            const auto linear = bn.Linear; // & isNonLinear
+
+            // if this buffer is "stateful", we cannot make it *thread* local
+            if (dynamic || lookBehind || reflection || copyBack || lookAhead) {
+                nonLocal = true;
+            }
+
 
             bn.LookBehind = lookBehind;
             bn.LookBehindReflection = reflection;
             bn.CopyBack = copyBack;
             bn.LookAhead = lookAhead;
-
-            // if this buffer is "stateful", we cannot make it *thread* local
-            if (dynamic || lookAhead || reflection || copyBack || lookAhead) {
-                nonLocal = true;                
-            }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth) / blockWidth;
@@ -263,7 +266,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
-            const auto linear = bn.Linear; // & isNonLinear
             if (dynamic) {
                 buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             } else {

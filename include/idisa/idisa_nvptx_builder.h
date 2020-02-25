@@ -33,7 +33,7 @@ public:
     unsigned getGroupThreads() const;
 
     void CreateBaseFunctions() override;
-    
+
     llvm::Value * bitblock_any(llvm::Value * a) override;
     std::pair<llvm::Value *, llvm::Value *> bitblock_add_with_carry(llvm::Value * a, llvm::Value * b, llvm::Value * carryin) override;
     virtual std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
@@ -55,11 +55,11 @@ public:
     #ifdef HAS_ADDRESS_SANITIZER
     llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const char *Name) override;
 
-    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const llvm::Twine &Name = "") override;
+    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, const llvm::Twine Name = "") override;
 
-    llvm::LoadInst * CreateLoad(llvm::Type *Ty, llvm::Value *Ptr, const llvm::Twine &Name = "") override;
+    llvm::LoadInst * CreateLoad(llvm::Type *Ty, llvm::Value *Ptr, const llvm::Twine Name = "") override;
 
-    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, bool isVolatile, const llvm::Twine &Name = "") override;
+    llvm::LoadInst * CreateLoad(llvm::Value *Ptr, bool isVolatile, const llvm::Twine Name = "") override;
 
     llvm::StoreInst * CreateStore(llvm::Value *Val, llvm::Value *Ptr, bool isVolatile = false) override;
     #endif
@@ -86,13 +86,13 @@ private:
 
 class IDISA_NVPTX35_Builder : public IDISA_NVPTX20_Builder {
     IDISA_NVPTX35_Builder(Module * m, int groupSize) : IDISA_NVPTX30_Builder(m, groupSize) {}
-    
+
     std::pair<llvm::Value *, llvm::Value *> bitblock_advance(llvm::Value * a, llvm::Value * shiftin, unsigned shift) override;
 
     ~IDISA_NVPTX35_Builder() {};
     virtual std::string getBuilderUniqueName() override;
 };
-#endif    
-    
+#endif
+
 }
 #endif // IDISA_NVPTX_BUILDER_H

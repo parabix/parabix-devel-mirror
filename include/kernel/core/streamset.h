@@ -110,6 +110,8 @@ public:
 
     virtual llvm::Value * getBaseAddress(BuilderPtr b) const = 0;
 
+    virtual llvm::Value * getMallocAddress(BuilderPtr b) const = 0;
+
     virtual void setBaseAddress(BuilderPtr b, llvm::Value * addr) const = 0;
 
     virtual llvm::Value * getOverflowAddress(BuilderPtr b) const = 0;
@@ -117,6 +119,8 @@ public:
     virtual void setCapacity(BuilderPtr b, llvm::Value * size) const = 0;
 
     virtual llvm::Value * getCapacity(BuilderPtr b) const = 0;
+
+    virtual llvm::Value * getLinearCapacity(BuilderPtr b) const = 0;
 
     virtual llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const = 0;
 
@@ -178,9 +182,13 @@ public:
 
     llvm::Value * getBaseAddress(BuilderPtr b) const override;
 
+    llvm::Value * getMallocAddress(BuilderPtr b) const override;
+
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 
     llvm::Value * getCapacity(BuilderPtr b) const override;
+
+    llvm::Value * getLinearCapacity(BuilderPtr b) const override;
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const override;
 
@@ -236,7 +244,7 @@ public:
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
-    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress };
+    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress, InternalCapacity };
 
     void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
@@ -246,6 +254,8 @@ public:
 
     llvm::Value * getBaseAddress(BuilderPtr b) const override;
 
+    llvm::Value * getMallocAddress(BuilderPtr b) const override;
+
     void setBaseAddress(BuilderPtr b, llvm::Value * addr) const override;
 
     llvm::Value * getOverflowAddress(BuilderPtr b) const override;
@@ -253,6 +263,8 @@ public:
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 
     llvm::Value * getCapacity(BuilderPtr b) const override;
+
+    llvm::Value * getLinearCapacity(BuilderPtr b) const override;
 
     llvm::Value * modByCapacity(BuilderPtr b, llvm::Value * const offset) const final;
 
@@ -272,7 +284,7 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    enum Field { BaseAddress, Capacity, PriorAddress, MallocedAddress };
+    enum Field { BaseAddress, EffectiveCapacity, PriorAddress, MallocedAddress, InternalCapacity };
 
 public:
 
@@ -288,7 +300,11 @@ public:
 
     void releaseBuffer(BuilderPtr b) const override;
 
+    llvm::Value * getMallocAddress(BuilderPtr b) const override;
+
     llvm::Value * getCapacity(BuilderPtr b) const override;
+
+    llvm::Value * getLinearCapacity(BuilderPtr b) const override;
 
     void setCapacity(BuilderPtr b, llvm::Value * capacity) const override;
 

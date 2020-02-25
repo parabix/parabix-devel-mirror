@@ -393,6 +393,8 @@ inline unsigned PipelineCompiler::getLookAhead(const unsigned bufferVertex) cons
     return mBufferGraph[bufferVertex].LookAhead;
 }
 
+#warning Linear buffers do not correctly handle lookbehind
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeLookBehindLogic
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -402,12 +404,18 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookBehind) {
             const StreamSetBuffer * const buffer = bn.Buffer;
-            Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
-            Value * const produced = mAlreadyProducedPhi(mKernelIndex, br.Port);
-            Value * const producedOffset = b->CreateURem(produced, capacity);
+            Value * needsCopy = nullptr;
             Constant * const underflow = b->getSize(bn.LookBehind);
-            Value * const needsCopy = b->CreateICmpULT(producedOffset, underflow);
+            if (LLVM_UNLIKELY(buffer->isLinear())) {
+                Value * const consumed = mConsumedItemCount(br.Port);
+                needsCopy = b->CreateICmpUGT(consumed, underflow);
+            } else {
+                Value * const produced = mAlreadyProducedPhi(br.Port);
+                Value * const capacity = buffer->getCapacity(b);
+                Value * const producedOffset = b->CreateURem(produced, capacity);
+                needsCopy = b->CreateICmpULT(producedOffset, underflow);
+            }
             copy(b, CopyMode::LookBehind, needsCopy, br.Port, bn.Buffer, bn.LookBehind);
         }
     }
@@ -535,6 +543,8 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
 
+    b->CallPrintInt(prefix + "_copy_cond", cond);
+
     b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
 
     b->SetInsertPoint(copyStart);
@@ -553,18 +563,38 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     debugPrint(b, prefix + std::to_string(itemsToCopy) + "_bytesToCopy = %" PRIu64, bytesToCopy);
     #endif
 
-    Value * source = buffer->getOverflowAddress(b);
-    Value * target = buffer->getBaseAddress(b);
+    Value * source = nullptr;
+    Value * target = nullptr;
+
+    PointerType * const int8PtrTy = b->getInt8PtrTy();
+
+    // TODO: Wrong base address here. Needs base from prior to linearize
+
+    if (buffer->isLinear()) {
+        source = buffer->getBaseAddress(b);
+        source = b->CreatePointerCast(source, int8PtrTy);
+        Value * offset = b->CreateMul(mConsumedItemCount(outputPort), bytesPerSteam);
+        b->CallPrintInt("offset", offset);
+        source = b->CreateGEP(source, offset);
+        target = buffer->getMallocAddress(b);
+    } else {
+        source = buffer->getOverflowAddress(b);
+        target = buffer->getBaseAddress(b);
+    }
+
+    b->CallPrintInt("source", source);
+    b->CallPrintInt("target", target);
+
     if (mode == CopyMode::LookBehind || mode == CopyMode::LookBehindReflection) {
         DataLayout DL(b->getModule());
         Type * const intPtrTy = DL.getIntPtrType(source->getType());
         Value * const offset = b->CreateNeg(b->CreateZExt(bytesToCopy, intPtrTy));
-        PointerType * const int8PtrTy = b->getInt8PtrTy();
         source = b->CreatePointerCast(source, int8PtrTy);
         source = b->CreateInBoundsGEP(source, offset);
         target = b->CreatePointerCast(target, int8PtrTy);
         target = b->CreateInBoundsGEP(target, offset);
     }
+
     if (mode == CopyMode::LookAhead || mode == CopyMode::LookBehindReflection) {
         std::swap(target, source);
     }

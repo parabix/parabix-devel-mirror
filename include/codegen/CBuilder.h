@@ -18,8 +18,9 @@
 #ifdef ENABLE_ASSERTION_TRACE
 #include <llvm/ADT/DenseMap.h>
 #endif
+#include <util/not_null.h>
 
-namespace partition { class KernelBuilder; }
+namespace kernel { class KernelBuilder; }
 namespace llvm { class Function; }
 namespace llvm { class IntegerType; }
 namespace llvm { class Module; }
@@ -61,21 +62,21 @@ public:
     }
 
     // UDiv and URem with optimization for division by power-of-2 constants
-    llvm::Value * CreateUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
-    llvm::Value * CreateURem(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+    llvm::Value * CreateUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine Name = "");
+    llvm::Value * CreateURem(llvm::Value * number, llvm::Value * divisor, const llvm::Twine Name = "");
 
     // Division with rounding up to the ceiling
     // Equivalent to CreateUDiv(CreateAdd(number, CreateSub(divisor, ConstantInt::get(divisor->getType(), 1))), divisor)
-    llvm::Value * CreateCeilUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+    llvm::Value * CreateCeilUDiv(llvm::Value * number, llvm::Value * divisor, const llvm::Twine Name = "");
 
     // Round down to a multiple of divisor.
-    llvm::Value * CreateRoundDown(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+    llvm::Value * CreateRoundDown(llvm::Value * number, llvm::Value * divisor, const llvm::Twine Name = "");
 
     // Round up to a multiple of divisor.
-    llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine &Name = "");
+    llvm::Value * CreateRoundUp(llvm::Value * number, llvm::Value * divisor, const llvm::Twine Name = "");
 
     // Get minimum of two unsigned numbers
-    llvm::Value * CreateUMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+    llvm::Value * CreateUMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine Name = "") {
         if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
         if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
@@ -83,7 +84,7 @@ public:
     }
 
     // Get minimum of two signed numbers
-    llvm::Value * CreateSMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+    llvm::Value * CreateSMin(llvm::Value * const a, llvm::Value * const b, const llvm::Twine Name = "") {
         if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
         if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
@@ -91,7 +92,7 @@ public:
     }
 
     // Get maximum of two unsigned numbers
-    llvm::Value * CreateUMax(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+    llvm::Value * CreateUMax(llvm::Value * const a, llvm::Value * const b, const llvm::Twine Name = "") {
         if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
         if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
@@ -99,16 +100,16 @@ public:
     }
 
     // Get maximum of two signed numbers
-    llvm::Value * CreateSMax(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "") {
+    llvm::Value * CreateSMax(llvm::Value * const a, llvm::Value * const b, const llvm::Twine Name = "") {
         if (LLVM_UNLIKELY(a == nullptr || a == b)) return b;
         if (LLVM_UNLIKELY(b == nullptr)) return a;
         assert (a->getType() == b->getType());
         return CreateSelect(CreateICmpSGT(a, b), a, b, Name);
     }
 
-    llvm::Value * CreateSaturatingAdd(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "");
+    llvm::Value * CreateSaturatingAdd(llvm::Value * const a, llvm::Value * const b, const llvm::Twine Name = "");
 
-    llvm::Value * CreateSaturatingSub(llvm::Value * const a, llvm::Value * const b, const llvm::Twine &Name = "");
+    llvm::Value * CreateSaturatingSub(llvm::Value * const a, llvm::Value * const b, const llvm::Twine Name = "");
 
     llvm::Value * CreateMalloc(llvm::Value * const size);
 
@@ -334,7 +335,7 @@ public:
         return CreateLikelyCondBr(Cond, True, False, 100 - probability);
     }
 
-    llvm::AllocaInst * CreateAllocaAtEntryPoint(llvm::Type * Ty, llvm::Value * ArraySize = nullptr, const llvm::Twine & Name = "");
+    llvm::AllocaInst * CreateAllocaAtEntryPoint(llvm::Type * Ty, llvm::Value * ArraySize = nullptr, const llvm::Twine Name = "");
 
     llvm::BasicBlock * CreateBasicBlock(const llvm::StringRef name = "", llvm::BasicBlock * insertBefore = nullptr);
 
@@ -343,25 +344,25 @@ public:
     llvm::Value * CreatePopcount(llvm::Value * bits);
 
     // TODO: AVX512 offers these as vector instructions
-    llvm::Value * CreateCountForwardZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
-    llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const bool guaranteedNonZero = false);
+    llvm::Value * CreateCountForwardZeroes(llvm::Value * value, const llvm::Twine Name = "", const no_conversion<bool> guaranteedNonZero = false);
+    llvm::Value * CreateCountReverseZeroes(llvm::Value * value, const llvm::Twine Name = "", const no_conversion<bool> guaranteedNonZero = false);
 
     // Useful bit manipulation operations
-    llvm::Value * CreateResetLowestBit(llvm::Value * bits, const llvm::Twine &Name = "");
+    llvm::Value * CreateResetLowestBit(llvm::Value * bits, const llvm::Twine Name = "");
 
-    llvm::Value * CreateIsolateLowestBit(llvm::Value * bits, const llvm::Twine &Name = "");
+    llvm::Value * CreateIsolateLowestBit(llvm::Value * bits, const llvm::Twine Name = "");
 
-    llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits, const llvm::Twine &Name = "");
+    llvm::Value * CreateMaskToLowestBitInclusive(llvm::Value * bits, const llvm::Twine Name = "");
 
-    llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits, const llvm::Twine &Name = "");
+    llvm::Value * CreateMaskToLowestBitExclusive(llvm::Value * bits, const llvm::Twine Name = "");
 
-    virtual llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos, const llvm::Twine &Name = "");
+    virtual llvm::Value * CreateZeroHiBitsFrom(llvm::Value * bits, llvm::Value * pos, const llvm::Twine Name = "");
 
-    virtual llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length, const llvm::Twine &Name = "");
+    virtual llvm::Value * CreateExtractBitField(llvm::Value * bits, llvm::Value * start, llvm::Value * length, const llvm::Twine Name = "");
 
-    llvm::Value * CreateCeilLog2(llvm::Value * value, const llvm::Twine &Name = "");
+    llvm::Value * CreateCeilLog2(llvm::Value * value, const llvm::Twine Name = "");
 
-    llvm::Value * CreateLog2(llvm::Value * value, const llvm::Twine &Name = "");
+    llvm::Value * CreateLog2(llvm::Value * value, const llvm::Twine Name = "");
 
     llvm::Value * CreateReadCycleCounter();
 
@@ -379,19 +380,19 @@ public:
 
     virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const char * Name);
 
-    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const llvm::Twine & Name = "");
+    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, const llvm::Twine Name = "");
 
-    virtual llvm::LoadInst * CreateLoad(llvm::Type * Ty, llvm::Value * Ptr, const llvm::Twine & Name = "");
+    virtual llvm::LoadInst * CreateLoad(llvm::Type * Ty, llvm::Value * Ptr, const llvm::Twine Name = "");
 
-    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, bool isVolatile, const llvm::Twine & Name = "");
+    virtual llvm::LoadInst * CreateLoad(llvm::Value * Ptr, bool isVolatile, const llvm::Twine Name = "");
 
     virtual llvm::StoreInst * CreateStore(llvm::Value * Val, llvm::Value * Ptr, bool isVolatile = false);
 
     llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, const char * Name);
 
-    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, const llvm::Twine & Name = "");
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, const llvm::Twine Name = "");
 
-    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, bool isVolatile, const llvm::Twine & Name = "");
+    llvm::LoadInst * CreateAlignedLoad(llvm::Value * Ptr, unsigned Align, bool isVolatile, const llvm::Twine Name = "");
 
     llvm::StoreInst * CreateAlignedStore(llvm::Value * Val, llvm::Value * Ptr, unsigned Align, bool isVolatile = false);
 
@@ -433,15 +434,15 @@ public:
                            llvm::MDNode *ScopeTag = nullptr,
                            llvm::MDNode *NoAliasTag = nullptr);
 
-    llvm::Value * CreateExtractElement(llvm::Value *Vec, llvm::Value *Idx, const llvm::Twine &Name = "");
+    llvm::Value * CreateExtractElement(llvm::Value *Vec, llvm::Value *Idx, const llvm::Twine Name = "");
 
-    llvm::Value * CreateExtractElement(llvm::Value *Vec, uint64_t Idx, const llvm::Twine &Name = "") {
+    llvm::Value * CreateExtractElement(llvm::Value *Vec, uint64_t Idx, const llvm::Twine Name = "") {
         return CreateExtractElement(Vec, getInt64(Idx), Name);
     }
 
-    llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, llvm::Value *Idx, const llvm::Twine &Name = "");
+    llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, llvm::Value *Idx, const llvm::Twine Name = "");
 
-    llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, uint64_t Idx, const llvm::Twine &Name = "") {
+    llvm::Value * CreateInsertElement(llvm::Value *Vec, llvm::Value *NewElt, uint64_t Idx, const llvm::Twine Name = "") {
         return CreateInsertElement(Vec, NewElt, getInt64(Idx), Name);
     }
 
