@@ -92,7 +92,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
                     func = getKernelAllocateSharedInternalStreamSetsFunction(b);
                 } else {
                     func = getKernelAllocateThreadLocalInternalStreamSetsFunction(b);
-                    params.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
+                    params.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
                 }
                 params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, MaximumNumOfStrides[i]));
                 b->CreateCall(func, params);
@@ -204,30 +204,30 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
  * @brief readInitialItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort inputPort{PortType::Input, i};
         const Binding & input = getInputBinding(inputPort);
-        const auto prefix = makeBufferName(mKernelIndex, inputPort);
+        const auto prefix = makeBufferName(mKernelId, inputPort);
         Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        mInitiallyProcessedItemCount(mKernelIndex, inputPort) = processed;
+        mInitiallyProcessedItemCount(mKernelId, inputPort) = processed;
         if (input.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProcessedDeferredItemCount(mKernelIndex, inputPort) = deferred;
+            mInitiallyProcessedDeferredItemCount(mKernelId, inputPort) = deferred;
         }
     }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort outputPort{PortType::Output, i};
         const Binding & output = getOutputBinding(outputPort);
-        const auto prefix = makeBufferName(mKernelIndex, outputPort);
-        mInitiallyProducedItemCount(mKernelIndex, outputPort) = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        mInitiallyProducedItemCount(mKernelId, outputPort) = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount(outputPort));
         #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProducedDeferredItemCount(mKernelIndex, outputPort) = deferred;
+            mInitiallyProducedDeferredItemCount(mKernelId, outputPort) = deferred;
         }
     }
 }
@@ -240,56 +240,56 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
     auto getProcessedArg = [&](const StreamSetPort port) -> Value * {
         switch (source) {
             case ItemCountSource::ComputedAtKernelCall:
-                return mProcessedItemCount(mKernelIndex, port);
+                return mProcessedItemCount(mKernelId, port);
             case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProcessedPhi(mKernelIndex, port);
+                return mUpdatedProcessedPhi(mKernelId, port);
         }
         llvm_unreachable("unknown source type");
     };
     auto getProcessedDeferredArg = [&](const StreamSetPort port) -> Value * {
         switch (source) {
             case ItemCountSource::ComputedAtKernelCall:
-                return mProcessedDeferredItemCount(mKernelIndex, port);
+                return mProcessedDeferredItemCount(mKernelId, port);
             case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProcessedDeferredPhi(mKernelIndex, port);
+                return mUpdatedProcessedDeferredPhi(mKernelId, port);
         }
         llvm_unreachable("unknown source type");
     };
     auto getProducedArg = [&](const StreamSetPort port) -> Value * {
         switch (source) {
             case ItemCountSource::ComputedAtKernelCall:
-                return mProducedItemCount(mKernelIndex, port);
+                return mProducedItemCount(mKernelId, port);
             case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProducedPhi(mKernelIndex, port);
+                return mUpdatedProducedPhi(mKernelId, port);
         }
         llvm_unreachable("unknown source type");
     };
     auto getProducedDeferredArg = [&](const StreamSetPort port) -> Value * {
         switch (source) {
             case ItemCountSource::ComputedAtKernelCall:
-                return mProducedDeferredItemCount(mKernelIndex, port);
+                return mProducedDeferredItemCount(mKernelId, port);
             case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProducedDeferredPhi(mKernelIndex, port);
+                return mUpdatedProducedDeferredPhi(mKernelId, port);
         }
         llvm_unreachable("unknown source type");
     };
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort inputPort{PortType::Input, i};
         const Binding & input = getInputBinding(inputPort);
-        const auto prefix = makeBufferName(mKernelIndex, inputPort);
+        const auto prefix = makeBufferName(mKernelId, inputPort);
         b->setScalarField(prefix + ITEM_COUNT_SUFFIX, getProcessedArg(inputPort));
         if (input.isDeferred()) {
             b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, getProcessedDeferredArg(inputPort));
         }
     }
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort outputPort{PortType::Output, i};
         const Binding & output = getOutputBinding(outputPort);
-        const auto prefix = makeBufferName(mKernelIndex, outputPort);
+        const auto prefix = makeBufferName(mKernelId, outputPort);
         b->setScalarField(prefix + ITEM_COUNT_SUFFIX, getProducedArg(outputPort));
         if (output.isDeferred()) {
             b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, getProducedDeferredArg(outputPort));
@@ -301,7 +301,7 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
  * @brief recordFinalProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto outputPort = mBufferGraph[e].Port;
         Value * const fullyProduced = mFullyProducedItemCount(outputPort);
         setLocallyAvailableItemCount(b, outputPort, fullyProduced);
@@ -319,7 +319,7 @@ void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
  * @brief readReturnedOutputVirtualBaseAddresses
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) const {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         // owned or external buffers do not have a mutable vba
@@ -328,14 +328,14 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         }
         const BufferRateData & rd = mBufferGraph[e];
         const StreamSetPort port(rd.Port.Type, rd.Port.Number);
-        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(mKernelIndex, port);
+        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(mKernelId, port);
         assert (ptr);
         Value * vba = b->CreateLoad(ptr);
         StreamSetBuffer * const buffer = bn.Buffer;
         vba = b->CreatePointerCast(vba, buffer->getPointerType());
         buffer->setBaseAddress(b.get(), vba);
-        buffer->setCapacity(b.get(), mProducedItemCount(mKernelIndex, port));
-        const auto handleName = makeBufferName(mKernelIndex, port);
+        buffer->setCapacity(b.get(), mProducedItemCount(mKernelId, port));
+        const auto handleName = makeBufferName(mKernelId, port);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, handleName + "_virtualBaseAddress = %" PRIu64, vba);
         #endif
@@ -348,7 +348,7 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
  * @brief loadLastGoodVirtualBaseAddressesOfUnownedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         // owned or external buffers do not have a mutable vba
@@ -356,7 +356,7 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
             continue;
         }
         const BufferRateData & rd = mBufferGraph[e];
-        const auto handleName = makeBufferName(mKernelIndex, rd.Port);
+        const auto handleName = makeBufferName(mKernelId, rd.Port);
         Value * const vba = b->getScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
         StreamSetBuffer * const buffer = bn.Buffer;
         buffer->setBaseAddress(b.get(), vba);
@@ -399,7 +399,7 @@ inline unsigned PipelineCompiler::getLookAhead(const unsigned bufferVertex) cons
  * @brief writeLookBehindLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookBehind) {
@@ -425,14 +425,14 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
  * @brief writeLookBehindReflectionLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookBehindReflection) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
-            Value * const produced = mAlreadyProducedPhi(mKernelIndex, br.Port);
+            Value * const produced = mAlreadyProducedPhi(mKernelId, br.Port);
             Constant * const reflection = b->getSize(bn.LookBehindReflection);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const needsCopy = b->CreateICmpULT(producedOffset, reflection);
@@ -445,16 +445,16 @@ void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
  * @brief writeCopyBackLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.CopyBack) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
-            Value * const alreadyProduced = mAlreadyProducedPhi(mKernelIndex, br.Port);
+            Value * const alreadyProduced = mAlreadyProducedPhi(mKernelId, br.Port);
             Value * const priorOffset = b->CreateURem(alreadyProduced, capacity);
-            Value * const produced = mProducedItemCount(mKernelIndex, br.Port);
+            Value * const produced = mProducedItemCount(mKernelId, br.Port);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
@@ -470,7 +470,7 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
 void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
     // Unless we modified the portion of data that ought to be reflected in the overflow region, do not copy
     // any data. To do so would incur extra writes and pollute the cache with potentially unnecessary data.
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.LookAhead) {
@@ -538,7 +538,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         llvm_unreachable("unknown copy mode!");
     };
 
-    const auto prefix = makeBufferName(mKernelIndex, outputPort) + "_copy" + makeSuffix(mode);
+    const auto prefix = makeBufferName(mKernelId, outputPort) + "_copy" + makeSuffix(mode);
 
     BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
@@ -612,7 +612,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
  * @brief prepareLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::prepareLinearBuffers(BuilderRef b) const {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         const StreamSetBuffer * const buffer = bn.Buffer;
@@ -659,7 +659,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
  * @brief getInputVirtualBaseAddresses
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const {
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
         PHINode * processed = nullptr;
@@ -679,7 +679,7 @@ void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> &
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCompiler::getInputBufferVertex(const StreamSetPort inputPort) const {
-    return getInputBufferVertex(mKernelIndex, inputPort);
+    return getInputBufferVertex(mKernelId, inputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -693,7 +693,7 @@ unsigned PipelineCompiler::getInputBufferVertex(const size_t kernelVertex, const
  * @brief getInputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const StreamSetPort inputPort) const {
-    return getInputBuffer(mKernelIndex, inputPort);
+    return getInputBuffer(mKernelId, inputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -727,7 +727,7 @@ const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, con
  * @brief getInputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const Binding & PipelineCompiler::getInputBinding(const StreamSetPort inputPort) const {
-    return getInputBinding(mKernelIndex, inputPort);
+    return getInputBinding(mKernelId, inputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -758,7 +758,7 @@ inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_
  * @brief getOutputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCompiler::getOutputBufferVertex(const StreamSetPort outputPort) const {
-    return getOutputBufferVertex(mKernelIndex, outputPort);
+    return getOutputBufferVertex(mKernelId, outputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -793,14 +793,14 @@ const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, co
  * @brief getOutputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const Binding & PipelineCompiler::getOutputBinding(const StreamSetPort outputPort) const {
-    return getOutputBinding(mKernelIndex, outputPort);
+    return getOutputBinding(mKernelId, outputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const StreamSetPort outputPort) const {
-    return getOutputBuffer(mKernelIndex, outputPort);
+    return getOutputBuffer(mKernelId, outputPort);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -843,7 +843,7 @@ inline unsigned PipelineCompiler::getNumOfStreamOutputs(const unsigned kernel) c
  * @brief getBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const Binding & PipelineCompiler::getBinding(const StreamSetPort port) const {
-    return getBinding(mKernelIndex, port);
+    return getBinding(mKernelId, port);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

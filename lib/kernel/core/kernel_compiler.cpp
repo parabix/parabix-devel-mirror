@@ -34,7 +34,7 @@ const static std::string TERMINATION_SIGNAL = "__termination_signal";
 // TODO: this check is a bit too strict in general; if the pipeline could request data/
 // EOF padding from the MemorySource kernel, it would be possible to re-enable.
 
-#define CHECK_IO_ADDRESS_RANGE
+// #define CHECK_IO_ADDRESS_RANGE
 
 // TODO: split the init/final into two methods each, one to do allocation/init, and the
 // other final/deallocate? Would potentially allow us to reuse the kernel/stream set
@@ -1178,7 +1178,13 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
     for (const auto & buffer : mStreamSetOutputBuffers) {
         buffer->setHandle(nullptr);
     }
-
+    // remove any unused scalars
+    for (const auto & field : mScalarFieldMap) {
+        Value * const scalar = field.getValue();
+        if (scalar->hasNUses(0) && isa<Instruction>(scalar)) {
+            cast<Instruction>(scalar)->eraseFromParent();
+        }
+    }
     mScalarFieldMap.clear();
 }
 

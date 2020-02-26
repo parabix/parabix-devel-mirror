@@ -615,7 +615,7 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
             N.Linear = true;
         }
     }
-
+#if 0
     // Any ImplicitPopCount/RegionSelector inputs must be linear to ensure
     // we can easily access all of the rate information.
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
@@ -634,6 +634,7 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
             }
         }
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -681,7 +682,7 @@ BufferPortMap PipelineCompiler::constructOutputPortMappings() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief mayHaveNonLinearIO
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::mayHaveNonLinearIO() const {
+bool PipelineCompiler::mayHaveNonLinearIO(const size_t kernel) const {
 
     // If this kernel has I/O that crosses a partition boundary and the
     // buffer itself is not guaranteed to be linear then this kernel
@@ -690,7 +691,7 @@ bool PipelineCompiler::mayHaveNonLinearIO() const {
     // two or more linear sub-segments.
 
     bool noCountableInput = true;
-    for (const auto input : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
         const auto streamSet = source(input, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
         if (node.Linear) {
@@ -706,7 +707,7 @@ bool PipelineCompiler::mayHaveNonLinearIO() const {
             return true;
         }
     }
-    for (const auto output : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(output, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
         if (node.NonLocal || !node.Linear) {

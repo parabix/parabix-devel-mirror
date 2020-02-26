@@ -90,7 +90,7 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
  * @brief getFamilyFunctionFromKernelState
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getFamilyFunctionFromKernelState(BuilderRef b, Type * const type, const std::string & suffix) const {
-    const auto prefix = makeKernelName(mKernelIndex);
+    const auto prefix = makeKernelName(mKernelId);
     Value * const funcPtr = b->getScalarField(prefix + suffix);
     assert (funcPtr->getType() == b->getVoidPtrTy());
     if (LLVM_UNLIKELY(mCheckAssertions)) {

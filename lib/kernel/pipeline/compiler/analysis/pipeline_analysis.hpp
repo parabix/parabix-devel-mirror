@@ -1156,7 +1156,7 @@ inline const StreamSetPort PipelineCompiler::getReference(const size_t kernel, c
 }
 
 inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort port) const {
-    return getReference(mKernelIndex, port);
+    return getReference(mKernelId, port);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1269,10 +1269,10 @@ AddGraph PipelineCompiler::makeAddGraph() const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::identifyPipelineInputs() {
     mHasPipelineInput.reset();
-    mHasPipelineInput.resize(in_degree(mKernelIndex, mBufferGraph));
+    mHasPipelineInput.resize(in_degree(mKernelId, mBufferGraph));
 
     if (LLVM_LIKELY(out_degree(PipelineInput, mBufferGraph) > 0)) {
-        for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const auto streamSet = source(e, mBufferGraph);
             const auto producer = parent(streamSet, mBufferGraph);
             if (LLVM_UNLIKELY(producer == PipelineInput)) {

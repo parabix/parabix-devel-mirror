@@ -338,7 +338,7 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const St
  * @brief readConsumedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mConsumerGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mConsumerGraph))) {
         const ConsumerEdge & c = mConsumerGraph[e];
         const auto streamSet = target(e, mConsumerGraph);
         Value * consumed = nullptr;
@@ -348,7 +348,7 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
             // is identical to its production rate.
             consumed = mInitiallyProducedItemCount(port);
         } else {
-            const auto prefix = makeBufferName(mKernelIndex, port);
+            const auto prefix = makeBufferName(mKernelId, port);
             Value * ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
             if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
                 Constant * const ZERO = b->getInt32(0);
@@ -370,13 +370,13 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
     IntegerType * const sizeTy = b->getSizeTy();
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mConsumerGraph))) {
         const auto buffer = source(e, mConsumerGraph);
         const ConsumerNode & cn = mConsumerGraph[buffer];
         if (LLVM_LIKELY(cn.PhiNode == nullptr)) {
             const ConsumerEdge & c = mConsumerGraph[e];
             const StreamSetPort port(PortType::Input, c.Port);
-            const auto prefix = makeBufferName(mKernelIndex, port);
+            const auto prefix = makeBufferName(mKernelId, port);
             PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
             assert (cn.Consumed);
             consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
@@ -389,7 +389,7 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
  * @brief computeMinimumConsumedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mConsumerGraph))) {
         //if (LLVM_UNLIKELY(mConsumerGraph[e] == FAKE_CONSUMER)) continue;
         const ConsumerEdge & c = mConsumerGraph[e];
         const StreamSetPort port(PortType::Input, c.Port);
@@ -420,7 +420,7 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
 
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mConsumerGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mConsumerGraph))) {
         const auto buffer = source(e, mConsumerGraph);
         //if (LLVM_UNLIKELY(mConsumerGraph[e] != FAKE_CONSUMER)) {
         const ConsumerNode & cn = mConsumerGraph[buffer];
@@ -501,27 +501,6 @@ inline void PipelineCompiler::writeExternalConsumedItemCounts(BuilderRef b) {
         b->CreateStore(cn.Consumed, ptr);
     }
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief exhaustedPipelineInput
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::exhaustedPipelineInput(BuilderRef b) {
-    Value * result = nullptr;
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const auto streamSet = target(e, mBufferGraph);
-        const ConsumerNode & cn = mConsumerGraph[streamSet];
-        Value * const consumed = cn.Consumed;
-        Value * const avail = mLocallyAvailableItems[getBufferIndex(streamSet)];
-        Value * const exhausted = b->CreateICmpEQ(consumed, avail);
-        if (result) {
-            result = b->CreateOr(exhausted, result);
-        } else {
-            result = exhausted;
-        }
-    }
-    return result;
-}
-
 
 }
 

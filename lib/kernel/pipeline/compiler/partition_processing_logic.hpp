@@ -91,79 +91,31 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
  * @brief getPartitionExitPoint
  ** ------------------------------------------------------------------------------------------------------------- */
 inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
-    assert (mKernelIndex >= FirstKernel && mKernelIndex <= LastKernel);
-    const auto partitionId = KernelPartitionId[mKernelIndex];
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    const auto partitionId = KernelPartitionId[mKernelId];
     return mPartitionEntryPoint[partitionId + 1];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkInputDataOnPartitionEntry
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::checkInputDataOnPartitionEntry(BuilderRef b) {
-
-    // Only the first node in the partition may have a bounded *input* rate. All other inputs must be countable.
-    // Since every kernel in the partition will perform N * C_i strides (where C_i is some constant factor for
-    // the i-th kernel), we can trivially calculate the Fixed rates by maintaining a next partition relative stride
-    // counter. PartialSum rates, however, must be counted independently.
-
-    // All inputs for the partition must be tested after acquiring the first partition node's lock. No other
-    // kernel in the partition is required to test its input. Each kernel, however, is responsible for
-    // assessing whether it has sufficient output space for the given input. Although this too could be determined
-    // upon entering the partition, other threads may still be actively consuming data from the produced streams;
-    // thus we may end up needlessly expanding buffers by performing the test too early.
-
-    assert (mKernelIndex >= FirstKernel && mKernelIndex <= LastKernel);
-    const auto partitionId = KernelPartitionId[mKernelIndex];
+inline bool PipelineCompiler::isPartitionRoot() {
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    const auto partitionId = KernelPartitionId[mKernelId];
     if (partitionId == mCurrentPartitionId) {
-        return;
+        return false;
     }
+    mPartitionRootKernelId = mKernelId;
     mCurrentPartitionId = partitionId;
-
-#if 0
-
-    using TypeId = PartitioningGraphNode::TypeId;
-
-    Value * numOfStrides = nullptr;
-
-    for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
-        const auto u = source(e, mPartitioningGraph);
-        const PartitioningGraphNode & node = mPartitioningGraph[u];
-        Value * const available = mLocallyAvailableItems[getBufferIndex(node.StreamSet)];
-        Value * const closed = isClosed(b, node.StreamSet);
-
-        const PartitioningGraphEdge & E = mPartitioningGraph[e];
-        assert (KernelPartitionId[E.Kernel] == partitionId);
-        Value * const processedPtr = b->getScalarFieldPtr(getPartitionPortName(partitionId, E));
-        Value * const processed = b->CreateLoad(processedPtr);
-
-        Value * const unread = b->CreateSub(available, processed);
-
-        const Binding & binding = getBinding(E.Kernel, E.Port);
-        const ProcessingRate & rate = binding.getRate();
-
-
-
-
-
-        const auto lookAhead = node.Delay;
-
-
-
-
-
-
-    }
-
-#endif
-
+    return true;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForPartitionExit
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
-    assert (mKernelIndex >= FirstKernel && mKernelIndex <= LastKernel);
-    const auto nextPartitionId = KernelPartitionId[mKernelIndex + 1];
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    const auto nextPartitionId = KernelPartitionId[mKernelId + 1];
     if (nextPartitionId != mCurrentPartitionId) {
         BasicBlock * nextPartition;
         if (LLVM_UNLIKELY(nextPartitionId == -1U)) {

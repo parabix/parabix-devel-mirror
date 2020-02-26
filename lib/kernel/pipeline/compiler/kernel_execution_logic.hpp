@@ -29,8 +29,8 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         updateProcessedAndProducedItemCounts(b);
         writeUpdatedItemCounts(b, ItemCountSource::ComputedAtKernelCall);
         writeTerminationSignal(b, mIsFinalInvocationPhi);
-        BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelTerminationCheck);
-        BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelTerminationCheck);
+        BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelCompletionCheck);
+        BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelCompletionCheck);
 
         Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
         releaseLock = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
@@ -57,7 +57,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     Value * const doSegment = getKernelDoSegmentFunction(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
-        BasicBlock * const invokeOk = b->CreateBasicBlock("", mKernelTerminationCheck);
+        BasicBlock * const invokeOk = b->CreateBasicBlock("", mKernelCompletionCheck);
         doSegmentRetVal = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
         b->SetInsertPoint(invokeOk);
     } else {
@@ -72,8 +72,8 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     if (mKernelIsInternallySynchronized) {
 
-        BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelTerminationCheck);
-        BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelTerminationCheck);
+        BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelCompletionCheck);
+        BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelCompletionCheck);
 
         b->CreateCondBr(releaseLock, lastPartialSegment, afterSyncLock);
 
@@ -100,8 +100,8 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
 
     ArgVec args;
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
@@ -109,7 +109,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(mKernelHandle); assert (mKernelHandle);
     }
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
-        args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
+        args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
     }
 
     Value * numOfStrides = mNumOfLinearStrides;
@@ -124,7 +124,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     // If a kernel is internally synchronized, pass the segno to
     // allow the kernel to initialize its current "position"
     if (mKernelIsInternallySynchronized) {
-        const auto prefix = makeKernelName(mKernelIndex);
+        const auto prefix = makeKernelName(mKernelId);
         Value * const internalSegNoPtr = b->getScalarFieldPtr(prefix + CURRENT_LOGICAL_SEGMENT_NUMBER);
         Value * const segNo = b->CreateLoad(internalSegNoPtr);
         b->CreateStore(b->CreateAdd(segNo, b->getSize(1)), internalSegNoPtr);
@@ -135,7 +135,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     }
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto port = getInput(mKernelIndex, StreamSetPort(PortType::Input, i));
+        const auto port = getInput(mKernelId, StreamSetPort(PortType::Input, i));
         const BufferRateData & rt = mBufferGraph[port];
 
         if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
@@ -170,7 +170,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     }
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = getOutput(mKernelIndex, StreamSetPort(PortType::Output, i));
+        const auto port = getOutput(mKernelId, StreamSetPort(PortType::Output, i));
         const BufferRateData & rt = mBufferGraph[port];
 
         assert (rt.Port.Reason == ReasonType::Explicit);
@@ -210,8 +210,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
 
     // calculate or read the item counts (assuming this kernel did not terminate)
     for (unsigned i = 0; i < numOfInputs; ++i) {

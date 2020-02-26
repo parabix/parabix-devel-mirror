@@ -465,8 +465,6 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
 
 }
 
-#if 1
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinkedIOPorts
  *
@@ -663,8 +661,6 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
 
 
 }
-
-#endif
 
 } // end of kernel namespace
 

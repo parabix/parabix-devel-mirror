@@ -131,11 +131,6 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             mappedKernel[kernel] = u;
             assert (H[kernel].none());
 
-//            const Kernel * const kernelObj = node.Kernel;
-//            if (kernelObj == pipelineKernel) {
-//                continue;
-//            }
-
             bool isNewPartitionRoot = false;
 
             // Iterate through the inputs
@@ -1330,6 +1325,9 @@ skip_edge_2:        // -----------------
     END_SCOPED_REGION
 
     const auto n = num_vertices(G);
+
+    BEGIN_SCOPED_REGION
+
     const auto m = num_edges(G) + PartitionCount;
 
     std::vector<BitSet> rateSet(n);
@@ -1337,6 +1335,8 @@ skip_edge_2:        // -----------------
     flat_map<PartitioningVertex, unsigned> partialSumId;
 
     unsigned id = 0;
+
+    std::queue<unsigned> Q;
 
     for (unsigned partition = 0; partition < PartitionCount; ++partition) {
 
@@ -1388,70 +1388,40 @@ skip_edge_2:        // -----------------
             B.set(id++);
         };
 
-        if (in_degree(partition, G) > 0) {
-
-            for (const auto input : make_iterator_range(in_edges(partition, G))) {
-                const auto buffer = source(input, G);
-                const PartitioningGraphNode & N = G[buffer];                
-                BitSet & B = rateSet[buffer];
-                for (const auto e : make_iterator_range(in_edges(buffer, G))) {
-                    const PartitioningGraphEdge & E = G[e];
-                    if (E.Type == PartitioningGraphEdge::Channel) {
-                        const auto u = source(e, G);
-                        B = rateSet[u];
-                        if (N.Type == TypeId::PartialSum) {
-                            getPartialSumId(buffer, B);
-                        } else if (N.Type == TypeId::Relative) {
-                            const auto i = getReferenceId(buffer);
-                            assert (!rateSet[i].empty());
-                            B |= rateSet[i];
-                        } else if (N.Type == TypeId::Variable || N.Delay) {
+        for (const auto input : make_iterator_range(in_edges(partition, G))) {
+            const auto buffer = source(input, G);
+            const PartitioningGraphNode & N = G[buffer];
+            BitSet & B = rateSet[buffer];
+            for (const auto e : make_iterator_range(in_edges(buffer, G))) {
+                const PartitioningGraphEdge & E = G[e];
+                if (E.Type == PartitioningGraphEdge::Channel) {
+                    const auto u = source(e, G);
+                    B = rateSet[u];
+                    if (N.Type == TypeId::PartialSum) {
+                        getPartialSumId(buffer, B);
+                    } else if (N.Type == TypeId::Relative) {
+                        const auto i = getReferenceId(buffer);
+                        assert (!rateSet[i].empty());
+                        B |= rateSet[i];
+                    } else if (N.Type == TypeId::Variable || N.Delay) {
+                        assert (id < m);
+                        B.set(id++);
+                    } else if (N.Type == TypeId::Greedy) {
+                        // conservatively we cannot ignore a greedy rate that has a
+                        // non-zero minimum data requirement
+                        const PartitioningGraphEdge & S = G[input];
+                        const Binding & binding = getBinding(S.Kernel, S.Port);
+                        const ProcessingRate & rate = binding.getRate();
+                        assert (rate.isGreedy());
+                        if (rate.getLowerBound() > 0 || N.Delay) {
                             assert (id < m);
                             B.set(id++);
-                        } else if (N.Type == TypeId::Greedy) {
-                            // conservatively we cannot ignore a greedy rate that has a
-                            // non-zero minimum data requirement
-                            const PartitioningGraphEdge & S = G[input];
-                            const Binding & binding = getBinding(S.Kernel, S.Port);
-                            const ProcessingRate & rate = binding.getRate();
-                            assert (rate.isGreedy());
-                            if (rate.getLowerBound() > 0 || N.Delay) {
-                                assert (id < m);
-                                B.set(id++);
-                            }
-                        }
-                        break;
-                    }
-                }
-                P |= B;
-            }
-
-            if (in_degree(partition, G) > 1) {
-
-                InEdgeIterator begin, end;
-                std::tie(begin, end) = in_edges(partition, G);
-
-                for (auto i = begin + 1; i != end; ++i) {
-                    BitSet & A = rateSet[source(*i, G)];
-                    if (A.empty()) continue;
-                    for (auto j = begin; j != i; ++j) {
-                        BitSet & B = rateSet[source(*j, G)];
-                        if (B.empty()) continue;
-                        if (A.is_subset_of(B)) {
-                            A.clear();
-                            break;
-                        }
-                        if (B.is_subset_of(A)) {
-                            B.clear();
                         }
                     }
+                    break;
                 }
-
-                remove_in_edge_if(partition, [&](const PartitioningGraph::edge_descriptor e){
-                    return rateSet[source(e, G)].empty();
-                }, G);
-
             }
+            P |= B;
         }
 
         for (const auto output : make_iterator_range(out_edges(partition, G))) {
@@ -1472,7 +1442,87 @@ skip_edge_2:        // -----------------
 
     }
 
-    // printG();
+    for (unsigned partition = PartitionCount; partition--; ) {
+
+        if (in_degree(partition, G) > 1) {
+
+            InEdgeIterator begin, end;
+            std::tie(begin, end) = in_edges(partition, G);
+
+            assert (Q.empty());
+
+            for (auto i = begin + 1; i != end; ++i) {
+                const auto a = source(*i, G);
+                BitSet & A = rateSet[a];
+                if (A.empty()) continue;
+                for (auto j = begin; j != i; ++j) {
+                    const auto b = source(*j, G);
+                    BitSet & B = rateSet[b];
+                    if (B.empty()) continue;
+                    if (A.is_subset_of(B)) {
+                        A.clear();
+                        Q.push(a);
+                        break;
+                    }
+                    if (B.is_subset_of(A)) {
+                        B.clear();
+                        Q.push(b);
+                    }
+                }
+            }
+
+
+            while (!Q.empty()) {
+                const auto u = Q.front();
+                Q.pop();
+                for (const auto e : make_iterator_range(in_edges(u, G))) {
+                    const auto v = source(e, G);
+                    if (v >= PartitionCount && out_degree(v, G) == 1) {
+                        Q.push(v);
+                    }
+                }
+                clear_vertex(u, G);
+            }
+
+        }
+
+    }
+
+
+
+
+    END_SCOPED_REGION
+
+//    printG();
+
+//    const auto cfg = Z3_mk_config();
+//    Z3_set_param_value(cfg, "model", "false");
+//    Z3_set_param_value(cfg, "proof", "false");
+//    const auto ctx = Z3_mk_context(cfg);
+//    Z3_del_config(cfg);
+//    const auto solver = Z3_mk_solver(ctx);
+//    Z3_solver_inc_ref(ctx, solver);
+
+//    for (unsigned partition = 0; partition < PartitionCount; ++partition) {
+
+//        for (const auto input : make_iterator_range(in_edges(partition, G))) {
+//            const auto buffer = source(input, G);
+
+
+
+
+//        }
+
+
+
+
+//    }
+
+//    Z3_solver_dec_ref(ctx, solver);
+//    Z3_del_context(ctx);
+
+//    Z3_reset_memory();
+
 
     return G;
 }

@@ -11,7 +11,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlock * const insertBefore) const {
     #ifndef DISABLE_ZERO_EXTEND
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
     const auto strideSize = mKernel->getStride();
     const auto blockWidth = b->getBitBlockWidth();
     Value * requiredSpace = nullptr;
@@ -51,7 +51,7 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
         }
     }
     assert (requiredSpace);
-    const auto prefix = makeKernelName(mKernelIndex);
+    const auto prefix = makeKernelName(mKernelId);
     BasicBlock * const entry = b->GetInsertBlock();
     BasicBlock * const expandZeroExtension =
         b->CreateBasicBlock(prefix + "_expandZeroExtensionBuffer", insertBefore);
@@ -91,7 +91,7 @@ void PipelineCompiler::getZeroExtendedInputVirtualBaseAddresses(BuilderRef b,
                                                                 Value * const zeroExtensionSpace,
                                                                 Vec<Value *> & zeroExtendedVirtualBaseAddress) const {
     #ifndef DISABLE_ZERO_EXTEND
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
         Value * const zeroExtended = mIsInputZeroExtended(rt.Port);
@@ -137,7 +137,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
 
-    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (LLVM_UNLIKELY(bn.NonLocal)) {
@@ -190,7 +190,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 }
                 ++mNumOfTruncatedInputBuffers;
 
-                const auto prefix = makeBufferName(mKernelIndex, port);
+                const auto prefix = makeBufferName(mKernelId, port);
                 const auto itemWidth = getItemWidth(buffer->getBaseType());
                 Constant * const ITEM_WIDTH = b->getSize(itemWidth);
                 const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
@@ -379,7 +379,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     Constant * const ONE = b->getSize(1);
     Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         const StreamSetBuffer * const buffer = getOutputBuffer(port);
@@ -392,7 +392,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         }
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
-        const auto prefix = makeBufferName(mKernelIndex, port);
+        const auto prefix = makeBufferName(mKernelId, port);
         Value * const produced = mFinalProducedPhi(port);
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);

@@ -261,7 +261,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 
         Value * const signal = b->CreateCall(f, args);
         Value * const terminatedOnInit = b->CreateICmpNE(signal, unterminated);
-        const auto prefix = makeKernelName(mKernelIndex);
+        const auto prefix = makeKernelName(mKernelId);
         BasicBlock * const kernelTerminated = b->CreateBasicBlock(prefix + "_terminatedOnInit");
         BasicBlock * const kernelExit = b->CreateBasicBlock(prefix + "_exit");
         b->CreateUnlikelyCondBr(terminatedOnInit, kernelTerminated, kernelExit);
@@ -304,7 +304,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 
     mLocallyAvailableItems.resize(LastStreamSet - FirstStreamSet + 1);
 
-    mKernelIndex = PipelineInput;
+    mKernelId = PipelineInput;
 
     // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
@@ -328,7 +328,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         }
     }
 
-    mKernelIndex = PipelineOutput;
+    mKernelId = PipelineOutput;
 
     // NOTE: all inputs of PipelineOutput node are outputs of the PipelineKernel
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
@@ -501,7 +501,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
         updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::FINAL);
     }
     mKernel = nullptr;
-    mKernelIndex = 0;
+    mKernelId = 0;
     end(b);
 
     // only call pthread_exit() within spawned threads; otherwise it'll be equivalent to calling exit() within the process

@@ -38,16 +38,14 @@
 #define PRISz PRId64
 #endif
 
-#define ENABLE_ASSERTION_TRACE
-
 #ifdef ENABLE_ASSERTION_TRACE
-//#include <dwarf.h>
-//#include <libdwarf.h>
-//#include <libelf.h>
-//#include <link.h>
-//#include <dlfcn.h>
+#include <dwarf.h>
+#include <libdwarf.h>
+#include <libelf.h>
+#include <link.h>
+#include <dlfcn.h>
 #include <execinfo.h>
-//#include <cxxabi.h>
+#include <cxxabi.h>
 #endif
 
 #if LLVM_VERSION_INTEGER < LLVM_VERSION_CODE(5, 0, 0)

@@ -9,7 +9,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
     assert (index >= FirstKernel && index <= LastKernel);
-    mKernelIndex = index;
+    mKernelId = index;
     mKernel = getKernel(index);
     mKernelHandle = nullptr;
     if (LLVM_LIKELY(mKernel->isStateful())) {
@@ -21,7 +21,7 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
     }
     SmallVector<char, 256> tmp;
     raw_svector_ostream out(tmp);
-    out << mKernelIndex << "." << mKernel->getName();
+    out << mKernelId << "." << mKernel->getName();
     mKernelAssertionName = b->GetString(out.str());
 }
 
@@ -29,7 +29,7 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
  * @brief computeFullyProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort port{PortType::Input, i};
         const Binding & input = getInputBinding(port);
@@ -54,7 +54,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     // it's consumers has a non-Fixed rate that does not have a matching BlockSize
     // attribute.
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         const Binding & output = getOutputBinding(port);
@@ -141,7 +141,7 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
         // stride has been processed.
         Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
         Value * const maskedItemCount = b->CreateAnd(itemCount, ConstantExpr::getNeg(BLOCK_WIDTH));
-        Value * const terminated = hasKernelTerminated(b, mKernelIndex);
+        Value * const terminated = hasKernelTerminated(b, mKernelId);
         itemCount = b->CreateSelect(terminated, itemCount, maskedItemCount);
     }
     return itemCount;

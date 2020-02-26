@@ -44,9 +44,9 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const LockType lockType, const CycleCounter start) {
     if (mNumOfThreads > 1 || ExternallySynchronized) {
-        const auto prefix = makeKernelName(mKernelIndex);
+        const auto prefix = makeKernelName(mKernelId);
         const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
-        const unsigned waitingOnIdx = serialize ? LastKernel : mKernelIndex;
+        const unsigned waitingOnIdx = serialize ? LastKernel : mKernelId;
         const auto waitingOn = makeKernelName(waitingOnIdx);
 
         auto getLockName = [&]() -> const std::string & {
@@ -105,7 +105,7 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const LockType l
 void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const LockType lockType) {
     if (mNumOfThreads > 1 || ExternallySynchronized) {
         Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
-        const auto prefix = makeKernelName(mKernelIndex);
+        const auto prefix = makeKernelName(mKernelId);
 
         auto getLockName = [&]() -> const std::string & {
             switch (lockType) {
@@ -150,7 +150,7 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const LockType l
 void PipelineCompiler::verifySynchronizationLock(BuilderRef b, const LockType lockType) {
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         if (mNumOfThreads > 1 || ExternallySynchronized) {
-            const auto waitingOn = makeKernelName(mKernelIndex);
+            const auto waitingOn = makeKernelName(mKernelId);
 
             auto getLockName = [&]() -> const std::string & {
                 switch (lockType) {
