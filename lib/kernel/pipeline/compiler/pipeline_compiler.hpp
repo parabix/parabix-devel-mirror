@@ -32,7 +32,7 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -723,7 +723,7 @@ public:
 
     void writeUpdatedItemCounts(BuilderRef b, const ItemCountSource source);
 
-    void replacePhiCatchBlocksWith(BasicBlock * const loopExit, BasicBlock * const initiallyTerminatedExit);
+    void replacePhiCatchBlocksWith(BasicBlock *& from, BasicBlock * const to);
 
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
@@ -895,6 +895,7 @@ public:
     bool mayHaveNonLinearIO(const size_t kernel) const;
     bool supportsInternalSynchronization() const;
     void identifyLinkedIOPorts(BufferGraph & G) const;
+    bool isBounded() const;
 
     void printBufferGraph(raw_ostream & out) const;
 
@@ -1119,6 +1120,7 @@ protected:
     bool                                        mKernelCanTerminateEarly = false;
     bool                                        mHasExplicitFinalPartialStride = false;
     bool                                        mIsPartitionRoot = false;
+    bool                                        mHasTerminationBlock = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;

@@ -53,8 +53,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         const Rational diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
         mNumOfLinearStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
     }
-
-    mIsBounded = (mNumOfLinearStrides != nullptr);
     if (mNumOfLinearStrides == nullptr) {
         mNumOfLinearStrides = b->getSize(1);
     }

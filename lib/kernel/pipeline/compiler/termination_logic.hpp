@@ -142,14 +142,13 @@ void PipelineCompiler::updateTerminationSignal(Value * const signal) {
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
-    if (mIsPartitionRoot) {
+    if (mHasTerminationBlock) {
         Value * const signal = readTerminationSignal(b);
         updateTerminationSignal(signal);
         mTerminatedInitially = signal;
-        mTerminatedInitiallyCheck = hasKernelTerminated(b, mKernelId);
+        return hasKernelTerminated(b, mKernelId);
     }
-    assert (mTerminatedInitiallyCheck);
-    return mTerminatedInitiallyCheck; // TODO: temporary measure
+    return nullptr; // TODO: temporary measure
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

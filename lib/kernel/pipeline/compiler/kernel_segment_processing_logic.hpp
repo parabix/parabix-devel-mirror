@@ -106,6 +106,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mIsPartitionRoot = isPartitionRoot();
     assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));
+    mIsBounded = isBounded();
+    mHasTerminationBlock = mIsPartitionRoot && mIsBounded;
 
     mKernelLoopEntry = b->CreateBasicBlock(prefix + "_loopEntry", partitionExit);
     mKernelCheckOutputSpace = b->CreateBasicBlock(prefix + "_checkOutputSpace", partitionExit);
@@ -113,16 +115,19 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelCompletionCheck = b->CreateBasicBlock(prefix + "_normalCompletionCheck", partitionExit);
     mKernelInsufficientIOExit = b->CreateBasicBlock(prefix + "_insufficientIOExit", partitionExit);
     mKernelTerminated = nullptr;
-    if (mIsPartitionRoot) {
+    mKernelInitiallyTerminated = nullptr;
+    mKernelInitiallyTerminatedPhiCatch = nullptr;
+    if (mHasTerminationBlock) {
         mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", partitionExit);
+        mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", partitionExit);
+        mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", partitionExit);
     }
     mKernelLoopExit = b->CreateBasicBlock(prefix + "_loopExit", partitionExit);
     // The phi catch simplifies compilation logic by "forward declaring" the loop exit point.
     // Subsequent optimization phases will collapse it into the correct exit block.
     mKernelLoopExitPhiCatch = b->CreateBasicBlock(prefix + "_kernelExitPhiCatch", partitionExit);
-    mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", partitionExit);
-    mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", partitionExit);
     mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", partitionExit);
+
 
     readInitialItemCounts(b);
     readConsumedItemCounts(b);
@@ -133,8 +138,12 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mKernelEntry = b->GetInsertBlock();
 
-    Value * const terminated = initiallyTerminated(b);
-    b->CreateUnlikelyCondBr(terminated, mKernelInitiallyTerminated, mKernelLoopEntry);
+    if (mHasTerminationBlock) {
+        Value * const terminated = initiallyTerminated(b);
+        b->CreateUnlikelyCondBr(terminated, mKernelInitiallyTerminated, mKernelLoopEntry);
+    } else {
+        b->CreateBr(mKernelLoopEntry);
+    }
 
     /// -------------------------------------------------------------------------------------
     /// PHI NODE INITIALIZATION
@@ -143,7 +152,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     // Set up some PHI nodes early to simplify accumulating their incoming values.
     initializeKernelLoopEntryPhis(b);
     initializeKernelCheckOutputSpacePhis(b);
-    if (mIsPartitionRoot) {
+    if (mHasTerminationBlock) {
         initializeKernelTerminatedPhis(b);
     }
     initializeKernelInsufficientIOExitPhis(b);
@@ -202,7 +211,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL TERMINATED
     /// -------------------------------------------------------------------------------------
 
-    if (LLVM_UNLIKELY(mIsPartitionRoot)) {
+    if (LLVM_UNLIKELY(mHasTerminationBlock)) {
         b->SetInsertPoint(mKernelTerminated);
         writeTerminationSignal(b, mTerminatedSignalPhi);
         clearUnwrittenOutputData(b);
@@ -230,32 +239,33 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     computeMinimumConsumedItemCounts(b);
     writeLookAheadLogic(b);
     computeFullyProducedItemCounts(b);
-    BasicBlock * const loopExit = b->GetInsertBlock(); assert (loopExit);
+    replacePhiCatchBlocksWith(mKernelLoopExitPhiCatch, b->GetInsertBlock());
     b->CreateBr(mKernelExit);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL INITIALLY TERMINATED EXIT
     /// -------------------------------------------------------------------------------------
 
-    b->SetInsertPoint(mKernelInitiallyTerminated);
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "* " + prefix + ".initiallyTerminated = %" PRIu64, mSegNo);
-    #endif
-    if (mKernelIsInternallySynchronized) {
-        releaseSynchronizationLock(b, LockType::ItemCheck);
-        startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
-        acquireSynchronizationLock(b, LockType::Segment, CycleCounter::BEFORE_SYNCHRONIZATION);
+    if (mHasTerminationBlock) {
+        b->SetInsertPoint(mKernelInitiallyTerminated);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "* " + prefix + ".initiallyTerminated = %" PRIu64, mSegNo);
+        #endif
+        if (mKernelIsInternallySynchronized) {
+            releaseSynchronizationLock(b, LockType::ItemCheck);
+            startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+            acquireSynchronizationLock(b, LockType::Segment, CycleCounter::BEFORE_SYNCHRONIZATION);
+        }
+        loadLastGoodVirtualBaseAddressesOfUnownedBuffers(b);
+        replacePhiCatchBlocksWith(mKernelInitiallyTerminatedPhiCatch, b->GetInsertBlock());
+        b->CreateBr(mKernelExit);
     }
-    loadLastGoodVirtualBaseAddressesOfUnownedBuffers(b);
-    BasicBlock * const initiallyTerminatedExit = b->GetInsertBlock(); assert (initiallyTerminatedExit);
-    b->CreateBr(mKernelExit);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL EXIT (CONTINUED)
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelExit);
-    replacePhiCatchBlocksWith(loopExit, initiallyTerminatedExit);
     updateTerminationSignal(mTerminatedAtExitPhi);
     writeFinalConsumedItemCounts(b);
     recordFinalProducedItemCounts(b);
@@ -279,25 +289,19 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
  *
  * replace the phi catch with the actual exit blocks
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::replacePhiCatchBlocksWith(BasicBlock * const loopExit, BasicBlock * const initiallyTerminatedExit) {
+void PipelineCompiler::replacePhiCatchBlocksWith(BasicBlock *& from, BasicBlock * const to) {
     // NOTE: not all versions of LLVM seem to have BasicBlock::replacePhiUsesWith or PHINode::replaceIncomingBlockWith.
     // This code could be made to use those instead.
-    assert (loopExit);
-    assert (initiallyTerminatedExit);
     for (Instruction & inst : *mKernelExit) {
         PHINode & pn = cast<PHINode>(inst);
         for (unsigned i = 0; i != pn.getNumIncomingValues(); ++i) {
-            if (pn.getIncomingBlock(i) == mKernelLoopExitPhiCatch) {
-                pn.setIncomingBlock(i, loopExit);
-            } else if (pn.getIncomingBlock(i) == mKernelInitiallyTerminatedPhiCatch) {
-                pn.setIncomingBlock(i, initiallyTerminatedExit);
+            if (pn.getIncomingBlock(i) == from) {
+                pn.setIncomingBlock(i, to);
             }
         }
     }
-    mKernelLoopExitPhiCatch->eraseFromParent();
-    mKernelLoopExitPhiCatch = loopExit;
-    mKernelInitiallyTerminatedPhiCatch->eraseFromParent();
-    mKernelInitiallyTerminatedPhiCatch = initiallyTerminatedExit;
+    from->eraseFromParent();
+    from = to;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -350,7 +354,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
                 }
             }
 
-            BasicBlock * const exitBlock = mIsPartitionRoot ? mKernelTerminated : mKernelLoopExit; assert (exitBlock);
+            BasicBlock * const exitBlock = mHasTerminationBlock ? mKernelTerminated : mKernelLoopExit; assert (exitBlock);
 
             b->CreateCondBr(notFinal, mKernelLoopEntry, exitBlock);
 

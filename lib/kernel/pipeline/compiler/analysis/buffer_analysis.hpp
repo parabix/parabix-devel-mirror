@@ -735,6 +735,27 @@ bool PipelineCompiler::supportsInternalSynchronization() const {
     return false;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isBounded
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::isBounded() const {
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const Binding & binding = br.Binding;
+        const ProcessingRate & rate = binding.getRate();
+        switch (rate.getKind()) {
+            case RateId::Bounded:
+            case RateId::Fixed:
+            case RateId::PartialSum:
+                return true;
+            default: break;
+
+        }
+    }
+    return false;
+}
+
 
 }
 
