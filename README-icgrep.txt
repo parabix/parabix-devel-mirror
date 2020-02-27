@@ -39,9 +39,10 @@ git clone https://cs-git-research.cs.surrey.sfu.ca/cameron/parabix-devel.git
 Create a build subdirectory
 cd parabix-devel
 mkdir build
+cd build
 
 Create the makefiles
-cmake -DCMAKE_BUILD_TYPE=Release
+cmake -DCMAKE_BUILD_TYPE=Release ..
 
 Note: if you have built/installed a custom LLVM version, you may need
 to override cmake's default search path.
