@@ -379,7 +379,9 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
             const auto prefix = makeBufferName(mKernelId, port);
             PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
             assert (cn.Consumed);
-            consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
+//            if (mIsPartitionRoot) {
+//                consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
+//            }
             cn.PhiNode = consumedPhi;
         }
     }

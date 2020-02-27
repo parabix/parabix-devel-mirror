@@ -2136,7 +2136,7 @@ skip_edge_2:        // -----------------
  * I.e., the one with input from some disjoint path. If none exists, we'll begin jump to "PartitionCount", which
  * marks the end of the processing loop.
  ** ------------------------------------------------------------------------------------------------------------- */
-std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
+Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 
     using BV = dynamic_bitset<>;
     using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
@@ -2274,11 +2274,27 @@ std::vector<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
     }
 
     END_SCOPED_REGION
-    std::vector<unsigned> jumpIndices(PartitionCount);
+    Vec<unsigned> jumpIndices(PartitionCount);
     for (unsigned u = 0; u < PartitionCount; ++u) {
         jumpIndices[u] = child(u, G);
     }
     return jumpIndices;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makePartitionJumpGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+PartitionJumpGraph PipelineCompiler::makePartitionJumpGraph() const {
+    PartitionJumpGraph G(PartitionCount + 1);
+    for (auto i = 0U; i < PartitionCount; ++i) {
+        add_edge(i, (i + 1), G);
+        add_edge(i, mPartitionJumpIndex[i], G);
+    }
+
+    printGraph(G, errs(), "J");
+
+    return G;
 }
 
 } // end of namespace kernel

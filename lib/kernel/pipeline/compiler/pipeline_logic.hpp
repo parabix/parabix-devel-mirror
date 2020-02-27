@@ -77,13 +77,15 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     addConsumerKernelProperties(b, PipelineInput);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         const auto partitionId = KernelPartitionId[i];
-        if (partitionId != currentPartitionId) {
-            currentPartitionId = partitionId;
-            assert (currentPartitionId != -1U);
+        const bool partitionRoot = (partitionId != currentPartitionId);
+        currentPartitionId = partitionId;
+        if (partitionRoot) {
             addPartitionInputItemCounts(b, currentPartitionId);
         }
-        addBufferHandlesToPipelineKernel(b, i);
-        addTerminationProperties(b, i);
+        addBufferHandlesToPipelineKernel(b, i);        
+        if (partitionRoot) {
+            addTerminationProperties(b, i);
+        }
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
         addCycleCounterProperties(b, i);
@@ -228,49 +230,59 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
     }
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+    Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
+
+    Value * terminated = nullptr;
+    auto partitionId = KernelPartitionId[FirstKernel];
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
 
         // Family kernels must be initialized in the "main" method.
         const Kernel * kernel = getKernel(i);
-        if (LLVM_UNLIKELY(kernel->externallyInitialized())) {
-            continue;
+        if (LLVM_LIKELY(!kernel->externallyInitialized())) {
+            setActiveKernel(b, i);
+            initializeStridesPerSegment(b);
+            ArgVec args;
+
+            if (LLVM_LIKELY(mKernel->isStateful())) {
+                args.push_back(mKernelHandle);
+            }
+            #ifndef NDEBUG
+            unsigned expected = 0;
+            #endif
+            for (const auto e : make_iterator_range(in_edges(i, mScalarGraph))) {
+                assert (mScalarGraph[e].Type == PortType::Input);
+                assert (expected++ == mScalarGraph[e].Number);
+                const auto scalar = source(e, mScalarGraph);
+                Value * const scalarValue = getScalar(b, scalar);
+                args.push_back(scalarValue);
+            }
+            Value * const f = getKernelInitializeFunction(b);
+            if (LLVM_UNLIKELY(f == nullptr)) {
+                report_fatal_error(mKernel->getName() + " does not have an initialize method");
+            }
+
+            Value * const signal = b->CreateCall(f, args);
+            Value * const terminatedOnInit = b->CreateICmpNE(signal, unterminated);
+
+            if (terminated) {
+                terminated = b->CreateOr(terminated, terminatedOnInit);
+            } else {
+                terminated = terminatedOnInit;
+            }
+
         }
 
-        setActiveKernel(b, i);
-        initializeStridesPerSegment(b);
-        ArgVec args;
-
-        if (LLVM_LIKELY(mKernel->isStateful())) {
-            args.push_back(mKernelHandle);
-        }
-        #ifndef NDEBUG
-        unsigned expected = 0;
-        #endif
-        for (const auto e : make_iterator_range(in_edges(i, mScalarGraph))) {
-            assert (mScalarGraph[e].Type == PortType::Input);
-            assert (expected++ == mScalarGraph[e].Number);
-            const auto scalar = source(e, mScalarGraph);
-            Value * const scalarValue = getScalar(b, scalar);
-            args.push_back(scalarValue);
-        }
-        Value * const f = getKernelInitializeFunction(b);
-        if (LLVM_UNLIKELY(f == nullptr)) {
-            report_fatal_error(mKernel->getName() + " does not have an initialize method");
+        // Is this the last kernel in a partition? If so, store the accumulated
+        // termination signal.
+        const auto nextPartitionId = KernelPartitionId[i + 1];
+        if (partitionId != nextPartitionId) {
+            Value * const signal = b->CreateSelect(terminated, aborted, unterminated);
+            writeTerminationSignal(b, signal);
+            partitionId = nextPartitionId;
+            terminated = nullptr;
         }
 
-        Value * const signal = b->CreateCall(f, args);
-        Value * const terminatedOnInit = b->CreateICmpNE(signal, unterminated);
-        const auto prefix = makeKernelName(mKernelId);
-        BasicBlock * const kernelTerminated = b->CreateBasicBlock(prefix + "_terminatedOnInit");
-        BasicBlock * const kernelExit = b->CreateBasicBlock(prefix + "_exit");
-        b->CreateUnlikelyCondBr(terminatedOnInit, kernelTerminated, kernelExit);
-
-        b->SetInsertPoint(kernelTerminated);
-        writeTerminationSignal(b, getTerminationSignal(b, TerminationSignal::Aborted));
-        b->CreateBr(kernelExit);
-
-        b->SetInsertPoint(kernelExit);
     }
     resetInternalBufferHandles();
 }
@@ -554,48 +566,6 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     releaseOwnedBuffers(b, true);
     resetInternalBufferHandles();
     simplifyPhiNodes(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief simplifyPhiNodes
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
-
-    // LLVM is not aggressive enough with how it deals with phi nodes. To ensure that
-    // we collapse every phi node in which all incoming values are identical into the
-    // incoming value, we execute the following mini optimization pass.
-
-    // TODO: check the newer versions of LLVM to see if any can do this now.
-
-    Function * const f = b->GetInsertBlock()->getParent();
-
-    for (BasicBlock & bb : f->getBasicBlockList()) {
-        Instruction * inst = &bb.getInstList().front();
-        while (inst) {
-            if (isa<PHINode>(inst)) {
-                PHINode * const phi = cast<PHINode>(inst);
-                inst = inst->getNextNode();
-
-                bool remove = true;
-                assert (phi && phi->getNumIncomingValues() > 0);
-                Value * const value = phi->getIncomingValue(0);
-                const auto n = phi->getNumIncomingValues();
-                for (unsigned i = 1; i != n; ++i) {
-                    if (LLVM_LIKELY(phi->getIncomingValue(i) != value)) {
-                        remove = false;
-                        break;
-                    }
-                }
-                if (remove) {
-                    phi->replaceAllUsesWith(value);
-                    RecursivelyDeleteDeadPHINode(phi);
-                }
-            } else {
-                break;
-            }
-        }
-    }
-
 }
 
 enum : unsigned {

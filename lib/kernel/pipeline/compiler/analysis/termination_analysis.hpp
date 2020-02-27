@@ -8,21 +8,26 @@ namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeTerminationGraph
- *
- * The termination graph is a minimum vertex-disjoint path cover of the transitive reduction of I/O dependencies.
- * It "kernel path" models which kernels to are controlled by a specific termination "counter" and the incoming
- * edges to the P_{out} vertex indicates which counters must be checked by the pipeline to determine whether the
- * work has finished.
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() const {
 
-    TerminationGraph G(PipelineOutput + 1);
+    TerminationGraph G(PartitionCount + 1);
+
+    // Although every kernel will eventually terminate, we only need to observe one kernel
+    // in each partition terminating to know whether *all* of the kernels will terminate.
+    // Since only the root of a partition could be a kernel that explicitly terminates,
+    // we can "share" its termination state.
 
     for (auto consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
+        const auto cid = KernelPartitionId[consumer];
         for (const auto e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
             const auto buffer = source(e, mBufferGraph);
             const auto producer = parent(buffer, mBufferGraph);
-            add_edge(producer, consumer, false, G);
+            const auto pid = KernelPartitionId[producer];
+            assert (pid <= cid);
+            if (pid != cid) {
+                add_edge(pid, cid, false, G);
+            }
         }
     }
 
@@ -32,7 +37,8 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
             for (const auto producer : make_iterator_range(in_edges(r, mScalarGraph))) {
                 const auto k = source(producer, mScalarGraph);
                 assert ("cannot occur" && k != PipelineOutput);
-                add_edge(k, PipelineOutput, false, G);
+                const auto pid = KernelPartitionId[k];
+                add_edge(pid, PartitionCount, false, G);
             }
         }
     }
@@ -51,23 +57,21 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         return false;
     };
 
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+    for (auto i = FirstKernel; i <= LastKernel; ++i) {
         if (any_termination(getKernel(i))) {
-            add_edge(i, PipelineOutput, false, G);
+            const auto pid = KernelPartitionId[i];
+            add_edge(pid, PartitionCount, false, G);
         }
     }
 
     transitive_reduction_dag(G);
 
-    clear_out_edges(PipelineInput, G);
-
     // we are only interested in the incoming edges of the pipeline output
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+    for (unsigned i = 0; i < PartitionCount; ++i) {
         clear_in_edges(i, G);
     }
 
     // hard terminations
-
     auto hard_termination = [](const Kernel * const kernel) {
         for (const Attribute & attr : kernel->getAttributes()) {
             switch (attr.getKind()) {
@@ -81,16 +85,19 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
 
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         if (hard_termination(getKernel(i))) {
-            // incase we already have the edge in G, set the
+            // in case we already have the edge in G, set the
             // hard termination flag to true after "adding" it.
-            G[add_edge(i, PipelineOutput, true, G).first] = true;
+            const auto pid = KernelPartitionId[i];
+            G[add_edge(pid, PartitionCount, true, G).first] = true;
         }
     }
 
+    printGraph(G, errs(), "T");
+
     assert ("a pipeline with no sinks ought to produce no observable data"
-            && in_degree(PipelineOutput, G) > 0);
+            && in_degree(PartitionCount, G) > 0);
     assert ("termination graph construction error?"
-            && out_degree(PipelineOutput, G) == 0);
+            && out_degree(PartitionCount, G) == 0);
 
     return G;
 }

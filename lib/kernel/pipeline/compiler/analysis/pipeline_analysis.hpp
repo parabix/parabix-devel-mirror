@@ -304,7 +304,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
 
     P.KernelPartitionId[P.PipelineInput] = 0;
-    P.KernelPartitionId[P.PipelineOutput] = numOfPartitions - 1;
+    P.KernelPartitionId[P.PipelineOutput] = numOfPartitions;
 
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {

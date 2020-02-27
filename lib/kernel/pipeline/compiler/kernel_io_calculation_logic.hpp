@@ -30,6 +30,17 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mBranchToLoopExit = b->getFalse();
     }
 
+    if (mIsPartitionRoot) {
+        mNumOfLinearStrides = nullptr;
+    } else {
+        const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
+        Value * numOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
+        if (mMayHaveNonLinearIO) {
+            numOfStrides = b->CreateSub(numOfStrides, mCurrentNumOfStrides);
+        }
+        mNumOfLinearStrides = numOfStrides;
+    }
+
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferRateData & br = mBufferGraph[e];
@@ -49,9 +60,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                 mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
             }
         }
-    } else { // use the already derived num of partition strides
-        const Rational diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
-        mNumOfLinearStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
     }
     if (mNumOfLinearStrides == nullptr) {
         mNumOfLinearStrides = b->getSize(1);

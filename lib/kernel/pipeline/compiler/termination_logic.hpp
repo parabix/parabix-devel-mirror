@@ -9,7 +9,8 @@ namespace kernel {
  * @brief addTerminationProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_t kernel) {
-    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(kernel));
+    const auto id = KernelPartitionId[kernel];
+    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(id));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -46,10 +47,9 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
     Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
 
     // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mTerminationGraph))) {
-        const auto kernel = source(e, mTerminationGraph);
-        const auto partitionId = KernelPartitionId[kernel];
-        Value * const signal = mTerminationSignals[partitionId];
+    for (const auto e : make_iterator_range(in_edges(PartitionCount, mTerminationGraph))) {
+        const auto partitionId = source(e, mTerminationGraph);
+        Value * const signal = mPartitionTerminatedAtPartitionExit[partitionId];
         assert (signal);
         assert (signal->getType() == unterminated->getType());
         // if this is a hard termination, such as a fatal error, any can terminate the pipeline.
@@ -142,20 +142,21 @@ void PipelineCompiler::updateTerminationSignal(Value * const signal) {
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
-    if (mHasTerminationBlock) {
+    if (mIsPartitionRoot) {
         Value * const signal = readTerminationSignal(b);
         updateTerminationSignal(signal);
         mTerminatedInitially = signal;
         return hasKernelTerminated(b, mKernelId);
     }
-    return nullptr; // TODO: temporary measure
+    return nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b) {
-    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelId));
+    const auto id = KernelPartitionId[mKernelId];
+    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(id));
     return b->CreateLoad(ptr, true);
 }
 
@@ -163,7 +164,8 @@ inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b) {
  * @brief setTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeTerminationSignal(BuilderRef b, Value * const signal) {
-    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelId));
+    const auto id = KernelPartitionId[mKernelId];
+    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(id));
     b->CreateStore(signal, ptr, true);
 }
 

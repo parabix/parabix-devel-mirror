@@ -436,6 +436,8 @@ bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B
 
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
+using PartitionJumpGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
+
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
     static constexpr unsigned FirstKernel = 1U;
@@ -651,7 +653,9 @@ public:
     void makePartitionEntryPoints(BuilderRef b);
     void branchToInitialPartition(BuilderRef b);
     BasicBlock * getPartitionExitPoint(BuilderRef b);
-    bool isPartitionRoot();
+    void checkPartitionEntry(BuilderRef b);
+    void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
+    void jumpToNextPartition(BuilderRef b);
     void checkForPartitionExit(BuilderRef b);
 
 // inter-kernel codegen functions
@@ -692,6 +696,7 @@ public:
     void normalCompletionCheck(BuilderRef b);
 
     void writeInsufficientIOExit(BuilderRef b);
+    void writeInitParitionJump(BuilderRef b);
 
     void writeCopyBackLogic(BuilderRef b);
     void writeLookAheadLogic(BuilderRef b);
@@ -727,6 +732,7 @@ public:
 
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
+
 
 // intra-kernel codegen functions
 
@@ -783,7 +789,7 @@ public:
     void loadInternalStreamSetHandles(BuilderRef b);
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
-    void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b);
+    void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
     LLVM_READNONE bool requiresCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE bool requiresLookAhead(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
@@ -881,7 +887,9 @@ public:
                                                     const unsigned numOfPartitions) const;
 
     PartitioningGraph generatePartitioningGraph() const;
-    std::vector<unsigned> determinePartitionJumpIndices() const;
+    Vec<unsigned> determinePartitionJumpIndices() const;
+    PartitionJumpGraph makePartitionJumpGraph() const;
+
 
 // buffer management analysis functions
 
@@ -1025,7 +1033,10 @@ protected:
 
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
-    const std::vector<unsigned>                 mPartitionJumpIndex;
+    const Vec<unsigned>                         mPartitionJumpIndex;
+    const PartitionJumpGraph                    mPartitionJumpGraph;
+
+
     const BufferPortMap                         mInputPortSet;
     const BufferPortMap                         mOutputPortSet;
 
@@ -1050,7 +1061,6 @@ protected:
     Value *                                     mExhaustedInput = nullptr;
     PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;
-    PHINode *                                   mNextPipelineProgress = nullptr;
     Value *                                     mCurrentThreadTerminationSignalPtr = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
     BasicBlock *                                mKernelEntry = nullptr;
@@ -1062,6 +1072,7 @@ protected:
     BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelInsufficientIOExit = nullptr;
+    BasicBlock *                                mKernelInitPartitionJump = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
@@ -1075,10 +1086,17 @@ protected:
     Vec<Value *,      128>                      mLocallyAvailableItems;
 
     // partition state
-    Vec<BasicBlock *, 32>                       mPartitionEntryPoint;
+    Vec<BasicBlock *>                           mPartitionEntryPoint;
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
+
+    Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
+    // Vec<PHINode *>                              mPartitionTerminatedAtPartitionExit;
+
+    Vec<Value *>                                mPartitionTerminatedAtTerminatedInitially;
+    Vec<BasicBlock *>                           mPartitionInitiallyTerminatedExit;
+    Vec<Value *>                                mPartitionTerminatedAtPartitionExit;
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
@@ -1103,6 +1121,7 @@ protected:
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mReportedNumOfStridesPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
+    BasicBlock *                                mNextPartitionWithPotentialInput = nullptr;
 
     BitVector                                   mHasPipelineInput;
 
@@ -1120,7 +1139,6 @@ protected:
     bool                                        mKernelCanTerminateEarly = false;
     bool                                        mHasExplicitFinalPartialStride = false;
     bool                                        mIsPartitionRoot = false;
-    bool                                        mHasTerminationBlock = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
@@ -1291,6 +1309,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 
 , mPartitioningGraph(generatePartitioningGraph())
 , mPartitionJumpIndex(determinePartitionJumpIndices())
+, mPartitionJumpGraph(makePartitionJumpGraph())
 
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())
@@ -1441,5 +1460,6 @@ static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const
 #include "synchronization_logic.hpp"
 #include "debug_messages.hpp"
 #include "codegen/buffer_manipulation_logic.hpp"
+#include "pipeline_optimization_logic.hpp"
 
 #endif // PIPELINE_COMPILER_HPP

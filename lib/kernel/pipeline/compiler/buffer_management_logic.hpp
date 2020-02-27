@@ -347,8 +347,8 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadLastGoodVirtualBaseAddressesOfUnownedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const {
+    for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         // owned or external buffers do not have a mutable vba
@@ -356,7 +356,7 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
             continue;
         }
         const BufferRateData & rd = mBufferGraph[e];
-        const auto handleName = makeBufferName(mKernelId, rd.Port);
+        const auto handleName = makeBufferName(kernelId, rd.Port);
         Value * const vba = b->getScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
         StreamSetBuffer * const buffer = bn.Buffer;
         buffer->setBaseAddress(b.get(), vba);

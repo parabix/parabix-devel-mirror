@@ -73,6 +73,23 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
     for (unsigned i = 0; i <= PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }
+
+    mPipelineProgressAtPartitionExit.resize(PartitionCount + 1, nullptr);
+
+    mPartitionTerminatedAtTerminatedInitially.resize(PartitionCount, nullptr);
+    mPartitionTerminatedAtPartitionExit.resize(PartitionCount, nullptr);
+    mPartitionInitiallyTerminatedExit.resize(PartitionCount, nullptr);
+
+    const auto ip = b->saveIP();
+
+    Type * const boolTy = b->getInt1Ty();
+    for (unsigned i = 1; i <= PartitionCount; ++i) {
+        b->SetInsertPoint(mPartitionEntryPoint[i]);
+        mPipelineProgressAtPartitionExit[i] = b->CreatePHI(boolTy, PartitionCount, "PipelineProgress" + std::to_string(i));
+    }
+
+    b->restoreIP(ip);
+
     mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
 }
 
@@ -99,16 +116,64 @@ inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkInputDataOnPartitionEntry
  ** ------------------------------------------------------------------------------------------------------------- */
-inline bool PipelineCompiler::isPartitionRoot() {
+inline void PipelineCompiler::checkPartitionEntry(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    mNextPartitionWithPotentialInput = nullptr;
+    mIsPartitionRoot = false;
     const auto partitionId = KernelPartitionId[mKernelId];
-    if (partitionId == mCurrentPartitionId) {
-        return false;
+    if (partitionId != mCurrentPartitionId) {
+        mPartitionRootKernelId = mKernelId;
+        mCurrentPartitionId = partitionId;
+        const auto jumpIdx = mPartitionJumpIndex[partitionId];
+        mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
+        mIsPartitionRoot = true;
     }
-    mPartitionRootKernelId = mKernelId;
-    mCurrentPartitionId = partitionId;
-    return true;
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadLastGoodVirtualBaseAddressesOfUnownedBuffersInCurrentPartition
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const {
+    for (auto i = mPartitionRootKernelId; i <= LastKernel; ++i) {
+        if (KernelPartitionId[i] != mCurrentPartitionId) {
+            break;
+        }
+        loadLastGoodVirtualBaseAddressesOfUnownedBuffers(b, i);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief jumpToNextPartition
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::jumpToNextPartition(BuilderRef b) {
+
+
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief writeInitParitionJump
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::writeInitParitionJump(BuilderRef b) {
+    if (mKernelIsInternallySynchronized) {
+        releaseSynchronizationLock(b, LockType::ItemCheck);
+        startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+        acquireSynchronizationLock(b, LockType::Segment, CycleCounter::BEFORE_SYNCHRONIZATION);
+    }
+    releaseSynchronizationLock(b, LockType::Segment);
+
+    BasicBlock * const exitBlock = b->GetInsertBlock();
+
+    mPartitionTerminatedAtTerminatedInitially[mCurrentPartitionId] = mTerminatedInitially;
+    mPartitionInitiallyTerminatedExit[mCurrentPartitionId] = exitBlock;
+
+    const auto pid = mPartitionJumpIndex[mCurrentPartitionId];
+    PHINode * const p = mPipelineProgressAtPartitionExit[pid];
+    p->addIncoming(mPipelineProgress, exitBlock);
+
+    b->CreateBr(mNextPartitionWithPotentialInput);
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief checkForPartitionExit
@@ -116,16 +181,33 @@ inline bool PipelineCompiler::isPartitionRoot() {
 inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
     const auto nextPartitionId = KernelPartitionId[mKernelId + 1];
+
     if (nextPartitionId != mCurrentPartitionId) {
-        BasicBlock * nextPartition;
-        if (LLVM_UNLIKELY(nextPartitionId == -1U)) {
-            nextPartition = mPartitionEntryPoint[PartitionCount];
-        } else {
-            assert (nextPartitionId < PartitionCount);
-            nextPartition = mPartitionEntryPoint[nextPartitionId];
-        }
+
+        assert (nextPartitionId <= PartitionCount);
+        BasicBlock * const nextPartition = mPartitionEntryPoint[nextPartitionId];
+        BasicBlock * const exitBlock = b->GetInsertBlock();
         b->CreateBr(nextPartition);
+
         b->SetInsertPoint(nextPartition);
+        PHINode * const p = mPipelineProgressAtPartitionExit[nextPartitionId]; assert (p);
+        p->addIncoming(mHasProgressedPhi, exitBlock);
+        assert (mTerminatedAtExitPhi);
+        mPipelineProgress = p;
+
+        mPartitionTerminatedAtPartitionExit[mCurrentPartitionId] = mTerminatedAtExitPhi;
+
+        IntegerType * const sizeTy = b->getSizeTy();
+
+        for (auto i = 0U; i <= mCurrentPartitionId; ++i) {
+            if (mPartitionJumpIndex[i] == nextPartitionId)  {
+                PHINode * const p = b->CreatePHI(sizeTy, 2);
+                p->addIncoming(mPartitionTerminatedAtPartitionExit[i], exitBlock);
+                p->addIncoming(mPartitionTerminatedAtTerminatedInitially[i], mPartitionInitiallyTerminatedExit[i]);
+                mPartitionTerminatedAtPartitionExit[i] = p;
+            }
+        }
+
     }
 }
 
