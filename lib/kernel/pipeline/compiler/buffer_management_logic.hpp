@@ -201,33 +201,39 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief readInitialItemCounts
+ * @brief readProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readInitialItemCounts(BuilderRef b) {
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+void PipelineCompiler::readProcessedItemCounts(BuilderRef b, const size_t kernel) {
+    const auto numOfInputs = getNumOfStreamInputs(kernel);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort inputPort{PortType::Input, i};
-        const Binding & input = getInputBinding(inputPort);
-        const auto prefix = makeBufferName(mKernelId, inputPort);
+        const Binding & input = getInputBinding(kernel, inputPort);
+        const auto prefix = makeBufferName(kernel, inputPort);
         Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        mInitiallyProcessedItemCount(mKernelId, inputPort) = processed;
+        mInitiallyProcessedItemCount(kernel, inputPort) = processed;
         if (input.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProcessedDeferredItemCount(mKernelId, inputPort) = deferred;
+            mInitiallyProcessedDeferredItemCount(kernel, inputPort) = deferred;
         }
     }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readProducedItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readProducedItemCounts(BuilderRef b, const size_t kernel) {
+    const auto numOfOutputs = getNumOfStreamOutputs(kernel);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort outputPort{PortType::Output, i};
-        const Binding & output = getOutputBinding(outputPort);
-        const auto prefix = makeBufferName(mKernelId, outputPort);
-        mInitiallyProducedItemCount(mKernelId, outputPort) = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+        const Binding & output = getOutputBinding(kernel, outputPort);
+        const auto prefix = makeBufferName(kernel, outputPort);
+        mInitiallyProducedItemCount(kernel, outputPort) = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount(outputPort));
         #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProducedDeferredItemCount(mKernelId, outputPort) = deferred;
+            mInitiallyProducedDeferredItemCount(kernel, outputPort) = deferred;
         }
     }
 }

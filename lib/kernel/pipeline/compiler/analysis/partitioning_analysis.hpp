@@ -2288,9 +2288,9 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 PartitionJumpGraph PipelineCompiler::makePartitionJumpGraph() const {
     PartitionJumpGraph G(PartitionCount + 1);
     for (auto i = 0U; i < PartitionCount; ++i) {
-        add_edge(i, (i + 1), G);
         add_edge(i, mPartitionJumpIndex[i], G);
     }
+    transitive_closure_dag(G);
 
     printGraph(G, errs(), "J");
 

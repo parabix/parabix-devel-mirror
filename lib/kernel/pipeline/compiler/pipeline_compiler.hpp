@@ -436,7 +436,11 @@ bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B
 
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
-using PartitionJumpGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
+struct PartitionJumpNode {
+    mutable PHINode * Phi;
+};
+
+using PartitionJumpGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PartitionJumpNode, no_property>;
 
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
@@ -660,7 +664,8 @@ public:
 
 // inter-kernel codegen functions
 
-    void readInitialItemCounts(BuilderRef b);
+    void readProcessedItemCounts(BuilderRef b, const size_t kernel);
+    void readProducedItemCounts(BuilderRef b, const size_t kernel);
 
     void initializeKernelLoopEntryPhis(BuilderRef b);
     void initializeKernelCheckOutputSpacePhis(BuilderRef b);
@@ -696,7 +701,7 @@ public:
     void normalCompletionCheck(BuilderRef b);
 
     void writeInsufficientIOExit(BuilderRef b);
-    void writeInitParitionJump(BuilderRef b);
+    void writeOnInitialTerminationJumpToNextPartitionToCheck(BuilderRef b);
 
     void writeCopyBackLogic(BuilderRef b);
     void writeLookAheadLogic(BuilderRef b);
@@ -1071,8 +1076,8 @@ protected:
     BasicBlock *                                mKernelInitiallyTerminated = nullptr;
     BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
-    BasicBlock *                                mKernelInsufficientIOExit = nullptr;
-    BasicBlock *                                mKernelInitPartitionJump = nullptr;
+    BasicBlock *                                mKernelInsufficientInput = nullptr;
+    BasicBlock *                                mKernelJumpToNextUsefulPartition = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
@@ -1087,16 +1092,16 @@ protected:
 
     // partition state
     Vec<BasicBlock *>                           mPartitionEntryPoint;
+    Vec<BasicBlock *>                           mPartitionJumpPoint;
+    Vec<BasicBlock *>                           mPartitionExitPoint;
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
 
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
-    // Vec<PHINode *>                              mPartitionTerminatedAtPartitionExit;
-
-    Vec<Value *>                                mPartitionTerminatedAtTerminatedInitially;
-    Vec<BasicBlock *>                           mPartitionInitiallyTerminatedExit;
-    Vec<Value *>                                mPartitionTerminatedAtPartitionExit;
+    Vec<PHINode *>                              mPartitionTerminationSignalPhi;
+    Vec<Value *>                                mPartitionTerminationAtJumpExitSignal;
+    Vec<Value *>                                mPartitionTerminationSignal;
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
@@ -1341,6 +1346,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mUpdatedProcessedPhi(this)
 , mUpdatedProcessedDeferredPhi(this)
 , mFullyProcessedItemCount(this)
+
 
 , mInitiallyProducedItemCount(this)
 , mInitiallyProducedDeferredItemCount(this)

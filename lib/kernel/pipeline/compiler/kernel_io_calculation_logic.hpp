@@ -30,16 +30,18 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mBranchToLoopExit = b->getFalse();
     }
 
-    if (mIsPartitionRoot) {
-        mNumOfLinearStrides = nullptr;
-    } else {
-        const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
-        Value * numOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
-        if (mMayHaveNonLinearIO) {
-            numOfStrides = b->CreateSub(numOfStrides, mCurrentNumOfStrides);
-        }
-        mNumOfLinearStrides = numOfStrides;
-    }
+    mNumOfLinearStrides = nullptr;
+
+//    if (mIsPartitionRoot) {
+//        mNumOfLinearStrides = nullptr;
+//    } else {
+//        const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
+//        Value * numOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
+//        if (mMayHaveNonLinearIO) {
+//            numOfStrides = b->CreateSub(numOfStrides, mCurrentNumOfStrides);
+//        }
+//        mNumOfLinearStrides = numOfStrides;
+//    }
 
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
@@ -87,7 +89,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     // kernel if any stream is insufficient.
     if (mBranchToLoopExit) {
         BasicBlock * const noStreamIsInsufficient = b->CreateBasicBlock("", mKernelCheckOutputSpace);
-        b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientIOExit, noStreamIsInsufficient);
+        b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientInput, noStreamIsInsufficient);
         updatePHINodesForLoopExit(b);
         b->SetInsertPoint(noStreamIsInsufficient);
     }
@@ -244,10 +246,10 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     BasicBlock * const hasInputData = b->CreateBasicBlock(prefix + "_hasInputData", mKernelCheckOutputSpace);
 
     BasicBlock * recordBlockedIO = nullptr;
-    BasicBlock * insufficentIO = mKernelInsufficientIOExit;
+    BasicBlock * insufficentIO = mKernelInsufficientInput;
 
     if (mBranchToLoopExit) {
-        recordBlockedIO = b->CreateBasicBlock(prefix + "_recordBlockedIO", mKernelInsufficientIOExit);
+        recordBlockedIO = b->CreateBasicBlock(prefix + "_recordBlockedIO", mKernelInsufficientInput);
         insufficentIO = recordBlockedIO;
     }
 

@@ -276,7 +276,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
         // Is this the last kernel in a partition? If so, store the accumulated
         // termination signal.
         const auto nextPartitionId = KernelPartitionId[i + 1];
-        if (partitionId != nextPartitionId) {
+        if (terminated && partitionId != nextPartitionId) {
             Value * const signal = b->CreateSelect(terminated, aborted, unterminated);
             writeTerminationSignal(b, signal);
             partitionId = nextPartitionId;

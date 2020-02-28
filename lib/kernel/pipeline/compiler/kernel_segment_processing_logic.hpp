@@ -107,14 +107,18 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelCheckOutputSpace = b->CreateBasicBlock(prefix + "_checkOutputSpace", partitionExit);
     mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", partitionExit);
     mKernelCompletionCheck = b->CreateBasicBlock(prefix + "_normalCompletionCheck", partitionExit);
-    mKernelInsufficientIOExit = b->CreateBasicBlock(prefix + "_insufficientIOExit", partitionExit);
+    mKernelInsufficientInput = b->CreateBasicBlock(prefix + "_insufficientInput", partitionExit);
     mKernelTerminated = nullptr;
     mKernelInitiallyTerminated = nullptr;
     mKernelInitiallyTerminatedPhiCatch = nullptr;
     if (mIsPartitionRoot) {
         mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", partitionExit);
         mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", partitionExit);
-        mKernelInitPartitionJump = b->CreateBasicBlock(prefix + "_initPartitionJump", partitionExit);
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream nm(tmp);
+        nm << prefix << "_jumpFromPartition" << mCurrentPartitionId
+           << "To" << mPartitionJumpIndex[mCurrentPartitionId];
+        mKernelJumpToNextUsefulPartition = b->CreateBasicBlock(nm.str(), partitionExit);
     }
     mKernelLoopExit = b->CreateBasicBlock(prefix + "_loopExit", partitionExit);
     // The phi catch simplifies compilation logic by "forward declaring" the loop exit point.
@@ -123,7 +127,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", partitionExit);
 
 
-    readInitialItemCounts(b);
+    readProcessedItemCounts(b, mKernelId);
+    readProducedItemCounts(b, mKernelId);
     readConsumedItemCounts(b);
     prepareLinearBuffers(b);
 
@@ -217,7 +222,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL INSUFFICIENT IO EXIT
     /// -------------------------------------------------------------------------------------
 
-    b->SetInsertPoint(mKernelInsufficientIOExit);
+    b->SetInsertPoint(mKernelInsufficientInput);
     writeInsufficientIOExit(b);
 
     /// -------------------------------------------------------------------------------------
@@ -246,7 +251,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         debugPrint(b, "* " + prefix + ".initiallyTerminated = %" PRIu64, mSegNo);
         #endif
         loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
-        b->CreateBr(mKernelInitPartitionJump);
+        b->CreateBr(mKernelJumpToNextUsefulPartition);
     }
 
     /// -------------------------------------------------------------------------------------
@@ -254,8 +259,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     if (mIsPartitionRoot) {
-        b->SetInsertPoint(mKernelInitPartitionJump);
-        writeInitParitionJump(b);
+        b->SetInsertPoint(mKernelJumpToNextUsefulPartition);
+        writeOnInitialTerminationJumpToNextPartitionToCheck(b);
     }
 
     /// -------------------------------------------------------------------------------------
@@ -505,7 +510,7 @@ inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
 inline void PipelineCompiler::initializeKernelInsufficientIOExitPhis(BuilderRef b) {
     mExhaustedPipelineInputPhi = nullptr;
     if (LLVM_UNLIKELY(mHasPipelineInput.any())) {
-        b->SetInsertPoint(mKernelInsufficientIOExit);
+        b->SetInsertPoint(mKernelInsufficientInput);
         const auto prefix = makeKernelName(mKernelId);
         IntegerType * const boolTy = b->getInt1Ty();
         mExhaustedPipelineInputPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInput");
@@ -596,13 +601,15 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
 
     if (mIsPartitionRoot) {
         assert (mNextPartitionWithPotentialInput);
-        assert (mKernelInitPartitionJump);
+        assert (mKernelJumpToNextUsefulPartition);
         if (mMayHaveNonLinearIO) {
-            b->CreateLikelyCondBr(mExecutedAtLeastOncePhi, mKernelLoopExit, mKernelInitPartitionJump);
+            b->CreateLikelyCondBr(mExecutedAtLeastOncePhi, mKernelLoopExit, mKernelJumpToNextUsefulPartition);
         } else {
-            b->CreateBr(mKernelInitPartitionJump);
+            b->CreateBr(mKernelJumpToNextUsefulPartition);
         }
-    } else { // if this is not a partition root, we know it
+    } else {
+        // if this is not a partition root, it is not responsible for determining
+        // whether the partition is out of input
         b->CreateBr(mKernelLoopExit);
     }
 }
@@ -689,8 +696,8 @@ void PipelineCompiler::end(BuilderRef b) {
     // TODO: if we determine that all of the pipeline I/O is consumed in one invocation of the
     // pipeline, we can avoid testing at the end whether its terminated.
 
-    Value * terminated = nullptr;
 
+    Value * terminated = nullptr;
     if (ExternallySynchronized) {
         b->CreateBr(mPipelineEnd);
     } else {

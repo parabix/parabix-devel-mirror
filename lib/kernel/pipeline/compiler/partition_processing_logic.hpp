@@ -70,24 +70,43 @@ inline void PipelineCompiler::addPartitionInputItemCounts(BuilderRef b, const si
 inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {    
     mPipelineLoop = b->CreateBasicBlock("PipelineLoop");
     mPartitionEntryPoint.resize(PartitionCount + 1);
+
+    mPartitionJumpPoint.resize(PartitionCount);
+    mPartitionExitPoint.resize(PartitionCount);
+
     for (unsigned i = 0; i <= PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }
 
     mPipelineProgressAtPartitionExit.resize(PartitionCount + 1, nullptr);
 
-    mPartitionTerminatedAtTerminatedInitially.resize(PartitionCount, nullptr);
-    mPartitionTerminatedAtPartitionExit.resize(PartitionCount, nullptr);
-    mPartitionInitiallyTerminatedExit.resize(PartitionCount, nullptr);
+    mPartitionTerminationSignalPhi.resize(PartitionCount, nullptr);
+    mPartitionTerminationSignal.resize(PartitionCount, nullptr);
+    mPartitionTerminationAtJumpExitSignal.resize(PartitionCount, nullptr);
 
     const auto ip = b->saveIP();
 
-    Type * const boolTy = b->getInt1Ty();
+    IntegerType * const boolTy = b->getInt1Ty();
     for (unsigned i = 1; i <= PartitionCount; ++i) {
         b->SetInsertPoint(mPartitionEntryPoint[i]);
-        mPipelineProgressAtPartitionExit[i] = b->CreatePHI(boolTy, PartitionCount, "PipelineProgress" + std::to_string(i));
+        mPipelineProgressAtPartitionExit[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".pipelineProgress");
+    }
+#if 0
+    IntegerType * const sizeTy = b->getSizeTy();
+    for (const auto e : make_iterator_range(edges(mPartitionJumpGraph))) {
+        const auto j = target(e, mPartitionJumpGraph);
+        b->SetInsertPoint(mPartitionEntryPoint[j]);
+        const auto i = source(e, mPartitionJumpGraph);
+//        PHINode * const phi = b->CreatePHI(sizeTy, in_degree(j, mPartitionJumpGraph), std::to_string(i) + ".terminationSignal");
+//        mPartitionJumpGraph[e].Phi = phi;
     }
 
+//    for (unsigned i = 0; i < PartitionCount; ++i) {
+//        const auto j = mPartitionJumpIndex[i];
+//        b->SetInsertPoint(mPartitionEntryPoint[j]);
+//        mPartitionTerminationSignalJumpCombinePhi[i] = b->CreatePHI(sizeTy, PartitionCount, "terminationSignal" + std::to_string(i));
+//    }
+#endif
     b->restoreIP(ip);
 
     mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
@@ -152,9 +171,9 @@ void PipelineCompiler::jumpToNextPartition(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeInitParitionJump
+ * @brief writeOnInitialTerminationJumpToNextPartitionToCheck
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::writeInitParitionJump(BuilderRef b) {
+inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToCheck(BuilderRef b) {
     if (mKernelIsInternallySynchronized) {
         releaseSynchronizationLock(b, LockType::ItemCheck);
         startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
@@ -162,15 +181,57 @@ inline void PipelineCompiler::writeInitParitionJump(BuilderRef b) {
     }
     releaseSynchronizationLock(b, LockType::Segment);
 
+    const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+
+//    auto lastKernel = mKernel + 1;
+//    for (; lastKernel <= LastKernel; ++lastKernel) {
+//        if (mPartitionJumpIndex[lastKernel] != jumpId) {
+//            break;
+//        }
+//        readProducedItemCounts(b, lastKernel);
+//    }
+
+
+
+
     BasicBlock * const exitBlock = b->GetInsertBlock();
 
-    mPartitionTerminatedAtTerminatedInitially[mCurrentPartitionId] = mTerminatedInitially;
-    mPartitionInitiallyTerminatedExit[mCurrentPartitionId] = exitBlock;
+    mPartitionJumpPoint[mCurrentPartitionId] = exitBlock;
+    mPartitionTerminationAtJumpExitSignal[mCurrentPartitionId] = mTerminatedInitially;
 
-    const auto pid = mPartitionJumpIndex[mCurrentPartitionId];
-    PHINode * const p = mPipelineProgressAtPartitionExit[pid];
+    PHINode * const p = mPipelineProgressAtPartitionExit[jumpId]; assert (p);
     p->addIncoming(mPipelineProgress, exitBlock);
 
+#if 0
+
+    // pass any previously resolved termination states
+    for (const auto e : make_iterator_range(in_edges(jumpId, mPartitionJumpGraph))) {
+        PHINode * const p = mPartitionJumpGraph[e].Phi; assert (p);
+        // If we have not yet executed the partition, assume it inherits this
+        // partition's termination signal.
+        Value * val = nullptr;
+        const auto i = source(e, mPartitionJumpGraph);
+        if (i < mCurrentPartitionId) {
+            val = mPartitionTerminationSignal[i]; assert (val);
+        } else {
+            val = mTerminatedInitially;
+        }
+        p->addIncoming(val, exitBlock);
+
+
+//        const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+//        for (unsigned i = 0; i < numOfOutputs; ++i) {
+//            const auto port = StreamSetPort{ PortType::Output, i };
+//            const auto prefix = makeBufferName(mKernelId, port);
+//            PHINode * const fullyProduced = b->CreatePHI(sizeTy, 2, prefix + "_fullyProducedAtKernelExit");
+//            mFullyProducedItemCount(port) = fullyProduced;
+//        }
+
+    }
+
+#endif
+
+    // Finally jump to our next partition that may have input
     b->CreateBr(mNextPartitionWithPotentialInput);
 }
 
@@ -183,10 +244,16 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
     const auto nextPartitionId = KernelPartitionId[mKernelId + 1];
 
     if (nextPartitionId != mCurrentPartitionId) {
-
+        assert (mCurrentPartitionId < nextPartitionId);
         assert (nextPartitionId <= PartitionCount);
         BasicBlock * const nextPartition = mPartitionEntryPoint[nextPartitionId];
         BasicBlock * const exitBlock = b->GetInsertBlock();
+        // When entering here, mPartitionTerminationSignal[mCurrentPartitionId] will pointer to the initially
+        // terminated state. Update it to reflect the state upon exiting this partition. Depending on which
+        // partitions jump into the next partition, we may end up immediately phi-ing it out. Thus this must
+        // be done before the subsequent phi-out loop.
+        mPartitionTerminationSignal[mCurrentPartitionId] = mTerminatedAtExitPhi;
+        mPartitionExitPoint[mCurrentPartitionId] = exitBlock;
         b->CreateBr(nextPartition);
 
         b->SetInsertPoint(nextPartition);
@@ -195,18 +262,66 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
         assert (mTerminatedAtExitPhi);
         mPipelineProgress = p;
 
-        mPartitionTerminatedAtPartitionExit[mCurrentPartitionId] = mTerminatedAtExitPhi;
 
-        IntegerType * const sizeTy = b->getSizeTy();
+        const auto n = in_degree(nextPartitionId, mPartitionJumpGraph);
 
-        for (auto i = 0U; i <= mCurrentPartitionId; ++i) {
-            if (mPartitionJumpIndex[i] == nextPartitionId)  {
-                PHINode * const p = b->CreatePHI(sizeTy, 2);
-                p->addIncoming(mPartitionTerminatedAtPartitionExit[i], exitBlock);
-                p->addIncoming(mPartitionTerminatedAtTerminatedInitially[i], mPartitionInitiallyTerminatedExit[i]);
-                mPartitionTerminatedAtPartitionExit[i] = p;
+        if (n) {
+
+            std::vector<size_t> O;
+            O.reserve(n);
+            for (const auto e : make_iterator_range(in_edges(nextPartitionId, mPartitionJumpGraph))) {
+                O.push_back(source(e, mBufferGraph));
             }
+            std::sort(O.begin(), O.end());
+
+            std::vector<Value *> P(n);
+            std::vector<Value *> V(n);
+
+            IntegerType * const sizeTy = b->getSizeTy();
+            for (unsigned i = 0; i != n; ++i) {
+                const auto k = O[i];
+                PHINode * const p = b->CreatePHI(sizeTy, n + 1, std::to_string(k) + ".terminationSignal");
+                for (unsigned j = i; j != n; ++j) {
+                    V[j] = mPartitionTerminationAtJumpExitSignal[O[j]];
+                }
+                for (unsigned j = 0; j != n; ++j) {
+                    p->addIncoming(V[j], mPartitionJumpPoint[O[j]]);
+                }
+                V[i] = mPartitionTerminationSignal[k];
+                p->addIncoming(V[i], exitBlock);
+                P[i] = p;
+            }
+
+            for (unsigned i = 0; i != n; ++i) {
+                mPartitionTerminationSignal[O[i]] = P[i];
+            }
+
         }
+
+
+
+#if 0
+
+        // When entering here, mPartitionTerminationSignal[mCurrentPartitionId] will pointer to the initially
+        // terminated state. Update it to reflect the state upon exiting this partition. Depending on which
+        // partitions jump into the next partition, we may end up immediately phi-ing it out. Thus this must
+        // be done before the subsequent phi-out loop.
+        mPartitionTerminationSignal[mCurrentPartitionId] = mTerminatedAtExitPhi;
+
+        for (const auto e : make_iterator_range(in_edges(nextPartitionId, mPartitionJumpGraph))) {
+            PHINode * const p = mPartitionJumpGraph[e].Phi; assert (p);
+            const auto i = source(e, mPartitionJumpGraph);
+            Value * const v = mPartitionTerminationSignal[i]; assert(v);
+            assert (p != v);
+            p->addIncoming(v, exitBlock);
+            mPartitionTerminationSignal[i] = p;
+
+
+
+
+        }
+
+#endif
 
     }
 }

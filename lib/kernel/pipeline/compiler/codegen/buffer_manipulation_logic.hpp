@@ -406,8 +406,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         }
 
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelInsufficientIOExit);
-        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelInsufficientIOExit);
+        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelInsufficientInput);
+        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelInsufficientInput);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
         Value * const baseAddress = buffer->getBaseAddress(b);
         #ifdef PRINT_DEBUG_MESSAGES
