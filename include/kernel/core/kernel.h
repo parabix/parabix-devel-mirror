@@ -410,6 +410,8 @@ protected:
 
     llvm::Function * addFinalizeDeclaration(BuilderRef b) const;
 
+    virtual void runOptimizationPasses(BuilderRef b) const;
+
 public:
 
     llvm::Function * addOrDeclareMainFunction(BuilderRef b, const MainMethodGenerationType method) const;

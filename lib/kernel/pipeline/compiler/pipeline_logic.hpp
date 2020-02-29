@@ -564,8 +564,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         mScalarValue[i] = b->CreateCall(getKernelFinalizeFunction(b), params);
     }
     releaseOwnedBuffers(b, true);
-    resetInternalBufferHandles();
-    simplifyPhiNodes(b);
+    resetInternalBufferHandles();        
 }
 
 enum : unsigned {

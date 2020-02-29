@@ -157,6 +157,13 @@ void PipelineKernel::recursivelyConstructFamilyKernels(BuilderRef b, InitArgs & 
 
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief runOptimizationPasses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineKernel::runOptimizationPasses(BuilderRef b) const {
+    COMPILER->runOptimizationPasses(b);
+}
+
 #define JOIN3(X,Y,Z) BOOST_JOIN(X,BOOST_JOIN(Y,Z))
 
 #define REPLACE_INTERNAL_KERNEL_BINDINGS(BindingType) \

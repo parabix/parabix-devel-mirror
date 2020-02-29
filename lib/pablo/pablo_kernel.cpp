@@ -188,7 +188,9 @@ void PabloKernel::generateDoBlockMethod(BuilderRef b) {
 
 void PabloKernel::generateFinalBlockMethod(BuilderRef b, Value * const remainingBytes) {
     // Standard Pablo convention for final block processing: set a bit marking
-    // the position just past EOF, as well as a mask marking all positions past EOF.    
+    // the position just past EOF, as well as a mask marking all positions past EOF.
+    assert (remainingBytes);
+    assert (remainingBytes->getType()->isIntegerTy());
     b->setScalarField("EOFbit", b->bitblock_set_bit(remainingBytes));
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
     RepeatDoBlockLogic(b);

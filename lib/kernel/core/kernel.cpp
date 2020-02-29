@@ -1110,6 +1110,13 @@ void Kernel::recursivelyConstructFamilyKernels(BuilderRef /* b */, InitArgs & /*
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief runOptimizationPasses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void Kernel::runOptimizationPasses(BuilderRef /* b */) const {
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief getStringHash
  *
  * Create a fixed length string hash of the given str

@@ -134,6 +134,8 @@ protected:
 
     void generateFinalizeMethod(BuilderRef b) final;
 
+    void runOptimizationPasses(BuilderRef b) const final;
+
 protected:
 
     const unsigned                            mNumOfThreads;

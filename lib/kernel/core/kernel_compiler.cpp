@@ -63,7 +63,6 @@ void KernelCompiler::generateKernel(BuilderRef b) {
     callGenerateFinalizeThreadLocalMethod(b);
     callGenerateFinalizeMethod(b);
     mTarget->addAdditionalFunctions(b);
-    b->setCompiler(oc);
 
     // TODO: we could create a LLVM optimization pass manager here and execute it on this kernel;
     // it would allow the programmer to define a set of optimizations they want executed on the
@@ -72,6 +71,9 @@ void KernelCompiler::generateKernel(BuilderRef b) {
 
     // What is the cost of generating a pass manager instance for each compiled kernel vs.
     // the complexity of using a factory?
+
+    mTarget->runOptimizationPasses(b);
+    b->setCompiler(oc);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -2285,15 +2285,33 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePartitionJumpGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-PartitionJumpGraph PipelineCompiler::makePartitionJumpGraph() const {
-    PartitionJumpGraph G(PartitionCount + 1);
+PartitionJumpTree PipelineCompiler::makePartitionJumpGraph() const {
+    PartitionJumpTree G(PartitionCount + 1);
     for (auto i = 0U; i < PartitionCount; ++i) {
         add_edge(i, mPartitionJumpIndex[i], G);
     }
-    transitive_closure_dag(G);
+    #ifndef NDEBUG
+    graph_traits<PartitionJumpTree>::edge_iterator begin, end;
+    std::tie(begin, end) = edges(G);
+    for (auto ei = begin; ei != end; ++ei) {
+        const auto u1 = source(*ei, G);
+        const auto v1 = target(*ei, G);
+        for (auto ej = ei; ++ej != end; ) {
+            const auto u2 = source(*ej, G);
+            const auto v2 = target(*ej, G);
 
+            const auto j_nested_within_i = (u1 <= u2) && (v2 <= v1);
+            const auto j_before_i = (v2 <= u1);
+            const auto i_nested_within_j = (u2 <= u1) && (v1 <= v2);
+            const auto i_before_j = (v1 <= u2);
+            const auto valid = (j_before_i || j_nested_within_i || i_before_j || i_nested_within_j);
+
+            assert ("jump graph contains a crossing edge!" && valid);
+        }
+    }
+    #endif
+    // transitive_closure_dag(G);
     printGraph(G, errs(), "J");
-
     return G;
 }
 

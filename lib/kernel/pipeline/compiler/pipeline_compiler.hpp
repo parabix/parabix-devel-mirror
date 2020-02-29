@@ -440,7 +440,7 @@ struct PartitionJumpNode {
     mutable PHINode * Phi;
 };
 
-using PartitionJumpGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, PartitionJumpNode, no_property>;
+using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
 
 struct PipelineGraphBundle {
     static constexpr unsigned PipelineInput = 0U;
@@ -610,12 +610,11 @@ public:
     void generateFinalizeMethod(BuilderRef b);
     void generateFinalizeThreadLocalMethod(BuilderRef b);
     std::vector<Value *> getFinalOutputScalars(BuilderRef b) override;
+    void runOptimizationPasses(BuilderRef b);
 
 private:
 
     PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P);
-
-    void simplifyPhiNodes(BuilderRef b) const;
 
 // internal pipeline state construction functions
 
@@ -848,6 +847,10 @@ public:
 
     void printItemCountDeltas(BuilderRef b, const StringRef title, const StringRef suffix) const;
 
+// internal optimization passes
+
+    void simplifyPhiNodes(Module * const m) const;
+
 // pipeline analysis functions
 
     using KernelPartitionIds = flat_map<Relationships::vertex_descriptor, unsigned>;
@@ -893,7 +896,7 @@ public:
 
     PartitioningGraph generatePartitioningGraph() const;
     Vec<unsigned> determinePartitionJumpIndices() const;
-    PartitionJumpGraph makePartitionJumpGraph() const;
+    PartitionJumpTree makePartitionJumpGraph() const;
 
 
 // buffer management analysis functions
@@ -1039,7 +1042,7 @@ protected:
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
     const Vec<unsigned>                         mPartitionJumpIndex;
-    const PartitionJumpGraph                    mPartitionJumpGraph;
+    const PartitionJumpTree                    mPartitionJumpTree;
 
 
     const BufferPortMap                         mInputPortSet;
@@ -1100,7 +1103,7 @@ protected:
 
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
     Vec<PHINode *>                              mPartitionTerminationSignalPhi;
-    Vec<Value *>                                mPartitionTerminationAtJumpExitSignal;
+    Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
     Vec<Value *>                                mPartitionTerminationSignal;
 
     // kernel state
@@ -1314,7 +1317,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 
 , mPartitioningGraph(generatePartitioningGraph())
 , mPartitionJumpIndex(determinePartitionJumpIndices())
-, mPartitionJumpGraph(makePartitionJumpGraph())
+, mPartitionJumpTree(makePartitionJumpGraph())
 
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())

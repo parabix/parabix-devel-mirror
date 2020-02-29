@@ -8,11 +8,26 @@
 
 namespace kernel {
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief runOptimizationPasses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
+
+    // To make sure the optimizations aren't hiding an error, first run the verifier
+    // detect any possible errors prior to optimizing it.
+
+    // assert (!verifyModule(*b->getModule()));
+
+    simplifyPhiNodes(b->getModule());
+
+    b->getModule()->print(errs(), nullptr);
+
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief simplifyPhiNodes
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
+inline void PipelineCompiler::simplifyPhiNodes(Module * const m) const {
 
     // LLVM is not aggressive enough with how it deals with phi nodes. To ensure that
     // we collapse every phi node in which all incoming values are identical into the
@@ -22,19 +37,15 @@ inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
 
 
 
-    // To make sure this pass isn't hiding an error by removing a phi node, first run
-    // the verifier on this to detect any possible errors prior to optimizing it.
-    // assert (!verifyModule(*b->getModule()));
 
-    Function * const f = b->GetInsertBlock()->getParent();
-    for (BasicBlock & bb : f->getBasicBlockList()) {
-        Instruction * inst = &bb.getInstList().front();
-        for (;;) {
-            if (LLVM_LIKELY(isa<PHINode>(inst))) {
+    for (Function & f : m->getFunctionList()) {
+        for (BasicBlock & bb : f.getBasicBlockList()) {
+            Instruction * inst = &bb.getInstList().front();
+            while (isa<PHINode>(inst)) {
                 PHINode * const phi = cast<PHINode>(inst);
+                assert (phi->getNumIncomingValues() > 0);
                 inst = inst->getNextNode();
                 if (LLVM_LIKELY(phi->hasNUsesOrMore(1))) {
-                    assert (phi && phi->getNumIncomingValues() > 0);
                     Value * const value = phi->getIncomingValue(0);
                     const auto n = phi->getNumIncomingValues();
                     for (unsigned i = 1; i != n; ++i) {
@@ -47,7 +58,6 @@ inline void PipelineCompiler::simplifyPhiNodes(BuilderRef b) const {
                 RecursivelyDeleteDeadPHINode(phi);
 keep_phi_node:  continue;
             }
-            break;
         }
     }
 
