@@ -49,5 +49,11 @@ to override cmake's default search path.
 
 cmake -DCMAKE_PREFIX_PATH=path/to/libllvm -DCMAKE_BUILD_TYPE=Release ..
 
+Then, while you are still in the build directory, build the software and 
+run the test suite, by issuing the following two commands.
+make
+make check
+
+
 LLVM files are governed by the LLVM Release License in LLVM-LICENSE.txt.
 icgrep is governed by Open Software License 3.0 in OSL-3.0.txt.
