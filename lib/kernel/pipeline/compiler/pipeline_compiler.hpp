@@ -436,10 +436,6 @@ bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B
 
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
-struct PartitionJumpNode {
-    mutable PHINode * Phi;
-};
-
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
 
 struct PipelineGraphBundle {
@@ -539,6 +535,8 @@ template <typename T>
 using OwningVec = std::vector<std::unique_ptr<T>>;
 
 using BufferPortMap = flat_set<std::pair<unsigned, unsigned>>;
+
+using PartitionJumpPhiOutMap = flat_map<std::pair<unsigned, unsigned>, Value *>;
 
 #define BEGIN_SCOPED_REGION {
 #define END_SCOPED_REGION }
@@ -712,6 +710,7 @@ public:
 
     void computeFullyProcessedItemCounts(BuilderRef b);
     void computeFullyProducedItemCounts(BuilderRef b);
+    Value * computeFullyProducedItemCount(BuilderRef b, const StreamSetPort port, Value * produced, Value * const terminationSignal);
 
     void updatePhisAfterTermination(BuilderRef b);
 
@@ -751,7 +750,7 @@ public:
     Value * addLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) const;
     Value * subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount);
     Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
-    Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const;
+    Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * const terminationSignal) const;
 
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
@@ -896,7 +895,7 @@ public:
 
     PartitioningGraph generatePartitioningGraph() const;
     Vec<unsigned> determinePartitionJumpIndices() const;
-    PartitionJumpTree makePartitionJumpGraph() const;
+    PartitionJumpTree makePartitionJumpTree() const;
 
 
 // buffer management analysis functions
@@ -1042,7 +1041,7 @@ protected:
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
     const Vec<unsigned>                         mPartitionJumpIndex;
-    const PartitionJumpTree                    mPartitionJumpTree;
+    const PartitionJumpTree                     mPartitionJumpTree;
 
 
     const BufferPortMap                         mInputPortSet;
@@ -1095,16 +1094,18 @@ protected:
 
     // partition state
     Vec<BasicBlock *>                           mPartitionEntryPoint;
-    Vec<BasicBlock *>                           mPartitionJumpPoint;
+    Vec<BasicBlock *>                           mPartitionJumpExitPoint;
     Vec<BasicBlock *>                           mPartitionExitPoint;
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
 
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
-    Vec<PHINode *>                              mPartitionTerminationSignalPhi;
     Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
     Vec<Value *>                                mPartitionTerminationSignal;
+
+    PartitionJumpPhiOutMap                      mPartitionProducedItemCountAtJumpExit;
+
 
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
@@ -1317,7 +1318,7 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 
 , mPartitioningGraph(generatePartitioningGraph())
 , mPartitionJumpIndex(determinePartitionJumpIndices())
-, mPartitionJumpTree(makePartitionJumpGraph())
+, mPartitionJumpTree(makePartitionJumpTree())
 
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())

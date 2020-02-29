@@ -72,8 +72,6 @@ StreamsIntersect::StreamsIntersect(BuilderRef b, const std::vector<StreamSet *> 
         mInputStreamSets.push_back(Binding{"input" + std::to_string(i), inputs[i]});
     }
     mOutputStreamSets.push_back(Binding{"output", output});    
-    #warning remove this after testing!
-    addAttribute(MayFatallyTerminate());
 }
 
 void StreamsIntersect::generateDoBlockMethod(BuilderRef b) {

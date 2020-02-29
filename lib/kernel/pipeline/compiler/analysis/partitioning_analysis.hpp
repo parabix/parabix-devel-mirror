@@ -2274,8 +2274,8 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
     }
 
     END_SCOPED_REGION
-    Vec<unsigned> jumpIndices(PartitionCount);
-    for (unsigned u = 0; u < PartitionCount; ++u) {
+    Vec<unsigned> jumpIndices(PartitionCount + 1);
+    for (unsigned u = 0; u <= PartitionCount; ++u) {
         jumpIndices[u] = child(u, G);
     }
     return jumpIndices;
@@ -2285,7 +2285,7 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePartitionJumpGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-PartitionJumpTree PipelineCompiler::makePartitionJumpGraph() const {
+PartitionJumpTree PipelineCompiler::makePartitionJumpTree() const {
     PartitionJumpTree G(PartitionCount + 1);
     for (auto i = 0U; i < PartitionCount; ++i) {
         add_edge(i, mPartitionJumpIndex[i], G);
@@ -2306,11 +2306,10 @@ PartitionJumpTree PipelineCompiler::makePartitionJumpGraph() const {
             const auto i_before_j = (v1 <= u2);
             const auto valid = (j_before_i || j_nested_within_i || i_before_j || i_nested_within_j);
 
-            assert ("jump graph contains a crossing edge!" && valid);
+            assert ("jump graph G contains a crossing edge? G cannot be a tree!" && valid);
         }
     }
     #endif
-    // transitive_closure_dag(G);
     printGraph(G, errs(), "J");
     return G;
 }

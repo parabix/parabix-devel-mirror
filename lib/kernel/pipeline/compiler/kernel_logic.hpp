@@ -39,8 +39,8 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
         } else {
             processed = mUpdatedProcessedPhi(port);
         }
-        processed = truncateBlockSize(b, input, processed);
-        mFullyProcessedItemCount(port) = processed;
+        Value * const fullyProcessed = truncateBlockSize(b, input, processed, mTerminatedAtLoopExitPhi);
+        mFullyProcessedItemCount(port) = fullyProcessed;
     }
 }
 
@@ -49,25 +49,34 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
 
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    for (unsigned i = 0; i < numOfOutputs; ++i) {
+        const StreamSetPort port{PortType::Output, i};
+        Value * produced = mUpdatedProducedPhi(port);
+        Value * const fullyProduced = computeFullyProducedItemCount(b, port, produced, mTerminatedAtLoopExitPhi);
+        mFullyProducedItemCount(port)->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief computeFullyProducedItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b, const StreamSetPort port,
+                                                     Value * produced, Value * const terminationSignal) {
+
     // TODO: we only need to consider the blocksize attribute if it's possible this
     // stream could be read before being fully written. This might occur if one of
     // it's consumers has a non-Fixed rate that does not have a matching BlockSize
     // attribute.
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort port{PortType::Output, i};
-        const Binding & output = getOutputBinding(port);
-        Value * produced = mUpdatedProducedPhi(port);
-        if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
-            const auto & D = output.findAttribute(AttrId::Delayed);
-            Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
-            Value * const terminated = b->CreateIsNotNull(mTerminatedAtLoopExitPhi);
-            produced = b->CreateSelect(terminated, produced, delayed);
-        }
-        produced = truncateBlockSize(b, output, produced);
-        mFullyProducedItemCount(port)->addIncoming(produced, mKernelLoopExitPhiCatch);
+    const Binding & output = getOutputBinding(port);
+    if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
+        const auto & D = output.findAttribute(AttrId::Delayed);
+        Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
+        Value * const terminated = b->CreateIsNotNull(terminationSignal);
+        produced = b->CreateSelect(terminated, produced, delayed);
     }
+    return truncateBlockSize(b, output, produced, terminationSignal);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -129,7 +138,7 @@ Constant * PipelineCompiler::getLookahead(BuilderRef b, const StreamSetPort inpu
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief maskBlockSize
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount) const {
+Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * const terminationSignal) const {
     // TODO: if we determine all of the inputs of a stream have a blocksize attribute, or the output has one,
     // we can skip masking it on input
 
@@ -141,7 +150,7 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
         // stride has been processed.
         Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
         Value * const maskedItemCount = b->CreateAnd(itemCount, ConstantExpr::getNeg(BLOCK_WIDTH));
-        Value * const terminated = hasKernelTerminated(b, mKernelId);
+        Value * const terminated = b->CreateIsNotNull(terminationSignal);
         itemCount = b->CreateSelect(terminated, itemCount, maskedItemCount);
     }
     return itemCount;
