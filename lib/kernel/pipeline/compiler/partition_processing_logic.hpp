@@ -173,44 +173,92 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
     // (3) if we have yet to execute (and will be jumping over) the kernel, load
     // the prior produced count.
 
-    for (auto k = FirstKernel; k <= LastKernel; ++k) {
-        const auto p = KernelPartitionId[k];
-        if (mPartitionJumpIndex[p] == jumpId) {
-            for (const auto e : make_iterator_range(out_edges(k, mBufferGraph))) {
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        if ((kernel < mKernelId) || mPartitionJumpIndex[KernelPartitionId[kernel]] == jumpId) {
+
+            for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(e, mBufferGraph);
+
                 // If the consumer of this stream set is dominated by the jump target,
                 // we'll need to store the produced item count for later use.
-                bool requiresPhi = false;
+                bool prepareProducedPhi = false;
                 for (const auto f : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
                     const auto consumer = target(f, mBufferGraph);
                     const auto p = KernelPartitionId[consumer];
                     if (p >= jumpId) {
-                        requiresPhi = true;
+                        prepareProducedPhi = true;
                         break;
                     }
                 }
-                if (requiresPhi) {
+                if (prepareProducedPhi) {
                     const BufferRateData & br = mBufferGraph[e];
                     // Select/compute/load the appropriate produced item count
                     Value * produced = nullptr;
-                    if (k < mKernelId) {
-                        produced = mFullyProducedItemCount(k, br.Port);
-                    } else if (k == mKernelId) {
-                        produced = mAlreadyProducedDeferredPhi(k, br.Port);
-                        if (LLVM_LIKELY(produced == nullptr)) {
-                            produced = mAlreadyProducedPhi(k, br.Port);
-                        }
-                        produced = computeFullyProducedItemCount(b, br.Port, produced, mTerminatedInitially);
+                    if (kernel < mKernelId) {
+                        produced = mLocallyAvailableItems[getBufferIndex(streamSet)];
                     } else {
-                        const Binding & output = getOutputBinding(k, br.Port);
-                        const auto prefix = makeBufferName(k, br.Port);
-                        if (output.isDeferred()) {
-                            produced = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+                        const Binding & output = br.Binding;
+                        const auto deferred = output.isDeferred();
+                        if (kernel == mKernelId) {
+                            IntegerType * const sizeTy = b->getSizeTy();
+
+                            const auto ip = b->saveIP();
+
+                            // Create the PHI node at the start of the basicblock.
+                            b->SetInsertPoint(mKernelJumpToNextUsefulPartition, mKernelJumpToNextUsefulPartition->begin());
+
+                            Value * intermediateProducedPhi = nullptr;
+                            Value * initialProducedPhi = nullptr;
+                            if (LLVM_UNLIKELY(deferred)) {
+                                intermediateProducedPhi = mAlreadyProducedDeferredPhi(br.Port);
+                                initialProducedPhi = mInitiallyProducedDeferredItemCount(br.Port);
+                            } else {
+                                intermediateProducedPhi = mAlreadyProducedPhi(br.Port);
+                                initialProducedPhi = mInitiallyProducedItemCount[streamSet];
+                            }
+
+                            PHINode * const producedPhi = b->CreatePHI(sizeTy, 2);
+                            if (mKernelInsufficientInputExit) {
+                                producedPhi->addIncoming(intermediateProducedPhi, mKernelInsufficientInputExit);
+                            }
+                            if (mKernelInitiallyTerminatedExit) {
+                                producedPhi->addIncoming(initialProducedPhi, mKernelInitiallyTerminatedExit);
+                            }
+                            b->restoreIP(ip);
+
+                            produced = producedPhi;
                         } else {
-                            produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+                            const auto prefix = makeBufferName(kernel, br.Port);
+                            if (LLVM_UNLIKELY(deferred)) {
+                                produced = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
+                            } else {
+                                produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+                            }
                         }
+                        produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);
                     }
-                    mPartitionProducedItemCountAtJumpExit.emplace(std::make_pair(p, streamSet), produced);
+                    // Store the produced item count at the point we're jumping out of the partition
+                    mPartitionProducedItemCountAtJumpExit.emplace(std::make_pair(streamSet, mCurrentPartitionId), produced);
+                }
+
+                bool prepareConsumedPhi = false;
+                for (const auto f : make_iterator_range(out_edges(streamSet, mConsumerGraph))) {
+                    const auto consumer = target(f, mConsumerGraph);
+                    const auto p = KernelPartitionId[consumer];
+                    if (p >= jumpId) {
+                        prepareConsumedPhi = true;
+                        break;
+                    }
+                }
+                if (prepareConsumedPhi) {
+                    Value * consumed = nullptr;
+                    if (kernel <= mKernelId) {
+                        consumed = mConsumedItemCount[streamSet];
+                    } else {
+                        consumed = readConsumedItemCount(b, streamSet);
+                    }
+                    // Store the produced item count at the point we're jumping out of the partition
+                    mPartitionConsumedItemCountAtJumpExit.emplace(std::make_pair(streamSet, mCurrentPartitionId), consumed);
                 }
             }
         }
@@ -226,6 +274,8 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
     // Finally jump to our next partition that may have input
     b->CreateBr(mNextPartitionWithPotentialInput);
 }
+
+
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -262,11 +312,10 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
         if (n) {
 
             // Gather all of the incoming non-local streams for any dominated partitions
-            flat_set<size_t> streamSets;
+            flat_set<unsigned> streamSets;
             const auto nextJumpId = mPartitionJumpIndex[nextPartitionId];
             for (auto k = (mKernelId + 1); k <= LastKernel; ++k) {
-                const auto p = KernelPartitionId[k];
-                if (p == nextJumpId) {
+                if (KernelPartitionId[k] == nextJumpId) {
                     break;
                 }
                 for (const auto e : make_iterator_range(in_edges(k, mBufferGraph))) {
@@ -277,18 +326,71 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
                     // producer's partition is < the partition after the current kernel,
                     // then we need to phi it out.
                     if (partitionId < nextPartitionId) {
-                        streamSets.insert(streamSet);
+                        streamSets.emplace(streamSet);
                     }
                 }
             }
 
-            const auto m = streamSets;
 
-            // Phi out the termination signals + produced/consumed item counts
             IntegerType * const sizeTy = b->getSizeTy();
             InEdgeIterator begin, end;
             std::tie(begin, end) = in_edges(nextPartitionId, mPartitionJumpTree);
 
+            // Phi-out all of the produced item counts
+            for (const auto streamSet : streamSets) {
+
+                PHINode * const producedPhi = b->CreatePHI(sizeTy, n + 1);
+                for (auto ej = begin; ej != end; ++ej) {
+                    const auto j = source(*ej, mPartitionJumpTree);
+                    const auto f = mPartitionProducedItemCountAtJumpExit.find(std::make_pair(streamSet, j));
+                    assert (f != mPartitionProducedItemCountAtJumpExit.end());
+                    Value * const incomingValue = f->second;
+                    BasicBlock * const exit = mPartitionJumpExitPoint[j];
+                    producedPhi->addIncoming(incomingValue, exit);
+                }
+
+                const auto k = getBufferIndex(streamSet);
+                Value * const avail = mLocallyAvailableItems[k];
+                producedPhi->addIncoming(avail, exitBlock);
+                mLocallyAvailableItems[k] = producedPhi;
+            }
+
+            streamSets.clear();
+
+            for (auto k = (mKernelId + 1); k <= LastKernel; ++k) {
+                if (KernelPartitionId[k] == nextJumpId) {
+                    break;
+                }
+                for (const auto e : make_iterator_range(in_edges(k, mConsumerGraph))) {
+                    const auto streamSet = source(e, mConsumerGraph);
+                    const auto producer = parent(streamSet, mConsumerGraph);
+                    const auto partitionId = KernelPartitionId[producer];
+                    // Since every partition is numbered in order of execution, if the
+                    // producer's partition is < the partition after the current kernel,
+                    // then we need to phi it out.
+                    if (partitionId < nextPartitionId) {
+                        streamSets.emplace(streamSet);
+                    }
+                }
+            }
+
+            // Phi-out all of the consumed item counts
+            for (const auto streamSet : streamSets) {
+                PHINode * const producedPhi = b->CreatePHI(sizeTy, n + 1);
+                for (auto ej = begin; ej != end; ++ej) {
+                    const auto j = source(*ej, mPartitionJumpTree);
+                    const auto f = mPartitionConsumedItemCountAtJumpExit.find(std::make_pair(streamSet, j));
+                    assert (f != mPartitionConsumedItemCountAtJumpExit.end());
+                    Value * const incomingValue = f->second;
+                    BasicBlock * const exit = mPartitionJumpExitPoint[j];
+                    producedPhi->addIncoming(incomingValue, exit);
+                }
+                const ConsumerNode & cn = mConsumerGraph[streamSet];
+                producedPhi->addIncoming(cn.Consumed, exitBlock);
+                cn.Consumed = producedPhi;
+            }
+
+            // Phi out the termination signals
             unsigned prior_i = 0;
             for (auto ei = begin; ei != end; ++ei) {
 
@@ -304,33 +406,31 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
                         phiOutPredecessors(source(e, mPartitionJumpTree));
                     }
 
-                    PHINode * const p = b->CreatePHI(sizeTy, n + 1, std::to_string(k) + ".terminationSignal");
 
-
+                    PHINode * const termSignalPhi = b->CreatePHI(sizeTy, n + 1, std::to_string(k) + ".terminationSignal");
                     // If we're phi-ing out a value of a partition when when it was
                     // "jumped over", we inherit the termination signal of the prior
                     // partition.
                     for (auto ej = begin; ej != ei; ++ej) {
                         const auto j = source(*ej, mPartitionJumpTree);
                         BasicBlock * const exit = mPartitionJumpExitPoint[j];
-                        p->addIncoming(mPartitionTerminationSignalAtJumpExit[j], exit);
+                        termSignalPhi->addIncoming(mPartitionTerminationSignalAtJumpExit[j], exit);
 
                     }
 
                     // NOTE: "i" is intentional as i is the value from the outer for loop.
-                    p->addIncoming(mPartitionTerminationSignalAtJumpExit[i], mPartitionJumpExitPoint[i]);
+                    termSignalPhi->addIncoming(mPartitionTerminationSignalAtJumpExit[i], mPartitionJumpExitPoint[i]);
 
                     // If we have successfully executed the partition, we use its actual
                     // termination signal.
                     Value * const termSignal = mPartitionTerminationSignal[k];
                     for (auto ej = ei + 1; ej != end; ++ej) {
                         const auto j = source(*ej, mPartitionJumpTree);
-                        p->addIncoming(termSignal, mPartitionJumpExitPoint[j]);
+                        termSignalPhi->addIncoming(termSignal, mPartitionJumpExitPoint[j]);
                     }
                     // Finally phi-out the "successful" signal
-                    p->addIncoming(termSignal, exitBlock);
-                    // mPartitionTerminationSignalAtJumpExit[k] = p;
-                    mPartitionTerminationSignal[k] = p;
+                    termSignalPhi->addIncoming(termSignal, exitBlock);
+                    mPartitionTerminationSignal[k] = termSignalPhi;
                 };
 
                 phiOutPredecessors(i);

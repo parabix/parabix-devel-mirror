@@ -383,7 +383,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
     #endif
 
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, inputPort);
+    const auto prefix = makeBufferName(mKernelId, inputPort);
     debugPrint(b, prefix + "_available = %" PRIu64, available);
     debugPrint(b, prefix + "_processed = %" PRIu64, processed);
     debugPrint(b, prefix + "_accessible = %" PRIu64, accessible);
@@ -409,14 +409,14 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
  * @brief ensureSufficientOutputSpace
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort  outputPort) {
-    const auto bufferVertex = getOutputBufferVertex(outputPort);
-    const BufferNode & bn = mBufferGraph[bufferVertex];
+    const auto streamSet = getOutputBufferVertex(outputPort);
+    const BufferNode & bn = mBufferGraph[streamSet];
     if (LLVM_UNLIKELY(bn.isUnowned())) {
         return;
     }
     const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
-    Value * const consumed = mConsumedItemCount(outputPort); assert (consumed);
+    Value * const consumed = mConsumedItemCount[streamSet]; assert (consumed);
     Value * const required = mLinearOutputItemsPhi(outputPort);
     ConstantInt * copyBack = nullptr;
     const auto size = getCopyBack(getOutputBufferVertex(outputPort));
@@ -471,12 +471,13 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
  * @brief getWritableOutputItems
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPort outputPort, const bool useOverflow) {
+    const auto streamSet = getOutputBufferVertex(outputPort);
     const Binding & output = getOutputBinding(outputPort);
     const StreamSetBuffer * const buffer = getOutputBuffer(outputPort);
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
-    Value * const consumed = mConsumedItemCount(outputPort); assert (consumed);
+    Value * const consumed = mConsumedItemCount[streamSet]; assert (consumed);
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, outputPort);
+    const auto prefix = makeBufferName(mKernelId, outputPort);
     debugPrint(b, prefix + "_produced = %" PRIu64, produced);
     debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
     debugPrint(b, prefix + "_capacity = %" PRIu64, buffer->getCapacity(b));
@@ -521,7 +522,7 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b, const StreamSe
         numOfStrides = b->CreateUDiv(subtractLookahead(b, inputPort, accessible), strideLength);
     }
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, inputPort);
+    const auto prefix = makeBufferName(mKernelId, inputPort);
     #endif
     Value * const ze = mIsInputZeroExtended(mKernelId, inputPort);
     if (ze) {
@@ -554,7 +555,7 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const StreamSetP
         numOfStrides = b->CreateUDiv(writable, strideLength);
     }
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelIndex, outputPort);
+    const auto prefix = makeBufferName(mKernelId, outputPort);
     debugPrint(b, "> " + prefix + "_numOfStrides = %" PRIu64, numOfStrides);
     #endif
     return numOfStrides;
@@ -635,7 +636,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
 
     #ifdef PRINT_DEBUG_MESSAGES
     if (principalFixedRateFactor) {
-        debugPrint(b, makeKernelName(mKernelIndex) + "_principalFixedRateFactor = %" PRIu64, principalFixedRateFactor);
+        debugPrint(b, makeKernelName(mKernelId) + "_principalFixedRateFactor = %" PRIu64, principalFixedRateFactor);
     }
     #endif
 
@@ -711,7 +712,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
 //                if (LLVM_UNLIKELY(mCheckAssertions)) {
 //                    Value * const accessible = accessibleItems[i];
 //                    Value * correctItemCount = b->CreateICmpULE(calculated, accessible);
-//                    Value * const zeroExtended = mIsInputZeroExtended(mKernelIndex, inputPort);
+//                    Value * const zeroExtended = mIsInputZeroExtended(mKernelId, inputPort);
 //                    if (LLVM_UNLIKELY(zeroExtended != nullptr)) {
 //                        correctItemCount = b->CreateOr(correctItemCount, zeroExtended);
 //                    }
@@ -725,7 +726,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
                 accessibleItems[i] = calculated;
             }
             #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = makeBufferName(mKernelIndex, inputPort);
+            const auto prefix = makeBufferName(mKernelId, inputPort);
             debugPrint(b, prefix + ".accessible' = %" PRIu64, accessibleItems[i]);
             #endif
         }
@@ -768,7 +769,7 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         }
         writableItems[i] = writable;
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
+        const auto prefix = makeBufferName(mKernelId, StreamSetPort{PortType::Output, i});
         debugPrint(b, prefix + ".writable' = %" PRIu64, writableItems[i]);
         #endif
     }
@@ -919,8 +920,6 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     BasicBlock * const popCountEntry = b->GetInsertBlock();
     Value * const initialStrideCount = b->CreateMul(mNumOfLinearStrides, STEP);
 
-    b->CallPrintInt("initialStrideCount", initialStrideCount);
-
     if (peekableItemCount) {
         Value * const hasNonOverflowStride = b->CreateICmpUGE(sourceItemCount, minimumItemCount);
         b->CreateLikelyCondBr(hasNonOverflowStride, popCountLoop, popCountLoopExit);
@@ -938,9 +937,6 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     nextRequiredItems->addIncoming(MAX_INT, popCountEntry);
 
     Value * const strideIndex = b->CreateSub(numOfStrides, STEP);
-
-    b->CallPrintInt("strideIndex", strideIndex);
-
     Value * const ptr = b->CreateInBoundsGEP(baseAddress, strideIndex);
     Value * const requiredItems = b->CreateLoad(ptr);
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);

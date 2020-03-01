@@ -7,6 +7,7 @@
 #endif
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <llvm/IR/LegacyPassManager.h>
 
 namespace kernel {
 
@@ -18,12 +19,25 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
     // To make sure the optimizations aren't hiding an error, first run the verifier
     // detect any possible errors prior to optimizing it.
 
-    // assert (!verifyModule(*b->getModule()));
+    Module * const m = b->getModule();
 
-    simplifyPhiNodes(b->getModule());
+    #ifndef NDEBUG
+    if (LLVM_UNLIKELY(verifyModule(*m, &errs(), nullptr))) {
+        m->print(errs(), nullptr);
+        report_fatal_error("Error during pipeline code generation!");
+    }
+    #endif
 
-    b->getModule()->print(errs(), nullptr);
+    simplifyPhiNodes(m);
 
+    auto pm = make_unique<legacy::PassManager>();
+    pm->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
+    pm->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
+    pm->run(*m);
+
+    simplifyPhiNodes(m);
+
+    // m->print(errs(), nullptr);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -42,13 +56,14 @@ inline void PipelineCompiler::simplifyPhiNodes(Module * const m) const {
 
     for (Function & f : m->getFunctionList()) {
         bool anyPhis = false;
+
         for (BasicBlock & bb : f.getBasicBlockList()) {
 
             preds.assign(pred_begin(&bb), pred_end(&bb));
             const auto n = preds.size();
             value.resize(n);
 
-            Instruction * inst = &bb.getInstList().front();
+            Instruction * inst = &bb.front();
             while (isa<PHINode>(inst)) {
                 PHINode * const phi = cast<PHINode>(inst);
                 assert (phi->getNumIncomingValues() == n);

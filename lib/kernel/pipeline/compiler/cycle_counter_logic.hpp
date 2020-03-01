@@ -1314,8 +1314,9 @@ void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
         Vec<Value *> prior(n);
         for (unsigned i = 0; i != n; ++i) {
             const StreamSetPort port(PortType::Output, i);
+            const auto streamSet = getOutputBufferVertex(port);
             current[i] = mFullyProducedItemCount(port);
-            prior[i] = mInitiallyProducedItemCount(port);
+            prior[i] = mInitiallyProducedItemCount[streamSet];
         }
         recordItemCountDeltas(b, current, prior, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
@@ -1352,8 +1353,9 @@ void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
         Vec<Value *> prior(n);
         for (unsigned i = 0; i != n; ++i) {
             const StreamSetPort port(PortType::Output, i);
-            current[i] = mInitiallyProducedItemCount(port);
-            prior[i] = mConsumedItemCount(port);
+            const auto streamSet = getOutputBufferVertex(port);
+            current[i] = mInitiallyProducedItemCount[streamSet];
+            prior[i] = mConsumedItemCount[streamSet];
         }
         recordItemCountDeltas(b, current, prior, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }

@@ -48,7 +48,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     const auto args = buildKernelCallArgumentList(b);
 
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeKernelName(mKernelIndex);
+    const auto prefix = makeKernelName(mKernelId);
     debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
     debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocationPhi);
     debugHalt(b);
@@ -177,8 +177,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         assert (rt.Port.Type == PortType::Output);
 
         PHINode * const produced = mAlreadyProducedPhi(rt.Port);
-        const auto buffer = target(port, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[buffer];
+        const auto streamSet = target(port, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
         const Binding & output = rt.Binding;
 
         assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
@@ -194,7 +194,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             args.push_back(mLinearOutputItemsPhi(rt.Port));  assert (mLinearOutputItemsPhi(rt.Port));
         }
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            args.push_back(mConsumedItemCount(rt.Port)); assert (mConsumedItemCount(rt.Port));
+            args.push_back(mConsumedItemCount[streamSet]); assert (mConsumedItemCount[streamSet]);
         }
     }
 
@@ -225,7 +225,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 assert (mReturnedProcessedItemCountPtr(inputPort));
                 mProcessedDeferredItemCount(inputPort) = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
                 #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelIndex, inputPort);
+                const auto prefix = makeBufferName(mKernelId, inputPort);
                 debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount(inputPort));
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -258,7 +258,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
         }
         mProcessedItemCount(inputPort) = processed; assert (processed);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, inputPort);
+        const auto prefix = makeBufferName(mKernelId, inputPort);
         debugPrint(b, prefix + "_processed' = %" PRIu64, mProcessedItemCount(inputPort));
         #endif
     }
@@ -274,7 +274,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                 assert (mReturnedProducedItemCountPtr(outputPort));
                 mProducedDeferredItemCount(outputPort) = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
                 #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelIndex, outputPort);
+                const auto prefix = makeBufferName(mKernelId, outputPort);
                 debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount(outputPort));
                 #endif
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -306,7 +306,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
             report_fatal_error(out.str());
         }
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
+        const auto prefix = makeBufferName(mKernelId, StreamSetPort{PortType::Output, i});
         debugPrint(b, prefix + "_produced' = %" PRIu64, produced);
         #endif
         mProducedItemCount(outputPort) = produced;

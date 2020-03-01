@@ -337,33 +337,42 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const St
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readConsumedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(out_edges(mKernelId, mConsumerGraph))) {
-        const ConsumerEdge & c = mConsumerGraph[e];
+void PipelineCompiler::readConsumedItemCounts(BuilderRef b, const size_t kernel) {
+    for (const auto e : make_iterator_range(out_edges(kernel, mConsumerGraph))) {
         const auto streamSet = target(e, mConsumerGraph);
-        Value * consumed = nullptr;
-        const StreamSetPort port(PortType::Output, c.Port);
-        if (LLVM_UNLIKELY(out_degree(streamSet, mConsumerGraph) == 0)) {
-            // This stream either has no consumers or we've proven that its consumption rate
-            // is identical to its production rate.
-            consumed = mInitiallyProducedItemCount(port);
-        } else {
-            const auto prefix = makeBufferName(mKernelId, port);
-            Value * ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
-            if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
-                Constant * const ZERO = b->getInt32(0);
-                ptr = b->CreateInBoundsGEP(ptr, { ZERO, ZERO } );
-            }
-            consumed = b->CreateLoad(ptr);
-        }
-        mConsumedItemCount(port) = consumed; assert (consumed);
+        Value * consumed = readConsumedItemCount(b, streamSet);
+        mConsumedItemCount[streamSet] = consumed; assert (consumed);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, c.Port});
+        const ConsumerEdge & c = mConsumerGraph[e];
+        const StreamSetPort port{PortType::Output, c.Port};
+        const auto prefix = makeBufferName(kernel, port);
         debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
         #endif
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readConsumedItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t streamSet) {
+    if (LLVM_UNLIKELY(out_degree(streamSet, mConsumerGraph) == 0)) {
+        // This stream either has no consumers or we've proven that its consumption rate
+        // is identical to its production rate.
+        return mInitiallyProducedItemCount[streamSet];
+    } else {
+        const auto e = in_edge(streamSet, mConsumerGraph);
+        const ConsumerEdge & c = mConsumerGraph[e];
+        const auto producer = source(e, mConsumerGraph);
+        const StreamSetPort port{PortType::Output, c.Port};
+        const auto prefix = makeBufferName(producer, port);
+        Value * ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
+        if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
+            Constant * const ZERO = b->getInt32(0);
+            ptr = b->CreateInBoundsGEP(ptr, { ZERO, ZERO } );
+        }
+        return b->CreateLoad(ptr);
+    }
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief createConsumedPhiNodes
@@ -379,9 +388,6 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
             const auto prefix = makeBufferName(mKernelId, port);
             PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
             assert (cn.Consumed);
-//            if (mIsPartitionRoot) {
-//                consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
-//            }
             cn.PhiNode = consumedPhi;
         }
     }

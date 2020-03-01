@@ -227,9 +227,10 @@ void PipelineCompiler::readProducedItemCounts(BuilderRef b, const size_t kernel)
         const StreamSetPort outputPort{PortType::Output, i};
         const Binding & output = getOutputBinding(kernel, outputPort);
         const auto prefix = makeBufferName(kernel, outputPort);
-        mInitiallyProducedItemCount(kernel, outputPort) = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
+        const auto streamSet = getOutputBufferVertex(kernel, outputPort);
+        mInitiallyProducedItemCount[streamSet] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount(outputPort));
+        debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount[streamSet]);
         #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
@@ -313,8 +314,9 @@ void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
         setLocallyAvailableItemCount(b, outputPort, fullyProduced);
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, outputPort);
-        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount(outputPort));
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        const auto streamSet = getOutputBufferVertex(outputPort);
+        Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[streamSet]);
         debugPrint(b, prefix + "_producedΔ = %" PRIu64, producedDelta);
         #endif
     }
@@ -414,7 +416,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
             Value * needsCopy = nullptr;
             Constant * const underflow = b->getSize(bn.LookBehind);
             if (LLVM_UNLIKELY(buffer->isLinear())) {
-                Value * const consumed = mConsumedItemCount(br.Port);
+                Value * const consumed = mConsumedItemCount[streamSet];
                 needsCopy = b->CreateICmpUGT(consumed, underflow);
             } else {
                 Value * const produced = mAlreadyProducedPhi(br.Port);
@@ -483,7 +485,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
-            Value * const initial = mInitiallyProducedItemCount(br.Port);
+            Value * const initial = mInitiallyProducedItemCount[streamSet];
             Value * const produced = mUpdatedProducedPhi(br.Port);
 
             // If we wrote anything and it was not our first write to the buffer ...
@@ -549,8 +551,6 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
 
-    b->CallPrintInt(prefix + "_copy_cond", cond);
-
     b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
 
     b->SetInsertPoint(copyStart);
@@ -579,17 +579,14 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     if (buffer->isLinear()) {
         source = buffer->getBaseAddress(b);
         source = b->CreatePointerCast(source, int8PtrTy);
-        Value * offset = b->CreateMul(mConsumedItemCount(outputPort), bytesPerSteam);
-        b->CallPrintInt("offset", offset);
+        const auto streamSet = getOutputBufferVertex(outputPort);
+        Value * offset = b->CreateMul(mConsumedItemCount[streamSet], bytesPerSteam);
         source = b->CreateGEP(source, offset);
         target = buffer->getMallocAddress(b);
     } else {
         source = buffer->getOverflowAddress(b);
         target = buffer->getBaseAddress(b);
     }
-
-    b->CallPrintInt("source", source);
-    b->CallPrintInt("target", target);
 
     if (mode == CopyMode::LookBehind || mode == CopyMode::LookBehindReflection) {
         DataLayout DL(b->getModule());
@@ -623,11 +620,11 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) const {
         const BufferNode & bn = mBufferGraph[streamSet];
         const StreamSetBuffer * const buffer = bn.Buffer;
         if (buffer->isLinear()) {
-            const BufferRateData & br = mBufferGraph[e];
-            Value * const produced = mInitiallyProducedItemCount(br.Port);
-            Value * const consumed = mConsumedItemCount(br.Port);
+            Value * const produced = mInitiallyProducedItemCount[streamSet];
+            Value * const consumed = mConsumedItemCount[streamSet];
             #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = makeBufferName(mKernelIndex, br.Port);
+            const BufferRateData & br = mBufferGraph[e];
+            const auto prefix = makeBufferName(mKernelId, br.Port);
             debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, produced);
             debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
             #endif

@@ -110,7 +110,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelInsufficientInput = b->CreateBasicBlock(prefix + "_insufficientInput", partitionExit);
     mKernelTerminated = nullptr;
     mKernelInitiallyTerminated = nullptr;
-    mKernelInitiallyTerminatedPhiCatch = nullptr;
+    mKernelInitiallyTerminatedExit = nullptr;
     if (mIsPartitionRoot) {
         mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", partitionExit);
         mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", partitionExit);
@@ -129,7 +129,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     readProcessedItemCounts(b, mKernelId);
     readProducedItemCounts(b, mKernelId);
-    readConsumedItemCounts(b);
+    readConsumedItemCounts(b, mKernelId);
     prepareLinearBuffers(b);
 
     incrementNumberOfSegmentsCounter(b);
@@ -251,6 +251,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         debugPrint(b, "* " + prefix + ".initiallyTerminated = %" PRIu64, mSegNo);
         #endif
         loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
+        mKernelInitiallyTerminatedExit = b->GetInsertBlock();
         b->CreateBr(mKernelJumpToNextUsefulPartition);
     }
 
@@ -427,8 +428,9 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto port = StreamSetPort{PortType::Output, i};
         const auto prefix = makeBufferName(mKernelId, port);
+        const auto streamSet = getOutputBufferVertex(port);
         mAlreadyProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProduced");
-        mAlreadyProducedPhi(port)->addIncoming(mInitiallyProducedItemCount(port), mKernelEntry);
+        mAlreadyProducedPhi(port)->addIncoming(mInitiallyProducedItemCount[streamSet], mKernelEntry);
         if (mInitiallyProducedDeferredItemCount(port)) {
             mAlreadyProducedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProducedDeferred");
             mAlreadyProducedDeferredPhi(port)->addIncoming(mInitiallyProducedDeferredItemCount(port), mKernelEntry);
@@ -599,6 +601,8 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         mHasProgressedPhi->addIncoming(mPipelineProgress, exitBlock);
     }
 
+    mKernelInsufficientInputExit = b->GetInsertBlock();
+
     if (mIsPartitionRoot) {
         assert (mNextPartitionWithPotentialInput);
         assert (mKernelJumpToNextUsefulPartition);
@@ -701,10 +705,6 @@ void PipelineCompiler::end(BuilderRef b) {
     if (ExternallySynchronized) {
         b->CreateBr(mPipelineEnd);
     } else {
-
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, mTarget->getName() + "+++ pipeline end %" PRIu64 " +++", mSegNo);
-        #endif
 
         terminated = hasPipelineTerminated(b);
         Value * done = b->CreateIsNotNull(terminated);

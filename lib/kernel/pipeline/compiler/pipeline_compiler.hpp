@@ -30,7 +30,7 @@
 #include <util/maxsat.hpp>
 #include <assert.h>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 #define PRINT_BUFFER_GRAPH
 
@@ -710,7 +710,7 @@ public:
 
     void computeFullyProcessedItemCounts(BuilderRef b);
     void computeFullyProducedItemCounts(BuilderRef b);
-    Value * computeFullyProducedItemCount(BuilderRef b, const StreamSetPort port, Value * produced, Value * const terminationSignal);
+    Value * computeFullyProducedItemCount(BuilderRef b, const size_t kernel, const StreamSetPort port, Value * produced, Value * const terminationSignal);
 
     void updatePhisAfterTermination(BuilderRef b);
 
@@ -780,7 +780,8 @@ public:
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
     void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
-    void readConsumedItemCounts(BuilderRef b);
+    void readConsumedItemCounts(BuilderRef b, const size_t kernel);
+    Value * readConsumedItemCount(BuilderRef b, const size_t streamSet);
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
 
@@ -1076,9 +1077,10 @@ protected:
     BasicBlock *                                mKernelLoopCall = nullptr;
     BasicBlock *                                mKernelCompletionCheck = nullptr;
     BasicBlock *                                mKernelInitiallyTerminated = nullptr;
-    BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
+    BasicBlock *                                mKernelInitiallyTerminatedExit = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelInsufficientInput = nullptr;
+    BasicBlock *                                mKernelInsufficientInputExit = nullptr;
     BasicBlock *                                mKernelJumpToNextUsefulPartition = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
@@ -1103,8 +1105,10 @@ protected:
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
     Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
     Vec<Value *>                                mPartitionTerminationSignal;
+    Vec<Value *>                                mConsumedItemCount;
 
     PartitionJumpPhiOutMap                      mPartitionProducedItemCountAtJumpExit;
+    PartitionJumpPhiOutMap                      mPartitionConsumedItemCountAtJumpExit;
 
 
     // kernel state
@@ -1175,14 +1179,13 @@ protected:
     InputPortVec<PHINode *>                     mUpdatedProcessedDeferredPhi;
     InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
 
-    OutputPortVec<Value *>                      mInitiallyProducedItemCount; // *before* entering the kernel
+    Vec<Value *>                                mInitiallyProducedItemCount; // *before* entering the kernel
     OutputPortVec<Value *>                      mInitiallyProducedDeferredItemCount;
     OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
     OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
     OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
     OutputPortVec<Value *>                      mFirstOutputStrideLength;
     OutputPortVec<Value *>                      mWritableOutputItems;
-    OutputPortVec<Value *>                      mConsumedItemCount;
     OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
     OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
     OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
@@ -1320,6 +1323,9 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mPartitionJumpIndex(determinePartitionJumpIndices())
 , mPartitionJumpTree(makePartitionJumpTree())
 
+, mConsumedItemCount(LastStreamSet + 1)
+
+
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())
 // TODO: refactor to remove the following const cast
@@ -1352,14 +1358,13 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mFullyProcessedItemCount(this)
 
 
-, mInitiallyProducedItemCount(this)
+, mInitiallyProducedItemCount(LastStreamSet + 1)
 , mInitiallyProducedDeferredItemCount(this)
 , mAlreadyProducedPhi(this)
 , mAlreadyProducedDelayedPhi(this)
 , mAlreadyProducedDeferredPhi(this)
 , mFirstOutputStrideLength(this)
 , mWritableOutputItems(this)
-, mConsumedItemCount(this)
 , mLinearOutputItemsPhi(this)
 , mReturnedOutputVirtualBaseAddressPtr(this)
 , mReturnedProducedItemCountPtr(this)

@@ -53,7 +53,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         Value * produced = mUpdatedProducedPhi(port);
-        Value * const fullyProduced = computeFullyProducedItemCount(b, port, produced, mTerminatedAtLoopExitPhi);
+        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mTerminatedAtLoopExitPhi);
         mFullyProducedItemCount(port)->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
     }
 }
@@ -61,8 +61,10 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeFullyProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b, const StreamSetPort port,
-                                                     Value * produced, Value * const terminationSignal) {
+Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b,
+                                                        const size_t kernel,
+                                                        const StreamSetPort port,
+                                                        Value * produced, Value * const terminationSignal) {
 
     // TODO: we only need to consider the blocksize attribute if it's possible this
     // stream could be read before being fully written. This might occur if one of

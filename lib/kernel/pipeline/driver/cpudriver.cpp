@@ -179,7 +179,6 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createCFGSimplificationPass());          // Repeat CFG Simplification to "clean up" any newly found redundant phi nodes
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         mPassManager->add(createRemoveRedundantAssertionsPass());
-        mPassManager->add(createCFGSimplificationPass());
     }
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     if (LLVM_UNLIKELY(codegen::ShowASMOption != codegen::OmittedOption)) {
