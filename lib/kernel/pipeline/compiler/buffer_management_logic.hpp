@@ -223,12 +223,12 @@ void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
 
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
         const auto outputPort = br.Port;
         const Binding & output = br.Binding;
         const auto prefix = makeBufferName(mKernelId, outputPort);
-        const auto streamSet = getOutputBufferVertex(mKernelId, outputPort);
+        const auto streamSet = target(e, mBufferGraph);
         mInitiallyProducedItemCount[streamSet] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount[streamSet]);

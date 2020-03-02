@@ -415,22 +415,27 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     IntegerType * const boolTy = b->getInt1Ty();
     b->SetInsertPoint(mKernelLoopEntry);
     const auto numOfInputs = getNumOfStreamInputs(mKernelId);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto port = StreamSetPort{PortType::Input, i};
+
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto port = br.Port;
         const auto prefix = makeBufferName(mKernelId, port);
         mAlreadyProcessedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProcessed");
+        assert (mInitiallyProcessedItemCount(port));
         mAlreadyProcessedPhi(port)->addIncoming(mInitiallyProcessedItemCount(port), mKernelEntry);
         if (mInitiallyProcessedDeferredItemCount(port)) {
             mAlreadyProcessedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProcessedDeferred");
             mAlreadyProcessedDeferredPhi(port)->addIncoming(mInitiallyProcessedDeferredItemCount(port), mKernelEntry);
         }
     }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = StreamSetPort{PortType::Output, i};
+
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto port = br.Port;
         const auto prefix = makeBufferName(mKernelId, port);
-        const auto streamSet = getOutputBufferVertex(port);
+        const auto streamSet = target(e, mBufferGraph);
         mAlreadyProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProduced");
+        assert (mInitiallyProducedItemCount[streamSet]);
         mAlreadyProducedPhi(port)->addIncoming(mInitiallyProducedItemCount[streamSet], mKernelEntry);
         if (mInitiallyProducedDeferredItemCount(port)) {
             mAlreadyProducedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProducedDeferred");
@@ -439,6 +444,7 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     }
     const auto prefix = makeKernelName(mKernelId);
     mAlreadyProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_madeProgress");
+    assert (mPipelineProgress);
     mAlreadyProgressedPhi->addIncoming(mPipelineProgress, mKernelEntry);
     if (mMayHaveNonLinearIO) {
         // Since we may loop and call the kernel again, we want to mark that we've progressed

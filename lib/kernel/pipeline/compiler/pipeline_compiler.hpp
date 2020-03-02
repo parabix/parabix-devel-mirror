@@ -30,7 +30,7 @@
 #include <util/maxsat.hpp>
 #include <assert.h>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 #define PRINT_BUFFER_GRAPH
 
@@ -353,17 +353,25 @@ using BufferVertexSet = SmallFlatSet<BufferGraph::vertex_descriptor, 32>;
 struct ConsumerNode {
     mutable Value * Consumed = nullptr;
     mutable PHINode * PhiNode = nullptr;
-    mutable unsigned Encountered = 0;
 };
 
 struct ConsumerEdge {
+
+    enum ConsumerTypeFlags {
+        None = 0
+        , UpdatePhi = 1
+        , WriteFinalCount = 2
+        , UpdateAndWrite = UpdatePhi | WriteFinalCount
+    };
+
     unsigned Port = 0;
     unsigned Index = 0;
+    ConsumerTypeFlags Flags = ConsumerTypeFlags::None;
 
     ConsumerEdge() = default;
 
-    ConsumerEdge(StreamSetPort port, unsigned index)
-    : Port(port.Number), Index(index) { }
+    ConsumerEdge(StreamSetPort port, unsigned index, ConsumerTypeFlags flags)
+    : Port(port.Number), Index(index), Flags(flags) { }
 };
 
 using ConsumerGraph = adjacency_list<vecS, vecS, bidirectionalS, ConsumerNode, ConsumerEdge>;
@@ -784,7 +792,7 @@ public:
     void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
     void readConsumedItemCounts(BuilderRef b);
     Value * readConsumedItemCount(BuilderRef b, const size_t streamSet);
-    void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
+    void setConsumedItemCount(BuilderRef b, const size_t bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
 
 // buffer management codegen functions
