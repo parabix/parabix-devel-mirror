@@ -396,6 +396,8 @@ protected:
 
     llvm::Function *                mCurrentMethod = nullptr;
 
+    llvm::BasicBlock *              mEntryPoint = nullptr;
+
     llvm::Value *                   mSharedHandle = nullptr;
     llvm::Value *                   mThreadLocalHandle = nullptr;
 

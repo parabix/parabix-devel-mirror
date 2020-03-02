@@ -30,9 +30,9 @@
 #include <util/maxsat.hpp>
 #include <assert.h>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
-#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -658,6 +658,8 @@ public:
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
     void jumpToNextPartition(BuilderRef b);
     void checkForPartitionExit(BuilderRef b);
+    void setCurrentPartitionTerminationSignal(Value * const signal);
+    Value * getCurrentPartitionTerminationSignal() const;
 
 // inter-kernel codegen functions
 
@@ -770,7 +772,6 @@ public:
     void writeTerminationSignal(BuilderRef b, Value * const signal);
     Value * hasPipelineTerminated(BuilderRef b) const;
     void signalAbnormalTermination(BuilderRef b);
-    void updateTerminationSignal(Value * const signal);
     LLVM_READNONE static Constant * getTerminationSignal(BuilderRef b, const TerminationSignal type);
 
 // consumer codegen functions
@@ -1114,6 +1115,7 @@ protected:
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
     Value *                                     mTerminatedInitiallyCheck = nullptr;
+    Value *                                     mMaximumNumOfStrides = nullptr;
     PHINode *                                   mCurrentNumOfStrides = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     PHINode *                                   mTotalNumOfStrides = nullptr;
@@ -1137,8 +1139,6 @@ protected:
     BasicBlock *                                mNextPartitionWithPotentialInput = nullptr;
 
     BitVector                                   mHasPipelineInput;
-
-    unsigned                                    mMaximumNumOfStrides = 0;
 
     Rational                                    mFixedRateLCM;
     Value *                                     mTerminatedExplicitly = nullptr;

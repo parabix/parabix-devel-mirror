@@ -2310,7 +2310,6 @@ PartitionJumpTree PipelineCompiler::makePartitionJumpTree() const {
         }
     }
     #endif
-    printGraph(G, errs(), "J");
     return G;
 }
 

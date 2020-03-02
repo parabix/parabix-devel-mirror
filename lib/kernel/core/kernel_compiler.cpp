@@ -8,6 +8,8 @@
 #include <llvm/IR/MDBuilder.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/Utils/PromoteMemToReg.h>
+#include <llvm/IR/Dominators.h>
 
 using namespace llvm;
 using namespace boost;
@@ -131,7 +133,8 @@ inline void reset(Vec & vec, const size_t n) {
 inline void KernelCompiler::callGenerateInitializeMethod(BuilderRef b) {
     b->setCompiler(this);
     mCurrentMethod = mTarget->getInitializeFunction(b);
-    b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+    mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+    b->SetInsertPoint(mEntryPoint);
     auto arg = mCurrentMethod->arg_begin();
     const auto arg_end = mCurrentMethod->arg_end();
     auto nextArg = [&]() {
@@ -182,7 +185,8 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
         b->setCompiler(this);
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = mTarget->getInitializeThreadLocalFunction(b);
-        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+        b->SetInsertPoint(mEntryPoint);
         auto arg = mCurrentMethod->arg_begin();
         auto nextArg = [&]() {
             assert (arg != mCurrentMethod->arg_end());
@@ -209,7 +213,8 @@ inline void KernelCompiler::callGenerateAllocateSharedInternalStreamSets(Builder
         b->setCompiler(this);
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = mTarget->getAllocateSharedInternalStreamSetsFunction(b);
-        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+        b->SetInsertPoint(mEntryPoint);
         auto arg = mCurrentMethod->arg_begin();
         auto nextArg = [&]() {
             assert (arg != mCurrentMethod->arg_end());
@@ -236,7 +241,8 @@ inline void KernelCompiler::callGenerateAllocateThreadLocalInternalStreamSets(Bu
         b->setCompiler(this);
         assert (mSharedHandle == nullptr && mThreadLocalHandle == nullptr);
         mCurrentMethod = mTarget->getAllocateThreadLocalInternalStreamSetsFunction(b);
-        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+        b->SetInsertPoint(mEntryPoint);
         auto arg = mCurrentMethod->arg_begin();
         auto nextArg = [&]() {
             assert (arg != mCurrentMethod->arg_end());
@@ -628,7 +634,8 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
 
     b->setCompiler(this);
     mCurrentMethod = mTarget->getDoSegmentFunction(b);
-    b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+    mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+    b->SetInsertPoint(mEntryPoint);
 
     BEGIN_SCOPED_REGION
     Vec<Value *, 64> args;
@@ -803,7 +810,8 @@ inline void KernelCompiler::callGenerateFinalizeThreadLocalMethod(BuilderRef b) 
     if (mTarget->hasThreadLocal()) {
         b->setCompiler(this);
         mCurrentMethod = mTarget->getFinalizeThreadLocalFunction(b);
-        b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+        mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+        b->SetInsertPoint(mEntryPoint);
         auto arg = mCurrentMethod->arg_begin();
         auto nextArg = [&]() {
             assert (arg != mCurrentMethod->arg_end());
@@ -829,7 +837,8 @@ inline void KernelCompiler::callGenerateFinalizeMethod(BuilderRef b) {
 
     b->setCompiler(this);
     mCurrentMethod = mTarget->getFinalizeFunction(b);
-    b->SetInsertPoint(BasicBlock::Create(b->getContext(), "entry", mCurrentMethod));
+    mEntryPoint = BasicBlock::Create(b->getContext(), "entry", mCurrentMethod);
+    b->SetInsertPoint(mEntryPoint);
     if (LLVM_LIKELY(mTarget->isStateful())) {
         auto args = mCurrentMethod->arg_begin();
         setHandle(&*(args++));
@@ -1167,13 +1176,6 @@ void KernelCompiler::loadHandlesOfLocalOutputStreamSets(BuilderRef b) const {
  * @brief clearInternalStateAfterCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelCompiler::clearInternalStateAfterCodeGen() {
-    mSharedHandle = nullptr;
-    mThreadLocalHandle = nullptr;
-    mExternalSegNo = nullptr;
-    mCurrentMethod = nullptr;
-    mIsFinal = nullptr;
-    mNumOfStrides = nullptr;
-    mTerminationSignalPtr = nullptr;
     for (const auto & buffer : mStreamSetInputBuffers) {
         buffer->setHandle(nullptr);
     }
@@ -1187,7 +1189,34 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
             cast<Instruction>(scalar)->eraseFromParent();
         }
     }
+    // Attempt to promote all of the allocas in the entry block into PHI nodes
+    SmallVector<AllocaInst *, 32> allocas;
+    Instruction * inst = mEntryPoint->getFirstNonPHIOrDbgOrLifetime();
+    while (inst) {
+        AllocaInst * const A = dyn_cast<AllocaInst>(inst);
+        if (A == nullptr) {
+            break;
+        }
+        if (isAllocaPromotable(A)) {
+            allocas.push_back(A);
+        }
+        inst = inst->getNextNode();
+    }
+    if (LLVM_LIKELY(!allocas.empty())) {
+        assert (mCurrentMethod);
+        DominatorTree dt(*mCurrentMethod);
+        PromoteMemToReg(allocas, dt);
+    }
     mScalarFieldMap.clear();
+
+    mSharedHandle = nullptr;
+    mThreadLocalHandle = nullptr;
+    mExternalSegNo = nullptr;
+    mCurrentMethod = nullptr;
+    mEntryPoint = nullptr;
+    mIsFinal = nullptr;
+    mNumOfStrides = nullptr;
+    mTerminationSignalPtr = nullptr;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

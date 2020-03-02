@@ -441,6 +441,22 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief setCurrentPartitionTerminationSignal
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::setCurrentPartitionTerminationSignal(Value * const signal) {
+    const auto partitionId = KernelPartitionId[mKernelId];
+    mPartitionTerminationSignal[partitionId] = signal;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getCurrentPartitionTerminationSignal
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::getCurrentPartitionTerminationSignal() const {
+    const auto partitionId = KernelPartitionId[mKernelId];
+    return mPartitionTerminationSignal[partitionId];
+}
+
 }
 
 #endif

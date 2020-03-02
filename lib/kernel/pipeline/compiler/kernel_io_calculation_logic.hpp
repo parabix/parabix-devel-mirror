@@ -30,18 +30,21 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mBranchToLoopExit = b->getFalse();
     }
 
-    mNumOfLinearStrides = nullptr;
+    // If this kernel is the root of a partition, we'll use the available input to compute how many strides the
+    // kernels within the partition will execute. Otherwise we begin by bounding the kernel by the expected number
+    // of strides w.r.t. its partition's root.
 
-//    if (mIsPartitionRoot) {
-//        mNumOfLinearStrides = nullptr;
-//    } else {
-//        const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
-//        Value * numOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
-//        if (mMayHaveNonLinearIO) {
-//            numOfStrides = b->CreateSub(numOfStrides, mCurrentNumOfStrides);
-//        }
-//        mNumOfLinearStrides = numOfStrides;
-//    }
+    if (mIsPartitionRoot) {
+        mNumOfLinearStrides = nullptr;
+    } else {
+        const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
+        mMaximumNumOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
+        if (mMayHaveNonLinearIO) {
+            mNumOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStrides);
+        } else {
+            mNumOfLinearStrides = mMaximumNumOfStrides;
+        }
+    }
 
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
@@ -63,15 +66,31 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             }
         }
     }
+
     if (mNumOfLinearStrides == nullptr) {
+        // If this kernel is source kernel, just assume it has one stride.
         mNumOfLinearStrides = b->getSize(1);
     }
 
     if (mMayHaveNonLinearIO) {
+        Value * numOfOutputStrides = mNumOfLinearStrides;
+        bool checkOutput = false;
         for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
             const BufferRateData & br = mBufferGraph[e];
             Value * const strides = getNumOfWritableStrides(b, br.Port);
-            mNumOfLinearStrides = b->CreateUMin(mNumOfLinearStrides, strides);
+            if (LLVM_LIKELY(strides != nullptr)) {
+                const auto streamSet = target(e, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+                if (bn.NonLocal || !bn.Linear) {
+                    numOfOutputStrides = b->CreateUMin(numOfOutputStrides, strides);
+                    checkOutput = true;
+                }
+            }
+        }
+        if (checkOutput) {
+            // TODO: should we always resize the output buffers to fit more output?
+            Value * const noOutputStrides = b->CreateIsNull(numOfOutputStrides);
+            mNumOfLinearStrides = b->CreateSelect(noOutputStrides, mNumOfLinearStrides, numOfOutputStrides);
         }
         mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
     } else {
@@ -300,10 +319,8 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
  * @brief determineIsFinal
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
-    if (LLVM_LIKELY(mIsBounded)) {
-        return b->CreateIsNull(mNumOfLinearStrides, "isFinal");
-    } else { // check whether any stream is fully consumed; if so, we cannot execute any further segments
-        Value * isFinal = nullptr;
+    if (mIsPartitionRoot || mMayHaveNonLinearIO) {
+        Value * isFinal = nullptr;       
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferRateData & br =  mBufferGraph[e];
             if (LLVM_UNLIKELY(br.ZeroExtended)) {
@@ -331,8 +348,11 @@ Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
             Value * const noMoreStrides = b->CreateIsNull(mNumOfLinearStrides);
             isFinal = b->CreateAnd(isFinal, noMoreStrides);
         }
-        isFinal->setName("isFinal");
         return isFinal;
+    } else {
+        // If this kernel is not a partition root and all input is linear,
+        // use the termination state set at the exit of the partition root.
+        return b->CreateIsNotNull(getCurrentPartitionTerminationSignal());
     }
 }
 

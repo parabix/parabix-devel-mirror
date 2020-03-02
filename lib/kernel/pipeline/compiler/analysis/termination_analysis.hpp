@@ -92,8 +92,6 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         }
     }
 
-    printGraph(G, errs(), "T");
-
     assert ("a pipeline with no sinks ought to produce no observable data"
             && in_degree(PartitionCount, G) > 0);
     assert ("termination graph construction error?"

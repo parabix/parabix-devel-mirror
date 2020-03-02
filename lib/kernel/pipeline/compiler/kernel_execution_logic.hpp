@@ -29,20 +29,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         updateProcessedAndProducedItemCounts(b);
         writeUpdatedItemCounts(b, ItemCountSource::ComputedAtKernelCall);
         writeTerminationSignal(b, mIsFinalInvocationPhi);
-        BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelCompletionCheck);
-        BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelCompletionCheck);
-
-        Constant * const maxStrides = b->getSize(mMaximumNumOfStrides);
-        releaseLock = b->CreateICmpEQ(mUpdatedNumOfStrides, maxStrides);
-        releaseLock = b->CreateOr(b->CreateIsNotNull(mIsFinalInvocationPhi), releaseLock);
-
-        b->CreateCondBr(releaseLock, lastPartialSegment, afterSyncLock);
-
-        b->SetInsertPoint(lastPartialSegment);
         releaseSynchronizationLock(b, LockType::ItemCheck);
-        b->CreateBr(afterSyncLock);
-
-        b->SetInsertPoint(afterSyncLock);
     }
 
     const auto args = buildKernelCallArgumentList(b);

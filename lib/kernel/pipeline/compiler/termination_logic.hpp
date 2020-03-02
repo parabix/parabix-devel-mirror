@@ -130,22 +130,13 @@ Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inp
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief updateTerminationSignal
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::updateTerminationSignal(Value * const signal) {
-//    const auto partitionId = KernelPartitionId[mKernelId];
-//    mTerminationSignals[partitionId] = signal;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
     if (mIsPartitionRoot) {
         Value * const signal = readTerminationSignal(b);        
-        mTerminatedInitially = signal;
-        const auto partitionId = KernelPartitionId[mKernelId];
-        mPartitionTerminationSignal[partitionId] = signal;
+        mTerminatedInitially = signal; assert (signal);
+        setCurrentPartitionTerminationSignal(signal);
         return hasKernelTerminated(b, mKernelId);
     }
     return nullptr;
