@@ -473,11 +473,11 @@ void PipelineCompiler::computeDataFlowRates(BufferGraph & G) {
  * entails that by knowing the initial value of one we can compute the latter.
  *
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
+void PipelineCompiler::identifyLocalPortIds(BufferGraph & G) const {
 
     using BitSet = dynamic_bitset<>;
     using Vertex = BufferGraph::vertex_descriptor;
-    using LinkedIOMap = std::map<BitSet, unsigned>;
+    using PortIds = std::map<BitSet, unsigned>;
     using Graph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BitSet>;
 
 
@@ -485,8 +485,6 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
     const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
 
     unsigned nextRateId = 0;
-
-
 
     flat_map<Vertex, unsigned> partialSumRefId;
     flat_map<StreamSetPort, RefWrapper<BitSet>> relativeRefId;
@@ -611,40 +609,54 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
         start = end;
     }
 
-    LinkedIOMap M;
-    unsigned nextPortNum = 0;
-
-    auto getPortNumber = [&](BitSet & B) {
-        if (nextRateId >= B.capacity()) {
-            B.resize(nextRateId);
-        }
-        const auto f = M.find(B);
-        if (f == M.end()) {
-            const auto id = nextPortNum++;
-            M.emplace(std::move(B), id);
-            return id;
-        }
-        return f->second;
-    };
-
     using GInIter = graph_traits<BufferGraph>::in_edge_iterator;
     using GOutIter = graph_traits<BufferGraph>::out_edge_iterator;
 
     using HInIter = graph_traits<Graph>::in_edge_iterator;
     using HOutIter = graph_traits<Graph>::out_edge_iterator;
 
+    PortIds localPortIds;
+    PortIds globalPortIds;
+    unsigned nextLocalPortId = 0;
+    unsigned nextGlobalPortId = 0;
+    unsigned currentPartitionId = 0;
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        // reset the local port ids with each new partition
+        const auto partitionId = KernelPartitionId[kernel];
+        if (currentPartitionId != partitionId) {
+            localPortIds.clear();
+            nextLocalPortId = 0;
+            currentPartitionId = partitionId;
+        }
+
+        auto getPortNumber = [&](const BitSet & B, PortIds & portIds, unsigned & nextPortId) {
+            const auto f = portIds.find(B);
+            if (f == portIds.end()) {
+                const auto id = nextPortId++;
+                portIds.emplace(std::move(B), id);
+                return id;
+            }
+            return f->second;
+        };
 
         GInIter ei, ei_end;
         std::tie(ei, ei_end) = in_edges(kernel, G);
         HInIter fi, fi_end;
         std::tie(fi, fi_end) = in_edges(kernel, H);
 
+        assert (std::distance(ei, ei_end) == std::distance(fi, fi_end));
+
         for (; ei != ei_end; ++ei, ++fi) {
             assert (fi != fi_end);
             BufferRateData & br = G[*ei];
-            br.LinkedPortId = getPortNumber(H[*fi]);
+            BitSet & rateSet = H[*fi];
+            if (nextRateId >= rateSet.capacity()) {
+                rateSet.resize(nextRateId);
+            }
+            br.LocalPortId = getPortNumber(rateSet, localPortIds, nextLocalPortId);
+            br.GlobalPortId = getPortNumber(rateSet, globalPortIds, nextGlobalPortId);
         }
 
         GOutIter ej, ej_end;
@@ -652,10 +664,17 @@ void PipelineCompiler::identifyLinkedIOPorts(BufferGraph & G) const {
         HOutIter fj, fj_end;
         std::tie(fj, fj_end) = out_edges(kernel, H);
 
+        assert (std::distance(ej, ej_end) == std::distance(fj, fj_end));
+
         for (; ej != ej_end; ++ej, ++fj) {
             assert (fj != fj_end);
             BufferRateData & br = G[*ej];
-            br.LinkedPortId = getPortNumber(H[*fj]);
+            BitSet & rateSet = H[*fj];
+            if (nextRateId >= rateSet.capacity()) {
+                rateSet.resize(nextRateId);
+            }
+            br.LocalPortId = getPortNumber(rateSet, localPortIds, nextLocalPortId);
+            br.GlobalPortId = getPortNumber(rateSet, globalPortIds, nextGlobalPortId);
         }
     }
 

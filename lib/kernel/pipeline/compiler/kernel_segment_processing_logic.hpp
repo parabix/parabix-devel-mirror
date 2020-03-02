@@ -127,9 +127,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", partitionExit);
 
 
-    readProcessedItemCounts(b, mKernelId);
-    readProducedItemCounts(b, mKernelId);
-    readConsumedItemCounts(b, mKernelId);
+    readProcessedItemCounts(b);
+    readProducedItemCounts(b);
+    readConsumedItemCounts(b);
     prepareLinearBuffers(b);
 
     incrementNumberOfSegmentsCounter(b);

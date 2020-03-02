@@ -40,7 +40,7 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     BufferGraph G(LastStreamSet + 1);
 
     initializeBufferGraph(G);
-    identifyLinkedIOPorts(G);
+    identifyLocalPortIds(G);
     computeDataFlowRates(G);
     identifyLinearBuffers(G);
 

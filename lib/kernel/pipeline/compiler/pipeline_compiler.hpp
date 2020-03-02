@@ -32,7 +32,7 @@
 
 // #define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -325,7 +325,8 @@ struct BufferRateData {
     Rational Minimum;
     Rational Maximum;
     bool ZeroExtended = false;
-    unsigned LinkedPortId = 0;
+    unsigned LocalPortId = 0;
+    unsigned GlobalPortId = 0;
 
     bool operator < (const BufferRateData & rn) const {
         if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {
@@ -663,8 +664,8 @@ public:
 
 // inter-kernel codegen functions
 
-    void readProcessedItemCounts(BuilderRef b, const size_t kernel);
-    void readProducedItemCounts(BuilderRef b, const size_t kernel);
+    void readProcessedItemCounts(BuilderRef b);
+    void readProducedItemCounts(BuilderRef b);
 
     void initializeKernelLoopEntryPhis(BuilderRef b);
     void initializeKernelCheckOutputSpacePhis(BuilderRef b);
@@ -781,7 +782,7 @@ public:
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
     void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
-    void readConsumedItemCounts(BuilderRef b, const size_t kernel);
+    void readConsumedItemCounts(BuilderRef b);
     Value * readConsumedItemCount(BuilderRef b, const size_t streamSet);
     void setConsumedItemCount(BuilderRef b, const unsigned bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
@@ -911,7 +912,7 @@ public:
     BufferPortMap constructOutputPortMappings() const;
     bool mayHaveNonLinearIO(const size_t kernel) const;
     bool supportsInternalSynchronization() const;
-    void identifyLinkedIOPorts(BufferGraph & G) const;
+    void identifyLocalPortIds(BufferGraph & G) const;
     bool isBounded() const;
 
     void printBufferGraph(raw_ostream & out) const;

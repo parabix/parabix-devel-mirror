@@ -203,17 +203,17 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readProcessedItemCounts(BuilderRef b, const size_t kernel) {
-    const auto numOfInputs = getNumOfStreamInputs(kernel);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const StreamSetPort inputPort{PortType::Input, i};
-        const Binding & input = getInputBinding(kernel, inputPort);
-        const auto prefix = makeBufferName(kernel, inputPort);
+void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto inputPort = br.Port;
+        const Binding & input = br.Binding;
+        const auto prefix = makeBufferName(mKernelId, inputPort);
         Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        mInitiallyProcessedItemCount(kernel, inputPort) = processed;
+        mInitiallyProcessedItemCount(mKernelId, inputPort) = processed;
         if (input.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProcessedDeferredItemCount(kernel, inputPort) = deferred;
+            mInitiallyProcessedDeferredItemCount(mKernelId, inputPort) = deferred;
         }
     }
 }
@@ -221,20 +221,21 @@ void PipelineCompiler::readProcessedItemCounts(BuilderRef b, const size_t kernel
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readProducedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readProducedItemCounts(BuilderRef b, const size_t kernel) {
-    const auto numOfOutputs = getNumOfStreamOutputs(kernel);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const Binding & output = getOutputBinding(kernel, outputPort);
-        const auto prefix = makeBufferName(kernel, outputPort);
-        const auto streamSet = getOutputBufferVertex(kernel, outputPort);
+void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
+
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto outputPort = br.Port;
+        const Binding & output = br.Binding;
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        const auto streamSet = getOutputBufferVertex(mKernelId, outputPort);
         mInitiallyProducedItemCount[streamSet] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount[streamSet]);
         #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProducedDeferredItemCount(kernel, outputPort) = deferred;
+            mInitiallyProducedDeferredItemCount(mKernelId, outputPort) = deferred;
         }
     }
 }
