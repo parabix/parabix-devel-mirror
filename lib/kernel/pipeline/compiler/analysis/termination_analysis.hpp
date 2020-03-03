@@ -65,11 +65,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         }
     }
 
-    printGraph(G, errs(), "T1");
-
     transitive_reduction_dag(G);
-
-    printGraph(G, errs(), "T2");
 
     // we are only interested in the incoming edges of the pipeline output
     for (unsigned i = 0; i < terminal; ++i) {
@@ -96,8 +92,6 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
             G[add_edge(pid, terminal, true, G).first] = true;
         }
     }
-
-    printGraph(G, errs(), "T3");
 
     assert ("a pipeline with no sinks ought to produce no observable data"
             && in_degree(terminal, G) > 0);

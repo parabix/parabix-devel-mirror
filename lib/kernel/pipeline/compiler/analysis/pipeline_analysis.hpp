@@ -280,8 +280,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
 
     #warning rewrite partition ids after generating jump tree
 
-    auto inputPartitionId = -1U;
-    auto outputPartitionId = -1U;
+    auto inputPartitionId = 0U;
+    auto outputPartitionId = 0U;
     for (unsigned i = 0; i != numOfKernels; ++i) {
         const auto in = kernels[i];
         assert (subsitution[in] == -1U);
@@ -293,15 +293,13 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
         // renumber the partitions to reflect the selected ordering instead
         // of the lexical (program input) ordering
         if (id != inputPartitionId) {
-            if (LLVM_UNLIKELY(id == -1U)) {
-                outputPartitionId = 0;
-            } else {
-                ++outputPartitionId;
-                inputPartitionId = id;
-            }
+            ++outputPartitionId;
+            inputPartitionId = id;
         }
         P.KernelPartitionId[out] = outputPartitionId;
     }
+
+    assert (outputPartitionId == (numOfPartitions - 1));
     assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
 

@@ -114,6 +114,8 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     // When tracing blocking I/O, test all I/O streams but do not execute the
     // kernel if any stream is insufficient.
     if (mBranchToLoopExit) {
+        assert (mIsBounded);
+
         BasicBlock * const noStreamIsInsufficient = b->CreateBasicBlock("", mKernelCheckOutputSpace);
         b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientInput, noStreamIsInsufficient);
         updatePHINodesForLoopExit(b);
@@ -323,14 +325,12 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         anyInsufficient->addIncoming(insufficient, entryBlock);
         anyInsufficient->addIncoming(b->getTrue(), exitBlock);
         mBranchToLoopExit = anyInsufficient;
-    } else {
-        if (mExhaustedPipelineInputPhi) {
-            Value * exhausted = mExhaustedInput;
-            if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
-                exhausted = b->getTrue();
-            }
-            mExhaustedPipelineInputPhi->addIncoming(exhausted, entryBlock);
+    } else if (mExhaustedPipelineInputPhi) {
+        Value * exhausted = mExhaustedInput;
+        if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
+            exhausted = b->getTrue();
         }
+        mExhaustedPipelineInputPhi->addIncoming(exhausted, entryBlock);
         b->SetInsertPoint(hasInputData);
     }
 

@@ -308,8 +308,6 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
         }
     }
 
-    printGraph(H, errs());
-
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));
     assert (nextKernel == kernels);
@@ -350,7 +348,7 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
             BitSet & node = H[u];
             const auto k = mappedKernel[u];
             if (LLVM_UNLIKELY(node.none())) {
-                partitionIds.emplace(k, -1U);
+                partitionIds.emplace(k, 0);
             } else {
                 auto f = partitionSets.find(node);
                 unsigned id;
@@ -366,9 +364,6 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
     }
 
     assert (partitionIds.size() == kernels);
-
-    errs() << nextPartitionId << "\n";
-
 
     return nextPartitionId;
 }
@@ -1045,9 +1040,9 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
     assert (KernelPartitionId[lastKernel] < PartitionCount);
     assert (KernelPartitionId[lastKernel] < FirstStreamSet);
 
-    PartitioningGraph G(PartitionCount + 1);
+    PartitioningGraph G(PartitionCount);
 
-    #if 1
+    #if 0
 
     auto printG =[&]() {
 
@@ -1347,7 +1342,7 @@ skip_edge_2:        // -----------------
 
     std::queue<unsigned> Q;
 
-    for (unsigned partition = 0; partition < PartitionCount; ++partition) {
+    for (auto partition = 0U; partition < PartitionCount; ++partition) {
 
         BitSet & P = rateSet[partition];
         P.resize(m);
@@ -1451,7 +1446,7 @@ skip_edge_2:        // -----------------
 
     }
 
-    for (unsigned partition = PartitionCount; partition--; ) {
+    for (auto partition = (PartitionCount - 1); partition--; ) {
 
         if (in_degree(partition, G) > 1) {
 
@@ -2153,7 +2148,7 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 
     // Summarize the partitioning graph to only represent the existance of a dataflow relationship
     // between the partitions.
-    Graph G(PartitionCount + 1);
+    Graph G(PartitionCount);
 
     BEGIN_SCOPED_REGION
     std::queue<Vertex> Q;
@@ -2196,7 +2191,7 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
     // Add a special sink node that marks the end of the processing loop.
     for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
         if (LLVM_UNLIKELY(out_degree(partitionId, G) == 0)) {
-            add_edge(partitionId, PartitionCount, G);
+            add_edge(partitionId, (PartitionCount - 1), G);
         }
     }
 
@@ -2210,17 +2205,19 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 
     const auto m = num_edges(G);
 
-    std::vector<BV> paths(PartitionCount + 1);
+    std::vector<BV> paths(PartitionCount);
     unsigned p = 0;
-    for (unsigned u = 0; u <= PartitionCount; ++u) { // forward topological ordering
+    for (unsigned u = 0; u < PartitionCount; ++u) { // forward topological ordering
         BV & P = paths[u];
         P.resize(m);
         for (const auto e : make_iterator_range(in_edges(u, G))) {
             const auto v = source(e, G);
+            assert (v < PartitionCount);
             P |= paths[v];
         }
         for (const auto e : make_iterator_range(out_edges(u, G))) {
             const auto v = target(e, G);
+            assert (v < PartitionCount);
             BV & O = paths[v];
             O = P;
             assert (p < m);
@@ -2228,13 +2225,10 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
         }
     }
 
-    // ensure that the common sink is a sentinal for the subsequent search process
-    add_edge(PartitionCount, PartitionCount, G);
-
     BV M(m);
 
     // reverse topological ordering starting at (PartitionCount - 1)
-    for (auto u = PartitionCount; u--; ) {
+    for (auto u = (PartitionCount - 1); u--; ) {
 
         auto v = u;
 
@@ -2248,7 +2242,7 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
                 M |= O;
             }
 
-            while (++v <= PartitionCount) {
+            while (++v < PartitionCount) {
                 const BV & O = paths[v];
                 // since each output of partition u is assigned a new rate id,
                 // the only way that M ⊆ O is if v post dominates u.
@@ -2261,7 +2255,7 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
 
         }
 
-        assert ("an immediate post dominator is guaranteed!" && v <= PartitionCount);
+        assert ("an immediate post dominator is guaranteed!" && v < PartitionCount);
 
         // v is the immediate post-dominator of u; however, since this graph indicates
         // that we could not execute u nor any of its branched paths, we search for the
@@ -2278,13 +2272,14 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
         }
 
         clear_out_edges(u, G);
+        assert (u != v);
         add_edge(u, v, G);
 
     }
 
     END_SCOPED_REGION
-    Vec<unsigned> jumpIndices(PartitionCount + 1);
-    for (unsigned u = 0; u <= PartitionCount; ++u) {
+    Vec<unsigned> jumpIndices(PartitionCount);
+    for (unsigned u = 0; u < PartitionCount; ++u) {
         jumpIndices[u] = child(u, G);
     }
     return jumpIndices;
@@ -2295,12 +2290,10 @@ Vec<unsigned> PipelineCompiler::determinePartitionJumpIndices() const {
  * @brief makePartitionJumpGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 PartitionJumpTree PipelineCompiler::makePartitionJumpTree() const {
-    PartitionJumpTree G(PartitionCount + 1);
-    for (auto i = 0U; i < PartitionCount; ++i) {
+    PartitionJumpTree G(PartitionCount);
+    for (auto i = 0U; i < (PartitionCount - 1); ++i) {
         add_edge(i, mPartitionJumpIndex[i], G);
     }
-
-    // printGraph(G, errs(), "T");
 
     #ifndef NDEBUG
     graph_traits<PartitionJumpTree>::edge_iterator begin, end;

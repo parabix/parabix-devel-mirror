@@ -40,7 +40,7 @@ void PipelineCompiler::start(BuilderRef b) {
     mMadeProgressInLastSegment->addIncoming(b->getTrue(), entryBlock);
     Constant * const i1_FALSE = b->getFalse();
     mPipelineProgress = i1_FALSE;
-    mExhaustedInput = i1_FALSE;
+    mExhaustedInput = i1_FALSE;    
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = mTarget->getName();
     #endif
@@ -107,7 +107,10 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelCheckOutputSpace = b->CreateBasicBlock(prefix + "_checkOutputSpace", partitionExit);
     mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", partitionExit);
     mKernelCompletionCheck = b->CreateBasicBlock(prefix + "_normalCompletionCheck", partitionExit);
-    mKernelInsufficientInput = b->CreateBasicBlock(prefix + "_insufficientInput", partitionExit);
+    mKernelInsufficientInput = nullptr;
+    if (mIsBounded) {
+        mKernelInsufficientInput = b->CreateBasicBlock(prefix + "_insufficientInput", partitionExit);
+    }
     mKernelTerminated = nullptr;
     mKernelInitiallyTerminated = nullptr;
     mKernelInitiallyTerminatedExit = nullptr;
@@ -223,8 +226,10 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// KERNEL INSUFFICIENT IO EXIT
     /// -------------------------------------------------------------------------------------
 
-    b->SetInsertPoint(mKernelInsufficientInput);
-    writeInsufficientIOExit(b);
+    if (mIsBounded) {
+        b->SetInsertPoint(mKernelInsufficientInput);
+        writeInsufficientIOExit(b);
+    }
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL LOOP EXIT
@@ -410,9 +415,7 @@ inserted_branch:
     } else {
         mTotalNumOfStrides->addIncoming(mNumOfLinearStrides, exitBlock);
     }
-    if (mExhaustedPipelineInputAtLoopExitPhi) {
-        mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
-    }
+    mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -530,7 +533,7 @@ inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelInsufficientIOExitPhis(BuilderRef b) {
     mExhaustedPipelineInputPhi = nullptr;
-    if (LLVM_UNLIKELY(mHasPipelineInput.any())) {
+    if (mIsBounded) {
         b->SetInsertPoint(mKernelInsufficientInput);
         const auto prefix = makeKernelName(mKernelId);
         IntegerType * const boolTy = b->getInt1Ty();
@@ -567,9 +570,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     mTerminatedAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtLoopExit");    
     mHasProgressedPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgressAtLoopExit");
     mTotalNumOfStrides = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtLoopExit");
-    if (mExhaustedPipelineInputPhi) {
-        mExhaustedPipelineInputAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInputAtLoopExit");
-    }    
+    mExhaustedPipelineInputAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInputAtLoopExit");
     if (mIsPartitionRoot) {
         mNextNumOfPartitionStridesAtLoopExitPhi = nullptr;
     } else {
@@ -614,9 +615,8 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         } else {
             mTotalNumOfStrides->addIncoming(b->getSize(0), exitBlock);
         }
-        if (mExhaustedPipelineInputAtLoopExitPhi) {
-            mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
-        }
+        assert (mExhaustedPipelineInputPhi);
+        mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
 
     }
 
@@ -668,11 +668,9 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
         mFullyProducedItemCount(port) = fullyProduced;
     }
 
-    if (LLVM_UNLIKELY(mExhaustedPipelineInputPhi)) {
-        PHINode * const phi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedPipelineInputAtKernelExit");
-        phi->addIncoming(mExhaustedPipelineInputAtLoopExitPhi, mKernelLoopExitPhiCatch);
-        mExhaustedPipelineInputAtExit = phi;
-    }
+    PHINode * const phi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedPipelineInputAtKernelExit");
+    phi->addIncoming(mExhaustedPipelineInputAtLoopExitPhi, mKernelLoopExitPhiCatch);
+    mExhaustedPipelineInputAtExit = phi;
 
 }
 
@@ -683,9 +681,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mTerminatedAtLoopExitPhi->addIncoming(mTerminatedSignalPhi, exitBlock);
     mHasProgressedPhi->addIncoming(b->getTrue(), exitBlock);
-    if (mExhaustedPipelineInputAtLoopExitPhi) {
-        mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
-    }
+    mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
     if (mMayHaveNonLinearIO) {
         mTotalNumOfStrides->addIncoming(mCurrentNumOfStrides, exitBlock);
     } else {

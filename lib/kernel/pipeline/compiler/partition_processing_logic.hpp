@@ -69,25 +69,32 @@ inline void PipelineCompiler::addPartitionInputItemCounts(BuilderRef b, const si
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {    
     mPipelineLoop = b->CreateBasicBlock("PipelineLoop");
-    mPartitionEntryPoint.resize(PartitionCount + 1);
+    mPartitionEntryPoint.resize(PartitionCount);
 
     mPartitionJumpExitPoint.resize(PartitionCount);
     mPartitionExitPoint.resize(PartitionCount);
 
-    for (unsigned i = 0; i <= PartitionCount; ++i) {
+    for (unsigned i = 0; i < PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }
 
-    mPipelineProgressAtPartitionExit.resize(PartitionCount + 1, nullptr);
+    mPipelineProgressAtPartitionExit.resize(PartitionCount, nullptr);
 
     mPartitionTerminationSignal.resize(PartitionCount, nullptr);
     mPartitionTerminationSignalAtJumpExit.resize(PartitionCount, nullptr);
 
+    mExhaustedPipelineInputAtPartitionEntry.resize(PartitionCount, nullptr);
+
     const auto ip = b->saveIP();
     IntegerType * const boolTy = b->getInt1Ty();
-    for (unsigned i = 1; i <= PartitionCount; ++i) {
+    for (unsigned i = 1; i < PartitionCount; ++i) {
         b->SetInsertPoint(mPartitionEntryPoint[i]);
         mPipelineProgressAtPartitionExit[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".pipelineProgress");
+        // if we have some partition input and at least one partition jumps into this one,
+        // create a phi node to store whether we've exhausted the pipeline's input data
+        if (in_degree(i, mPartitionJumpTree) > 0) {
+            mExhaustedPipelineInputAtPartitionEntry[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".exhaustedInput");
+        }
     }
     b->restoreIP(ip);
 
@@ -163,6 +170,11 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
     }
     releaseSynchronizationLock(b, LockType::Segment);
 
+    // Create our branch to our next partition that may have input early so that we always have
+    // and insertion point later to introduce any new phi-d variables. We move it to the end of
+    // the block afterwards.
+    BranchInst * const br = b->CreateBr(mNextPartitionWithPotentialInput);
+
     const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
 
     // When jumping out of a partition to some subsequent one, we may have to
@@ -172,6 +184,8 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
     // (2) if producer is the current kernel, we use the already produced phi node.
     // (3) if we have yet to execute (and will be jumping over) the kernel, load
     // the prior produced count.
+
+    Instruction * const insertPoint = b->GetInsertBlock()->getFirstNonPHI(); assert (insertPoint);
 
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         if ((kernel < mKernelId) || mPartitionJumpIndex[KernelPartitionId[kernel]] == jumpId) {
@@ -200,12 +214,6 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
                         const Binding & output = br.Binding;
                         const auto deferred = output.isDeferred();
                         if (kernel == mKernelId) {
-                            IntegerType * const sizeTy = b->getSizeTy();
-
-                            const auto ip = b->saveIP();
-
-                            // Create the PHI node at the start of the basicblock.
-                            b->SetInsertPoint(mKernelJumpToNextUsefulPartition, mKernelJumpToNextUsefulPartition->begin());
 
                             Value * intermediateProducedPhi = nullptr;
                             Value * initialProducedPhi = nullptr;
@@ -217,15 +225,14 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
                                 initialProducedPhi = mInitiallyProducedItemCount[streamSet];
                             }
 
-                            PHINode * const producedPhi = b->CreatePHI(sizeTy, 2);
+                            IntegerType * const sizeTy = b->getSizeTy();
+                            PHINode * const producedPhi = PHINode::Create(sizeTy, 2, "", insertPoint);
                             if (mKernelInsufficientInputExit) {
                                 producedPhi->addIncoming(intermediateProducedPhi, mKernelInsufficientInputExit);
                             }
                             if (mKernelInitiallyTerminatedExit) {
                                 producedPhi->addIncoming(initialProducedPhi, mKernelInitiallyTerminatedExit);
                             }
-                            b->restoreIP(ip);
-
                             produced = producedPhi;
                         } else {
                             const auto prefix = makeBufferName(kernel, br.Port);
@@ -235,7 +242,7 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
                                 produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
                             }
                         }
-                        produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);
+                        produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);                        
                     }
                     // Store the produced item count at the point we're jumping out of the partition
                     mPartitionProducedItemCountAtJumpExit.emplace(std::make_pair(streamSet, mCurrentPartitionId), produced);
@@ -267,14 +274,32 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
     }
 
     BasicBlock * const exitBlock = b->GetInsertBlock();
+
     mPartitionJumpExitPoint[mCurrentPartitionId] = exitBlock;
     mPartitionTerminationSignalAtJumpExit[mCurrentPartitionId] = mTerminatedInitially;
 
     PHINode * const p = mPipelineProgressAtPartitionExit[jumpId]; assert (p);
     p->addIncoming(mPipelineProgress, exitBlock);
 
-    // Finally jump to our next partition that may have input
-    b->CreateBr(mNextPartitionWithPotentialInput);
+    PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[jumpId];
+    if (exhaustedInputPhi) {
+        IntegerType * const boolTy = b->getInt1Ty();
+        PHINode * const phi = PHINode::Create(boolTy, 2, "", insertPoint);
+        if (mKernelInsufficientInputExit) {
+            phi->addIncoming(mExhaustedPipelineInputPhi, mKernelInsufficientInputExit);
+        }
+        if (mKernelInitiallyTerminatedExit) {
+            phi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
+        }
+        exhaustedInputPhi->addIncoming(phi, exitBlock);
+    }
+
+    // Move the branch to the end of the block
+    Instruction * const last = &exitBlock->back();
+    if (br != last) {
+        br->moveAfter(last);
+    }
+
 }
 
 
@@ -291,7 +316,7 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
     if (nextPartitionId != mCurrentPartitionId) {
         assert (mCurrentPartitionId < nextPartitionId);
-        assert (nextPartitionId <= PartitionCount);
+        assert (nextPartitionId < PartitionCount);
         BasicBlock * const nextPartition = mPartitionEntryPoint[nextPartitionId];
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mPartitionExitPoint[mCurrentPartitionId] = exitBlock;
@@ -302,6 +327,12 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
         p->addIncoming(mHasProgressedPhi, exitBlock);
         assert (mTerminatedAtExitPhi);
         mPipelineProgress = p;
+
+        PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
+        if (exhaustedInputPhi) {
+            exhaustedInputPhi->addIncoming(mExhaustedInput, exitBlock); assert (mExhaustedInput);
+            mExhaustedInput = exhaustedInputPhi;
+        }
 
         // When entering here, mPartitionTerminationSignal[mCurrentPartitionId] will pointer to the initially
         // terminated state. Update it to reflect the state upon exiting this partition. Depending on which

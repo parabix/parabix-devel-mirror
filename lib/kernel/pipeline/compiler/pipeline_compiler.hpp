@@ -730,6 +730,9 @@ protected:
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
     Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
     Vec<Value *>                                mPartitionTerminationSignal;
+
+    Vec<PHINode *>                              mExhaustedPipelineInputAtPartitionEntry;
+
     Vec<Value *>                                mConsumedItemCount;
 
     PartitionJumpPhiOutMap                      mPartitionProducedItemCountAtJumpExit;
@@ -745,8 +748,8 @@ protected:
     PHINode *                                   mTotalNumOfStrides = nullptr;
     PHINode *                                   mHasProgressedPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
-    PHINode *                                   mAlreadyExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
+    PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
     Value *                                     mExhaustedPipelineInputAtExit = nullptr;
     PHINode *                                   mExecutedAtLeastOncePhi = nullptr;

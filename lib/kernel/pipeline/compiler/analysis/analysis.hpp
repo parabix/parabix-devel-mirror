@@ -17,13 +17,17 @@ private:
 
     // constructor
 
-    PipelineAnalysis(PipelineKernel * pipelineKernel);
+    PipelineAnalysis(PipelineKernel * pipelineKernel)
+    : mPipelineKernel(pipelineKernel) {
+
+    }
 
     // pipeline analysis functions
 
     using KernelPartitionIds = flat_map<Relationships::vertex_descriptor, unsigned>;
 
-    PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
+    void makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
+
     Relationships generateInitialPipelineGraph(BuilderRef b,
                                                PipelineKernel * const pipelineKernel,
                                                OwningVector<Kernel> & internalKernels,
@@ -148,6 +152,14 @@ public:
     OwningVector<Binding>           InternalBindings;
 
 };
+
+PipelineAnalysis PipelineAnalysis::analyze(BuilderRef b, PipelineKernel * pipelineKernel) {
+    PipelineAnalysis PA(pipelineKernel);
+
+
+}
+
+
 
 #endif
 
