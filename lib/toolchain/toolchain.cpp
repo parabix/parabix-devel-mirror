@@ -29,7 +29,7 @@ inline unsigned getPageSize() {
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
 
 static cl::bits<DebugFlags>
-DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
+DebugOptions(cl::desc("Debugging Options"), cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumVal(TraceCounts, "Trace kernel processed, consumed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Trace dynamic buffer allocations and deallocations."),
@@ -40,9 +40,7 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(TraceUnconsumedItemCounts, "Trace unconsumed item counts over segments."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
                         clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously "
-                                                  "overwriting kernel state / stream space.\n"
-                                                  "NOTE: this requires memory to be page-aligned, which "
-                                                  "may still hide errors."),
+                                                  "overwriting kernel state / stream space."),
                         clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
                         clEnumVal(EnableBlockingIOCounter, "Count and report the number of blocked kernel "
                                                            "executions due to insufficient data/space of a "
@@ -130,15 +128,12 @@ ThreadNumOption("thread-num", cl::location(SegmentThreads),
 static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),
                                           cl::desc("Number of blocks per stride for scanning kernels"), cl::value_desc("positive initeger"));
 
-static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
-                                 cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
-
 static cl::opt<unsigned, true> GroupNumOption("group-num", cl::location(GroupNum), cl::init(256),
                                          cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 std::string TraceOption = "";
 static cl::opt<std::string, true> TraceValueOption("trace", cl::location(TraceOption),
-                                            cl::desc("The char"), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
+                                            cl::desc("Trace the values of variables beginning with the given prefix."), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
 
 std::string CCCOption = "";
 static cl::opt<std::string, true> CCTypeOption("ccc-type", cl::location(CCCOption), cl::init("binary"),
@@ -165,15 +160,6 @@ bool TraceObjectCache;
 unsigned CacheDaysLimit;
 
 int FreeCallBisectLimit;
-
-bool NVPTX = [](const bool nvptx) {
-    #ifndef CUDA_ENABLED
-    if (nvptx) {
-        report_fatal_error("CUDA compiler is not supported.");
-    }
-    #endif
-    return nvptx;
-}(NVPTXOption);
 
 unsigned GroupNum;
 
@@ -219,11 +205,6 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     target_Options.MCOptions.AsmVerbose = true;
-#endif
-#ifndef CUDA_ENABLED
-    if (NVPTX) {
-        report_fatal_error("CUDA compiler is not supported.");
-    }
 #endif
 }
 
