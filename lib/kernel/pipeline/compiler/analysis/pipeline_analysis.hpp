@@ -294,7 +294,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
         // of the lexical (program input) ordering
         if (id != inputPartitionId) {
             if (LLVM_UNLIKELY(id == -1U)) {
-                outputPartitionId = -1U;
+                outputPartitionId = 0;
             } else {
                 ++outputPartitionId;
                 inputPartitionId = id;
@@ -305,8 +305,8 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
     assert (G[kernels[P.PipelineInput]].Kernel == pipelineKernel);
     assert (G[kernels[P.PipelineOutput]].Kernel == pipelineKernel);
 
-    P.KernelPartitionId[P.PipelineInput] = 0;
-    P.KernelPartitionId[P.PipelineOutput] = numOfPartitions;
+    assert (P.KernelPartitionId[P.PipelineInput] == 0);
+    assert (P.KernelPartitionId[P.PipelineOutput] == (numOfPartitions - 1));
 
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {

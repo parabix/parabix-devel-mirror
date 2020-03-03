@@ -10,12 +10,14 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 TerminationGraph PipelineCompiler::makeTerminationGraph() const {
 
-    TerminationGraph G(PartitionCount + 1);
+    TerminationGraph G(PartitionCount);
 
     // Although every kernel will eventually terminate, we only need to observe one kernel
     // in each partition terminating to know whether *all* of the kernels will terminate.
     // Since only the root of a partition could be a kernel that explicitly terminates,
     // we can "share" its termination state.
+
+    const auto terminal = PartitionCount - 1;
 
     for (auto consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
         const auto cid = KernelPartitionId[consumer];
@@ -30,14 +32,14 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
         }
     }
 
-    for (auto consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
+    for (auto consumer = FirstCall; consumer <= LastCall; ++consumer) {
         for (const auto relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
             const auto r = source(relationship, mScalarGraph);
             for (const auto producer : make_iterator_range(in_edges(r, mScalarGraph))) {
                 const auto k = source(producer, mScalarGraph);
                 assert ("cannot occur" && k != PipelineOutput);
                 const auto pid = KernelPartitionId[k];
-                add_edge(pid, PartitionCount, false, G);
+                add_edge(pid, terminal, false, G);
             }
         }
     }
@@ -59,14 +61,18 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
         if (any_termination(getKernel(i))) {
             const auto pid = KernelPartitionId[i];
-            add_edge(pid, PartitionCount, false, G);
+            add_edge(pid, terminal, false, G);
         }
     }
 
+    printGraph(G, errs(), "T1");
+
     transitive_reduction_dag(G);
 
+    printGraph(G, errs(), "T2");
+
     // we are only interested in the incoming edges of the pipeline output
-    for (unsigned i = 0; i < PartitionCount; ++i) {
+    for (unsigned i = 0; i < terminal; ++i) {
         clear_in_edges(i, G);
     }
 
@@ -87,14 +93,16 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() const {
             // in case we already have the edge in G, set the
             // hard termination flag to true after "adding" it.
             const auto pid = KernelPartitionId[i];
-            G[add_edge(pid, PartitionCount, true, G).first] = true;
+            G[add_edge(pid, terminal, true, G).first] = true;
         }
     }
 
+    printGraph(G, errs(), "T3");
+
     assert ("a pipeline with no sinks ought to produce no observable data"
-            && in_degree(PartitionCount, G) > 0);
+            && in_degree(terminal, G) > 0);
     assert ("termination graph construction error?"
-            && out_degree(PartitionCount, G) == 0);
+            && out_degree(terminal, G) == 0);
 
     return G;
 }

@@ -47,7 +47,7 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
     Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
 
     // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges(PartitionCount, mTerminationGraph))) {
+    for (const auto e : make_iterator_range(in_edges((PartitionCount - 1), mTerminationGraph))) {
         const auto partitionId = source(e, mTerminationGraph);
         Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
         assert (signal->getType() == unterminated->getType());

@@ -308,6 +308,8 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
         }
     }
 
+    printGraph(H, errs());
+
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));
     assert (nextKernel == kernels);
@@ -318,6 +320,10 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
     if (LLVM_UNLIKELY(!lexical_ordering(H, orderingOfH))) {
         report_fatal_error("Cannot lexically order the partition graph!");
     }
+
+
+    const auto sink = orderingOfH.back();
+    addRateId(H[sink], nextRateId++);
 
     for (const auto u : orderingOfH) {
         auto & nodeRateSet = H[u];
@@ -360,6 +366,9 @@ unsigned PipelineCompiler::identifyKernelPartitions(const Relationships & G,
     }
 
     assert (partitionIds.size() == kernels);
+
+    errs() << nextPartitionId << "\n";
+
 
     return nextPartitionId;
 }
@@ -1033,10 +1042,10 @@ PartitioningGraph PipelineCompiler::generatePartitioningGraph() const {
 
     assert (PartitionCount > 0);
     assert (KernelPartitionId[firstKernel] == 0U);
-    assert ((KernelPartitionId[lastKernel] + 1) == PartitionCount);
-    assert (PartitionCount < FirstStreamSet);
+    assert (KernelPartitionId[lastKernel] < PartitionCount);
+    assert (KernelPartitionId[lastKernel] < FirstStreamSet);
 
-    PartitioningGraph G(PartitionCount);
+    PartitioningGraph G(PartitionCount + 1);
 
     #if 1
 
@@ -2291,7 +2300,7 @@ PartitionJumpTree PipelineCompiler::makePartitionJumpTree() const {
         add_edge(i, mPartitionJumpIndex[i], G);
     }
 
-    printGraph(G, errs(), "T");
+    // printGraph(G, errs(), "T");
 
     #ifndef NDEBUG
     graph_traits<PartitionJumpTree>::edge_iterator begin, end;
