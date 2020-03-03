@@ -2290,6 +2290,9 @@ PartitionJumpTree PipelineCompiler::makePartitionJumpTree() const {
     for (auto i = 0U; i < PartitionCount; ++i) {
         add_edge(i, mPartitionJumpIndex[i], G);
     }
+
+    printGraph(G, errs(), "T");
+
     #ifndef NDEBUG
     graph_traits<PartitionJumpTree>::edge_iterator begin, end;
     std::tie(begin, end) = edges(G);

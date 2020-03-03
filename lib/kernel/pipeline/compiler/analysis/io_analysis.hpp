@@ -5,24 +5,19 @@
 
 namespace kernel {
 
-#if 0
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernelInputCheckGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::makeKernelInputCheckGraph() const {
+IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
 
     // The root kernel of a partition is resposible for determining how many strides the
     // remaining kernels within the partition will execute. The reason for this is only
     // the root kernel may accept input at a non-Fixed rate or have input rate attributes
     // that may alter the dataflow rates within the partition.
 
-    flat_set<unsigned> knownLinkedRateIds;
+    flat_set<unsigned> knownGlobalRateIds;
 
-
-    using InputGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BufferRateData>;
-
-    InputGraph G(num_vertices(mBufferGraph));
+    IOCheckGraph G(num_vertices(mBufferGraph));
 
     for (auto start = FirstKernel; start <= LastKernel; ) {
 
@@ -34,54 +29,65 @@ void PipelineCompiler::makeKernelInputCheckGraph() const {
             }
         }
 
-        knownLinkedRateIds.clear();
+        knownGlobalRateIds.clear();
 
-        auto addCheck = [&](const size_t kernel, const BufferGraph::edge_descriptor e) {
+        // Linked rates have equivalent processed/produced/consumed counts throughout the
+        // lifetime of the program. We can avoid redundant checks by ensuring any rate we
+        // assess is unique. However, any port with non-linear I/O could have different
+        // intermediary item counts but despite having linked final item counts.
+
+        auto addInputCheck = [&](const size_t kernel, const BufferGraph::edge_descriptor e) {
             const BufferRateData & br = mBufferGraph[e];
-            const auto streamSet = source(e, mBufferGraph);
-            add_edge(kernel, streamSet, br, G);
+            if (knownGlobalRateIds.insert(br.GlobalPortId).second) {
+                const auto streamSet = source(e, mBufferGraph);
+                add_edge(kernel, streamSet, br, G);
+            }
+        };
+
+        auto addOutputCheck = [&](const size_t kernel, const BufferGraph::edge_descriptor e) {
+            const BufferRateData & br = mBufferGraph[e];
+            if (knownGlobalRateIds.insert(br.GlobalPortId).second) {
+                const auto streamSet = target(e, mBufferGraph);
+                add_edge(streamSet, kernel, br, G);
+            }
         };
 
         for (const auto e : make_iterator_range(in_edges(pid, mPartitioningGraph))) {
             const PartitioningGraphEdge & check = mPartitioningGraph[e];
-            addCheck(start, getInput(check.Kernel, check.Port));
+            addInputCheck(start, getInput(check.Kernel, check.Port));
         }
 
-        for (auto kernel = start; kernel < end; ++kernel) {
-
+        for (auto kernel = start; kernel != end; ++kernel) {
 
             // If a kernel has non-linear input, we'll have to test the non-linear input
             // ports to determine how many strides are in a particular sub-segment.
 
             if (mayHaveNonLinearIO(kernel)) {
                 for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-
-                    // TODO: we should be able to characterize linked I/O ports better to reflect the
-                    // potential itermediary states. This would require reasoning about the symbolic
-                    // state of the item counts over time for any data patterns.
-
                     const auto streamSet = source(e, mBufferGraph);
                     const BufferNode & bn = mBufferGraph[streamSet];
+                    if (bn.NonLocal || !bn.Linear) {
+                        addInputCheck(kernel, e);
+                    }
+                }
 
-                    // Linked rates have equivalent processed/produced/consumed counts throughout the
-                    // lifetime of the program. We can avoid redundant checks by ensuring any rate we
-                    // assess is unique. However, any port with non-linear I/O could have different
-                    // intermediary item counts but despite having linked final item counts.
-
-                    if (!bn.Linear || knownLinkedRateIds.insert(br.LinkedPortId).second) {
-                        addCheck(kernel, e);
+                for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                    const auto streamSet = target(e, mBufferGraph);
+                    const BufferNode & bn = mBufferGraph[streamSet];
+                    if (bn.NonLocal || !bn.Linear) {
+                        addOutputCheck(kernel, e);
                     }
                 }
             }
+
+
         }
 
         start = end;
     }
 
-
+    return G;
 }
-
-#endif
 
 }
 

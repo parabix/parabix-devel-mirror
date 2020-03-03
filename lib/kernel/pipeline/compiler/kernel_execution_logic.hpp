@@ -99,12 +99,10 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
     }
 
-    Value * numOfStrides = mNumOfLinearStrides;
-    if (mReportedNumOfStridesPhi) {
-        numOfStrides = mReportedNumOfStridesPhi;
-    }
-    args.push_back(numOfStrides); assert (numOfStrides);
-    if (!mHasExplicitFinalPartialStride) {
+    if (mHasExplicitFinalPartialStride) {
+        args.push_back(mNumOfLinearStrides);
+    } else {
+        args.push_back(mReportedNumOfStridesPhi);
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
     }
 

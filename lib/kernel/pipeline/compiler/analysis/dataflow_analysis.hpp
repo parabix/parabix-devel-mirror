@@ -477,7 +477,8 @@ void PipelineCompiler::identifyLocalPortIds(BufferGraph & G) const {
 
     using BitSet = dynamic_bitset<>;
     using Vertex = BufferGraph::vertex_descriptor;
-    using PortIds = std::map<BitSet, unsigned>;
+    using GlobalPortIds = std::map<BitSet, unsigned>;
+    using LocalPortIds = flat_map<unsigned, unsigned>;
     using Graph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BitSet>;
 
 
@@ -615,8 +616,8 @@ void PipelineCompiler::identifyLocalPortIds(BufferGraph & G) const {
     using HInIter = graph_traits<Graph>::in_edge_iterator;
     using HOutIter = graph_traits<Graph>::out_edge_iterator;
 
-    PortIds localPortIds;
-    PortIds globalPortIds;
+    GlobalPortIds globalPortIds;
+    LocalPortIds localPortIds;
     unsigned nextLocalPortId = 0;
     unsigned nextGlobalPortId = 0;
     unsigned currentPartitionId = 0;
@@ -631,11 +632,21 @@ void PipelineCompiler::identifyLocalPortIds(BufferGraph & G) const {
             currentPartitionId = partitionId;
         }
 
-        auto getPortNumber = [&](const BitSet & B, PortIds & portIds, unsigned & nextPortId) {
-            const auto f = portIds.find(B);
-            if (f == portIds.end()) {
-                const auto id = nextPortId++;
-                portIds.emplace(std::move(B), id);
+        auto getGlobalPortId = [&](const BitSet & B) {
+            const auto f = globalPortIds.find(B);
+            if (f == globalPortIds.end()) {
+                const auto id = nextGlobalPortId++;
+                globalPortIds.emplace(std::move(B), id);
+                return id;
+            }
+            return f->second;
+        };
+
+        auto getLocalPortId = [&](const unsigned globalId) {
+            const auto f = localPortIds.find(globalId);
+            if (f == localPortIds.end()) {
+                const auto id = nextLocalPortId++;
+                localPortIds.emplace(globalId, id);
                 return id;
             }
             return f->second;
@@ -655,8 +666,8 @@ void PipelineCompiler::identifyLocalPortIds(BufferGraph & G) const {
             if (nextRateId >= rateSet.capacity()) {
                 rateSet.resize(nextRateId);
             }
-            br.LocalPortId = getPortNumber(rateSet, localPortIds, nextLocalPortId);
-            br.GlobalPortId = getPortNumber(rateSet, globalPortIds, nextGlobalPortId);
+            br.GlobalPortId = getGlobalPortId(rateSet);
+            br.LocalPortId = getLocalPortId(br.GlobalPortId);
         }
 
         GOutIter ej, ej_end;
@@ -673,8 +684,9 @@ void PipelineCompiler::identifyLocalPortIds(BufferGraph & G) const {
             if (nextRateId >= rateSet.capacity()) {
                 rateSet.resize(nextRateId);
             }
-            br.LocalPortId = getPortNumber(rateSet, localPortIds, nextLocalPortId);
-            br.GlobalPortId = getPortNumber(rateSet, globalPortIds, nextGlobalPortId);
+            br.GlobalPortId = getGlobalPortId(rateSet);
+            br.LocalPortId = getLocalPortId(br.GlobalPortId);
+
         }
     }
 

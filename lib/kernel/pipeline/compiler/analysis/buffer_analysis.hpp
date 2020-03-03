@@ -707,7 +707,7 @@ bool PipelineCompiler::mayHaveNonLinearIO(const size_t kernel) const {
             return true;
         }
     }
-    for (const auto output : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
         const auto streamSet = target(output, mBufferGraph);
         const BufferNode & node = mBufferGraph[streamSet];
         if (node.NonLocal || !node.Linear) {
