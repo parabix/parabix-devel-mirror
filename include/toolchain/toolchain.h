@@ -72,7 +72,6 @@ extern unsigned SegmentThreads;
 extern unsigned ScanBlocks;
 extern bool EnableObjectCache;
 extern bool TraceObjectCache;
-extern bool NVPTX;
 extern unsigned GroupNum;
 extern std::string ProgramName;
 extern llvm::TargetOptions target_Options;

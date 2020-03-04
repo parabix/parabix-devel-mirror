@@ -20,6 +20,13 @@ private:
     void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
 };
 
+class ScanBatchKernel : public MultiBlockKernel {
+public:
+    ScanBatchKernel(BuilderRef b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks = 1);
+private:
+    void generateMultiBlockLogic(BuilderRef iBuilder, llvm::Value * const numOfStrides) override;
+};
+
 class MatchCoordinatesKernel : public MultiBlockKernel {
 public:
     MatchCoordinatesKernel(BuilderRef b,

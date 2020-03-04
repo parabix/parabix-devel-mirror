@@ -63,11 +63,11 @@ void Hexify::generatePabloMethod() {
     PabloAST * LF = ccc.compileCC(re::makeByte(0xA));
     
     std::vector<PabloAST *> lo(4);
-    lo[3] = pb.createSel(insertMask, spreadBasis[7], pb.createAdvance(spreadBasis[3], 1));
-    lo[2] = pb.createSel(insertMask, spreadBasis[6], pb.createAdvance(spreadBasis[2], 1));
-    lo[1] = pb.createSel(insertMask, spreadBasis[5], pb.createAdvance(spreadBasis[1], 1));
-    lo[0] = pb.createSel(insertMask, spreadBasis[4], pb.createAdvance(spreadBasis[0], 1));
-    PabloAST * hexA_F = bnc.UGE(lo, 10);
+    lo[3] = pb.createSel(insertMask, spreadBasis[7], pb.createAdvance(spreadBasis[3], 1), "lo[3]");
+    lo[2] = pb.createSel(insertMask, spreadBasis[6], pb.createAdvance(spreadBasis[2], 1), "lo[2]");
+    lo[1] = pb.createSel(insertMask, spreadBasis[5], pb.createAdvance(spreadBasis[1], 1), "lo[1]");
+    lo[0] = pb.createSel(insertMask, spreadBasis[4], pb.createAdvance(spreadBasis[0], 1), "lo[0]");
+    PabloAST * hexA_F = bnc.UGE(lo, 10, "hexA_F");
     BixNum lo1 = bnc.SubModular(lo, 9);
     std::vector<PabloAST *> hex(8);
     hex[7] = pb.createZeroes();

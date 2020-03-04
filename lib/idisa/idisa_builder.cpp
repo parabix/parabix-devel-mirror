@@ -453,7 +453,7 @@ Value * IDISA_Builder::simd_pext(unsigned fieldwidth, Value * v, Value * extract
     for (unsigned fw = 2; fw < fieldwidth; fw = fw * 2) {
         Value * shift_fwd_amts = simd_srli(fw, simd_select_lo(fw*2, delcounts), fw/2);
         Value * shift_back_amts = simd_select_lo(fw, simd_select_hi(fw*2, delcounts));
-      w = simd_or(simd_sllv(fw, simd_select_lo(fw*2, w), shift_fwd_amts),
+        w = simd_or(simd_sllv(fw, simd_select_lo(fw*2, w), shift_fwd_amts),
                     simd_srlv(fw, simd_select_hi(fw*2, w), shift_back_amts));
         delcounts = simd_add(fw, simd_select_lo(fw, delcounts), simd_srli(fw, delcounts, fw/2));
     }

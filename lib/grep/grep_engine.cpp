@@ -66,6 +66,7 @@
 #include <grep/grep_toolchain.h>
 #include <toolchain/toolchain.h>
 #include <kernel/util/debug_display.h>
+#include <util/aligned_allocator.h>
 
 using namespace llvm;
 using namespace cc;
@@ -91,6 +92,21 @@ extern "C" void accumulate_match_wrapper(intptr_t accum_addr, const size_t lineN
 extern "C" void finalize_match_wrapper(intptr_t accum_addr, char * buffer_end) {
     assert ("passed a null accumulator" && accum_addr);
     reinterpret_cast<MatchAccumulator *>(accum_addr)->finalize_match(buffer_end);
+}
+
+extern "C" unsigned get_file_count_wrapper(intptr_t accum_addr) {
+    assert ("passed a null accumulator" && accum_addr);
+    return reinterpret_cast<MatchAccumulator *>(accum_addr)->getFileCount();
+}
+
+extern "C" size_t get_file_start_pos_wrapper(intptr_t accum_addr, unsigned fileNo) {
+    assert ("passed a null accumulator" && accum_addr);
+    return reinterpret_cast<MatchAccumulator *>(accum_addr)->getFileStartPos(fileNo);
+}
+
+extern "C" void set_batch_line_number_wrapper(intptr_t accum_addr, unsigned fileNo, size_t batchLine) {
+    assert ("passed a null accumulator" && accum_addr);
+    reinterpret_cast<MatchAccumulator *>(accum_addr)->setBatchLineNumber(fileNo, batchLine);
 }
 
 // Grep Engine construction and initialization.
@@ -163,11 +179,47 @@ void GrepEngine::setRecordBreak(GrepRecordBreakKind b) {
     mGrepRecordBreak = b;
 }
 
+namespace fs = boost::filesystem;
+
+std::vector<std::vector<std::string>> formFileGroups(std::vector<fs::path> paths) {
+    const unsigned maxFilesPerGroup = 32;
+    const uintmax_t FileBatchThreshold = 4 * codegen::SegmentSize;
+    std::vector<std::vector<std::string>> groups;
+    // The total size of files in the current group, or 0 if the
+    // the next file should start a new group.
+    uintmax_t groupTotalSize = 0;
+    for (auto p : paths) {
+        boost::system::error_code errc;
+        auto s = fs::file_size(p, errc);
+        if ((s > 0) && (s < FileBatchThreshold)) {
+            if (groupTotalSize == 0) {
+                groups.push_back({p.string()});
+                groupTotalSize = s;
+            } else {
+                groups.back().push_back(p.string());
+                groupTotalSize += s;
+                if ((groupTotalSize > FileBatchThreshold) || (groups.back().size() == maxFilesPerGroup)) {
+                    // Signal to start a new group
+                    groupTotalSize = 0;
+                }
+            }
+        } else {
+            // For large files, or in the case of non-regular file or other error,
+            // the path is saved in its own group.
+            groups.push_back({p.string()});
+            // This group is done, signal to start a new group.
+            groupTotalSize = 0;
+        }
+    }
+    return groups;
+}
+
 void GrepEngine::initFileResult(const std::vector<boost::filesystem::path> & paths) {
     const unsigned n = paths.size();
     mResultStrs.resize(n);
     mFileStatus.resize(n, FileStatus::Pending);
-    inputPaths = paths;
+    mInputPaths = paths;
+    mFileGroups = formFileGroups(paths);
 }
 
 //
@@ -302,6 +354,12 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
 }
 
 void GrepEngine::grepPrologue(const std::unique_ptr<ProgramBuilder> & P, StreamSet * SourceStream) {
+
+    mLineBreakStream = nullptr;
+    mU8index = nullptr;
+    mGCB_stream = nullptr;
+    mPropertyStreamMap.clear();
+
     Scalar * const callbackObject = P->getInputScalar("callbackObject");
     if (mBinaryFilesMode == argv::Text) {
         mNullMode = NullCharMode::Data;
@@ -545,24 +603,70 @@ void GrepEngine::grepCodeGen() {
 //  Default Report Match:  lines are emitted with whatever line terminators are found in the
 //  input.  However, if the final line is not terminated, a new line is appended.
 //
+const size_t batch_alignment = 64;
+
+void EmitMatch::setFileLabel(std::string fileLabel) {
+    if (mShowFileNames) {
+        mLinePrefix = fileLabel + (mInitialTab ? "\t:" : ":");
+    } else mLinePrefix = "";
+}
+
+void EmitMatch::setStringStream(std::ostringstream * s) {
+    mResultStr = s;
+}
+
+unsigned EmitMatch::getFileCount() {
+    if (mFileNames.size() == 0) return 1;
+    return mFileNames.size();
+}
+
+size_t EmitMatch::getFileStartPos(unsigned fileNo) {
+    if (mFileStartPositions.size() == 0) return 0;
+    assert(fileNo < mFileStartPositions.size());
+    //llvm::errs() << "getFileStartPos(" << fileNo << ") = " << mFileStartPositions[fileNo] << "  file = " << mFileNames[fileNo] << "\n";
+    return mFileStartPositions[fileNo];
+}
+
+void EmitMatch::setBatchLineNumber(unsigned fileNo, size_t batchLine) {
+    //llvm::errs() << "setBatchLineNumber(" << fileNo << ", " << batchLine << ")  file = " << mFileNames[fileNo] << "\n";
+    mFileStartLineNumbers[fileNo] = batchLine;
+}
+
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
-    if ((mLineCount > 0) && mContextGroups && (lineNum > mLineNum + 1)) {
-        mResultStr << "--\n";
+    unsigned nextFile = mCurrentFile + 1;
+    unsigned nextLine = mFileStartLineNumbers[nextFile];
+    if ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0)) {
+        do {
+            mCurrentFile = nextFile;
+            nextFile++;
+            //llvm::errs() << "mCurrentFile = " << mCurrentFile << ", mFileStartLineNumbers[mCurrentFile] " << mFileStartLineNumbers[mCurrentFile] << "\n";
+            nextLine = mFileStartLineNumbers[nextFile];
+        } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
+        setFileLabel(mFileNames[mCurrentFile]);
+        if (!mTerminated) {
+            *mResultStr << "\n";
+            mTerminated = true;
+        }
+        //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
     }
-    mResultStr << mLinePrefix;
+    size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
+    if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
+        *mResultStr << "--\n";
+    }
+    *mResultStr << mLinePrefix;
     if (mShowLineNumbers) {
         // Internally line numbers are counted from 0.  For display, adjust
         // the line number so that lines are numbered from 1.
         if (mInitialTab) {
-            mResultStr << lineNum+1 << "\t:";
+            *mResultStr << relLineNum+1 << "\t:";
         }
         else {
-            mResultStr << lineNum+1 << ":";
+            *mResultStr << relLineNum+1 << ":";
         }
     }
 
     const auto bytes = line_end - line_start + 1;
-    mResultStr.write(line_start, bytes);
+    mResultStr->write(line_start, bytes);
     mLineCount++;
     mLineNum = lineNum;
     unsigned last_byte = *line_end;
@@ -581,27 +685,10 @@ void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char 
 }
 
 void EmitMatch::finalize_match(char * buffer_end) {
-    if (!mTerminated) mResultStr << "\n";
+    if (!mTerminated) *mResultStr << "\n";
 }
 
-void EmitMatchesEngine::grepCodeGen() {
-    auto & idb = mGrepDriver.getBuilder();
-
-    auto E = mGrepDriver.makePipeline(
-                // inputs
-                {Binding{idb->getSizeTy(), "useMMap"},
-                Binding{idb->getInt32Ty(), "fileDescriptor"},
-                Binding{idb->getIntAddrTy(), "callbackObject"},
-                Binding{idb->getSizeTy(), "maxCount"}}
-                ,// output
-                {Binding{idb->getInt64Ty(), "countResult"}});
-
-    Scalar * const useMMap = E->getInputScalar("useMMap");
-    Scalar * const fileDescriptor = E->getInputScalar("fileDescriptor");
-
-    StreamSet * const ByteStream = E->CreateStreamSet(1, ENCODING_BITS);
-    E->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
-
+void EmitMatchesEngine::grepPipeline(const std::unique_ptr<ProgramBuilder> & E, StreamSet * ByteStream) {
     StreamSet * SourceStream = getBasis(E, ByteStream);
 
     grepPrologue(E, SourceStream);
@@ -750,17 +837,53 @@ void EmitMatchesEngine::grepCodeGen() {
             matchK->link("finalize_match_wrapper", finalize_match_wrapper);
         } else {
             Scalar * const callbackObject = E->getInputScalar("callbackObject");
-            Kernel * const scanMatchK = E->CreateKernelCall<ScanMatchKernel>(MatchedLineEnds, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
-            scanMatchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
-            scanMatchK->link("finalize_match_wrapper", finalize_match_wrapper);
+            Kernel * const scanBatchK = E->CreateKernelCall<ScanBatchKernel>(MatchedLineEnds, mLineBreakStream, ByteStream, callbackObject, ScanMatchBlocks);
+            scanBatchK->link("get_file_count_wrapper", get_file_count_wrapper);
+            scanBatchK->link("get_file_start_pos_wrapper", get_file_start_pos_wrapper);
+            scanBatchK->link("set_batch_line_number_wrapper", set_batch_line_number_wrapper);
+            scanBatchK->link("accumulate_match_wrapper", accumulate_match_wrapper);
+            scanBatchK->link("finalize_match_wrapper", finalize_match_wrapper);
         }
     }
-
     //E->CreateKernelCall<StdOutKernel>(ColorizedBytes);
+}
 
-    E->setOutputScalar("countResult", E->CreateConstant(idb->getInt64(0)));
+void EmitMatchesEngine::grepCodeGen() {
+    auto & idb = mGrepDriver.getBuilder();
 
-    mMainMethod = E->compile();
+    auto E1 = mGrepDriver.makePipeline(
+                // inputs
+                {Binding{idb->getSizeTy(), "useMMap"},
+                Binding{idb->getInt32Ty(), "fileDescriptor"},
+                Binding{idb->getIntAddrTy(), "callbackObject"},
+                Binding{idb->getSizeTy(), "maxCount"}}
+                ,// output
+                {Binding{idb->getInt64Ty(), "countResult"}});
+
+    Scalar * const useMMap = E1->getInputScalar("useMMap");
+    Scalar * const fileDescriptor = E1->getInputScalar("fileDescriptor");
+    StreamSet * const ByteStream = E1->CreateStreamSet(1, ENCODING_BITS);
+    E1->CreateKernelCall<FDSourceKernel>(useMMap, fileDescriptor, ByteStream);
+    grepPipeline(E1, ByteStream);
+    E1->setOutputScalar("countResult", E1->CreateConstant(idb->getInt64(0)));
+    mMainMethod = E1->compile();
+
+    auto E2 = mGrepDriver.makePipeline(
+                // inputs
+                {Binding{idb->getInt8PtrTy(), "buffer"},
+                Binding{idb->getSizeTy(), "length"},
+                Binding{idb->getIntAddrTy(), "callbackObject"},
+                Binding{idb->getSizeTy(), "maxCount"}}
+                ,// output
+                {Binding{idb->getInt64Ty(), "countResult"}});
+
+    Scalar * const buffer = E2->getInputScalar("buffer");
+    Scalar * const length = E2->getInputScalar("length");
+    StreamSet * const InternalBytes = E2->CreateStreamSet(1, 8);
+    E2->CreateKernelCall<MemorySourceKernel>(buffer, length, InternalBytes);
+    grepPipeline(E2, InternalBytes);
+    E2->setOutputScalar("countResult", E2->CreateConstant(idb->getInt64(0)));
+    mBatchMethod = E2->compile();
 }
 
 //
@@ -777,25 +900,28 @@ bool canMMap(const std::string & fileName) {
 }
 
 
-uint64_t GrepEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
+uint64_t GrepEngine::doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) {
     typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, GrepCallBackObject *, size_t maxCount);
-    bool useMMap = mPreferMMap && canMMap(fileName);
     auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-
-    int32_t fileDescriptor = openFile(fileName, strm);
-    if (fileDescriptor == -1) return 0;
     GrepCallBackObject handler;
-    uint64_t grepResult = f(useMMap, fileDescriptor, &handler, mMaxCount);
+    uint64_t resultTotal = 0;
 
-    close(fileDescriptor);
-    if (handler.binaryFileSignalled()) {
-        llvm::errs() << "Binary file " << fileName << "\n";
-        return 0;
+    for (auto fileName : fileNames) {
+        bool useMMap = mPreferMMap && canMMap(fileName);
+        int32_t fileDescriptor = openFile(fileName, strm);
+        if (fileDescriptor == -1) return 0;
+        uint64_t grepResult = f(useMMap, fileDescriptor, &handler, mMaxCount);
+
+        close(fileDescriptor);
+        if (handler.binaryFileSignalled()) {
+            llvm::errs() << "Binary file " << fileName << "\n";
+        }
+        else {
+            showResult(grepResult, fileName, strm);
+            resultTotal += grepResult;
+        }
     }
-    else {
-        showResult(grepResult, fileName, strm);
-        return grepResult;
-    }
+    return resultTotal;
 }
 
 std::string GrepEngine::linePrefix(std::string fileName) {
@@ -823,21 +949,93 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
     }
 }
 
-uint64_t EmitMatchesEngine::doGrep(const std::string & fileName, std::ostringstream & strm) {
-    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
-    bool useMMap = mPreferMMap && canMMap(fileName);
-    auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-    int32_t fileDescriptor = openFile(fileName, strm);
-    if (fileDescriptor == -1) return 0;
-    EmitMatch accum(linePrefix(fileName), mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab, strm);
-    f(useMMap, fileDescriptor, &accum, mMaxCount);
-    close(fileDescriptor);
-    if (accum.binaryFileSignalled()) {
-        accum.mResultStr.clear();
-        accum.mResultStr.str("");
+uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) {
+    if (fileNames.size() == 1) {
+        typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
+        auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+        accum.setStringStream(&strm);
+        bool useMMap;
+        int32_t fileDescriptor;
+        if (fileNames[0] == "-") {
+            fileDescriptor = STDIN_FILENO;
+            accum.setFileLabel(mStdinLabel);
+            useMMap = false;
+        } else {
+            fileDescriptor= openFile(fileNames[0], strm);
+            if (fileDescriptor == -1) return 0;
+            accum.setFileLabel(fileNames[0]);
+            useMMap = mPreferMMap && canMMap(fileNames[0]);
+        }
+        f(useMMap, fileDescriptor, &accum, mMaxCount);
+        close(fileDescriptor);
+        if (accum.binaryFileSignalled()) {
+            accum.mResultStr->clear();
+            accum.mResultStr->str("");
+        }
+        if (accum.mLineCount > 0) grepMatchFound = true;
+        return accum.mLineCount;
+    } else {
+        typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
+        auto f = reinterpret_cast<GrepBatchFunctionType>(mBatchMethod);
+        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+        accum.setStringStream(&strm);
+        std::vector<int32_t> fileDescriptor(fileNames.size());
+        std::vector<size_t> fileSize(fileNames.size(), 0);
+        size_t cumulativeSize = 0;
+        unsigned filesOpened = 0;
+        for (unsigned i = 0; i < fileNames.size(); i++) {
+            fileDescriptor[i] = openFile(fileNames[i], strm);
+            if (fileDescriptor[i] == -1) continue;  // File error; skip.
+            struct stat st;
+            if (fstat(fileDescriptor[i], &st) != 0) continue;
+            fileSize[i] = st.st_size;
+            cumulativeSize += st.st_size;
+            filesOpened++;
+        }
+        cumulativeSize += filesOpened;  // Add an extra byte per file for possible '\n'.
+        size_t aligned_size = (cumulativeSize + batch_alignment - 1) & -batch_alignment;
+
+        AlignedAllocator<char, batch_alignment> alloc;
+        accum.mBatchBuffer = alloc.allocate(aligned_size, 0);
+        if (accum.mBatchBuffer == nullptr) {
+            llvm::report_fatal_error("Unable to allocate batch buffer of size: " + std::to_string(aligned_size));
+        }
+        char * current_base = accum.mBatchBuffer;
+        size_t current_start_position = 0;
+        accum.mFileNames.reserve(filesOpened);
+        accum.mFileStartPositions.reserve(filesOpened);
+
+        for (unsigned i = 0; i < fileNames.size(); i++) {
+            if (fileDescriptor[i] == -1) continue;  // Error opening file; skip.
+            ssize_t bytes_read = read(fileDescriptor[i], current_base, fileSize[i]);
+            close(fileDescriptor[i]);
+            if (bytes_read <= 0) continue; // No data or error reading the file; skip.
+            if (mBinaryFilesMode == argv::WithoutMatch) {
+                auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
+                if (null_byte_ptr != nullptr) {
+                    continue;  // Binary file; skip.
+                }
+            }
+            accum.mFileNames.push_back(fileNames[i]);
+            accum.mFileStartPositions.push_back(current_start_position);
+            current_base += bytes_read;
+            current_start_position += bytes_read;
+            if (*(current_base - 1) != '\n') {
+                *current_base = '\n';
+                current_base++;
+                current_start_position++;
+            }
+        }
+        if (accum.mFileNames.size() > 0) {
+            accum.setFileLabel(accum.mFileNames[0]);
+            accum.mFileStartLineNumbers.resize(accum.mFileNames.size());
+            f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
+        }
+        alloc.deallocate(accum.mBatchBuffer, 0);
+        if (accum.mLineCount > 0) grepMatchFound = true;
+        return accum.mLineCount;
     }
-    if (accum.mLineCount > 0) grepMatchFound = true;
-    return accum.mLineCount;
 }
 
 // Open a file and return its file desciptor.
@@ -886,7 +1084,7 @@ void * DoGrepThreadFunction(void *args) {
 
 bool GrepEngine::searchAllFiles() {
     const unsigned numOfThreads = std::min(static_cast<unsigned>(codegen::TaskThreads),
-                                           std::max(static_cast<unsigned>(inputPaths.size()), 1u));
+                                           std::max(static_cast<unsigned>(mFileGroups.size()), 1u));
     codegen::setTaskThreads(numOfThreads);
     std::vector<pthread_t> threads(numOfThreads);
 
@@ -912,11 +1110,8 @@ bool GrepEngine::searchAllFiles() {
 void * GrepEngine::DoGrepThreadMethod() {
 
     unsigned fileIdx = mNextFileToGrep++;
-    while (fileIdx < inputPaths.size()) {
-        if (codegen::DebugOptionIsSet(codegen::TraceCounts)) {
-            errs() << "Tracing " << inputPaths[fileIdx].string() << "\n";
-        }
-        const auto grepResult = doGrep(inputPaths[fileIdx].string(), mResultStrs[fileIdx]);
+    while (fileIdx < mFileGroups.size()) {
+        const auto grepResult = doGrep(mFileGroups[fileIdx], mResultStrs[fileIdx]);
         mFileStatus[fileIdx] = FileStatus::GrepComplete;
         if (grepResult > 0) {
             grepMatchFound = true;
@@ -929,7 +1124,7 @@ void * GrepEngine::DoGrepThreadMethod() {
         }
         fileIdx = mNextFileToGrep++;
         if (pthread_self() == mEngineThread) {
-            while ((mNextFileToPrint < inputPaths.size()) && (mFileStatus[mNextFileToPrint] == FileStatus::GrepComplete)) {
+            while ((mNextFileToPrint < mFileGroups.size()) && (mFileStatus[mNextFileToPrint] == FileStatus::GrepComplete)) {
                 const auto output = mResultStrs[mNextFileToPrint].str();
                 if (!output.empty()) {
                     llvm::outs() << output;
@@ -942,7 +1137,7 @@ void * GrepEngine::DoGrepThreadMethod() {
     if (pthread_self() != mEngineThread) {
         pthread_exit(nullptr);
     }
-    while (mNextFileToPrint < inputPaths.size()) {
+    while (mNextFileToPrint < mFileGroups.size()) {
         const bool readyToPrint = (mFileStatus[mNextFileToPrint] == FileStatus::GrepComplete);
         if (readyToPrint) {
             const auto output = mResultStrs[mNextFileToPrint].str();
@@ -957,7 +1152,7 @@ void * GrepEngine::DoGrepThreadMethod() {
     }
     if (mGrepStdIn) {
         std::ostringstream s;
-        const auto grepResult = doGrep("-", s);
+        const auto grepResult = doGrep({"-"}, s);
         llvm::outs() << s.str();
         if (grepResult) grepMatchFound = true;
     }
