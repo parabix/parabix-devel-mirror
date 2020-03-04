@@ -749,8 +749,11 @@ bool PipelineCompiler::isBounded() const {
             case RateId::Fixed:
             case RateId::PartialSum:
                 return true;
+            case RateId::Greedy:
+                if (rate.getLowerBound() > Rational{0, 1}) {
+                    return true;
+                }
             default: break;
-
         }
     }
     return false;

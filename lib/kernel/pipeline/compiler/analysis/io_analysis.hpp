@@ -62,13 +62,28 @@ IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
             // If a kernel has non-linear input, we'll have to test the non-linear input
             // ports to determine how many strides are in a particular sub-segment.
 
+            // TODO: if an input has an Add(k), we'll need to check the input stream.
+            // We can only directly accept the partition # of strides if there is no
+            // potential change of input even in the final stride even if the kernel has
+            // strictly linear input.
+
+
             if (mayHaveNonLinearIO(kernel)) {
+
+                bool needsAtLeastOneInput = true;
+
                 for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                     const auto streamSet = source(e, mBufferGraph);
                     const BufferNode & bn = mBufferGraph[streamSet];
                     if (bn.NonLocal || !bn.Linear) {
                         addInputCheck(kernel, e);
+                        needsAtLeastOneInput = false;
                     }
+                }
+
+
+                if (needsAtLeastOneInput)  {
+
                 }
 
                 for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {

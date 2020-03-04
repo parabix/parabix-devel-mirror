@@ -28,9 +28,9 @@
 
 #include "analysis/graphs.h"
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -294,7 +294,6 @@ public:
 
     void calculateItemCounts(BuilderRef b);
     Value * determineIsFinal(BuilderRef b) const;
-    Value * calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddresses);
 
@@ -751,7 +750,7 @@ protected:
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
-    Value *                                     mExhaustedPipelineInputAtExit = nullptr;
+    Value *                                     mExhaustedPipelineInputAtExit = nullptr;    
     PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
     PHINode *                                   mTerminatedSignalPhi = nullptr;
     PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;
@@ -760,6 +759,7 @@ protected:
     Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
+    PHINode *                                   mSomeInputIsNotExhaustedPhi = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mReportedNumOfStridesPhi = nullptr;
     PHINode *                                   mNextNumOfPartitionStridesPhi = nullptr;

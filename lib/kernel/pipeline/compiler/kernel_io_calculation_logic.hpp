@@ -141,7 +141,8 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
                                Value * const fixedRateFactor,
                                Value * const numOfReportedStrides,
                                Constant * const terminationSignal,
-                               Value * const nextNumOfPartitionStrides) {
+                               Value * const nextNumOfPartitionStrides,
+                               Value * const anyRemainingInput) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto port = StreamSetPort{ PortType::Input, i };
@@ -162,7 +163,10 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
             mNextNumOfPartitionStridesPhi->addIncoming(nextNumOfPartitionStrides, exitBlock);
         }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
-
+        if (mSomeInputIsNotExhaustedPhi) {
+            assert (anyRemainingInput);
+            mSomeInputIsNotExhaustedPhi->addIncoming(anyRemainingInput, exitBlock);
+        }
     };
     // --- lambda function end
 
@@ -238,7 +242,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
             finalNumOfStrides = b->CreateUMax(mNumOfPartitionStrides, finalNumOfStrides);
         }
         phiOutItemCounts(accessibleItems, truncatedVirtualBaseAddress, writableItems,
-                         fixedItemFactor, maxNumOfOutputStrides, completed, finalNumOfStrides);
+                         fixedItemFactor, maxNumOfOutputStrides, completed, finalNumOfStrides, b->getFalse());
         b->CreateBr(mKernelCheckOutputSpace);
 
         /// -------------------------------------------------------------------------------------
@@ -259,9 +263,41 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         }
     }
 
-    Value * const nonFinalFactor = calculateNonFinalItemCounts(b, accessibleItems, writableItems);
+    /// -------------------------------------------------------------------------------------
+    /// KERNEL CALCULATE NON-FINAL INPUT COUNT
+    /// -------------------------------------------------------------------------------------
+
+    assert (mNumOfLinearStrides);
+    Value * fixedRateFactor = nullptr;
+    if (mFixedRateFactorPhi) {
+        const Rational stride(mKernel->getStride());
+        fixedRateFactor  = b->CreateMulRate(mNumOfLinearStrides, stride * mFixedRateLCM);
+    }
+    Value * anyRemainingInput = nullptr;
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        Value * const accessible = calculateNumOfLinearItems(b, br.Port, mNumOfLinearStrides); assert (accessible);
+        if (mIsBounded) {
+            const auto streamSet = source(e, mBufferGraph);
+            Value * const avail = mLocallyAvailableItems[getBufferIndex(streamSet)]; assert (avail);
+            Value * const notExhausted = b->CreateICmpNE(accessible, avail);
+            if (anyRemainingInput) {
+                anyRemainingInput = b->CreateOr(anyRemainingInput, notExhausted);
+            } else {
+                anyRemainingInput = notExhausted;
+            }
+        }
+        accessibleItems[br.Port.Number] = accessible;
+    }
+
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        writableItems[br.Port.Number] = calculateNumOfLinearItems(b, br.Port, mNumOfLinearStrides);
+    }
+
     phiOutItemCounts(accessibleItems, inputVirtualBaseAddress, writableItems,
-                     nonFinalFactor, mNumOfLinearStrides, unterminated, mNumOfPartitionStrides);
+                     fixedRateFactor, mNumOfLinearStrides, unterminated, mNumOfPartitionStrides, anyRemainingInput);
+
     b->CreateBr(mKernelCheckOutputSpace);
 
     b->SetInsertPoint(mKernelCheckOutputSpace);
@@ -285,7 +321,6 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     #endif
 
     Value * const sufficientInput = b->CreateOr(hasEnough, closed);
-
     BasicBlock * const hasInputData = b->CreateBasicBlock(prefix + "_hasInputData", mKernelCheckOutputSpace);
 
     BasicBlock * recordBlockedIO = nullptr;
@@ -601,28 +636,6 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const StreamSetP
     debugPrint(b, "> " + prefix + "_numOfStrides = %" PRIu64, numOfStrides);
     #endif
     return numOfStrides;
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief calculateNonFinalItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::calculateNonFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems) {
-    assert (mNumOfLinearStrides);
-    Value * fixedRateFactor = nullptr;
-    if (mFixedRateFactorPhi) {
-        const Rational stride(mKernel->getStride());
-        fixedRateFactor  = b->CreateMulRate(mNumOfLinearStrides, stride * mFixedRateLCM);
-    }
-    const auto numOfInputs = accessibleItems.size();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        accessibleItems[i] = calculateNumOfLinearItems(b, StreamSetPort{PortType::Input, i}, mNumOfLinearStrides);
-    }
-    const auto numOfOutputs = writableItems.size();
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        writableItems[i] = calculateNumOfLinearItems(b, StreamSetPort{PortType::Output, i}, mNumOfLinearStrides);
-    }
-    return fixedRateFactor;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
