@@ -63,6 +63,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mHasZeroExtendedInput = nullptr;
     mZeroExtendBufferPhi = nullptr;
+    mAnyRemainingInput = nullptr;
     mExhaustedPipelineInputAtExit = mExhaustedInput;
     mExhaustedPipelineInputPhi = nullptr;
 
@@ -332,7 +333,12 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
     ConstantInt * const i1_TRUE = b->getTrue();
 
-    if (mSomeInputIsNotExhaustedPhi) {
+    Value * nonFinal = nullptr;
+    if (mIsPartitionRoot) {
+        nonFinal = b->CreateIsNull(mIsFinalInvocationPhi);
+    }
+
+    if (mAnyRemainingInput) {
 
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto port = StreamSetPort{ PortType::Input, i };
@@ -358,7 +364,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
             const auto prefix = makeKernelName(mKernelId);
             BasicBlock * const isFinalCheck = b->CreateBasicBlock(prefix + "_isFinalCheck", mKernelTerminated);
-            b->CreateCondBr(mSomeInputIsNotExhaustedPhi, mKernelLoopEntry, isFinalCheck);
+            b->CreateCondBr(mAnyRemainingInput, mKernelLoopEntry, isFinalCheck);
 
             b->SetInsertPoint(isFinalCheck);
         }
@@ -383,12 +389,11 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
         mTerminatedSignalPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
 
-        Value * const nonFinal = b->CreateIsNull(mIsFinalInvocationPhi);
         b->CreateLikelyCondBr(nonFinal, mKernelLoopExit, mKernelTerminated);
 
-    } else if (mSomeInputIsNotExhaustedPhi) {
+    } else if (mAnyRemainingInput) {
 
-        b->CreateCondBr(mSomeInputIsNotExhaustedPhi, mKernelLoopEntry, mKernelLoopExit);
+        b->CreateCondBr(mAnyRemainingInput, mKernelLoopEntry, mKernelLoopExit);
 
     } else { // just exit the loop
         b->CreateBr(mKernelLoopExit);
@@ -509,11 +514,6 @@ inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b)
         mNextNumOfPartitionStridesPhi = nullptr;
     } else {
         mNextNumOfPartitionStridesPhi = b->CreatePHI(sizeTy, 2, prefix + "_nextNumOfPartitionStrides");
-    }
-    if (mIsBounded && mMayHaveNonLinearIO) {
-        mSomeInputIsNotExhaustedPhi = b->CreatePHI(boolTy, 2, prefix + "_someInputIsNotExhausted");
-    } else {
-        mSomeInputIsNotExhaustedPhi = nullptr;
     }
 
 }

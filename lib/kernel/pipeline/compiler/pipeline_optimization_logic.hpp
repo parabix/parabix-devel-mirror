@@ -7,7 +7,9 @@
 #endif
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
+// #include <llvm/Transforms/Scalar/DCE.h>
 #include <llvm/IR/LegacyPassManager.h>
+
 
 namespace kernel {
 
@@ -29,7 +31,6 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
     #endif
 
     simplifyPhiNodes(m);
-
     auto pm = make_unique<legacy::PassManager>();
     pm->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     pm->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes

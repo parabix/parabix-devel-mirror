@@ -293,7 +293,7 @@ public:
     void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
-    Value * determineIsFinal(BuilderRef b) const;
+    Value * determineIsFinal(BuilderRef b);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
     void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddresses);
 
@@ -759,7 +759,7 @@ protected:
     Value *                                     mLastPartialSegment = nullptr;
     Value *                                     mNumOfLinearStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
-    PHINode *                                   mSomeInputIsNotExhaustedPhi = nullptr;
+    Value *                                     mAnyRemainingInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mReportedNumOfStridesPhi = nullptr;
     PHINode *                                   mNextNumOfPartitionStridesPhi = nullptr;

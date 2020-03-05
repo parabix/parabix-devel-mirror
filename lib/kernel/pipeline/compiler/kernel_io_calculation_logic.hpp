@@ -17,7 +17,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
-    mFixedRateLCM = getFixedRateLCM(mKernel);
+    mFixedRateLCM = getLCMOfFixedRateInputs(mKernel);
 
     // If this kernel does not have an explicit do final segment, then we want to know whether this stride will
     // be the final stride of the kernel. (i.e., that it will be flagged as terminated after executing the kernel
@@ -163,10 +163,10 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
             mNextNumOfPartitionStridesPhi->addIncoming(nextNumOfPartitionStrides, exitBlock);
         }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
-        if (mSomeInputIsNotExhaustedPhi) {
-            assert (anyRemainingInput);
-            mSomeInputIsNotExhaustedPhi->addIncoming(anyRemainingInput, exitBlock);
-        }
+//        if (mSomeInputIsNotExhaustedPhi) {
+//            assert (anyRemainingInput);
+//            mSomeInputIsNotExhaustedPhi->addIncoming(anyRemainingInput, exitBlock);
+//        }
     };
     // --- lambda function end
 
@@ -273,21 +273,10 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         const Rational stride(mKernel->getStride());
         fixedRateFactor  = b->CreateMulRate(mNumOfLinearStrides, stride * mFixedRateLCM);
     }
-    Value * anyRemainingInput = nullptr;
+
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
-        Value * const accessible = calculateNumOfLinearItems(b, br.Port, mNumOfLinearStrides); assert (accessible);
-        if (mIsBounded) {
-            const auto streamSet = source(e, mBufferGraph);
-            Value * const avail = mLocallyAvailableItems[getBufferIndex(streamSet)]; assert (avail);
-            Value * const notExhausted = b->CreateICmpNE(accessible, avail);
-            if (anyRemainingInput) {
-                anyRemainingInput = b->CreateOr(anyRemainingInput, notExhausted);
-            } else {
-                anyRemainingInput = notExhausted;
-            }
-        }
-        accessibleItems[br.Port.Number] = accessible;
+        accessibleItems[br.Port.Number] = calculateNumOfLinearItems(b, br.Port, mNumOfLinearStrides);
     }
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
@@ -296,7 +285,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     }
 
     phiOutItemCounts(accessibleItems, inputVirtualBaseAddress, writableItems,
-                     fixedRateFactor, mNumOfLinearStrides, unterminated, mNumOfPartitionStrides, anyRemainingInput);
+                     fixedRateFactor, mNumOfLinearStrides, unterminated, mNumOfPartitionStrides, mAnyRemainingInput);
 
     b->CreateBr(mKernelCheckOutputSpace);
 
@@ -375,9 +364,10 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief determineIsFinal
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
+Value * PipelineCompiler::determineIsFinal(BuilderRef b) {
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
-        Value * isFinal = nullptr;       
+        Value * isFinal = nullptr;
+        Value * allReadable = nullptr;
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferRateData & br =  mBufferGraph[e];
             if (LLVM_UNLIKELY(br.ZeroExtended)) {
@@ -392,6 +382,11 @@ Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
                 Value * const total = b->CreateAdd(processed, accessible);
                 Value * const avail = getLocallyAvailableItemCount(b, br.Port);
                 Value * const fullyReadable = b->CreateICmpEQ(total, avail);
+                if (allReadable) {
+                    allReadable = b->CreateAnd(allReadable, fullyReadable);
+                } else {
+                    allReadable = fullyReadable;
+                }
                 fullyConsumed = b->CreateAnd(closed, fullyReadable);
             }
             if (isFinal) {
@@ -400,11 +395,24 @@ Value * PipelineCompiler::determineIsFinal(BuilderRef b) const {
                 isFinal = fullyConsumed;
             }
         }
+
+        const auto prefix = makeKernelName(mKernelId);
+
         assert (isFinal && "non-zero-extended stream is required");
         if (mHasExplicitFinalPartialStride) {
             Value * const noMoreStrides = b->CreateIsNull(mNumOfLinearStrides);
+            Value * finished = noMoreStrides;
+            if (allReadable) {
+                finished = b->CreateAnd(allReadable, noMoreStrides);
+            }
+            Value * const done = b->CreateOr(finished, isFinal);
+            mAnyRemainingInput =  b->CreateNot(done, prefix + "_anyRemainingInput");
             isFinal = b->CreateAnd(isFinal, noMoreStrides);
+        } else if (allReadable) {
+            Value * const done = b->CreateOr(allReadable, isFinal);
+            mAnyRemainingInput = b->CreateNot(done, prefix + "_anyRemainingInput");
         }
+        isFinal->setName(prefix + "_isFinal");
         return isFinal;
     } else {
         // If this kernel is not a partition root and all input is linear,
@@ -788,10 +796,37 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
     }
 
     Constant * const ONE = b->getSize(1);
-    Value * maxNumOfOutputStrides = ONE;
-    if (!mHasExplicitFinalPartialStride && minFixedRateFactor) {
+    Value * maxNumOfOutputStrides = nullptr;
+
+    if (mHasExplicitFinalPartialStride) {
+        maxNumOfOutputStrides = ONE;
+    } else if (minFixedRateFactor) {
+        const auto outLCM = getLCMOfFixedRateOutputs(mKernel);
+        const Rational strideSize{mKernel->getStride()};
+        const auto factor = outLCM / (strideSize * mFixedRateLCM);
+        maxNumOfOutputStrides = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+        // TODO: fix this to not require a umax (n,1)
+        maxNumOfOutputStrides = b->CreateUMax(maxNumOfOutputStrides, ONE);
+
+        if (LLVM_UNLIKELY(mCheckAssertions)) {
+            Value * const notTooFew = b->CreateICmpUGE(maxNumOfOutputStrides, mNumOfLinearStrides);
+            Value * const limit = b->CreateAdd(mNumOfLinearStrides, ONE);
+            Value * const notTooMany = b->CreateICmpULE(maxNumOfOutputStrides, limit);
+            Value * const valid = b->CreateAnd(notTooFew, notTooMany);
+
+            b->CreateAssert(valid, "%s: computed %" PRId64 " output strides but expected [%" PRId64 ", %" PRId64 "]",
+                            mKernelAssertionName,
+                            maxNumOfOutputStrides,
+                            mNumOfLinearStrides,
+                            limit);
+
+        }
+
+    } else {
         maxNumOfOutputStrides = b->CreateAdd(mNumOfLinearStrides, ONE);
     }
+
+    b->CallPrintInt("maxNumOfOutputStrides", maxNumOfOutputStrides);
 
     const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {

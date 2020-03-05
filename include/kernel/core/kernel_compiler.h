@@ -381,7 +381,9 @@ private:
 
     void clearInternalStateAfterCodeGen();
 
-    Rational getFixedRateLCM(const Kernel * const target) const;
+    static Rational getLCMOfFixedRateInputs(const Kernel * const target);
+
+    static Rational getLCMOfFixedRateOutputs(const Kernel * const target);
 
 protected:
 

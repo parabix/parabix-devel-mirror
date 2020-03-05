@@ -263,15 +263,37 @@ inline void KernelCompiler::callGenerateAllocateThreadLocalInternalStreamSets(Bu
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getFixedRateLCM
+ * @brief getLCMOfFixedRateInputs
  ** ------------------------------------------------------------------------------------------------------------- */
-Rational KernelCompiler::getFixedRateLCM(const Kernel * const target) const {
+/* static */ Rational KernelCompiler::getLCMOfFixedRateInputs(const Kernel * const target) {
     Rational rateLCM(1);
     bool first = true;
     const auto n = target->getNumOfStreamInputs();
     for (unsigned i = 0; i < n; ++i) {
         const Binding & input = target->getInputStreamSetBinding(i);
         const ProcessingRate & rate = input.getRate();
+        if (LLVM_LIKELY(rate.isFixed())) {
+            if (first) {
+                rateLCM = rate.getRate();
+                first = false;
+            } else {
+                rateLCM = lcm(rateLCM, rate.getRate());
+            }
+        }
+    }
+    return rateLCM;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getLCMOfFixedRateOutputs
+ ** ------------------------------------------------------------------------------------------------------------- */
+/* static */ Rational KernelCompiler::getLCMOfFixedRateOutputs(const Kernel * const target) {
+    Rational rateLCM(1);
+    bool first = true;
+    const auto n = target->getNumOfStreamOutputs();
+    for (unsigned i = 0; i < n; ++i) {
+        const Binding & output = target->getOutputStreamSetBinding(i);
+        const ProcessingRate & rate = output.getRate();
         if (LLVM_LIKELY(rate.isFixed())) {
             if (first) {
                 rateLCM = rate.getRate();
@@ -328,7 +350,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     mFixedRateFactor = nullptr;
     Rational fixedRateLCM{0};
     if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
-        fixedRateLCM = getFixedRateLCM(mTarget);
+        fixedRateLCM = getLCMOfFixedRateInputs(mTarget);
         mFixedRateFactor = nextArg();
     }
 

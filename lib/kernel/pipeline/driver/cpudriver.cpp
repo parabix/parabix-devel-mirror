@@ -235,10 +235,6 @@ void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
         kernel->ensureLoaded();
     }
 
-    for (const auto & kernel : mCompiledKernel) {
-        kernel->ensureLoaded();
-    }
-
     for (const auto & kernel : mCachedKernel) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");

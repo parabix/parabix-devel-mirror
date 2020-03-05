@@ -35,11 +35,10 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     const auto args = buildKernelCallArgumentList(b);
 
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeKernelName(mKernelId);
-    debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
-    debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocationPhi);
     debugHalt(b);
     #endif
+
+
     startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
     Value * const doSegment = getKernelDoSegmentFunction(b);
     Value * doSegmentRetVal = nullptr;
@@ -100,11 +99,21 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     }
 
     if (mHasExplicitFinalPartialStride) {
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeKernelName(mKernelId);
+        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
+        #endif
         args.push_back(mNumOfLinearStrides);
     } else {
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeKernelName(mKernelId);
+        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mReportedNumOfStridesPhi);
+        debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocationPhi);
+        #endif
         args.push_back(mReportedNumOfStridesPhi);
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
     }
+
 
     // If a kernel is internally synchronized, pass the segno to
     // allow the kernel to initialize its current "position"

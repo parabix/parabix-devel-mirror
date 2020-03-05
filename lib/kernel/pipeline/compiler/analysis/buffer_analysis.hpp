@@ -184,6 +184,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
 
+            unsigned add = 0;
+
             for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
 
                 const BufferRateData & consumerRate = G[ce];
@@ -223,6 +225,9 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                         case AttrId::LookBehind:
                             lookBehind = std::max(lookBehind, attr.amount());
                             break;
+                        case AttrId::Add:
+                            add = std::max(add, attr.amount());
+                            break;
                         default: break;
                     }
                 }
@@ -248,7 +253,10 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             bn.LookAhead = lookAhead;
 
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth) / blockWidth;
+            auto reqOverflow = std::max(copyBack, lookAhead);
+            reqOverflow = std::max(reqOverflow, add);
+
+            const auto overflowSize = round_up_to(reqOverflow, blockWidth) / blockWidth;
             const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;
             const auto reqSize0 = round_up_to(ceiling(std::max((consumeMax * Rational{2}) - consumeMin, pMax)), blockWidth) / blockWidth;
             const auto reqSize1 = 2 * (overflowSize + underflowSize);
