@@ -324,7 +324,7 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
         b->SetInsertPoint(nextPartition);
         PHINode * const p = mPipelineProgressAtPartitionExit[nextPartitionId]; assert (p);
-        p->addIncoming(mHasProgressedPhi, exitBlock);
+        p->addIncoming(mAnyProgressedAtLoopExitPhi, exitBlock);
         assert (mTerminatedAtExitPhi);
         mPipelineProgress = p;
 

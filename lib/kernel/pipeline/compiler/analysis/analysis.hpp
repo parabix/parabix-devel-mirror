@@ -106,9 +106,11 @@ private:
 
     IOCheckGraph makeKernelIOGraph() const;
 
-public:
+private:
 
     PipelineKernel * const          mPipelineKernel;
+
+public:
 
     static constexpr unsigned       PipelineInput = 0U;
     static constexpr unsigned       FirstKernel = 1U;

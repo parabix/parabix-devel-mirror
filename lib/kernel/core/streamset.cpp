@@ -887,29 +887,6 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             b->CreateBr(storeNewBuffer);
 
             b->SetInsertPoint(storeNewBuffer);
-            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-                BasicBlock * const entryBlock = b->GetInsertBlock();
-                BasicBlock * const checkNewBuffer = b->CreateBasicBlock();
-                BasicBlock * const checkNewBufferExit = b->CreateBasicBlock();
-                b->CreateBr(checkNewBuffer);
-
-                b->SetInsertPoint(checkNewBuffer);
-                PHINode * const index = b->CreatePHI(sizeTy, 2);
-                index->addIncoming(consumedChunks, entryBlock);
-                Value * const sourceOffset = b->CreateURem(index, capacity);
-                Value * const sourcePtr = b->CreateInBoundsGEP(virtualBase, sourceOffset);
-                Value * const targetOffset = b->CreateURem(index, newCapacity);
-                Value * const targetPtr = b->CreateInBoundsGEP(newBuffer, targetOffset);
-                assert (sourcePtr->getType() == targetPtr->getType());
-                Value * const valid = b->CreateMemCmp(sourcePtr, targetPtr, CHUNK_SIZE);
-                b->CreateAssertZero(valid, "dynamic buffer expansion failed to correctly copy the data");
-                Value * const nextIndex = b->CreateAdd(index, b->getSize(1));
-                index->addIncoming(nextIndex, checkNewBuffer);
-                Value * const notDone = b->CreateICmpNE(nextIndex, producedChunks);
-                b->CreateCondBr(notDone, checkNewBuffer, checkNewBufferExit);
-
-                b->SetInsertPoint(checkNewBufferExit);
-            }
             indices[1] = b->getInt32(PriorAddress);
             Value * const priorBufferField = b->CreateInBoundsGEP(handle, indices);
             Value * const priorBuffer = b->CreateLoad(priorBufferField);

@@ -112,6 +112,7 @@ void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * c
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
     blockOffsetPhi->addIncoming(ZERO, entry);
+
     if (BMI2_available() && ((mCompressFieldWidth == 32) || (mCompressFieldWidth == 64))) {
         Type * fieldTy = kb->getIntNTy(mCompressFieldWidth);
         Type * fieldPtrTy = PointerType::get(fieldTy, 0);
@@ -122,7 +123,7 @@ void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * c
             PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_32);
         }
         const unsigned fieldsPerBlock = kb->getBitBlockWidth()/mCompressFieldWidth;
-        std::vector<Value *> mask(fieldsPerBlock);
+        SmallVector<Value *, 16> mask(fieldsPerBlock);
         Value * extractionMaskPtr = kb->getInputStreamBlockPtr("extractionMask", ZERO, blockOffsetPhi);
         extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
         for (unsigned i = 0; i < fieldsPerBlock; i++) {

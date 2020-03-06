@@ -216,11 +216,22 @@ void FieldDepositKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * co
         kb->SetInsertPoint(processBlock);
         PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
         blockOffsetPhi->addIncoming(ZERO, entry);
+
+        kb->CallPrintInt("blockOffsetPhi", blockOffsetPhi);
+
         Value * depositMask = kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi);
+
+        kb->CallPrintRegister("depositMask", depositMask);
+
         for (unsigned j = 0; j < mStreamCount; ++j) {
             Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+
+            kb->CallPrintRegister("input" + std::to_string(j), input);
+
             Value * output = kb->simd_pdep(mFieldWidth, input, depositMask);
             kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
+
+            kb->CallPrintRegister("store" + std::to_string(j), input);
         }
         Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
         blockOffsetPhi->addIncoming(nextBlk, processBlock);

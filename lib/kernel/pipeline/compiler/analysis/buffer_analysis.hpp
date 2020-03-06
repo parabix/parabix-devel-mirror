@@ -64,8 +64,8 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     };
 
     // fill in any known managed buffers
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        for (const auto e : make_iterator_range(out_edges(i, G))) {
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        for (const auto e : make_iterator_range(out_edges(kernel, G))) {
             const BufferRateData & producerRate = G[e];
             const Binding & output = producerRate.Binding;
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
@@ -100,6 +100,30 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) continue;
             bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
             bn.Type = BufferType::UnownedExternal;
+        }
+    }
+
+    // Scan through the I/O for each kernel to see if some transitive
+    // add relationship imposes an overflow requirement on a buffer
+
+    SmallVector<int, 64> transitiveAdd(LastStreamSet - FirstStreamSet + 1, 0);
+
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        int maxK = 0;
+        for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+            maxK = std::max(maxK, mAddGraph[e]);
+        }
+        for (const auto e : make_iterator_range(out_edges(kernel, mAddGraph))) {
+            maxK = std::max(maxK, mAddGraph[e]);
+        }
+        const auto K = mAddGraph[kernel] + maxK;
+        for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+            const auto streamSet = source(e, mAddGraph) - FirstStreamSet;
+            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], K);
+        }
+        for (const auto e : make_iterator_range(out_edges(kernel, mAddGraph))) {
+            const auto streamSet = target(e, mAddGraph) - FirstStreamSet;
+            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], K);
         }
     }
 
@@ -184,8 +208,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
 
-            unsigned add = 0;
-
             for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
 
                 const BufferRateData & consumerRate = G[ce];
@@ -225,9 +247,6 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                         case AttrId::LookBehind:
                             lookBehind = std::max(lookBehind, attr.amount());
                             break;
-                        case AttrId::Add:
-                            add = std::max(add, attr.amount());
-                            break;
                         default: break;
                     }
                 }
@@ -254,7 +273,10 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
             // calculate overflow (copyback) and fascimile (copyforward) space
             auto reqOverflow = std::max(copyBack, lookAhead);
-            reqOverflow = std::max(reqOverflow, add);
+            const auto addK = transitiveAdd[streamSet - FirstStreamSet];
+            if (addK > 0) {
+                reqOverflow = std::max(reqOverflow, static_cast<unsigned>(addK));
+            }
 
             const auto overflowSize = round_up_to(reqOverflow, blockWidth) / blockWidth;
             const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;

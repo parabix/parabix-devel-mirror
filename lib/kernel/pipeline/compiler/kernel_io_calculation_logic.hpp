@@ -38,15 +38,20 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mNumOfLinearStrides = nullptr;
     } else {
         const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
-        mMaximumNumOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
 
-        }
+        b->CallPrintInt("mNumOfPartitionStrides", mNumOfPartitionStrides);
+
+        mMaximumNumOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
+
+        b->CallPrintInt("mMaximumNumOfStrides", mMaximumNumOfStrides);
+
         if (mMayHaveNonLinearIO) {
             mNumOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStrides);
         } else {
             mNumOfLinearStrides = mMaximumNumOfStrides;
         }
+
+        b->CallPrintInt("mNumOfLinearStrides", mNumOfLinearStrides);
     }
 
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
@@ -58,7 +63,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                 checkForSufficientInputData(b, br.Port);
             }
         }
-        mNumOfLinearStrides = nullptr;
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferRateData & br = mBufferGraph[e];
             const auto streamSet = source(e, mBufferGraph);
@@ -110,6 +114,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     } else {
         mUpdatedNumOfStrides = numOfStrides;
     }
+    b->CallPrintInt("calc:mUpdatedNumOfStrides", mUpdatedNumOfStrides);
 
     // When tracing blocking I/O, test all I/O streams but do not execute the
     // kernel if any stream is insufficient.
@@ -140,9 +145,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
                                const Vec<Value *> & writableItems,
                                Value * const fixedRateFactor,
                                Value * const numOfReportedStrides,
-                               Constant * const terminationSignal,
-                               Value * const nextNumOfPartitionStrides,
-                               Value * const anyRemainingInput) {
+                               Constant * const terminationSignal) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto port = StreamSetPort{ PortType::Input, i };
@@ -159,14 +162,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         if (mReportedNumOfStridesPhi) {
             mReportedNumOfStridesPhi->addIncoming(numOfReportedStrides, exitBlock);
         }
-        if (mNextNumOfPartitionStridesPhi) {
-            mNextNumOfPartitionStridesPhi->addIncoming(nextNumOfPartitionStrides, exitBlock);
-        }
         mIsFinalInvocationPhi->addIncoming(terminationSignal, exitBlock);
-//        if (mSomeInputIsNotExhaustedPhi) {
-//            assert (anyRemainingInput);
-//            mSomeInputIsNotExhaustedPhi->addIncoming(anyRemainingInput, exitBlock);
-//        }
     };
     // --- lambda function end
 
@@ -233,16 +229,8 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
         }
         zeroInputAfterFinalItemCount(b, accessibleItems, truncatedVirtualBaseAddress);
         Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-
-        auto finalNumOfStrides = maxNumOfOutputStrides;
-        if (mNextNumOfPartitionStridesPhi) {
-            if (mMayHaveNonLinearIO) {
-                finalNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, maxNumOfOutputStrides);
-            }
-            finalNumOfStrides = b->CreateUMax(mNumOfPartitionStrides, finalNumOfStrides);
-        }
         phiOutItemCounts(accessibleItems, truncatedVirtualBaseAddress, writableItems,
-                         fixedItemFactor, maxNumOfOutputStrides, completed, finalNumOfStrides, b->getFalse());
+                         fixedItemFactor, maxNumOfOutputStrides, completed);
         b->CreateBr(mKernelCheckOutputSpace);
 
         /// -------------------------------------------------------------------------------------
@@ -285,7 +273,7 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
     }
 
     phiOutItemCounts(accessibleItems, inputVirtualBaseAddress, writableItems,
-                     fixedRateFactor, mNumOfLinearStrides, unterminated, mNumOfPartitionStrides, mAnyRemainingInput);
+                     fixedRateFactor, mNumOfLinearStrides, unterminated);
 
     b->CreateBr(mKernelCheckOutputSpace);
 
@@ -396,23 +384,35 @@ Value * PipelineCompiler::determineIsFinal(BuilderRef b) {
             }
         }
 
-        const auto prefix = makeKernelName(mKernelId);
-
         assert (isFinal && "non-zero-extended stream is required");
+
+        b->CallPrintInt("isFinal", isFinal);
+
         if (mHasExplicitFinalPartialStride) {
             Value * const noMoreStrides = b->CreateIsNull(mNumOfLinearStrides);
-            Value * finished = noMoreStrides;
-            if (allReadable) {
-                finished = b->CreateAnd(allReadable, noMoreStrides);
+
+            b->CallPrintInt("noMoreStrides", noMoreStrides);
+
+            Value * finished = b->CreateAnd(isFinal, b->CreateNot(noMoreStrides));
+
+            b->CallPrintInt("finished", finished);
+
+            if (LLVM_LIKELY(mMayHaveNonLinearIO)) {
+
+                b->CallPrintInt("allReadable", allReadable);
+
+                finished = b->CreateOr(b->CreateNot(allReadable), finished);
+
+                b->CallPrintInt("finished'", finished);
             }
-            Value * const done = b->CreateOr(finished, isFinal);
-            mAnyRemainingInput =  b->CreateNot(done, prefix + "_anyRemainingInput");
+            mAnyRemainingInput = finished;
             isFinal = b->CreateAnd(isFinal, noMoreStrides);
-        } else if (allReadable) {
-            Value * const done = b->CreateOr(allReadable, isFinal);
-            mAnyRemainingInput = b->CreateNot(done, prefix + "_anyRemainingInput");
+        } else if (LLVM_UNLIKELY(mMayHaveNonLinearIO)) {
+
+            b->CallPrintInt("allReadable", allReadable);
+
+            mAnyRemainingInput = b->CreateNot(b->CreateOr(allReadable, isFinal));
         }
-        isFinal->setName(prefix + "_isFinal");
         return isFinal;
     } else {
         // If this kernel is not a partition root and all input is linear,
@@ -801,10 +801,8 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
     if (mHasExplicitFinalPartialStride) {
         maxNumOfOutputStrides = ONE;
     } else if (minFixedRateFactor) {
-        const auto outLCM = getLCMOfFixedRateOutputs(mKernel);
-        const Rational strideSize{mKernel->getStride()};
-        const auto factor = outLCM / (strideSize * mFixedRateLCM);
-        maxNumOfOutputStrides = b->CreateCeilUMulRate(minFixedRateFactor, factor);
+        const auto factor = (Rational{mKernel->getStride()} * mFixedRateLCM);
+        maxNumOfOutputStrides = b->CreateCeilUDivRate(minFixedRateFactor, factor);
         // TODO: fix this to not require a umax (n,1)
         maxNumOfOutputStrides = b->CreateUMax(maxNumOfOutputStrides, ONE);
 
@@ -825,8 +823,6 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
     } else {
         maxNumOfOutputStrides = b->CreateAdd(mNumOfLinearStrides, ONE);
     }
-
-    b->CallPrintInt("maxNumOfOutputStrides", maxNumOfOutputStrides);
 
     const auto numOfOutputs = writableItems.size();
     for (unsigned i = 0; i < numOfOutputs; ++i) {
@@ -1098,7 +1094,7 @@ Value * PipelineCompiler::getFirstStrideLength(BuilderRef b, const size_t kernel
         return getPartialSumItemCount(b, kernel, port);
     } else if (rate.isGreedy()) {
         assert ("kernel cannot have a greedy output rate" && port.Type != PortType::Output);
-        const Rational lb = rate.getLowerBound(); // * mKernel->getStride();
+        const Rational lb = rate.getLowerBound();
         const auto ilb = floor(lb);
         return b->getSize(ilb);
     } else if (rate.isRelative()) {

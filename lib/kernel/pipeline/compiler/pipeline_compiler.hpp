@@ -662,7 +662,10 @@ protected:
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
 
+    const AddGraph                              mAddGraph;
+
     const BufferGraph                           mBufferGraph;
+
     const PartitioningGraph                     mPartitioningGraph;
     const Vec<unsigned>                         mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
@@ -678,7 +681,6 @@ protected:
 
     Vec<Value *>                                mScalarValue;
     const TerminationGraph                      mTerminationGraph;
-    const AddGraph                              mAddGraph;
     const IOCheckGraph                          mIOCheckGraph;
 
 
@@ -744,8 +746,8 @@ protected:
     Value *                                     mMaximumNumOfStrides = nullptr;
     PHINode *                                   mCurrentNumOfStrides = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
-    PHINode *                                   mTotalNumOfStrides = nullptr;
-    PHINode *                                   mHasProgressedPhi = nullptr;
+    PHINode *                                   mTotalNumOfStridesAtLoopExitPhi = nullptr;
+    PHINode *                                   mAnyProgressedAtLoopExitPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
@@ -762,9 +764,7 @@ protected:
     Value *                                     mAnyRemainingInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
     PHINode *                                   mReportedNumOfStridesPhi = nullptr;
-    PHINode *                                   mNextNumOfPartitionStridesPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
-    PHINode *                                   mNextNumOfPartitionStridesAtLoopExitPhi = nullptr;
     BasicBlock *                                mNextPartitionWithPotentialInput = nullptr;
 
     BitVector                                   mHasPipelineInput;
@@ -946,6 +946,8 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
 
+, mAddGraph(makeAddGraph())
+
 , mBufferGraph(makeBufferGraph(b))
 
 , mPartitioningGraph(generatePartitioningGraph())
@@ -963,7 +965,6 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)
 , mTerminationGraph(makeTerminationGraph())
-, mAddGraph(makeAddGraph())
 , mIOCheckGraph(makeKernelIOGraph())
 
 , mInitiallyProcessedItemCount(this)
