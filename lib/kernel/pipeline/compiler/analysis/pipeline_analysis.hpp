@@ -10,6 +10,8 @@
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
+#define PRINT_BUFFER_GRAPH
+
 namespace kernel {
 
 struct PipelineAnalysis : public PipelineCommonGraphFunctions {
@@ -34,6 +36,7 @@ public:
             // Construct the Stream and Scalar graphs
             P.transcribeRelationshipGraph();
             P.generateInitialBufferGraph();
+
             P.computeDataFlowRates();
             P.generatePartitioningGraph();
 
@@ -196,7 +199,7 @@ public:
 
     BufferGraph                     mBufferGraph;
     PartitioningGraph               mPartitioningGraph;
-    Vec<unsigned>                   mPartitionJumpIndex;
+    std::vector<unsigned>           mPartitionJumpIndex;
     PartitionJumpTree               mPartitionJumpTree;
 
 

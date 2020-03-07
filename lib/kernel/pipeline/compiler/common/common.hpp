@@ -9,8 +9,8 @@ class PipelineCommonGraphFunctions {
 public:
 
     PipelineCommonGraphFunctions(const RelationshipGraph & sg, const BufferGraph & bg)
-    : mStreamGraph(sg)
-    , mBufferGraph(bg) {
+    : mStreamGraphRef(sg)
+    , mBufferGraphRef(bg) {
 
     }
 
@@ -39,10 +39,10 @@ public:
     LLVM_READNONE bool mayHaveNonLinearIO(const size_t kernel) const;
 
 
-public:
+private:
 
-    const RelationshipGraph &   mStreamGraph;
-    const BufferGraph &         mBufferGraph;
+    const RelationshipGraph &   mStreamGraphRef;
+    const BufferGraph &         mBufferGraphRef;
 
 };
 
@@ -123,27 +123,27 @@ RelationshipGraph::edge_descriptor PipelineCommonGraphFunctions::getReferenceEdg
     RelationshipGraph::vertex_descriptor binding = 0;
     if (port.Type == PortType::Input) {
         InEdgeIterator ei, ei_end;
-        std::tie(ei, ei_end) = in_edges(kernel, mStreamGraph);
+        std::tie(ei, ei_end) = in_edges(kernel, mStreamGraphRef);
         assert (port.Number < std::distance(ei, ei_end));
         const auto e = *(ei + port.Number);
-        assert (mStreamGraph[e].Number == port.Number);
-        binding = source(e, mStreamGraph);
+        assert (mStreamGraphRef[e].Number == port.Number);
+        binding = source(e, mStreamGraphRef);
     } else { // if (port.Type == PortType::Output) {
         OutEdgeIterator ei, ei_end;
-        std::tie(ei, ei_end) = out_edges(kernel, mStreamGraph);
+        std::tie(ei, ei_end) = out_edges(kernel, mStreamGraphRef);
         assert (port.Number < std::distance(ei, ei_end));
         const auto e = *(ei + port.Number);
-        assert (mStreamGraph[e].Number == port.Number);
-        binding = target(e, mStreamGraph);
+        assert (mStreamGraphRef[e].Number == port.Number);
+        binding = target(e, mStreamGraphRef);
     }
-    assert (mStreamGraph[binding].Type == RelationshipNode::IsBinding);
-    assert (in_degree(binding, mStreamGraph) == 2);
+    assert (mStreamGraphRef[binding].Type == RelationshipNode::IsBinding);
+    assert (in_degree(binding, mStreamGraphRef) == 2);
 
     InEdgeIterator ei, ei_end;
-    std::tie(ei, ei_end) = in_edges(binding, mStreamGraph);
+    std::tie(ei, ei_end) = in_edges(binding, mStreamGraphRef);
     assert (std::distance(ei, ei_end) == 2);
     const auto e = *(ei + 1);
-    assert (mStreamGraph[e].Reason == ReasonType::Reference);
+    assert (mStreamGraphRef[e].Reason == ReasonType::Reference);
     return e;
 }
 
@@ -151,28 +151,28 @@ RelationshipGraph::edge_descriptor PipelineCommonGraphFunctions::getReferenceEdg
  * @brief getReferenceBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCommonGraphFunctions::getReferenceBufferVertex(const size_t kernel, const StreamSetPort port) const {
-    return parent(source(getReferenceEdge(kernel, port), mStreamGraph), mStreamGraph);
+    return parent(source(getReferenceEdge(kernel, port), mStreamGraphRef), mStreamGraphRef);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReference
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const StreamSetPort PipelineCommonGraphFunctions::getReference(const size_t kernel, const StreamSetPort port) const {
-    return mStreamGraph[getReferenceEdge(kernel, port)];
+    return mStreamGraphRef[getReferenceEdge(kernel, port)];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCommonGraphFunctions::getInputBufferVertex(const size_t kernel, const StreamSetPort inputPort) const {
-    return source(getInput(kernel, inputPort), mBufferGraph);
+    return source(getInput(kernel, inputPort), mBufferGraphRef);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 StreamSetBuffer * PipelineCommonGraphFunctions::getInputBuffer(const size_t kernel, const StreamSetPort inputPort) const {
-    return mBufferGraph[getInputBufferVertex(kernel, inputPort)].Buffer;
+    return mBufferGraphRef[getInputBufferVertex(kernel, inputPort)].Buffer;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -184,13 +184,13 @@ const Binding & PipelineCommonGraphFunctions::getInputBinding(const size_t kerne
     RelationshipGraph::edge_descriptor e;
 
     graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
-    std::tie(ei, ei_end) = in_edges(kernel, mStreamGraph);
+    std::tie(ei, ei_end) = in_edges(kernel, mStreamGraphRef);
     assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
     e = *(ei + inputPort.Number);
-    v = source(e, mStreamGraph);
+    v = source(e, mStreamGraphRef);
 
-    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == inputPort);
-    const RelationshipNode & rn = mStreamGraph[v];
+    assert (static_cast<StreamSetPort>(mStreamGraphRef[e]) == inputPort);
+    const RelationshipNode & rn = mStreamGraphRef[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;
 }
@@ -200,9 +200,9 @@ const Binding & PipelineCommonGraphFunctions::getInputBinding(const size_t kerne
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getInput(const size_t kernel, const StreamSetPort inputPort) const {
     assert (inputPort.Type == PortType::Input);
-    assert (inputPort.Number < in_degree(kernel, mBufferGraph));
-    for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+    assert (inputPort.Number < in_degree(kernel, mBufferGraphRef));
+    for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
+        const BufferRateData & br = mBufferGraphRef[e];
         if (br.Port.Number == inputPort.Number) {
             return e;
         }
@@ -214,7 +214,7 @@ inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getInput
  * @brief getOutputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCommonGraphFunctions::getOutputBufferVertex(const size_t kernel, const StreamSetPort outputPort) const {
-    return target(getOutput(kernel, outputPort), mBufferGraph);
+    return target(getOutput(kernel, outputPort), mBufferGraphRef);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -226,14 +226,14 @@ const Binding & PipelineCommonGraphFunctions::getOutputBinding(const size_t kern
     RelationshipGraph::edge_descriptor e;
 
     graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
-    std::tie(ei, ei_end) = out_edges(kernel, mStreamGraph);
+    std::tie(ei, ei_end) = out_edges(kernel, mStreamGraphRef);
     assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
     e = *(ei + outputPort.Number);
-    v = target(e, mStreamGraph);
+    v = target(e, mStreamGraphRef);
 
-    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == outputPort);
+    assert (static_cast<StreamSetPort>(mStreamGraphRef[e]) == outputPort);
 
-    const RelationshipNode & rn = mStreamGraph[v];
+    const RelationshipNode & rn = mStreamGraphRef[v];
     assert (rn.Type == RelationshipNode::IsBinding);
     return rn.Binding;
 }
@@ -242,7 +242,7 @@ const Binding & PipelineCommonGraphFunctions::getOutputBinding(const size_t kern
  * @brief getOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 StreamSetBuffer * PipelineCommonGraphFunctions::getOutputBuffer(const size_t kernel, const StreamSetPort outputPort) const {
-    return mBufferGraph[getOutputBufferVertex(kernel, outputPort)].Buffer;
+    return mBufferGraphRef[getOutputBufferVertex(kernel, outputPort)].Buffer;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -250,9 +250,9 @@ StreamSetBuffer * PipelineCommonGraphFunctions::getOutputBuffer(const size_t ker
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getOutput(const size_t kernel, const StreamSetPort outputPort) const {
     assert (outputPort.Type == PortType::Output);
-    assert (outputPort.Number < out_degree(kernel, mBufferGraph));
-    for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+    assert (outputPort.Number < out_degree(kernel, mBufferGraphRef));
+    for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
+        const BufferRateData & br = mBufferGraphRef[e];
         if (br.Port.Number == outputPort.Number) {
             return e;
         }
@@ -264,14 +264,14 @@ inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getOutpu
  * @brief getNumOfStreamInputs
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCommonGraphFunctions::numOfStreamInputs(const unsigned kernel) const {
-    return in_degree(kernel, mStreamGraph);
+    return in_degree(kernel, mStreamGraphRef);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getNumOfStreamOutputs
  ** ------------------------------------------------------------------------------------------------------------- */
 inline unsigned PipelineCommonGraphFunctions::numOfStreamOutputs(const unsigned kernel) const {
-    return out_degree(kernel, mStreamGraph);
+    return out_degree(kernel, mStreamGraphRef);
 }
 
 
@@ -292,7 +292,7 @@ const Binding & PipelineCommonGraphFunctions::getBinding(const unsigned kernel, 
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const Kernel * PipelineCommonGraphFunctions::getKernel(const unsigned index) const {
     // assert (PipelineInput <= index && index <= PipelineOutput);
-    return mStreamGraph[index].Kernel;
+    return mStreamGraphRef[index].Kernel;
 }
 
 
@@ -308,14 +308,14 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
     // two or more linear sub-segments.
 
     bool noCountableInput = true;
-    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-        const auto streamSet = source(input, mBufferGraph);
-        const BufferNode & node = mBufferGraph[streamSet];
+    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
+        const auto streamSet = source(input, mBufferGraphRef);
+        const BufferNode & node = mBufferGraphRef[streamSet];
         if (node.Linear) {
             // To safely ensure we can determine the maximum number of strides
             // before invoking the kernel, we require at least one countable
             // input. NOTE: the PopCount reference is guaranteed to be linear.
-            const BufferRateData & rateData = mBufferGraph[input];
+            const BufferRateData & rateData = mBufferGraphRef[input];
             if (isCountable(rateData.Binding)) {
                 noCountableInput = false;
             }
@@ -324,9 +324,9 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
             return true;
         }
     }
-    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-        const auto streamSet = target(output, mBufferGraph);
-        const BufferNode & node = mBufferGraph[streamSet];
+    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
+        const auto streamSet = target(output, mBufferGraphRef);
+        const BufferNode & node = mBufferGraphRef[streamSet];
         if (node.NonLocal || !node.Linear) {
             return true;
         }

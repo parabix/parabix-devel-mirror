@@ -11,8 +11,6 @@
 
 #define PRINT_DEBUG_MESSAGES
 
-#define PRINT_BUFFER_GRAPH
-
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
 // #define DISABLE_ZERO_EXTEND
@@ -523,7 +521,7 @@ protected:
     const AddGraph                              mAddGraph;
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
-    const Vec<unsigned>                         mPartitionJumpIndex;
+    const std::vector<unsigned>                 mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
     const ConsumerGraph                         mConsumerGraph;
     const TerminationGraph                      mTerminationGraph;
@@ -729,6 +727,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mHasZeroExtendedStream(P.mHasZeroExtendedStream)
 
 , KernelPartitionId(std::move(P.KernelPartitionId))
+, MinimumNumOfStrides(std::move(P.MinimumNumOfStrides))
+, MaximumNumOfStrides(std::move(P.MaximumNumOfStrides))
 , PartitionCount(P.PartitionCount)
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))

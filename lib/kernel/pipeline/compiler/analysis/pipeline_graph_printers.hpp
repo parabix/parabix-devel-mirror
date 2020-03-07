@@ -312,7 +312,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         const auto explicitFinalPartialStride = kernelObj->requiresExplicitPartialFinalStride();
         const auto nonLinear = mayHaveNonLinearIO(kernel);
 
-        const auto borders = (nonLinear || explicitFinalPartialStride) ? '2' : '1';
+        const auto borders = nonLinear ? '2' : '1';
 
 
 
