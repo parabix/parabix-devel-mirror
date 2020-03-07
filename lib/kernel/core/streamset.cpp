@@ -162,9 +162,13 @@ Value * StreamSetBuffer::addOverflow(BuilderPtr b, Value * const bufferCapacity,
             Value * const valid = b->CreateICmpULE(overflowItems, overflowCapacity);
             b->CreateAssert(valid, "overflow items exceeds overflow capacity");
         }
-        // limit the overflow so that we do not overwrite our unconsumed data during a copyback
-        Value * const effectiveOverflow = b->CreateUMin(consumedOffset, overflowItems);
-        return b->CreateAdd(bufferCapacity, effectiveOverflow);
+        if (consumedOffset) {
+            // limit the overflow so that we do not overwrite our unconsumed data during a copyback
+            Value * const effectiveOverflow = b->CreateUMin(consumedOffset, overflowItems);
+            return b->CreateAdd(bufferCapacity, effectiveOverflow);
+        } else {
+            return b->CreateAdd(bufferCapacity, overflowItems);
+        }
     } else { // no overflow
         return bufferCapacity;
     }
@@ -332,7 +336,8 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const f
 Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const consumedItems, Value * overflowItems) const {
     Value * const capacity = getCapacity(b);
     if (LLVM_UNLIKELY(mLinear)) {
-        return b->CreateSub(capacity, fromPosition);
+        Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
+        return b->CreateSub(capacityWithOverflow, fromPosition);
     } else {
         Value * const unconsumedItems = b->CreateSub(fromPosition, consumedItems);
         Value * const full = b->CreateICmpUGE(unconsumedItems, capacity);

@@ -282,7 +282,7 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
         llvm_unreachable("unknown source type");
     };
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort inputPort{PortType::Input, i};
         const Binding & input = getInputBinding(inputPort);
@@ -293,7 +293,7 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
         }
     }
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort outputPort{PortType::Output, i};
         const Binding & output = getOutputBinding(outputPort);
@@ -677,206 +677,6 @@ void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> &
         assert (isFromCurrentFunction(b, bn.Buffer->getHandle()));
         baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed);
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBufferVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getInputBufferVertex(const StreamSetPort inputPort) const {
-    return getInputBufferVertex(mKernelId, inputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBufferVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::getInputBufferVertex(const size_t kernelVertex, const StreamSetPort inputPort) const {
-    return source(getInput(kernelVertex, inputPort), mBufferGraph);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const StreamSetPort inputPort) const {
-    return getInputBuffer(mKernelId, inputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-StreamSetBuffer * PipelineCompiler::getInputBuffer(const size_t kernelVertex, const StreamSetPort inputPort) const {
-    return mBufferGraph[getInputBufferVertex(kernelVertex, inputPort)].Buffer;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & PipelineCompiler::getInputBinding(const size_t kernelVertex, const StreamSetPort inputPort) const {
-
-    RelationshipGraph::vertex_descriptor v;
-    RelationshipGraph::edge_descriptor e;
-
-    graph_traits<RelationshipGraph>::in_edge_iterator ei, ei_end;
-    std::tie(ei, ei_end) = in_edges(kernelVertex, mStreamGraph);
-    assert (inputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
-    e = *(ei + inputPort.Number);
-    v = source(e, mStreamGraph);
-
-    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == inputPort);
-    const RelationshipNode & rn = mStreamGraph[v];
-    assert (rn.Type == RelationshipNode::IsBinding);
-    return rn.Binding;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInputBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getInputBinding(const StreamSetPort inputPort) const {
-    return getInputBinding(mKernelId, inputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getProducerOutputBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getProducerOutputBinding(const StreamSetPort inputPort) const {
-    const auto buffer = getInputBufferVertex(inputPort);
-    const BufferRateData & br = mBufferGraph[in_edge(buffer, mBufferGraph)];
-    return br.Binding;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInput
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const BufferGraph::edge_descriptor PipelineCompiler::getInput(const size_t kernelVertex, const StreamSetPort inputPort) const {
-    assert (inputPort.Type == PortType::Input);
-    assert (inputPort.Number < in_degree(kernelVertex, mBufferGraph));
-    for (const auto e : make_iterator_range(in_edges(kernelVertex, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        if (br.Port.Number == inputPort.Number) {
-            return e;
-        }
-    }
-    llvm_unreachable("could not find input port");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBufferVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getOutputBufferVertex(const StreamSetPort outputPort) const {
-    return getOutputBufferVertex(mKernelId, outputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBufferVertex
- ** ------------------------------------------------------------------------------------------------------------- */
-unsigned PipelineCompiler::getOutputBufferVertex(const size_t kernelVertex, const StreamSetPort outputPort) const {
-    return target(getOutput(kernelVertex, outputPort), mBufferGraph);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & PipelineCompiler::getOutputBinding(const size_t kernelVertex, const StreamSetPort outputPort) const {
-
-    RelationshipGraph::vertex_descriptor v;
-    RelationshipGraph::edge_descriptor e;
-
-    graph_traits<RelationshipGraph>::out_edge_iterator ei, ei_end;
-    std::tie(ei, ei_end) = out_edges(kernelVertex, mStreamGraph);
-    assert (outputPort.Number < static_cast<size_t>(std::distance(ei, ei_end)));
-    e = *(ei + outputPort.Number);
-    v = target(e, mStreamGraph);
-
-    assert (static_cast<StreamSetPort>(mStreamGraph[e]) == outputPort);
-
-    const RelationshipNode & rn = mStreamGraph[v];
-    assert (rn.Type == RelationshipNode::IsBinding);
-    return rn.Binding;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getOutputBinding(const StreamSetPort outputPort) const {
-    return getOutputBinding(mKernelId, outputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const StreamSetPort outputPort) const {
-    return getOutputBuffer(mKernelId, outputPort);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-StreamSetBuffer * PipelineCompiler::getOutputBuffer(const size_t kernelVertex, const StreamSetPort outputPort) const {
-    return mBufferGraph[getOutputBufferVertex(kernelVertex, outputPort)].Buffer;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInput
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const BufferGraph::edge_descriptor PipelineCompiler::getOutput(const size_t kernelVertex, const StreamSetPort outputPort) const {
-    assert (outputPort.Type == PortType::Output);
-    assert (outputPort.Number < out_degree(kernelVertex, mBufferGraph));
-    for (const auto e : make_iterator_range(out_edges(kernelVertex, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        if (br.Port.Number == outputPort.Number) {
-            return e;
-        }
-    }
-    llvm_unreachable("could not find output port");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getNumOfStreamInputs
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getNumOfStreamInputs(const unsigned kernel) const {
-    return in_degree(kernel, mStreamGraph);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getNumOfStreamOutputs
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getNumOfStreamOutputs(const unsigned kernel) const {
-    return out_degree(kernel, mStreamGraph);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Binding & PipelineCompiler::getBinding(const StreamSetPort port) const {
-    return getBinding(mKernelId, port);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getBinding
- ** ------------------------------------------------------------------------------------------------------------- */
-const Binding & PipelineCompiler::getBinding(const unsigned kernel, const StreamSetPort port) const {
-    if (port.Type == PortType::Input) {
-        return getInputBinding(kernel, port);
-    } else if (port.Type == PortType::Output) {
-        return getOutputBinding(kernel, port);
-    }
-    llvm_unreachable("unknown port binding type!");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getBufferIndex(const unsigned bufferVertex) const {
-    assert (bufferVertex >= FirstStreamSet);
-    assert (bufferVertex <= LastStreamSet);
-    return bufferVertex - FirstStreamSet;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Kernel * PipelineCompiler::getKernel(const unsigned index) const {
-    assert (PipelineInput <= index && index <= PipelineOutput);
-    return mStreamGraph[index].Kernel;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

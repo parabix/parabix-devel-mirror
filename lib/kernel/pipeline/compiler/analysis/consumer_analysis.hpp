@@ -1,7 +1,7 @@
 #ifndef CONSUMER_ANALYSIS_HPP
 #define CONSUMER_ANALYSIS_HPP
 
-#include "../pipeline_compiler.hpp"
+#include "pipeline_analysis.hpp"
 
 namespace kernel {
 
@@ -12,9 +12,9 @@ namespace kernel {
  *
  * Copy the buffer graph but amalgamate any multi-edges into a single one
  ** ------------------------------------------------------------------------------------------------------------- */
-ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
+void PipelineAnalysis::makeConsumerGraph() {
 
-    ConsumerGraph G(LastStreamSet + 1);
+    mConsumerGraph = ConsumerGraph(LastStreamSet + 1);
 
     flat_set<unsigned> observedGlobalPortIds;
 
@@ -23,7 +23,7 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
         const auto pe = in_edge(streamSet, mBufferGraph);
         const BufferRateData & br = mBufferGraph[pe];
         const auto producer = source(pe, mBufferGraph);
-        add_edge(producer, streamSet, ConsumerEdge{br.Port, 0, ConsumerEdge::None}, G);
+        add_edge(producer, streamSet, ConsumerEdge{br.Port, 0, ConsumerEdge::None}, mConsumerGraph);
 
         // If we have no consumers, we do not want to update the consumer count on exit
         // as we would then have to retain a scalar for it. Initially
@@ -40,7 +40,7 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
                 lastConsumer = std::max(lastConsumer, consumer);
                 // check if any consumer has a rate we have not yet observed
                 if (observedGlobalPortIds.insert(br.GlobalPortId).second) {
-                    add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, G);
+                    add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
                     flags = ConsumerEdge::WriteFinalCount;
                 }
             }
@@ -54,17 +54,15 @@ ConsumerGraph PipelineCompiler::makeConsumerGraph()  const {
 
         ConsumerGraph::edge_descriptor e;
         bool exists;
-        std::tie(e, exists) = edge(streamSet, lastConsumer, G);
+        std::tie(e, exists) = edge(streamSet, lastConsumer, mConsumerGraph);
 
         if (exists) {
-            G[e].Flags = ConsumerEdge::UpdateAndWrite;
+            mConsumerGraph[e].Flags = ConsumerEdge::UpdateAndWrite;
         } else {
-            add_edge(streamSet, lastConsumer, ConsumerEdge{br.Port, 0, flags}, G);
+            add_edge(streamSet, lastConsumer, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
         }
-
-
     }
-    return G;
+
 }
 
 }

@@ -31,12 +31,12 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
 
         // # of blocked I/O channel attempts in which no strides
         // were possible (i.e., blocked on first iteration)
-        const auto numOfInputs = getNumOfStreamInputs(kernel);
+        const auto numOfInputs = numOfStreamInputs(kernel);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
             mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX);
         }
-        const auto numOfOutputs = getNumOfStreamOutputs(kernel);
+        const auto numOfOutputs = numOfStreamOutputs(kernel);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             // TODO: ignore dynamic buffers
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
@@ -55,12 +55,12 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
 
         // # of blocked I/O channel attempts in which no strides
         // were possible (i.e., blocked on first iteration)
-        const auto numOfInputs = getNumOfStreamInputs(kernel);
+        const auto numOfInputs = numOfStreamInputs(kernel);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
             mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
         }
-        const auto numOfOutputs = getNumOfStreamOutputs(kernel);
+        const auto numOfOutputs = numOfStreamOutputs(kernel);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
             mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
@@ -534,7 +534,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
             std::string temp = kernel->getName();
             boost::replace_all(temp, "\"", "\\\"");
             format << ",\"" << i << " " << temp << "\"";
-            const auto numOfPorts = getNumOfStreamInputs(i) + getNumOfStreamOutputs(i);
+            const auto numOfPorts = numOfStreamInputs(i) + numOfStreamOutputs(i);
             for (unsigned j = 1; j < numOfPorts; ++j) {
                 format.write(',');
             }
@@ -572,7 +572,7 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         format << "%" PRIu64; // seg #
         unsigned fieldCount = 0;
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
-            const auto numOfPorts = getNumOfStreamInputs(i) + getNumOfStreamOutputs(i);
+            const auto numOfPorts = numOfStreamInputs(i) + numOfStreamOutputs(i);
             fieldCount += numOfPorts;
             for (unsigned j = 0; j < numOfPorts; ++j) {
                 format << ",%" PRIu64; // strides
@@ -593,8 +593,8 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         SmallVector<Value *, 64> updatedIndex(fieldCount);
 
         for (unsigned i = FirstKernel, j = 0; i <= LastKernel; ++i) {
-            const auto numOfInputs = getNumOfStreamInputs(i);
-            const auto numOfOutputs = getNumOfStreamOutputs(i);
+            const auto numOfInputs = numOfStreamInputs(i);
+            const auto numOfOutputs = numOfStreamOutputs(i);
 
             for (unsigned k = 0; k < numOfInputs; ++k, ++j) {
                 const auto prefix = makeBufferName(i, StreamSetPort{PortType::Input, k});

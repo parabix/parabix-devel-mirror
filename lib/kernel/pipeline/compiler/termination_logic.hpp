@@ -173,7 +173,7 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
         return isCountable(binding);
     };
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
     Vec<Value *> finalProcessed(numOfInputs);
     for (unsigned i = 0; i < numOfInputs; i++) {
         const StreamSetPort port (PortType::Input, i);
@@ -182,7 +182,7 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
             finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr(port));
         }
     }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     Vec<Value *> finalProduced(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const StreamSetPort port (PortType::Output, i);

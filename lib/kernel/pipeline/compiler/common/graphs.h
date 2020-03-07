@@ -5,6 +5,16 @@
 #include <boost/graph/adjacency_matrix.hpp>
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
+#include <kernel/core/refwrapper.h>
+#include <util/extended_boost_graph_containers.h>
+#include <toolchain/toolchain.h>
+#include <boost/range/adaptor/reversed.hpp>
+#include <boost/math/common_factor_rt.hpp>
+#include <boost/dynamic_bitset.hpp>
+#include <llvm/IR/ValueMap.h>
+#include <llvm/ADT/BitVector.h>
+#include <llvm/Support/raw_ostream.h>
+#include <util/small_flat_set.hpp>
 
 using namespace boost;
 using namespace llvm;
@@ -407,6 +417,17 @@ using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, int, int>;
 using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BufferRateData>;
 
 using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
+
+template <typename T, unsigned n = 16>
+using Vec = SmallVector<T, n>;
+
+using Allocator = SlabAllocator<>;
+
+template <typename T>
+using OwningVec = std::vector<std::unique_ptr<T>>;
+
+#define BEGIN_SCOPED_REGION {
+#define END_SCOPED_REGION }
 
 }
 

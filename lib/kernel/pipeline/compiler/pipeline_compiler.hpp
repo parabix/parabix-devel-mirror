@@ -3,30 +3,11 @@
 
 #include <kernel/pipeline/pipeline_kernel.h>
 #include <kernel/core/kernel_compiler.h>
-#include <kernel/core/streamset.h>
-#include <kernel/core/kernel_builder.h>
-#include <kernel/core/refwrapper.h>
-#include <util/extended_boost_graph_containers.h>
-#include <toolchain/toolchain.h>
-#include <boost/range/adaptor/reversed.hpp>
-#include <boost/math/common_factor_rt.hpp>
-#include <boost/dynamic_bitset.hpp>
 #include <llvm/IR/Module.h>
-#include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
 #include <llvm/Transforms/Utils/Local.h>
-#include <llvm/IR/ValueMap.h>
 #include <llvm/ADT/STLExtras.h>
-#include <llvm/ADT/BitVector.h>
-#include <util/slab_allocator.h>
-#include <util/small_flat_set.hpp>
-#include <algorithm>
-#include <queue>
-#include <z3.h>
-#include <util/maxsat.hpp>
-#include <assert.h>
-
-#include "analysis/graphs.h"
+#include "analysis/pipeline_analysis.hpp"
 
 #define PRINT_DEBUG_MESSAGES
 
@@ -55,41 +36,6 @@ inline static unsigned floor_log2(const unsigned v) {
 }
 
 namespace kernel {
-
-struct PipelineGraphBundle {
-    static constexpr unsigned PipelineInput = 0U;
-    static constexpr unsigned FirstKernel = 1U;
-    unsigned LastKernel = 0;
-    unsigned PipelineOutput = 0;
-    unsigned FirstStreamSet = 0;
-    unsigned LastStreamSet = 0;
-    unsigned FirstBinding = 0;
-    unsigned LastBinding = 0;
-    unsigned FirstCall = 0;
-    unsigned LastCall = 0;
-    unsigned FirstScalar = 0;
-    unsigned LastScalar = 0;
-    unsigned PartitionCount = 0;
-    bool HasZeroExtendedStream = false;
-
-    RelationshipGraph       Streams;
-    RelationshipGraph       Scalars;
-    OwningVector<Kernel>    InternalKernels;
-    OwningVector<Binding>   InternalBindings;
-    Partition               KernelPartitionId;
-
-    PipelineGraphBundle(const unsigned n,
-                        const unsigned m,
-                        const unsigned numOfKernels,
-                        OwningVector<Kernel> && internalKernels,
-                        OwningVector<Binding> && internalBindings)
-    : Streams(n), Scalars(m)
-    , InternalKernels(std::move(internalKernels))
-    , InternalBindings(std::move(internalBindings))
-    , KernelPartitionId(numOfKernels) {
-
-    }
-};
 
 enum CycleCounter {
   INITIAL
@@ -138,24 +84,13 @@ const static std::string STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX = ".SUIC";
 
 const static std::string LAST_GOOD_VIRTUAL_BASE_ADDRESS = ".LGA";
 
-template <typename T, unsigned n = 16>
-using Vec = SmallVector<T, n>;
-
 using ArgVec = Vec<Value *, 64>;
-
-using Allocator = SlabAllocator<>;
-
-template <typename T>
-using OwningVec = std::vector<std::unique_ptr<T>>;
 
 using BufferPortMap = flat_set<std::pair<unsigned, unsigned>>;
 
 using PartitionJumpPhiOutMap = flat_map<std::pair<unsigned, unsigned>, Value *>;
 
-#define BEGIN_SCOPED_REGION {
-#define END_SCOPED_REGION }
-
-class PipelineCompiler final : public KernelCompiler {
+class PipelineCompiler final : public KernelCompiler, public PipelineCommonGraphFunctions {
 
     template<typename T>
     struct InputPortVec {
@@ -226,7 +161,7 @@ public:
 
 private:
 
-    PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P);
+    PipelineCompiler(PipelineKernel * const pipelineKernel, PipelineAnalysis && P);
 
 // internal pipeline state construction functions
 
@@ -351,7 +286,6 @@ public:
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
 
-
 // intra-kernel codegen functions
 
     Value * getInputStrideLength(BuilderRef b, const StreamSetPort inputPort);
@@ -389,7 +323,6 @@ public:
 
 // consumer codegen functions
 
-    ConsumerGraph makeConsumerGraph() const;
     void addConsumerKernelProperties(BuilderRef b, const unsigned producer);
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
@@ -465,87 +398,15 @@ public:
 
     void simplifyPhiNodes(Module * const m) const;
 
-// pipeline analysis functions
-
-    using KernelPartitionIds = flat_map<Relationships::vertex_descriptor, unsigned>;
-
-    PipelineGraphBundle makePipelineGraph(BuilderRef b, PipelineKernel * const pipelineKernel);
-    Relationships generateInitialPipelineGraph(BuilderRef b,
-                                               PipelineKernel * const pipelineKernel,
-                                               OwningVector<Kernel> & internalKernels,
-                                               OwningVector<Binding> & internalBindings);
-
-    using KernelVertexVec = SmallVector<Relationships::Vertex, 64>;
-
-    void addRegionSelectorKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, Relationships & G,
-                                  OwningVector<Kernel> & internalKernels, OwningVector<Binding> & internalBindings);
-
-    void addPopCountKernels(BuilderRef b, Kernels & partition, KernelVertexVec & vertex, Relationships & G,
-                            OwningVector<Kernel> &internalKernels, OwningVector<Binding> &internalBindings);
-
-    static void combineDuplicateKernels(BuilderRef b, const Kernels & partition, Relationships & G);
-    static void removeUnusedKernels(const PipelineKernel * pipelineKernel, const unsigned p_in, const unsigned p_out, const Kernels & partition, Relationships & G);
-
-    void identifyPipelineInputs();
-
-// partitioning analysis
-
-    unsigned partitionIntoFixedRateRegionsWithOrderingConstraints(Relationships & G,
-                                                                  KernelPartitionIds & partitionIds,
-                                                                  const PipelineKernel * const pipelineKernel) const;
-
-    unsigned identifyKernelPartitions(const Relationships &G,
-                                                    const std::vector<unsigned> & orderingOfG,
-                                                    const PipelineKernel * const pipelineKernel,
-                                                    KernelPartitionIds & partitionIds) const;
-
-    void addOrderingConstraintsToPartitionSubgraphs(Relationships & G,
-                                                    const std::vector<unsigned> & orderingOfG,
-                                                    const KernelPartitionIds & partitionIds,
-                                                    const unsigned numOfPartitions) const;
-
-    PartitioningGraph generatePartitioningGraph() const;
-    Vec<unsigned> determinePartitionJumpIndices() const;
-    PartitionJumpTree makePartitionJumpTree() const;
-
-
 // buffer management analysis functions
 
-    BufferGraph makeBufferGraph(BuilderRef b);
-    void initializeBufferGraph(BufferGraph & G) const;
-    void verifyIOStructure(const BufferGraph & G) const;
-    void identifyLinearBuffers(BufferGraph & G) const;
-    void identifyNonLocalBuffers(BufferGraph & G) const;
     BufferPortMap constructInputPortMappings() const;
     BufferPortMap constructOutputPortMappings() const;
-    bool mayHaveNonLinearIO(const size_t kernel) const;
     bool supportsInternalSynchronization() const;
-    void identifyLocalPortIds(BufferGraph & G) const;
     bool isBounded() const;
+    void identifyPipelineInputs();
 
     void printBufferGraph(raw_ostream & out) const;
-
-// dataflow analysis functions
-
-    void computeDataFlowRates(BufferGraph & G);
-    PartitionConstraintGraph identifyHardPartitionConstraints(BufferGraph & G) const;
-    LengthConstraintGraph identifyLengthEqualityAssertions(BufferGraph & G) const;
-
-// zero extension analysis function
-
-    bool hasZeroExtendedStreams(BufferGraph & G) const;
-
-// termination analysis functions
-
-    TerminationGraph makeTerminationGraph() const;
-
-// add(k) analysis functions
-
-    AddGraph makeAddGraph() const;
-
-// IO analysis functions
-
-    IOCheckGraph makeKernelIOGraph() const;
 
 // synchronization functions
 
@@ -594,36 +455,31 @@ public:
     LLVM_READNONE std::string makeKernelName(const size_t kernelIndex) const;
     LLVM_READNONE std::string makeBufferName(const size_t kernelIndex, const StreamSetPort port) const;
 
-    LLVM_READNONE RelationshipGraph::edge_descriptor getReferenceEdge(const size_t kernel, const StreamSetPort port) const;
-    LLVM_READNONE unsigned getReferenceBufferVertex(const size_t kernel, const StreamSetPort port) const;
-    LLVM_READNONE const StreamSetPort getReference(const size_t kernel, const StreamSetPort port) const;
+    using PipelineCommonGraphFunctions::getReference;
+
     const StreamSetPort getReference(const StreamSetPort port) const;
 
-    LLVM_READNONE unsigned getInputBufferVertex(const size_t kernelVertex, const StreamSetPort inputPort) const;
+    using PipelineCommonGraphFunctions::getInputBufferVertex;
+    using PipelineCommonGraphFunctions::getInputBuffer;
+    using PipelineCommonGraphFunctions::getInputBinding;
+
     unsigned getInputBufferVertex(const StreamSetPort inputPort) const;
     StreamSetBuffer * getInputBuffer(const StreamSetPort inputPort) const;
-    LLVM_READNONE StreamSetBuffer * getInputBuffer(const size_t kernelVertex, const StreamSetPort inputPort) const;
-    LLVM_READNONE const Binding & getInputBinding(const size_t kernelVertex, const StreamSetPort inputPort) const;
     const Binding & getInputBinding(const StreamSetPort inputPort) const;
-    LLVM_READNONE const BufferGraph::edge_descriptor getInput(const size_t kernelVertex, const StreamSetPort outputPort) const;
-    const Binding & getProducerOutputBinding(const StreamSetPort inputPort) const;
 
-    LLVM_READNONE unsigned getOutputBufferVertex(const size_t kernelVertex, const StreamSetPort outputPort) const;
+    using PipelineCommonGraphFunctions::getOutputBufferVertex;
+    using PipelineCommonGraphFunctions::getOutputBuffer;
+    using PipelineCommonGraphFunctions::getOutputBinding;
+
     unsigned getOutputBufferVertex(const StreamSetPort outputPort) const;
     StreamSetBuffer * getOutputBuffer(const StreamSetPort outputPort) const;
-    LLVM_READNONE StreamSetBuffer * getOutputBuffer(const size_t kernelVertex, const StreamSetPort outputPort) const;
-    LLVM_READNONE const Binding & getOutputBinding(const size_t kernelVertex, const StreamSetPort outputPort) const;
     const Binding & getOutputBinding(const StreamSetPort outputPort) const;
-    LLVM_READNONE const BufferGraph::edge_descriptor getOutput(const size_t kernelVertex, const StreamSetPort outputPort) const;
 
-    LLVM_READNONE unsigned getNumOfStreamInputs(const unsigned kernel) const;
-    LLVM_READNONE unsigned getNumOfStreamOutputs(const unsigned kernel) const;
-
-    LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
+    using PipelineCommonGraphFunctions::getBinding;
 
     const Binding & getBinding(const StreamSetPort port) const;
-    LLVM_READNONE const Binding & getBinding(const unsigned kernel, const StreamSetPort port) const;
-    LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
+
+    LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
 
 protected:
 
@@ -634,13 +490,10 @@ protected:
     const bool                       			mTraceIndividualConsumedItemCounts;
 
     const unsigned								mNumOfThreads;
-    const unsigned                              mNumOfSegments;
 
     const LengthAssertions &                    mLengthAssertions;
 
     // analysis state
-    const RelationshipGraph                     mStreamGraph;
-    const RelationshipGraph                     mScalarGraph;
     static constexpr unsigned                   PipelineInput = 0;
     static constexpr unsigned                   FirstKernel = 1;
     const unsigned                              LastKernel;
@@ -653,36 +506,31 @@ protected:
     const unsigned                              LastCall;
     const unsigned                              FirstScalar;
     const unsigned                              LastScalar;
-    const Partition                             KernelPartitionId;
     const unsigned                              PartitionCount;
-
-    std::vector<Rational>                       MinimumNumOfStrides;
-    std::vector<Rational>                       MaximumNumOfStrides;
 
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
+    const bool                                  mHasZeroExtendedStream;
 
+    bool                                        mHasThreadLocalPipelineState = false;
+
+    const Partition                             KernelPartitionId;
+    const std::vector<Rational>                 MinimumNumOfStrides;
+    const std::vector<Rational>                 MaximumNumOfStrides;
+
+    const RelationshipGraph                     mStreamGraph;
+    const RelationshipGraph                     mScalarGraph;
     const AddGraph                              mAddGraph;
-
     const BufferGraph                           mBufferGraph;
-
     const PartitioningGraph                     mPartitioningGraph;
     const Vec<unsigned>                         mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
-
-
-    const BufferPortMap                         mInputPortSet;
-    const BufferPortMap                         mOutputPortSet;
-
-    const bool                                  mHasZeroExtendedStream;
-    bool                                        mHasThreadLocalPipelineState;
-
     const ConsumerGraph                         mConsumerGraph;
-
-    Vec<Value *>                                mScalarValue;
     const TerminationGraph                      mTerminationGraph;
     const IOCheckGraph                          mIOCheckGraph;
 
+    const BufferPortMap                         mInputPortSet;
+    const BufferPortMap                         mOutputPortSet;
 
     // pipeline state
     unsigned                                    mKernelId = 0;
@@ -717,8 +565,8 @@ protected:
     Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
     Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
-
     Vec<Value *, 128>                           mLocallyAvailableItems;
+    Vec<Value *>                                mScalarValue;
 
     // partition state
     Vec<BasicBlock *>                           mPartitionEntryPoint;
@@ -744,7 +592,7 @@ protected:
     Value *                                     mTerminatedInitially = nullptr;
     Value *                                     mTerminatedInitiallyCheck = nullptr;
     Value *                                     mMaximumNumOfStrides = nullptr;
-    PHINode *                                   mCurrentNumOfStrides = nullptr;
+    PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
     PHINode *                                   mTotalNumOfStridesAtLoopExitPhi = nullptr;
     PHINode *                                   mAnyProgressedAtLoopExitPhi = nullptr;
@@ -753,7 +601,7 @@ protected:
     PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
     Value *                                     mExhaustedPipelineInputAtExit = nullptr;    
-    PHINode *                                   mExecutedAtLeastOncePhi = nullptr;
+    PHINode *                                   mExecutedAtLeastOnceAtLoopEntryPhi = nullptr;
     PHINode *                                   mTerminatedSignalPhi = nullptr;
     PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
@@ -837,81 +685,18 @@ protected:
 
     // misc.
 
-    OwningVec<StreamSetBuffer>                  mInternalBuffers;
     OwningVec<Kernel>                           mInternalKernels;
     OwningVec<Binding>                          mInternalBindings;
+    OwningVec<StreamSetBuffer>                  mInternalBuffers;
+
 
 };
-
-
-// NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
-
-template <typename Graph>
-LLVM_READNONE
-inline typename graph_traits<Graph>::edge_descriptor first_in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return *in_edges(u, G).first;
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline typename graph_traits<Graph>::edge_descriptor in_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    assert (in_degree(u, G) == 1);
-    return first_in_edge(u, G);
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline typename graph_traits<Graph>::vertex_descriptor parent(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return source(in_edge(u, G), G);
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline typename graph_traits<Graph>::edge_descriptor first_out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return *out_edges(u, G).first;
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline typename graph_traits<Graph>::edge_descriptor out_edge(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    assert (out_degree(u, G) == 1);
-    return first_out_edge(u, G);
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline typename graph_traits<Graph>::vertex_descriptor child(const typename graph_traits<Graph>::vertex_descriptor u, const Graph & G) {
-    return target(out_edge(u, G), G);
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline bool is_parent(const typename graph_traits<Graph>::vertex_descriptor u,
-                      const typename graph_traits<Graph>::vertex_descriptor v,
-                      const Graph & G) {
-    return parent(u, G) == v;
-}
-
-template <typename Graph>
-LLVM_READNONE
-inline bool has_child(const typename graph_traits<Graph>::vertex_descriptor u,
-                      const typename graph_traits<Graph>::vertex_descriptor v,
-                      const Graph & G) {
-    for (const auto e : make_iterator_range(out_edges(u, G))) {
-        if (target(e, G) == v) {
-            return true;
-        }
-    }
-    return false;
-}
-
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
 inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel)
-: PipelineCompiler(b, pipelineKernel, makePipelineGraph(b, pipelineKernel)) {
+: PipelineCompiler(pipelineKernel, std::move(PipelineAnalysis::analyze(b, pipelineKernel))) {
     // Use a delegating constructor to compute the pipeline graph data once and pass it to
     // the compiler. Although a const function attribute ought to suffice, gcc 8.2 does not
     // resolve it correctly and clang requires -O2 or better.
@@ -920,16 +705,14 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipelineKernel, PipelineGraphBundle && P)
+PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, PipelineAnalysis && P)
 : KernelCompiler(pipelineKernel)
+, PipelineCommonGraphFunctions(mStreamGraph, mBufferGraph)
 , mCheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
 , mTraceProcessedProducedItemCounts(codegen::DebugOptionIsSet(codegen::TraceCounts))
 , mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
 , mNumOfThreads(pipelineKernel->getNumOfThreads())
-, mNumOfSegments(pipelineKernel->getNumOfSegments())
 , mLengthAssertions(pipelineKernel->getLengthAssertions())
-, mStreamGraph(std::move(P.Streams))
-, mScalarGraph(std::move(P.Scalars))
 , LastKernel(P.LastKernel)
 , PipelineOutput(P.PipelineOutput)
 , FirstStreamSet(P.FirstStreamSet)
@@ -940,32 +723,29 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , LastCall(P.LastCall)
 , FirstScalar(P.FirstScalar)
 , LastScalar(P.LastScalar)
-, KernelPartitionId(std::move(P.KernelPartitionId))
-, PartitionCount(P.PartitionCount)
 
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
+, mHasZeroExtendedStream(P.mHasZeroExtendedStream)
 
-, mAddGraph(makeAddGraph())
-
-, mBufferGraph(makeBufferGraph(b))
-
-, mPartitioningGraph(generatePartitioningGraph())
-, mPartitionJumpIndex(determinePartitionJumpIndices())
-, mPartitionJumpTree(makePartitionJumpTree())
+, KernelPartitionId(std::move(P.KernelPartitionId))
+, PartitionCount(P.PartitionCount)
+, mStreamGraph(std::move(P.mStreamGraph))
+, mScalarGraph(std::move(P.mScalarGraph))
+, mAddGraph(std::move(P.mAddGraph))
+, mBufferGraph(std::move(P.mBufferGraph))
+, mPartitioningGraph(std::move(P.mPartitioningGraph))
+, mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
+, mPartitionJumpTree(std::move(P.mPartitionJumpTree))
+, mConsumerGraph(std::move(P.mConsumerGraph))
+, mTerminationGraph(std::move(P.mTerminationGraph))
+, mIOCheckGraph(std::move(P.mIOCheckGraph))
 
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())
 
 , mConsumedItemCount(LastStreamSet + 1)
-
-// TODO: refactor to remove the following const cast
-, mHasZeroExtendedStream(hasZeroExtendedStreams(const_cast<BufferGraph &>(mBufferGraph)))
-
-, mConsumerGraph(makeConsumerGraph())
 , mScalarValue(LastScalar + 1)
-, mTerminationGraph(makeTerminationGraph())
-, mIOCheckGraph(makeKernelIOGraph())
 
 , mInitiallyProcessedItemCount(this)
 , mInitiallyProcessedDeferredItemCount(this)
@@ -1007,15 +787,11 @@ PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const pipeline
 , mUpdatedProducedDeferredPhi(this)
 , mFullyProducedItemCount(this)
 
-, mInternalKernels(std::move(P.InternalKernels))
-, mInternalBindings(std::move(P.InternalBindings))
-
-
-
+, mInternalKernels(std::move(P.mInternalKernels))
+, mInternalBindings(std::move(P.mInternalBindings))
+, mInternalBuffers(std::move(P.mInternalBuffers))
 {
-    #ifdef PRINT_BUFFER_GRAPH
-    printBufferGraph(errs());
-    #endif
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -1064,11 +840,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
 }
 
-inline size_t round_up_to(const size_t x, const size_t y) {
-    assert(is_power_2(y));
-    return (x + y - 1) & -y;
-}
-
 #ifndef NDEBUG
 static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const bool allowNull = true) {
     if (value == nullptr) {
@@ -1093,7 +864,7 @@ static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const
 
 } // end of namespace
 
-#include "analysis/analysis.hpp"
+#include "analysis/pipeline_analysis.hpp"
 #include "buffer_management_logic.hpp"
 #include "termination_logic.hpp"
 #include "consumer_logic.hpp"

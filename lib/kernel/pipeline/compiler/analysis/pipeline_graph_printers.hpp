@@ -1,7 +1,7 @@
 #ifndef PIPELINE_GRAPH_PRINTER_HPP
 #define PIPELINE_GRAPH_PRINTER_HPP
 
-#include "../pipeline_compiler.hpp"
+#include "relationship_analysis.hpp"
 #include <boost/algorithm/string/replace.hpp>
 
 namespace kernel {
@@ -180,7 +180,7 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
+void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
     using BufferId = StreamSetBuffer::BufferKind;
 
@@ -305,13 +305,26 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
 
     auto printKernel = [&](const unsigned kernel, const StringRef name, const bool ignorePartition) {
         checkOpenPartitionLabel(kernel, ignorePartition);
+
+        const Kernel * const kernelObj = getKernel(kernel);
+
+
+        const auto explicitFinalPartialStride = kernelObj->requiresExplicitPartialFinalStride();
+        const auto nonLinear = mayHaveNonLinearIO(kernel);
+
+        const auto borders = (nonLinear || explicitFinalPartialStride) ? '2' : '1';
+
+
+
         out << "v" << kernel << " [label=\"[" <<
                 kernel << "] " << name << "\\n"
-                //" Partition: " << KernelPartitionId[v] << "\\n"
                 " Expected:  ["; print_rational(MinimumNumOfStrides[kernel]) << ',';
                                 print_rational(MaximumNumOfStrides[kernel]) << "]\\n"
-                "\" shape=rect,style=rounded,peripheries=2"
-                "];\n";
+                "\" shape=rect,style=rounded,peripheries=" << borders;
+                if (explicitFinalPartialStride) {
+                    out << ",color=\"blue\"";
+                }
+                out << "];\n";
 
         for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const auto streamSet = target(e, mBufferGraph);
@@ -319,7 +332,7 @@ void PipelineCompiler::printBufferGraph(raw_ostream & out) const {
         }
     };
 
-    out << "digraph \"" << mTarget->getName() << "\" {\n"
+    out << "digraph \"" << mPipelineKernel->getName() << "\" {\n"
            "rankdir=tb;"
            "nodesep=0.5;"
            "ranksep=0.5;"

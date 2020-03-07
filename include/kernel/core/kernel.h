@@ -167,9 +167,6 @@ public:
     // mechanisms that are short, inexpensive to compute and guarantee uniqueness
     // based on the semantics of the kernel.
     //
-    // If no other mechanism is available, the default makeSignature() method uses the
-    // full LLVM IR (before optimization) of the kernel instance.
-    //
     // A kernel Module ID is short string that is used as a name for a particular kernel
     // instance.  Kernel Module IDs are used to look up and retrieve cached kernel
     // instances and so should be highly likely to uniquely identify a kernel instance.
@@ -177,16 +174,6 @@ public:
     // The ideal case is that a kernel Module ID serves as a full kernel signature thus
     // guaranteeing uniqueness.  In this case, hasSignature() should return false.
     //
-
-    //
-    // Kernel builder subtypes define their logic of kernel construction
-    // in terms of 3 virtual methods for
-    // (a) preparing the Kernel state data structure
-    // (c) defining the logic of the finalBlock function.
-    //
-    // Note: the kernel state data structure must only be finalized after
-    // all scalar fields have been added.   If there are no fields to
-    // be added, the default method for preparing kernel state may be used.
 
     LLVM_READNONE const llvm::StringRef getName() const {
         return mKernelName;
@@ -370,6 +357,10 @@ public:
     template <typename ExternalFunctionType>
     void link(llvm::StringRef name, ExternalFunctionType & functionPtr);
 
+    static bool isLocalBuffer(const Binding & output);
+
+    LLVM_READNONE bool canSetTerminateSignal() const;
+
     virtual void addKernelDeclarations(BuilderRef b);
 
     virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
@@ -441,10 +432,6 @@ protected:
     static std::string getStringHash(const llvm::StringRef str);
 
     LLVM_READNONE std::string getDefaultFamilyName() const;
-
-    LLVM_READNONE bool canSetTerminateSignal() const;
-
-    static bool isLocalBuffer(const Binding & output);
 
     LLVM_READNONE bool hasFixedRateInput() const;
 

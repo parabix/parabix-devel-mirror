@@ -1,24 +1,22 @@
 #ifndef ZERO_EXTEND_ANALYSIS_HPP
 #define ZERO_EXTEND_ANALYSIS_HPP
 
-#include "../pipeline_compiler.hpp"
+#include "pipeline_analysis.hpp"
 
 namespace kernel {
 
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief hasZeroExtendedStreams
+ * @brief identifyZeroExtendedStreamSets
  *
  * Determine whether there are any zero extend attributes on any kernel and verify that every kernel with
  * zero extend attributes have at least one input that is not transitively dependent on a zero extended
  * input stream.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::hasZeroExtendedStreams(BufferGraph & G) const {
-    bool hasZeroExtendedStream = false;
+void PipelineAnalysis::identifyZeroExtendedStreamSets() {
+
     #ifndef DISABLE_ZERO_EXTEND
     using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
-
-    std::queue<PartitioningGraph::vertex_descriptor> Q;
 
     for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         const RelationshipNode & rn = mStreamGraph[kernel];
@@ -83,10 +81,10 @@ bool PipelineCompiler::hasZeroExtendedStreams(BufferGraph & G) const {
         bool necessary = false;
 
         const auto partitionId = KernelPartitionId[kernel];
-        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-            const BufferRateData & inputData = G[input];
-            const auto streamSet = source(input, G);
-            const auto producer = parent(streamSet, G);
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const BufferRateData & inputData = mBufferGraph[input];
+            const auto streamSet = source(input, mBufferGraph);
+            const auto producer = parent(streamSet, mBufferGraph);
             const auto prodPartitionId = KernelPartitionId[producer];
             if (partitionId != prodPartitionId) {
                 for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
@@ -100,18 +98,17 @@ bool PipelineCompiler::hasZeroExtendedStreams(BufferGraph & G) const {
         }
 
         if (necessary) {
-            for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-                BufferRateData & inputData = G[input];
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                BufferRateData & inputData = mBufferGraph[input];
                 const Binding & binding = inputData.Binding;
                 if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::ZeroExtended))) {
                     inputData.ZeroExtended = true;
                 }
             }
-            hasZeroExtendedStream = true;
+            HasZeroExtendedStream = true;
         }
     }
     #endif
-    return hasZeroExtendedStream;
 }
 
 }

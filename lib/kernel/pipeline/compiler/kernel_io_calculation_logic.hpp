@@ -46,7 +46,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         b->CallPrintInt("mMaximumNumOfStrides", mMaximumNumOfStrides);
 
         if (mMayHaveNonLinearIO) {
-            mNumOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStrides);
+            mNumOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
         } else {
             mNumOfLinearStrides = mMaximumNumOfStrides;
         }
@@ -98,7 +98,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             // TODO: should we always resize the output buffers to fit more output?
             Value * const noOutputStrides = b->CreateIsNull(numOfOutputStrides);
             mNumOfLinearStrides = b->CreateSelect(noOutputStrides, mNumOfLinearStrides, numOfOutputStrides);
-        }        
+        }
     }
 
     calculateItemCounts(b);
@@ -110,7 +110,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     Value * numOfStrides = mHasExplicitFinalPartialStride ? mNumOfLinearStrides : mReportedNumOfStridesPhi;
     if (mMayHaveNonLinearIO) {
-        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, numOfStrides);
+        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, numOfStrides);
     } else {
         mUpdatedNumOfStrides = numOfStrides;
     }
@@ -316,7 +316,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     if (mBranchToLoopExit) {
         // do not record the block if this not the first execution of the
         // kernel but ensure that the system knows at least one failed.
-        test = b->CreateOr(sufficientInput, mExecutedAtLeastOncePhi);
+        test = b->CreateOr(sufficientInput, mExecutedAtLeastOnceAtLoopEntryPhi);
         insufficient = b->CreateOr(mBranchToLoopExit, b->CreateNot(sufficientInput));
     }
 
@@ -806,19 +806,19 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         // TODO: fix this to not require a umax (n,1)
         maxNumOfOutputStrides = b->CreateUMax(maxNumOfOutputStrides, ONE);
 
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
-            Value * const notTooFew = b->CreateICmpUGE(maxNumOfOutputStrides, mNumOfLinearStrides);
-            Value * const limit = b->CreateAdd(mNumOfLinearStrides, ONE);
-            Value * const notTooMany = b->CreateICmpULE(maxNumOfOutputStrides, limit);
-            Value * const valid = b->CreateAnd(notTooFew, notTooMany);
+//        if (LLVM_UNLIKELY(mCheckAssertions)) {
+//            Value * const notTooFew = b->CreateICmpUGE(maxNumOfOutputStrides, mNumOfLinearStrides);
+//            Value * const limit = b->CreateAdd(mNumOfLinearStrides, ONE);
+//            Value * const notTooMany = b->CreateICmpULE(maxNumOfOutputStrides, limit);
+//            Value * const valid = b->CreateAnd(notTooFew, notTooMany);
 
-            b->CreateAssert(valid, "%s: computed %" PRId64 " output strides but expected [%" PRId64 ", %" PRId64 "]",
-                            mKernelAssertionName,
-                            maxNumOfOutputStrides,
-                            mNumOfLinearStrides,
-                            limit);
+//            b->CreateAssert(valid, "%s: computed %" PRId64 " output strides but expected [%" PRId64 ", %" PRId64 "]",
+//                            mKernelAssertionName,
+//                            maxNumOfOutputStrides,
+//                            mNumOfLinearStrides,
+//                            limit);
 
-        }
+//        }
 
     } else {
         maxNumOfOutputStrides = b->CreateAdd(mNumOfLinearStrides, ONE);
@@ -1129,7 +1129,7 @@ Value * PipelineCompiler::calculateNumOfLinearItems(BuilderRef b, const StreamSe
 void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b) {
 
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort port(PortType::Input, i);
         mUpdatedProcessedPhi(port)->addIncoming(mAlreadyProcessedPhi(port), exitBlock);
@@ -1137,7 +1137,7 @@ void PipelineCompiler::updatePHINodesForLoopExit(BuilderRef b) {
             mUpdatedProcessedDeferredPhi(port)->addIncoming(mAlreadyProcessedDeferredPhi(port), exitBlock);
         }
     }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port(PortType::Output, i);
         mUpdatedProducedPhi(port)->addIncoming(mAlreadyProducedPhi(port), exitBlock);

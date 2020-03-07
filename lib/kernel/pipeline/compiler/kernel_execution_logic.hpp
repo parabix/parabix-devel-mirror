@@ -86,8 +86,8 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
 
     ArgVec args;
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
@@ -204,8 +204,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
 
     // calculate or read the item counts (assuming this kernel did not terminate)
     for (unsigned i = 0; i < numOfInputs; ++i) {

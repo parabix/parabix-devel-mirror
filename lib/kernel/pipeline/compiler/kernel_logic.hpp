@@ -29,7 +29,7 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
  * @brief computeFullyProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort port{PortType::Input, i};
         const Binding & input = getInputBinding(port);
@@ -49,7 +49,7 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         Value * produced = mUpdatedProducedPhi(port);
@@ -246,6 +246,175 @@ Value * PipelineCompiler::getThreadLocalHandlePtr(BuilderRef b, const unsigned k
         handle = b->CreatePointerCast(handle, localStateTy->getPointerTo());
     }
     return handle;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructInputPortMappings
+ ** ------------------------------------------------------------------------------------------------------------- */
+BufferPortMap PipelineCompiler::constructInputPortMappings() const {
+    size_t n = 0;
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        n += in_degree(i, mBufferGraph);
+    }
+    BufferPortMap M;
+    M.reserve(n);
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        const auto hint = M.nth(M.size());
+        for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+            const BufferRateData & input = mBufferGraph[e];
+            M.emplace_hint_unique(hint, i, input.Port.Number);
+        }
+    }
+    assert (M.size() == n);
+    return M;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief constructOutputPortMappings
+ ** ------------------------------------------------------------------------------------------------------------- */
+BufferPortMap PipelineCompiler::constructOutputPortMappings() const {
+    size_t n = 0;
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        n += out_degree(i, mBufferGraph);
+    }
+    BufferPortMap M;
+    M.reserve(n);
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
+        const auto hint = M.nth(M.size());
+        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const BufferRateData & output = mBufferGraph[e];
+            M.emplace_hint_unique(hint, i, output.Port.Number);
+        }
+    }
+    assert (M.size() == n);
+    return M;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief supportsInternalSynchronization
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::supportsInternalSynchronization() const {
+    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
+        if (LLVM_UNLIKELY(mMayHaveNonLinearIO)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "PipelineCompiler error: " <<
+                   mKernel->getName() << " is internally synchronized"
+                   " but permits non-linear I/O.";
+            report_fatal_error(out.str());
+        }
+        return true;
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isBounded
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::isBounded() const {
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const Binding & binding = br.Binding;
+        const ProcessingRate & rate = binding.getRate();
+        switch (rate.getKind()) {
+            case RateId::Bounded:
+            case RateId::Fixed:
+            case RateId::PartialSum:
+                return true;
+            case RateId::Greedy:
+                if (rate.getLowerBound() > Rational{0, 1}) {
+                    return true;
+                }
+            default: break;
+        }
+    }
+    return false;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyPipelineInputs
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifyPipelineInputs() {
+    mHasPipelineInput.reset();
+    mHasPipelineInput.resize(in_degree(mKernelId, mBufferGraph));
+
+    if (LLVM_LIKELY(out_degree(PipelineInput, mBufferGraph) > 0)) {
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const auto streamSet = source(e, mBufferGraph);
+            const auto producer = parent(streamSet, mBufferGraph);
+            if (LLVM_UNLIKELY(producer == PipelineInput)) {
+                const BufferRateData & br = mBufferGraph[e];
+                mHasPipelineInput.set(br.Port.Number);
+            }
+        }
+    }
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInputBufferVertex
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline unsigned PipelineCompiler::getInputBufferVertex(const StreamSetPort inputPort) const {
+    return getInputBufferVertex(mKernelId, inputPort);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInputBuffer
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StreamSetBuffer * PipelineCompiler::getInputBuffer(const StreamSetPort inputPort) const {
+    return getInputBuffer(mKernelId, inputPort);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInputBinding
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Binding & PipelineCompiler::getInputBinding(const StreamSetPort inputPort) const {
+    return getInputBinding(mKernelId, inputPort);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputBufferVertex
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline unsigned PipelineCompiler::getOutputBufferVertex(const StreamSetPort outputPort) const {
+    return getOutputBufferVertex(mKernelId, outputPort);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputBinding
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Binding & PipelineCompiler::getOutputBinding(const StreamSetPort outputPort) const {
+    return getOutputBinding(mKernelId, outputPort);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputBuffer
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StreamSetBuffer * PipelineCompiler::getOutputBuffer(const StreamSetPort outputPort) const {
+    return getOutputBuffer(mKernelId, outputPort);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getBinding
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Binding & PipelineCompiler::getBinding(const StreamSetPort port) const {
+    return getBinding(mKernelId, port);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getReference
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort port) const {
+    return PipelineCommonGraphFunctions::getReference(mKernelId, port);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputBuffer
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline unsigned PipelineCompiler::getBufferIndex(const unsigned bufferVertex) const {
+    assert (bufferVertex >= FirstStreamSet);
+    assert (bufferVertex <= LastStreamSet);
+    return bufferVertex - FirstStreamSet;
 }
 
 }

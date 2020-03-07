@@ -1,19 +1,20 @@
 #ifndef ADD_ANALYSIS_HPP
 #define ADD_ANALYSIS_HPP
 
-#include "../pipeline_compiler.hpp"
+#include "pipeline_analysis.hpp"
 
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeAddGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-AddGraph PipelineCompiler::makeAddGraph() const {
+void PipelineAnalysis::makeAddGraph() {
     // TODO: this should generate formulas to take roundup into account
 
     // TODO: this doesn't handle fixed I/O rate conversions correctly. E.g., 2 input items to 3 output items.
 
-    AddGraph G(LastStreamSet + 1);
+    mAddGraph = AddGraph(LastStreamSet + 1);
+
     for (auto kernel = PipelineInput; kernel <= PipelineOutput; ++kernel) {
         int minAddK = 0;
         if (LLVM_LIKELY(in_degree(kernel, mStreamGraph) > 0)) {
@@ -31,7 +32,7 @@ AddGraph PipelineCompiler::makeAddGraph() const {
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
                 assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
 
-                int k = G[streamSet];
+                int k = mAddGraph[streamSet];
                 bool isPrincipal = false;
                 for (const Attribute & attr : input.getAttributes()) {
                     switch (attr.getKind()) {
@@ -52,26 +53,26 @@ AddGraph PipelineCompiler::makeAddGraph() const {
                     noPrincipal = false;
                 }
 
-                add_edge(streamSet, kernel, k, G);
+                add_edge(streamSet, kernel, k, mAddGraph);
             }
 
             if (LLVM_LIKELY(noPrincipal)) {
                 minAddK = std::numeric_limits<int>::max();
-                for (const auto e : make_iterator_range(in_edges(kernel, G))) {
-                    minAddK = std::min<int>(minAddK, G[e]);
+                for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+                    minAddK = std::min<int>(minAddK, mAddGraph[e]);
                 }
-                for (const auto e : make_iterator_range(in_edges(kernel, G))) {
-                    G[e] -= minAddK;
+                for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+                    mAddGraph[e] -= minAddK;
                 }
             } else {
-                for (const auto e : make_iterator_range(in_edges(kernel, G))) {
-                    G[e] = 0;
+                for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+                    mAddGraph[e] = 0;
                 }
             }
 
         }
 
-        G[kernel] = minAddK;
+        mAddGraph[kernel] = minAddK;
 
         for (const auto e : make_iterator_range(out_edges(kernel, mStreamGraph))) {
 
@@ -99,28 +100,27 @@ AddGraph PipelineCompiler::makeAddGraph() const {
                 }
             }
 
-            G[streamSet] = k;
-            add_edge(kernel, streamSet, k, G);
+            mAddGraph[streamSet] = k;
+            add_edge(kernel, streamSet, k, mAddGraph);
         }
     }
 
-    #if 1
+    #if 0
     auto & out = errs();
     out << "digraph AddGraph {\n";
-    for (const auto v : make_iterator_range(vertices(G))) {
-        out << "v" << v << " [label=\"" << v << " (" << (int)G[v] << ")\"];\n";
+    for (const auto v : make_iterator_range(vertices(mAddGraph))) {
+        out << "v" << v << " [label=\"" << v << " (" << (int)mAddGraph[v] << ")\"];\n";
     }
-    for (const auto e : make_iterator_range(edges(G))) {
-        const auto s = source(e, G);
-        const auto t = target(e, G);
-        out << "v" << s << " -> v" << t << " [label=\"" << (int)G[e] << "\"];\n";
+    for (const auto e : make_iterator_range(edges(mAddGraph))) {
+        const auto s = source(e, mAddGraph);
+        const auto t = target(e, mAddGraph);
+        out << "v" << s << " -> v" << t << " [label=\"" << (int)mAddGraph[e] << "\"];\n";
     }
 
     out << "}\n\n";
     out.flush();
     #endif
 
-    return G;
 }
 
 }

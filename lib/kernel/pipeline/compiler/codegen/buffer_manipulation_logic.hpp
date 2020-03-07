@@ -11,7 +11,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlock * const insertBefore) const {
     #ifndef DISABLE_ZERO_EXTEND
-    const auto numOfInputs = getNumOfStreamInputs(mKernelId);
+    const auto numOfInputs = numOfStreamInputs(mKernelId);
     const auto strideSize = mKernel->getStride();
     const auto blockWidth = b->getBitBlockWidth();
     Value * requiredSpace = nullptr;
@@ -379,7 +379,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     Constant * const ONE = b->getSize(1);
     Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
 
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelId);
+    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         const StreamSetBuffer * const buffer = getOutputBuffer(port);

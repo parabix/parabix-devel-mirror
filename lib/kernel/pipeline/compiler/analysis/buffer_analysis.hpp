@@ -1,7 +1,7 @@
 #ifndef BUFFER_ANALYSIS_HPP
 #define BUFFER_ANALYSIS_HPP
 
-#include "../pipeline_compiler.hpp"
+#include "pipeline_analysis.hpp"
 
 // TODO: any buffers that exist only to satisfy the output dependencies are unnecessary.
 // We could prune away kernels if none of their outputs are needed but we'd want some
@@ -29,30 +29,19 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makePipelineBufferGraph
- *
- * Return an acyclic bi-partite graph indicating the I/O relationships between the kernels and their buffers.
- *
- * Ordering: producer -> buffer -> consumer
+ * @brief addStreamSetsToBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
-
-    BufferGraph G(LastStreamSet + 1);
-
-    initializeBufferGraph(G);
-    identifyLocalPortIds(G);
-    computeDataFlowRates(G);
-    identifyLinearBuffers(G);
+void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
     // Identify all External I/O buffers
     SmallFlatSet<BufferGraph::vertex_descriptor, 16> IsExternal;
 
-    IsExternal.reserve(out_degree(PipelineInput, G) + in_degree(PipelineOutput, G));
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, G))) {
-        IsExternal.insert(target(e, G));
+    IsExternal.reserve(out_degree(PipelineInput, mBufferGraph) + in_degree(PipelineOutput, mBufferGraph));
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        IsExternal.insert(target(e, mBufferGraph));
     }
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, G))) {
-        IsExternal.insert(source(e, G));
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+        IsExternal.insert(source(e, mBufferGraph));
     }
 
     auto internalOrExternal = [&IsExternal](BufferGraph::vertex_descriptor streamSet) -> BufferType {
@@ -65,12 +54,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
 
     // fill in any known managed buffers
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
-        for (const auto e : make_iterator_range(out_edges(kernel, G))) {
-            const BufferRateData & producerRate = G[e];
+        for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const BufferRateData & producerRate = mBufferGraph[e];
             const Binding & output = producerRate.Binding;
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
-                const auto streamSet = target(e, G);
-                BufferNode & bn = G[streamSet];
+                const auto streamSet = target(e, mBufferGraph);
+                BufferNode & bn = mBufferGraph[streamSet];
                 const auto linear = output.hasAttribute(AttrId::Linear);
                 bn.Buffer = new ExternalBuffer(b, output.getType(), linear, 0);
                 bn.Type = BufferType::Unowned | internalOrExternal(streamSet);
@@ -79,11 +68,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     }
 
     // fill in any unmanaged pipeline input buffers
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, G))) {
-        const auto streamSet = target(e, G);
-        BufferNode & bn = G[streamSet];
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        BufferNode & bn = mBufferGraph[streamSet];
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
-            const BufferRateData & rate = G[e];
+            const BufferRateData & rate = mBufferGraph[e];
             const Binding & input = rate.Binding;
             bn.Buffer = new ExternalBuffer(b, input.getType(), true, 0);
             bn.Type = BufferType::UnownedExternal;
@@ -91,11 +80,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     }
 
     // and pipeline output buffers ...
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, G))) {
-        const auto streamSet = source(e, G);
-        BufferNode & bn = G[streamSet];
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+        const auto streamSet = source(e, mBufferGraph);
+        BufferNode & bn = mBufferGraph[streamSet];
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
-            const BufferRateData & rate = G[e];
+            const BufferRateData & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) continue;
             bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
@@ -134,18 +123,18 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
-        BufferNode & bn = G[streamSet];
-        const auto producerOutput = in_edge(streamSet, G);
-        const BufferRateData & producerRate = G[producerOutput];
+        BufferNode & bn = mBufferGraph[streamSet];
+        const auto producerOutput = in_edge(streamSet, mBufferGraph);
+        const BufferRateData & producerRate = mBufferGraph[producerOutput];
         const Binding & output = producerRate.Binding;
 
         bool nonLocal = false;
 
         // Does this stream cross a partition boundary?
-        const auto producer = source(producerOutput, G);
+        const auto producer = source(producerOutput, mBufferGraph);
         const auto producerPartitionId = KernelPartitionId[producer];
-        for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
-            const auto consumer = target(ce, G);
+        for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const auto consumer = target(ce, mBufferGraph);
             if (producerPartitionId != KernelPartitionId[consumer]) {
                 nonLocal = true;
                 break;
@@ -208,12 +197,12 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
 
-            for (const auto ce : make_iterator_range(out_edges(streamSet, G))) {
+            for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
 
-                const BufferRateData & consumerRate = G[ce];
+                const BufferRateData & consumerRate = mBufferGraph[ce];
                 const Binding & input = consumerRate.Binding;
 
-                const auto consumer = target(ce, G);
+                const auto consumer = target(ce, mBufferGraph);
 
                 const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
                 const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
@@ -256,7 +245,16 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 lookAhead = std::max(tmpLookAhead, lookAhead);
             }
 
-            auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
+            const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
+
+
+            // calculate overflow (copyback) and fascimile (copyforward) space
+            const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth) / blockWidth;
+            const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;
+            const auto spillover = std::max((consumeMax * Rational{2}) - consumeMin, pMax);
+            const auto reqSize0 = round_up_to(ceiling(spillover), blockWidth) / blockWidth;
+            const auto reqSize1 = 2 * (overflowSize + underflowSize);
+            const auto requiredSize = std::max(reqSize0, reqSize1);
 
             const auto linear = bn.Linear; // & isNonLinear
 
@@ -265,24 +263,11 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
                 nonLocal = true;
             }
 
-
             bn.LookBehind = lookBehind;
             bn.LookBehindReflection = reflection;
             bn.CopyBack = copyBack;
             bn.LookAhead = lookAhead;
 
-            // calculate overflow (copyback) and fascimile (copyforward) space
-            auto reqOverflow = std::max(copyBack, lookAhead);
-            const auto addK = transitiveAdd[streamSet - FirstStreamSet];
-            if (addK > 0) {
-                reqOverflow = std::max(reqOverflow, static_cast<unsigned>(addK));
-            }
-
-            const auto overflowSize = round_up_to(reqOverflow, blockWidth) / blockWidth;
-            const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;
-            const auto reqSize0 = round_up_to(ceiling(std::max((consumeMax * Rational{2}) - consumeMin, pMax)), blockWidth) / blockWidth;
-            const auto reqSize1 = 2 * (overflowSize + underflowSize);
-            const auto requiredSize = std::max(reqSize0, reqSize1);
 
             Type * const baseType = output.getType();
 
@@ -306,15 +291,15 @@ BufferGraph PipelineCompiler::makeBufferGraph(BuilderRef b) {
         bn.NonLocal = nonLocal;
     }
 
-    verifyIOStructure(G);
-
-    return G;
+    verifyIOStructure();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief initializeBufferGraph
+ * @brief generateInitialBufferGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
+void PipelineAnalysis::generateInitialBufferGraph() {
+
+    mBufferGraph = BufferGraph(LastStreamSet + 1U);
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS, RelationshipGraph::edge_descriptor>;
     using Vertex = graph_traits<Graph>::vertex_descriptor;
@@ -339,13 +324,13 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
                         << kernelObj->getName() << "." << binding.getName();
                     report_fatal_error(out.str());
                 }
-                const auto e = in_edge(streamSet, G);
-                const BufferRateData & producerBr = G[e];
+                const auto e = in_edge(streamSet, mBufferGraph);
+                const BufferRateData & producerBr = mBufferGraph[e];
                 ub = std::max(lb, producerBr.Maximum);
             } else {
                 const auto strideLength = kernelObj->getStride();
                 if (LLVM_UNLIKELY(rate.isRelative())) {
-                    const Binding & ref = getBinding(getReference(i, port));
+                    const Binding & ref = getBinding(i, getReference(i, port));
                     const ProcessingRate & refRate = ref.getRate();
                     lb *= refRate.getLowerBound();
                     ub *= refRate.getUpperBound();
@@ -485,7 +470,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
                 const auto streamSet = source(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                add_edge(streamSet, i, computeBufferRateBounds(port, rn, streamSet), G);
+                add_edge(streamSet, i, computeBufferRateBounds(port, rn, streamSet), mBufferGraph);
             } else {
                 const auto binding = target(e, mStreamGraph);
                 const RelationshipNode & rn = mStreamGraph[binding];
@@ -495,7 +480,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
                 const auto streamSet = target(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), G);
+                add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), mBufferGraph);
             }
         }
     }
@@ -504,7 +489,7 @@ void PipelineCompiler::initializeBufferGraph(BufferGraph & G) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyIOStructure
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::verifyIOStructure(const BufferGraph & G) const {
+void PipelineAnalysis::verifyIOStructure() const {
 
 
 #if 0
@@ -568,7 +553,7 @@ void PipelineCompiler::verifyIOStructure(const BufferGraph & G) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
+void PipelineAnalysis::identifyLinearBuffers() {
 
     // Any kernel that is internally synchronized or has a greedy rate input
     // requires that all of its inputs are linear.
@@ -577,15 +562,15 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
         bool mustBeLinear = false;
         if (LLVM_UNLIKELY(kernelObj->hasAttribute(AttrId::InternallySynchronized))) {
             // An internally synchronized kernel requires that all I/O is linear
-            for (const auto e : make_iterator_range(out_edges(i, G))) {
-                const auto streamSet = target(e, G);
-                BufferNode & N = G[streamSet];
+            for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
+                const auto streamSet = target(e, mBufferGraph);
+                BufferNode & N = mBufferGraph[streamSet];
                 N.Linear = true;
             }
             mustBeLinear = true;
         } else {
-            for (const auto e : make_iterator_range(in_edges(i, G))) {
-                const BufferRateData & rateData = G[e];
+            for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const BufferRateData & rateData = mBufferGraph[e];
                 const Binding & binding = rateData.Binding;
                 const ProcessingRate & rate = binding.getRate();
                 if (LLVM_UNLIKELY(rate.isGreedy())) {
@@ -595,9 +580,9 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
             }
         }
         if (LLVM_UNLIKELY(mustBeLinear)) {
-            for (const auto e : make_iterator_range(in_edges(i, G))) {
-                const auto streamSet = source(e, G);
-                BufferNode & N = G[streamSet];
+            for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const auto streamSet = source(e, mBufferGraph);
+                BufferNode & N = mBufferGraph[streamSet];
                 N.Linear = true;
             }
         }
@@ -607,8 +592,8 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
     // that the kernel requires linear input, mark it accordingly.
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
-        const auto binding = in_edge(streamSet, G);
-        const BufferRateData & producerRate = G[binding];
+        const auto binding = in_edge(streamSet, mBufferGraph);
+        const BufferRateData & producerRate = mBufferGraph[binding];
         const Binding & output = producerRate.Binding;
 
         auto requiresLinearAccess = [](const Binding & binding) {
@@ -631,8 +616,8 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
         if (LLVM_UNLIKELY(requiresLinearAccess(output))) {
             mustBeLinear = true;
         } else {
-            for (const auto binding : make_iterator_range(out_edges(streamSet, G))) {
-                const BufferRateData & consumerRate = G[binding];
+            for (const auto binding : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                const BufferRateData & consumerRate = mBufferGraph[binding];
                 const Binding & input = consumerRate.Binding;
                 if (LLVM_UNLIKELY(requiresLinearAccess(input))) {
                     mustBeLinear = true;
@@ -641,7 +626,7 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
            }
         }
         if (LLVM_UNLIKELY(mustBeLinear)) {
-            BufferNode & N = G[streamSet];
+            BufferNode & N = mBufferGraph[streamSet];
             N.Linear = true;
         }
     }
@@ -666,129 +651,6 @@ void PipelineCompiler::identifyLinearBuffers(BufferGraph & G) const {
     }
 #endif
 }
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief constructInputPortMappings
- ** ------------------------------------------------------------------------------------------------------------- */
-BufferPortMap PipelineCompiler::constructInputPortMappings() const {
-    size_t n = 0;
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        n += in_degree(i, mBufferGraph);
-    }
-    BufferPortMap M;
-    M.reserve(n);
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        const auto hint = M.nth(M.size());
-        for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-            const BufferRateData & input = mBufferGraph[e];
-            M.emplace_hint_unique(hint, i, input.Port.Number);
-        }
-    }
-    assert (M.size() == n);
-    return M;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief constructOutputPortMappings
- ** ------------------------------------------------------------------------------------------------------------- */
-BufferPortMap PipelineCompiler::constructOutputPortMappings() const {
-    size_t n = 0;
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        n += out_degree(i, mBufferGraph);
-    }
-    BufferPortMap M;
-    M.reserve(n);
-    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
-        const auto hint = M.nth(M.size());
-        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const BufferRateData & output = mBufferGraph[e];
-            M.emplace_hint_unique(hint, i, output.Port.Number);
-        }
-    }
-    assert (M.size() == n);
-    return M;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief mayHaveNonLinearIO
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::mayHaveNonLinearIO(const size_t kernel) const {
-
-    // If this kernel has I/O that crosses a partition boundary and the
-    // buffer itself is not guaranteed to be linear then this kernel
-    // may have non-linear I/O. A kernel with non-linear I/O may not be
-    // able to execute its full segment without splitting the work across
-    // two or more linear sub-segments.
-
-    bool noCountableInput = true;
-    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-        const auto streamSet = source(input, mBufferGraph);
-        const BufferNode & node = mBufferGraph[streamSet];
-        if (node.Linear) {
-            // To safely ensure we can determine the maximum number of strides
-            // before invoking the kernel, we require at least one countable
-            // input. NOTE: the PopCount reference is guaranteed to be linear.
-            const BufferRateData & rateData = mBufferGraph[input];
-            if (isCountable(rateData.Binding)) {
-                noCountableInput = false;
-            }
-        }
-        if (node.NonLocal) {
-            return true;
-        }
-    }
-    for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-        const auto streamSet = target(output, mBufferGraph);
-        const BufferNode & node = mBufferGraph[streamSet];
-        if (node.NonLocal || !node.Linear) {
-            return true;
-        }
-    }
-    return noCountableInput;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief supportsInternalSynchronization
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::supportsInternalSynchronization() const {
-    if (LLVM_UNLIKELY(mKernel->hasAttribute(AttrId::InternallySynchronized))) {
-        if (LLVM_UNLIKELY(mMayHaveNonLinearIO)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "PipelineCompiler error: " <<
-                   mKernel->getName() << " is internally synchronized"
-                   " but permits non-linear I/O.";
-            report_fatal_error(out.str());
-        }
-        return true;
-    }
-    return false;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief isBounded
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::isBounded() const {
-    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        const Binding & binding = br.Binding;
-        const ProcessingRate & rate = binding.getRate();
-        switch (rate.getKind()) {
-            case RateId::Bounded:
-            case RateId::Fixed:
-            case RateId::PartialSum:
-                return true;
-            case RateId::Greedy:
-                if (rate.getLowerBound() > Rational{0, 1}) {
-                    return true;
-                }
-            default: break;
-        }
-    }
-    return false;
-}
-
 
 }
 

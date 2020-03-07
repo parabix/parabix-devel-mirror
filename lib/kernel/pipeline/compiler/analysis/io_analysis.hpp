@@ -1,14 +1,14 @@
 #ifndef IO_ANALYSIS_HPP
 #define IO_ANALYSIS_HPP
 
-#include "../pipeline_compiler.hpp"
+#include "pipeline_analysis.hpp"
 
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernelInputCheckGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
+void PipelineAnalysis::makeKernelIOGraph() {
 
     // The root kernel of a partition is resposible for determining how many strides the
     // remaining kernels within the partition will execute. The reason for this is only
@@ -17,7 +17,7 @@ IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
 
     flat_set<unsigned> knownGlobalRateIds;
 
-    IOCheckGraph G(num_vertices(mBufferGraph));
+    mIOCheckGraph = IOCheckGraph(num_vertices(mBufferGraph));
 
     for (auto start = FirstKernel; start <= LastKernel; ) {
 
@@ -40,7 +40,7 @@ IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
             const BufferRateData & br = mBufferGraph[e];
             if (knownGlobalRateIds.insert(br.GlobalPortId).second) {
                 const auto streamSet = source(e, mBufferGraph);
-                add_edge(kernel, streamSet, br, G);
+                add_edge(kernel, streamSet, br, mIOCheckGraph);
             }
         };
 
@@ -48,7 +48,7 @@ IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
             const BufferRateData & br = mBufferGraph[e];
             if (knownGlobalRateIds.insert(br.GlobalPortId).second) {
                 const auto streamSet = target(e, mBufferGraph);
-                add_edge(streamSet, kernel, br, G);
+                add_edge(streamSet, kernel, br, mIOCheckGraph);
             }
         };
 
@@ -101,7 +101,6 @@ IOCheckGraph PipelineCompiler::makeKernelIOGraph() const {
         start = end;
     }
 
-    return G;
 }
 
 }
