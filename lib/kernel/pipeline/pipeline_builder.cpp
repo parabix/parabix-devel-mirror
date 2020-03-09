@@ -267,9 +267,10 @@ Kernel * PipelineBuilder::makeKernel() {
         }
     };
 
-
+    bool noFamilyKernels = true;
     for (unsigned i = 0; i < numOfKernels; ++i) {
         const Kernel * const k = mKernels[i];
+        noFamilyKernels &= !k->hasFamilyName();
         enumerateConsumerBindings(VertexType::Scalar, firstKernel + i, k->getInputScalarBindings());
         enumerateConsumerBindings(VertexType::StreamSet, firstKernel + i, k->getInputStreamSetBindings());
     }
@@ -284,6 +285,12 @@ Kernel * PipelineBuilder::makeKernel() {
     raw_string_ostream out(signature);
 
     out << 'P' << mNumOfThreads;
+    // TODO: create a pipeline executor that can check the arg types and capture any outputs;
+    // it should pass buffer segments in so that it can be given to the allocation function.
+    if (noFamilyKernels) {
+        out << 'B' << codegen::BufferSegments;
+    }
+
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         out << "+CYC";
     }
@@ -323,7 +330,7 @@ Kernel * PipelineBuilder::makeKernel() {
 
     PipelineKernel * const pipeline =
         new PipelineKernel(mDriver, std::move(signature),
-                           mNumOfThreads, codegen::BufferSegments,
+                           mNumOfThreads,
                            std::move(mKernels), std::move(mCallBindings),
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars),

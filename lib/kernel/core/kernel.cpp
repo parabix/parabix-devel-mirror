@@ -900,7 +900,9 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         if (LLVM_LIKELY(isStateful())) {
             allocArgs.push_back(sharedHandle);
         }
-        allocArgs.push_back(ONE);
+        // pass in the desired number of segments
+        #warning fix this so BufferSegments is an argument to main
+        allocArgs.push_back(b->getSize(codegen::BufferSegments));
         b->CreateCall(allocInternal, allocArgs);
         if (hasThreadLocal()) {
             Function * const allocInternal = getAllocateThreadLocalInternalStreamSetsFunction(b, false);

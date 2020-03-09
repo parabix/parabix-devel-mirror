@@ -19,6 +19,8 @@
 
 // #define DISABLE_OUTPUT_ZEROING
 
+#define FORCE_PIPELINE_ASSERTIONS
+
 // TODO: create a preallocation phase for source kernels to add capacity suggestions
 
 using namespace boost;
@@ -227,7 +229,9 @@ public:
 
     void calculateItemCounts(BuilderRef b);
     Value * determineIsFinal(BuilderRef b);
+    Value * anyRemainingInput(BuilderRef b);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
+
     void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddresses);
 
     void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
@@ -402,6 +406,7 @@ public:
     BufferPortMap constructOutputPortMappings() const;
     bool supportsInternalSynchronization() const;
     bool isBounded() const;
+    bool canTruncateInputBuffer() const;
     void identifyPipelineInputs();
 
     void printBufferGraph(raw_ostream & out) const;
@@ -549,7 +554,7 @@ protected:
     BasicBlock *                                mKernelLoopCall = nullptr;
     BasicBlock *                                mKernelCompletionCheck = nullptr;
     BasicBlock *                                mKernelInitiallyTerminated = nullptr;
-    BasicBlock *                                mKernelInitiallyTerminatedExit = nullptr;
+    BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelInsufficientInput = nullptr;
     BasicBlock *                                mKernelInsufficientInputExit = nullptr;
@@ -573,6 +578,7 @@ protected:
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
+    BasicBlock *                                mNextPartitionEntryPoint;
 
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
     Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
@@ -592,8 +598,10 @@ protected:
     Value *                                     mMaximumNumOfStrides = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
+    Value *                                     mKernelIsFinal = nullptr;
     PHINode *                                   mTotalNumOfStridesAtLoopExitPhi = nullptr;
     PHINode *                                   mAnyProgressedAtLoopExitPhi = nullptr;
+    PHINode *                                   mAnyProgressedAtExitPhi = nullptr;
     PHINode *                                   mAlreadyProgressedPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
@@ -605,11 +613,12 @@ protected:
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     PHINode *                                   mTotalNumOfStridesAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;
-    Value *                                     mNumOfLinearStrides = nullptr;
+    Value *                                     mNumOfFinalStrides = nullptr;
+    Value *                                     mNumOfNonFinalStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
     Value *                                     mAnyRemainingInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
-    PHINode *                                   mReportedNumOfStridesPhi = nullptr;
+    PHINode *                                   mNumOfLinearStridesPhi = nullptr;
     PHINode *                                   mIsFinalInvocationPhi = nullptr;
     BasicBlock *                                mNextPartitionWithPotentialInput = nullptr;
 
@@ -626,7 +635,9 @@ protected:
     bool                                        mKernelIsInternallySynchronized = false;
     bool                                        mKernelCanTerminateEarly = false;
     bool                                        mHasExplicitFinalPartialStride = false;
+    bool                                        mCanTruncatedInput = false;
     bool                                        mIsPartitionRoot = false;
+    bool                                        mLoopsBackToEntry = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
@@ -706,7 +717,11 @@ inline PipelineCompiler::PipelineCompiler(BuilderRef b, PipelineKernel * const p
 PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, PipelineAnalysis && P)
 : KernelCompiler(pipelineKernel)
 , PipelineCommonGraphFunctions(mStreamGraph, mBufferGraph)
+#ifdef FORCE_PIPELINE_ASSERTIONS
+, mCheckAssertions(true)
+#else
 , mCheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
+#endif
 , mTraceProcessedProducedItemCounts(codegen::DebugOptionIsSet(codegen::TraceCounts))
 , mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
 , mNumOfThreads(pipelineKernel->getNumOfThreads())
@@ -744,8 +759,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())
 
-, mConsumedItemCount(LastStreamSet + 1)
 , mScalarValue(LastScalar + 1)
+, mConsumedItemCount(LastStreamSet + 1)
 
 , mInitiallyProcessedItemCount(this)
 , mInitiallyProcessedDeferredItemCount(this)

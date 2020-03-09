@@ -1036,8 +1036,14 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     PHINode * const blockNo = b->CreatePHI(sizeTy, 2);
     blockNo->addIncoming(sz_ZERO, stridePrologue);
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
+
+    b->CallPrintInt("strideBlockIndex", strideBlockIndex);
+
     Value * matchBitBlock = b->loadInputStreamBlock("matchStarts", sz_ZERO, strideBlockIndex);
     Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
+
+    b->CallPrintRegister("matchStarts", matchBitBlock);
+    b->CallPrintRegister("breakBitBlock", breakBitBlock);
 
     Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
     Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
@@ -1155,6 +1161,9 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     Value * const partialLineOutputPtr = b->getRawOutputPointer("Output", partialProducedPhi);
     b->CreateMemCpy(partialLineOutputPtr, partialLineStartPtr, partialLineBytes, 1);
     Value * partialProducedPos = b->CreateAdd(partialProducedPhi, partialLineBytes, "partialProducedPos");
+
+    b->CallPrintInt("partialProducedPos", partialProducedPos);
+
     strideNo->addIncoming(nextStrideNo, strideEndMatch);
     pendingMatchPhi->addIncoming(ConstantInt::get(pendingMatch->getType(), 1), strideEndMatch);
     strideProducedPhi->addIncoming(partialProducedPos, strideEndMatch);
@@ -1165,6 +1174,9 @@ void MatchFilterKernel::generateMultiBlockLogic(BuilderRef b, Value * const numO
     strideFinalProduced->addIncoming(nextProducedPos, inStrideMatch);
     strideFinalProduced->addIncoming(producedPos1, strideInitialMatch);
     strideFinalProduced->addIncoming(strideProducedPhi, strideMasksReady);
+
+    b->CallPrintInt("strideFinalProduced", strideFinalProduced);
+
     strideNo->addIncoming(nextStrideNo, strideMatchesDone);
     pendingMatchPhi->addIncoming(Constant::getNullValue(pendingMatch->getType()), strideMatchesDone);
     strideProducedPhi->addIncoming(strideFinalProduced, strideMatchesDone);

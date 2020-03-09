@@ -368,8 +368,8 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vector<unsigned> & orderingOfG) {
 
+    using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitVector, no_property>;
     using BitSet = BitVector;
-    using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitSet, no_property>;
     using EdgeIterator = graph_traits<ConstraintGraph>::edge_iterator;
 
     std::vector<unsigned> kernels;
@@ -549,6 +549,9 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     };
 
     const auto contractedPartitions = contract_constraint_graph(P, orderingOfP, false);
+
+    #warning generate a jump index tree here and add its constraints to P?
+
 
     // Build a partition mapping that reflects the *original* graph C
 

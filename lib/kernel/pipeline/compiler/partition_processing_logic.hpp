@@ -216,22 +216,16 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
                         if (kernel == mKernelId) {
 
                             Value * intermediateProducedPhi = nullptr;
-                            Value * initialProducedPhi = nullptr;
                             if (LLVM_UNLIKELY(deferred)) {
                                 intermediateProducedPhi = mAlreadyProducedDeferredPhi(br.Port);
-                                initialProducedPhi = mInitiallyProducedDeferredItemCount(br.Port);
                             } else {
                                 intermediateProducedPhi = mAlreadyProducedPhi(br.Port);
-                                initialProducedPhi = mInitiallyProducedItemCount[streamSet];
                             }
 
                             IntegerType * const sizeTy = b->getSizeTy();
                             PHINode * const producedPhi = PHINode::Create(sizeTy, 2, "", insertPoint);
                             if (mKernelInsufficientInputExit) {
                                 producedPhi->addIncoming(intermediateProducedPhi, mKernelInsufficientInputExit);
-                            }
-                            if (mKernelInitiallyTerminatedExit) {
-                                producedPhi->addIncoming(initialProducedPhi, mKernelInitiallyTerminatedExit);
                             }
                             produced = producedPhi;
                         } else {
@@ -283,15 +277,8 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
 
     PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[jumpId];
     if (exhaustedInputPhi) {
-        IntegerType * const boolTy = b->getInt1Ty();
-        PHINode * const phi = PHINode::Create(boolTy, 2, "", insertPoint);
-        if (mKernelInsufficientInputExit) {
-            phi->addIncoming(mExhaustedPipelineInputPhi, mKernelInsufficientInputExit);
-        }
-        if (mKernelInitiallyTerminatedExit) {
-            phi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
-        }
-        exhaustedInputPhi->addIncoming(phi, exitBlock);
+        Value * const exhausted = mIsBounded ? mExhaustedPipelineInputPhi : mExhaustedInput;
+        exhaustedInputPhi->addIncoming(exhausted, exitBlock); assert (exhausted);
     }
 
     // Move the branch to the end of the block
@@ -324,13 +311,12 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
         b->SetInsertPoint(nextPartition);
         PHINode * const p = mPipelineProgressAtPartitionExit[nextPartitionId]; assert (p);
-        p->addIncoming(mAnyProgressedAtLoopExitPhi, exitBlock);
-        assert (mTerminatedAtExitPhi);
+        p->addIncoming(mPipelineProgress, exitBlock);
         mPipelineProgress = p;
 
         PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
         if (exhaustedInputPhi) {
-            exhaustedInputPhi->addIncoming(mExhaustedInput, exitBlock); assert (mExhaustedInput);
+            exhaustedInputPhi->addIncoming(mExhaustedInput, exitBlock);
             mExhaustedInput = exhaustedInputPhi;
         }
 
@@ -338,6 +324,7 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
         // terminated state. Update it to reflect the state upon exiting this partition. Depending on which
         // partitions jump into the next partition, we may end up immediately phi-ing it out. Thus this must
         // be done before the subsequent phi-out loop.
+        assert (mTerminatedAtExitPhi);
         mPartitionTerminationSignal[mCurrentPartitionId] = mTerminatedAtExitPhi;
 
         const auto n = in_degree(nextPartitionId, mPartitionJumpTree);

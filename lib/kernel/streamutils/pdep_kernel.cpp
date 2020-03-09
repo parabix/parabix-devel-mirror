@@ -81,6 +81,9 @@ void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * con
         Constant * const streamIndex = ConstantInt::get(streamBase->getType(), i);
         Value * const streamOffset = b->CreateAdd(streamBase, streamIndex);
         pendingData[i] = b->loadInputStreamBlock("source", streamOffset, ZERO);
+
+
+        b->CallPrintRegister("pendingData" + std::to_string(i), pendingData[i]);
     }
 
     b->CreateBr(expandLoop);
@@ -99,6 +102,9 @@ void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * con
     }
 
     Value * deposit_mask = b->loadInputStreamBlock("marker", ZERO, blockNoPhi);
+
+    b->CallPrintRegister("deposit_mask", deposit_mask);
+
     Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
     if (mOptimization == StreamExpandOptimization::NullCheck) {
@@ -216,22 +222,11 @@ void FieldDepositKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * co
         kb->SetInsertPoint(processBlock);
         PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
         blockOffsetPhi->addIncoming(ZERO, entry);
-
-        kb->CallPrintInt("blockOffsetPhi", blockOffsetPhi);
-
         Value * depositMask = kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi);
-
-        kb->CallPrintRegister("depositMask", depositMask);
-
         for (unsigned j = 0; j < mStreamCount; ++j) {
             Value * input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
-
-            kb->CallPrintRegister("input" + std::to_string(j), input);
-
             Value * output = kb->simd_pdep(mFieldWidth, input, depositMask);
             kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
-
-            kb->CallPrintRegister("store" + std::to_string(j), input);
         }
         Value * nextBlk = kb->CreateAdd(blockOffsetPhi, kb->getSize(1));
         blockOffsetPhi->addIncoming(nextBlk, processBlock);
@@ -259,7 +254,11 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
         kb->SetInsertPoint(processBlock);
         PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
         blockOffsetPhi->addIncoming(ZERO, entry);
-        std::vector<Value *> mask(fieldsPerBlock);
+
+        kb->CallPrintInt("blockOffsetPhi", blockOffsetPhi);
+
+
+        SmallVector<Value *, 16> mask(fieldsPerBlock);
         //  When operating on fields individually, we can use vector load/store with
         //  extract/insert element operations, or we can use individual field load
         //  and stores.   Individual field operations require fewer total operations,
@@ -275,7 +274,9 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
             mask[i] = kb->CreateLoad(kb->CreateGEP(depositMaskPtr, kb->getInt32(i)));
         }
 #else
+
         Value * depositMask = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi));
+        kb->CallPrintRegister("depositMask", depositMask);
         for (unsigned i = 0; i < fieldsPerBlock; i++) {
             mask[i] = kb->CreateExtractElement(depositMask, kb->getInt32(i));
         }
@@ -285,7 +286,9 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
             Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
             inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
 #else
-            Value * inputStrm = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi));
+            Value * const input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
+            kb->CallPrintRegister("input" + std::to_string(j), input);
+            Value * inputStrm = kb->fwCast(fieldWidth, input);
 #endif
 #ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT
             Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);

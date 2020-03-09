@@ -118,7 +118,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
 
     const auto blockWidth = b->getBitBlockWidth();
-    const auto numOfSegments = std::max(mNumOfSegments, mNumOfThreads);
 
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
@@ -256,7 +255,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             const auto reqSize1 = 2 * (overflowSize + underflowSize);
             const auto requiredSize = std::max(reqSize0, reqSize1);
 
-            const auto linear = bn.Linear; // & isNonLinear
+
+            const auto linear = false; // bn.Linear; // & isNonLinear
 
             // if this buffer is "stateful", we cannot make it *thread* local
             if (dynamic || lookBehind || reflection || copyBack || lookAhead) {
@@ -272,9 +272,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             Type * const baseType = output.getType();
 
             #ifdef PERMIT_THREAD_LOCAL_BUFFERS
-            const auto bufferFactor = nonLocal ? numOfSegments : 1U;
+            const auto bufferFactor = nonLocal ? mNumOfThreads : 1U;
             #else
-            const auto bufferFactor = numOfSegments;
+            const auto bufferFactor = mNumOfThreads;
             #endif
 
             const auto bufferSize = requiredSize * bufferFactor;

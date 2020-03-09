@@ -57,6 +57,8 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         position = b->getProducedItemCount(POSITIVE_STREAM);
     }
 
+    b->CallPrintInt("PopCount.position", position);
+
     // TODO: load the initial counts from a lookbehind
 
     Value * positiveArray = nullptr;
@@ -80,6 +82,8 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         negativeArray = b->getRawOutputPointer(NEGATIVE_STREAM, position);
         initialNegativeCount = b->CreateLoad(b->CreateInBoundsGEP(negativeArray, NEG_ONE));
     }
+
+    b->CallPrintInt("PopCount.initial", initialPositiveCount);
 
     BasicBlock * const entry = b->GetInsertBlock();
     BasicBlock * const popCountLoop = b->CreateBasicBlock("Loop");
@@ -117,6 +121,9 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
                 Constant * const I = b->getSize(i);
                 Value * const idx = b->CreateAdd(baseIndex, I);
                 Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
+
+                b->CallPrintRegister("value" + std::to_string(i), value);
+
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
                 }
@@ -132,6 +139,9 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
             SmallVector<Value *, 64> adders(m);
             // load the first block
             Value * value = b->loadInputStreamBlock(INPUT, ZERO, baseIndex);
+
+            b->CallPrintRegister("value_0" , value);
+
             if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                 value = b->CreateNot(value);
             }
@@ -140,7 +150,11 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
             for (unsigned i = 1; i < step; ++i) {
                 Constant * const I = b->getSize(i);
                 Value * const idx = b->CreateAdd(baseIndex, I);
+
                 Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
+
+                b->CallPrintRegister("value" + std::to_string(i), value);
+
                 if (LLVM_UNLIKELY(positiveSum == nullptr)) { // only negative count
                     value = b->CreateNot(value);
                 }
@@ -203,6 +217,7 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
 
     b->SetInsertPoint(popCountExit);
 
+    b->CallPrintInt("PopCount.final", positivePartialSum);
 
 }
 

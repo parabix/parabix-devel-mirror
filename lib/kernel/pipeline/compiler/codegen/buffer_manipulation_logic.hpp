@@ -18,7 +18,7 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
-    Value * const numOfStrides = b->CreateUMax(mNumOfLinearStrides, ONE);
+    Value * const numOfStrides = b->CreateUMax(mNumOfFinalStrides, ONE);
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const StreamSetPort port{PortType::Input, i};
@@ -165,7 +165,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             if (LLVM_LIKELY(rate.isFixed())) {
 
-                assert (mMayHaveNonLinearIO);
+                assert (mCanTruncatedInput);
 
                 // TODO: if this kernel is the *sole* consumer of this buffer, we do not need a
                 // temporary buffer to copy to and can directly clear the input data of the
@@ -195,6 +195,11 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 Constant * const ITEM_WIDTH = b->getSize(itemWidth);
                 const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
                 const auto strideRate = rate.getUpperBound() * stridesPerBlock;
+
+
+                const auto inputRate = Rational{mKernel->getStride()} * rate.getUpperBound();
+                assert (inputRate.denominator() == 1);
+
                 const auto stridesPerSegment = ceiling(strideRate); assert (stridesPerSegment >= 1);
                 Constant * const STRIDES_PER_SEGMENT = b->getSize(stridesPerSegment);
 
@@ -202,7 +207,9 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelCheckOutputSpace);
                 BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectedInput", mKernelCheckOutputSpace);
 
-                Value * const tooMany = b->CreateICmpULT(accessibleItems[port.Number], mAccessibleInputItems(port));
+                Value * a = accessibleItems[port.Number];
+                Value * b = mAccessibleInputItems(port);
+                Value * const tooMany = b->CreateICmpULT(a, b);
                 Value * computeMask = tooMany;
                 if (mIsInputZeroExtended(port)) {
                     computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended(port)));

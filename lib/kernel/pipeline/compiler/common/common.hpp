@@ -320,14 +320,14 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
                 noCountableInput = false;
             }
         }
-        if (node.NonLocal) {
+        if (node.NonLocal && !node.Linear) {
             return true;
         }
     }
     for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = target(output, mBufferGraphRef);
         const BufferNode & node = mBufferGraphRef[streamSet];
-        if (node.NonLocal || !node.Linear) {
+        if (node.NonLocal && !node.Linear) {
             return true;
         }
     }

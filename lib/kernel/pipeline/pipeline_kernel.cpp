@@ -218,7 +218,7 @@ std::unique_ptr<KernelCompiler> PipelineKernel::instantiateKernelCompiler(Builde
  ** ------------------------------------------------------------------------------------------------------------- */
 PipelineKernel::PipelineKernel(BaseDriver & driver,
                                std::string && signature,
-                               const unsigned numOfThreads, const unsigned numOfSegments,
+                               const unsigned numOfThreads,
                                Kernels && kernels, CallBindings && callBindings,
                                Bindings && stream_inputs, Bindings && stream_outputs,
                                Bindings && scalar_inputs, Bindings && scalar_outputs,
@@ -229,7 +229,6 @@ PipelineKernel::PipelineKernel(BaseDriver & driver,
              tmp.reserve(32);
              raw_string_ostream name(tmp);
              name << 'P' << numOfThreads
-                  << 'B' << numOfSegments
                   << '_' << Kernel::getStringHash(signature);
              name.flush();
              return tmp;
@@ -237,7 +236,6 @@ PipelineKernel::PipelineKernel(BaseDriver & driver,
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs), {})
 , mNumOfThreads(numOfThreads)
-, mNumOfSegments(numOfSegments)
 , mSignature(std::move(signature))
 , mKernels(std::move(kernels))
 , mCallBindings(std::move(callBindings))

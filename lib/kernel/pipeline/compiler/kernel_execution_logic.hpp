@@ -98,19 +98,16 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
     }
 
-    if (mHasExplicitFinalPartialStride) {
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeKernelName(mKernelId);
+    debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
+    #endif
+
+    args.push_back(mNumOfLinearStridesPhi);
+    if (!mHasExplicitFinalPartialStride) {
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeKernelName(mKernelId);
-        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
-        #endif
-        args.push_back(mNumOfLinearStrides);
-    } else {
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeKernelName(mKernelId);
-        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mReportedNumOfStridesPhi);
         debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocationPhi);
         #endif
-        args.push_back(mReportedNumOfStridesPhi);
         args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
     }
 

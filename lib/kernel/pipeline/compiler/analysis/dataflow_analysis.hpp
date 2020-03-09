@@ -5,57 +5,57 @@
 
 namespace kernel {
 
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief identifyHardPartitionConstraints
-// ** ------------------------------------------------------------------------------------------------------------- */
-//PartitionConstraintGraph PipelineAnalysis::identifyHardPartitionConstraints(BufferGraph & G) const {
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyHardPartitionConstraints
+ ** ------------------------------------------------------------------------------------------------------------- */
+PartitionConstraintGraph PipelineAnalysis::identifyHardPartitionConstraints(BufferGraph & G) const {
 
-//    PartitionConstraintGraph H(PartitionCount);
+    PartitionConstraintGraph H(PartitionCount);
 
-//    const auto firstKernel = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
-//    const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
+    const auto firstKernel = out_degree(PipelineInput, G) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, G) == 0 ? LastKernel : PipelineOutput;
 
-//    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
-//        const auto partitionId = KernelPartitionId[kernel];
-//        assert (partitionId < PartitionCount);
+        const auto partitionId = KernelPartitionId[kernel];
+        assert (partitionId < PartitionCount);
 
-//        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
-//            const auto buffer = source(input, G);
-//            const auto producer = parent(buffer, G);
-//            const auto producerPartitionId = KernelPartitionId[producer];
-//            assert (producerPartitionId <= partitionId);
-//            if (producerPartitionId != partitionId) {
-//                const BufferRateData & inputRate = G[input];
-//                const Binding & binding = inputRate.Binding;
-//                const ProcessingRate & rate = binding.getRate();
-//                if (LLVM_UNLIKELY(!rate.isFixed())) {
-//                    add_edge(producerPartitionId, partitionId, H);
-//                }
-//            }
-//        }
+        for (const auto input : make_iterator_range(in_edges(kernel, G))) {
+            const auto buffer = source(input, G);
+            const auto producer = parent(buffer, G);
+            const auto producerPartitionId = KernelPartitionId[producer];
+            assert (producerPartitionId <= partitionId);
+            if (producerPartitionId != partitionId) {
+                const BufferRateData & inputRate = G[input];
+                const Binding & binding = inputRate.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                if (LLVM_UNLIKELY(!rate.isFixed())) {
+                    add_edge(producerPartitionId, partitionId, H);
+                }
+            }
+        }
 
-//        for (const auto output : make_iterator_range(out_edges(kernel, G))) {
-//            const auto buffer = target(output, G);
-//            for (const auto data : make_iterator_range(out_edges(buffer, G))) {
-//                const auto consumer = target(data, G);
-//                const auto consumerPartitionId = KernelPartitionId[consumer];
-//                assert (consumerPartitionId >= partitionId);
-//                assert (consumerPartitionId < PartitionCount);
-//                if (consumerPartitionId != partitionId) {
-//                    const BufferRateData & outputRate = G[output];
-//                    const Binding & binding = outputRate.Binding;
-//                    const ProcessingRate & rate = binding.getRate();
-//                    if (LLVM_UNLIKELY(!rate.isFixed())) {
-//                        add_edge(partitionId, consumerPartitionId, H);
-//                    }
-//                }
-//            }
-//        }
-//    }
+        for (const auto output : make_iterator_range(out_edges(kernel, G))) {
+            const auto buffer = target(output, G);
+            for (const auto data : make_iterator_range(out_edges(buffer, G))) {
+                const auto consumer = target(data, G);
+                const auto consumerPartitionId = KernelPartitionId[consumer];
+                assert (consumerPartitionId >= partitionId);
+                assert (consumerPartitionId < PartitionCount);
+                if (consumerPartitionId != partitionId) {
+                    const BufferRateData & outputRate = G[output];
+                    const Binding & binding = outputRate.Binding;
+                    const ProcessingRate & rate = binding.getRate();
+                    if (LLVM_UNLIKELY(!rate.isFixed())) {
+                        add_edge(partitionId, consumerPartitionId, H);
+                    }
+                }
+            }
+        }
+    }
 
-//    return H;
-//}
+    return H;
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyHardPartitionConstraints
@@ -284,129 +284,121 @@ void PipelineAnalysis::computeDataFlowRates() {
     std::fill_n(&VarList[FirstStreamSet], LastStreamSet - FirstStreamSet, nullptr);
     #endif
 
+    const auto H = identifyHardPartitionConstraints(mBufferGraph);
+
+    auto crossesVariableRatePartitionBoundary =[&H](const unsigned p1, const unsigned p2) {
+        return edge(p1, p2, H).second;
+    };
+
     std::array<std::vector<Z3_ast>, 3> assumptions;
 
-    for (auto start = firstKernel; start <= lastKernel; ) {
-        // Determine which kernels are in this partition
-        const auto partitionId = KernelPartitionId[start];
-        auto end = start + 1U;
-        for (; end <= LastKernel; ++end) {
-            if (KernelPartitionId[end] != partitionId) {
-                break;
-            }
-        }
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
-        for (auto kernel = start; kernel < end; ++kernel) {
+        const auto stridesPerSegmentVar = VarList[kernel];
+        const auto partitionId = KernelPartitionId[kernel];
 
-            const auto stridesPerSegmentVar = VarList[kernel];
-            const auto partitionId = KernelPartitionId[kernel];
+        unsigned numOfGreedyRates = 0;
 
-            unsigned numOfGreedyRates = 0;
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto buffer = source(input, mBufferGraph);
 
-            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-                const auto streamSet = source(input, mBufferGraph);
-                const auto producer = parent(streamSet, mBufferGraph);
+            const BufferRateData & inputRate = mBufferGraph[input];
+            const Binding & binding = inputRate.Binding;
+            const ProcessingRate & rate = binding.getRate();
 
-                if (producer < start) {
+            const auto producedRate = VarList[buffer]; assert (producedRate);
 
-                    const BufferRateData & inputRate = mBufferGraph[input];
-                    const Binding & binding = inputRate.Binding;
-                    const ProcessingRate & rate = binding.getRate();
+            if (LLVM_LIKELY(rate.isFixed())) {
 
-                    const auto producedRate = VarList[streamSet]; assert (producedRate);
+                const auto fixedRateVal = minimum(inputRate);
+                const auto consumedRate = multiply(stridesPerSegmentVar, fixedRateVal);
+                // To consume any data, we want to guarantee at least one full stride of work.
+                const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, fixedRateVal);
+                assumptions[Common].push_back(atLeastOneStride);
+                // A partition-local stream must *always* consume everything but streams that
+                // cross a partition simply need to produce enough to satisfy its consumer(s)
+                const auto consumeEverything = Z3_mk_eq(ctx, producedRate, consumedRate);
+                const auto producer = parent(buffer, mBufferGraph);
 
-                    if (LLVM_LIKELY(rate.isFixed())) {
-
-
-                        const auto fixedRateVal = minimum(inputRate);
-                        const auto consumedRate = multiply(stridesPerSegmentVar, fixedRateVal);
-                        // To consume any data, we want to guarantee at least one full stride of work.
-                        const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, fixedRateVal);
-                        assumptions[Common].push_back(atLeastOneStride);
-                        // A partition-local stream must *always* consume everything but streams that
-                        // cross a partition simply need to produce enough to satisfy its consumer(s)
-                        const auto consumeEverything = Z3_mk_eq(ctx, producedRate, consumedRate);
-                        // Assume we can consume all of the data
-                        assumptions[Common].push_back(consumeEverything);
-                        const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
-                        Z3_solver_assert(ctx, solver, produceEnough);
-
-
-                    } else if (LLVM_UNLIKELY(rate.isGreedy())) {
-                        ++numOfGreedyRates;
-                    } else {
-
-                        const auto inputRateVar = bounded_variable(inputRate);
-                        const auto consumedRate = multiply(stridesPerSegmentVar, inputRateVar);
-                        const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
-                        Z3_solver_assert(ctx, solver, produceEnough);
-
-                        // To consume any data, we want to guarantee at least one full stride of work;
-                        // however we can only state that only Bounded rates will block on less than
-                        // this amount.
-                        const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, maximum(inputRate));
-                        if (rate.isBounded()) {
-                            Z3_solver_assert(ctx, solver, atLeastOneStride);
-                        } else {
-                            assumptions[Common].push_back(atLeastOneStride);
-                        }
-
-                        // Since we are trying to determine the lower and upper bound on the number
-                        // of strides per segment, to determine the lower bound we assume that a
-                        // kernel consumes the maximum amount of data but produces the minimum.
-                        // The upper bound is similar except we consume the minimum and produce
-                        // the maximum.
-
-                        const auto avgInputRate = average(inputRate);
-
-                        assumptions[LowerBound].push_back(Z3_mk_ge(ctx, inputRateVar, avgInputRate));
-                        assumptions[LowerBound].push_back(Z3_mk_eq(ctx, inputRateVar, maximum(inputRate)));
-
-                        assumptions[UpperBound].push_back(Z3_mk_le(ctx, inputRateVar, avgInputRate));
-                        assumptions[UpperBound].push_back(Z3_mk_eq(ctx, consumedRate, minimum(inputRate)));
-                    }
-                }
-            }
-
-            // Any kernel with all greedy rates must exhaust its input in a single iteration.
-            if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
-                const auto constraint = Z3_mk_eq(ctx, stridesPerSegmentVar, ONE);
-                Z3_solver_assert(ctx, solver, constraint);
-            }
-
-            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-                const auto streamSet = target(output, mBufferGraph);
-                const BufferRateData & outputRate = mBufferGraph[output];
-                const Binding & binding = outputRate.Binding;
-                const ProcessingRate & rate = binding.getRate();
-                if (LLVM_LIKELY(rate.isFixed())) {
-                    const auto outputRateVar = maximum(outputRate);
-                    const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
-                    VarList[streamSet] = producedRate;
-                } else if (LLVM_UNLIKELY(rate.isUnknown())) {
-                    // TODO: is there a better way to handle unknown outputs? This
-                    // free variable represents the ideal amount of data to transfer
-                    // to subsequent kernels but that isn't very meaningful here.
-                    VarList[streamSet] = lower_bounded_variable(outputRate);
+                if (crossesVariableRatePartitionBoundary(KernelPartitionId[producer], partitionId)) {
+                    const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
+                    Z3_solver_assert(ctx, solver, produceEnough);
+                    // Assume we can consume all of the data
+                    assumptions[Common].push_back(consumeEverything);
                 } else {
-                    const auto outputRateVar = bounded_variable(outputRate);
-                    const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
-                    VarList[streamSet] = producedRate;
-                    // Like above, when calculating the lower bound of the number of kernel strides,
-                    // we assume we've produced the minimum amount of data and for the upper bound,
-                    // the maximum.
-
-                    const auto avgOutputRate = average(outputRate);
-                    assumptions[LowerBound].push_back(Z3_mk_le(ctx, outputRateVar, avgOutputRate));
-                    assumptions[LowerBound].push_back(Z3_mk_eq(ctx, producedRate, minimum(outputRate)));
-
-                    assumptions[UpperBound].push_back(Z3_mk_ge(ctx, outputRateVar, avgOutputRate));
-                    assumptions[UpperBound].push_back(Z3_mk_eq(ctx, outputRateVar, maximum(outputRate)));
+                    Z3_solver_assert(ctx, solver, consumeEverything);
                 }
+            } else if (LLVM_UNLIKELY(rate.isGreedy())) {
+                ++numOfGreedyRates;
+            } else {
+
+                const auto inputRateVar = bounded_variable(inputRate);
+                const auto consumedRate = multiply(stridesPerSegmentVar, inputRateVar);
+                const auto produceEnough = Z3_mk_ge(ctx, producedRate, consumedRate);
+                Z3_solver_assert(ctx, solver, produceEnough);
+
+                // To consume any data, we want to guarantee at least one full stride of work;
+                // however we can only state that only Bounded rates will block on less than
+                // this amount.
+                const auto atLeastOneStride = Z3_mk_ge(ctx, consumedRate, maximum(inputRate));
+                if (rate.isBounded()) {
+                    Z3_solver_assert(ctx, solver, atLeastOneStride);
+                } else {
+                    assumptions[Common].push_back(atLeastOneStride);
+                }
+
+                // Since we are trying to determine the lower and upper bound on the number
+                // of strides per segment, to determine the lower bound we assume that a
+                // kernel consumes the maximum amount of data but produces the minimum.
+                // The upper bound is similar except we consume the minimum and produce
+                // the maximum.
+
+                const auto avgInputRate = average(inputRate);
+
+                assumptions[LowerBound].push_back(Z3_mk_ge(ctx, inputRateVar, avgInputRate));
+                assumptions[LowerBound].push_back(Z3_mk_eq(ctx, inputRateVar, maximum(inputRate)));
+
+                assumptions[UpperBound].push_back(Z3_mk_le(ctx, inputRateVar, avgInputRate));
+                assumptions[UpperBound].push_back(Z3_mk_eq(ctx, consumedRate, minimum(inputRate)));
             }
         }
 
-        start = end;
+        // Any kernel with all greedy rates must exhaust its input in a single iteration.
+        if (LLVM_UNLIKELY(numOfGreedyRates == in_degree(kernel, mBufferGraph))) {
+            const auto constraint = Z3_mk_eq(ctx, stridesPerSegmentVar, ONE);
+            Z3_solver_assert(ctx, solver, constraint);
+        }
+
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const BufferRateData & outputRate = mBufferGraph[output];
+            const Binding & binding = outputRate.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            const auto buffer = target(output, mBufferGraph);
+            if (LLVM_LIKELY(rate.isFixed())) {
+                const auto outputRateVar = maximum(outputRate);
+                const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
+                VarList[buffer] = producedRate;
+            } else if (LLVM_UNLIKELY(rate.isUnknown())) {
+                // TODO: is there a better way to handle unknown outputs? This
+                // free variable represents the ideal amount of data to transfer
+                // to subsequent kernels but that isn't very meaningful here.
+                VarList[buffer] = lower_bounded_variable(outputRate);
+            } else {
+                const auto outputRateVar = bounded_variable(outputRate);
+                const auto producedRate = multiply(stridesPerSegmentVar, outputRateVar);
+                VarList[buffer] = producedRate;
+                // Like above, when calculating the lower bound of the number of kernel strides,
+                // we assume we've produced the minimum amount of data and for the upper bound,
+                // the maximum.
+
+                const auto avgOutputRate = average(outputRate);
+                assumptions[LowerBound].push_back(Z3_mk_le(ctx, outputRateVar, avgOutputRate));
+                assumptions[LowerBound].push_back(Z3_mk_eq(ctx, producedRate, minimum(outputRate)));
+
+                assumptions[UpperBound].push_back(Z3_mk_ge(ctx, outputRateVar, avgOutputRate));
+                assumptions[UpperBound].push_back(Z3_mk_eq(ctx, outputRateVar, maximum(outputRate)));
+            }
+        }
     }
 
     const auto E = identifyLengthEqualityAssertions(mBufferGraph);
@@ -552,29 +544,9 @@ void PipelineAnalysis::computeDataFlowRates() {
         MaximumNumOfStrides[kernel] = r[UpperBound];
     }
 
-    #ifndef NDEBUG
-    for (auto start = firstKernel; start <= lastKernel; ) {
-        // Determine which kernels are in this partition
-        const auto partitionId = KernelPartitionId[start];
-        assert (partitionId < PartitionCount);
-        auto end = start + 1U;
-        for (; end <= LastKernel; ++end) {
-            if (KernelPartitionId[end] != partitionId) {
-                break;
-            }
-        }
-        if (end > (start + 1)) {
-            const auto check = MaximumNumOfStrides[start] / MinimumNumOfStrides[start];
-            for (auto kernel = start + 1; kernel < end; ++kernel) {
-                const auto check2 = MaximumNumOfStrides[kernel] / MinimumNumOfStrides[kernel];
-                if (LLVM_UNLIKELY(check != check2)) {
-                    report_fatal_error("Kernel " + std::to_string(kernel) + " non-synchronous dataflow in partition " + std::to_string(partitionId) );
-                }
-            }
-        }
-        start = end;
-    }
-    #endif
+
+
+
 
 }
 

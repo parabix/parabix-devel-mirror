@@ -530,8 +530,18 @@ Value * StaticBuffer::getMallocAddress(BuilderPtr b) const {
     unsupported("getMallocAddress", "Static");
 }
 
-void StaticBuffer::reserveCapacity(BuilderPtr /* b */, Value * /* produced */, Value * /* consumed */, Value * const /* required */, Constant * const /* overflowItems */) const  {
-    /* do nothing */
+void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems) const  {
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+
+        Value * const writable = getLinearlyWritableItems(b, produced, consumed, overflowItems);
+        Value * const canFit = b->CreateICmpULE(required, writable);
+
+        b->CreateAssert(canFit,
+                        "Static buffer does not have sufficient capacity "
+                        "(%" PRId64 ") for required items (%" PRId64 ")",
+                        writable, required);
+
+    }
 }
 
 // Dynamic Buffer

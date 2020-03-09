@@ -76,10 +76,6 @@ public:
         return mNumOfThreads;
     }
 
-    const unsigned getNumOfSegments() const {
-        return mNumOfSegments;
-    }
-
     const Kernels & getKernels() const {
         return mKernels;
     }
@@ -102,7 +98,7 @@ protected:
 
     PipelineKernel(BaseDriver & driver,
                    std::string && signature,
-                   const unsigned numOfThreads, const unsigned numOfSegments,
+                   const unsigned numOfThreads,
                    Kernels && kernels, CallBindings && callBindings,
                    Bindings && stream_inputs, Bindings && stream_outputs,
                    Bindings && scalar_inputs, Bindings && scalar_outputs,
@@ -139,7 +135,6 @@ protected:
 protected:
 
     const unsigned                            mNumOfThreads;
-    const unsigned                            mNumOfSegments;
     const std::string                         mSignature;
     const Kernels                             mKernels;
     const CallBindings                        mCallBindings;

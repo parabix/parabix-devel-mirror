@@ -82,8 +82,6 @@ public:
                          }()
                          // num of threads
                          , 1
-                         // num of segments (is num of threads)
-                         , codegen::SegmentThreads
                          // make kernel list
                          , [&]() -> Kernels {
                              Kernels kernels;

@@ -59,6 +59,7 @@ public:
         P.makeAddGraph();
         P.makeConsumerGraph();
         P.makeTerminationGraph();
+        P.makeInputTruncationGraph();
         P.makePartitionJumpTree();
         P.makeKernelIOGraph();
 
@@ -80,7 +81,6 @@ private:
     : PipelineCommonGraphFunctions(mStreamGraph, mBufferGraph)
     , mPipelineKernel(pipelineKernel)
     , mNumOfThreads(pipelineKernel->getNumOfThreads())
-    , mNumOfSegments(pipelineKernel->getNumOfSegments())
     , mLengthAssertions(pipelineKernel->getLengthAssertions()) {
 
     }
@@ -157,20 +157,18 @@ private:
 
     void makeKernelIOGraph();
 
-    // Misc. functions
+    // Input truncation analysis functions
 
-    LLVM_READNONE const Kernel * getKernel(const unsigned index) const;
+    void makeInputTruncationGraph();
+
 
 private:
 
     PipelineKernel * const          mPipelineKernel;
     const unsigned					mNumOfThreads;
-    const unsigned                  mNumOfSegments;
     const LengthAssertions &        mLengthAssertions;
     Relationships                   mRelationships;
     KernelPartitionIds              mPartitionIds;
-
-
 
 public:
 
@@ -208,8 +206,9 @@ public:
 
     ConsumerGraph                   mConsumerGraph;
 
-    TerminationGraph                mTerminationGraph;
+    TerminationGraph                mTerminationGraph;    
     AddGraph                        mAddGraph;
+    InputTruncationGraph            mInputTruncationGraph;
     IOCheckGraph                    mIOCheckGraph;
 
     OwningVec<StreamSetBuffer>      mInternalBuffers;
@@ -217,15 +216,6 @@ public:
     OwningVector<Binding>           mInternalBindings;
 
 };
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-inline const Kernel * PipelineAnalysis::getKernel(const unsigned index) const {
-    assert (PipelineInput <= index && index <= PipelineOutput);
-    return mStreamGraph[index].Kernel;
-}
-
 
 }
 
@@ -237,6 +227,7 @@ inline const Kernel * PipelineAnalysis::getKernel(const unsigned index) const {
 #include "partitioning_analysis.hpp"
 #include "termination_analysis.hpp"
 #include "zero_extend_analysis.hpp"
+#include "input_truncation_analysis.hpp"
 #include "add_analysis.hpp"
 #include "io_analysis.hpp"
 

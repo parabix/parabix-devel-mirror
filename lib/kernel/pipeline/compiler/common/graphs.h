@@ -414,6 +414,8 @@ using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property
 
 using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, int, int>;
 
+using InputTruncationGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+
 using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BufferRateData>;
 
 using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
