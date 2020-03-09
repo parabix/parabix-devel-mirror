@@ -45,12 +45,13 @@ struct StreamSetInputPort {
     operator StreamSetPort () const noexcept {
         return StreamSetPort{Type, Number};
     }
+    StreamSetInputPort() = default;
     explicit StreamSetInputPort(const StreamSetPort port)
     : Number(port.Number) {
         assert (port.Type == Type);
     }
     static constexpr PortType Type = PortType::Input;
-    const unsigned Number;
+    unsigned Number = 0;
 };
 
 struct StreamSetOutputPort {
@@ -61,8 +62,9 @@ struct StreamSetOutputPort {
     : Number(port.Number) {
         assert (port.Type == Type);
     }
+    StreamSetOutputPort() = default;
     static constexpr PortType Type = PortType::Output;
-    const unsigned Number;
+    unsigned Number = 0;
 };
 
 struct RelationshipNode {
@@ -414,22 +416,24 @@ using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property
 
 using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, int, int>;
 
-using InputTruncationGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+struct InputTruncation {
+    StreamSetInputPort  Port;
+    bool                CreateTemporaryBuffer = false;
+
+    InputTruncation() = default;
+
+    explicit InputTruncation(const StreamSetPort port)
+    : Port(port)
+    , CreateTemporaryBuffer(true) {
+
+    }
+};
+
+using InputTruncationGraph = adjacency_list<hash_setS, vecS, directedS, no_property, InputTruncation>;
 
 using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BufferRateData>;
 
 using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
-
-template <typename T, unsigned n = 16>
-using Vec = SmallVector<T, n>;
-
-using Allocator = SlabAllocator<>;
-
-template <typename T>
-using OwningVec = std::vector<std::unique_ptr<T>>;
-
-#define BEGIN_SCOPED_REGION {
-#define END_SCOPED_REGION }
 
 }
 

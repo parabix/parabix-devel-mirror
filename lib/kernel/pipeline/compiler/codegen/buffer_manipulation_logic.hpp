@@ -137,239 +137,207 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
 
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+    for (const auto i : make_iterator_range(out_edges(mKernelId, mInputTruncationGraph))) {
+        const InputTruncation & trunc = mInputTruncationGraph[i];
+
+        const auto e = getInput(mKernelId, trunc.Port);
+
         const auto streamSet = source(e, mBufferGraph);
+
         const BufferNode & bn = mBufferGraph[streamSet];
-        if (LLVM_UNLIKELY(bn.NonLocal)) {
 
-            // A non-local buffer could still be produced by a kernel within the same partition
-            // as the current kernel.
-            const auto producer = parent(streamSet, mBufferGraph);
-            if (KernelPartitionId[producer] == mCurrentPartitionId) {
-                continue;
-            }
-
-            const StreamSetBuffer * const buffer = bn.Buffer;
-
-            // If this streamset has 0 streams and is not extensible, it exists only to have a
-            // produced/processed count. Ignore it even if its a non-local buffer.
-            if (LLVM_UNLIKELY(buffer->isEmptySet())) {
-                continue;
-            }
-
-            const BufferRateData & rt = mBufferGraph[e];
-            assert (rt.Port.Type == PortType::Input);
-            const auto port = rt.Port;
-            const Binding & input = rt.Binding;
-            const ProcessingRate & rate = input.getRate();
-
-            if (LLVM_LIKELY(rate.isFixed())) {
-
-                assert (mCanTruncatedInput);
-
-                // TODO: if this kernel is the *sole* consumer of this buffer, we do not need a
-                // temporary buffer to copy to and can directly clear the input data of the
-                // original buffer.
-
-                // TODO: support popcount/partialsum
-
-                // TODO: for fixed rate inputs, so long as the actual number of items is aa even
-                // multiple of the stride*rate, we can ignore masking.
-
-                AllocaInst * bufferStorage = nullptr;
-                bool potentiallyReused = false;
-                if (mNumOfTruncatedInputBuffers < mTruncatedInputBuffer.size()) {
-                    bufferStorage = mTruncatedInputBuffer[mNumOfTruncatedInputBuffers];
-                    potentiallyReused = true;
-                } else { // create a stack entry for this buffer at the start of the pipeline
-                    PointerType * const int8PtrTy = b->getInt8PtrTy();
-                    bufferStorage = b->CreateAllocaAtEntryPoint(int8PtrTy);
-                    Instruction * const nextNode = bufferStorage->getNextNode(); assert (nextNode);
-                    new StoreInst(ConstantPointerNull::get(int8PtrTy), bufferStorage, nextNode);
-                    mTruncatedInputBuffer.push_back(bufferStorage);
-                }
-                ++mNumOfTruncatedInputBuffers;
-
-                const auto prefix = makeBufferName(mKernelId, port);
-                const auto itemWidth = getItemWidth(buffer->getBaseType());
-                Constant * const ITEM_WIDTH = b->getSize(itemWidth);
-                const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
-                const auto strideRate = rate.getUpperBound() * stridesPerBlock;
+        const StreamSetBuffer * const buffer = bn.Buffer;
 
 
-                const auto inputRate = Rational{mKernel->getStride()} * rate.getUpperBound();
-                assert (inputRate.denominator() == 1);
+        const BufferRateData & rt = mBufferGraph[e];
+        assert (rt.Port.Type == PortType::Input);
+        const auto port = rt.Port;
+        const Binding & input = rt.Binding;
+        const ProcessingRate & rate = input.getRate();
 
-                const auto stridesPerSegment = ceiling(strideRate); assert (stridesPerSegment >= 1);
-                Constant * const STRIDES_PER_SEGMENT = b->getSize(stridesPerSegment);
+        assert (mCanTruncatedInput);
 
-                BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_genMaskedInput", mKernelCheckOutputSpace);
-                BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelCheckOutputSpace);
-                BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectedInput", mKernelCheckOutputSpace);
+        // TODO: support popcount/partialsum
 
-                Value * a = accessibleItems[port.Number];
-                Value * b = mAccessibleInputItems(port);
-                Value * const tooMany = b->CreateICmpULT(a, b);
-                Value * computeMask = tooMany;
-                if (mIsInputZeroExtended(port)) {
-                    computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended(port)));
-                }
+        // TODO: for fixed rate inputs, so long as the actual number of items is aa even
+        // multiple of the stride*rate, we can ignore masking.
 
-                BasicBlock * const entryBlock = b->GetInsertBlock();
-                b->CreateUnlikelyCondBr(computeMask, maskedInput, selectedInput);
-
-                b->SetInsertPoint(maskedInput);
-
-                // if this is a deferred fixed rate stream, we cannot be sure how many
-                // blocks will have to be provided to the kernel in order to mask out
-                // the truncated input stream.
-
-                #ifdef PRINT_DEBUG_MESSAGES
-                debugPrint(b, prefix + " truncating item count from %" PRIu64 " to %" PRIu64,
-                           mAccessibleInputItems(port), accessibleItems[port.Number]);
-                #endif
-
-                if (potentiallyReused) {
-                    b->CreateFree(b->CreateLoad(bufferStorage));
-                }
-
-                // TODO: if we can prove that this will be the last kernel invocation that will ever touch this stream)
-                // and is not an input to the pipeline (which we cannot prove will have space after the last item), we
-                // can avoid copying the buffer and instead just mask out the surpressed items.
-
-                ExternalBuffer tmp(b, input.getType(), true, 0);
-
-                Value * const start = b->CreateLShr(mAlreadyProcessedPhi(port), LOG_2_BLOCK_WIDTH);
-
-                DataLayout DL(b->getModule());
-                Value * const inputAddress = inputBaseAddresses[port.Number];
-                Value * const startPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, start);
-                Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
-                Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
-
-                Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
-                Value * const limitPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, limit);
-                Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
-
-                Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
-
-                Value * segmentBytes = strideBytes;
-
-                Value * initial = start;
-                Value * initialPtr = startPtr;
-                Value * initialPtrInt = startPtrInt;
-
-                Value * end = start;
-                Value * fullBytesToCopy = nullptr;
-
-                if (stridesPerSegment != 1 || input.isDeferred()) {
-                    if (input.isDeferred()) {
-                        initial = b->CreateLShr(mAlreadyProcessedDeferredPhi(port), LOG_2_BLOCK_WIDTH);
-                        initialPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, initial);
-                        initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
-                    }
-                    // if a kernel reads in multiple strides of data per segment, we may be able to
-                    // copy over a portion of it with a single memcpy.
-                    Value * endPtrInt = startPtrInt;
-                    if (stridesPerSegment  != 1) {
-                        end = b->CreateAdd(mAlreadyProcessedPhi(port), accessibleItems[port.Number]);
-                        end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                        Value * const endPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, end);
-                        endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
-                    }
-                    fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
-                    segmentBytes = b->CreateAdd(fullBytesToCopy, strideBytes);
-                }
-
-                Value * maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
-
-                b->CreateStore(maskedBuffer, bufferStorage);
-                PointerType * const bufferType = tmp.getPointerType();
-                maskedBuffer = b->CreatePointerCast(maskedBuffer, bufferType, "maskedBuffer");
-
-                if (fullBytesToCopy) {
-                    b->CreateMemCpy(maskedBuffer, initialPtr, fullBytesToCopy, blockWidth / 8);
-                }
-
-                Value * maskedAddress = tmp.getStreamBlockPtr(b, maskedBuffer, ZERO, b->CreateNeg(initial));
-                maskedAddress = b->CreatePointerCast(maskedAddress, bufferType);
-
-                Value * packIndex = nullptr;
-                Value * maskOffset = b->CreateAnd(accessibleItems[port.Number], BLOCK_MASK);
-                if (itemWidth > 1) {
-                    Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
-                    packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
-                    maskOffset = b->CreateAnd(position, BLOCK_MASK);
-                }
-                Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-                Value * const numOfStreams = buffer->getStreamSetCount(b);
-                BasicBlock * const loopEntryBlock = b->GetInsertBlock();
-                b->CreateBr(maskedInputLoop);
-
-                b->SetInsertPoint(maskedInputLoop);
-                PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
-                streamIndex->addIncoming(ZERO, loopEntryBlock);
-
-                Value * inputPtr = tmp.getStreamBlockPtr(b, inputAddress, streamIndex, end);
-                Value * outputPtr = tmp.getStreamBlockPtr(b, maskedAddress, streamIndex, end);
-
-                if (itemWidth > 1) {
-                    Value * const endPtr = inputPtr;
-                    Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
-                    inputPtr = tmp.getStreamPackPtr(b, inputAddress, streamIndex, end, packIndex);
-                    Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
-                    Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
-                    b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
-                    outputPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, packIndex);
-                }
-
-                assert (inputPtr->getType() == outputPtr->getType());
-                Value * const val = b->CreateBlockAlignedLoad(inputPtr);
-                Value * const maskedVal = b->CreateAnd(val, mask);
-                b->CreateBlockAlignedStore(maskedVal, outputPtr);
-
-                if (itemWidth > 1) {
-                    Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
-                    Value * const clearPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, nextPackIndex);
-                    Value * const clearPtrInt = b->CreatePtrToInt(clearPtr, intPtrTy);
-                    Value * const clearEndPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, ITEM_WIDTH);
-                    Value * const clearEndPtrInt = b->CreatePtrToInt(clearEndPtr, intPtrTy);
-                    Value * const bytesToClear = b->CreateSub(clearEndPtrInt, clearPtrInt);
-                    b->CreateMemZero(clearPtr, bytesToClear, blockWidth / 8);
-                }
-
-                Value * const nextIndex = b->CreateAdd(streamIndex, ONE);
-                Value * const notDone = b->CreateICmpNE(nextIndex, numOfStreams);
-                streamIndex->addIncoming(nextIndex, maskedInputLoop);
-
-
-                BasicBlock * const maskedInputLoopExit = b->GetInsertBlock();
-                b->CreateCondBr(notDone, maskedInputLoop, selectedInput);
-
-                b->SetInsertPoint(selectedInput);
-                PHINode * const phi = b->CreatePHI(bufferType, 2);
-                phi->addIncoming(inputAddress, entryBlock);
-                phi->addIncoming(maskedAddress, maskedInputLoopExit);
-                inputBaseAddresses[port.Number] = phi;
-
-            } else if (LLVM_UNLIKELY(mCheckAssertions)) {
-                Value * valid = b->CreateICmpEQ(accessibleItems[port.Number], mAccessibleInputItems(port));
-                if (mIsInputZeroExtended(port)) {
-                    Value * zeroExtended = b->CreateICmpULE(accessibleItems[port.Number], mAccessibleInputItems(port));
-                    zeroExtended = b->CreateAnd(zeroExtended, mIsInputZeroExtended(port));
-                    valid = b->CreateOr(valid, zeroExtended);
-                }
-                b->CreateAssert(valid, "%s.%s: requires truncation from %" PRIu64
-                                " to %" PRIu64 " but is an internal static buffer",
-                                mKernelAssertionName,
-                                b->GetString(input.getName()),
-                                accessibleItems[port.Number],
-                                mAccessibleInputItems(port));
-            }
-
-
-
+        AllocaInst * bufferStorage = nullptr;
+        bool potentiallyReused = false;
+        if (mNumOfTruncatedInputBuffers < mTruncatedInputBuffer.size()) {
+            bufferStorage = mTruncatedInputBuffer[mNumOfTruncatedInputBuffers];
+            potentiallyReused = true;
+        } else { // create a stack entry for this buffer at the start of the pipeline
+            PointerType * const int8PtrTy = b->getInt8PtrTy();
+            bufferStorage = b->CreateAllocaAtEntryPoint(int8PtrTy);
+            Instruction * const nextNode = bufferStorage->getNextNode(); assert (nextNode);
+            new StoreInst(ConstantPointerNull::get(int8PtrTy), bufferStorage, nextNode);
+            mTruncatedInputBuffer.push_back(bufferStorage);
         }
+        ++mNumOfTruncatedInputBuffers;
+
+        const auto prefix = makeBufferName(mKernelId, port);
+        const auto itemWidth = getItemWidth(buffer->getBaseType());
+        Constant * const ITEM_WIDTH = b->getSize(itemWidth);
+        const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
+        const auto strideRate = rate.getUpperBound() * stridesPerBlock;
+
+
+        const auto inputRate = Rational{mKernel->getStride()} * rate.getUpperBound();
+        assert (inputRate.denominator() == 1);
+
+        const auto stridesPerSegment = ceiling(strideRate); assert (stridesPerSegment >= 1);
+        Constant * const STRIDES_PER_SEGMENT = b->getSize(stridesPerSegment);
+
+        BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_genMaskedInput", mKernelCheckOutputSpace);
+        BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelCheckOutputSpace);
+        BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectedInput", mKernelCheckOutputSpace);
+
+        Value * selected = accessibleItems[port.Number];
+        Value * total = mAccessibleInputItems(port);
+        Value * const tooMany = b->CreateICmpULT(selected, total);
+        Value * computeMask = tooMany;
+        if (mIsInputZeroExtended(port)) {
+            computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended(port)));
+        }
+
+        BasicBlock * const entryBlock = b->GetInsertBlock();
+        b->CreateUnlikelyCondBr(computeMask, maskedInput, selectedInput);
+
+        b->SetInsertPoint(maskedInput);
+
+        // if this is a deferred fixed rate stream, we cannot be sure how many
+        // blocks will have to be provided to the kernel in order to mask out
+        // the truncated input stream.
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + " truncating item count from %" PRIu64 " to %" PRIu64,
+                   mAccessibleInputItems(port), accessibleItems[port.Number]);
+        #endif
+
+        if (potentiallyReused) {
+            b->CreateFree(b->CreateLoad(bufferStorage));
+        }
+
+        // TODO: if we can prove that this will be the last kernel invocation that will ever touch this stream)
+        // and is not an input to the pipeline (which we cannot prove will have space after the last item), we
+        // can avoid copying the buffer and instead just mask out the surpressed items.
+
+        ExternalBuffer tmp(b, input.getType(), true, 0);
+
+        Value * const start = b->CreateLShr(mAlreadyProcessedPhi(port), LOG_2_BLOCK_WIDTH);
+
+        DataLayout DL(b->getModule());
+        Value * const inputAddress = inputBaseAddresses[port.Number];
+        Value * const startPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, start);
+        Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
+        Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
+
+        Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
+        Value * const limitPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, limit);
+        Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
+
+        Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
+
+        Value * segmentBytes = strideBytes;
+
+        Value * initial = start;
+        Value * initialPtr = startPtr;
+        Value * initialPtrInt = startPtrInt;
+
+        Value * end = start;
+        Value * fullBytesToCopy = nullptr;
+
+        if (stridesPerSegment != 1 || input.isDeferred()) {
+            if (input.isDeferred()) {
+                initial = b->CreateLShr(mAlreadyProcessedDeferredPhi(port), LOG_2_BLOCK_WIDTH);
+                initialPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, initial);
+                initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
+            }
+            // if a kernel reads in multiple strides of data per segment, we may be able to
+            // copy over a portion of it with a single memcpy.
+            Value * endPtrInt = startPtrInt;
+            if (stridesPerSegment  != 1) {
+                end = b->CreateAdd(mAlreadyProcessedPhi(port), accessibleItems[port.Number]);
+                end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
+                Value * const endPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, end);
+                endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
+            }
+            fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
+            segmentBytes = b->CreateAdd(fullBytesToCopy, strideBytes);
+        }
+
+        Value * maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
+
+        b->CreateStore(maskedBuffer, bufferStorage);
+        PointerType * const bufferType = tmp.getPointerType();
+        maskedBuffer = b->CreatePointerCast(maskedBuffer, bufferType, "maskedBuffer");
+
+        if (fullBytesToCopy) {
+            b->CreateMemCpy(maskedBuffer, initialPtr, fullBytesToCopy, blockWidth / 8);
+        }
+
+        Value * maskedAddress = tmp.getStreamBlockPtr(b, maskedBuffer, ZERO, b->CreateNeg(initial));
+        maskedAddress = b->CreatePointerCast(maskedAddress, bufferType);
+
+        Value * packIndex = nullptr;
+        Value * maskOffset = b->CreateAnd(accessibleItems[port.Number], BLOCK_MASK);
+        if (itemWidth > 1) {
+            Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
+            packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
+            maskOffset = b->CreateAnd(position, BLOCK_MASK);
+        }
+        Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
+        Value * const numOfStreams = buffer->getStreamSetCount(b);
+        BasicBlock * const loopEntryBlock = b->GetInsertBlock();
+        b->CreateBr(maskedInputLoop);
+
+        b->SetInsertPoint(maskedInputLoop);
+        PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
+        streamIndex->addIncoming(ZERO, loopEntryBlock);
+
+        Value * inputPtr = tmp.getStreamBlockPtr(b, inputAddress, streamIndex, end);
+        Value * outputPtr = tmp.getStreamBlockPtr(b, maskedAddress, streamIndex, end);
+
+        if (itemWidth > 1) {
+            Value * const endPtr = inputPtr;
+            Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
+            inputPtr = tmp.getStreamPackPtr(b, inputAddress, streamIndex, end, packIndex);
+            Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
+            Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
+            b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
+            outputPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, packIndex);
+        }
+
+        assert (inputPtr->getType() == outputPtr->getType());
+        Value * const val = b->CreateBlockAlignedLoad(inputPtr);
+        Value * const maskedVal = b->CreateAnd(val, mask);
+        b->CreateBlockAlignedStore(maskedVal, outputPtr);
+
+        if (itemWidth > 1) {
+            Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
+            Value * const clearPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, nextPackIndex);
+            Value * const clearPtrInt = b->CreatePtrToInt(clearPtr, intPtrTy);
+            Value * const clearEndPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, ITEM_WIDTH);
+            Value * const clearEndPtrInt = b->CreatePtrToInt(clearEndPtr, intPtrTy);
+            Value * const bytesToClear = b->CreateSub(clearEndPtrInt, clearPtrInt);
+            b->CreateMemZero(clearPtr, bytesToClear, blockWidth / 8);
+        }
+
+        Value * const nextIndex = b->CreateAdd(streamIndex, ONE);
+        Value * const notDone = b->CreateICmpNE(nextIndex, numOfStreams);
+        streamIndex->addIncoming(nextIndex, maskedInputLoop);
+
+
+        BasicBlock * const maskedInputLoopExit = b->GetInsertBlock();
+        b->CreateCondBr(notDone, maskedInputLoop, selectedInput);
+
+        b->SetInsertPoint(selectedInput);
+        PHINode * const phi = b->CreatePHI(bufferType, 2);
+        phi->addIncoming(inputAddress, entryBlock);
+        phi->addIncoming(maskedAddress, maskedInputLoopExit);
+        inputBaseAddresses[port.Number] = phi;
+
     }
     #endif
 }

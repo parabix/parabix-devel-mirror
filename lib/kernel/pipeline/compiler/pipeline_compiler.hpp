@@ -524,6 +524,7 @@ protected:
     const RelationshipGraph                     mStreamGraph;
     const RelationshipGraph                     mScalarGraph;
     const AddGraph                              mAddGraph;
+    const InputTruncationGraph                  mInputTruncationGraph;
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
     const std::vector<unsigned>                 mPartitionJumpIndex;
@@ -694,9 +695,9 @@ protected:
 
     // misc.
 
-    OwningVec<Kernel>                           mInternalKernels;
-    OwningVec<Binding>                          mInternalBindings;
-    OwningVec<StreamSetBuffer>                  mInternalBuffers;
+    const OwningVec<Kernel>                     mInternalKernels;
+    const OwningVec<Binding>                    mInternalBindings;
+    const OwningVec<StreamSetBuffer>            mInternalBuffers;
 
 
 };
@@ -748,6 +749,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))
 , mAddGraph(std::move(P.mAddGraph))
+, mInputTruncationGraph(std::move(P.mInputTruncationGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
 , mPartitioningGraph(std::move(P.mPartitioningGraph))
 , mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))

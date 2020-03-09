@@ -287,6 +287,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
             }
             bn.Buffer = buffer;
+            mInternalBuffers.emplace_back(buffer);
         }
         bn.NonLocal = nonLocal;
     }

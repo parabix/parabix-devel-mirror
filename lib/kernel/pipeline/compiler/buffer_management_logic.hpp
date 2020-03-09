@@ -190,14 +190,6 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
         mStreamSetOutputBuffers[i].reset(bn.Buffer);
     }
 
-    mInternalBuffers.reserve(LastStreamSet - FirstStreamSet + 1);
-    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
-        const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_LIKELY(bn.isInternal())) {
-            mInternalBuffers.emplace_back(bn.Buffer);
-        }
-    }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

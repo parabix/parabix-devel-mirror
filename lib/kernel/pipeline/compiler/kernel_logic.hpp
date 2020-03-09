@@ -337,23 +337,7 @@ bool PipelineCompiler::isBounded() const {
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::canTruncateInputBuffer() const {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        const Binding & binding = br.Binding;
-        const ProcessingRate & rate = binding.getRate();
-        switch (rate.getKind()) {
-            case RateId::Bounded:
-            case RateId::Fixed:
-            case RateId::PartialSum:
-                return true;
-            case RateId::Greedy:
-                if (rate.getLowerBound() > Rational{0, 1}) {
-                    return true;
-                }
-            default: break;
-        }
-    }
-    return false;
+    return out_degree(mKernelId, mInputTruncationGraph) != 0;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

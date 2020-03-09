@@ -5,6 +5,14 @@
 
 namespace kernel {
 
+template <typename T, unsigned n = 16>
+using Vec = SmallVector<T, n>;
+
+using Allocator = SlabAllocator<>;
+
+template <typename T>
+using OwningVec = std::vector<std::unique_ptr<T>>;
+
 class PipelineCommonGraphFunctions {
 public:
 
@@ -46,6 +54,8 @@ private:
 
 };
 
+#define BEGIN_SCOPED_REGION {
+#define END_SCOPED_REGION }
 
 // NOTE: these graph functions not safe for general use since they are intended for inspection of *edge-immutable* graphs.
 

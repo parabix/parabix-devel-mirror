@@ -7,7 +7,7 @@ namespace kernel {
 
 void PipelineAnalysis::makeInputTruncationGraph() {
 
-    mInputTruncationGraph = InputTruncationGraph(LastStreamSet + 1);
+    mInputTruncationGraph = InputTruncationGraph(LastKernel + 1);
 
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
 
@@ -27,20 +27,35 @@ void PipelineAnalysis::makeInputTruncationGraph() {
                     continue;
                 }
 
-                // A non-local buffer could still be produced by a kernel within the same partition
-                // as the current kernel.
-                const auto producer = parent(streamSet, mBufferGraph);
-                if (KernelPartitionId[producer] == partitionId) {
-                    continue;
+                const BufferRateData & br = mBufferGraph[e];
+
+                const Binding & input = br.Binding;
+                const ProcessingRate & rate = input.getRate();
+
+                if (LLVM_LIKELY(rate.isFixed())) {
+
+                    // A non-local buffer could still be produced by a kernel within the same partition
+                    // as the current kernel.
+                    const auto producer = parent(streamSet, mBufferGraph);
+                    if (KernelPartitionId[producer] == partitionId) {
+                        continue;
+                    }
+
+                    // TODO: if this kernel is the *sole* consumer of this buffer, we do not need a
+                    // temporary buffer to copy to and can directly clear the input data of the
+                    // original buffer.
+
+                    InputTruncation it(br.Port);
+
+                    if (out_degree(streamSet, mBufferGraph) == 1) {
+                        it.CreateTemporaryBuffer = false;
+                    }
+
+                    add_edge(kernel, kernel, it, mInputTruncationGraph);
+
                 }
-
-                // TODO: if this kernel is the *sole* consumer of this buffer, we do not need a
-                // temporary buffer to copy to and can directly clear the input data of the
-                // original buffer.
-
             }
-    }
-
+        }
     }
 }
 
