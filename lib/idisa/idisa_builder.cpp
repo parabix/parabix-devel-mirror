@@ -849,8 +849,40 @@ Value * IDISA_Builder::mvmd_shuffle2(unsigned fw, Value * table0, Value * table1
 }
 
 
-Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * a, Value * select_mask) {
-    UnsupportedFieldWidthError(fw, "mvmd_compress");
+Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * v, Value * select_mask) {
+    if (fw <= 8) UnsupportedFieldWidthError(fw, "mvmd_compress");
+    v = fwCast(fw, v);
+    Type * valueTy = v->getType();
+    Type * fieldTy = valueTy->getVectorElementType();
+    unsigned field_count = valueTy->getVectorNumElements();
+    Type * maskTy = select_mask->getType();
+    if (maskTy->isIntegerTy()) {
+        assert(maskTy->getIntegerBitWidth() == field_count);
+        assert(maskTy->getIntegerBitWidth() <= fieldTy->getIntegerBitWidth());
+        SmallVector<Constant *, 16> elements(field_count);
+        for (unsigned i = 0; i < field_count; i++) {
+            elements[i] = ConstantInt::get(fieldTy, 1<<i);
+        }
+        Constant * seq = ConstantVector::get(elements);
+        select_mask = simd_eq(fw, simd_and(simd_fill(fw, select_mask), seq), seq);
+    }
+    Value * selected = simd_and(v, select_mask);
+    Constant * oneSplat = ConstantVector::getSplat(field_count, ConstantInt::get(fieldTy, 1));
+    Value * deletion_counts = simd_add(fw, oneSplat, select_mask);
+    Value * deletion_totals = hsimd_partial_sum(fw, deletion_counts);
+    unsigned fields = getVectorBitWidth(v)/fw;
+    unsigned shift_amt = 1;
+    while (shift_amt < fields) {
+        Value * shift_splat = ConstantVector::getSplat(field_count, ConstantInt::get(fieldTy, shift_amt));
+        Value * shift_select = simd_and(deletion_totals, shift_splat);
+        Value * shift_mask = simd_eq(fw, shift_select, shift_splat);
+        Value * to_shift = simd_and(shift_mask, selected);
+        Value * shifted = mvmd_srli(fw, to_shift, shift_amt);
+        deletion_totals = simd_sub(fw, deletion_totals, shift_select);
+        selected = simd_or(shifted, simd_xor(selected, to_shift));
+        shift_amt *= 2;
+    }
+    return selected;
 }
 
 Value * IDISA_Builder::bitblock_any(Value * a) {
