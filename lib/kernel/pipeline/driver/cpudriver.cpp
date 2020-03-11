@@ -13,6 +13,7 @@
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Timer.h>
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
@@ -210,11 +211,18 @@ void CPUDriver::generateUncachedKernels() {
     preparePassManager();
     mCachedKernel.reserve(mUncachedKernel.size());
     for (auto & kernel : mUncachedKernel) {
-        kernel->generateKernel(mBuilder);
-        Module * const module = kernel->getModule(); assert (module);
-        module->setTargetTriple(mMainModule->getTargetTriple());
-        mPassManager->run(*module);
-        mCachedKernel.emplace_back(kernel.release());
+        {
+            NamedRegionTimer T(kernel->getName(),
+                               kernel->getSignature(),
+                               "kernel",
+                               "Kernel Generation",
+                               codegen::TimeKernelsIsEnabled);
+            kernel->generateKernel(mBuilder);
+            Module * const module = kernel->getModule(); assert (module);
+            module->setTargetTriple(mMainModule->getTargetTriple());
+            mPassManager->run(*module);
+            mCachedKernel.emplace_back(kernel.release());
+        }
     }
     mUncachedKernel.clear();
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
