@@ -36,7 +36,7 @@ void * ProgramBuilder::compile() {
                            kernel->getSignature(),
                            "pipeline",
                            "Pipeline Compilation",
-                           codegen::KernelTimePassesIsEnabled);
+                           codegen::TimeKernelsIsEnabled);
         finalObj = compileKernel(kernel);
     }
     return finalObj;

@@ -216,7 +216,7 @@ void CPUDriver::generateUncachedKernels() {
                                kernel->getSignature(),
                                "kernel",
                                "Kernel Generation",
-                               codegen::KernelTimePassesIsEnabled);
+                               codegen::TimeKernelsIsEnabled);
             kernel->generateKernel(mBuilder);
             Module * const module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
