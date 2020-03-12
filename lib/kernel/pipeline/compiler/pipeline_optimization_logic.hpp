@@ -13,6 +13,35 @@
 
 namespace kernel {
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief replacePhiCatchBlocksWith
+ *
+ * replace the phi catch with the actual exit blocks
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock *& from, BasicBlock * const exit) {
+    // NOTE: not all versions of LLVM seem to have BasicBlock::replacePhiUsesWith or PHINode::replaceIncomingBlockWith.
+    // This code could be made to use those instead.
+
+    assert (from);
+
+    BasicBlock * const to = b->GetInsertBlock();
+    for (Instruction & inst : exit->getInstList()) {
+        if (LLVM_LIKELY(isa<PHINode>(inst))) {
+            PHINode & pn = cast<PHINode>(inst);
+            for (unsigned i = 0; i != pn.getNumIncomingValues(); ++i) {
+                if (pn.getIncomingBlock(i) == from) {
+                    pn.setIncomingBlock(i, to);
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    from->eraseFromParent();
+    from = to;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief runOptimizationPasses
  ** ------------------------------------------------------------------------------------------------------------- */

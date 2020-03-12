@@ -120,6 +120,12 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
             for (unsigned i = 0; i < step; ++i) {
                 Constant * const I = b->getSize(i);
                 Value * const idx = b->CreateAdd(baseIndex, I);
+
+                Value * ptr = b->getInputStreamBlockPtr(INPUT, ZERO, baseIndex);
+
+                b->CallPrintInt("reading ptr", ptr);
+
+
                 Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
 
                 b->CallPrintRegister("value" + std::to_string(i), value);
@@ -138,6 +144,11 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
             const auto m = floor_log2(step + 1) + 1;
             SmallVector<Value *, 64> adders(m);
             // load the first block
+
+            Value * ptr = b->getInputStreamBlockPtr(INPUT, ZERO, baseIndex);
+
+            b->CallPrintInt("reading ptr", ptr);
+
             Value * value = b->loadInputStreamBlock(INPUT, ZERO, baseIndex);
 
             b->CallPrintRegister("value_0" , value);
@@ -150,6 +161,10 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
             for (unsigned i = 1; i < step; ++i) {
                 Constant * const I = b->getSize(i);
                 Value * const idx = b->CreateAdd(baseIndex, I);
+
+                Value * ptr = b->getInputStreamBlockPtr(INPUT, ZERO, baseIndex);
+
+                b->CallPrintInt("reading ptr", ptr);
 
                 Value * value = b->loadInputStreamBlock(INPUT, ZERO, idx);
 
@@ -193,6 +208,10 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         positivePartialSum = b->CreateAdd(positiveSum, sum);
         positiveSum->addIncoming(positivePartialSum, popCountLoop);
         Value * const ptr = b->CreateInBoundsGEP(positiveArray, index);
+
+        b->CallPrintInt("writing ptr", ptr);
+        b->CallPrintInt("writing value", positivePartialSum);
+
         b->CreateStore(positivePartialSum, ptr);
     }
 

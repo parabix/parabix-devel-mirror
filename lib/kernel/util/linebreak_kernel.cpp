@@ -339,8 +339,10 @@ LineStartsKernel::LineStartsKernel(BuilderRef b, StreamSet * LineEnds, StreamSet
 void LineStartsKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     PabloAST * lineEnds = getInputStreamSet("LineEnds")[0];
+    pb.createIntrinsicCall(pablo::Intrinsic::PrintRegister, {lineEnds}, "lineEnds");
     // Line starts are the positions after every line end, as well as the initial position.
     PabloAST * lineStarts = pb.createInFile(pb.createNot(pb.createAdvance(pb.createNot(lineEnds), 1)));
+    pb.createIntrinsicCall(pablo::Intrinsic::PrintRegister, {lineStarts}, "lineStarts");
     pb.createAssign(pb.createExtract(getOutputStreamVar("LineStarts"), 0), lineStarts);
 }
 

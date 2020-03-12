@@ -568,11 +568,11 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     PointerType * const int8PtrTy = b->getInt8PtrTy();
 
     // TODO: Wrong base address here. Needs base from prior to linearize
-
     if (buffer->isLinear()) {
-        source = buffer->getBaseAddress(b);
-        source = b->CreatePointerCast(source, int8PtrTy);
+//        source = buffer->getBaseAddress(b);
+//        source = b->CreatePointerCast(source, int8PtrTy);
         const auto streamSet = getOutputBufferVertex(outputPort);
+        source = b->CreatePointerCast(mOriginalBaseAddress[streamSet], int8PtrTy);
         Value * offset = b->CreateMul(mConsumedItemCount[streamSet], bytesPerSteam);
         source = b->CreateGEP(source, offset);
         target = buffer->getMallocAddress(b);
@@ -610,7 +610,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief prepareLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::prepareLinearBuffers(BuilderRef b) const {
+void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
@@ -624,7 +624,11 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) const {
             debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, produced);
             debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
             #endif
-            buffer->prepareLinearBuffer(b, produced, consumed);
+
+            Value * const baseAddress = buffer->getBaseAddress(b);
+            mOriginalBaseAddress[streamSet] = baseAddress;
+
+            buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind);
         }
     }
 }

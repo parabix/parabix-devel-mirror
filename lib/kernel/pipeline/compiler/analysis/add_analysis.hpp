@@ -15,24 +15,17 @@ void PipelineAnalysis::makeAddGraph() {
 
     mAddGraph = AddGraph(LastStreamSet + 1);
 
-    for (auto kernel = PipelineInput; kernel <= PipelineOutput; ++kernel) {
+    for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
         int minAddK = 0;
-        if (LLVM_LIKELY(in_degree(kernel, mStreamGraph) > 0)) {
+        if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
             bool noPrincipal = true;
 
-            for (const auto e : make_iterator_range(in_edges(kernel, mStreamGraph))) {
-                const auto binding = source(e, mBufferGraph);
-                const RelationshipNode & rn = mStreamGraph[binding];
-                assert (rn.Type == RelationshipNode::IsBinding);
-                const Binding & input = rn.Binding;
+            for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const auto buffer = source(e, mBufferGraph);
+                const BufferRateData & br = mBufferGraph[e];
+                const Binding & input = br.Binding;
 
-                const auto f = first_in_edge(binding, mStreamGraph);
-                const auto streamSet = source(f, mStreamGraph);
-                assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
-                assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
-
-                int k = mAddGraph[streamSet];
+                int k = mAddGraph[buffer];
                 bool isPrincipal = false;
                 for (const Attribute & attr : input.getAttributes()) {
                     switch (attr.getKind()) {
@@ -53,39 +46,32 @@ void PipelineAnalysis::makeAddGraph() {
                     noPrincipal = false;
                 }
 
-                add_edge(streamSet, kernel, k, mAddGraph);
+                add_edge(buffer, i, k, mAddGraph);
             }
 
             if (LLVM_LIKELY(noPrincipal)) {
                 minAddK = std::numeric_limits<int>::max();
-                for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
-                    minAddK = std::min<int>(minAddK, mAddGraph[e]);
+                for (const auto e : make_iterator_range(in_edges(i, mAddGraph))) {
+                    const int k = mAddGraph[e];
+                    minAddK = std::min(minAddK, k);
                 }
-                for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+                for (const auto e : make_iterator_range(in_edges(i, mAddGraph))) {
                     mAddGraph[e] -= minAddK;
                 }
             } else {
-                for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
+                for (const auto e : make_iterator_range(in_edges(i, mAddGraph))) {
                     mAddGraph[e] = 0;
                 }
             }
 
         }
 
-        mAddGraph[kernel] = minAddK;
+        mAddGraph[i] = minAddK;
 
-        for (const auto e : make_iterator_range(out_edges(kernel, mStreamGraph))) {
-
-            const auto binding = target(e, mBufferGraph);
-            const RelationshipNode & rn = mStreamGraph[binding];
-            assert (rn.Type == RelationshipNode::IsBinding);
-            const Binding & output = rn.Binding;
-
-            assert (rn.Type == RelationshipNode::IsBinding);
-            const auto f = out_edge(binding, mStreamGraph);
-            assert (mStreamGraph[f].Reason != ReasonType::Reference);
-            const auto streamSet = target(f, mStreamGraph);
-            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
+        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
+            const auto buffer = target(e, mBufferGraph);
+            const BufferRateData & br = mBufferGraph[e];
+            const Binding & output = br.Binding;
 
             int k = minAddK;
             for (const Attribute & attr : output.getAttributes()) {
@@ -100,8 +86,9 @@ void PipelineAnalysis::makeAddGraph() {
                 }
             }
 
-            mAddGraph[streamSet] = k;
-            add_edge(kernel, streamSet, k, mAddGraph);
+
+            mAddGraph[buffer] = k;
+            add_edge(i, buffer, k, mAddGraph);
         }
     }
 
@@ -114,7 +101,27 @@ void PipelineAnalysis::makeAddGraph() {
     for (const auto e : make_iterator_range(edges(mAddGraph))) {
         const auto s = source(e, mAddGraph);
         const auto t = target(e, mAddGraph);
-        out << "v" << s << " -> v" << t << " [label=\"" << (int)mAddGraph[e] << "\"];\n";
+
+        graph_traits<BufferGraph>::edge_descriptor f;
+        bool found;
+        std::tie(f, found) = edge(s, t, mBufferGraph); assert (found);
+        const BufferRateData & br = mBufferGraph[f];
+
+        out << "v" << s << " -> v" << t << " [label=\"";
+        if (br.Port.Type == PortType::Input) {
+            out << "I";
+        } else {
+            out << "O";
+        }
+        out << br.Port.Number;
+
+        const int k = mAddGraph[e];
+        if (k > 0) {
+            out << " +" << k;
+        } else if (k < 0) {
+            out << " " << k;
+        }
+        out << "\"];\n";
     }
 
     out << "}\n\n";

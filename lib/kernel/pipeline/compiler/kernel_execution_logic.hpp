@@ -104,12 +104,15 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     #endif
 
     args.push_back(mNumOfLinearStridesPhi);
-    if (!mHasExplicitFinalPartialStride) {
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mIsFinalInvocationPhi);
-        #endif
-        args.push_back(b->CreateIsNotNull(mIsFinalInvocationPhi));
+
+    if (mHasExplicitFinalPartialStride) {
+        // isFinal = b->CreateIsNull(mNumOfLinearStridesPhi);
+    } else {
+        args.push_back(mKernelIsFinal);
     }
+
+    // TODO: if we've terminated, should all inputs be terminated? or just one
+    // non zero extended input?
 
 
     // If a kernel is internally synchronized, pass the segno to

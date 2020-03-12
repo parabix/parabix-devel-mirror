@@ -50,21 +50,23 @@ public:
 
         }
 
-        // Finish annotating the buffer graph
+        P.makeAddGraph();
+
+        // Finish annotating the buffer graph       
         P.identifyLocalPortIds();
         P.identifyLinearBuffers();
         P.identifyZeroExtendedStreamSets();
 
         // Make the remaining graphs
-        P.makeAddGraph();
         P.makeConsumerGraph();
         P.makeTerminationGraph();
-        P.makeInputTruncationGraph();
         P.makePartitionJumpTree();
         P.makeKernelIOGraph();
 
         // Finish the buffer graph
         P.addStreamSetsToBufferGraph(b);
+
+        P.makeInputTruncationGraph();
 
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());

@@ -33,9 +33,11 @@
 #endif
 
 #if defined(__i386__)
-#define PRISz PRId32
+#define PRIdsz PRId32
+#define PRIxsz PRIx32
 #else
-#define PRISz PRId64
+#define PRIdsz PRId64
+#define PRIxsz PRIx64
 #endif
 
 #ifdef ENABLE_ASSERTION_TRACE
@@ -1071,11 +1073,11 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     PointerType * const stackPtrTy = stackTy->getPointerTo();
     PointerType * const int8PtrTy = getInt8PtrTy();
 
-    FixedArray<Type *, 3> fields;
-    fields[0] = int8PtrTy;
-    fields[1] = int8PtrTy;
-    fields[2] = int32Ty;
-    StructType * const structTy = StructType::create(C, fields);
+//    FixedArray<Type *, 3> fields;
+//    fields[0] = int8PtrTy;
+//    fields[1] = int8PtrTy;
+//    fields[2] = int32Ty;
+//    StructType * const structTy = StructType::create(C, fields);
 
     Function * assertFunc = m->getFunction("assert");
     if (LLVM_UNLIKELY(assertFunc == nullptr)) {
@@ -1431,8 +1433,9 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const char *
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
     LI->setAlignment(Align);
@@ -1443,8 +1446,9 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, const Twine 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, Name);
     LI->setAlignment(Align);
@@ -1455,8 +1459,9 @@ LoadInst * CBuilder::CreateAlignedLoad(Value * Ptr, unsigned Align, bool isVolat
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedLoad: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     LoadInst * LI = CreateLoad(Ptr, isVolatile, Name);
     LI->setAlignment(Align);
@@ -1467,8 +1472,9 @@ StoreInst * CBuilder::CreateAlignedStore(Value * Val, Value * Ptr, unsigned Alig
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
         DataLayout DL(getModule());
         IntegerType * const intPtrTy = cast<IntegerType>(DL.getIntPtrType(Ptr->getType()));
-        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), ConstantInt::get(intPtrTy, Align));
-        CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer is misaligned");
+        ConstantInt * align = ConstantInt::get(intPtrTy, Align);
+        Value * alignmentOffset = CreateURem(CreatePtrToInt(Ptr, intPtrTy), align);
+        CreateAssertZero(alignmentOffset, "CreateAlignedStore: pointer (%" PRIxsz ") is misaligned (%" PRIdsz ")", Ptr, align);
     }
     StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
     SI->setAlignment(Align);
@@ -1591,7 +1597,7 @@ Value * CBuilder::CreateExtractElement(Value * Vec, Value *Idx, const Twine Name
         }
         Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
         // exctracting an element from a position that exceeds the length of the vector is undefined
-        __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRISz ") is greater than Vec size (%" PRISz ")", { Idx, Size });
+        __CreateAssert(CreateICmpULT(Idx, Size), "CreateExtractElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateExtractElement(Vec, Idx, Name);
 }
@@ -1603,7 +1609,7 @@ Value * CBuilder::CreateInsertElement(Value * Vec, Value * NewElt, Value * Idx, 
         }
         Constant * const Size = ConstantInt::get(Idx->getType(), Vec->getType()->getVectorNumElements());
         // inserting an element into a position that exceeds the length of the vector is undefined
-        __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRISz ") is greater than Vec size (%" PRISz ")", { Idx, Size });
+        __CreateAssert(CreateICmpULT(Idx, Size), "CreateInsertElement: Idx (%" PRIdsz ") is greater than Vec size (%" PRIdsz ")", { Idx, Size });
     }
     return IRBuilder<>::CreateInsertElement(Vec, NewElt, Idx, Name);
 }

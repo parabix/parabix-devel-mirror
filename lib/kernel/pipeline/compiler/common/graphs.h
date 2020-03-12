@@ -260,12 +260,12 @@ struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
     BufferType Type = BufferType::None;
     bool NonLocal = false;
-    bool Linear = false;
+    bool NonLinear = false;
     unsigned LookBehind = 0;
     unsigned LookBehindReflection = 0;
     unsigned CopyBack = 0;
     unsigned LookAhead = 0;
-    unsigned RequiredSpace = 0;
+    unsigned Add = 0;
 
     bool isOwned() const {
         return (Type & BufferType::Unowned) == BufferType::None;
@@ -431,7 +431,15 @@ struct InputTruncation {
 
 using InputTruncationGraph = adjacency_list<hash_setS, vecS, directedS, no_property, InputTruncation>;
 
-using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BufferRateData>;
+struct IOCheckEdge {
+    unsigned        Kernel = 0;
+    StreamSetPort   Port;
+
+    IOCheckEdge() = default;
+    IOCheckEdge(unsigned kernel, StreamSetPort port) : Kernel(kernel), Port(port) { }
+};
+
+using IOCheckGraph = adjacency_list<vecS, vecS, bidirectionalS, no_property, IOCheckEdge>;
 
 using LengthConstraintGraph = adjacency_list<vecS, vecS, undirectedS>;
 

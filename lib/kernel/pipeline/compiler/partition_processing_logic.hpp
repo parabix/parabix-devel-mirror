@@ -92,9 +92,9 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
         mPipelineProgressAtPartitionExit[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".pipelineProgress");
         // if we have some partition input and at least one partition jumps into this one,
         // create a phi node to store whether we've exhausted the pipeline's input data
-        if (in_degree(i, mPartitionJumpTree) > 0) {
+        //if (in_degree(i, mPartitionJumpTree) > 0) {
             mExhaustedPipelineInputAtPartitionEntry[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".exhaustedInput");
-        }
+        //}
     }
     b->restoreIP(ip);
 
@@ -151,13 +151,24 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartiti
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief jumpToNextPartition
+ * @brief writeInitiallyTerminatedPartitionExit
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::jumpToNextPartition(BuilderRef b) {
+void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
+    loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
 
+    const auto nextPartition = mCurrentPartitionId + 1U;
+    PHINode * const p = mPipelineProgressAtPartitionExit[nextPartition]; assert (p);
+    p->addIncoming(mPipelineProgress, mKernelInitiallyTerminatedPhiCatch);
 
+    PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartition];
+    exhaustedInputPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedPhiCatch);
+
+    replacePhiCatchWithCurrentBlock(b, mKernelInitiallyTerminatedPhiCatch, mNextPartitionEntryPoint);
+    b->CreateBr(mNextPartitionEntryPoint);
 }
+
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOnInitialTerminationJumpToNextPartitionToCheck

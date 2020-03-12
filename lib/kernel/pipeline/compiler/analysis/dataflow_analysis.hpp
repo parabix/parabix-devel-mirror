@@ -952,6 +952,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
     unsigned nextRateId = 0;
 
     flat_map<Vertex, unsigned> partialSumRefId;
+    flat_map<Vertex, unsigned> addId;
     flat_map<StreamSetPort, RefWrapper<BitSet>> relativeRefId;
 
     Graph H(LastStreamSet + 1);
@@ -972,6 +973,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
        dst |= src;
     };
 
+
+
     for (auto start = firstKernel; start <= lastKernel; ) {
         // Determine which kernels are in this partition
         const auto partitionId = KernelPartitionId[start];
@@ -983,6 +986,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
         }
 
         const auto partRateId = nextRateId++;
+
+
 
         for (auto kernel = start; kernel < end; ++kernel) {
 
@@ -1008,6 +1013,26 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 assert (f != relativeRefId.end());
                 return f->second.get();
             };
+
+            graph_traits<AddGraph>::in_edge_iterator ai, ai_end;
+            std::tie(ai, ai_end) = in_edges(kernel, mAddGraph);
+
+            auto insertAddId = [&] (BitSet & S, const AddGraph::edge_descriptor a) {
+                const auto k = mAddGraph[a];
+                if (k) {
+                    unsigned id;
+                    const auto f = addId.find(k);
+                    if (f == addId.end()) {
+                        id = nextRateId++;
+                        addId.emplace(k, id);
+                    } else {
+                        id = f->second;
+                    }
+                    addRateId(S, id);
+                }
+            };
+
+            addId.clear();
 
             bool hasInputFixedRate = false;
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
@@ -1037,9 +1062,21 @@ void PipelineAnalysis::identifyLocalPortIds() {
                         default: break;
                     }
                     relativeRefId.emplace(data.Port, S);
+                }                
+                if (data.ZeroExtended) {
+                    addRateId(S, nextRateId++);
                 }
+                assert (ai != ai_end);
+                insertAddId(S, *ai);
+                ai++;
                 combine(K, S);
             }
+            assert (ai == ai_end);
+
+            addId.clear();
+
+            graph_traits<AddGraph>::out_edge_iterator aj, aj_end;
+            std::tie(aj, aj_end) = out_edges(kernel, mAddGraph);
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const BufferRateData & data = mBufferGraph[output];
@@ -1066,9 +1103,11 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     }
                     relativeRefId.emplace(data.Port, S);
                 }
-
-
+                assert (aj != aj_end);
+                insertAddId(S, *aj);
+                aj++;
             }
+            assert (aj == aj_end);
             relativeRefId.clear();
         }
         start = end;

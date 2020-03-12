@@ -425,4 +425,36 @@ inline unsigned PipelineCompiler::getBufferIndex(const unsigned bufferVertex) co
     return bufferVertex - FirstStreamSet;
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reset
+ ** ------------------------------------------------------------------------------------------------------------- */
+template <typename Vec>
+inline void reset(Vec & vec, const size_t n) {
+    vec.resize(n);
+    std::memset(vec.data(), 0, n * sizeof(typename Vec::value_type));
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief clearInternalStateForCurrentKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::clearInternalStateForCurrentKernel() {
+    mNumOfAddressableItemCount = 0;
+    mNumOfVirtualBaseAddresses = 0;
+    mNumOfTruncatedInputBuffers = 0;
+
+    mHasZeroExtendedInput = nullptr;
+    mZeroExtendBufferPhi = nullptr;
+    mAnyRemainingInput = nullptr;
+    mExhaustedPipelineInputPhi = nullptr;
+
+    mMaximumNumOfStrides = nullptr;
+
+    assert (mKernelId >= FirstKernel);
+    assert (mKernelId <= LastKernel);
+
+    const auto numOfInputs = in_degree(mKernelId, mBufferGraph);
+    reset(mAccessibleInputItems, numOfInputs);
+
+}
+
 }

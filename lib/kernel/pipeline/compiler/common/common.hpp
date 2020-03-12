@@ -317,31 +317,21 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
     // able to execute its full segment without splitting the work across
     // two or more linear sub-segments.
 
-    bool noCountableInput = true;
     for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = source(input, mBufferGraphRef);
         const BufferNode & node = mBufferGraphRef[streamSet];
-        if (node.Linear) {
-            // To safely ensure we can determine the maximum number of strides
-            // before invoking the kernel, we require at least one countable
-            // input. NOTE: the PopCount reference is guaranteed to be linear.
-            const BufferRateData & rateData = mBufferGraphRef[input];
-            if (isCountable(rateData.Binding)) {
-                noCountableInput = false;
-            }
-        }
-        if (node.NonLocal && !node.Linear) {
+        if (node.NonLocal || node.NonLinear) {
             return true;
         }
     }
     for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = target(output, mBufferGraphRef);
         const BufferNode & node = mBufferGraphRef[streamSet];
-        if (node.NonLocal && !node.Linear) {
+        if (node.isOwned() && (node.NonLocal || node.NonLinear)) {
             return true;
         }
     }
-    return noCountableInput;
+    return false;
 }
 
 }

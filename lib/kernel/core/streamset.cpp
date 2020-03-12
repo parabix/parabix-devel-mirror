@@ -284,7 +284,7 @@ inline void ExternalBuffer::assertValidBlockIndex(BuilderPtr b, Value * blockInd
     }
 }
 
-void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */) const {
+void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
     /* do nothing */
 }
 
@@ -472,7 +472,7 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     return b->CreateInBoundsGEP(getBaseAddress(b), capacity);
 }
 
-void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed) const {
+void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const {
     if (mLinear) {
 
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -484,6 +484,7 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
 
         const auto blockWidth = b->getBitBlockWidth();
         assert (is_power_2(blockWidth));
+        assert (lookBehind < (mOverflow * blockWidth));
 
         ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
         Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
@@ -685,7 +686,7 @@ void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Dynamic");
 }
 
-void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */) const {
+void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
     /* do nothing */
 }
 

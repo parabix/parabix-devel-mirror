@@ -584,6 +584,10 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             if (cast<Var>(expr)->isKernelParameter()) {
                 Value * const ptr = compileExpression(b, expr, false);
                 Type * const elemTy = ptr->getType()->getPointerElementType();
+
+                b->CallPrintInt("ptr", ptr);
+                b->CallPrintRegister("value", value);
+
                 b->CreateAlignedStore(b->CreateZExt(value, elemTy), ptr, getAlignment(elemTy));
                 value = ptr;
             }

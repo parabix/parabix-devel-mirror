@@ -105,14 +105,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         for (const auto e : make_iterator_range(out_edges(kernel, mAddGraph))) {
             maxK = std::max(maxK, mAddGraph[e]);
         }
-        const auto K = mAddGraph[kernel] + maxK;
         for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
             const auto streamSet = source(e, mAddGraph) - FirstStreamSet;
-            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], K);
+            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], maxK);
         }
         for (const auto e : make_iterator_range(out_edges(kernel, mAddGraph))) {
             const auto streamSet = target(e, mAddGraph) - FirstStreamSet;
-            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], K);
+            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], maxK);
         }
     }
 
@@ -181,17 +180,12 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             assert (producerRate.Maximum >= producerRate.Minimum);
 
-            if (producerRate.Minimum< producerRate.Maximum) {
+            if (producerRate.Minimum < producerRate.Maximum) {
                 nonLocal = true;
             }
 
             // TODO: dataflow analysis must take lookahead/delay into account to permit
             // this optimization.
-
-//            bool isNonLinear = false;
-//            if (pMin != pMax) {
-//                isNonLinear = true;
-//            }
 
             Rational consumeMin(std::numeric_limits<unsigned>::max());
             Rational consumeMax(std::numeric_limits<unsigned>::min());
@@ -205,10 +199,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
                 const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
                 const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
-
-//                if (cMin != cMax) {
-//                    isNonLinear = true;
-//                }
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
@@ -246,17 +236,21 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
 
+            auto reqOverflow = std::max(copyBack, lookAhead);
+            const auto add = transitiveAdd[streamSet - FirstStreamSet];
+            if (add > 0) {
+                bn.Add = add;
+                reqOverflow = std::max(reqOverflow, bn.Add);
+            }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const auto overflowSize = round_up_to(std::max(copyBack, lookAhead), blockWidth) / blockWidth;
+            const auto overflowSize = round_up_to(reqOverflow, blockWidth) / blockWidth;
             const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;
             const auto spillover = std::max((consumeMax * Rational{2}) - consumeMin, pMax);
             const auto reqSize0 = round_up_to(ceiling(spillover), blockWidth) / blockWidth;
             const auto reqSize1 = 2 * (overflowSize + underflowSize);
             const auto requiredSize = std::max(reqSize0, reqSize1);
 
-
-            const auto linear = false; // bn.Linear; // & isNonLinear
 
             // if this buffer is "stateful", we cannot make it *thread* local
             if (dynamic || lookBehind || reflection || copyBack || lookAhead) {
@@ -282,9 +276,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
             if (dynamic) {
-                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
+                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
             } else {
-                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, linear, 0U);
+                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
             }
             bn.Buffer = buffer;
             mInternalBuffers.emplace_back(buffer);
@@ -556,6 +550,11 @@ void PipelineAnalysis::verifyIOStructure() const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::identifyLinearBuffers() {
 
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        BufferNode & N = mBufferGraph[streamSet];
+        N.NonLinear = true;
+    }
+
     // Any kernel that is internally synchronized or has a greedy rate input
     // requires that all of its inputs are linear.
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
@@ -566,7 +565,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & N = mBufferGraph[streamSet];
-                N.Linear = true;
+                N.NonLinear = false;
             }
             mustBeLinear = true;
         } else {
@@ -584,7 +583,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto streamSet = source(e, mBufferGraph);
                 BufferNode & N = mBufferGraph[streamSet];
-                N.Linear = true;
+                N.NonLinear = false;
             }
         }
     }
@@ -628,7 +627,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
         }
         if (LLVM_UNLIKELY(mustBeLinear)) {
             BufferNode & N = mBufferGraph[streamSet];
-            N.Linear = true;
+            N.NonLinear = false;
         }
     }
 #if 0

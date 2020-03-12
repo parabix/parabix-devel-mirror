@@ -205,7 +205,7 @@ public:
     BasicBlock * getPartitionExitPoint(BuilderRef b);
     void checkPartitionEntry(BuilderRef b);
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
-    void jumpToNextPartition(BuilderRef b);
+    void writeInitiallyTerminatedPartitionExit(BuilderRef b);
     void checkForPartitionExit(BuilderRef b);
     void setCurrentPartitionTerminationSignal(Value * const signal);
     Value * getCurrentPartitionTerminationSignal() const;
@@ -228,15 +228,11 @@ public:
     void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
-    Value * determineIsFinal(BuilderRef b);
-    Value * anyRemainingInput(BuilderRef b);
+    void determineIsFinal(BuilderRef b);
+    Value * hasMoreInput(BuilderRef b);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
 
     void zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Value *> & accessibleItems, Vec<Value *> & inputBaseAddresses);
-
-    void checkForLastPartialSegment(BuilderRef b, Value * isFinal);
-    Value * noMoreInputData(BuilderRef b, const unsigned inputPort);
-    Value * noMoreOutputData(BuilderRef b, const unsigned outputPort);
 
     Value * allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlock * const insertBefore) const;
 
@@ -283,8 +279,6 @@ public:
 
     void writeUpdatedItemCounts(BuilderRef b, const ItemCountSource source);
 
-    void replacePhiCatchBlocksWith(BasicBlock *& from, BasicBlock * const to);
-
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
 
@@ -292,7 +286,7 @@ public:
 
     Value * getInputStrideLength(BuilderRef b, const StreamSetPort inputPort);
     Value * getOutputStrideLength(BuilderRef b, const StreamSetPort outputPort);
-    Value * getFirstStrideLength(BuilderRef b, const size_t kernel, const StreamSetPort port);
+    Value * calculateStrideLength(BuilderRef b, const size_t kernel, const StreamSetPort port, Value * const offset = nullptr);
     Value * calculateNumOfLinearItems(BuilderRef b, const StreamSetPort port, Value * const adjustment);
     Value * getAccessibleInputItems(BuilderRef b, const StreamSetPort inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const StreamSetPort inputPort);
@@ -307,7 +301,6 @@ public:
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
     Value * getPartialSumItemCount(BuilderRef b, const size_t kernel, const StreamSetPort port, Value * const offset = nullptr) const;
-
     Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const StreamSetPort port);
 
 // termination codegen functions
@@ -348,7 +341,7 @@ public:
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
 
-    void prepareLinearBuffers(BuilderRef b) const;
+    void prepareLinearBuffers(BuilderRef b);
     Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
@@ -399,6 +392,7 @@ public:
 // internal optimization passes
 
     void simplifyPhiNodes(Module * const m) const;
+    void replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock *& from, BasicBlock * const exit);
 
 // buffer management analysis functions
 
@@ -483,6 +477,8 @@ public:
     const Binding & getBinding(const StreamSetPort port) const;
 
     LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
+
+    void clearInternalStateForCurrentKernel();
 
 protected:
 
@@ -572,6 +568,8 @@ protected:
     Vec<Value *, 128>                           mLocallyAvailableItems;
     Vec<Value *>                                mScalarValue;
 
+    Vec<Value *>                                mOriginalBaseAddress;
+
     // partition state
     Vec<BasicBlock *>                           mPartitionEntryPoint;
     Vec<BasicBlock *>                           mPartitionJumpExitPoint;
@@ -580,6 +578,8 @@ protected:
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
     BasicBlock *                                mNextPartitionEntryPoint;
+
+    Value *                                     mKernelIsPenultimate = nullptr;
 
     Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
     Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
@@ -614,8 +614,8 @@ protected:
     PHINode *                                   mTerminatedAtExitPhi = nullptr;
     PHINode *                                   mTotalNumOfStridesAtExitPhi = nullptr;
     Value *                                     mLastPartialSegment = nullptr;
-    Value *                                     mNumOfFinalStrides = nullptr;
-    Value *                                     mNumOfNonFinalStrides = nullptr;
+    Value *                                     mNumOfInputStrides = nullptr;
+    Value *                                     mNumOfOutputStrides = nullptr;
     Value *                                     mHasZeroExtendedInput = nullptr;
     Value *                                     mAnyRemainingInput = nullptr;
     PHINode *                                   mFixedRateFactorPhi = nullptr;
@@ -650,11 +650,15 @@ protected:
     InputPortVec<Value *>                       mInitiallyProcessedDeferredItemCount;
     InputPortVec<PHINode *>                     mAlreadyProcessedPhi; // entering the segment loop
     InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
+
+    enum { WITH_OVERFLOW = 0, WITHOUT_OVERFLOW = 1};
+
+
     InputPortVec<Value *>                       mInputEpoch;
     InputPortVec<Value *>                       mIsInputZeroExtended;
     InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
     InputPortVec<Value *>                       mFirstInputStrideLength;
-    InputPortVec<Value *>                       mAccessibleInputItems;
+    Vec<std::array<Value *, 2>, 8>              mAccessibleInputItems;
     InputPortVec<PHINode *>                     mLinearInputItemsPhi;
     InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
     InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
@@ -764,6 +768,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mScalarValue(LastScalar + 1)
 , mConsumedItemCount(LastStreamSet + 1)
 
+, mOriginalBaseAddress(LastStreamSet + 1)
+
 , mInitiallyProcessedItemCount(this)
 , mInitiallyProcessedDeferredItemCount(this)
 , mAlreadyProcessedPhi(this)
@@ -772,7 +778,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mIsInputZeroExtended(this)
 , mInputVirtualBaseAddressPhi(this)
 , mFirstInputStrideLength(this)
-, mAccessibleInputItems(this)
 , mLinearInputItemsPhi(this)
 , mReturnedProcessedItemCountPtr(this)
 , mProcessedItemCount(this)
