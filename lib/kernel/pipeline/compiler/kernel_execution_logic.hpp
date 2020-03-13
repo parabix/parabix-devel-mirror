@@ -188,7 +188,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             args.push_back(mLinearOutputItemsPhi(rt.Port));  assert (mLinearOutputItemsPhi(rt.Port));
         }
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            args.push_back(mConsumedItemCount[streamSet]); assert (mConsumedItemCount[streamSet]);
+            args.push_back(mInitialConsumedItemCount[streamSet]); assert (mInitialConsumedItemCount[streamSet]);
         }
     }
 

@@ -62,7 +62,7 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mConsumerGraph))) {
         const auto streamSet = target(e, mConsumerGraph);
         Value * consumed = readConsumedItemCount(b, streamSet);
-        mConsumedItemCount[streamSet] = consumed; assert (consumed);
+        mInitialConsumedItemCount[streamSet] = consumed; assert (consumed);
         #ifdef PRINT_DEBUG_MESSAGES
         const ConsumerEdge & c = mConsumerGraph[e];
         const StreamSetPort port{PortType::Output, c.Port};
@@ -117,9 +117,6 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
                 const auto prefix = makeBufferName(mKernelId, port);
                 PHINode * const consumedPhi = b->CreatePHI(sizeTy, 2, prefix + "_consumed");
                 assert (cn.Consumed);
-//                if (mIsPartitionRoot) {
-//                    consumedPhi->addIncoming(cn.Consumed, mKernelInitiallyTerminatedPhiCatch);
-//                }
                 cn.PhiNode = consumedPhi;
             }
         }
@@ -153,7 +150,6 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
             }
             assert (cn.Consumed);
             cn.Consumed = b->CreateUMin(cn.Consumed, processed);
-
         }
     }
 }

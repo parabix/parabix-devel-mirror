@@ -8,6 +8,7 @@
 #include <llvm/Transforms/Utils/Local.h>
 #include <llvm/ADT/STLExtras.h>
 #include "analysis/pipeline_analysis.hpp"
+#include <boost/multi_array.hpp>
 
 #define PRINT_DEBUG_MESSAGES
 
@@ -89,6 +90,8 @@ using ArgVec = Vec<Value *, 64>;
 using BufferPortMap = flat_set<std::pair<unsigned, unsigned>>;
 
 using PartitionJumpPhiOutMap = flat_map<std::pair<unsigned, unsigned>, Value *>;
+
+using PartitionPhiNodeTable = multi_array<PHINode *, 2>;
 
 class PipelineCompiler final : public KernelCompiler, public PipelineCommonGraphFunctions {
 
@@ -205,6 +208,10 @@ public:
     BasicBlock * getPartitionExitPoint(BuilderRef b);
     void checkPartitionEntry(BuilderRef b);
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
+
+    void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const exitBlock);
+    void phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const exitBlock);
+
     void writeInitiallyTerminatedPartitionExit(BuilderRef b);
     void checkForPartitionExit(BuilderRef b);
     void setCurrentPartitionTerminationSignal(Value * const signal);
@@ -572,8 +579,6 @@ protected:
 
     // partition state
     Vec<BasicBlock *>                           mPartitionEntryPoint;
-    Vec<BasicBlock *>                           mPartitionJumpExitPoint;
-    Vec<BasicBlock *>                           mPartitionExitPoint;
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
@@ -581,16 +586,17 @@ protected:
 
     Value *                                     mKernelIsPenultimate = nullptr;
 
-    Vec<PHINode *>                              mPipelineProgressAtPartitionExit;
-    Vec<Value *>                                mPartitionTerminationSignalAtJumpExit;
     Vec<Value *>                                mPartitionTerminationSignal;
 
     Vec<PHINode *>                              mExhaustedPipelineInputAtPartitionEntry;
 
-    Vec<Value *>                                mConsumedItemCount;
+    Vec<Value *>                                mInitialConsumedItemCount;
 
-    PartitionJumpPhiOutMap                      mPartitionProducedItemCountAtJumpExit;
-    PartitionJumpPhiOutMap                      mPartitionConsumedItemCountAtJumpExit;
+    PartitionPhiNodeTable                       mPartitionProducedItemCountPhi;
+    PartitionPhiNodeTable                       mPartitionConsumedItemCountPhi;
+    PartitionPhiNodeTable                       mPartitionTerminationSignalPhi;
+    Vec<PHINode *>                              mPartitionPipelineProgressPhi;
+
 
 
     // kernel state
@@ -671,7 +677,7 @@ protected:
     InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
 
     Vec<Value *>                                mInitiallyProducedItemCount; // *before* entering the kernel
-    OutputPortVec<Value *>                      mInitiallyProducedDeferredItemCount;
+    Vec<Value *>                                mInitiallyProducedDeferredItemCount;
     OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
     OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
     OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
@@ -741,6 +747,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , LastCall(P.LastCall)
 , FirstScalar(P.FirstScalar)
 , LastScalar(P.LastScalar)
+, PartitionCount(P.PartitionCount)
 
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
@@ -749,7 +756,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , KernelPartitionId(std::move(P.KernelPartitionId))
 , MinimumNumOfStrides(std::move(P.MinimumNumOfStrides))
 , MaximumNumOfStrides(std::move(P.MaximumNumOfStrides))
-, PartitionCount(P.PartitionCount)
+
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))
 , mAddGraph(std::move(P.mAddGraph))
@@ -766,9 +773,14 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mOutputPortSet(constructOutputPortMappings())
 
 , mScalarValue(LastScalar + 1)
-, mConsumedItemCount(LastStreamSet + 1)
+, mInitialConsumedItemCount(LastStreamSet + 1)
 
 , mOriginalBaseAddress(LastStreamSet + 1)
+
+, mPartitionProducedItemCountPhi(extents[PartitionCount][LastStreamSet - FirstStreamSet + 1])
+, mPartitionConsumedItemCountPhi(extents[PartitionCount][LastStreamSet - FirstStreamSet + 1])
+, mPartitionTerminationSignalPhi(extents[PartitionCount][PartitionCount])
+, mPartitionPipelineProgressPhi(PartitionCount)
 
 , mInitiallyProcessedItemCount(this)
 , mInitiallyProcessedDeferredItemCount(this)
@@ -789,9 +801,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mUpdatedProcessedDeferredPhi(this)
 , mFullyProcessedItemCount(this)
 
-
 , mInitiallyProducedItemCount(LastStreamSet + 1)
-, mInitiallyProducedDeferredItemCount(this)
+, mInitiallyProducedDeferredItemCount(LastStreamSet + 1)
+
 , mAlreadyProducedPhi(this)
 , mAlreadyProducedDelayedPhi(this)
 , mAlreadyProducedDeferredPhi(this)

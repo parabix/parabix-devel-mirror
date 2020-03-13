@@ -111,7 +111,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     if (mIsPartitionRoot) {
         mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", mNextPartitionEntryPoint);
         mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", mNextPartitionEntryPoint);
-        mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", mNextPartitionEntryPoint);
+        // mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", mNextPartitionEntryPoint);
 
         SmallVector<char, 256> tmp;
         raw_svector_ostream nm(tmp);
@@ -421,9 +421,9 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
         mAlreadyProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProduced");
         assert (mInitiallyProducedItemCount[streamSet]);
         mAlreadyProducedPhi(port)->addIncoming(mInitiallyProducedItemCount[streamSet], mKernelEntry);
-        if (mInitiallyProducedDeferredItemCount(port)) {
+        if (mInitiallyProducedDeferredItemCount[streamSet]) {
             mAlreadyProducedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProducedDeferred");
-            mAlreadyProducedDeferredPhi(port)->addIncoming(mInitiallyProducedDeferredItemCount(port), mKernelEntry);
+            mAlreadyProducedDeferredPhi(port)->addIncoming(mInitiallyProducedDeferredItemCount[streamSet], mKernelEntry);
         }
     }
     const auto prefix = makeKernelName(mKernelId);

@@ -227,7 +227,7 @@ void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
         #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProducedDeferredItemCount(mKernelId, outputPort) = deferred;
+            mInitiallyProducedDeferredItemCount[streamSet] = deferred;
         }
     }
 }
@@ -409,7 +409,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
             Value * needsCopy = nullptr;
             Constant * const underflow = b->getSize(bn.LookBehind);
             if (LLVM_UNLIKELY(buffer->isLinear())) {
-                Value * const consumed = mConsumedItemCount[streamSet];
+                Value * const consumed = mInitialConsumedItemCount[streamSet];
                 needsCopy = b->CreateICmpUGT(consumed, underflow);
             } else {
                 Value * const produced = mAlreadyProducedPhi(br.Port);
@@ -573,7 +573,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 //        source = b->CreatePointerCast(source, int8PtrTy);
         const auto streamSet = getOutputBufferVertex(outputPort);
         source = b->CreatePointerCast(mOriginalBaseAddress[streamSet], int8PtrTy);
-        Value * offset = b->CreateMul(mConsumedItemCount[streamSet], bytesPerSteam);
+        Value * offset = b->CreateMul(mInitialConsumedItemCount[streamSet], bytesPerSteam);
         source = b->CreateGEP(source, offset);
         target = buffer->getMallocAddress(b);
     } else {
@@ -617,7 +617,7 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
         const StreamSetBuffer * const buffer = bn.Buffer;
         if (buffer->isLinear()) {
             Value * const produced = mInitiallyProducedItemCount[streamSet];
-            Value * const consumed = mConsumedItemCount[streamSet];
+            Value * const consumed = mInitialConsumedItemCount[streamSet];
             #ifdef PRINT_DEBUG_MESSAGES
             const BufferRateData & br = mBufferGraph[e];
             const auto prefix = makeBufferName(mKernelId, br.Port);

@@ -90,7 +90,7 @@ LengthConstraintGraph PipelineAnalysis::identifyLengthEqualityAssertions(BufferG
     return H;
 }
 
-#if 1
+#if 0
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeParitionDataFlowRates
@@ -543,10 +543,6 @@ void PipelineAnalysis::computeDataFlowRates() {
         MinimumNumOfStrides[kernel] = r[LowerBound];
         MaximumNumOfStrides[kernel] = r[UpperBound];
     }
-
-
-
-
 
 }
 

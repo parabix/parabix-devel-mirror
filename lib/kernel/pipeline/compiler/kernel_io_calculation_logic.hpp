@@ -102,8 +102,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         ensureSufficientOutputSpace(b, output.Port);
     }
 
-    b->CallPrintInt("mNumOfLinearStridesPhi", mNumOfLinearStridesPhi);
-
     if (mLoopsBackToEntry) {
         mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, mNumOfLinearStridesPhi);
     } else {
@@ -610,7 +608,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
     }
     const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
-    Value * const consumed = mConsumedItemCount[streamSet]; assert (consumed);
+    Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
     Value * const required = mLinearOutputItemsPhi(outputPort);
     ConstantInt * overflow = nullptr;
     if (bn.CopyBack || bn.Add) {
@@ -668,7 +666,7 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPo
     const BufferNode & bn = mBufferGraph[streamSet];
     const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
-    Value * const consumed = mConsumedItemCount[streamSet]; assert (consumed);
+    Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         const Binding & output = getOutputBinding(outputPort);
         Value * const sanityCheck = b->CreateICmpULE(consumed, produced);

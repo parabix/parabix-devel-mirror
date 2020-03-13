@@ -71,7 +71,7 @@ Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b,
     // it's consumers has a non-Fixed rate that does not have a matching BlockSize
     // attribute.
 
-    const Binding & output = getOutputBinding(port);
+    const Binding & output = getOutputBinding(kernel, port);
     if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
         const auto & D = output.findAttribute(AttrId::Delayed);
         Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));

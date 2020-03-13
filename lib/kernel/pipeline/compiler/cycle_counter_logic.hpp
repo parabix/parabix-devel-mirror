@@ -1355,7 +1355,7 @@ void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
             const StreamSetPort port(PortType::Output, i);
             const auto streamSet = getOutputBufferVertex(port);
             current[i] = mInitiallyProducedItemCount[streamSet];
-            prior[i] = mConsumedItemCount[streamSet];
+            prior[i] = mInitialConsumedItemCount[streamSet];
         }
         recordItemCountDeltas(b, current, prior, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }

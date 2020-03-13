@@ -2321,9 +2321,12 @@ void PipelineAnalysis::addPartitionJumpConstraintsToRelationshipGraph() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::makePartitionJumpTree() {
     mPartitionJumpTree = PartitionJumpTree(PartitionCount);
-    for (auto i = 0U; i < (PartitionCount - 1); ++i) {
+    for (auto i = 0U; i < (PartitionCount - 1); ++i) {        
         add_edge(i, mPartitionJumpIndex[i], mPartitionJumpTree);
     }
+//    for (auto i = 1U; i < (PartitionCount - 1); ++i) {
+//        add_edge(i, (i + 1U), mPartitionJumpTree);
+//    }
 }
 
 } // end of namespace kernel
