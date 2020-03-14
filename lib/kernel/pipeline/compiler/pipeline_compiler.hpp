@@ -59,6 +59,8 @@ const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
 
 const static std::string ITEM_COUNT_READ_GUARD_SUFFIX = ".LRG";
 const static std::string NEXT_LOGICAL_SEGMENT_SUFFIX = ".NSN";
+
+
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";
@@ -73,6 +75,8 @@ const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
+
+const static std::string FULLY_PRODUCED_ITEM_COUNT_SUFFIX = ".FPC";
 
 const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
@@ -170,7 +174,7 @@ private:
 
 public:
 
-    void addInternalKernelProperties(BuilderRef b, const unsigned kernelIndex);
+    void addInternalKernelProperties(BuilderRef b, const unsigned kernelId);
     void generateSingleThreadKernelMethod(BuilderRef b);
     void generateMultiThreadKernelMethod(BuilderRef b);
 
@@ -221,10 +225,12 @@ public:
 
     void readProcessedItemCounts(BuilderRef b);
     void readProducedItemCounts(BuilderRef b);
+    void readLocallyAvailableItemCounts(BuilderRef b);
 
     void initializeKernelLoopEntryPhis(BuilderRef b);
     void initializeKernelCheckOutputSpacePhis(BuilderRef b);
     void initializeKernelTerminatedPhis(BuilderRef b);
+    void initializeJumpToNextUsefulPartitionPhis(BuilderRef b);
     void initializeKernelInsufficientIOExitPhis(BuilderRef b);
     void initializeKernelLoopExitPhis(BuilderRef b);
     void initializeKernelExitPhis(BuilderRef b);
@@ -390,7 +396,7 @@ public:
     void recordUnconsumedItemCounts(BuilderRef b) const;
     void printUnconsumedItemCounts(BuilderRef b) const;
 
-    void addItemCountDeltaProperties(BuilderRef b, unsigned kernel, const StringRef suffix) const;
+    void addItemCountDeltaProperties(BuilderRef b, const unsigned kernel, const StringRef suffix) const;
 
     void recordItemCountDeltas(BuilderRef b, const Vec<Value *> & current, const Vec<Value *> & prior, const StringRef suffix) const;
 
@@ -399,7 +405,7 @@ public:
 // internal optimization passes
 
     void simplifyPhiNodes(Module * const m) const;
-    void replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock *& from, BasicBlock * const exit);
+    void replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock *& toReplace, BasicBlock * const phiContainer);
 
 // buffer management analysis functions
 
@@ -420,9 +426,7 @@ public:
     };
 
     void acquireSynchronizationLock(BuilderRef b, const LockType lockType, const CycleCounter start);
-    void releaseSynchronizationLock(BuilderRef b, const LockType lockType);
-    void verifySynchronizationLock(BuilderRef b, const LockType lockType);
-
+    void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId, const LockType lockType);
 
 // family functions
 
@@ -483,9 +487,8 @@ public:
 
     const Binding & getBinding(const StreamSetPort port) const;
 
-    LLVM_READNONE unsigned getBufferIndex(const unsigned bufferVertex) const;
-
     void clearInternalStateForCurrentKernel();
+    void initializeKernelAssertions(BuilderRef b);
 
 protected:
 
@@ -563,6 +566,7 @@ protected:
     BasicBlock *                                mKernelInsufficientInput = nullptr;
     BasicBlock *                                mKernelInsufficientInputExit = nullptr;
     BasicBlock *                                mKernelJumpToNextUsefulPartition = nullptr;
+    PHINode *                                   mExhaustedInputAtJumpPhi = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
     BasicBlock *                                mKernelLoopExitPhiCatch = nullptr;
     BasicBlock *                                mKernelExit = nullptr;
@@ -572,8 +576,8 @@ protected:
     Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
     Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
-    Vec<Value *, 128>                           mLocallyAvailableItems;
-    Vec<Value *>                                mScalarValue;
+    FixedVector<Value *>                        mLocallyAvailableItems;
+    FixedVector<Value *>                        mScalarValue;
 
     Vec<Value *>                                mOriginalBaseAddress;
 
@@ -635,7 +639,6 @@ protected:
     Value *                                     mTerminatedExplicitly = nullptr;
     Value *                                     mBranchToLoopExit = nullptr;
 
-    Value *                                     mKernelAssertionName = nullptr;
 
     bool                                        mMayHaveNonLinearIO = false;
     bool                                        mIsBounded = false;
@@ -699,9 +702,11 @@ protected:
     std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
 
     // debug state
-    Value *                                     mThreadId;
-    Value *                                     mDebugFileName;
-    Value *                                     mDebugFdPtr;
+    Value *                                     mThreadId = nullptr;
+    Value *                                     mDebugFileName = nullptr;
+    Value *                                     mDebugFdPtr = nullptr;
+    Value *                                     mCurrentKernelName = nullptr;
+    FixedVector<Value *>                        mKernelName;
 
     // misc.
 
@@ -771,8 +776,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())
-
-, mScalarValue(LastScalar + 1)
+, mLocallyAvailableItems(FirstStreamSet, LastStreamSet, mAllocator)
+, mScalarValue(FirstKernel, LastScalar, mAllocator)
 , mInitialConsumedItemCount(LastStreamSet + 1)
 
 , mOriginalBaseAddress(LastStreamSet + 1)
@@ -820,6 +825,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mUpdatedProducedPhi(this)
 , mUpdatedProducedDeferredPhi(this)
 , mFullyProducedItemCount(this)
+
+, mKernelName(FirstKernel, LastKernel, mAllocator)
 
 , mInternalKernels(std::move(P.mInternalKernels))
 , mInternalBindings(std::move(P.mInternalBindings))
@@ -873,28 +880,6 @@ LLVM_READNONE inline unsigned getItemWidth(const Type * ty ) {
     }
     return cast<IntegerType>(ty->getVectorElementType())->getBitWidth();
 }
-
-#ifndef NDEBUG
-static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const bool allowNull = true) {
-    if (value == nullptr) {
-        return allowNull;
-    }
-    if (LLVM_UNLIKELY(&b->getContext() != &value->getContext())) {
-        return false;
-    }
-    if (isa<Constant>(value)) {
-        return true;
-    }
-    const Function * const builderFunction = b->GetInsertBlock()->getParent();
-    const Function * function = builderFunction;
-    if (isa<Argument>(value)) {
-        function = cast<Argument>(value)->getParent();
-    } else if (isa<Instruction>(value)) {
-        function = cast<Instruction>(value)->getParent()->getParent();
-    }
-    return (builderFunction == function);
-}
-#endif
 
 } // end of namespace
 

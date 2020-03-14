@@ -19,10 +19,7 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
         }
         mKernelHandle = handle;
     }
-    SmallVector<char, 256> tmp;
-    raw_svector_ostream out(tmp);
-    out << mKernelId << "." << mKernel->getName();
-    mKernelAssertionName = b->GetString(out.str());
+    mCurrentKernelName = mKernelName[mKernelId];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -54,9 +51,14 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
         const StreamSetPort port{PortType::Output, i};
         Value * produced = mUpdatedProducedPhi(port);
         Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mTerminatedAtLoopExitPhi);
+        if (fullyProduced != produced) {
+            const auto prefix = makeBufferName(mKernelId, port);
+            b->setScalarField(prefix + FULLY_PRODUCED_ITEM_COUNT_SUFFIX, fullyProduced);
+        }
         mFullyProducedItemCount(port)->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
     }
 }
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeFullyProducedItemCounts
@@ -79,20 +81,6 @@ Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b,
         produced = b->CreateSelect(terminated, produced, delayed);
     }
     return truncateBlockSize(b, output, produced, terminationSignal);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getTotalItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort inputPort) const {
-    return mLocallyAvailableItems[getBufferIndex(getInputBufferVertex(inputPort))];
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getTotalItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort outputPort, Value * const available) {
-    mLocallyAvailableItems[getBufferIndex(getOutputBufferVertex(outputPort))] = available;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -119,7 +107,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const StreamSetPort in
         const Binding & binding = getInputBinding(inputPort);
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
                         "%s.%s: look ahead exceeds item count",
-                        mKernelAssertionName,
+                        mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
     Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
@@ -417,15 +405,6 @@ inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort po
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getOutputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getBufferIndex(const unsigned bufferVertex) const {
-    assert (bufferVertex >= FirstStreamSet);
-    assert (bufferVertex <= LastStreamSet);
-    return bufferVertex - FirstStreamSet;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief reset
  ** ------------------------------------------------------------------------------------------------------------- */
 template <typename Vec>
@@ -455,6 +434,19 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     const auto numOfInputs = in_degree(mKernelId, mBufferGraph);
     reset(mAccessibleInputItems, numOfInputs);
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeKernelAssertions
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::initializeKernelAssertions(BuilderRef b) {
+    SmallVector<char, 256> tmp;
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        raw_svector_ostream out(tmp);
+        out << kernel << "." << getKernel(kernel)->getName();
+        mKernelName[kernel] = b->GetString(out.str());
+        tmp.clear();
+    }
 }
 
 }

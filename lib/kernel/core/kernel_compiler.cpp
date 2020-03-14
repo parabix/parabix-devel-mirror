@@ -736,7 +736,6 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 std::vector<Value *> KernelCompiler::storeDoSegmentState() const {
 
-
     const auto numOfInputs = getNumOfStreamInputs();
     const auto numOfOutputs = getNumOfStreamOutputs();
 
@@ -929,18 +928,20 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
         if (LLVM_UNLIKELY(!i.second)) {
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
-            out << "Kernel " << getName() << " contains two scalar fields named " << bindingName;
+            out << "Kernel " << getName() << " contains two scalar or alias fields named " << bindingName;
             report_fatal_error(out.str());
         }
-        Type * const actualType = scalar->getType()->getPointerElementType();
-        if (LLVM_UNLIKELY(actualType != expectedType)) {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "Scalar " << getName() << '.' << bindingName << " was expected to be a ";
-            expectedType->print(out);
-            out << " but was stored as a ";
-            actualType->print(out);
-            report_fatal_error(out.str());
+        if (expectedType) {
+            Type * const actualType = scalar->getType()->getPointerElementType();
+            if (LLVM_UNLIKELY(actualType != expectedType)) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << "Scalar " << getName() << '.' << bindingName << " was expected to be a ";
+                expectedType->print(out);
+                out << " but was stored as a ";
+                actualType->print(out);
+                report_fatal_error(out.str());
+            }
         }
     };
 
@@ -1028,7 +1029,24 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
     }
     assert (mSharedHandle == nullptr || sharedIndex == sharedCount);
     assert (mThreadLocalHandle == nullptr || threadLocalIndex == threadLocalCount);
+
+    // finally add any aliases
+    for (const auto & alias : mScalarAliasMap) {
+        const auto f = mScalarFieldMap.find(alias.second);
+        if (f != mScalarFieldMap.end()) {
+            addToScalarFieldMap(alias.first, f->second, nullptr);
+        }
+    }
+
 }
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addAlias
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelCompiler::addAlias(llvm::StringRef alias, llvm::StringRef scalarName) {
+    mScalarAliasMap.emplace_back(alias, scalarName);
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeBindingMap
@@ -1204,21 +1222,12 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
     for (const auto & buffer : mStreamSetOutputBuffers) {
         buffer->setHandle(nullptr);
     }
-    // remove any unused scalars
-    for (const auto & field : mScalarFieldMap) {
-        Value * const scalar = field.getValue();
-        if (scalar->hasNUses(0) && isa<Instruction>(scalar)) {
-            cast<Instruction>(scalar)->eraseFromParent();
-        }
-    }
+
     // Attempt to promote all of the allocas in the entry block into PHI nodes
     SmallVector<AllocaInst *, 32> allocas;
     Instruction * inst = mEntryPoint->getFirstNonPHIOrDbgOrLifetime();
-    while (inst) {
-        AllocaInst * const A = dyn_cast<AllocaInst>(inst);
-        if (A == nullptr) {
-            break;
-        }
+    while (inst && isa<AllocaInst>(inst)) {
+        AllocaInst * const A = cast<AllocaInst>(inst);
         if (isAllocaPromotable(A)) {
             allocas.push_back(A);
         }
@@ -1229,6 +1238,7 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
         DominatorTree dt(*mCurrentMethod);
         PromoteMemToReg(allocas, dt);
     }
+
     mScalarFieldMap.clear();
 
     mSharedHandle = nullptr;

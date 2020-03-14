@@ -29,7 +29,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         updateProcessedAndProducedItemCounts(b);
         writeUpdatedItemCounts(b, ItemCountSource::ComputedAtKernelCall);
         writeTerminationSignal(b, mIsFinalInvocationPhi);
-        releaseSynchronizationLock(b, LockType::ItemCheck);
+        releaseSynchronizationLock(b, mKernelId, LockType::ItemCheck);
     }
 
     const auto args = buildKernelCallArgumentList(b);
@@ -235,7 +235,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                     b->CreateAssert(isDeferredOrFinal,
                                     "%s.%s: deferred processed item count (%" PRIu64 ") "
                                     "exceeds non-deferred (%" PRIu64 ")",
-                                    mKernelAssertionName,
+                                    mCurrentKernelName,
                                     b->GetString(input.getName()),
                                     deferred, processed);
                 }
@@ -284,7 +284,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                     b->CreateAssert(isDeferredOrFinal,
                                     "%s.%s: deferred processed item count (%" PRIu64 ") "
                                     "exceeds non-deferred (%" PRIu64 ")",
-                                    mKernelAssertionName,
+                                    mCurrentKernelName,
                                     b->GetString(output.getName()),
                                     deferred, produced);
                 }

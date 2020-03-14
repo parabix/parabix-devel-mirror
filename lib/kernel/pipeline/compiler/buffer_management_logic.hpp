@@ -33,7 +33,7 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
             //}
         } else {
             mTarget->addNonPersistentScalar(handleType, handleName);
-            mTarget->addInternalScalar(buffer->getPointerType(), handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
+            mTarget->addInternalScalar(buffer->getPointerType(), handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS, index);
         }
     }
 }
@@ -230,6 +230,37 @@ void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
             mInitiallyProducedDeferredItemCount[streamSet] = deferred;
         }
     }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readLocallyAvailableItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readLocallyAvailableItemCounts(BuilderRef b) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = source(e, mBufferGraph);
+        const auto output = in_edge(streamSet, mBufferGraph);
+        const auto producer = source(output, mBufferGraph);
+        if (KernelPartitionId[producer] < mCurrentPartitionId) {
+            const BufferRateData & br = mBufferGraph[output];
+            const auto prefix = makeBufferName(producer, br.Port);
+            Value * itemCount = b->getScalarField(prefix + FULLY_PRODUCED_ITEM_COUNT_SUFFIX);
+            mLocallyAvailableItems[streamSet] = itemCount;
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getTotalItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort inputPort) const {
+    return mLocallyAvailableItems[getInputBufferVertex(inputPort)];
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getTotalItemCount
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort outputPort, Value * const available) {
+    mLocallyAvailableItems[getOutputBufferVertex(outputPort)] = available;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -650,7 +681,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     Value * const baseAddress = buffer->getBaseAddress(b);
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         b->CreateAssert(baseAddress, "%s.%s: baseAddress cannot be null",
-                        mKernelAssertionName,
+                        mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
     Value * address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);

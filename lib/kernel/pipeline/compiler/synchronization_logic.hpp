@@ -60,10 +60,9 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const LockType l
         const auto suffix = getLockName();
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + suffix);
 
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        debugPrint(b, "* waiting " + prefix + suffix + " = %" PRIu64 " (PTR) %" PRIu64, mSegNo, waitingOnPtr);
-//        debugPrint(b, "* init " + prefix + suffix + " = %" PRIu64, b->CreateLoad(waitingOnPtr));
-//        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + suffix + " waiting for %" PRIu64 ", initially %" PRIu64, mSegNo, b->CreateLoad(waitingOnPtr));
+        #endif
 
         BasicBlock * const nextNode = b->GetInsertBlock()->getNextNode();
         BasicBlock * const acquired = b->CreateBasicBlock(prefix + "_acquired" + suffix, nextNode);
@@ -87,7 +86,7 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const LockType l
                     break;
             }
             out << " is %" PRIu64 " but was expected to be [0,%" PRIu64 "]";
-            b->CreateAssert(pendingOrReady, out.str(), mKernelAssertionName, currentSegNo, mSegNo);
+            b->CreateAssert(pendingOrReady, out.str(), mCurrentKernelName, currentSegNo, mSegNo);
         }
         Value * const ready = b->CreateICmpEQ(mSegNo, currentSegNo);
         b->CreateLikelyCondBr(ready, acquired, acquire);
@@ -102,10 +101,10 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const LockType l
  *
  * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const LockType lockType) {
+void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned kernelId, const LockType lockType) {
     if (mNumOfThreads > 1 || ExternallySynchronized) {
         Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
-        const auto prefix = makeKernelName(mKernelId);
+        const auto prefix = makeKernelName(kernelId);
 
         auto getLockName = [&]() -> const std::string & {
             switch (lockType) {
@@ -116,10 +115,16 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const LockType l
         };
 
         const auto suffix = getLockName();
-
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + suffix);
+        Value * currentSegNo = nullptr;
         if (LLVM_UNLIKELY(mCheckAssertions)) {
-            Value * const currentSegNo = b->CreateAtomicLoadAcquire(waitingOnPtr);
+            currentSegNo = b->CreateLoad(waitingOnPtr);
+        }
+        b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + suffix + " released %" PRIu64, mSegNo);
+        #endif
+        if (LLVM_UNLIKELY(mCheckAssertions)) {
             Value * const unchanged = b->CreateICmpEQ(mSegNo, currentSegNo);
 
             SmallVector<char, 256> tmp;
@@ -134,55 +139,10 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const LockType l
                     break;
             }
             out << " is %" PRIu64 " but was expected to be %" PRIu64;
-            b->CreateAssert(unchanged, out.str(), mKernelAssertionName, currentSegNo, mSegNo);
-        }
-        b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        debugPrint(b, "* released " + prefix + suffix + " %" PRIu64 " (PTR) %" PRIu64, nextSegNo, waitingOnPtr);
-//        #endif
-    }
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief verifySynchronizationLock
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::verifySynchronizationLock(BuilderRef b, const LockType lockType) {
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        if (mNumOfThreads > 1 || ExternallySynchronized) {
-            const auto waitingOn = makeKernelName(mKernelId);
-
-            auto getLockName = [&]() -> const std::string & {
-                switch (lockType) {
-                    case LockType::ItemCheck: return ITEM_COUNT_READ_GUARD_SUFFIX;
-                    case LockType::Segment: return LOGICAL_SEGMENT_SUFFIX;
-                }
-                llvm_unreachable("unknown lock type!");
-            };
-
-            const auto suffix = getLockName();
-            Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + suffix);
-            Value * const currentSegNo = b->CreateAtomicLoadAcquire(waitingOnPtr);
-
-            Value * const writtenOrPassed = b->CreateICmpUGT(currentSegNo, mSegNo);
-
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "%s: ";
-            switch (lockType) {
-                case LockType::ItemCheck:
-                    out << "item check guard";
-                    break;
-                case LockType::Segment:
-                    out << "logical segment number";
-                    break;
-            }
-            out << " is %" PRIu64 " but was expected to be greater than %" PRIu64;
-            b->CreateAssert(writtenOrPassed, out.str(), mKernelAssertionName, currentSegNo, mSegNo);
+            b->CreateAssert(unchanged, out.str(), mKernelName[kernelId], currentSegNo, mSegNo);
         }
     }
 }
-
 
 }
 

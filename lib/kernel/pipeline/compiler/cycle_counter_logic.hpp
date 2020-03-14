@@ -27,20 +27,20 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
         IntegerType * const int64Ty = b->getInt64Ty();
 
         // total # of segments processed by kernel
-        mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_SEGMENT_COUNT_SUFFIX);
+        mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_SEGMENT_COUNT_SUFFIX, kernel);
 
         // # of blocked I/O channel attempts in which no strides
         // were possible (i.e., blocked on first iteration)
         const auto numOfInputs = numOfStreamInputs(kernel);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
-            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX);
+            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX, kernel);
         }
         const auto numOfOutputs = numOfStreamOutputs(kernel);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             // TODO: ignore dynamic buffers
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
-            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX);
+            mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX, kernel);
         }
     }
 
@@ -58,12 +58,12 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
         const auto numOfInputs = numOfStreamInputs(kernel);
         for (unsigned i = 0; i < numOfInputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
-            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
+            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX, kernel);
         }
         const auto numOfOutputs = numOfStreamOutputs(kernel);
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
-            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
+            mTarget->addInternalScalar(historyTy, prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX, kernel);
         }
 
     }
@@ -1424,7 +1424,7 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addItemCountDeltaProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, unsigned kernel, const StringRef suffix) const {
+void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, const unsigned kernel, const StringRef suffix) const {
     const auto n = out_degree(kernel, mBufferGraph);
     if (LLVM_UNLIKELY(n == 0)) {
         return;
@@ -1436,7 +1436,7 @@ void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, unsigned kernel
     StructType * const logChunkTy = StructType::get(C, { logTy, voidPtrTy } );
     PointerType * const traceTy = logChunkTy->getPointerTo();
     const auto fieldName = (makeKernelName(kernel) + suffix).str();
-    mTarget->addInternalScalar(traceTy, fieldName);
+    mTarget->addInternalScalar(traceTy, fieldName, kernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

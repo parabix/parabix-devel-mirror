@@ -11,7 +11,70 @@ using Vec = SmallVector<T, n>;
 using Allocator = SlabAllocator<>;
 
 template <typename T>
+struct FixedVector {
+    FixedVector(const size_t First, const size_t Last, Allocator & A)
+    : mArray(A.allocate<T>(Last - First + 1U) - First)
+    #ifndef NDEBUG
+    , mFirst(First)
+    , mLast(Last)
+    #endif
+    {
+        reset(First, Last);
+    }
+
+    T operator[](const size_t index) const {
+        assert ("index exceeds allocated bounds!" && index >= mFirst && index <= mLast);
+        return mArray[index];
+    }
+
+
+    T & operator[](const size_t index) {
+        assert ("index exceeds allocated bounds!" && index >= mFirst && index <= mLast);
+        return mArray[index];
+    }
+
+    void reset(const size_t First, const size_t Last) {
+        assert ("invalid range!" && First <= Last);
+        assert ("range exceeds allocated bounds!" && mFirst <= First && mLast >= Last);
+        std::fill_n(mArray + First, (Last - First) + 1U, T{});
+    }
+
+private:
+    T * const mArray;
+    #ifndef NDEBUG
+    const size_t mFirst;
+    const size_t mLast;
+    #endif
+};
+
+template <typename T>
 using OwningVec = std::vector<std::unique_ptr<T>>;
+
+#ifndef NDEBUG
+static bool isFromCurrentFunction(BuilderRef b, const Value * const value, const bool allowNull = true) {
+    if (value == nullptr) {
+        return allowNull;
+    }
+    BasicBlock * const ip = b->GetInsertBlock();
+    assert (ip);
+    if (isa<Constant>(value)) {
+        return true;
+    }
+    const Function * const builderFunction = ip->getParent();
+    assert (builderFunction);
+    const Function * function = builderFunction;
+    if (isa<Argument>(value)) {
+        function = cast<Argument>(value)->getParent();
+    } else if (isa<Instruction>(value)) {
+        function = cast<Instruction>(value)->getParent()->getParent();
+    }
+    assert (function);
+    if (LLVM_UNLIKELY(&b->getContext() != &value->getContext())) {
+        return false;
+    }
+    return (builderFunction == function);
+}
+#endif
 
 class PipelineCommonGraphFunctions {
 public:

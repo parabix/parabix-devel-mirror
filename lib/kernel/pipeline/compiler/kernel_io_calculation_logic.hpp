@@ -103,9 +103,9 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     }
 
     if (mLoopsBackToEntry) {
-        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, mNumOfLinearStridesPhi);
+        mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, mNumOfInputStrides);
     } else {
-        mUpdatedNumOfStrides = mNumOfLinearStridesPhi;
+        mUpdatedNumOfStrides = mNumOfInputStrides;
     }
 
     // When tracing blocking I/O, test all I/O streams but do not execute the
@@ -380,9 +380,15 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
             // use the termination state set at the exit of the partition root.
             mKernelIsPenultimate = b->CreateIsNotNull(getCurrentPartitionTerminationSignal());
         }
+
         ConstantInt * const sz_ZERO = b->getSize(0);
         Value * const noMoreStrides = b->CreateICmpEQ(mNumOfInputStrides, sz_ZERO);
         mKernelIsFinal = b->CreateAnd(mKernelIsPenultimate, noMoreStrides);
+        Value * const hasMoreStrides = b->CreateICmpNE(mNumOfInputStrides, sz_ZERO);
+        mKernelIsPenultimate = b->CreateAnd(mKernelIsPenultimate, hasMoreStrides);
+
+        b->CallPrintInt("mKernelIsPenultimate", mKernelIsPenultimate);
+        b->CallPrintInt("mKernelIsFinal", mKernelIsFinal);
     }
 
 }
@@ -418,7 +424,7 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
 
                 if (first) {
                     BasicBlock * const nextTest = b->CreateBasicBlock("", mKernelLoopExit);
-                    enoughInputPhi->addIncoming(mKernelIsPenultimate, b->GetInsertBlock());
+                    enoughInputPhi->addIncoming(b->getFalse(), b->GetInsertBlock());
                     // We expect that this will always fail in a normal segment; don't bother creating a branch
                     // for the remaining checks.
                     b->CreateUnlikelyCondBr(hasEnough, nextTest, lastTestExit);
@@ -433,7 +439,7 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
         b->CreateBr(lastTestExit);
 
         b->SetInsertPoint(lastTestExit);
-        return enoughInputPhi;
+        return b->CreateOr(mKernelIsPenultimate, enoughInputPhi);
     } else {
         Value * const hasMoreStrides = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
         return b->CreateAnd(hasMoreStrides, b->CreateNot(mKernelIsFinal));
@@ -575,18 +581,18 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
         debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
     }
     #endif
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        const Binding & inputBinding = rateData.Binding;
-        Value * sanityCheck = b->CreateICmpULE(processed, available);
-        if (mIsInputZeroExtended(mKernelId, inputPort)) {
-            sanityCheck = b->CreateOr(mIsInputZeroExtended(mKernelId, inputPort), sanityCheck);
-        }
-        b->CreateAssert(sanityCheck,
-                        "%s.%s: processed count (%" PRIu64 ") exceeds total count (%" PRIu64 ")",
-                        mKernelAssertionName,
-                        b->GetString(inputBinding.getName()),
-                        processed, available);
-    }
+//    if (LLVM_UNLIKELY(mCheckAssertions)) {
+//        const Binding & inputBinding = rateData.Binding;
+//        Value * sanityCheck = b->CreateICmpULE(processed, available);
+//        if (mIsInputZeroExtended(mKernelId, inputPort)) {
+//            sanityCheck = b->CreateOr(mIsInputZeroExtended(mKernelId, inputPort), sanityCheck);
+//        }
+//        b->CreateAssert(sanityCheck,
+//                        "%s.%s: processed count (%" PRIu64 ") exceeds total count (%" PRIu64 ")",
+//                        mCurrentKernelName,
+//                        b->GetString(inputBinding.getName()),
+//                        processed, available);
+//    }
     // cache the values for later use
     if (useOverflow) {
         A[WITH_OVERFLOW] = accessible;
@@ -672,7 +678,7 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPo
         Value * const sanityCheck = b->CreateICmpULE(consumed, produced);
         b->CreateAssert(sanityCheck,
                         "%s.%s: consumed count (%" PRIu64 ") exceeds produced count (%" PRIu64 ")",
-                        mKernelAssertionName,
+                        mCurrentKernelName,
                         b->GetString(output.getName()),
                         consumed, produced);
     }
@@ -1038,7 +1044,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const size_t kern
             const auto & binding = getBinding(port);
             b->CreateAssert(b->CreateICmpNE(offset, ZERO),
                             "%s.%s: partial sum offset must be non-zero",
-                            mKernelAssertionName,
+                            mCurrentKernelName,
                             b->GetString(binding.getName()));
         }
         Constant * const ONE = b->getSize(1);
@@ -1068,7 +1074,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const size_t kern
         b->CreateAssert(b->CreateICmpULE(prior, current),
                         "%s.%s: partial sum is not non-decreasing "
                         "(prior %" PRIu64 " > current %" PRIu64 ")",
-                        mKernelAssertionName,
+                        mCurrentKernelName,
                         b->GetString(binding.getName()),
                         prior, current);
     }
@@ -1171,11 +1177,11 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
         Value * const inputName = b->GetString(input.getName());
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(numOfStrides, STEP), hasEnough),
                         "%s.%s: attempting to read invalid popcount entry",
-                        mKernelAssertionName, inputName);
+                        mCurrentKernelName, inputName);
         b->CreateAssert(b->CreateICmpULE(initialItemCount, requiredItems),
                         "%s.%s: partial sum is not non-decreasing "
                         "(prior %" PRIu64 " > current %" PRIu64 ")",
-                        mKernelAssertionName, inputName,
+                        mCurrentKernelName, inputName,
                         initialItemCount, requiredItems);
     }
 
@@ -1206,7 +1212,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
         const Binding & binding = getInputBinding(ref);
         b->CreateAssert(b->CreateICmpNE(finalNumOfStrides, MAX_INT),
                         "%s.%s: attempting to use sentinal popcount entry",
-                        mKernelAssertionName,
+                        mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
     return finalNumOfStrides;

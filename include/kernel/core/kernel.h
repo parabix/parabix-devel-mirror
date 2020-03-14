@@ -129,8 +129,6 @@ public:
 
     using InternalScalars = std::vector<InternalScalar>;
 
-    using ScalarValueMap = llvm::StringMap<llvm::Value *>;
-
     enum class PortType { Input, Output };
 
     struct StreamSetPort {

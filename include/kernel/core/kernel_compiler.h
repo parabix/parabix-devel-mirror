@@ -23,6 +23,8 @@ public:
 
     using ScalarValueMap = llvm::StringMap<llvm::Value *>;
 
+    using ScalarAliasMap = std::vector<std::pair<std::string, std::string>>;
+
     using ScalarType = Kernel::ScalarType;
 
     using InternalScalar = Kernel::InternalScalar;
@@ -339,6 +341,10 @@ private:
 
 protected:
 
+    void addAlias(llvm::StringRef alias, llvm::StringRef scalarName);
+
+protected:
+
     // In threaded mode, the PipelineCompiler generates a DoSegment block that instantiates
     // a set of thread functions. When compiling the DoSegmentThread functions, the I/O
     // arguments must refer to the argments of the DoSegmentThread function but we want to
@@ -426,6 +432,7 @@ protected:
     Vec<llvm::Value *>              mConsumedOutputItems;
 
     ScalarValueMap                  mScalarFieldMap;
+    ScalarAliasMap                  mScalarAliasMap;
     BindingMap                      mBindingMap;
 
     OwnedStreamSetBuffers           mStreamSetInputBuffers;

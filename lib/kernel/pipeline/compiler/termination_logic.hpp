@@ -10,7 +10,7 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_t kernel) {
     const auto id = KernelPartitionId[kernel];
-    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(id));
+    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(id), kernel);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -24,6 +24,12 @@ Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel,
         assert (kernel != PipelineOutput);
         const auto partitionId = KernelPartitionId[kernel];
         Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
+
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << "TERM " << partitionId << ":" << kernel << "   (" << signal->getName() << ")";
+        b->CallPrintInt(out.str(), signal);
+
         if (normally) {
             Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
             return b->CreateICmpEQ(signal, completed);

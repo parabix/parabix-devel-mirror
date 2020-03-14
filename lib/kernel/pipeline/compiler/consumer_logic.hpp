@@ -30,7 +30,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
             countTy = ArrayType::get(sizeTy, numOfIndependentConsumers + 1);
         }
         if (LLVM_LIKELY(bn.isOwned() || bn.isInternal())) {
-            mTarget->addInternalScalar(countTy, name);
+            mTarget->addInternalScalar(countTy, name, producer);
         } else {
             mTarget->addNonPersistentScalar(countTy, name);
         }
@@ -204,7 +204,7 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
         b->CreateAssert(b->CreateICmpULE(prior, consumed),
                         "%s.%s: consumed item count is not monotonically nondecreasing "
                         "(prior %" PRIu64 " > current %" PRIu64 ")",
-                        mKernelAssertionName,
+                        mCurrentKernelName,
                         b->GetString(output.getName()),
                         prior, consumed);
     }
