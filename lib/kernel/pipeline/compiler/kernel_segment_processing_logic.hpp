@@ -272,10 +272,20 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     if (mIsPartitionRoot) {
         mNumOfPartitionStrides = mTotalNumOfStridesAtExitPhi;
         setCurrentPartitionTerminationSignal(mTerminatedAtExitPhi);
+        mPartitionRootTerminationSignal = b->CreateIsNotNull(mTerminatedAtExitPhi);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mTotalNumOfStridesAtExitPhi);
         debugPrint(b, "* " + prefix + ".partitionTerminationOnExit = %" PRIu8, mTerminatedAtExitPhi);
         #endif
+    } else if (LLVM_UNLIKELY(mCheckAssertions)) {
+        const auto msg =
+            "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
+            "after %s was terminated.";
+        Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+        Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
+        b->CreateAssert(valid, msg,
+            mCurrentKernelName, b->getSize(mCurrentPartitionId),
+            mKernelName[mPartitionRootKernelId]);
     }
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -352,14 +362,10 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
         mTerminatedSignalPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
 
-        b->CallPrintInt("mKernelIsFinal", mKernelIsFinal);
-
         b->CreateLikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
 
-    } else if (mLoopsBackToEntry) {
-        Value * const notFinal = b->CreateAnd(loopAgain, b->CreateNot(mKernelIsFinal));
-        b->CreateCondBr(notFinal, mKernelLoopEntry, mKernelLoopExit);
-
+    } else if (mLoopsBackToEntry) {    
+        b->CreateCondBr(loopAgain, mKernelLoopEntry, mKernelLoopExit);
     } else { // just exit the loop
         b->CreateBr(mKernelLoopExit);
     }

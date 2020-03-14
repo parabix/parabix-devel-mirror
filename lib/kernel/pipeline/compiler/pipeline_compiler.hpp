@@ -323,7 +323,7 @@ public:
     Value * isClosed(BuilderRef b, const unsigned streamSet) const;
     Value * isClosedNormally(BuilderRef b, const StreamSetPort inputPort) const;
     Value * initiallyTerminated(BuilderRef b);
-    Value * readTerminationSignal(BuilderRef b);
+    Value * readTerminationSignal(BuilderRef b, const unsigned kernelId);
     void writeTerminationSignal(BuilderRef b, Value * const signal);
     Value * hasPipelineTerminated(BuilderRef b) const;
     void signalAbnormalTermination(BuilderRef b);
@@ -586,6 +586,7 @@ protected:
     unsigned                                    mCurrentPartitionId = 0;
     unsigned                                    mPartitionRootKernelId = 0;
     Value *                                     mNumOfPartitionStrides = nullptr;
+    Value *                                     mPartitionRootTerminationSignal = nullptr;
     BasicBlock *                                mNextPartitionEntryPoint;
 
     Value *                                     mKernelIsPenultimate = nullptr;

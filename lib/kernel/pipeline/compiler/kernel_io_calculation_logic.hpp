@@ -441,8 +441,9 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
         b->SetInsertPoint(lastTestExit);
         return b->CreateOr(mKernelIsPenultimate, enoughInputPhi);
     } else {
-        Value * const hasMoreStrides = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
-        return b->CreateAnd(hasMoreStrides, b->CreateNot(mKernelIsFinal));
+        Value * hasMoreStrides = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
+        hasMoreStrides = b->CreateAnd(hasMoreStrides, b->CreateNot(mKernelIsFinal));
+        return b->CreateOr(mKernelIsPenultimate, hasMoreStrides);
     }
 
 

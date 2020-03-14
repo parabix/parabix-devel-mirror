@@ -140,7 +140,7 @@ Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inp
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
     if (mIsPartitionRoot) {
-        Value * const signal = readTerminationSignal(b);        
+        Value * const signal = readTerminationSignal(b, KernelPartitionId[mKernelId]);
         mTerminatedInitially = signal; assert (signal);
         setCurrentPartitionTerminationSignal(signal);
         return hasKernelTerminated(b, mKernelId);
@@ -151,9 +151,8 @@ inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initiallyTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b) {
-    const auto id = KernelPartitionId[mKernelId];
-    const auto name = TERMINATION_PREFIX + std::to_string(id);
+inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b, const unsigned partitionId) {
+    const auto name = TERMINATION_PREFIX + std::to_string(partitionId);
     Value * const ptr = b->getScalarFieldPtr(name);
     return b->CreateLoad(ptr, true, name);
 }

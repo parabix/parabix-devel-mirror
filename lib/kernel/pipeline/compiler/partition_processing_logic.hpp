@@ -285,7 +285,7 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
         if (partitionId <= mCurrentPartitionId) {
             term = mPartitionTerminationSignal[partitionId];
         } else {
-            term = getTerminationSignal(b, TerminationSignal::None);
+            term = readTerminationSignal(b, partitionId);
         }
         termPhi->addIncoming(term, exitBlock);
     }
@@ -302,16 +302,6 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
 void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
-
-    // If a kernel is initially terminated, then all kernels it could jump over must also be terminated.
-
-    const auto nextPartitionId = mPartitionJumpIndex[mCurrentPartitionId];
-    for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
-        if (KernelPartitionId[kernel] > nextPartitionId) {
-            break;
-        }
-
-    }
     BasicBlock * const exitBlock = b->GetInsertBlock();
     mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
     b->CreateBr(mKernelJumpToNextUsefulPartition);
