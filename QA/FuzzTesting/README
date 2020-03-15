@@ -1,7 +1,0 @@
-This folder contains all the things needed to run AFL (American Fuzzy Lop: http://lcamtuf.coredump.cx/afl/) on icgrep. This will run thousands of fuzzed input on icgrep in an attempt to make icgrep crash thus reveiling a bug.
-This folder contains the compiler that icgrep needs to use for AFL to work, some test input files for AFL to use as seeds for fuzzing, as well as scripts for running AFL in background.
-
-
-The scripts in the "Scripts" folder start, stop, and process output from AFL fuzzy tester.
-Jenkins needs to run these scripts since they exit with a return value of 0 regardless if errors happened. Thus not failing the jenkins build in case some minor errors (ex: folder already exists).
-Place these files inside ~/workspace/icgrep-build-afl-fuzz folder.
