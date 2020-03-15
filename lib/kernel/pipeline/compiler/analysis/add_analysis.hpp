@@ -8,24 +8,24 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeAddGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::makeAddGraph() {
+void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
     // TODO: this should generate formulas to take roundup into account
 
     // TODO: this doesn't handle fixed I/O rate conversions correctly. E.g., 2 input items to 3 output items.
-
-    mAddGraph = AddGraph(LastStreamSet + 1);
 
     for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
         int minAddK = 0;
         if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
             bool noPrincipal = true;
-
+            minAddK = std::numeric_limits<int>::max();
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                const auto buffer = source(e, mBufferGraph);
-                const BufferRateData & br = mBufferGraph[e];
+                const auto streamSet = source(e, mBufferGraph);
+                const BufferNode & bn = mBufferGraph[streamSet];
+
+                BufferRateData & br = mBufferGraph[e];
                 const Binding & input = br.Binding;
 
-                int k = mAddGraph[buffer];
+                int k = bn.Add;
                 bool isPrincipal = false;
                 for (const Attribute & attr : input.getAttributes()) {
                     switch (attr.getKind()) {
@@ -41,39 +41,34 @@ void PipelineAnalysis::makeAddGraph() {
                         default: break;
                     }
                 }
+                minAddK = std::min(minAddK, k);
                 if (LLVM_UNLIKELY(isPrincipal)) {
                     minAddK = k;
                     noPrincipal = false;
+                    break;
                 }
-
-                add_edge(buffer, i, k, mAddGraph);
+                br.Add = k;
             }
 
             if (LLVM_LIKELY(noPrincipal)) {
-                minAddK = std::numeric_limits<int>::max();
-                for (const auto e : make_iterator_range(in_edges(i, mAddGraph))) {
-                    const int k = mAddGraph[e];
-                    minAddK = std::min(minAddK, k);
-                }
-                for (const auto e : make_iterator_range(in_edges(i, mAddGraph))) {
-                    mAddGraph[e] -= minAddK;
+                for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                    BufferRateData & br = mBufferGraph[e];
+                    br.Add -= minAddK;
                 }
             } else {
-                for (const auto e : make_iterator_range(in_edges(i, mAddGraph))) {
-                    mAddGraph[e] = 0;
+                for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                    BufferRateData & br = mBufferGraph[e];
+                    br.Add = 0;
                 }
             }
-
         }
 
-        mAddGraph[i] = minAddK;
 
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const auto buffer = target(e, mBufferGraph);
-            const BufferRateData & br = mBufferGraph[e];
+            BufferRateData & br = mBufferGraph[e];
             const Binding & output = br.Binding;
 
-            int k = minAddK;
+            auto k = minAddK;
             for (const Attribute & attr : output.getAttributes()) {
                 switch (attr.getKind()) {
                     case AttrId::Add:
@@ -85,48 +80,41 @@ void PipelineAnalysis::makeAddGraph() {
                     default: break;
                 }
             }
+            br.Add = k;
 
-
-            mAddGraph[buffer] = k;
-            add_edge(i, buffer, k, mAddGraph);
+            const auto streamSet = target(e, mBufferGraph);
+            BufferNode & bn = mBufferGraph[streamSet];
+            bn.Add = k;
         }
     }
 
-    #if 0
-    auto & out = errs();
-    out << "digraph AddGraph {\n";
-    for (const auto v : make_iterator_range(vertices(mAddGraph))) {
-        out << "v" << v << " [label=\"" << v << " (" << (int)mAddGraph[v] << ")\"];\n";
-    }
-    for (const auto e : make_iterator_range(edges(mAddGraph))) {
-        const auto s = source(e, mAddGraph);
-        const auto t = target(e, mAddGraph);
+    // Scan through the I/O for each kernel to see if some transitive
+    // add relationship imposes an overflow requirement on a buffer
 
-        graph_traits<BufferGraph>::edge_descriptor f;
-        bool found;
-        std::tie(f, found) = edge(s, t, mBufferGraph); assert (found);
-        const BufferRateData & br = mBufferGraph[f];
 
-        out << "v" << s << " -> v" << t << " [label=\"";
-        if (br.Port.Type == PortType::Input) {
-            out << "I";
-        } else {
-            out << "O";
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        int maxK = 0;
+        for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const BufferRateData & rate = mBufferGraph[e];
+            maxK = std::max(maxK, rate.Add);
         }
-        out << br.Port.Number;
-
-        const int k = mAddGraph[e];
-        if (k > 0) {
-            out << " +" << k;
-        } else if (k < 0) {
-            out << " " << k;
+        for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const BufferRateData & rate = mBufferGraph[e];
+            maxK = std::max(maxK, rate.Add);
         }
-        out << "\"];\n";
+        for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto streamSet = source(e, mBufferGraph);
+            BufferNode & bn = mBufferGraph[streamSet];
+            bn.Add = std::max<unsigned>(bn.Add, maxK);
+        }
+        for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const auto streamSet = target(e, mBufferGraph);
+            BufferNode & bn = mBufferGraph[streamSet];
+            bn.Add = std::max<unsigned>(bn.Add, maxK);
+        }
     }
 
-    out << "}\n\n";
-    out.flush();
-    #endif
+
 
 }
 

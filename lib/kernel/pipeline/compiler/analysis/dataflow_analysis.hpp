@@ -1010,11 +1010,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 return f->second.get();
             };
 
-            graph_traits<AddGraph>::in_edge_iterator ai, ai_end;
-            std::tie(ai, ai_end) = in_edges(kernel, mAddGraph);
-
-            auto insertAddId = [&] (BitSet & S, const AddGraph::edge_descriptor a) {
-                const auto k = mAddGraph[a];
+            auto insertAddId = [&] (BitSet & S, const int k) {
                 if (k) {
                     unsigned id;
                     const auto f = addId.find(k);
@@ -1062,17 +1058,10 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 if (data.ZeroExtended) {
                     addRateId(S, nextRateId++);
                 }
-                assert (ai != ai_end);
-                insertAddId(S, *ai);
-                ai++;
+                insertAddId(S, data.Add);
                 combine(K, S);
             }
-            assert (ai == ai_end);
-
             addId.clear();
-
-            graph_traits<AddGraph>::out_edge_iterator aj, aj_end;
-            std::tie(aj, aj_end) = out_edges(kernel, mAddGraph);
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const BufferRateData & data = mBufferGraph[output];
@@ -1099,11 +1088,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     }
                     relativeRefId.emplace(data.Port, S);
                 }
-                assert (aj != aj_end);
-                insertAddId(S, *aj);
-                aj++;
+                insertAddId(S, data.Add);
             }
-            assert (aj == aj_end);
             relativeRefId.clear();
         }
         start = end;

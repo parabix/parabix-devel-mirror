@@ -311,8 +311,6 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
         loopAgain = hasMoreInput(b);
 
-        b->CallPrintInt("loopAgain", loopAgain);
-
         BasicBlock * const entryBlock = b->GetInsertBlock();
 
         for (unsigned i = 0; i < numOfInputs; ++i) {

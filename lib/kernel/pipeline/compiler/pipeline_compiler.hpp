@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -20,7 +20,7 @@
 
 // #define DISABLE_OUTPUT_ZEROING
 
-#define FORCE_PIPELINE_ASSERTIONS
+// #define FORCE_PIPELINE_ASSERTIONS
 
 // TODO: create a preallocation phase for source kernels to add capacity suggestions
 
@@ -529,7 +529,6 @@ protected:
 
     const RelationshipGraph                     mStreamGraph;
     const RelationshipGraph                     mScalarGraph;
-    const AddGraph                              mAddGraph;
     const InputTruncationGraph                  mInputTruncationGraph;
     const BufferGraph                           mBufferGraph;
     const PartitioningGraph                     mPartitioningGraph;
@@ -765,7 +764,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))
-, mAddGraph(std::move(P.mAddGraph))
 , mInputTruncationGraph(std::move(P.mInputTruncationGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
 , mPartitioningGraph(std::move(P.mPartitioningGraph))

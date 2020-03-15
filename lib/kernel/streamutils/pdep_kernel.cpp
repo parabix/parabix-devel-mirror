@@ -81,9 +81,6 @@ void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * con
         Constant * const streamIndex = ConstantInt::get(streamBase->getType(), i);
         Value * const streamOffset = b->CreateAdd(streamBase, streamIndex);
         pendingData[i] = b->loadInputStreamBlock("source", streamOffset, ZERO);
-
-
-        b->CallPrintRegister("pendingData" + std::to_string(i), pendingData[i]);
     }
 
     b->CreateBr(expandLoop);
@@ -102,9 +99,6 @@ void StreamExpandKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * con
     }
 
     Value * deposit_mask = b->loadInputStreamBlock("marker", ZERO, blockNoPhi);
-
-    b->CallPrintRegister("deposit_mask", deposit_mask);
-
     Value * nextBlk = b->CreateAdd(blockNoPhi, b->getSize(1));
     Value * moreToDo = b->CreateICmpNE(nextBlk, numOfBlocks);
     if (mOptimization == StreamExpandOptimization::NullCheck) {
@@ -255,9 +249,6 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
         PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
         blockOffsetPhi->addIncoming(ZERO, entry);
 
-        kb->CallPrintInt("blockOffsetPhi", blockOffsetPhi);
-
-
         SmallVector<Value *, 16> mask(fieldsPerBlock);
         //  When operating on fields individually, we can use vector load/store with
         //  extract/insert element operations, or we can use individual field load
@@ -276,7 +267,6 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
 #else
 
         Value * depositMask = kb->fwCast(fieldWidth, kb->loadInputStreamBlock("depositMask", ZERO, blockOffsetPhi));
-        kb->CallPrintRegister("depositMask", depositMask);
         for (unsigned i = 0; i < fieldsPerBlock; i++) {
             mask[i] = kb->CreateExtractElement(depositMask, kb->getInt32(i));
         }
@@ -287,7 +277,6 @@ void PDEPFieldDepositLogic(BuilderRef kb, llvm::Value * const numOfBlocks, unsig
             inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
 #else
             Value * const input = kb->loadInputStreamBlock("inputStreamSet", kb->getInt32(j), blockOffsetPhi);
-            kb->CallPrintRegister("input" + std::to_string(j), input);
             Value * inputStrm = kb->fwCast(fieldWidth, input);
 #endif
 #ifdef PREFER_FIELD_STORES_OVER_INSERT_ELEMENT

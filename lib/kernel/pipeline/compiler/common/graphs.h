@@ -50,6 +50,10 @@ struct StreamSetInputPort {
     : Number(port.Number) {
         assert (port.Type == Type);
     }
+    explicit StreamSetInputPort(const StreamSetInputPort & port)
+    : Number(port.Number) {
+
+    }
     static constexpr PortType Type = PortType::Input;
     unsigned Number = 0;
 };
@@ -58,11 +62,15 @@ struct StreamSetOutputPort {
     operator StreamSetPort() const noexcept {
         return StreamSetPort{Type, Number};
     }
+    StreamSetOutputPort() = default;
     explicit StreamSetOutputPort(const StreamSetPort port)
     : Number(port.Number) {
         assert (port.Type == Type);
     }
-    StreamSetOutputPort() = default;
+    explicit StreamSetOutputPort(const StreamSetOutputPort & port)
+    : Number(port.Number) {
+
+    }    
     static constexpr PortType Type = PortType::Output;
     unsigned Number = 0;
 };
@@ -292,8 +300,9 @@ struct BufferRateData {
     Rational Minimum;
     Rational Maximum;
     bool ZeroExtended = false;
-    unsigned LocalPortId = 0;
-    unsigned GlobalPortId = 0;
+    unsigned LocalPortId = 0U;
+    unsigned GlobalPortId = 0U;
+    int Add = 0;
 
     bool operator < (const BufferRateData & rn) const {
         if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {
@@ -413,8 +422,6 @@ bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
-
-using AddGraph = adjacency_list<vecS, vecS, bidirectionalS, int, int>;
 
 struct InputTruncation {
     StreamSetInputPort  Port;

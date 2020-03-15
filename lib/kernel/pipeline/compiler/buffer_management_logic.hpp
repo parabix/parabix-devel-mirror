@@ -626,9 +626,6 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         std::swap(target, source);
     }
 
-    b->CallPrintInt("target", target);
-    b->CallPrintInt("source", source);
-
     b->CreateMemCpy(target, source, bytesToCopy, blockWidth / 8);
 
     updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);

@@ -271,7 +271,9 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (bn.LookAhead) {
             out << "|LA:" << bn.LookAhead;
         }
-
+        if (bn.Add) {
+            out << "|+" << bn.Add;
+        }
         out << "}}\"];\n";
 
     };
@@ -404,9 +406,12 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 break;
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
-        out << " {" << pd.LocalPortId << "}";
+        out << " {" << pd.GlobalPortId << "}";
         if (binding.hasAttribute(AttrId::Principal)) {
             out << " [P]";
+        }
+        if (pd.Add) {
+            out << " +" << pd.Add;
         }
         if (binding.hasAttribute(AttrId::ZeroExtended)) {
             if (pd.ZeroExtended) {

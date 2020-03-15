@@ -10,7 +10,7 @@
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
-#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 namespace kernel {
 
@@ -50,7 +50,7 @@ public:
 
         }
 
-        P.makeAddGraph();
+        P.annotateBufferGraphWithAddAttributes();
 
         // Finish annotating the buffer graph       
         P.identifyLocalPortIds();
@@ -131,8 +131,6 @@ private:
     void identifyLinearBuffers();
     void identifyLocalPortIds();
 
-    void printBufferGraph(raw_ostream & out) const;
-
     // consumer analysis functions
 
     void makeConsumerGraph();
@@ -153,7 +151,7 @@ private:
 
     // add(k) analysis functions
 
-    void makeAddGraph();
+    void annotateBufferGraphWithAddAttributes();
 
     // IO analysis functions
 
@@ -163,6 +161,9 @@ private:
 
     void makeInputTruncationGraph();
 
+    // Debug functions
+
+    void printBufferGraph(raw_ostream & out) const;
 
 private:
 
@@ -209,7 +210,6 @@ public:
     ConsumerGraph                   mConsumerGraph;
 
     TerminationGraph                mTerminationGraph;    
-    AddGraph                        mAddGraph;
     InputTruncationGraph            mInputTruncationGraph;
     IOCheckGraph                    mIOCheckGraph;
 

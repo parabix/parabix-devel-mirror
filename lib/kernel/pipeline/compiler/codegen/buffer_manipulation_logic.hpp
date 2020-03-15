@@ -368,28 +368,16 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
         const auto prefix = makeBufferName(mKernelId, port);
         Value * const produced = mFinalProducedPhi(port);
-
-        b->CallPrintInt(prefix + "_zf_produced", produced);
-
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
         Value * packIndex = nullptr;
         Value * maskOffset = b->CreateAnd(produced, BLOCK_MASK);
-
-        b->CallPrintInt(prefix + "_zf_maskOffset", maskOffset);
-
         if (itemWidth > 1) {
             Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
             packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
-
-        b->CallPrintInt(prefix + "_zf_blockIndex", blockIndex);
-
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-
-        b->CallPrintRegister(prefix + "_zf_mask", mask);
-
         BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelInsufficientInput);
         BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelInsufficientInput);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
@@ -404,25 +392,13 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
         streamIndex->addIncoming(ZERO, entry);
         Value * ptr = nullptr;
-
-        b->CallPrintInt(prefix + "_zf_streamIndex", streamIndex);
-
         if (itemWidth > 1) {
             ptr = buffer->getStreamPackPtr(b, baseAddress, streamIndex, blockIndex, packIndex);
         } else {
             ptr = buffer->getStreamBlockPtr(b, baseAddress, streamIndex, blockIndex);
         }
-
-        b->CallPrintInt(prefix + "_zf_ptr", ptr);
-
         Value * const value = b->CreateBlockAlignedLoad(ptr);
-
-        b->CallPrintRegister(prefix + "_zf_value", value);
-
         Value * const maskedValue = b->CreateAnd(value, mask);
-
-        b->CallPrintRegister(prefix + "_zf_maskedValue", maskedValue);
-
         b->CreateBlockAlignedStore(maskedValue, ptr);
 
         DataLayout DL(b->getModule());

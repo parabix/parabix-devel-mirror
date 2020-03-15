@@ -259,8 +259,6 @@ inline void BlockKernelCompiler::writeFinalBlockMethod(BuilderRef b, Value * rem
     auto ip = b->saveIP();
     Vec<Value *> availableItemCount;
 
-    b->CallPrintInt("remainingItems", remainingItems);
-
     if (!b->supportsIndirectBr()) {
         std::vector<Type *> params;
         params.reserve(2 + mAccessibleInputItems.size());

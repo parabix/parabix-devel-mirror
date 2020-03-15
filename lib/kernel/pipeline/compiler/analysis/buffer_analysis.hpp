@@ -92,30 +92,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         }
     }
 
-    // Scan through the I/O for each kernel to see if some transitive
-    // add relationship imposes an overflow requirement on a buffer
-
-    SmallVector<int, 64> transitiveAdd(LastStreamSet - FirstStreamSet + 1, 0);
-
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
-        int maxK = 0;
-        for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
-            maxK = std::max(maxK, mAddGraph[e]);
-        }
-        for (const auto e : make_iterator_range(out_edges(kernel, mAddGraph))) {
-            maxK = std::max(maxK, mAddGraph[e]);
-        }
-        for (const auto e : make_iterator_range(in_edges(kernel, mAddGraph))) {
-            const auto streamSet = source(e, mAddGraph) - FirstStreamSet;
-            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], maxK);
-        }
-        for (const auto e : make_iterator_range(out_edges(kernel, mAddGraph))) {
-            const auto streamSet = target(e, mAddGraph) - FirstStreamSet;
-            transitiveAdd[streamSet] = std::max(transitiveAdd[streamSet], maxK);
-        }
-    }
-
-
     const auto blockWidth = b->getBitBlockWidth();
 
     // then construct the rest
@@ -138,7 +114,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 break;
             }
         }
-
 
         if (LLVM_LIKELY(bn.Buffer == nullptr)) { // is internal buffer
 
@@ -237,9 +212,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
 
             auto reqOverflow = std::max(copyBack, lookAhead);
-            const auto add = transitiveAdd[streamSet - FirstStreamSet];
-            if (add > 0) {
-                bn.Add = add;
+            if (bn.Add > 0) {
                 reqOverflow = std::max(reqOverflow, bn.Add);
             }
 
@@ -262,7 +235,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             bn.CopyBack = copyBack;
             bn.LookAhead = lookAhead;
 
-
             Type * const baseType = output.getType();
 
             #ifdef PERMIT_THREAD_LOCAL_BUFFERS
@@ -281,9 +253,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
             }
             bn.Buffer = buffer;
-            mInternalBuffers.emplace_back(buffer);
         }
         bn.NonLocal = nonLocal;
+        mInternalBuffers.emplace_back(bn.Buffer);
     }
 
     verifyIOStructure();
@@ -612,10 +584,15 @@ void PipelineAnalysis::identifyLinearBuffers() {
             return false;
         };
 
+        const auto producer = source(binding, mBufferGraph);
+        const auto partitionId = KernelPartitionId[producer];
+
         bool mustBeLinear = false;
         if (LLVM_UNLIKELY(requiresLinearAccess(output))) {
             mustBeLinear = true;
         } else {
+            bool samePartition = true;
+
             for (const auto binding : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
                 const BufferRateData & consumerRate = mBufferGraph[binding];
                 const Binding & input = consumerRate.Binding;
@@ -623,13 +600,17 @@ void PipelineAnalysis::identifyLinearBuffers() {
                     mustBeLinear = true;
                     break;
                 }
+                const auto consumer = target(binding, mBufferGraph);
+                samePartition &= (KernelPartitionId[consumer] == partitionId);
            }
+           mustBeLinear |= samePartition;
         }
         if (LLVM_UNLIKELY(mustBeLinear)) {
             BufferNode & N = mBufferGraph[streamSet];
             N.NonLinear = false;
         }
     }
+
 #if 0
     // Any ImplicitPopCount/RegionSelector inputs must be linear to ensure
     // we can easily access all of the rate information.

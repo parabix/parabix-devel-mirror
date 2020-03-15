@@ -155,6 +155,9 @@ Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Va
     return b->CreateInBoundsGEP(blockPtr, positionInBlock);
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addOverflow
+ ** ------------------------------------------------------------------------------------------------------------- */
 Value * StreamSetBuffer::addOverflow(BuilderPtr b, Value * const bufferCapacity, Value * const overflowItems, Value * const consumedOffset) const {
     if (overflowItems) {
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
@@ -320,7 +323,7 @@ Value * InternalBuffer::getRawItemPointer(BuilderPtr b, Value * const streamInde
     return StreamSetBuffer::getRawItemPointer(b, streamIndex, b->CreateURem(absolutePosition, getCapacity(b)));
 }
 
-Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * overflowItems) const {
+Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * const overflowItems) const {
     if (mLinear) {
         return b->CreateSub(totalItems, fromPosition);
     } else {
@@ -333,11 +336,14 @@ Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const f
     }
 }
 
-Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const consumedItems, Value * overflowItems) const {
+Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const consumedItems, Value * const overflowItems) const {
     Value * const capacity = getCapacity(b);
+    ConstantInt * const ZERO = b->getSize(0);
     if (LLVM_UNLIKELY(mLinear)) {
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
-        return b->CreateSub(capacityWithOverflow, fromPosition);
+        Value * const full = b->CreateICmpUGE(fromPosition, capacityWithOverflow);
+        Value * const remaining = b->CreateSub(capacityWithOverflow, fromPosition);
+        return b->CreateSelect(full, ZERO, remaining);
     } else {
         Value * const unconsumedItems = b->CreateSub(fromPosition, consumedItems);
         Value * const full = b->CreateICmpUGE(unconsumedItems, capacity);
@@ -347,7 +353,7 @@ Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fro
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, consumedOffset);
         Value * const limit = b->CreateSelect(toEnd, capacityWithOverflow, consumedOffset);
         Value * const remaining = b->CreateSub(limit, fromOffset);
-        return b->CreateSelect(full, b->getSize(0), remaining);
+        return b->CreateSelect(full, ZERO, remaining);
     }
 }
 
@@ -533,15 +539,12 @@ Value * StaticBuffer::getMallocAddress(BuilderPtr b) const {
 
 void StaticBuffer::reserveCapacity(BuilderPtr b, Value * produced, Value * consumed, Value * const required, Constant * const overflowItems) const  {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-
         Value * const writable = getLinearlyWritableItems(b, produced, consumed, overflowItems);
         Value * const canFit = b->CreateICmpULE(required, writable);
-
         b->CreateAssert(canFit,
                         "Static buffer does not have sufficient capacity "
                         "(%" PRId64 ") for required items (%" PRId64 ")",
                         writable, required);
-
     }
 }
 
