@@ -212,11 +212,14 @@ void CPUDriver::generateUncachedKernels() {
     mCachedKernel.reserve(mUncachedKernel.size());
     for (auto & kernel : mUncachedKernel) {
         {
-            NamedRegionTimer T(kernel->getName(),
-                               kernel->getSignature(),
-                               "kernel",
-                               "Kernel Generation",
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+            NamedRegionTimer T(kernel->getSignature(), kernel->getName(),
+                               "kernel", "Kernel Generation",
                                codegen::TimeKernelsIsEnabled);
+#else
+            NamedRegionTimer T(kernel->getName(), "Kernel Generation",
+                               codegen::TimeKernelsIsEnabled);
+#endif
             kernel->generateKernel(mBuilder);
             Module * const module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
