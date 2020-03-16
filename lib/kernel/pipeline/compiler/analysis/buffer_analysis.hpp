@@ -94,6 +94,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
     const auto blockWidth = b->getBitBlockWidth();
 
+    mInternalBuffers.resize(LastStreamSet - FirstStreamSet + 1);
+
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
@@ -106,6 +108,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
         // Does this stream cross a partition boundary?
         const auto producer = source(producerOutput, mBufferGraph);
+        if (producer == PipelineInput) {
+            nonLocal = true;
+        }
         const auto producerPartitionId = KernelPartitionId[producer];
         for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
             const auto consumer = target(ce, mBufferGraph);
@@ -255,7 +260,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             bn.Buffer = buffer;
         }
         bn.NonLocal = nonLocal;
-        mInternalBuffers.emplace_back(bn.Buffer);
+        mInternalBuffers[streamSet - FirstStreamSet].reset(bn.Buffer);
     }
 
     verifyIOStructure();

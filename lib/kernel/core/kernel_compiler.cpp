@@ -53,6 +53,14 @@ void KernelCompiler::generateKernel(BuilderRef b) {
     auto const oc = b->getCompiler();
     b->setCompiler(this);
     constructStreamSetBuffers(b);
+    #ifndef NDEBUG
+    for (const auto & buffer : mStreamSetInputBuffers) {
+        assert ("input buffer not set by constructStreamSetBuffers" && buffer.get());
+    }
+    for (const auto & buffer : mStreamSetOutputBuffers) {
+        assert ("output buffer not set by constructStreamSetBuffers" && buffer.get());
+    }
+    #endif
     addBaseInternalProperties(b);
     mTarget->addInternalProperties(b);
     mTarget->constructStateTypes(b);

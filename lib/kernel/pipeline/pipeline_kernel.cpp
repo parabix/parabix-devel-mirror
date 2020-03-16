@@ -130,13 +130,12 @@ void PipelineKernel::addFamilyInitializationArgTypes(BuilderRef b, InitArgTypes 
             if (LLVM_LIKELY(kernel->isStateful())) {
                 n += 1;
             }
-            if (LLVM_LIKELY(kernel->hasFamilyName())) {
-                const auto k = kernel->allocatesInternalStreamSets() ? 1 : 0;
-                unsigned m = 2 + k;
-                if (LLVM_UNLIKELY(kernel->hasThreadLocal())) {
-                    m = 4 + k;
-                }
-                n += m;
+            if (kernel->hasFamilyName()) {
+                const auto ai = kernel->allocatesInternalStreamSets();
+                const auto k1 = ai ? 3U : 2U;
+                const auto tl = kernel->hasThreadLocal();
+                const auto k2 = tl ? (k1 * 2U) : k1;
+                n += k2;
             }
         }
     }

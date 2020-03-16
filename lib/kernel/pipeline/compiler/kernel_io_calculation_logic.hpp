@@ -65,7 +65,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                 Value * const strides = getNumOfAccessibleStrides(b, br.Port);
                 mNumOfInputStrides = b->CreateUMin(mNumOfInputStrides, strides);
             }
-        }        
+        }
     }
 
     if (mNumOfInputStrides == nullptr) {
@@ -388,6 +388,7 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
         ConstantInt * const sz_ZERO = b->getSize(0);
         Value * const noMoreStrides = b->CreateICmpEQ(mNumOfInputStrides, sz_ZERO);
         mKernelIsFinal = b->CreateAnd(mKernelIsPenultimate, noMoreStrides);
+
         Value * const hasMoreStrides = b->CreateICmpNE(mNumOfInputStrides, sz_ZERO);
         mKernelIsPenultimate = b->CreateAnd(mKernelIsPenultimate, hasMoreStrides);
     }
@@ -515,18 +516,18 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
         debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
     }
     #endif
-//    if (LLVM_UNLIKELY(mCheckAssertions)) {
-//        const Binding & inputBinding = rateData.Binding;
-//        Value * sanityCheck = b->CreateICmpULE(processed, available);
-//        if (mIsInputZeroExtended(mKernelId, inputPort)) {
-//            sanityCheck = b->CreateOr(mIsInputZeroExtended(mKernelId, inputPort), sanityCheck);
-//        }
-//        b->CreateAssert(sanityCheck,
-//                        "%s.%s: processed count (%" PRIu64 ") exceeds total count (%" PRIu64 ")",
-//                        mCurrentKernelName,
-//                        b->GetString(inputBinding.getName()),
-//                        processed, available);
-//    }
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        const Binding & inputBinding = rateData.Binding;
+        Value * sanityCheck = b->CreateICmpULE(processed, available);
+        if (mIsInputZeroExtended(mKernelId, inputPort)) {
+            sanityCheck = b->CreateOr(mIsInputZeroExtended(mKernelId, inputPort), sanityCheck);
+        }
+        b->CreateAssert(sanityCheck,
+                        "%s.%s: processed count (%" PRIu64 ") exceeds total count (%" PRIu64 ")",
+                        mCurrentKernelName,
+                        b->GetString(inputBinding.getName()),
+                        processed, available);
+    }
     // cache the values for later use
     if (useOverflow) {
         A[WITH_OVERFLOW] = accessible;

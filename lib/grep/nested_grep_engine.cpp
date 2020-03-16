@@ -67,9 +67,7 @@ public:
                              Kernel * const outerKernel,
                              const re::PatternVector & patterns,
                              const bool caseInsensitive,
-                             re::CC * const breakCC,
-
-                             const bool requiresInternalSynchronization)
+                             re::CC * const breakCC)
         : PipelineKernel(driver
                          // signature
                          , [&]() -> std::string {
@@ -148,9 +146,7 @@ public:
                          , {}, {}
                          // length assertions
                          , {}) {
-        if (requiresInternalSynchronization) {
-            addAttribute(InternallySynchronized());
-        }
+        addAttribute(InternallySynchronized());
     }
 
     bool hasFamilyName() const override { return true; }
@@ -214,8 +210,7 @@ void NestedInternalSearchEngine::push(const re::PatternVector & patterns) {
                                               mBasisBits, mU8index, mBreaks,
                                               mMatches,
                                               mNested.back(), // outer kernel
-                                              patterns, mCaseInsensitive, mBreakCC,
-                                              mNumOfThreads > 1);
+                                              patterns, mCaseInsensitive, mBreakCC);
     }
 
     mGrepDriver.generateUncachedKernels();

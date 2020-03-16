@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -53,14 +53,13 @@ enum CycleCounter {
   , FINAL
 };
 
-const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
 const static std::string PIPELINE_THREAD_LOCAL_STATE = "PTL";
 const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
 
+
+const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
 const static std::string ITEM_COUNT_READ_GUARD_SUFFIX = ".LRG";
 const static std::string NEXT_LOGICAL_SEGMENT_SUFFIX = ".NSN";
-
-
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";
@@ -420,13 +419,8 @@ public:
 
 // synchronization functions
 
-    enum class LockType {
-        Segment,
-        ItemCheck,
-    };
-
-    void acquireSynchronizationLock(BuilderRef b, const LockType lockType, const CycleCounter start);
-    void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId, const LockType lockType);
+    void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start);
+    void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
 
 // family functions
 
@@ -560,7 +554,7 @@ protected:
     BasicBlock *                                mKernelLoopCall = nullptr;
     BasicBlock *                                mKernelCompletionCheck = nullptr;
     BasicBlock *                                mKernelInitiallyTerminated = nullptr;
-    BasicBlock *                                mKernelInitiallyTerminatedPhiCatch = nullptr;
+    BasicBlock *                                mKernelInitiallyTerminatedExit = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelInsufficientInput = nullptr;
     BasicBlock *                                mKernelInsufficientInputExit = nullptr;
@@ -710,9 +704,9 @@ protected:
 
     // misc.
 
-    const OwningVec<Kernel>                     mInternalKernels;
-    const OwningVec<Binding>                    mInternalBindings;
-    const OwningVec<StreamSetBuffer>            mInternalBuffers;
+    OwningVec<Kernel>                           mInternalKernels;
+    OwningVec<Binding>                          mInternalBindings;
+    OwningVec<StreamSetBuffer>                  mInternalBuffers;
 
 
 };

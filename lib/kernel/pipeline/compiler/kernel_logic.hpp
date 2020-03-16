@@ -430,6 +430,12 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mAnyRemainingInput = nullptr;
     mExhaustedPipelineInputPhi = nullptr;
 
+    mKernelInsufficientInput = nullptr;
+    mKernelInsufficientInputExit = nullptr;
+    mKernelTerminated = nullptr;
+    mKernelInitiallyTerminated = nullptr;
+    mKernelInitiallyTerminatedExit = nullptr;
+
     mMaximumNumOfStrides = nullptr;
 
     assert (mKernelId >= FirstKernel);

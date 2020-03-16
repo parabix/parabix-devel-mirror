@@ -172,10 +172,12 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const BufferRateData & rd = mBufferGraph[e];
         const auto i = rd.Port.Number;
-        const auto b = target(e, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[b];
-        assert (bn.isExternal());
-        mStreamSetInputBuffers[i].reset(bn.Buffer);
+        const auto streamSet = target(e, mBufferGraph);
+        assert (mBufferGraph[streamSet].isExternal());
+        const auto j = streamSet - FirstStreamSet;
+        StreamSetBuffer * const buffer = mInternalBuffers[j].release();
+        assert (buffer == mBufferGraph[streamSet].Buffer);
+        mStreamSetInputBuffers[i].reset(buffer);
     }
 
     mStreamSetOutputBuffers.clear();
@@ -184,10 +186,12 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const BufferRateData & rd = mBufferGraph[e];
         const auto i = rd.Port.Number;
-        const auto b = source(e, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[b];
-        assert (bn.isExternal());
-        mStreamSetOutputBuffers[i].reset(bn.Buffer);
+        const auto streamSet = source(e, mBufferGraph);
+        assert (mBufferGraph[streamSet].isExternal());
+        const auto j = streamSet - FirstStreamSet;
+        StreamSetBuffer * const buffer = mInternalBuffers[j].release();
+        assert (buffer == mBufferGraph[streamSet].Buffer);
+        mStreamSetOutputBuffers[i].reset(buffer);
     }
 
 }

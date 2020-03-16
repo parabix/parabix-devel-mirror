@@ -39,7 +39,7 @@ Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel,
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
 
-    Value * hard = nullptr;
+    Value * hard = mExhaustedInput;
     Value * soft = nullptr;
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);

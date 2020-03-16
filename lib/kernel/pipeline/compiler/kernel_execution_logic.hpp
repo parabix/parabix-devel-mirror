@@ -23,15 +23,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CreateMProtect(mKernelHandle, CBuilder::Protect::NONE);
     }
 
-    Value * releaseLock = nullptr;
-
-    if (mKernelIsInternallySynchronized) {
-        updateProcessedAndProducedItemCounts(b);
-        writeUpdatedItemCounts(b, ItemCountSource::ComputedAtKernelCall);
-        writeTerminationSignal(b, mIsFinalInvocationPhi);
-        releaseSynchronizationLock(b, mKernelId, LockType::ItemCheck);
-    }
-
     const auto args = buildKernelCallArgumentList(b);
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -56,23 +47,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     mTerminatedExplicitly = mKernelCanTerminateEarly ? doSegmentRetVal : nullptr;
 
-    if (mKernelIsInternallySynchronized) {
-
-        BasicBlock * const lastPartialSegment = b->CreateBasicBlock("", mKernelCompletionCheck);
-        BasicBlock * const afterSyncLock = b->CreateBasicBlock("", mKernelCompletionCheck);
-
-        b->CreateCondBr(releaseLock, lastPartialSegment, afterSyncLock);
-
-        b->SetInsertPoint(lastPartialSegment);
-        startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
-        acquireSynchronizationLock(b, LockType::Segment, CycleCounter::BEFORE_SYNCHRONIZATION);
-        b->CreateBr(afterSyncLock);
-
-        b->SetInsertPoint(afterSyncLock);
-    } else {
-        updateProcessedAndProducedItemCounts(b);
-    }
-
+    updateProcessedAndProducedItemCounts(b);
     readReturnedOutputVirtualBaseAddresses(b);
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {

@@ -54,6 +54,7 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
             auto readNextScalar = [&](const StringRef name) {
                 auto ptr = getScalarFieldPtr(b.get(), name); assert (ptr);
                 Value * value = nextArg();
+
                 if (LLVM_UNLIKELY(mCheckAssertions)) {
                     b->CreateAssert(value, "family parameter (%s) was given a null value", b->GetString(name));
                 }

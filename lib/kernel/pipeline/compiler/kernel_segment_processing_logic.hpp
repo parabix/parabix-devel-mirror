@@ -45,6 +45,11 @@ void PipelineCompiler::start(BuilderRef b) {
     Constant * const i1_FALSE = b->getFalse();
     mPipelineProgress = i1_FALSE;
     mExhaustedInput = i1_FALSE;    
+
+
+    Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_SUFFIX);
+    mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
+
     branchToInitialPartition(b);
 }
 
@@ -57,6 +62,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mExhaustedPipelineInputAtExit = mExhaustedInput;
 
+    acquireSynchronizationLock(b, mKernelId, CycleCounter::INITIAL);
+
     mNextPartitionEntryPoint = getPartitionExitPoint(b);
 
     identifyPipelineInputs();
@@ -68,12 +75,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
     /// KERNEL ENTRY
     /// -------------------------------------------------------------------------------------
-
-    Value * const segNoPtr = b->getScalarFieldPtr(prefix + NEXT_LOGICAL_SEGMENT_SUFFIX);
-    mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
-
-    const auto initialLock = mKernelIsInternallySynchronized ? LockType::ItemCheck : LockType::Segment;
-    acquireSynchronizationLock(b, initialLock, CycleCounter::INITIAL);
 
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
     mHasExplicitFinalPartialStride = mKernel->requiresExplicitPartialFinalStride();
@@ -88,14 +89,9 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelCheckOutputSpace = b->CreateBasicBlock(prefix + "_checkOutputSpace", mNextPartitionEntryPoint);
     mKernelLoopCall = b->CreateBasicBlock(prefix + "_executeKernel", mNextPartitionEntryPoint);
     mKernelCompletionCheck = b->CreateBasicBlock(prefix + "_normalCompletionCheck", mNextPartitionEntryPoint);
-    mKernelInsufficientInput = nullptr;
-    mKernelInsufficientInputExit = nullptr;
     if (mIsBounded) {
         mKernelInsufficientInput = b->CreateBasicBlock(prefix + "_insufficientInput", mNextPartitionEntryPoint);
     }
-    mKernelTerminated = nullptr;
-    mKernelInitiallyTerminated = nullptr;
-    mKernelInitiallyTerminatedPhiCatch = nullptr;
     if (mIsPartitionRoot) {
         mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", mNextPartitionEntryPoint);
         mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", mNextPartitionEntryPoint);
@@ -265,10 +261,8 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     recordProducedItemCountDeltas(b);
 
     // chain the progress state so that the next one carries on from this one
-    mExhaustedInput = mExhaustedPipelineInputAtExit;
+    mExhaustedInput = mExhaustedPipelineInputAtExit;   
     mPipelineProgress = mAnyProgressedAtExitPhi;
-
-
     if (mIsPartitionRoot) {
         mNumOfPartitionStrides = mTotalNumOfStridesAtExitPhi;
         setCurrentPartitionTerminationSignal(mTerminatedAtExitPhi);
@@ -291,7 +285,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, "* " + prefix + ".madeProgress = %" PRIu8, mPipelineProgress);
     #endif
-    releaseSynchronizationLock(b, mKernelId, LockType::Segment);
+    releaseSynchronizationLock(b, mKernelId);
     checkForPartitionExit(b);
 }
 
@@ -310,7 +304,6 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     if (mLoopsBackToEntry) {
 
         loopAgain = hasMoreInput(b);
-
         BasicBlock * const entryBlock = b->GetInsertBlock();
 
         for (unsigned i = 0; i < numOfInputs; ++i) {
@@ -359,7 +352,6 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         }
 
         mTerminatedSignalPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
-
         b->CreateLikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
 
     } else if (mLoopsBackToEntry) {    
@@ -717,22 +709,19 @@ void PipelineCompiler::end(BuilderRef b) {
     } else {
 
         terminated = hasPipelineTerminated(b);
-        Value * done = b->CreateIsNotNull(terminated);
+
+        Value * const done = b->CreateIsNotNull(terminated);
 
         if (LLVM_UNLIKELY(mCheckAssertions)) {
             Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
             Value * const live = b->CreateOr(mMadeProgressInLastSegment, progressedOrFinished);
             b->CreateAssert(live, "Dead lock detected: pipeline could not progress after two iterations");
         }
-        if (mExhaustedInput) {
-            done = b->CreateOr(done, mExhaustedInput);
-        }
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mMadeProgressInLastSegment->addIncoming(mPipelineProgress, exitBlock);
         b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
     }
     b->SetInsertPoint(mPipelineEnd);
-
 
     writeExternalConsumedItemCounts(b);
     writeExternalProducedItemCounts(b);

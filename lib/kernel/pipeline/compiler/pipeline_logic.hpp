@@ -71,8 +71,10 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         mHasThreadLocalPipelineState = true;
     }
 
-    auto currentPartitionId = -1U;
+    IntegerType * const sizeTy = b->getSizeTy();
+    mTarget->addInternalScalar(sizeTy, NEXT_LOGICAL_SEGMENT_SUFFIX, 0);
 
+    auto currentPartitionId = -1U;
     addBufferHandlesToPipelineKernel(b, PipelineInput);
     addConsumerKernelProperties(b, PipelineInput);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {        
@@ -100,22 +102,13 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     const Kernel * const kernel = getKernel(kernelId);
     IntegerType * const sizeTy = b->getSizeTy();
 
-    const auto internallySynchronized = kernel->hasAttribute(AttrId::InternallySynchronized);
-
     // TODO: if we've proven we do not need synchronization then we've already proven that
     // we can calculate the item count and num of strides from the input item counts.
     // With the inclusion of InternallySynchronized attributes for PipelineKernels, this is
     // no longer true and the test requires greater precision.
 
-
     const auto name = makeKernelName(kernelId);
-    if (internallySynchronized) {
-        mTarget->addInternalScalar(sizeTy, name + ITEM_COUNT_READ_GUARD_SUFFIX, kernelId);
-        mTarget->addInternalScalar(sizeTy, name + CURRENT_LOGICAL_SEGMENT_NUMBER, kernelId);
-    } else {
-        mTarget->addInternalScalar(sizeTy, name + NEXT_LOGICAL_SEGMENT_SUFFIX, kernelId);
-        mTarget->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX, kernelId);
-    }
+    mTarget->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX, kernelId);
 
     if (LLVM_LIKELY(kernel->isStateful())) {
         PointerType * sharedStateTy = nullptr;
@@ -180,10 +173,6 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         } else {
             addAlias(prefix + FULLY_PRODUCED_ITEM_COUNT_SUFFIX, prefix + ITEM_COUNT_SUFFIX);
         }
-    }
-
-    if (internallySynchronized) {
-        mTarget->addInternalScalar(sizeTy, name + LOGICAL_SEGMENT_SUFFIX, kernelId);
     }
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {

@@ -490,7 +490,7 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
 
         const auto blockWidth = b->getBitBlockWidth();
         assert (is_power_2(blockWidth));
-        assert (lookBehind < (mOverflow * blockWidth));
+        assert (lookBehind <= (mOverflow * blockWidth));
 
         ConstantInt * const BLOCK_WIDTH = b->getSize(blockWidth);
         Constant * const CHUNK_SIZE = ConstantExpr::getSizeOf(mType);
