@@ -43,10 +43,10 @@ void PipelineCompiler::start(BuilderRef b) {
     b->SetInsertPoint(mPipelineLoop);
     mMadeProgressInLastSegment = b->CreatePHI(b->getInt1Ty(), 2, "madeProgressInLastSegment");
     mMadeProgressInLastSegment->addIncoming(b->getTrue(), entryBlock);
+    initializeLocallyAvailableItemCounts(b, entryBlock);
     Constant * const i1_FALSE = b->getFalse();
     mPipelineProgress = i1_FALSE;
     mExhaustedInput = i1_FALSE;
-
 
     Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_SUFFIX);
     mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
@@ -65,11 +65,11 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     acquireSynchronizationLock(b, mKernelId, CycleCounter::INITIAL);
 
-    mNextPartitionEntryPoint = getPartitionExitPoint(b);
-
     identifyPipelineInputs();
 
     checkPartitionEntry(b);
+
+    mNextPartitionEntryPoint = getPartitionExitPoint(b);
 
     const auto prefix = makeKernelName(mKernelId);
 
@@ -96,8 +96,6 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     if (mIsPartitionRoot) {
         mKernelTerminated = b->CreateBasicBlock(prefix + "_terminated", mNextPartitionEntryPoint);
         mKernelInitiallyTerminated = b->CreateBasicBlock(prefix + "_initiallyTerminated", mNextPartitionEntryPoint);
-        // mKernelInitiallyTerminatedPhiCatch = b->CreateBasicBlock(prefix + "_initiallyTerminatedPhiCatch", mNextPartitionEntryPoint);
-
         SmallVector<char, 256> tmp;
         raw_svector_ostream nm(tmp);
         nm << prefix << "_jumpFromPartition_" << mCurrentPartitionId
@@ -113,7 +111,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
 
     readProcessedItemCounts(b);
     readProducedItemCounts(b);
-    readLocallyAvailableItemCounts(b);
+    // readLocallyAvailableItemCounts(b);
     readConsumedItemCounts(b);
     prepareLinearBuffers(b);
 
@@ -272,15 +270,57 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
         debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mTotalNumOfStridesAtExitPhi);
         debugPrint(b, "* " + prefix + ".partitionTerminationOnExit = %" PRIu8, mTerminatedAtExitPhi);
         #endif
-    } else if (LLVM_UNLIKELY(mCheckAssertions)) {
-        const auto msg =
-            "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
-            "after %s was terminated.";
-        Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-        Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
-        b->CreateAssert(valid, msg,
-            mCurrentKernelName, b->getSize(mCurrentPartitionId),
-            mKernelName[mPartitionRootKernelId]);
+
+
+
+
+    }
+
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+
+
+
+        if (mIsPartitionRoot) {
+            Value * anyUnterminated = nullptr;
+            ConstantInt * const ZERO = b->getSize(0);
+            SmallVector<Value *, 8> unterminated;
+            if (mCurrentPartitionId > 0) {
+                Value * const signal = mPartitionTerminationSignal[mCurrentPartitionId - 1];
+                anyUnterminated = b->CreateICmpEQ(signal, ZERO);
+            }
+
+            for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionJumpTree))) {
+                const auto partitionId = source(e, mPartitionJumpTree);
+                Value * const signal = mPartitionTerminationSignal[partitionId];
+                Value * const nonterm = b->CreateICmpEQ(signal, ZERO);
+                if (anyUnterminated) {
+                    anyUnterminated = b->CreateOr(anyUnterminated, nonterm);
+                } else {
+                    anyUnterminated = nonterm;
+                }
+            }
+
+            if (anyUnterminated) {
+                Value * const allTerminated = b->CreateNot(anyUnterminated);
+                Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+                Value * const notTerminatedNormally = b->CreateICmpNE(mTerminatedAtExitPhi, completed);
+                Value * const valid = b->CreateOr(notTerminatedNormally, allTerminated);
+                constexpr auto msg =
+                    "Kernel %s of partition %" PRId64 " was flagged as complete "
+                    " before its source partitions were terminated.";
+                b->CreateAssert(valid, msg,
+                    mCurrentKernelName, b->getSize(mCurrentPartitionId));
+            }
+        } else {
+            constexpr auto msg =
+                "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
+                "after partition root %s was terminated.";
+            Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
+            Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
+            b->CreateAssert(valid, msg,
+                mCurrentKernelName, b->getSize(mCurrentPartitionId),
+                mKernelName[mPartitionRootKernelId]);
+        }
     }
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -720,6 +760,7 @@ void PipelineCompiler::end(BuilderRef b) {
         }
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mMadeProgressInLastSegment->addIncoming(mPipelineProgress, exitBlock);
+        updateLocallyAvailableItemCounts(b, exitBlock);
         b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
     }
     b->SetInsertPoint(mPipelineEnd);

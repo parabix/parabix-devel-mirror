@@ -309,6 +309,8 @@ public:
     Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * const terminationSignal) const;
 
+    void initializeLocallyAvailableItemCounts(BuilderRef b, BasicBlock * const entryBlock);
+    void updateLocallyAvailableItemCounts(BuilderRef b, BasicBlock * const entryBlock);
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
@@ -569,6 +571,7 @@ protected:
     Vec<AllocaInst *, 16>                       mAddressableItemCountPtr;
     Vec<AllocaInst *, 16>                       mVirtualBaseAddressPtr;
     Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
+    FixedVector<PHINode *>                      mInitiallyAvailableItemsPhi;
     FixedVector<Value *>                        mLocallyAvailableItems;
     FixedVector<Value *>                        mScalarValue;
 
@@ -769,6 +772,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , mInputPortSet(constructInputPortMappings())
 , mOutputPortSet(constructOutputPortMappings())
+, mInitiallyAvailableItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
 , mLocallyAvailableItems(FirstStreamSet, LastStreamSet, mAllocator)
 , mScalarValue(FirstKernel, LastScalar, mAllocator)
 , mInitialConsumedItemCount(LastStreamSet + 1)

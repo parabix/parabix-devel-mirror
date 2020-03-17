@@ -183,12 +183,12 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     CHECK_INCLUDE_FILE_CXX(execinfo.h HAS_EXECINFO)
     if (HAS_EXECINFO)
         ###   Import Dependency: DWARF   ###
-#        find_package(LibDwarf) # libelf-dev libdwarf-dev
-#        if (LIBDWARF_FOUND)
-#            include_directories(${LIBDWARF_INCLUDE_DIRS})
-#            link_directories(${LIBDWARF_LIBRARIES})
+        #find_package(LibDwarf) # libelf-dev libdwarf-dev
+        #if (LIBDWARF_FOUND)
+        #    include_directories(${LIBDWARF_INCLUDE_DIRS})
+        #    link_directories(${LIBDWARF_LIBRARIES})
             set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_ASSERTION_TRACE")
-#        endif()
+        #endif()
     endif()
 endif()
 

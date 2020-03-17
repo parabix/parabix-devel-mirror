@@ -26,15 +26,17 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     const auto args = buildKernelCallArgumentList(b);
 
     #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeKernelName(mKernelId);
+    debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
     debugHalt(b);
     #endif
-
 
     startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
     Value * const doSegment = getKernelDoSegmentFunction(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
-        BasicBlock * const invokeOk = b->CreateBasicBlock("", mKernelCompletionCheck);
+        const auto prefix = makeKernelName(mKernelId);
+        BasicBlock * const invokeOk = b->CreateBasicBlock(prefix + "_invokeOk", mKernelCompletionCheck);
         doSegmentRetVal = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
         b->SetInsertPoint(invokeOk);
     } else {
@@ -43,6 +45,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     updateCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);
+    debugPrint(b, "* " + prefix + "_executed = %" PRIu64, mNumOfLinearStridesPhi);
     #endif
 
     mTerminatedExplicitly = mKernelCanTerminateEarly ? doSegmentRetVal : nullptr;
@@ -72,11 +75,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
         args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
     }
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeKernelName(mKernelId);
-    debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
-    #endif
 
     args.push_back(mNumOfLinearStridesPhi);
 
