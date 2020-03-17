@@ -59,6 +59,8 @@ void BlockKernelCompiler::generateMultiBlockLogic(BuilderRef b, Value * const nu
 
     /// GENERATE DO BLOCK METHOD
 
+    b->CallPrintInt(mTarget->getName().str() + ".StrideBlockIndex", mStrideBlockIndex);
+
     writeDoBlockMethod(b);
 
     Value * const nextStrideBlockIndex = b->CreateAdd(mStrideBlockIndex, b->getSize(1));

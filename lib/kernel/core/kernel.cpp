@@ -895,7 +895,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
 
     // allocate any internal stream sets
     if (LLVM_LIKELY(allocatesInternalStreamSets())) {
-        Function * const allocInternal = getAllocateSharedInternalStreamSetsFunction(b, true);
+        Function * const allocInternal = getAllocateSharedInternalStreamSetsFunction(b);
         SmallVector<Value *, 2> allocArgs;
         if (LLVM_LIKELY(isStateful())) {
             allocArgs.push_back(sharedHandle);
@@ -905,7 +905,7 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         allocArgs.push_back(b->getSize(codegen::BufferSegments));
         b->CreateCall(allocInternal, allocArgs);
         if (hasThreadLocal()) {
-            Function * const allocInternal = getAllocateThreadLocalInternalStreamSetsFunction(b, false);
+            Function * const allocInternal = getAllocateThreadLocalInternalStreamSetsFunction(b);
             SmallVector<Value *, 3> allocArgs;
             if (LLVM_LIKELY(isStateful())) {
                 allocArgs.push_back(sharedHandle);

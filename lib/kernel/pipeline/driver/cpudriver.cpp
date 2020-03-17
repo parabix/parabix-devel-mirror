@@ -312,6 +312,90 @@ CPUDriver::~CPUDriver() {
     delete mTarget;
 }
 
+#if 0
+
+class TracePass : public ModulePass {
+public:
+    static char ID;
+    TracePass(kernel::KernelBuilder * kb, StringRef to_trace) : ModulePass(ID), iBuilder(kb), mToTrace(to_trace) { }
+    virtual bool runOnModule(Module &M) override;
+private:
+    kernel::KernelBuilder * const iBuilder;
+    const StringRef mToTrace;
+};
+
+char TracePass::ID = 0;
+
+bool TracePass::runOnModule(Module & M) {
+    Module * const saveModule = iBuilder->getModule();
+    iBuilder->setModule(&M);
+    bool modified = false;
+    const auto includeEverything = M.getName().startswith(mToTrace);
+    const auto blockWidth = iBuilder->getBitBlockWidth();
+
+    for (Function & F : M) {
+        for (BasicBlock & B : F) {
+
+            auto match = [&](const Instruction & inst) {
+                return (includeEverything || inst.getName().startswith(mToTrace));
+            };
+
+            auto print = [&](Instruction & inst, const BasicBlock::iterator ip) {
+                if (isa<AllocaInst>(inst)) {
+                    return false;
+                }
+                if (match(inst)) {
+                    Type * const t = inst.getType();
+                    if (t->isVectorTy()) {
+                        if (cast<VectorType>(t)->getBitWidth() == blockWidth) {
+                            iBuilder->SetInsertPoint(&B, ip);
+                            iBuilder->CallPrintRegister(inst.getName(), &inst);
+                            return true;
+                        }
+                    }
+                    if (isa<IntegerType>(t) || isa<PointerType>(t)) {
+                        if (isa<PointerType>(t) || cast<IntegerType>(t)->getBitWidth() <= 64) {
+                            iBuilder->SetInsertPoint(&B, ip);
+                            iBuilder->CallPrintInt(inst.getName(), &inst);
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            };
+
+            auto i = B.begin();
+            auto ip = i;
+
+            for (; isa<PHINode>(*ip); ++ip);
+
+            for (; isa<PHINode>(*i); ++i) {
+                if (print(*i, ip)) {
+                    ip++;
+                    modified = true;
+                }
+            }
+
+            for (;;) {
+                assert (i != B.end());
+                Instruction & inst = *i;
+                if (LLVM_UNLIKELY(inst.isTerminator())) {
+                    break;
+                }
+                const auto ip = i;
+                ++i;
+                if (print(inst, ip)) {
+                    modified = true;
+                }
+            }
+
+        }
+    }
+    iBuilder->setModule(saveModule);
+    return modified;
+}
+
+#endif
 
 class TracePass : public ModulePass {
 public:

@@ -22,15 +22,12 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
         const auto handleName = makeBufferName(index, rd.Port);
         StreamSetBuffer * const buffer = bn.Buffer;
         Type * const handleType = buffer->getHandleType(b);
-
-
-
         if (LLVM_LIKELY(bn.isOwned())) {
-            //if (LLVM_UNLIKELY(bn.NonLocal)) {
+            if (LLVM_UNLIKELY(bn.NonLocal)) {
                 mTarget->addInternalScalar(handleType, handleName);
-            //} else {
-            //    mTarget->addThreadLocalScalar(handleType, handleName);
-            //}
+            } else {
+                mTarget->addThreadLocalScalar(handleType, handleName);
+            }
         } else {
             mTarget->addNonPersistentScalar(handleType, handleName);
             mTarget->addInternalScalar(buffer->getPointerType(), handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS, index);
@@ -41,7 +38,7 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadInternalStreamSetHandles
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b) {
+void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool nonLocal) {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         const BufferNode & bn = mBufferGraph[streamSet];
         // external buffers already have a buffer handle
@@ -50,13 +47,15 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b) {
             assert (isFromCurrentFunction(b, buffer->getHandle()));
             continue;
         }
-        const auto pe = in_edge(streamSet, mBufferGraph);
-        const auto producer = source(pe, mBufferGraph);
-        const BufferRateData & rd = mBufferGraph[pe];
-        const auto handleName = makeBufferName(producer, rd.Port);
-        Value * const handle = b->getScalarFieldPtr(handleName);
-        assert (buffer->getHandle() == nullptr);
-        buffer->setHandle(handle);
+        if (bn.NonLocal == nonLocal) {
+            const auto pe = in_edge(streamSet, mBufferGraph);
+            const auto producer = source(pe, mBufferGraph);
+            const BufferRateData & rd = mBufferGraph[pe];
+            const auto handleName = makeBufferName(producer, rd.Port);
+            Value * const handle = b->getScalarFieldPtr(handleName);
+            assert (buffer->getHandle() == nullptr);
+            buffer->setHandle(handle);
+        }
     }
 }
 
@@ -64,8 +63,6 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b) {
  * @brief allocateOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal) {
-    if (!nonLocal) return;
-
     assert (expectedNumOfStrides);
 
     if (LLVM_UNLIKELY(mCheckAssertions)) {
@@ -102,7 +99,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto j = target(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[j];
-            if (LLVM_UNLIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
+            if (LLVM_UNLIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
                 StreamSetBuffer * const buffer = bn.Buffer;
                 if (LLVM_LIKELY(bn.isInternal())) {
                     const BufferRateData & rd = mBufferGraph[e];
@@ -122,13 +119,16 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
  * @brief releaseOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
-    if (!nonLocal) return;
+    loadInternalStreamSetHandles(b, nonLocal);
     for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
         const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_LIKELY(bn.isOwned())) { // && bn.NonLocal == nonLocal
+        if (LLVM_LIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
             StreamSetBuffer * const buffer = bn.Buffer;
             assert (isFromCurrentFunction(b, buffer->getHandle(), false));
             buffer->releaseBuffer(b);
+
+            #warning TraceDynamicBuffers needs to be fixed to permit thread local buffers.
+
             if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
                 if (isa<DynamicBuffer>(buffer)) {
 

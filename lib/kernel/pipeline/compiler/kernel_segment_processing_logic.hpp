@@ -32,7 +32,8 @@ void PipelineCompiler::start(BuilderRef b) {
     debugPrint(b, prefix + " +++ IS FINAL %" PRIu8 "+++", mIsFinal);
     #endif
 
-    loadInternalStreamSetHandles(b);
+    loadInternalStreamSetHandles(b, true);
+    loadInternalStreamSetHandles(b, false);
     readExternalConsumerItemCounts(b);
     mKernel = nullptr;
     mKernelId = 0;
@@ -44,7 +45,7 @@ void PipelineCompiler::start(BuilderRef b) {
     mMadeProgressInLastSegment->addIncoming(b->getTrue(), entryBlock);
     Constant * const i1_FALSE = b->getFalse();
     mPipelineProgress = i1_FALSE;
-    mExhaustedInput = i1_FALSE;    
+    mExhaustedInput = i1_FALSE;
 
 
     Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_SUFFIX);
@@ -261,7 +262,7 @@ void PipelineCompiler::executeKernel(BuilderRef b) {
     recordProducedItemCountDeltas(b);
 
     // chain the progress state so that the next one carries on from this one
-    mExhaustedInput = mExhaustedPipelineInputAtExit;   
+    mExhaustedInput = mExhaustedPipelineInputAtExit;
     mPipelineProgress = mAnyProgressedAtExitPhi;
     if (mIsPartitionRoot) {
         mNumOfPartitionStrides = mTotalNumOfStridesAtExitPhi;
@@ -354,7 +355,7 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         mTerminatedSignalPhi->addIncoming(mIsFinalInvocationPhi, exitBlock);
         b->CreateLikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
 
-    } else if (mLoopsBackToEntry) {    
+    } else if (mLoopsBackToEntry) {
         b->CreateCondBr(loopAgain, mKernelLoopEntry, mKernelLoopExit);
     } else { // just exit the loop
         b->CreateBr(mKernelLoopExit);
@@ -531,7 +532,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
             mUpdatedProducedDeferredPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessedDeferredAtLoopExit");
         }
     }
-    mTerminatedAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtLoopExit");    
+    mTerminatedAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtLoopExit");
     mAnyProgressedAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_anyProgressAtLoopExit");
     mTotalNumOfStridesAtLoopExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtLoopExit");
     mExhaustedPipelineInputAtLoopExitPhi = b->CreatePHI(boolTy, 2, prefix + "_exhaustedInputAtLoopExit");
@@ -540,7 +541,7 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeInsufficientIOExit
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {    
+inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
 
     // A partition root will always have an insufficient I/O check since they control how many strides the
     // other kernels in the partition will execute. If a kernel has non-linear I/O, however, we need to test
@@ -621,7 +622,7 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
 //    }
 
     mTotalNumOfStridesAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtExit");
-    mTotalNumOfStridesAtExitPhi->addIncoming(mTotalNumOfStridesAtLoopExitPhi, mKernelLoopExitPhiCatch);    
+    mTotalNumOfStridesAtExitPhi->addIncoming(mTotalNumOfStridesAtLoopExitPhi, mKernelLoopExitPhiCatch);
 //    if (mIsPartitionRoot) {
 //        ConstantInt * const ZERO = b->getSize(0);
 //        mTotalNumOfStridesAtExitPhi->addIncoming(ZERO, mKernelInitiallyTerminatedPhiCatch);
@@ -682,7 +683,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
         if (mUpdatedProducedDeferredPhi(port)) {
             mUpdatedProducedDeferredPhi(port)->addIncoming(mFinalProducedPhi(port), exitBlock);
         }
-    }   
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

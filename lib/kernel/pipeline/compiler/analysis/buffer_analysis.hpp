@@ -231,7 +231,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
 
             // if this buffer is "stateful", we cannot make it *thread* local
-            if (dynamic || lookBehind || reflection || copyBack || lookAhead) {
+            if (lookBehind || reflection || copyBack || lookAhead) {
                 nonLocal = true;
             }
 
@@ -242,20 +242,17 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             Type * const baseType = output.getType();
 
-            #ifdef PERMIT_THREAD_LOCAL_BUFFERS
-            const auto bufferFactor = nonLocal ? mNumOfThreads : 1U;
-            #else
-            const auto bufferFactor = mNumOfThreads;
-            #endif
-
-            const auto bufferSize = requiredSize * bufferFactor;
-
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
-            if (dynamic) {
+            if (dynamic || nonLocal) {
+                // TODO: we can make some buffers static despite crossing a partition but only if we can guarantee
+                // an upper bound to the buffer size for all potential inputs. Build a dataflow analysis to
+                // determine this.
+                const auto bufferSize = requiredSize * mNumOfThreads;
                 buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
             } else {
-                buffer = new StaticBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
+                assert (!bn.NonLinear);
+                buffer = new StaticBuffer(b, baseType, requiredSize, overflowSize, underflowSize, true, 0U);
             }
             bn.Buffer = buffer;
         }

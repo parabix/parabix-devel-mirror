@@ -344,7 +344,7 @@ public:
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
 
     void allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal);
-    void loadInternalStreamSetHandles(BuilderRef b);
+    void loadInternalStreamSetHandles(BuilderRef b, const bool nonLocal);
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
@@ -611,7 +611,7 @@ protected:
     PHINode *                                   mExhaustedPipelineInputPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtPartitionJumpPhi = nullptr;
     PHINode *                                   mExhaustedPipelineInputAtLoopExitPhi = nullptr;
-    Value *                                     mExhaustedPipelineInputAtExit = nullptr;    
+    Value *                                     mExhaustedPipelineInputAtExit = nullptr;
     PHINode *                                   mExecutedAtLeastOnceAtLoopEntryPhi = nullptr;
     PHINode *                                   mTerminatedSignalPhi = nullptr;
     PHINode *                                   mTerminatedAtLoopExitPhi = nullptr;

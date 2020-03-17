@@ -77,15 +77,14 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     auto currentPartitionId = -1U;
     addBufferHandlesToPipelineKernel(b, PipelineInput);
     addConsumerKernelProperties(b, PipelineInput);
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {        
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
-
+        // Is this the start of a new partition?
         const auto partitionId = KernelPartitionId[i];
         if (partitionId != currentPartitionId) {
-            addTerminationProperties(b, i);            
+            addTerminationProperties(b, i);
             currentPartitionId = partitionId;
         }
-
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
         addCycleCounterProperties(b, i);
@@ -264,7 +263,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
             for (const auto e : make_iterator_range(in_edges(i, mScalarGraph))) {
                 assert (mScalarGraph[e].Type == PortType::Input);
                 assert (expected++ == mScalarGraph[e].Number);
-                const auto scalar = source(e, mScalarGraph);          
+                const auto scalar = source(e, mScalarGraph);
                 args.push_back(getScalar(b, scalar));
             }
             Value * const f = getKernelInitializeFunction(b);
@@ -559,7 +558,6 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         Value * const segNo = b->getScalarField(makeKernelName(i) + LOGICAL_SEGMENT_SUFFIX);
         mSegNo = b->CreateUMax(mSegNo, segNo);
     }
-    loadInternalStreamSetHandles(b);
     printOptionalCycleCounter(b);
     printOptionalBlockingIOStatistics(b);
     printOptionalBlockedIOPerSegment(b);
@@ -576,7 +574,7 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
         mScalarValue[i] = b->CreateCall(getKernelFinalizeFunction(b), params);
     }
     releaseOwnedBuffers(b, true);
-    resetInternalBufferHandles();        
+    resetInternalBufferHandles();
 }
 
 enum : unsigned {
@@ -711,19 +709,18 @@ inline void PipelineCompiler::bindCompilerVariablesToThreadLocalState(BuilderRef
  * @brief generateInitializeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
-    if (mTarget->hasThreadLocal()) {
-        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-            const Kernel * const kernel = getKernel(i);
-            if (kernel->hasThreadLocal()) {
-                setActiveKernel(b, i);
-                assert (mKernel == kernel);
-                Value * const f = getKernelInitializeThreadLocalFunction(b);
-                if (LLVM_UNLIKELY(f == nullptr)) {
-                    report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
-                }
-                Value * const handle = b->CreateCall(f, mKernelHandle);
-                b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
+    assert (mTarget->hasThreadLocal());
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = getKernel(i);
+        if (kernel->hasThreadLocal()) {
+            setActiveKernel(b, i);
+            assert (mKernel == kernel);
+            Value * const f = getKernelInitializeThreadLocalFunction(b);
+            if (LLVM_UNLIKELY(f == nullptr)) {
+                report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
             }
+            Value * const handle = b->CreateCall(f, mKernelHandle);
+            b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
         }
     }
 }
@@ -741,51 +738,47 @@ void PipelineCompiler::generateAllocateSharedInternalStreamSetsMethod(BuilderRef
  * @brief generateAllocateThreadLocalInternalStreamSetsMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {
-#if 0
-    if (mTarget->hasThreadLocal()) {
-        allocateOwnedBuffers(b, expectedNumOfStrides, false);
-        resetInternalBufferHandles();
-    }
-#endif
+    assert (mTarget->hasThreadLocal());
+    allocateOwnedBuffers(b, expectedNumOfStrides, false);
+    resetInternalBufferHandles();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::generateFinalizeThreadLocalMethod(BuilderRef b) {
-    if (mTarget->hasThreadLocal()) {
-        if (mHasThreadLocalPipelineState) {
-            Value * const localState = getScalarFieldPtr(b.get(), PIPELINE_THREAD_LOCAL_STATE);
-            FixedArray<Value *, 2> indices;
-            indices[0] = b->getInt32(0);
-            if (mHasZeroExtendedStream) {
-                indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
-                b->CreateFree(b->CreateLoad(b->CreateInBoundsGEP(localState, indices)));
-            }
+    assert (mTarget->hasThreadLocal());
+    if (mHasThreadLocalPipelineState) {
+        Value * const localState = getScalarFieldPtr(b.get(), PIPELINE_THREAD_LOCAL_STATE);
+        FixedArray<Value *, 2> indices;
+        indices[0] = b->getInt32(0);
+        if (mHasZeroExtendedStream) {
+            indices[1] = b->getInt32(ZERO_EXTENDED_BUFFER_INDEX);
+            b->CreateFree(b->CreateLoad(b->CreateInBoundsGEP(localState, indices)));
         }
-        for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-            const Kernel * const kernel = getKernel(i);
-            if (kernel->hasThreadLocal()) {
-                setActiveKernel(b, i);
-                assert (mKernel == kernel);
-                SmallVector<Value *, 2> args;
-                if (LLVM_LIKELY(mKernel->isStateful())) {
-                    args.push_back(mKernelHandle);
-                }
-                args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, i)));
-                Value * const f = getKernelFinalizeThreadLocalFunction(b);
-                if (LLVM_UNLIKELY(f == nullptr)) {
-                    report_fatal_error(mKernel->getName() + " does not to have an finalize method for its threadlocal state");
-                }
-                b->CreateCall(f, args);
-            }
-        }
-        releaseOwnedBuffers(b, false);
-        // Since all of the nested kernels thread local state is contained within
-        // this pipeline thread's thread local state, freeing the pipeline's will
-        // also free the inner kernels.
-        b->CreateFree(getThreadLocalHandle());
     }
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = getKernel(i);
+        if (kernel->hasThreadLocal()) {
+            setActiveKernel(b, i);
+            assert (mKernel == kernel);
+            SmallVector<Value *, 2> args;
+            if (LLVM_LIKELY(mKernel->isStateful())) {
+                args.push_back(mKernelHandle);
+            }
+            args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, i)));
+            Value * const f = getKernelFinalizeThreadLocalFunction(b);
+            if (LLVM_UNLIKELY(f == nullptr)) {
+                report_fatal_error(mKernel->getName() + " does not to have an finalize method for its threadlocal state");
+            }
+            b->CreateCall(f, args);
+        }
+    }
+    releaseOwnedBuffers(b, false);
+    // Since all of the nested kernels thread local state is contained within
+    // this pipeline thread's thread local state, freeing the pipeline's will
+    // also free the inner kernels.
+    b->CreateFree(getThreadLocalHandle());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

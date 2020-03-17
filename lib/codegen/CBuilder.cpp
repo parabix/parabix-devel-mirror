@@ -41,11 +41,11 @@
 #endif
 
 #ifdef ENABLE_ASSERTION_TRACE
-#include <dwarf.h>
-#include <libdwarf.h>
-#include <libelf.h>
-#include <link.h>
-#include <dlfcn.h>
+//#include <dwarf.h>
+//#include <libdwarf.h>
+//#include <libelf.h>
+//#include <link.h>
+//#include <dlfcn.h>
 #include <execinfo.h>
 #include <cxxabi.h>
 #endif
@@ -333,7 +333,7 @@ void CBuilder::CallPrintIntCond(StringRef name, Value * const value, Value * con
     SetInsertPoint(exitBlock);
 }
 
-void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd) {
+CallInst * CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd) {
     Module * const m = getModule();
     Constant * printRegister = m->getFunction("print_int");
     IntegerType * const int64Ty = getInt64Ty();
@@ -361,16 +361,19 @@ void CBuilder::CallPrintInt(StringRef name, Value * const value, const STD_FD fd
         printRegister = printFn;
         restoreIP(ip);
     }
-    Value * num = nullptr;
-    if (value->getType()->isPointerTy()) {
+    Value * num = value;
+    Type * const t = value->getType();
+    if (t->isPointerTy()) {
         num = CreatePtrToInt(value, int64Ty);
-    } else if (value->getType()->isIntegerTy()) {
-        num = CreateZExt(value, int64Ty);
+    } else if (t->isIntegerTy()) {
+        if (t->getIntegerBitWidth() < 64) {
+            num = CreateZExt(value, int64Ty);
+        }
     } else {
         report_fatal_error("CallPrintInt was given a non-integer/non-pointer value.");
     }
-    assert (num->getType()->isIntegerTy());
-    CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
+    assert (num->getType()->isIntegerTy() && num->getType()->getIntegerBitWidth() == 64);
+    return CreateCall(printRegister, {getInt32(static_cast<uint32_t>(fd)), GetString(name), num});
 }
 
 Value * CBuilder::CreateMalloc(Value * size) {
@@ -1068,7 +1071,7 @@ void CBuilder::__CreateAssert(Value * const assertion, const Twine format, std::
     LLVMContext & C = getContext();
     Type * const stackTy = IntegerType::get(C, sizeof(uintptr_t) * 8);
 
-    IntegerType * const int32Ty = getInt32Ty();
+//    IntegerType * const int32Ty = getInt32Ty();
 
     PointerType * const stackPtrTy = stackTy->getPointerTo();
     PointerType * const int8PtrTy = getInt8PtrTy();

@@ -584,17 +584,7 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             if (cast<Var>(expr)->isKernelParameter()) {
                 Value * const ptr = compileExpression(b, expr, false);
                 Type * const elemTy = ptr->getType()->getPointerElementType();
-
-                b->CallPrintInt("store ptr", ptr);
-
                 b->CreateAlignedStore(b->CreateZExt(value, elemTy), ptr, getAlignment(elemTy));
-
-                if (value->getType()->isVectorTy()) {
-                    b->CallPrintRegister("value", value);
-                } else if (value->getType()->isIntegerTy()) {
-                    b->CallPrintInt("value", value);
-                }
-
                 value = ptr;
             }
         } else if (const InFile * e = dyn_cast<InFile>(stmt)) {
@@ -1019,16 +1009,7 @@ Value * PabloCompiler::compileExpression(BuilderRef b, const PabloAST * const ex
         // mMarker.insert({expr, value});
     }
     if (LLVM_UNLIKELY(value->getType()->isPointerTy() && ensureLoaded)) {
-
-        b->CallPrintInt("load ptr", value);
-
         value = b->CreateAlignedLoad(value, getPointerElementAlignment(value));
-
-        if (value->getType()->isVectorTy()) {
-            b->CallPrintRegister("value", value);
-        } else if (value->getType()->isIntegerTy()) {
-            b->CallPrintInt("value", value);
-        }
     }
     return value;
 }

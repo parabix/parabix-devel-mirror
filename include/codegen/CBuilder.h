@@ -272,7 +272,7 @@ public:
 
     void CallPrintIntCond(llvm::StringRef name, llvm::Value * const value, llvm::Value * const cond, const STD_FD fd = STD_FD::STD_ERR);
 
-    void CallPrintInt(llvm::StringRef name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
+    llvm::CallInst * CallPrintInt(llvm::StringRef name, llvm::Value * const value, const STD_FD fd = STD_FD::STD_ERR);
 
     llvm::Constant * GetString(llvm::StringRef Str);
 

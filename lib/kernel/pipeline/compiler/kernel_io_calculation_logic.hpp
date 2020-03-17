@@ -48,7 +48,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-            const auto streamSet = source(e, mBufferGraph);            
+            const auto streamSet = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
             const BufferRateData & br = mBufferGraph[e];
             if (bn.NonLocal && bn.NonLinear) {
@@ -66,6 +66,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                 mNumOfInputStrides = b->CreateUMin(mNumOfInputStrides, strides);
             }
         }
+        assert (in_degree(mKernelId, mBufferGraph) == 0 || mNumOfInputStrides);
     }
 
     if (mNumOfInputStrides == nullptr) {
@@ -337,7 +338,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
             exhausted = b->getTrue();
         }
-        mExhaustedPipelineInputPhi->addIncoming(exhausted, entryBlock);        
+        mExhaustedPipelineInputPhi->addIncoming(exhausted, entryBlock);
     }
 
     b->SetInsertPoint(hasInputData);
@@ -351,7 +352,7 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
 
 
     mKernelIsPenultimate = nullptr;
-    if (in_degree(mKernelId, mBufferGraph) == 0) {        
+    if (in_degree(mKernelId, mBufferGraph) == 0) {
         mKernelIsFinal = b->isFinal();
     } else {
         if (mIsPartitionRoot) { // || mMayHaveNonLinearIO
@@ -553,7 +554,7 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
     Value * const required = mLinearOutputItemsPhi(outputPort);
     ConstantInt * overflow = nullptr;
     if (bn.CopyBack || bn.Add) {
-        overflow = b->getSize(std::max(bn.CopyBack, bn.Add));        
+        overflow = b->getSize(std::max(bn.CopyBack, bn.Add));
     }
 
     Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, overflow);
@@ -983,7 +984,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const size_t kern
     }
 
     Value * const currentPtr = buffer->getRawItemPointer(b, ZERO, position);
-    Value * current = b->CreateLoad(currentPtr);   
+    Value * current = b->CreateLoad(currentPtr);
     if (mBranchToLoopExit) {
         current = b->CreateSelect(mBranchToLoopExit, prior, current);
     }
