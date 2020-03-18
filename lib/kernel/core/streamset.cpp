@@ -283,7 +283,7 @@ inline void ExternalBuffer::assertValidBlockIndex(BuilderPtr b, Value * blockInd
     }
 }
 
-void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */, const bool report) const {
+void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
     /* do nothing */
 }
 
@@ -462,7 +462,7 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     return b->CreateInBoundsGEP(base, b->getSize(mCapacity));
 }
 
-void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind, const bool report) const {
+void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const {
     if (mLinear) {
 
         // NOTE: static linear buffers are assumed to be threadlocal.
@@ -495,16 +495,6 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
 
         Value * const producedChunks = b->CreateUDiv(produced, BLOCK_WIDTH);
         Value * const effectiveCapacity = b->CreateAdd(producedChunks, b->getSize(mCapacity));
-
-        if (report) {
-            Constant * const fd = b->getInt32(STDERR_FILENO);
-            Value * const threadId = b->CreatePThreadSelf();
-            b->CreateDprintfCall(fd, "%016" PRIx64 "  consumedChunks = %" PRId64 "\n", threadId, consumedChunks);
-            b->CreateDprintfCall(fd, "%016" PRIx64 "  bufferStart = %" PRIx64 "\n", threadId, bufferStart);
-            b->CreateDprintfCall(fd, "%016" PRIx64 "  newBaseAddress = %" PRIx64 "\n", threadId, newBaseAddress);
-            b->CreateDprintfCall(fd, "%016" PRIx64 "  producedChunks = %" PRId64 "\n", threadId, producedChunks);
-            b->CreateDprintfCall(fd, "%016" PRIx64 "  effectiveCapacity = %" PRId64 "\n", threadId, effectiveCapacity);
-        }
 
         b->CreateStore(newBaseAddress, virtualBaseField);
         b->CreateStore(effectiveCapacity, capacityField);
@@ -663,7 +653,7 @@ void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Dynamic");
 }
 
-void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */, const bool report) const {
+void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
     /* do nothing */
 }
 

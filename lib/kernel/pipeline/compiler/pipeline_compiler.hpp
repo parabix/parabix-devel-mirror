@@ -53,13 +53,13 @@ enum CycleCounter {
   , FINAL
 };
 
-const static std::string PIPELINE_THREAD_LOCAL_STATE = "PTL";
+
+const static std::string ZERO_EXTENDED_BUFFER = "ZeB";
+const static std::string ZERO_EXTENDED_SPACE = "ZeS";
+
 const static std::string KERNEL_THREAD_LOCAL_SUFFIX = ".KTL";
 
-
-const static std::string CURRENT_LOGICAL_SEGMENT_NUMBER = "ILSN";
-const static std::string ITEM_COUNT_READ_GUARD_SUFFIX = ".LRG";
-const static std::string NEXT_LOGICAL_SEGMENT_SUFFIX = ".NSN";
+const static std::string NEXT_LOGICAL_SEGMENT_NUMBER = "@NLSN";
 const static std::string LOGICAL_SEGMENT_SUFFIX = ".LSN";
 
 const static std::string DEBUG_FD = ".DFd";

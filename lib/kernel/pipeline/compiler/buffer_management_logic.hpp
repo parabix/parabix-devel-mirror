@@ -57,6 +57,10 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
             buffer->setHandle(handle);
         }
     }
+    if (mHasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
+        mZeroExtendBuffer = b->getScalarFieldPtr(ZERO_EXTENDED_BUFFER);
+        mZeroExtendSpace = b->getScalarFieldPtr(ZERO_EXTENDED_SPACE);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -106,19 +110,12 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
                 const auto handleName = makeBufferName(i, rd.Port);
 
                 if (LLVM_LIKELY(bn.isInternal())) {
-
                     Value * const handle = b->getScalarFieldPtr(handleName);
-
-                    debugPrint(b, handleName + " (ptr) = %" PRIx64 "\n", handle);
-
                     buffer->setHandle(handle);
                 }
                 assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || nonLocal));
                 assert (isFromCurrentFunction(b, buffer->getHandle(), false));
                 buffer->allocateBuffer(b, expectedNumOfStrides);
-
-                debugPrint(b, handleName + " (base) = %" PRIx64 "\n", buffer->getBaseAddress(b));
-
             }
         }
     }
@@ -153,6 +150,10 @@ void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
                 }
             }
         }
+    }
+    if (mHasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
+        assert (isFromCurrentFunction(b, mZeroExtendBuffer, false));
+        b->CreateFree(b->CreateLoad(mZeroExtendBuffer));
     }
 }
 
@@ -698,7 +699,7 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
             Value * const baseAddress = buffer->getBaseAddress(b);
             mOriginalBaseAddress[streamSet] = baseAddress;
 
-            buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind, streamSet == 8);
+            buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind);
         }
     }
 }

@@ -465,9 +465,6 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     #endif
 }
 
-
-
-
 }
 
 #endif // BUFFER_MANIPULATION_LOGIC_HPP

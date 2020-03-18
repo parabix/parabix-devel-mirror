@@ -91,11 +91,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     // If a kernel is internally synchronized, pass the segno to
     // allow the kernel to initialize its current "position"
     if (mKernelIsInternallySynchronized) {
-        const auto prefix = makeKernelName(mKernelId);
-        Value * const internalSegNoPtr = b->getScalarFieldPtr(prefix + CURRENT_LOGICAL_SEGMENT_NUMBER);
-        Value * const segNo = b->CreateLoad(internalSegNoPtr);
-        b->CreateStore(b->CreateAdd(segNo, b->getSize(1)), internalSegNoPtr);
-        args.push_back(segNo);
+        args.push_back(mSegNo);
     }
     if (mFixedRateFactorPhi) {
         args.push_back(mFixedRateFactorPhi);
@@ -121,25 +117,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             const Binding & input = rt.Binding;
 
             args.push_back(mInputVirtualBaseAddressPhi(rt.Port));
-
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = makeBufferName(mKernelId, rt.Port);
-            const auto streamSet = source(port, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[streamSet];
-            StreamSetBuffer * const buffer = bn.Buffer;
-            if (buffer->isLinear()) {
-                if (isa<StaticBuffer>(buffer) || isa<DynamicBuffer>(buffer)) {
-                    Value * const start = buffer->getMallocAddress(b);
-                    Value * const end = buffer->getOverflowAddress(b);
-                    debugPrint(b, prefix + "_range = [%" PRIx64 ",%" PRIx64 ")", start, end);
-                }
-            }
-
-
-
-
-            debugPrint(b, prefix + "_vba = %" PRIx64, args.back());
-            #endif
 
             mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, args);
 
@@ -173,11 +150,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, bn.Buffer, args);
         } else {
             args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced));
-
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = makeBufferName(mKernelId, rt.Port);
-            debugPrint(b, prefix + "_vba = %" PRIx64, args.back());
-            #endif
         }
         mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, args);
         // TODO:  consider whether we should pass a requested amount to source streams?

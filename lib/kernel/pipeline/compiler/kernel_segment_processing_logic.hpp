@@ -35,6 +35,7 @@ void PipelineCompiler::start(BuilderRef b) {
     loadInternalStreamSetHandles(b, true);
     loadInternalStreamSetHandles(b, false);
     readExternalConsumerItemCounts(b);
+
     mKernel = nullptr;
     mKernelId = 0;
     BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -48,8 +49,12 @@ void PipelineCompiler::start(BuilderRef b) {
     mPipelineProgress = i1_FALSE;
     mExhaustedInput = i1_FALSE;
 
-    Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_SUFFIX);
-    mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
+    if (ExternallySynchronized) {
+        mSegNo = b->getExternalSegNo();
+    } else {
+        Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
+        mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
+    }
 
     branchToInitialPartition(b);
 }
