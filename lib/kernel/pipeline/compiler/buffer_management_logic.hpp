@@ -101,14 +101,24 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
             const BufferNode & bn = mBufferGraph[j];
             if (LLVM_UNLIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
                 StreamSetBuffer * const buffer = bn.Buffer;
+
+                const BufferRateData & rd = mBufferGraph[e];
+                const auto handleName = makeBufferName(i, rd.Port);
+
                 if (LLVM_LIKELY(bn.isInternal())) {
-                    const BufferRateData & rd = mBufferGraph[e];
-                    const auto handleName = makeBufferName(i, rd.Port);
+
                     Value * const handle = b->getScalarFieldPtr(handleName);
+
+                    debugPrint(b, handleName + " (ptr) = %" PRIx64 "\n", handle);
+
                     buffer->setHandle(handle);
                 }
+                assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || nonLocal));
                 assert (isFromCurrentFunction(b, buffer->getHandle(), false));
                 buffer->allocateBuffer(b, expectedNumOfStrides);
+
+                debugPrint(b, handleName + " (base) = %" PRIx64 "\n", buffer->getBaseAddress(b));
+
             }
         }
     }
@@ -396,9 +406,9 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         buffer->setBaseAddress(b.get(), vba);
         buffer->setCapacity(b.get(), mProducedItemCount(mKernelId, port));
         const auto handleName = makeBufferName(mKernelId, port);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, handleName + "_virtualBaseAddress = %" PRIu64, vba);
-        #endif
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        debugPrint(b, handleName + "_virtualBaseAddress = %" PRIu64, vba);
+//        #endif
         b->setScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS, vba);
     }
 }
@@ -667,6 +677,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
  * @brief prepareLinearBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
+
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
@@ -677,14 +688,17 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
             #ifdef PRINT_DEBUG_MESSAGES
             const BufferRateData & br = mBufferGraph[e];
             const auto prefix = makeBufferName(mKernelId, br.Port);
-            debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, produced);
-            debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
+            debugPrint(b, prefix + "_linear_initiallyProduced = %" PRIu64, produced);
+            debugPrint(b, prefix + "_linear_consumed = %" PRIu64, consumed);
+            if (bn.LookBehind) {
+                debugPrint(b, prefix + "_linear_lookBehind = %" PRIu64, b->getSize(bn.LookBehind));
+            }
             #endif
 
             Value * const baseAddress = buffer->getBaseAddress(b);
             mOriginalBaseAddress[streamSet] = baseAddress;
 
-            buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind);
+            buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind, streamSet == 8);
         }
     }
 }

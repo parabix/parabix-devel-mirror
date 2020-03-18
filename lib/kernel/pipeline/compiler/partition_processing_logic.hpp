@@ -75,10 +75,6 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }
 
-    mPartitionTerminationSignal.resize(PartitionCount, nullptr);
-
-    mExhaustedPipelineInputAtPartitionEntry.resize(PartitionCount, nullptr);
-
     const auto ip = b->saveIP();
     IntegerType * const boolTy = b->getInt1Ty();
     for (unsigned i = 1; i < PartitionCount; ++i) {

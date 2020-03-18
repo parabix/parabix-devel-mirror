@@ -283,7 +283,7 @@ inline void ExternalBuffer::assertValidBlockIndex(BuilderPtr b, Value * blockInd
     }
 }
 
-void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
+void ExternalBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */, const bool report) const {
     /* do nothing */
 }
 
@@ -357,21 +357,20 @@ Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fro
 
 Type * StaticBuffer::getHandleType(BuilderPtr b) const {
     auto & C = b->getContext();
-    IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const typePtr = getPointerType();
-    Type * const emptyTy = StructType::get(C);
     FixedArray<Type *, 3> types;
-    types[BaseAddress] = typePtr;
-    types[EffectiveCapacity] = sizeTy;
+    types[BaseAddress] = typePtr;    
     if (LLVM_UNLIKELY(mLinear)) {
+        IntegerType * const sizeTy = b->getSizeTy();
+        types[EffectiveCapacity] = sizeTy;
         types[MallocedAddress] = typePtr;
     } else {
+        Type * const emptyTy = StructType::get(C);
+        types[EffectiveCapacity] = emptyTy;
         types[MallocedAddress] = emptyTy;
     }
     return StructType::get(C, types);
 }
-
-#define EXTRA_PADDING 1024
 
 void StaticBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplier) {
     FixedArray<Value *, 2> indices;
@@ -384,17 +383,17 @@ void StaticBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplier
         b->CreateAssert(size, "Static buffer capacity cannot be 0.");
     }
 
-    indices[1] = b->getInt32(EffectiveCapacity);
-    Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
-    b->CreateStore(size, capacityField);
-
     indices[1] = b->getInt32(BaseAddress);
-    size = b->CreateAdd(size, b->getSize(mUnderflow + mOverflow + EXTRA_PADDING * 2));
-    Value * const buffer = addUnderflow(b, b->CreateCacheAlignedMalloc(mType, size, mAddressSpace), mUnderflow + EXTRA_PADDING);
+    size = b->CreateAdd(size, b->getSize(mUnderflow + mOverflow));
+    Value * const buffer = addUnderflow(b, b->CreateCacheAlignedMalloc(mType, size, mAddressSpace), mUnderflow);
     Value * const baseAddressField = b->CreateInBoundsGEP(handle, indices);
     b->CreateStore(buffer, baseAddressField);
 
     if (mLinear) {
+        indices[1] = b->getInt32(EffectiveCapacity);
+        Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
+        b->CreateStore(size, capacityField);
+
         indices[1] = b->getInt32(MallocedAddress);
         Value * const concreteAddrField = b->CreateInBoundsGEP(handle, indices);
         b->CreateStore(buffer, concreteAddrField);
@@ -408,7 +407,7 @@ void StaticBuffer::releaseBuffer(BuilderPtr b) const {
     indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
     Value * const addressField = b->CreateInBoundsGEP(handle, indices);
     Value * buffer = b->CreateLoad(addressField);
-    b->CreateFree(subtractUnderflow(b, buffer, mUnderflow + EXTRA_PADDING));
+    b->CreateFree(subtractUnderflow(b, buffer, mUnderflow));
     b->CreateStore(nullPointerFor(b, buffer, mUnderflow), addressField);
 }
 
@@ -430,9 +429,14 @@ Value * StaticBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
 }
 
 Value * StaticBuffer::getCapacity(BuilderPtr b) const {
-    assert (getHandle());
-    Value * ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(EffectiveCapacity)});
-    return b->CreateMul(b->CreateLoad(ptr), b->getSize(b->getBitBlockWidth()));
+    if (mLinear) {
+        assert (getHandle());
+        Value * ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(EffectiveCapacity)});
+        ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+        return b->CreateMul(b->CreateLoad(ptr), BLOCK_WIDTH);
+    } else {
+        return b->getSize(b->getBitBlockWidth() * mCapacity);
+    }
 }
 
 void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
@@ -451,12 +455,14 @@ void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const 
 
 Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
     assert (getHandle());
-    Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(EffectiveCapacity)});
-    Value * const capacity = b->CreateLoad(capacityPtr);
-    return b->CreateInBoundsGEP(getBaseAddress(b), capacity);
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    Value * const base = b->CreateInBoundsGEP(getHandle(), indices);
+    return b->CreateInBoundsGEP(base, b->getSize(mCapacity));
 }
 
-void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const {
+void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind, const bool report) const {
     if (mLinear) {
 
         // NOTE: static linear buffers are assumed to be threadlocal.
@@ -473,6 +479,7 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
         Value * const capacityField = b->CreateInBoundsGEP(mHandle, indices);
         Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
 
+
         indices[1] = b->getInt32(BaseAddress);
         Value * const virtualBaseField = b->CreateInBoundsGEP(mHandle, indices);
         Value * const virtualBase = b->CreateLoad(virtualBaseField);
@@ -482,9 +489,22 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
         Value * const mallocedAddrField = b->CreateInBoundsGEP(mHandle, indices);
         Value * const bufferStart = b->CreateLoad(mallocedAddrField);
 
+
         Value * const newBaseAddress = b->CreateGEP(bufferStart, b->CreateNeg(consumedChunks));
+
+
         Value * const producedChunks = b->CreateUDiv(produced, BLOCK_WIDTH);
         Value * const effectiveCapacity = b->CreateAdd(producedChunks, b->getSize(mCapacity));
+
+        if (report) {
+            Constant * const fd = b->getInt32(STDERR_FILENO);
+            Value * const threadId = b->CreatePThreadSelf();
+            b->CreateDprintfCall(fd, "%016" PRIx64 "  consumedChunks = %" PRId64 "\n", threadId, consumedChunks);
+            b->CreateDprintfCall(fd, "%016" PRIx64 "  bufferStart = %" PRIx64 "\n", threadId, bufferStart);
+            b->CreateDprintfCall(fd, "%016" PRIx64 "  newBaseAddress = %" PRIx64 "\n", threadId, newBaseAddress);
+            b->CreateDprintfCall(fd, "%016" PRIx64 "  producedChunks = %" PRId64 "\n", threadId, producedChunks);
+            b->CreateDprintfCall(fd, "%016" PRIx64 "  effectiveCapacity = %" PRId64 "\n", threadId, effectiveCapacity);
+        }
 
         b->CreateStore(newBaseAddress, virtualBaseField);
         b->CreateStore(effectiveCapacity, capacityField);
@@ -643,7 +663,7 @@ void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
     unsupported("setCapacity", "Dynamic");
 }
 
-void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */) const {
+void DynamicBuffer::prepareLinearBuffer(BuilderPtr /* b */, llvm::Value * /* produced */, llvm::Value * /* consumed */, const unsigned /* lookBehind */, const bool report) const {
     /* do nothing */
 }
 

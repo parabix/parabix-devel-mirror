@@ -38,7 +38,7 @@ BOOST_NOINLINE void PipelineCompiler::debugPrint(BuilderRef b, Twine format, Arg
     SmallVector<Value *, 8> argVals(2);
     argVals[0] = b->getInt32(STDERR_FILENO);
     if (mThreadId) {
-        out << "%016" PRIx64 << "  ";
+        out << "%016" PRIx64 "  ";
         argVals.push_back(mThreadId);
     }
     out << format << "\n";

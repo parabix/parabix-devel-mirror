@@ -122,6 +122,25 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
             args.push_back(mInputVirtualBaseAddressPhi(rt.Port));
 
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = makeBufferName(mKernelId, rt.Port);
+            const auto streamSet = source(port, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            StreamSetBuffer * const buffer = bn.Buffer;
+            if (buffer->isLinear()) {
+                if (isa<StaticBuffer>(buffer) || isa<DynamicBuffer>(buffer)) {
+                    Value * const start = buffer->getMallocAddress(b);
+                    Value * const end = buffer->getOverflowAddress(b);
+                    debugPrint(b, prefix + "_range = [%" PRIx64 ",%" PRIx64 ")", start, end);
+                }
+            }
+
+
+
+
+            debugPrint(b, prefix + "_vba = %" PRIx64, args.back());
+            #endif
+
             mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, args);
 
             if (LLVM_UNLIKELY(requiresItemCount(input))) {
@@ -154,6 +173,11 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, bn.Buffer, args);
         } else {
             args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced));
+
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto prefix = makeBufferName(mKernelId, rt.Port);
+            debugPrint(b, prefix + "_vba = %" PRIx64, args.back());
+            #endif
         }
         mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, args);
         // TODO:  consider whether we should pass a requested amount to source streams?

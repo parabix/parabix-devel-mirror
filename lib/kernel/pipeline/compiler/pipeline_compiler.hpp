@@ -190,15 +190,14 @@ public:
 // internal pipeline functions
 
     LLVM_READNONE StructType * getThreadStateType(BuilderRef b) const;
-    Value * allocateThreadState(BuilderRef b, Value * const threadId);
-    void readThreadState(BuilderRef b, Value * threadState);
+    Value * allocateMultiThreadedThreadStateObject(BuilderRef b, Value * const threadId, Value * const threadLocal);
+    void readMultiThreadedThreadStateObject(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
-    LLVM_READNONE StructType * getThreadLocalStateType(BuilderRef b);
     void allocateThreadLocalState(BuilderRef b, Value * const localState, Value * const threadId = nullptr);
-    void bindCompilerVariablesToThreadLocalState(BuilderRef b);
+    void createThreadStateForSingleThread(BuilderRef b);
     void deallocateThreadLocalState(BuilderRef b, Value * const localState);
-    Value * readTerminationSignalFromLocalState(BuilderRef b, Value * const localState) const;
+    Value * readTerminationSignalFromLocalState(BuilderRef b, Value * const threadState) const;
     inline Value * isProcessThread(BuilderRef b, Value * const threadState) const;
 
     void addTerminationProperties(BuilderRef b, const size_t kernel);
@@ -517,8 +516,6 @@ protected:
     const bool                                  PipelineHasTerminationSignal;
     const bool                                  mHasZeroExtendedStream;
 
-    bool                                        mHasThreadLocalPipelineState = false;
-
     const Partition                             KernelPartitionId;
     const std::vector<Rational>                 MinimumNumOfStrides;
     const std::vector<Rational>                 MaximumNumOfStrides;
@@ -575,8 +572,6 @@ protected:
     FixedVector<Value *>                        mLocallyAvailableItems;
     FixedVector<Value *>                        mScalarValue;
 
-    Vec<Value *>                                mOriginalBaseAddress;
-
     // partition state
     Vec<BasicBlock *>                           mPartitionEntryPoint;
     unsigned                                    mCurrentPartitionId = 0;
@@ -587,16 +582,17 @@ protected:
 
     Value *                                     mKernelIsPenultimate = nullptr;
 
-    Vec<Value *>                                mPartitionTerminationSignal;
+    FixedVector<Value *>                        mPartitionTerminationSignal;
 
-    Vec<PHINode *>                              mExhaustedPipelineInputAtPartitionEntry;
+    FixedVector<PHINode *>                      mExhaustedPipelineInputAtPartitionEntry;
 
-    Vec<Value *>                                mInitialConsumedItemCount;
+    FixedVector<Value *>                        mInitialConsumedItemCount;
+    FixedVector<Value *>                        mOriginalBaseAddress;
 
     PartitionPhiNodeTable                       mPartitionProducedItemCountPhi;
     PartitionPhiNodeTable                       mPartitionConsumedItemCountPhi;
     PartitionPhiNodeTable                       mPartitionTerminationSignalPhi;
-    Vec<PHINode *>                              mPartitionPipelineProgressPhi;
+    FixedVector<PHINode *>                      mPartitionPipelineProgressPhi;
 
 
 
@@ -676,8 +672,8 @@ protected:
     InputPortVec<PHINode *>                     mUpdatedProcessedDeferredPhi;
     InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
 
-    Vec<Value *>                                mInitiallyProducedItemCount; // *before* entering the kernel
-    Vec<Value *>                                mInitiallyProducedDeferredItemCount;
+    FixedVector<Value *>                        mInitiallyProducedItemCount; // *before* entering the kernel
+    FixedVector<Value *>                        mInitiallyProducedDeferredItemCount;
     OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
     OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
     OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
@@ -775,14 +771,16 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mInitiallyAvailableItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
 , mLocallyAvailableItems(FirstStreamSet, LastStreamSet, mAllocator)
 , mScalarValue(FirstKernel, LastScalar, mAllocator)
-, mInitialConsumedItemCount(LastStreamSet + 1)
 
-, mOriginalBaseAddress(LastStreamSet + 1)
+, mPartitionTerminationSignal(PartitionCount, mAllocator)
+, mExhaustedPipelineInputAtPartitionEntry(PartitionCount, mAllocator)
+, mInitialConsumedItemCount(FirstStreamSet, LastStreamSet, mAllocator)
+, mOriginalBaseAddress(FirstStreamSet, LastStreamSet, mAllocator)
 
 , mPartitionProducedItemCountPhi(extents[PartitionCount][LastStreamSet - FirstStreamSet + 1])
 , mPartitionConsumedItemCountPhi(extents[PartitionCount][LastStreamSet - FirstStreamSet + 1])
 , mPartitionTerminationSignalPhi(extents[PartitionCount][PartitionCount])
-, mPartitionPipelineProgressPhi(PartitionCount)
+, mPartitionPipelineProgressPhi(PartitionCount, mAllocator)
 
 , mInitiallyProcessedItemCount(this)
 , mInitiallyProcessedDeferredItemCount(this)
@@ -803,8 +801,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mUpdatedProcessedDeferredPhi(this)
 , mFullyProcessedItemCount(this)
 
-, mInitiallyProducedItemCount(LastStreamSet + 1)
-, mInitiallyProducedDeferredItemCount(LastStreamSet + 1)
+, mInitiallyProducedItemCount(FirstStreamSet, LastStreamSet, mAllocator)
+, mInitiallyProducedDeferredItemCount(FirstStreamSet, LastStreamSet, mAllocator)
 
 , mAlreadyProducedPhi(this)
 , mAlreadyProducedDelayedPhi(this)

@@ -22,6 +22,16 @@ struct FixedVector {
         reset(First, Last);
     }
 
+    FixedVector(const size_t Size, Allocator & A)
+    : mArray(A.allocate<T>(Size))
+    #ifndef NDEBUG
+    , mFirst(0)
+    , mLast(Size - 1U)
+    #endif
+    {
+        reset(0, Size - 1U);
+    }
+
     T operator[](const size_t index) const {
         assert ("index exceeds allocated bounds!" && index >= mFirst && index <= mLast);
         return mArray[index];
@@ -33,7 +43,7 @@ struct FixedVector {
         return mArray[index];
     }
 
-    void reset(const size_t First, const size_t Last) {
+    inline void reset(const size_t First, const size_t Last) {
         assert ("invalid range!" && First <= Last);
         assert ("range exceeds allocated bounds!" && mFirst <= First && mLast >= Last);
         std::fill_n(mArray + First, (Last - First) + 1U, T{});
