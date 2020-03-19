@@ -7,17 +7,21 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
+void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index, const bool allowThreadLocal) {
     assert (index >= FirstKernel && index <= LastKernel);
     mKernelId = index;
     mKernel = getKernel(index);
-    mKernelHandle = nullptr;
+    mKernelSharedHandle = nullptr;
     if (LLVM_LIKELY(mKernel->isStateful())) {
         Value * handle = b->getScalarField(makeKernelName(index));
         if (LLVM_UNLIKELY(mKernel->externallyInitialized())) {
             handle = b->CreatePointerCast(handle, mKernel->getSharedStateType()->getPointerTo());
         }
-        mKernelHandle = handle;
+        mKernelSharedHandle = handle;
+    }
+    mKernelThreadLocalHandle = nullptr;
+    if (mKernel->hasThreadLocal() && allowThreadLocal) {
+        mKernelThreadLocalHandle = b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId));
     }
     mCurrentKernelName = mKernelName[mKernelId];
 }
@@ -51,10 +55,6 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
         const StreamSetPort port{PortType::Output, i};
         Value * produced = mUpdatedProducedPhi(port);
         Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mTerminatedAtLoopExitPhi);
-        if (fullyProduced != produced) {
-            const auto prefix = makeBufferName(mKernelId, port);
-            b->setScalarField(prefix + FULLY_PRODUCED_ITEM_COUNT_SUFFIX, fullyProduced);
-        }
         mFullyProducedItemCount(port)->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
     }
 }

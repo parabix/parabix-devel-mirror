@@ -220,6 +220,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             if (bn.Add > 0) {
                 reqOverflow = std::max(reqOverflow, bn.Add);
             }
+            if (reqOverflow > 0)  {
+                reqOverflow = std::max(reqOverflow, ceiling(consumeMax));
+            }
 
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto overflowSize = round_up_to(reqOverflow, blockWidth) / blockWidth;

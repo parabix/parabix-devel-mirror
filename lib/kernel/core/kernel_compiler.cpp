@@ -330,36 +330,46 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         std::advance(arg, 1);
         return v;
     };
+
+    const auto enableAsserts = codegen::DebugOptionIsSet(codegen::EnableAsserts);
+
     if (LLVM_LIKELY(mTarget->isStateful())) {
         setHandle(nextArg());
         assert (mSharedHandle->getType()->getPointerElementType() == mTarget->getSharedStateType());
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        if (LLVM_UNLIKELY(enableAsserts)) {
             b->CreateAssert(getHandle(), "%s: shared handle cannot be null", b->GetString(getName()));
         }
     }
     if (LLVM_UNLIKELY(mTarget->hasThreadLocal())) {
         setThreadLocalHandle(nextArg());
         assert (mThreadLocalHandle->getType()->getPointerElementType() == mTarget->getThreadLocalStateType());
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        if (LLVM_UNLIKELY(enableAsserts)) {
             b->CreateAssert(getThreadLocalHandle(), "%s: thread local handle cannot be null", b->GetString(getName()));
         }
-    }
-    mNumOfStrides = nextArg();
-    if (LLVM_UNLIKELY(mTarget->requiresExplicitPartialFinalStride())) {
-        mIsFinal = b->CreateIsNull(mNumOfStrides);
-        mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
-    } else {
-        mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
-    }
-    mExternalSegNo = nullptr;
-    if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
-        mExternalSegNo = nextArg();
-    }
-    mFixedRateFactor = nullptr;
+    }    
+    const auto internallySynchronized = mTarget->hasAttribute(AttrId::InternallySynchronized);
+
     Rational fixedRateLCM{0};
-    if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
-        fixedRateLCM = getLCMOfFixedRateInputs(mTarget);
-        mFixedRateFactor = nextArg();
+    mFixedRateFactor = nullptr;
+    if (LLVM_UNLIKELY(internallySynchronized)) {
+        mExternalSegNo = nextArg();
+        mNumOfStrides = nullptr;
+    } else {
+        mExternalSegNo = nullptr;
+        mNumOfStrides = nextArg();
+        if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
+            fixedRateLCM = getLCMOfFixedRateInputs(mTarget);
+            mFixedRateFactor = nextArg();
+        }
+    }
+
+    if (internallySynchronized || !mTarget->requiresExplicitPartialFinalStride()) {
+        mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
+    } else {
+        mIsFinal = b->CreateIsNull(mNumOfStrides);
+        if (LLVM_LIKELY(!internallySynchronized)) {
+            mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
+        }
     }
 
     initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
@@ -425,7 +435,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
 
         const ProcessingRate & rate = input.getRate();
         Value * processed = nullptr;
-        if (isAddressable(input)) {
+        if (internallySynchronized || isAddressable(input)) {
             mUpdatableProcessedInputItemPtr[i] = nextArg();
             processed = b->CreateLoad(mUpdatableProcessedInputItemPtr[i]);
         } else if (LLVM_LIKELY(isCountable(input))) {
@@ -446,7 +456,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// accessible item count
         /// ----------------------------------------------------
         Value * accessible = nullptr;
-        if (LLVM_UNLIKELY(requiresItemCount(input))) {
+        if (LLVM_UNLIKELY(internallySynchronized || requiresItemCount(input))) {
             accessible = nextArg();
         } else {
             accessible = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
@@ -461,7 +471,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         }
         buffer->setCapacity(b, capacity);
         #ifdef CHECK_IO_ADDRESS_RANGE
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        if (LLVM_UNLIKELY(enableAsserts)) {
             checkStreamRange(buffer, input, processed);
         }
         #endif
@@ -506,7 +516,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// ----------------------------------------------------
         const ProcessingRate & rate = output.getRate();
         Value * produced = nullptr;
-        if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
+        if (LLVM_LIKELY(internallySynchronized || canTerminate || isAddressable(output))) {
             mUpdatableProducedOutputItemPtr[i] = nextArg();
             produced = b->CreateLoad(mUpdatableProducedOutputItemPtr[i]);
         } else if (LLVM_LIKELY(isCountable(output))) {
@@ -531,7 +541,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// writable / consumed item count
         /// ----------------------------------------------------
         Value * writable = nullptr;
-        if (requiresItemCount(output)) {
+        if (internallySynchronized || requiresItemCount(output)) {
             writable = nextArg();
             assert (writable && writable->getType() == sizeTy);
         } else if (mFixedRateFactor) {
@@ -547,7 +557,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             buffer->setCapacity(b, capacity);
         }
         #ifdef CHECK_IO_ADDRESS_RANGE
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        if (LLVM_UNLIKELY(enableAsserts)) {
             checkStreamRange(buffer, output, produced);
         }
         #endif
@@ -558,6 +568,12 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     mTerminationSignalPtr = nullptr;
     if (canTerminate) {
         mTerminationSignalPtr = b->getScalarFieldPtr(TERMINATION_SIGNAL);
+        if (LLVM_UNLIKELY(enableAsserts)) {
+            Value * const unterminated =
+                b->CreateICmpEQ(b->CreateLoad(mTerminationSignalPtr), b->getSize(KernelBuilder::TerminationCode::None));
+            b->CreateAssert(unterminated, getName() + ".doSegment was called after termination?");
+        }
+
     }
 }
 
@@ -579,15 +595,17 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
     if (LLVM_UNLIKELY(mTarget->hasThreadLocal())) {
         props.push_back(mThreadLocalHandle); assert (mThreadLocalHandle);
     }
-    props.push_back(mNumOfStrides); assert (mNumOfStrides);
-    if (LLVM_UNLIKELY(!mTarget->requiresExplicitPartialFinalStride())) {
-        props.push_back(mIsFinal);
-    }
-    if (LLVM_UNLIKELY(mTarget->hasAttribute(AttrId::InternallySynchronized))) {
+    const auto internallySynchronized = mTarget->hasAttribute(AttrId::InternallySynchronized);
+    if (LLVM_UNLIKELY(internallySynchronized)) {
         props.push_back(mExternalSegNo);
+    } else {
+        props.push_back(mNumOfStrides); assert (mNumOfStrides);
+        if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
+            props.push_back(mFixedRateFactor);
+        }
     }
-    if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
-        props.push_back(mFixedRateFactor); // fixedRateFactor
+    if (internallySynchronized || !mTarget->requiresExplicitPartialFinalStride()) {
+        props.push_back(mIsFinal);
     }
 
     const auto numOfInputs = getNumOfStreamInputs();
@@ -601,7 +619,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// processed item count
         /// ----------------------------------------------------
         const Binding & input = mInputStreamSets[i];
-        if (isAddressable(input)) {
+        if (internallySynchronized || isAddressable(input)) {
             props.push_back(mProcessedInputItemPtr[i]);
         } else if (LLVM_LIKELY(isCountable(input))) {
             props.push_back(b->CreateLoad(mProcessedInputItemPtr[i]));
@@ -609,7 +627,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         /// accessible item count
         /// ----------------------------------------------------
-        if (requiresItemCount(input)) {
+        if (internallySynchronized || requiresItemCount(input)) {
             props.push_back(mAccessibleInputItems[i]);
         }
     }
@@ -635,7 +653,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         /// produced item count
         /// ----------------------------------------------------
-        if (LLVM_LIKELY(canTerminate || isAddressable(output))) {
+        if (LLVM_LIKELY(internallySynchronized || canTerminate || isAddressable(output))) {
             props.push_back(mProducedOutputItemPtr[i]);
         } else if (LLVM_LIKELY(isCountable(output))) {
             props.push_back(b->CreateLoad(mProducedOutputItemPtr[i]));
@@ -643,7 +661,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         /// writable / consumed item count
         /// ----------------------------------------------------
-        if (requiresItemCount(output)) {
+        if (internallySynchronized || requiresItemCount(output)) {
             props.push_back(mWritableOutputItems[i]);
         }
         if (LLVM_UNLIKELY(isLocal)) {

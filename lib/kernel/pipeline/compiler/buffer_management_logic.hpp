@@ -82,18 +82,18 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
         const Kernel * const kernelObj = getKernel(i);
         if (LLVM_UNLIKELY(kernelObj->allocatesInternalStreamSets())) {
             if (nonLocal || kernelObj->hasThreadLocal()) {
-                setActiveKernel(b, i);
+                setActiveKernel(b, i, !nonLocal);
                 assert (mKernel == kernelObj);
                 SmallVector<Value *, 3> params;
-                if (LLVM_LIKELY(kernelObj->isStateful())) {
-                    params.push_back(mKernelHandle);
+                if (LLVM_LIKELY(mKernelSharedHandle)) {
+                    params.push_back(mKernelSharedHandle);
                 }
                 Value * func = nullptr;
                 if (nonLocal) {
                     func = getKernelAllocateSharedInternalStreamSetsFunction(b);
                 } else {
                     func = getKernelAllocateThreadLocalInternalStreamSetsFunction(b);
-                    params.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
+                    params.push_back(mKernelThreadLocalHandle);
                 }
                 params.push_back(b->CreateCeilUMulRate(expectedNumOfStrides, MaximumNumOfStrides[i]));
                 b->CreateCall(func, params);
@@ -248,23 +248,6 @@ void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief readLocallyAvailableItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readLocallyAvailableItemCounts(BuilderRef b) {
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const auto streamSet = source(e, mBufferGraph);
-        const auto output = in_edge(streamSet, mBufferGraph);
-        const auto producer = source(output, mBufferGraph);
-        if (KernelPartitionId[producer] < mCurrentPartitionId) {
-            const BufferRateData & br = mBufferGraph[output];
-            const auto prefix = makeBufferName(producer, br.Port);
-            Value * itemCount = b->getScalarField(prefix + FULLY_PRODUCED_ITEM_COUNT_SUFFIX);
-            mLocallyAvailableItems[streamSet] = itemCount;
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeLocallyAvailableItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::initializeLocallyAvailableItemCounts(BuilderRef b, BasicBlock * const entryBlock) {
@@ -373,7 +356,12 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
 void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto outputPort = mBufferGraph[e].Port;
-        Value * const fullyProduced = mFullyProducedItemCount(outputPort);
+        Value * fullyProduced = nullptr;
+        if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+            fullyProduced = mProducedItemCount(outputPort);
+        } else {
+            fullyProduced = mFullyProducedItemCount(outputPort);
+        }
         setLocallyAvailableItemCount(b, outputPort, fullyProduced);
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
@@ -399,13 +387,13 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         }
         const BufferRateData & rd = mBufferGraph[e];
         const StreamSetPort port(rd.Port.Type, rd.Port.Number);
-        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(mKernelId, port);
+        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(port);
         assert (ptr);
         Value * vba = b->CreateLoad(ptr);
         StreamSetBuffer * const buffer = bn.Buffer;
         vba = b->CreatePointerCast(vba, buffer->getPointerType());
         buffer->setBaseAddress(b.get(), vba);
-        buffer->setCapacity(b.get(), mProducedItemCount(mKernelId, port));
+        buffer->setCapacity(b.get(), mProducedItemCount(port));
         const auto handleName = makeBufferName(mKernelId, port);
 //        #ifdef PRINT_DEBUG_MESSAGES
 //        debugPrint(b, handleName + "_virtualBaseAddress = %" PRIu64, vba);

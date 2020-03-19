@@ -450,12 +450,14 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const nextOffset = buffer->modByCapacity(b, nextBlockIndex);
             Value * const startPtr = buffer->StreamSetBuffer::getStreamBlockPtr(b, baseAddress, ZERO, nextOffset);
             Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
-            Constant * const BLOCKS_TO_ZERO = b->getSize(blocksToZero);
-            Value * const endOffset = b->CreateRoundUp(nextOffset, BLOCKS_TO_ZERO);
+            Value * const endOffset = b->CreateRoundUp(nextOffset, b->getSize(blocksToZero));
             Value * const endPtr = buffer->StreamSetBuffer::getStreamBlockPtr(b, baseAddress, ZERO, endOffset);
             Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
             Value * const remainingBytes = b->CreateSub(endPtrInt, startPtrInt);
             #ifdef PRINT_DEBUG_MESSAGES
+            debugPrint(b, prefix + "_zeroFill_blockIndex = %" PRIu64, blockIndex);
+            debugPrint(b, prefix + "_zeroFill_nextOffset = %" PRIu64, nextOffset);
+            debugPrint(b, prefix + "_zeroFill_endOffset = %" PRIu64, endOffset);
             debugPrint(b, prefix + "_zeroFill_bufferStart = %" PRIu64, b->CreateSub(startPtrInt, epochInt));
             debugPrint(b, prefix + "_zeroFill_remainingBufferBytes = %" PRIu64, remainingBytes);
             #endif

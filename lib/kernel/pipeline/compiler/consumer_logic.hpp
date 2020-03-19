@@ -76,6 +76,8 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
  * @brief readConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t streamSet) {
+    #warning this needs to point to the input param for externally synchronized kernels
+
     const auto n = out_degree(streamSet, mConsumerGraph);
     assert (n > 0);
     if (LLVM_UNLIKELY(n == 1)) {

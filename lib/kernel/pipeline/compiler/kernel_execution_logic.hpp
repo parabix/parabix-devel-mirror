@@ -6,22 +6,13 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeRegularKernelCall
+ * @brief writeKernelCall
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeKernelCall(BuilderRef b) {
-
-    // WARNING: any change to this must be reflected in Kernel::addDoSegmentDeclaration, Kernel::getDoSegmentFields,
-    // Kernel::setDoSegmentProperties and Kernel::getDoSegmentProperties.
-
-    // TODO: consider whether we should share internally synchronized item counts via state?
 
     // TODO: add MProtect to buffers and their handles.
 
     // TODO: send in the # of output items we want in the external buffers
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernelHandle, CBuilder::Protect::NONE);
-    }
 
     const auto args = buildKernelCallArgumentList(b);
 
@@ -30,6 +21,10 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
     debugHalt(b);
     #endif
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
+        b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::WRITE);
+    }
 
     startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
     Value * const doSegment = getKernelDoSegmentFunction(b);
@@ -54,7 +49,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     readReturnedOutputVirtualBaseAddresses(b);
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernelHandle, CBuilder::Protect::WRITE);
+        b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::NONE);
     }
 
 }
@@ -64,39 +59,34 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
+    // WARNING: any change to this must be reflected in Kernel::addDoSegmentDeclaration, Kernel::getDoSegmentFields,
+    // Kernel::setDoSegmentProperties and Kernel::getDoSegmentProperties.
+
     const auto numOfInputs = numOfStreamInputs(mKernelId);
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
 
     ArgVec args;
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
-    if (LLVM_LIKELY(mKernel->isStateful())) {
-        args.push_back(mKernelHandle); assert (mKernelHandle);
+    if (LLVM_LIKELY(mKernelSharedHandle)) {
+        args.push_back(mKernelSharedHandle);
     }
-    if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
-        args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelId)));
+    if (LLVM_UNLIKELY(mKernelThreadLocalHandle)) {
+        args.push_back(mKernelThreadLocalHandle);
     }
-
-    args.push_back(mNumOfLinearStridesPhi);
-
-    if (mHasExplicitFinalPartialStride) {
-        // isFinal = b->CreateIsNull(mNumOfLinearStridesPhi);
-    } else {
-        args.push_back(mKernelIsFinal);
-    }
-
-    // TODO: if we've terminated, should all inputs be terminated? or just one
-    // non zero extended input?
-
 
     // If a kernel is internally synchronized, pass the segno to
     // allow the kernel to initialize its current "position"
     if (mKernelIsInternallySynchronized) {
         args.push_back(mSegNo);
+    } else {
+        args.push_back(mNumOfLinearStridesPhi);
+        if (mFixedRateFactorPhi) {
+            args.push_back(mFixedRateFactorPhi);
+        }
     }
-    if (mFixedRateFactorPhi) {
-        args.push_back(mFixedRateFactorPhi);
+    if (mKernelIsInternallySynchronized || !mHasExplicitFinalPartialStride) {
+        args.push_back(mKernelIsFinal);
     }
-
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto port = getInput(mKernelId, StreamSetPort(PortType::Input, i));
         const BufferRateData & rt = mBufferGraph[port];
@@ -107,27 +97,56 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             PHINode * processed = nullptr;
             bool deferred = false;
 
-            if (mAlreadyProcessedDeferredPhi(rt.Port)) {
+            const auto streamSet = source(port, mBufferGraph);
+            if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+
+                // As an outside observer to an internally synchronized kernel, we cannot
+                // know exactly how many items have been processed within the kernel itself.
+                // Moreover without any synchronization locks guarding this kernel code,
+                // we could easily have two or more threads simultaneously executing this
+                // code. However, we still want a uniform model for how we represent virtual
+                // base addresses (VBAs) since the address we're passing into this kernel
+                // could be external to the pipeline itself. However, this still means the
+                // invoked kernel will still have to modify the VBA to point to the correct
+                // position once it begins to use it.
+
+                processed = mInitiallyProcessedItemCount[streamSet];
+            } else if (mAlreadyProcessedDeferredPhi(rt.Port)) {
                 processed = mAlreadyProcessedDeferredPhi(rt.Port);
                 deferred = true;
             } else {
                 processed = mAlreadyProcessedPhi(rt.Port);
             }
 
+            Value * addr = nullptr;
+            if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+                const BufferNode & bn = mBufferGraph[streamSet];
+                assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
+                const StreamSetBuffer * const buffer = bn.Buffer;
+                addr = getVirtualBaseAddress(b, output, buffer, produced);
+            } else {
+                addr = mInputVirtualBaseAddressPhi(rt.Port);
+            }
+            args.push_back(addr);
+
             const Binding & input = rt.Binding;
-
-            args.push_back(mInputVirtualBaseAddressPhi(rt.Port));
-
-            mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, deferred, processed, args);
+            const auto addressable = mKernelIsInternallySynchronized | deferred;
+            mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, addressable, processed, args);
 
             if (LLVM_UNLIKELY(requiresItemCount(input))) {
-                // calculate how many linear items are from the *deferred* position
-                Value * inputItems = mLinearInputItemsPhi(rt.Port);
-                if (deferred) {
-                    Value * diff = b->CreateSub(mAlreadyProcessedPhi(rt.Port), mAlreadyProcessedDeferredPhi(rt.Port));
-                    inputItems = b->CreateAdd(inputItems, diff);
+                Value * inputItems = nullptr;
+                if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+                    const auto streamSet = source(port, mBufferGraph);
+                    inputItems = mLocallyAvailableItems[streamSet]; assert (inputItems);
+                } else {
+                    // calculate how many linear items are from the *deferred* position
+                    inputItems = mLinearInputItemsPhi(rt.Port); assert (inputItems);
+                    if (deferred) {
+                        Value * diff = b->CreateSub(mAlreadyProcessedPhi(rt.Port), mAlreadyProcessedDeferredPhi(rt.Port));
+                        inputItems = b->CreateAdd(inputItems, diff);
+                    }
                 }
-                args.push_back(inputItems); assert (inputItems);
+                args.push_back(inputItems);
             }
         }
     }
@@ -139,9 +158,17 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         assert (rt.Port.Reason == ReasonType::Explicit);
         assert (rt.Port.Type == PortType::Output);
 
-        PHINode * const produced = mAlreadyProducedPhi(rt.Port);
         const auto streamSet = target(port, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
+
+        Value * produced = nullptr;
+        if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+            assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
+            produced = mInitiallyProducedItemCount[streamSet];
+        } else {
+            produced = mAlreadyProducedPhi(rt.Port);
+        }
+
         const Binding & output = rt.Binding;
 
         assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
@@ -151,18 +178,24 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         } else {
             args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced));
         }
-        mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, mKernelCanTerminateEarly, produced, args);
+        const auto addressable = mKernelIsInternallySynchronized | mKernelCanTerminateEarly;
+        mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, addressable, produced, args);
         // TODO:  consider whether we should pass a requested amount to source streams?
         if (requiresItemCount(output)) {
-            args.push_back(mLinearOutputItemsPhi(rt.Port));  assert (mLinearOutputItemsPhi(rt.Port));
+            Value * linearlyWritable;
+            if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+                const StreamSetBuffer * const buffer = bn.Buffer;
+                Value * const consumed = mInitialConsumedItemCount[streamSet];
+                linearlyWritable = buffer->getLinearlyWritableItems(b, produced, consumed, nullptr);
+            } else {
+                linearlyWritable = mLinearOutputItemsPhi(rt.Port);
+            }
+            assert (linearlyWritable);
+            args.push_back(linearlyWritable);
         }
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
             args.push_back(mInitialConsumedItemCount[streamSet]); assert (mInitialConsumedItemCount[streamSet]);
         }
-    }
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mKernelHandle, CBuilder::Protect::NONE);
     }
 
     return args;
@@ -180,45 +213,51 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * processed = nullptr;
         const auto inputPort = StreamSetPort{PortType::Input, i};
-        const Binding & input = getInputBinding(inputPort);
-        const ProcessingRate & rate = input.getRate();
-        if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum() || rate.isGreedy())) {
-            processed = b->CreateAdd(mAlreadyProcessedPhi(inputPort), mLinearInputItemsPhi(inputPort));
-            if (mAlreadyProcessedDeferredPhi(inputPort)) {
-                assert (mReturnedProcessedItemCountPtr(inputPort));
-                mProcessedDeferredItemCount(inputPort) = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
-                #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelId, inputPort);
-                debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount(inputPort));
-                #endif
-                if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    Value * const deferred = mProcessedDeferredItemCount(inputPort);
-                    Value * const isDeferred = b->CreateICmpULE(deferred, processed);
-                    Value * const isFinal = mIsFinalInvocationPhi;
-                    // TODO: workaround now for ScanMatch; if it ends with a match on a
-                    // block-aligned boundary the start of the next match seems to be one
-                    // after? Revise the logic to only perform a 0-item final block on
-                    // kernels that may produce Add'ed data? Define the final/non-final
-                    // contract first.
-                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, b->CreateIsNotNull(isFinal));
-                    b->CreateAssert(isDeferredOrFinal,
-                                    "%s.%s: deferred processed item count (%" PRIu64 ") "
-                                    "exceeds non-deferred (%" PRIu64 ")",
-                                    mCurrentKernelName,
-                                    b->GetString(input.getName()),
-                                    deferred, processed);
-                }
-            }
-        } else if (rate.isBounded() || rate.isUnknown()) {
+        if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
             assert (mReturnedProcessedItemCountPtr(inputPort));
             processed = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
         } else {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "Kernel " << mKernel->getName() << ":" << input.getName()
-                << " has an " << "input" << " rate that is not properly handled by the PipelineKernel";
-            report_fatal_error(out.str());
+            const Binding & input = getInputBinding(inputPort);
+            const ProcessingRate & rate = input.getRate();
+            if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum() || rate.isGreedy())) {
+                processed = b->CreateAdd(mAlreadyProcessedPhi(inputPort), mLinearInputItemsPhi(inputPort));
+                if (mAlreadyProcessedDeferredPhi(inputPort)) {
+                    assert (mReturnedProcessedItemCountPtr(inputPort));
+                    mProcessedDeferredItemCount(inputPort) = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
+                    #ifdef PRINT_DEBUG_MESSAGES
+                    const auto prefix = makeBufferName(mKernelId, inputPort);
+                    debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount(inputPort));
+                    #endif
+                    if (LLVM_UNLIKELY(mCheckAssertions)) {
+                        Value * const deferred = mProcessedDeferredItemCount(inputPort);
+                        Value * const isDeferred = b->CreateICmpULE(deferred, processed);
+                        Value * const isFinal = mIsFinalInvocationPhi;
+                        // TODO: workaround now for ScanMatch; if it ends with a match on a
+                        // block-aligned boundary the start of the next match seems to be one
+                        // after? Revise the logic to only perform a 0-item final block on
+                        // kernels that may produce Add'ed data? Define the final/non-final
+                        // contract first.
+                        Value * const isDeferredOrFinal = b->CreateOr(isDeferred, b->CreateIsNotNull(isFinal));
+                        b->CreateAssert(isDeferredOrFinal,
+                                        "%s.%s: deferred processed item count (%" PRIu64 ") "
+                                        "exceeds non-deferred (%" PRIu64 ")",
+                                        mCurrentKernelName,
+                                        b->GetString(input.getName()),
+                                        deferred, processed);
+                    }
+                }
+            } else if (rate.isBounded() || rate.isUnknown()) {
+                assert (mReturnedProcessedItemCountPtr(inputPort));
+                processed = b->CreateLoad(mReturnedProcessedItemCountPtr(inputPort));
+            } else {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << "Kernel " << mKernel->getName() << ":" << input.getName()
+                    << " has an " << "input" << " rate that is not properly handled by the PipelineKernel";
+                report_fatal_error(out.str());
+            }
         }
+
         mProcessedItemCount(inputPort) = processed; assert (processed);
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelId, inputPort);
@@ -228,45 +267,50 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto outputPort = StreamSetPort{PortType::Output, i};
-        const Binding & output = getOutputBinding(outputPort);
-        const ProcessingRate & rate = output.getRate();
         Value * produced = nullptr;
-        if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum())) {
-            produced = b->CreateAdd(mAlreadyProducedPhi(outputPort), mLinearOutputItemsPhi(outputPort));
-            if (mAlreadyProducedDeferredPhi(outputPort)) {
-                assert (mReturnedProducedItemCountPtr(outputPort));
-                mProducedDeferredItemCount(outputPort) = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
-                #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelId, outputPort);
-                debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount(outputPort));
-                #endif
-                if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    Value * const deferred = mProducedDeferredItemCount(outputPort);
-                    Value * const isDeferred = b->CreateICmpULE(deferred, produced);
-                    Value * const isFinal = mIsFinalInvocationPhi;
-                    // TODO: workaround now for ScanMatch; if it ends with a match on a
-                    // block-aligned boundary the start of the next match seems to be one
-                    // after? Revise the logic to only perform a 0-item final block on
-                    // kernels that may produce Add'ed data? Define the final/non-final
-                    // contract first.
-                    Value * const isDeferredOrFinal = b->CreateOr(isDeferred, b->CreateIsNotNull(isFinal));
-                    b->CreateAssert(isDeferredOrFinal,
-                                    "%s.%s: deferred processed item count (%" PRIu64 ") "
-                                    "exceeds non-deferred (%" PRIu64 ")",
-                                    mCurrentKernelName,
-                                    b->GetString(output.getName()),
-                                    deferred, produced);
-                }
-            }
-        } else if (rate.isBounded() || rate.isUnknown()) {
+        if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
             assert (mReturnedProducedItemCountPtr(outputPort));
             produced = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
         } else {
-            SmallVector<char, 256> tmp;
-            raw_svector_ostream out(tmp);
-            out << "Kernel " << mKernel->getName() << ":" << output.getName()
-                << " has an " << "output" << " rate that is not properly handled by the PipelineKernel";
-            report_fatal_error(out.str());
+            const Binding & output = getOutputBinding(outputPort);
+            const ProcessingRate & rate = output.getRate();
+            if (LLVM_LIKELY(rate.isFixed() || rate.isPartialSum())) {
+                produced = b->CreateAdd(mAlreadyProducedPhi(outputPort), mLinearOutputItemsPhi(outputPort));
+                if (mAlreadyProducedDeferredPhi(outputPort)) {
+                    assert (mReturnedProducedItemCountPtr(outputPort));
+                    mProducedDeferredItemCount(outputPort) = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
+                    #ifdef PRINT_DEBUG_MESSAGES
+                    const auto prefix = makeBufferName(mKernelId, outputPort);
+                    debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount(outputPort));
+                    #endif
+                    if (LLVM_UNLIKELY(mCheckAssertions)) {
+                        Value * const deferred = mProducedDeferredItemCount(outputPort);
+                        Value * const isDeferred = b->CreateICmpULE(deferred, produced);
+                        Value * const isFinal = mIsFinalInvocationPhi;
+                        // TODO: workaround now for ScanMatch; if it ends with a match on a
+                        // block-aligned boundary the start of the next match seems to be one
+                        // after? Revise the logic to only perform a 0-item final block on
+                        // kernels that may produce Add'ed data? Define the final/non-final
+                        // contract first.
+                        Value * const isDeferredOrFinal = b->CreateOr(isDeferred, b->CreateIsNotNull(isFinal));
+                        b->CreateAssert(isDeferredOrFinal,
+                                        "%s.%s: deferred processed item count (%" PRIu64 ") "
+                                        "exceeds non-deferred (%" PRIu64 ")",
+                                        mCurrentKernelName,
+                                        b->GetString(output.getName()),
+                                        deferred, produced);
+                    }
+                }
+            } else if (rate.isBounded() || rate.isUnknown()) {
+                assert (mReturnedProducedItemCountPtr(outputPort));
+                produced = b->CreateLoad(mReturnedProducedItemCountPtr(outputPort));
+            } else {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << "Kernel " << mKernel->getName() << ":" << output.getName()
+                    << " has an " << "output" << " rate that is not properly handled by the PipelineKernel";
+                report_fatal_error(out.str());
+            }
         }
         #ifdef PRINT_DEBUG_MESSAGES
         const auto prefix = makeBufferName(mKernelId, StreamSetPort{PortType::Output, i});

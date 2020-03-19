@@ -210,9 +210,19 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                 addRateId(H[kernel], nextRateId++);
             }
 
-            unsigned termRateId = 0;
-            if (LLVM_UNLIKELY(mayTerminateEarly)) {
-                termRateId = nextRateId++;
+            // TODO: an internally synchronzied kernel with fixed rate I/O can be contained within a partition
+            // but cannot be the root of a non-isolated partition. To permit them to be roots, they'd need
+            // some way of informing the pipeline as to how many strides they executed or the pipeline
+            // would need to know to calculate it from its outputs. Rather than handling this complication,
+            // for now we simply prevent this case.
+
+            const auto internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
+
+            const auto demarcateOutputs = mayTerminateEarly || (isNewPartitionRoot && internallySynchronized);
+            unsigned demarcationId = 0;
+
+            if (LLVM_UNLIKELY(demarcateOutputs)) {
+                demarcationId = nextRateId++;
             }
 
             // Now iterate through the outputs
@@ -232,8 +242,8 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                     const Binding & b = rn.Binding;
                     const ProcessingRate & rate = b.getRate();
                     add_edge(kernel, buffer, mRelationships[e], H);
-                    if (LLVM_UNLIKELY(mayTerminateEarly)) {
-                        addRateId(H[buffer], termRateId);
+                    if (LLVM_UNLIKELY(demarcateOutputs)) {
+                        addRateId(H[buffer], demarcationId);
                     }
                     switch (rate.getKind()) {
                         case RateId::PartialSum:

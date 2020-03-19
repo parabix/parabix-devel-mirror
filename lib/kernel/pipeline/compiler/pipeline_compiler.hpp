@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -74,8 +74,6 @@ const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
-
-const static std::string FULLY_PRODUCED_ITEM_COUNT_SUFFIX = ".FPC";
 
 const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
@@ -180,8 +178,10 @@ public:
 // main doSegment functions
 
     void start(BuilderRef b);
-    void setActiveKernel(BuilderRef b, const unsigned index);
+    void setActiveKernel(BuilderRef b, const unsigned index, const bool allowThreadLocal);
     void executeKernel(BuilderRef b);
+    void executeExternallySynchronizedKernel(BuilderRef b);
+    void executeInternallySynchronizedKernel(BuilderRef b);
     void end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
@@ -189,9 +189,9 @@ public:
 
 // internal pipeline functions
 
-    LLVM_READNONE StructType * getThreadStateType(BuilderRef b) const;
-    Value * allocateMultiThreadedThreadStateObject(BuilderRef b, Value * const threadId, Value * const threadLocal);
-    void readMultiThreadedThreadStateObject(BuilderRef b, Value * threadState);
+    LLVM_READNONE StructType * getThreadStuctType(BuilderRef b) const;
+    Value * constructThreadStructObject(BuilderRef b, Value * const threadId, Value * const threadLocal);
+    void readThreadStuctObject(BuilderRef b, Value * threadState);
     void deallocateThreadState(BuilderRef b, Value * const threadState);
 
     void allocateThreadLocalState(BuilderRef b, Value * const localState, Value * const threadId = nullptr);
@@ -208,7 +208,7 @@ public:
     void makePartitionEntryPoints(BuilderRef b);
     void branchToInitialPartition(BuilderRef b);
     BasicBlock * getPartitionExitPoint(BuilderRef b);
-    void checkPartitionEntry(BuilderRef b);
+    void checkForPartitionEntry(BuilderRef b);
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
 
     void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const exitBlock);
@@ -223,7 +223,6 @@ public:
 
     void readProcessedItemCounts(BuilderRef b);
     void readProducedItemCounts(BuilderRef b);
-    void readLocallyAvailableItemCounts(BuilderRef b);
 
     void initializeKernelLoopEntryPhis(BuilderRef b);
     void initializeKernelCheckOutputSpacePhis(BuilderRef b);
@@ -239,6 +238,7 @@ public:
     void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
+    Value * anyInputClosed(BuilderRef b) const;
     void determineIsFinal(BuilderRef b);
     Value * hasMoreInput(BuilderRef b);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
@@ -537,8 +537,8 @@ protected:
     // pipeline state
     unsigned                                    mKernelId = 0;
     const Kernel *                              mKernel = nullptr;
-    Value *                                     mKernelHandle = nullptr;
-
+    Value *                                     mKernelSharedHandle = nullptr;
+    Value *                                     mKernelThreadLocalHandle = nullptr;
     Value *                                     mZeroExtendBuffer = nullptr;
     Value *                                     mZeroExtendSpace = nullptr;
     Value *                                     mSegNo = nullptr;
@@ -640,7 +640,7 @@ protected:
     bool                                        mHasExplicitFinalPartialStride = false;
     bool                                        mCanTruncatedInput = false;
     bool                                        mIsPartitionRoot = false;
-    bool                                        mLoopsBackToEntry = false;
+    bool                                        mNonSourceKernel = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
