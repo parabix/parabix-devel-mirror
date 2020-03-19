@@ -857,8 +857,6 @@ Value * IDISA_Builder::mvmd_compress(unsigned fw, Value * v, Value * select_mask
     unsigned field_count = valueTy->getVectorNumElements();
     Type * maskTy = select_mask->getType();
     if (maskTy->isIntegerTy()) {
-        assert(maskTy->getIntegerBitWidth() == field_count);
-        assert(maskTy->getIntegerBitWidth() <= fieldTy->getIntegerBitWidth());
         SmallVector<Constant *, 16> elements(field_count);
         for (unsigned i = 0; i < field_count; i++) {
             elements[i] = ConstantInt::get(fieldTy, 1<<i);
