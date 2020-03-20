@@ -14,11 +14,15 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
 
     // TODO: send in the # of output items we want in the external buffers
 
+    Value * const doSegment = getKernelDoSegmentFunction(b);
+
+    #ifndef NDEBUG
+    mKernelDoSegmentFunctionType = cast<FunctionType>(doSegment->getType()->getPointerElementType());
+    #endif
+
     const auto args = buildKernelCallArgumentList(b);
 
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeKernelName(mKernelId);
-    debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
     debugHalt(b);
     #endif
 
@@ -27,7 +31,6 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     }
 
     startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
-    Value * const doSegment = getKernelDoSegmentFunction(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
         const auto prefix = makeKernelName(mKernelId);
@@ -38,9 +41,9 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         doSegmentRetVal = b->CreateCall(doSegment, args);
     }
     updateCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
+
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);
-    debugPrint(b, "* " + prefix + "_executed = %" PRIu64, mNumOfLinearStridesPhi);
     #endif
 
     mTerminatedExplicitly = mKernelCanTerminateEarly ? doSegmentRetVal : nullptr;
@@ -66,26 +69,70 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
 
     ArgVec args;
+
+    auto addNextArg = [&](Value * arg) {
+
+        #ifndef NDEBUG
+        assert ("null argument" && arg);
+
+        const auto n = mKernelDoSegmentFunctionType->getNumParams();
+        if (LLVM_UNLIKELY(args.size() >= n)) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << mKernel->getName() << ": "
+                   "was given too many arguments";
+            throw std::runtime_error(out.str().str());
+        }
+
+        Type * const argTy = mKernelDoSegmentFunctionType->getParamType(args.size());
+        if (LLVM_UNLIKELY(argTy != arg->getType())) {
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << mKernel->getName() << ": "
+                "invalid argument type for #" << args.size()
+                << ": expected ";
+            argTy->print(out);
+            out << " but got ";
+            arg->getType()->print(out);
+            throw std::runtime_error(out.str().str());
+        }
+        #endif
+
+        args.push_back(arg);
+    };
+
     args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
     if (LLVM_LIKELY(mKernelSharedHandle)) {
-        args.push_back(mKernelSharedHandle);
+        addNextArg(mKernelSharedHandle);
     }
     if (LLVM_UNLIKELY(mKernelThreadLocalHandle)) {
-        args.push_back(mKernelThreadLocalHandle);
+        addNextArg(mKernelThreadLocalHandle);
     }
 
     // If a kernel is internally synchronized, pass the segno to
     // allow the kernel to initialize its current "position"
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeKernelName(mKernelId);
+    #endif
     if (mKernelIsInternallySynchronized) {
-        args.push_back(mSegNo);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "* " + prefix + "_internalSegNo = %" PRIu64, mSegNo);
+        #endif
+        addNextArg(mSegNo);
     } else {
-        args.push_back(mNumOfLinearStridesPhi);
+        addNextArg(mNumOfLinearStridesPhi);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
+        #endif
         if (mFixedRateFactorPhi) {
-            args.push_back(mFixedRateFactorPhi);
+            addNextArg(mFixedRateFactorPhi);
         }
     }
     if (mKernelIsInternallySynchronized || !mHasExplicitFinalPartialStride) {
-        args.push_back(mKernelIsFinal);
+        addNextArg(mKernelIsFinal);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mKernelIsFinal);
+        #endif
     }
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto port = getInput(mKernelId, StreamSetPort(PortType::Input, i));
@@ -93,11 +140,17 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
         if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
 
-            // calculate the deferred processed item count
-            PHINode * processed = nullptr;
-            bool deferred = false;
-
             const auto streamSet = source(port, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            const StreamSetBuffer * const buffer = bn.Buffer;
+            const Binding & input = rt.Binding;
+
+            assert ("input buffer type mismatch?" && (input.getType() == buffer->getBaseType()));
+
+            const auto  deferred = input.isDeferred();
+
+            Value * processed = nullptr;
+
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
 
                 // As an outside observer to an internally synchronized kernel, we cannot
@@ -110,43 +163,47 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                 // invoked kernel will still have to modify the VBA to point to the correct
                 // position once it begins to use it.
 
-                processed = mInitiallyProcessedItemCount[streamSet];
-            } else if (mAlreadyProcessedDeferredPhi(rt.Port)) {
-                processed = mAlreadyProcessedDeferredPhi(rt.Port);
-                deferred = true;
+                if (deferred) {
+                    processed = mInitiallyProcessedDeferredItemCount(rt.Port);
+                } else {
+                    processed = mInitiallyProcessedItemCount(rt.Port);
+                }
+
             } else {
-                processed = mAlreadyProcessedPhi(rt.Port);
+
+                if (deferred) {
+                    processed = mAlreadyProcessedDeferredPhi(rt.Port);
+                } else {
+                    processed = mAlreadyProcessedPhi(rt.Port);
+                }
             }
+            assert (processed);
 
             Value * addr = nullptr;
             if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-                const BufferNode & bn = mBufferGraph[streamSet];
                 assert ("internally synchronized I/O must be linear!" && !bn.NonLinear);
-                const StreamSetBuffer * const buffer = bn.Buffer;
-                addr = getVirtualBaseAddress(b, output, buffer, produced);
+                addr = getVirtualBaseAddress(b, rt, buffer, processed);
             } else {
                 addr = mInputVirtualBaseAddressPhi(rt.Port);
             }
-            args.push_back(addr);
+            addNextArg(addr);
 
-            const Binding & input = rt.Binding;
             const auto addressable = mKernelIsInternallySynchronized | deferred;
             mReturnedProcessedItemCountPtr(rt.Port) = addItemCountArg(b, input, addressable, processed, args);
 
-            if (LLVM_UNLIKELY(requiresItemCount(input))) {
-                Value * inputItems = nullptr;
-                if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-                    const auto streamSet = source(port, mBufferGraph);
-                    inputItems = mLocallyAvailableItems[streamSet]; assert (inputItems);
-                } else {
-                    // calculate how many linear items are from the *deferred* position
-                    inputItems = mLinearInputItemsPhi(rt.Port); assert (inputItems);
-                    if (deferred) {
-                        Value * diff = b->CreateSub(mAlreadyProcessedPhi(rt.Port), mAlreadyProcessedDeferredPhi(rt.Port));
-                        inputItems = b->CreateAdd(inputItems, diff);
-                    }
+            if (mKernelIsInternallySynchronized) {
+                const auto streamSet = source(port, mBufferGraph);
+                Value * const avail = mLocallyAvailableItems[streamSet]; assert (avail);
+                Value * const accessible = b->CreateSub(avail, processed);
+                addNextArg(accessible);
+            } else if (LLVM_UNLIKELY(requiresItemCount(input))) {
+                // calculate how many linear items are from the *deferred* position
+                Value * inputItems = mLinearInputItemsPhi(rt.Port); assert (inputItems);
+                if (deferred) {
+                    Value * diff = b->CreateSub(mAlreadyProcessedPhi(rt.Port), mAlreadyProcessedDeferredPhi(rt.Port));
+                    inputItems = b->CreateAdd(inputItems, diff);
                 }
-                args.push_back(inputItems);
+                addNextArg(inputItems);
             }
         }
     }
@@ -160,6 +217,10 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
         const auto streamSet = target(port, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
+        const Binding & output = rt.Binding;
+
+        assert ("output buffer type mismatch?" && (output.getType() == buffer->getBaseType()));
 
         Value * produced = nullptr;
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
@@ -169,34 +230,26 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             produced = mAlreadyProducedPhi(rt.Port);
         }
 
-        const Binding & output = rt.Binding;
-
-        assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
-
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, bn.Buffer, args);
+            mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, buffer, args);
         } else {
-            args.push_back(getVirtualBaseAddress(b, output, bn.Buffer, produced));
+            addNextArg(getVirtualBaseAddress(b, rt, buffer, produced));
         }
         const auto addressable = mKernelIsInternallySynchronized | mKernelCanTerminateEarly;
         mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, addressable, produced, args);
-        // TODO:  consider whether we should pass a requested amount to source streams?
-        if (requiresItemCount(output)) {
-            Value * linearlyWritable;
-            if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-                const StreamSetBuffer * const buffer = bn.Buffer;
-                Value * const consumed = mInitialConsumedItemCount[streamSet];
-                linearlyWritable = buffer->getLinearlyWritableItems(b, produced, consumed, nullptr);
-            } else {
-                linearlyWritable = mLinearOutputItemsPhi(rt.Port);
-            }
-            assert (linearlyWritable);
-            args.push_back(linearlyWritable);
-        }
+
         if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
-            args.push_back(mInitialConsumedItemCount[streamSet]); assert (mInitialConsumedItemCount[streamSet]);
+            addNextArg(mInitialConsumedItemCount[streamSet]);
+        } else if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+            Value * const consumed = mInitialConsumedItemCount[streamSet];
+            addNextArg(buffer->getLinearlyWritableItems(b, produced, consumed, nullptr));
+        } else if (requiresItemCount(output)) {
+            addNextArg(mLinearOutputItemsPhi(rt.Port));
         }
+
     }
+
+    assert (args.size() == mKernelDoSegmentFunctionType->getNumParams());
 
     return args;
 }
@@ -326,12 +379,20 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
                                           const bool forceAddressability,
-                                          PHINode * const itemCount,
+                                          Value * const itemCount,
                                           ArgVec & args) {
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
     }
+
+    auto addNextArg = [&](Value * arg) {
+        assert ("null argument" && arg);
+        assert ("too many arguments?" && args.size() < mKernelDoSegmentFunctionType->getNumParams());
+        assert ("invalid argument type" && (mKernelDoSegmentFunctionType->getParamType(args.size()) == arg->getType()));
+        args.push_back(arg);
+    };
+
     Value * ptr = nullptr;
     if (forceAddressability || isAddressable(binding)) {
         if (LLVM_UNLIKELY(mNumOfAddressableItemCount == mAddressableItemCountPtr.size())) {
@@ -340,9 +401,9 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
         }
         ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
         b->CreateStore(itemCount, ptr);
-        args.push_back(ptr);
+        addNextArg(ptr);
     } else if (isCountable(binding)) {
-        args.push_back(itemCount);
+        addNextArg(itemCount);
     }
     return ptr;
 }
@@ -355,10 +416,18 @@ Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSet
         auto vba = b->CreateAllocaAtEntryPoint(b->getVoidPtrTy());
         mVirtualBaseAddressPtr.push_back(vba);
     }
+
+    auto addNextArg = [&](Value * arg) {
+        assert ("null argument" && arg);
+        assert ("too many arguments?" && args.size() < mKernelDoSegmentFunctionType->getNumParams());
+        assert ("invalid argument type" && (mKernelDoSegmentFunctionType->getParamType(args.size()) == arg->getType()));
+        args.push_back(arg);
+    };
+
     Value * ptr = mVirtualBaseAddressPtr[mNumOfVirtualBaseAddresses++]; assert (isa<ExternalBuffer>(buffer));
     ptr = b->CreatePointerCast(ptr, buffer->getPointerType()->getPointerTo());
     b->CreateStore(buffer->getBaseAddress(b.get()), ptr);
-    args.push_back(ptr);
+    addNextArg(ptr);
     return ptr;
 }
 

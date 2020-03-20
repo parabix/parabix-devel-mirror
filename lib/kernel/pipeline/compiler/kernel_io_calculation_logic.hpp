@@ -38,8 +38,9 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mNumOfInputStrides = nullptr;
     } else {
         const auto diff = (MaximumNumOfStrides[mKernelId] / MaximumNumOfStrides[mPartitionRootKernelId]);
+        assert (mNumOfPartitionStrides);
         mMaximumNumOfStrides = b->CreateCeilUMulRate(mNumOfPartitionStrides, diff);
-        if (mNonSourceKernel) {
+        if (mMayLoopToEntry) {
             mNumOfInputStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
         } else {
             mNumOfInputStrides = mMaximumNumOfStrides;
@@ -76,7 +77,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     mNumOfOutputStrides = mNumOfInputStrides;
 
-    if (mNonSourceKernel) {
+    if (mMayLoopToEntry) {
 
         if (!mHasExplicitFinalPartialStride) {
             mNumOfOutputStrides = b->CreateUMax(b->getSize(1), mNumOfInputStrides);
@@ -105,7 +106,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         ensureSufficientOutputSpace(b, output.Port);
     }
 
-    if (mNonSourceKernel) {
+    if (mMayLoopToEntry) {
         mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, mNumOfInputStrides);
     } else {
         mUpdatedNumOfStrides = mNumOfInputStrides;
@@ -348,7 +349,7 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief anyInputClosed
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::anyInputClosed(BuilderRef b) const {
+Value * PipelineCompiler::anyInputClosed(BuilderRef b) {
     Value * anyClosed = nullptr;
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & br =  mBufferGraph[e];
@@ -403,7 +404,7 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
  * @brief hasMoreInput
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
-    assert (mNonSourceKernel);
+    assert (mMayLoopToEntry);
     if (mIsPartitionRoot) {
 
         BasicBlock * const lastTestExit = b->CreateBasicBlock("", mKernelLoopExit);
@@ -473,6 +474,9 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
 
     const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
+
+
+
     Value * const processed = mAlreadyProcessedPhi(inputPort);
     Value * overflow = nullptr;
     if (LLVM_LIKELY(useOverflow)) {

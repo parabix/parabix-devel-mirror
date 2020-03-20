@@ -201,8 +201,10 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
             // Check whether this (internal) kernel could terminate early
             const Kernel * const kernelObj = node.Kernel;
             bool mayTerminateEarly = false;
+            bool internallySynchronized = false;
             if (kernelObj != mPipelineKernel) {
                 mayTerminateEarly = kernelObj->canSetTerminateSignal();
+                internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
             }
 
             // Assign a root of a partition a new id.
@@ -215,8 +217,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
             // some way of informing the pipeline as to how many strides they executed or the pipeline
             // would need to know to calculate it from its outputs. Rather than handling this complication,
             // for now we simply prevent this case.
-
-            const auto internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
 
             const auto demarcateOutputs = mayTerminateEarly || (isNewPartitionRoot && internallySynchronized);
             unsigned demarcationId = 0;

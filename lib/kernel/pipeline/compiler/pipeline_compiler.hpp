@@ -238,7 +238,7 @@ public:
     void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
-    Value * anyInputClosed(BuilderRef b) const;
+    Value * anyInputClosed(BuilderRef b);
     void determineIsFinal(BuilderRef b);
     Value * hasMoreInput(BuilderRef b);
     std::pair<Value *, Value *> calculateFinalItemCounts(BuilderRef b, Vec<Value *> & accessibleItems, Vec<Value *> & writableItems);
@@ -251,7 +251,7 @@ public:
     ArgVec buildKernelCallArgumentList(BuilderRef b);
     void updateProcessedAndProducedItemCounts(BuilderRef b);
     void readReturnedOutputVirtualBaseAddresses(BuilderRef b) const;
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, PHINode * const itemCount, ArgVec &args);
+    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, Value * const itemCount, ArgVec &args);
     Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args);
 
     void normalCompletionCheck(BuilderRef b);
@@ -349,13 +349,14 @@ public:
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
+    void prepareExternallySynchronizedBuffers(BuilderRef b);
     LLVM_READNONE bool requiresCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE bool requiresLookAhead(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getLookAhead(const unsigned bufferVertex) const;
 
     void prepareLinearBuffers(BuilderRef b);
-    Value * getVirtualBaseAddress(BuilderRef b, const Binding & binding, const StreamSetBuffer * const buffer, Value * const position) const;
+    Value * getVirtualBaseAddress(BuilderRef b, const BufferRateData & rateData, const StreamSetBuffer * const buffer, Value * position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
 
@@ -415,8 +416,6 @@ public:
     bool isBounded() const;
     bool canTruncateInputBuffer() const;
     void identifyPipelineInputs();
-
-    void printBufferGraph(raw_ostream & out) const;
 
 // synchronization functions
 
@@ -547,7 +546,7 @@ protected:
     Value *                                     mPipelineProgress = nullptr;
     Value *                                     mCurrentThreadTerminationSignalPtr = nullptr;
     BasicBlock *                                mPipelineLoop = nullptr;
-    BasicBlock *                                mKernelEntry = nullptr;
+    BasicBlock *                                mKernelLoopStart = nullptr;
     BasicBlock *                                mKernelLoopEntry = nullptr;
     BasicBlock *                                mKernelCheckOutputSpace = nullptr;
     BasicBlock *                                mKernelLoopCall = nullptr;
@@ -640,7 +639,7 @@ protected:
     bool                                        mHasExplicitFinalPartialStride = false;
     bool                                        mCanTruncatedInput = false;
     bool                                        mIsPartitionRoot = false;
-    bool                                        mNonSourceKernel = false;
+    bool                                        mMayLoopToEntry = false;
 
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
@@ -654,7 +653,6 @@ protected:
     InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
 
     enum { WITH_OVERFLOW = 0, WITHOUT_OVERFLOW = 1};
-
 
     InputPortVec<Value *>                       mInputEpoch;
     InputPortVec<Value *>                       mIsInputZeroExtended;
@@ -700,6 +698,10 @@ protected:
     Value *                                     mDebugFdPtr = nullptr;
     Value *                                     mCurrentKernelName = nullptr;
     FixedVector<Value *>                        mKernelName;
+
+    #ifndef NDEBUG
+    FunctionType *                              mKernelDoSegmentFunctionType = nullptr;
+    #endif
 
     // misc.
 

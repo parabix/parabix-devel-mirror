@@ -237,9 +237,6 @@ void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
         const auto prefix = makeBufferName(mKernelId, outputPort);
         const auto streamSet = target(e, mBufferGraph);
         mInitiallyProducedItemCount[streamSet] = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_initiallyProduced = %" PRIu64, mInitiallyProducedItemCount[streamSet]);
-        #endif
         if (output.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
             mInitiallyProducedDeferredItemCount[streamSet] = deferred;
@@ -252,10 +249,9 @@ void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::initializeLocallyAvailableItemCounts(BuilderRef b, BasicBlock * const entryBlock) {
     IntegerType * const sizeTy = b->getSizeTy();
-    ConstantInt * const ZERO = b->getSize(0);
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         PHINode * const phi = b->CreatePHI(sizeTy, 2);
-        phi->addIncoming(ZERO, entryBlock);
+        phi->addIncoming(mLocallyAvailableItems[streamSet], entryBlock);
         mInitiallyAvailableItemsPhi[streamSet] = phi;
         mLocallyAvailableItems[streamSet] = phi;
     }
@@ -264,7 +260,7 @@ void PipelineCompiler::initializeLocallyAvailableItemCounts(BuilderRef b, BasicB
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief updateLocallyAvailableItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::updateLocallyAvailableItemCounts(BuilderRef /* b */, BasicBlock * const entryBlock) {
+void PipelineCompiler::updateLocallyAvailableItemCounts(BuilderRef b, BasicBlock * const entryBlock) {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         PHINode * const phi = mInitiallyAvailableItemsPhi[streamSet];
         phi->addIncoming(mLocallyAvailableItems[streamSet], entryBlock);
@@ -275,14 +271,16 @@ void PipelineCompiler::updateLocallyAvailableItemCounts(BuilderRef /* b */, Basi
  * @brief getTotalItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort inputPort) const {
-    return mLocallyAvailableItems[getInputBufferVertex(inputPort)];
+    const auto streamSet = getInputBufferVertex(inputPort);
+    return mLocallyAvailableItems[streamSet];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getTotalItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const StreamSetPort outputPort, Value * const available) {
-    mLocallyAvailableItems[getOutputBufferVertex(outputPort)] = available;
+    const auto streamSet = getOutputBufferVertex(outputPort);
+    mLocallyAvailableItems[streamSet] = available;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -698,9 +696,9 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
  * Returns the address of the "zeroth" item of the (logically-unbounded) stream set.
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
-                                                const Binding & binding,
+                                                const BufferRateData & rateData,
                                                 const StreamSetBuffer * const buffer,
-                                                Value * const position) const {
+                                                Value * position) const {
     assert ("buffer cannot be null!" && buffer);
     Constant * const LOG_2_BLOCK_WIDTH = b->getSize(floor_log2(b->getBitBlockWidth()));
     Constant * const ZERO = b->getSize(0);
@@ -708,10 +706,12 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
     Value * const baseAddress = buffer->getBaseAddress(b);
     if (LLVM_UNLIKELY(mCheckAssertions)) {
+        const Binding & binding = rateData.Binding;
         b->CreateAssert(baseAddress, "%s.%s: baseAddress cannot be null",
                         mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
+
     Value * address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
     return b->CreatePointerCast(address, bufferType);
 }
@@ -733,9 +733,56 @@ void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> &
         const auto buffer = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];
         assert (isFromCurrentFunction(b, bn.Buffer->getHandle()));
-        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt.Binding, bn.Buffer, processed);
+        baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt, bn.Buffer, processed);
     }
 }
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief prepareExternallySynchronizedBuffers
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::prepareExternallySynchronizedBuffers(BuilderRef b) {
+
+//    // If this pipeline is externally synchronized then the outer kernel does
+//    // not attempt to calculate the true VBA for this pipeline's I/O buffers;
+//    // instead the outer kernel provides the expected VBA but assumes we'll
+//    // determine the correct one after we acquire the internal lock.
+
+//    if (ExternallySynchronized) {
+
+//        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+//            const BufferRateData & br = mBufferGraph[e];
+//            const auto inputPort = br.Port;
+//            if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
+//                const auto streamSet = source(e, mBufferGraph);
+//                const auto port = in_edge(streamSet, mBufferGraph);
+//                const BufferRateData & external = mBufferGraph[port];
+//                Value * const ptr = getProcessedInputItemsPtr(external.Port.Number);
+//                Value * const externallyProcessed = b->CreateLoad(ptr);
+//                const Binding & binding = br.Binding;
+//                Value * processed = nullptr;
+//                if (binding.isDeferred()) {
+//                    processed = mInitiallyProcessedDeferredItemCount(inputPort);
+//                } else {
+//                    processed = mInitiallyProcessedItemCount(inputPort);
+//                }
+//                Value * const diff = b->CreateSub(processed, externallyProcessed);
+
+
+
+
+
+
+
+//            }
+//        }
+
+
+//    }
+
+
+}
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputPortIndex

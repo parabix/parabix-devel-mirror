@@ -302,7 +302,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
     mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
-    assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));
     mHasExplicitFinalPartialStride = mKernel->requiresExplicitPartialFinalStride();
     mNextPartitionEntryPoint = getPartitionExitPoint(b);
 
@@ -310,6 +309,8 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     identifyPipelineInputs();
     checkForPartitionEntry(b);
+
+    assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));
 
     if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
         executeInternallySynchronizedKernel(b);
@@ -334,19 +335,34 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 
     mKernelId = PipelineInput;
 
+    ConstantInt * const ZERO = b->getSize(0);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        mLocallyAvailableItems[streamSet] = ZERO;
+    }
+
     // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-
-        const auto buffer = target(e, mBufferGraph);
         const StreamSetPort inputPort = mBufferGraph[e].Port;
         assert (inputPort.Type == PortType::Output);
         Value * const available = getAvailableInputItems(inputPort.Number);
         setLocallyAvailableItemCount(b, inputPort, available);
         initializeConsumedItemCount(b, inputPort, available);
+    }
+
+    if (ExternallySynchronized) {
+        #warning read locally avail item counts here? values may be stale and inconsistent
+        return;
+    }
+
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+
+        const auto buffer = target(e, mBufferGraph);
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
 
         Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
         Value * const processed = b->CreateLoad(inPtr);
-
         for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
             const auto kernelIndex = target(e, mBufferGraph);
@@ -354,7 +370,9 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
             Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
             b->CreateStore(processed, ptr);
         }
+
     }
+
 
     mKernelId = PipelineOutput;
 
@@ -365,7 +383,6 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         assert (outputPort.Type == PortType::Input);
         Value * outPtr = getProducedOutputItemsPtr(outputPort.Number);
         Value * const produced = b->CreateLoad(outPtr);
-
         for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
             const auto kernelIndex = source(e, mBufferGraph);

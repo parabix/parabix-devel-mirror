@@ -464,12 +464,12 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         assert (accessible);
         assert (accessible->getType() == sizeTy);
         mAccessibleInputItems[i] = accessible;
-        Value * capacity = b->CreateAdd(processed, accessible);
-        mAvailableInputItems[i] = capacity;
+        Value * avail = b->CreateAdd(processed, accessible);
+        mAvailableInputItems[i] = avail;
         if (input.hasLookahead()) {
-            capacity = b->CreateAdd(capacity, b->getSize(input.getLookahead()));
+            avail = b->CreateAdd(avail, b->getSize(input.getLookahead()));
         }
-        buffer->setCapacity(b, capacity);
+        buffer->setCapacity(b, avail);
         #ifdef CHECK_IO_ADDRESS_RANGE
         if (LLVM_UNLIKELY(enableAsserts)) {
             checkStreamRange(buffer, input, processed);
@@ -541,21 +541,21 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// writable / consumed item count
         /// ----------------------------------------------------
         Value * writable = nullptr;
-        if (internallySynchronized || requiresItemCount(output)) {
-            writable = nextArg();
-            assert (writable && writable->getType() == sizeTy);
-        } else if (mFixedRateFactor) {
-            writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
-        }
-        mWritableOutputItems[i] = writable;
         if (LLVM_UNLIKELY(isLocal)) {
             Value * const consumed = nextArg();
             assert (consumed->getType() == sizeTy);
             mConsumedOutputItems[i] = consumed;
         } else {
+            if (internallySynchronized || requiresItemCount(output)) {
+                writable = nextArg();
+                assert (writable && writable->getType() == sizeTy);
+            } else if (mFixedRateFactor) {
+                writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+            }
             Value * const capacity = b->CreateAdd(produced, writable);
             buffer->setCapacity(b, capacity);
         }
+        mWritableOutputItems[i] = writable;
         #ifdef CHECK_IO_ADDRESS_RANGE
         if (LLVM_UNLIKELY(enableAsserts)) {
             checkStreamRange(buffer, output, produced);
@@ -661,11 +661,10 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         /// writable / consumed item count
         /// ----------------------------------------------------
-        if (internallySynchronized || requiresItemCount(output)) {
-            props.push_back(mWritableOutputItems[i]);
-        }
         if (LLVM_UNLIKELY(isLocal)) {
             props.push_back(mConsumedOutputItems[i]);
+        } else if (internallySynchronized || requiresItemCount(output)) {
+            props.push_back(mWritableOutputItems[i]);
         }
     }
     return props;
@@ -1242,6 +1241,34 @@ void KernelCompiler::loadHandlesOfLocalOutputStreamSets(BuilderRef b) const {
  * @brief clearInternalStateAfterCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelCompiler::clearInternalStateAfterCodeGen() {
+
+    // Attempt to promote all of the allocas in the entry block into PHI nodes
+    // and delete any unnecessary Alloca and GEP instructions.
+
+    SmallVector<AllocaInst *, 32> allocas;
+    Instruction * inst = mEntryPoint->getFirstNonPHIOrDbgOrLifetime();
+    while (inst) {
+        Instruction * const nextNode = inst->getNextNode();
+        if (isa<AllocaInst>(inst) || isa<GetElementPtrInst>(inst)) {
+            if (LLVM_UNLIKELY(inst->getNumUses() == 0)) {
+                inst->eraseFromParent();
+                inst = nextNode;
+                continue;
+            }
+        }
+        if (isa<AllocaInst>(inst)) {
+            if (isAllocaPromotable(cast<AllocaInst>(inst))) {
+                allocas.push_back(cast<AllocaInst>(inst));
+            }
+        }
+        inst = nextNode;
+    }
+
+    if (LLVM_LIKELY(!allocas.empty())) {
+        DominatorTree dt(*mCurrentMethod);
+        PromoteMemToReg(allocas, dt);
+    }
+
     for (const auto & buffer : mStreamSetInputBuffers) {
         buffer->setHandle(nullptr);
     }
@@ -1249,24 +1276,7 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
         buffer->setHandle(nullptr);
     }
 
-    // Attempt to promote all of the allocas in the entry block into PHI nodes
-    SmallVector<AllocaInst *, 32> allocas;
-    Instruction * inst = mEntryPoint->getFirstNonPHIOrDbgOrLifetime();
-    while (inst && isa<AllocaInst>(inst)) {
-        AllocaInst * const A = cast<AllocaInst>(inst);
-        if (isAllocaPromotable(A)) {
-            allocas.push_back(A);
-        }
-        inst = inst->getNextNode();
-    }
-    if (LLVM_LIKELY(!allocas.empty())) {
-        assert (mCurrentMethod);
-        DominatorTree dt(*mCurrentMethod);
-        PromoteMemToReg(allocas, dt);
-    }
-
     mScalarFieldMap.clear();
-
     mSharedHandle = nullptr;
     mThreadLocalHandle = nullptr;
     mExternalSegNo = nullptr;

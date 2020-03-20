@@ -367,7 +367,12 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
         const auto prefix = makeBufferName(mKernelId, port);
-        Value * const produced = mFinalProducedPhi(port);
+        Value * produced = nullptr;
+        if (mKernelIsInternallySynchronized) {
+            produced = mProducedItemCount(port);
+        } else {
+            produced = mFinalProducedPhi(port);
+        }
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
         Value * packIndex = nullptr;

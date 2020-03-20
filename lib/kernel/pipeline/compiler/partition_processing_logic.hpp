@@ -164,57 +164,47 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
         // (3) if we have yet to execute (and will be jumping over) the kernel, load
         // the prior produced count.
 
-        bool prepareProducedPhi = true;
-//        for (const auto f : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-//            const auto consumer = target(f, mBufferGraph);
-//            const auto p = KernelPartitionId[consumer];
-//            if (p >= targetPartitionId) {
-//                prepareProducedPhi = true;
-//                break;
-//            }
-//        }
-        if (prepareProducedPhi) {
-            const BufferRateData & br = mBufferGraph[e];
-            // Select/compute/load the appropriate produced item count
-            Value * produced = nullptr;
-            if (kernel < mKernelId) {
-                produced = mLocallyAvailableItems[streamSet];
-            } else {
-                const Binding & output = br.Binding;
-                const auto deferred = output.isDeferred();
-                if (kernel == mKernelId) {
-                    if (fromKernelEntry) {
-                        if (LLVM_UNLIKELY(deferred)) {
-                            produced = mInitiallyProducedDeferredItemCount[streamSet];
-                        } else {
-                            produced = mInitiallyProducedItemCount[streamSet];
-                        }
+
+        const BufferRateData & br = mBufferGraph[e];
+        // Select/compute/load the appropriate produced item count
+        Value * produced = nullptr;
+        if (kernel < mKernelId) {
+            produced = mLocallyAvailableItems[streamSet];
+        } else {
+            const Binding & output = br.Binding;
+            const auto deferred = output.isDeferred();
+            if (kernel == mKernelId) {
+                if (fromKernelEntry) {
+                    if (LLVM_UNLIKELY(deferred)) {
+                        produced = mInitiallyProducedDeferredItemCount[streamSet];
                     } else {
-                        Value * initiallyProduced;
-                        Value * alreadyProduced;
-                        if (LLVM_UNLIKELY(deferred)) {
-                            initiallyProduced = mInitiallyProducedDeferredItemCount[streamSet];
-                            alreadyProduced = mAlreadyProducedDeferredPhi(br.Port);
-                        } else {
-                            initiallyProduced = mInitiallyProducedItemCount[streamSet];
-                            alreadyProduced = mAlreadyProducedPhi(br.Port);
-                        }
-                        PHINode * const phi = b->CreatePHI(b->getSizeTy(), 2);
-                        if (mKernelInitiallyTerminatedExit) {
-                            phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
-                        }
-                        if (mKernelInsufficientInputExit) {
-                            phi->addIncoming(alreadyProduced, mKernelInsufficientInputExit);
-                        }
-                        produced = phi;
+                        produced = mInitiallyProducedItemCount[streamSet];
                     }
-                    produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);
                 } else {
-                    produced = mInitiallyAvailableItemsPhi[streamSet];
+                    Value * initiallyProduced;
+                    Value * alreadyProduced;
+                    if (LLVM_UNLIKELY(deferred)) {
+                        initiallyProduced = mInitiallyProducedDeferredItemCount[streamSet];
+                        alreadyProduced = mAlreadyProducedDeferredPhi(br.Port);
+                    } else {
+                        initiallyProduced = mInitiallyProducedItemCount[streamSet];
+                        alreadyProduced = mAlreadyProducedPhi(br.Port);
+                    }
+                    PHINode * const phi = b->CreatePHI(b->getSizeTy(), 2);
+                    if (mKernelInitiallyTerminatedExit) {
+                        phi->addIncoming(initiallyProduced, mKernelInitiallyTerminatedExit);
+                    }
+                    if (mKernelInsufficientInputExit) {
+                        phi->addIncoming(alreadyProduced, mKernelInsufficientInputExit);
+                    }
+                    produced = phi;
                 }
+                produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);
+            } else {
+                produced = mInitiallyAvailableItemsPhi[streamSet];
             }
-            producedSet.emplace_back(streamSet, produced);
         }
+        producedSet.emplace_back(streamSet, produced);
 
         bool prepareConsumedPhi = false;
         for (const auto f : make_iterator_range(out_edges(streamSet, mConsumerGraph))) {
