@@ -16,21 +16,30 @@ inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasKernelTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally) const {
+void PipelineCompiler::initializePipelineInputTerminationSignal(BuilderRef b) {
     // any pipeline input streams are considered produced by the P_{in} vertex.
-    if (LLVM_UNLIKELY(kernel == PipelineInput)) {
-        return mIsFinal;
+    if (out_degree(PipelineInput, mBufferGraph) > 0) {
+        assert (KernelPartitionId[PipelineInput] == 0);
+        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+        Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+        mPartitionTerminationSignal[0] = b->CreateSelect(mIsFinal, completed, unterminated);
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasKernelTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally) const {
+    const auto partitionId = KernelPartitionId[kernel];
+    Value * const signal = mPartitionTerminationSignal[partitionId];
+    if (signal == nullptr) errs() << partitionId << "\n\n";
+    assert (signal);
+    if (normally) {
+        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+        return b->CreateICmpEQ(signal, completed);
     } else {
-        assert (kernel != PipelineOutput);
-        const auto partitionId = KernelPartitionId[kernel];
-        Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
-        if (normally) {
-            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-            return b->CreateICmpEQ(signal, completed);
-        } else {
-            Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
-            return b->CreateICmpNE(signal, unterminated);
-        }
+        Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
+        return b->CreateICmpNE(signal, unterminated);
     }
 }
 

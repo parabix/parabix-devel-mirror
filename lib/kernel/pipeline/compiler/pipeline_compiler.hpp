@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -200,8 +200,6 @@ public:
     Value * readTerminationSignalFromLocalState(BuilderRef b, Value * const threadState) const;
     inline Value * isProcessThread(BuilderRef b, Value * const threadState) const;
 
-    void addTerminationProperties(BuilderRef b, const size_t kernel);
-
 // partitioning codegen functions
 
     void addPartitionInputItemCounts(BuilderRef b, const size_t partitionId) const;
@@ -318,6 +316,8 @@ public:
 
 // termination codegen functions
 
+    void addTerminationProperties(BuilderRef b, const size_t kernel);
+    void initializePipelineInputTerminationSignal(BuilderRef b);
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
     Value * isClosed(BuilderRef b, const StreamSetPort inputPort) const;
     Value * isClosed(BuilderRef b, const unsigned streamSet) const;

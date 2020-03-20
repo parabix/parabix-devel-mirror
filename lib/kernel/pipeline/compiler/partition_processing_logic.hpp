@@ -398,7 +398,7 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
     const auto nextPartitionId = KernelPartitionId[mKernelId + 1];
 
-    mPartitionTerminationSignal[mCurrentPartitionId] = mTerminatedAtExitPhi;
+    setCurrentPartitionTerminationSignal(mTerminatedAtExitPhi);
 
     if (nextPartitionId != mCurrentPartitionId) {
         assert (mCurrentPartitionId < nextPartitionId);
@@ -461,16 +461,16 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
  * @brief setCurrentPartitionTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::setCurrentPartitionTerminationSignal(Value * const signal) {
-    const auto partitionId = KernelPartitionId[mKernelId];
-    mPartitionTerminationSignal[partitionId] = signal;
+    assert (mCurrentPartitionId == KernelPartitionId[mKernelId]);
+    mPartitionTerminationSignal[mCurrentPartitionId] = signal;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getCurrentPartitionTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::getCurrentPartitionTerminationSignal() const {
-    const auto partitionId = KernelPartitionId[mKernelId];
-    return mPartitionTerminationSignal[partitionId];
+    assert (mCurrentPartitionId == KernelPartitionId[mKernelId]);
+    return mPartitionTerminationSignal[mCurrentPartitionId];
 }
 
 }

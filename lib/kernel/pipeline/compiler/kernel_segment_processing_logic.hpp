@@ -40,9 +40,11 @@ void PipelineCompiler::start(BuilderRef b) {
     loadInternalStreamSetHandles(b, true);
     loadInternalStreamSetHandles(b, false);
     readExternalConsumerItemCounts(b);
+    initializePipelineInputTerminationSignal(b);
 
     mKernel = nullptr;
     mKernelId = 0;
+
     BasicBlock * const entryBlock = b->GetInsertBlock();
     b->CreateBr(mPipelineLoop);
 
