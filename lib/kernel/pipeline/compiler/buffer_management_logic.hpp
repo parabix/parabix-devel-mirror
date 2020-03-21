@@ -353,7 +353,8 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSourc
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const auto outputPort = mBufferGraph[e].Port;
+        const BufferRateData & br = mBufferGraph[e];
+        const auto outputPort = br.Port;
         Value * fullyProduced = nullptr;
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
             fullyProduced = mProducedItemCount(outputPort);

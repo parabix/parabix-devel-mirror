@@ -282,7 +282,7 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
     assert (mRelationships[kernels[PipelineOutput]].Kernel == mPipelineKernel);
 
     assert (KernelPartitionId[PipelineInput] == 0);
-    assert (KernelPartitionId[PipelineOutput] == (PartitionCount - 1));
+    assert (KernelPartitionId[PipelineOutput] == (PartitionCount - 1U));
 
 
     for (unsigned i = 0; i < numOfStreamSets; ++i) {

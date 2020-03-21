@@ -113,8 +113,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
     std::vector<Relationships::vertex_descriptor> mappedKernel(kernels);
 
-
-
     // Begin by constructing a graph that represents the I/O relationships
     // and any partition boundaries.
     for (const auto u : orderingOfG) {
@@ -220,7 +218,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
             // would need to know to calculate it from its outputs. Rather than handling this complication,
             // for now we simply prevent this case.
 
-            const auto demarcateOutputs = mayTerminateEarly || (isNewPartitionRoot && internallySynchronized);
+            const auto demarcateOutputs = mayTerminateEarly || internallySynchronized; // (isNewPartitionRoot && internallySynchronized);
             unsigned demarcationId = 0;
 
             if (LLVM_UNLIKELY(demarcateOutputs)) {
@@ -304,12 +302,10 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
             if (LLVM_UNLIKELY(in_degree(kernel, H) == 0 && out_degree(kernel, H) != 0)) {
                 // place each input source kernel in its own partition
                 addRateId(H[kernel], nextRateId++);
-                if (kernelObj != mPipelineKernel) {
-                    const auto sourceKernelRateId = nextRateId++;
-                    for (const auto output : make_iterator_range(out_edges(u, H))) {
-                        const auto buffer = target(output, H);
-                        addRateId(H[buffer], sourceKernelRateId);
-                    }
+                const auto sourceKernelRateId = nextRateId++;
+                for (const auto output : make_iterator_range(out_edges(u, H))) {
+                    const auto buffer = target(output, H);
+                    addRateId(H[buffer], sourceKernelRateId);
                 }
             }
         }

@@ -10,6 +10,9 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Transforms/Utils/PromoteMemToReg.h>
 #include <llvm/IR/Dominators.h>
+#ifndef NDEBUG
+#include <llvm/IR/Verifier.h>
+#endif
 
 using namespace llvm;
 using namespace boost;
@@ -82,6 +85,7 @@ void KernelCompiler::generateKernel(BuilderRef b) {
     // What is the cost of generating a pass manager instance for each compiled kernel vs.
     // the complexity of using a factory?
 
+    runInternalOptimizationPasses(b->getModule());
     mTarget->runOptimizationPasses(b);
     b->setCompiler(oc);
 }
@@ -1241,41 +1245,12 @@ void KernelCompiler::loadHandlesOfLocalOutputStreamSets(BuilderRef b) const {
  * @brief clearInternalStateAfterCodeGen
  ** ------------------------------------------------------------------------------------------------------------- */
 void KernelCompiler::clearInternalStateAfterCodeGen() {
-
-    // Attempt to promote all of the allocas in the entry block into PHI nodes
-    // and delete any unnecessary Alloca and GEP instructions.
-
-    SmallVector<AllocaInst *, 32> allocas;
-    Instruction * inst = mEntryPoint->getFirstNonPHIOrDbgOrLifetime();
-    while (inst) {
-        Instruction * const nextNode = inst->getNextNode();
-        if (isa<AllocaInst>(inst) || isa<GetElementPtrInst>(inst)) {
-            if (LLVM_UNLIKELY(inst->getNumUses() == 0)) {
-                inst->eraseFromParent();
-                inst = nextNode;
-                continue;
-            }
-        }
-        if (isa<AllocaInst>(inst)) {
-            if (isAllocaPromotable(cast<AllocaInst>(inst))) {
-                allocas.push_back(cast<AllocaInst>(inst));
-            }
-        }
-        inst = nextNode;
-    }
-
-    if (LLVM_LIKELY(!allocas.empty())) {
-        DominatorTree dt(*mCurrentMethod);
-        PromoteMemToReg(allocas, dt);
-    }
-
     for (const auto & buffer : mStreamSetInputBuffers) {
         buffer->setHandle(nullptr);
     }
     for (const auto & buffer : mStreamSetOutputBuffers) {
         buffer->setHandle(nullptr);
     }
-
     mScalarFieldMap.clear();
     mSharedHandle = nullptr;
     mThreadLocalHandle = nullptr;
@@ -1285,6 +1260,59 @@ void KernelCompiler::clearInternalStateAfterCodeGen() {
     mIsFinal = nullptr;
     mNumOfStrides = nullptr;
     mTerminationSignalPtr = nullptr;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief runInternalOptimizationPasses
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelCompiler::runInternalOptimizationPasses(Module * const m) {
+
+    #ifndef NDEBUG
+    SmallVector<char, 256> tmp;
+    raw_svector_ostream msg(tmp);
+    if (LLVM_UNLIKELY(verifyModule(*m, &msg, nullptr))) {
+        m->print(errs(), nullptr);
+        report_fatal_error(msg.str());
+    }
+    #endif
+
+    // Attempt to promote all of the allocas in the entry block into PHI nodes
+    // and delete any unnecessary Alloca and GEP instructions.
+
+    SmallVector<AllocaInst *, 32> allocas;
+
+    for (Function & f : *m) {
+        if (f.empty()) continue;
+
+        BasicBlock & bb = f.getEntryBlock();
+
+        Instruction * inst = bb.getFirstNonPHIOrDbgOrLifetime();
+        while (inst) {
+            Instruction * const nextNode = inst->getNextNode();
+            if (isa<AllocaInst>(inst) || isa<GetElementPtrInst>(inst)) {
+                if (LLVM_UNLIKELY(inst->getNumUses() == 0)) {
+                    inst->eraseFromParent();
+                    inst = nextNode;
+                    continue;
+                }
+            }
+            if (isa<AllocaInst>(inst)) {
+                if (isAllocaPromotable(cast<AllocaInst>(inst))) {
+                    allocas.push_back(cast<AllocaInst>(inst));
+                }
+            }
+            inst = nextNode;
+        }
+
+        if (allocas.empty()) continue;
+
+        DominatorTree dt(f);
+        PromoteMemToReg(allocas, dt);
+        allocas.clear();
+    }
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

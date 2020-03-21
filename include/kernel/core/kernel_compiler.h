@@ -391,6 +391,8 @@ private:
 
     static Rational getLCMOfFixedRateOutputs(const Kernel * const target);
 
+    void runInternalOptimizationPasses(llvm::Module * const m);
+
 protected:
 
     Kernel * const                  mTarget;

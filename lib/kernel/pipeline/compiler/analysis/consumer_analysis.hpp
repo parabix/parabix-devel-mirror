@@ -26,9 +26,9 @@ void PipelineAnalysis::makeConsumerGraph() {
         add_edge(producer, streamSet, ConsumerEdge{br.Port, 0, ConsumerEdge::None}, mConsumerGraph);
 
         // If we have no consumers, we do not want to update the consumer count on exit
-        // as we would then have to retain a scalar for it. Initially
-        auto flags = ConsumerEdge::None;
-        auto lastConsumer = producer;
+        // as we would then have to retain a scalar for it.
+
+        size_t lastConsumer = PipelineInput;
 
         if (LLVM_LIKELY(out_degree(streamSet, mBufferGraph) > 0)) {
             unsigned index = 0;
@@ -41,7 +41,6 @@ void PipelineAnalysis::makeConsumerGraph() {
                 // check if any consumer has a rate we have not yet observed
                 if (observedGlobalPortIds.insert(br.GlobalPortId).second) {
                     add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
-                    flags = ConsumerEdge::WriteFinalCount;
                 }
             }
             observedGlobalPortIds.clear();
@@ -52,14 +51,38 @@ void PipelineAnalysis::makeConsumerGraph() {
         // consumed item count until the very last consumer reads the data.
         // Make sure the final consumer is told to write the count out.
 
-        ConsumerGraph::edge_descriptor e;
+        if (lastConsumer != PipelineInput) {
+
+            ConsumerGraph::edge_descriptor e;
+            bool exists;
+            std::tie(e, exists) = edge(streamSet, lastConsumer, mConsumerGraph);
+            const auto flags = ConsumerEdge::WriteFinalCount;
+
+            if (exists) {
+                ConsumerEdge & cn = mConsumerGraph[e];
+                cn.Flags = static_cast<ConsumerEdge::ConsumerTypeFlags>(static_cast<unsigned>(cn.Flags) | flags);
+            } else {
+                add_edge(streamSet, lastConsumer, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
+            }
+
+        }
+
+    }
+
+    // If this is a pipeline input, we want to update the count at the end of the loop.
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        ConsumerGraph::edge_descriptor f;
         bool exists;
-        std::tie(e, exists) = edge(streamSet, lastConsumer, mConsumerGraph);
+        std::tie(f, exists) = edge(streamSet, PipelineOutput, mConsumerGraph);
+        const auto flags = ConsumerEdge::UpdateExternalCount;
 
         if (exists) {
-            mConsumerGraph[e].Flags = ConsumerEdge::UpdateAndWrite;
+            ConsumerEdge & cn = mConsumerGraph[f];
+            cn.Flags = static_cast<ConsumerEdge::ConsumerTypeFlags>(static_cast<unsigned>(cn.Flags) | flags);
         } else {
-            add_edge(streamSet, lastConsumer, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
+            const BufferRateData & br = mBufferGraph[e];
+            add_edge(streamSet, PipelineOutput, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
         }
     }
 

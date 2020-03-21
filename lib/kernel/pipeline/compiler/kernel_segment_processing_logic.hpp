@@ -72,7 +72,9 @@ void PipelineCompiler::start(BuilderRef b) {
 inline void PipelineCompiler::executeInternallySynchronizedKernel(BuilderRef b) {
 
     mMayHaveNonLinearIO = false;
+    mCanTruncatedInput = false;
     mMayLoopToEntry = false;
+    mIsBounded = false;
 
     const auto prefix = makeKernelName(mKernelId);
 
@@ -100,6 +102,12 @@ inline void PipelineCompiler::executeInternallySynchronizedKernel(BuilderRef b) 
         b->CreateBr(mKernelLoopCall);
     }
 
+    if (mIsPartitionRoot) {
+        b->SetInsertPoint(mKernelExit);
+        IntegerType * const sizeTy = b->getSizeTy();
+        mTerminatedAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtKernelExit");
+    }
+
     /// -------------------------------------------------------------------------------------
     /// KERNEL CALL
     /// -------------------------------------------------------------------------------------
@@ -107,38 +115,67 @@ inline void PipelineCompiler::executeInternallySynchronizedKernel(BuilderRef b) 
     b->SetInsertPoint(mKernelLoopCall);
     mKernelIsFinal = anyInputClosed(b);
     writeKernelCall(b);
+    writeUpdatedItemCounts(b, ItemCountSource::ComputedAtKernelCall);
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL TERMINATED
     /// -------------------------------------------------------------------------------------
 
     if (mIsPartitionRoot) {
-
+        Value * aborted = nullptr;
         if (mKernelCanTerminateEarly) {
-            Value * const aborted = b->CreateIsNotNull(mTerminatedExplicitly);
+            aborted = b->CreateIsNotNull(mTerminatedExplicitly);
             mKernelIsFinal = b->CreateOr(mKernelIsFinal, aborted);
         }
+
+        Constant * const unfinished = getTerminationSignal(b, TerminationSignal::None);
+        mTerminatedAtExitPhi->addIncoming(unfinished, b->GetInsertBlock());
 
         b->CreateUnlikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelExit);
 
         b->SetInsertPoint(mKernelTerminated);
+        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
         Value * signal = nullptr;
         if (mKernelCanTerminateEarly) {
-            signal = mTerminatedExplicitly;
+            signal = b->CreateSelect(aborted, mTerminatedExplicitly, completed);
         } else {
-            signal = getTerminationSignal(b, TerminationSignal::Completed);
+            signal = completed;
         }
         writeTerminationSignal(b, signal);
         clearUnwrittenOutputData(b);
+
+        mTerminatedAtExitPhi->addIncoming(signal, b->GetInsertBlock());
     }
 
     b->CreateBr(mKernelExit);
+
+    /// -------------------------------------------------------------------------------------
+    /// KERNEL INITIALLY TERMINATED EXIT
+    /// -------------------------------------------------------------------------------------
+
+    if (mIsPartitionRoot) {
+        b->SetInsertPoint(mKernelInitiallyTerminated);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "* " + prefix + ".initiallyTerminated = %" PRIu64, mSegNo);
+        #endif
+        writeInitiallyTerminatedPartitionExit(b);
+    }
+
+    /// -------------------------------------------------------------------------------------
+    /// KERNEL PREPARE FOR PARTITION JUMP
+    /// -------------------------------------------------------------------------------------
+
+    if (mIsPartitionRoot) {
+        b->SetInsertPoint(mKernelJumpToNextUsefulPartition);
+        writeOnInitialTerminationJumpToNextPartitionToCheck(b);
+    }
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL EXIT
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelExit);
+    setCurrentTerminationSignal(b, mTerminatedAtExitPhi);
     writeFinalConsumedItemCounts(b);
     recordFinalProducedItemCounts(b);
     recordStridesPerSegment(b);
@@ -148,6 +185,7 @@ inline void PipelineCompiler::executeInternallySynchronizedKernel(BuilderRef b) 
     // if this kernel is a non-isolated partition root.
 
 }
+
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief executeExternallySynchronizedKernel
@@ -299,9 +337,7 @@ inline void PipelineCompiler::executeExternallySynchronizedKernel(BuilderRef b) 
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopExit);
-    if (LLVM_LIKELY(!mKernelIsInternallySynchronized)) {
-        writeUpdatedItemCounts(b, ItemCountSource::UpdatedItemCountsFromLoopExit);
-    }
+    writeUpdatedItemCounts(b, ItemCountSource::UpdatedItemCountsFromLoopExit);
     computeFullyProcessedItemCounts(b);
     computeMinimumConsumedItemCounts(b);
     writeLookAheadLogic(b);
@@ -343,58 +379,15 @@ inline void PipelineCompiler::executeExternallySynchronizedKernel(BuilderRef b) 
     // chain the progress state so that the next one carries on from this one
     mExhaustedInput = mExhaustedPipelineInputAtExit;
     mPipelineProgress = mAnyProgressedAtExitPhi;
+
+    setCurrentTerminationSignal(b, mTerminatedAtExitPhi);
+
     if (mIsPartitionRoot) {
         mNumOfPartitionStrides = mTotalNumOfStridesAtExitPhi;
-        setCurrentPartitionTerminationSignal(mTerminatedAtExitPhi);
-        mPartitionRootTerminationSignal = b->CreateIsNotNull(mTerminatedAtExitPhi);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "* " + prefix + ".partitionStridesOnExit = %" PRIu64, mTotalNumOfStridesAtExitPhi);
         debugPrint(b, "* " + prefix + ".partitionTerminationOnExit = %" PRIu8, mTerminatedAtExitPhi);
         #endif
-    }
-
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-
-        if (mIsPartitionRoot) {
-            Value * anyUnterminated = nullptr;
-            ConstantInt * const ZERO = b->getSize(0);
-            if (mCurrentPartitionId > 0) {
-                Value * const signal = mPartitionTerminationSignal[mCurrentPartitionId - 1];
-                anyUnterminated = b->CreateICmpEQ(signal, ZERO);
-            }
-
-            for (const auto e : make_iterator_range(in_edges(mCurrentPartitionId, mPartitionJumpTree))) {
-                const auto partitionId = source(e, mPartitionJumpTree);
-                Value * const signal = mPartitionTerminationSignal[partitionId];
-                Value * const nonterm = b->CreateICmpEQ(signal, ZERO);
-                if (anyUnterminated) {
-                    anyUnterminated = b->CreateOr(anyUnterminated, nonterm);
-                } else {
-                    anyUnterminated = nonterm;
-                }
-            }
-
-            if (anyUnterminated) {
-                Value * const allTerminated = b->CreateNot(anyUnterminated);
-                Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-                Value * const notTerminatedNormally = b->CreateICmpNE(mTerminatedAtExitPhi, completed);
-                Value * const valid = b->CreateOr(notTerminatedNormally, allTerminated);
-                constexpr auto msg =
-                    "Kernel %s of partition %" PRId64 " was flagged as complete "
-                    " before its source partitions were terminated.";
-                b->CreateAssert(valid, msg,
-                    mCurrentKernelName, b->getSize(mCurrentPartitionId));
-            }
-        } else {
-            constexpr auto msg =
-                "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
-                "after partition root %s was terminated.";
-            Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
-            Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
-            b->CreateAssert(valid, msg,
-                mCurrentKernelName, b->getSize(mCurrentPartitionId),
-                mKernelName[mPartitionRootKernelId]);
-        }
     }
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -729,6 +722,8 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     IntegerType * const boolTy = b->getInt1Ty();
     mTerminatedAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtKernelExit");
     mTerminatedAtExitPhi->addIncoming(mTerminatedAtLoopExitPhi, mKernelLoopExitPhiCatch);
+
+
 //    if (mIsPartitionRoot) {
 //        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
 //        mTerminatedAtExitPhi->addIncoming(completed, mKernelInitiallyTerminatedPhiCatch);

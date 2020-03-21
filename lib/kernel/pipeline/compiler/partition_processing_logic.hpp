@@ -5,65 +5,6 @@
 
 namespace kernel {
 
-//const static std::string PARTITION_LOGICAL_SEGMENT_NUMBER = ".PLS";
-//const static std::string PARTITION_ITEM_COUNT_SUFFIX = ".PIC";
-//const static std::string PARTITION_FIXED_RATE_SUFFIX = ".PFR";
-
-inline std::string getPartitionSegmentNumberName(const size_t partitionId) {
-    return std::to_string(partitionId) + PARTITION_LOGICAL_SEGMENT_NUMBER;
-}
-
-inline std::string getPartitionFixedRateName(const size_t partitionId) {
-    return std::to_string(partitionId) + PARTITION_FIXED_RATE_SUFFIX;
-}
-
-inline std::string getPartitionPortName(const size_t partitionId, const PartitioningGraphEdge & e) {
-    std::string tmp;
-    raw_string_ostream out(tmp);
-    out << partitionId << '.'
-        << e.Kernel <<
-        ((e.Port.Type == PortType::Input) ? 'I' : 'O') <<
-        e.Port.Number <<
-        PARTITION_ITEM_COUNT_SUFFIX;
-    out.flush();
-    return tmp;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addPartitionItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addPartitionInputItemCounts(BuilderRef b, const size_t partitionId) const {
-    IntegerType * const int64Ty = b->getInt64Ty();
-    mTarget->addInternalScalar(int64Ty, getPartitionSegmentNumberName(partitionId));
-
-    bool hasFixedRate = false;
-    for (unsigned i = FirstKernel, partitionSize = 0; i <= LastKernel; ++i) {
-        if (KernelPartitionId[i] == partitionId) {
-            ++partitionSize;
-            if (partitionSize > 1) {
-                hasFixedRate = true;
-                break;
-            }
-        }
-    }
-
-    for (const auto e : make_iterator_range(out_edges(partitionId, mPartitioningGraph))) {
-        const auto v = target(e, mPartitioningGraph);
-        const PartitioningGraphNode & node = mPartitioningGraph[v];
-        if (node.Type == PartitioningGraphNode::Fixed) {
-            hasFixedRate = true;
-            break;
-        }
-    }
-
-    if (LLVM_LIKELY(hasFixedRate)) {
-        mTarget->addInternalScalar(int64Ty, getPartitionFixedRateName(partitionId));
-    }
-    for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
-        mTarget->addInternalScalar(int64Ty, getPartitionPortName(partitionId, mPartitioningGraph[e]));
-    }
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief makePartitionEntryPoints
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -71,18 +12,21 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
     mPipelineLoop = b->CreateBasicBlock("PipelineLoop");
     mPartitionEntryPoint.resize(PartitionCount);
 
-    for (unsigned i = 0; i < PartitionCount; ++i) {
+    // the zeroth partition may be a fake one if this pipeline has I/O
+    const auto firstPartition = KernelPartitionId[FirstKernel];
+    for (unsigned i = firstPartition; i < PartitionCount; ++i) {
         mPartitionEntryPoint[i] = b->CreateBasicBlock("Partition" + std::to_string(i));
     }
 
     const auto ip = b->saveIP();
     IntegerType * const boolTy = b->getInt1Ty();
-    for (unsigned i = 1; i < PartitionCount; ++i) {
+    for (auto i = firstPartition + 1U; i < PartitionCount; ++i) {
         b->SetInsertPoint(mPartitionEntryPoint[i]);
         assert (mPartitionEntryPoint[i]->getFirstNonPHI() == nullptr);
         mPartitionPipelineProgressPhi[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".pipelineProgress");
         mExhaustedPipelineInputAtPartitionEntry[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".exhaustedInput");
     }
+    initializePipelineInputConsumedPhiNodes(b);
     b->restoreIP(ip);
 
     mPipelineEnd = b->CreateBasicBlock("PipelineEnd");
@@ -92,8 +36,8 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
  * @brief branchToInitialPartition
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
-    assert (KernelPartitionId[FirstKernel] == 0);
-    BasicBlock * const entry = mPartitionEntryPoint[0];
+    const auto firstPartition = KernelPartitionId[FirstKernel];
+    BasicBlock * const entry = mPartitionEntryPoint[firstPartition];
     b->CreateBr(entry);
     b->SetInsertPoint(entry);
     mCurrentPartitionId = -1U;
@@ -112,7 +56,7 @@ inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
  * @brief checkInputDataOnPartitionEntry
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
-    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);    
     mNextPartitionWithPotentialInput = nullptr;
     mIsPartitionRoot = false;
     const auto partitionId = KernelPartitionId[mKernelId];
@@ -123,6 +67,11 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
         mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
         mIsPartitionRoot = true;
     }
+    assert (KernelPartitionId[mKernelId - 1U] <= mCurrentPartitionId);
+    assert ((KernelPartitionId[mKernelId - 1U] + 1U) >= mCurrentPartitionId);
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
+    #endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -209,7 +158,7 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
         bool prepareConsumedPhi = false;
         for (const auto f : make_iterator_range(out_edges(streamSet, mConsumerGraph))) {
             const ConsumerEdge & c = mConsumerGraph[f];
-            if (c.Flags == ConsumerEdge::None) continue;
+            assert (c.Flags != ConsumerEdge::None);
             const auto consumer = target(f, mConsumerGraph);
             const auto p = KernelPartitionId[consumer];
             if (p >= targetPartitionId) {
@@ -302,9 +251,16 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
+
     mKernelInitiallyTerminatedExit = exitBlock;
     b->CreateBr(mKernelJumpToNextUsefulPartition);
+
+    if (mKernelIsInternallySynchronized) {
+        return;
+    }
+
+    mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
+
 
 #if 0
 
@@ -351,6 +307,7 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
     assert (mCurrentPartitionId < nextPartitionId);
 
     BasicBlock * exitBlock = b->CreateBasicBlock();
+
     for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, false, exitBlock);
     }
@@ -360,12 +317,15 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
         }
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, false, exitBlock);
     }
-
     phiOutPartitionStatusFlags(b, nextPartitionId, false, exitBlock);
     PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
-    if (exhaustedInputPhi) {
+    if (exhaustedInputPhi) {       
         Value * const exhausted = mIsBounded ? mExhaustedInputAtJumpPhi : mExhaustedInput;
         exhaustedInputPhi->addIncoming(exhausted, exitBlock); assert (exhausted);
+    }
+    // if we jump to the end of the pipeline, phi out the consumed item counts.
+    if (LLVM_UNLIKELY(nextPartitionId == (PartitionCount - 1U))) {
+        updatePipelineInputConsumedItemCounts(b, exitBlock);
     }
 
     // Find the first kernel in the partition we're jumping to and acquire the LSN
@@ -396,14 +356,15 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
 inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
-    const auto nextPartitionId = KernelPartitionId[mKernelId + 1];
-
-    setCurrentPartitionTerminationSignal(mTerminatedAtExitPhi);
+    const auto nextPartitionId = KernelPartitionId[mKernelId + 1U];
 
     if (nextPartitionId != mCurrentPartitionId) {
         assert (mCurrentPartitionId < nextPartitionId);
-        assert (nextPartitionId < PartitionCount);
+        assert (nextPartitionId <= PartitionCount);
         BasicBlock * const exitBlock = b->GetInsertBlock();
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "  *** exiting partition %" PRIu64, b->getSize(mCurrentPartitionId));
+        #endif
         b->CreateBr(mNextPartitionEntryPoint);
 
         b->SetInsertPoint(mNextPartitionEntryPoint);
@@ -445,6 +406,11 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
             }
         }
 
+        // if we jump to the end of the pipeline, phi out the consumed item counts.
+        if (LLVM_UNLIKELY(nextPartitionId == (PartitionCount - 1U))) {
+            updatePipelineInputConsumedItemCounts(b, exitBlock);
+        }
+
         for (unsigned i = 0; i != nextPartitionId; ++i) {
             PHINode * const termPhi = mPartitionTerminationSignalPhi[nextPartitionId][i];
             if (termPhi) {
@@ -453,24 +419,7 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
             }
         }
 
-
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief setCurrentPartitionTerminationSignal
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::setCurrentPartitionTerminationSignal(Value * const signal) {
-    assert (mCurrentPartitionId == KernelPartitionId[mKernelId]);
-    mPartitionTerminationSignal[mCurrentPartitionId] = signal;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getCurrentPartitionTerminationSignal
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::getCurrentPartitionTerminationSignal() const {
-    assert (mCurrentPartitionId == KernelPartitionId[mKernelId]);
-    return mPartitionTerminationSignal[mCurrentPartitionId];
 }
 
 }

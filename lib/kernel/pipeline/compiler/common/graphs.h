@@ -333,16 +333,16 @@ struct ConsumerNode {
 
 struct ConsumerEdge {
 
-    enum ConsumerTypeFlags {
+    enum ConsumerTypeFlags : unsigned {
         None = 0
         , UpdatePhi = 1
         , WriteFinalCount = 2
-        , UpdateAndWrite = UpdatePhi | WriteFinalCount
+        , UpdateExternalCount = 4
     };
 
     unsigned Port = 0;
     unsigned Index = 0;
-    ConsumerTypeFlags Flags = ConsumerTypeFlags::None;
+    ConsumerTypeFlags Flags = ConsumerEdge::None;
 
     ConsumerEdge() = default;
 

@@ -202,7 +202,6 @@ public:
 
 // partitioning codegen functions
 
-    void addPartitionInputItemCounts(BuilderRef b, const size_t partitionId) const;
     void makePartitionEntryPoints(BuilderRef b);
     void branchToInitialPartition(BuilderRef b);
     BasicBlock * getPartitionExitPoint(BuilderRef b);
@@ -214,8 +213,6 @@ public:
 
     void writeInitiallyTerminatedPartitionExit(BuilderRef b);
     void checkForPartitionExit(BuilderRef b);
-    void setCurrentPartitionTerminationSignal(Value * const signal);
-    Value * getCurrentPartitionTerminationSignal() const;
 
 // inter-kernel codegen functions
 
@@ -279,8 +276,6 @@ public:
 
     void writeCopyToOverflowLogic(BuilderRef b);
 
-    void readCountableItemCountsAfterAbnormalTermination(BuilderRef b);
-
     enum class ItemCountSource {
         ComputedAtKernelCall
         , UpdatedItemCountsFromLoopExit
@@ -318,6 +313,8 @@ public:
 
     void addTerminationProperties(BuilderRef b, const size_t kernel);
     void initializePipelineInputTerminationSignal(BuilderRef b);
+    void setCurrentTerminationSignal(BuilderRef b, Value * const signal);
+    Value * getCurrentTerminationSignal() const;
     Value * hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally = false) const;
     Value * isClosed(BuilderRef b, const StreamSetPort inputPort) const;
     Value * isClosed(BuilderRef b, const unsigned streamSet) const;
@@ -329,12 +326,17 @@ public:
     void signalAbnormalTermination(BuilderRef b);
     LLVM_READNONE static Constant * getTerminationSignal(BuilderRef b, const TerminationSignal type);
 
+    void readCountableItemCountsAfterAbnormalTermination(BuilderRef b);
+    void verifyPostInvocationTerminationSignal(BuilderRef b);
+
 // consumer codegen functions
 
     void addConsumerKernelProperties(BuilderRef b, const unsigned producer);
+    void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
+    void initializePipelineInputConsumedPhiNodes(BuilderRef b);
+    void updatePipelineInputConsumedItemCounts(BuilderRef b, BasicBlock * const exit);
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
-    void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
     void readConsumedItemCounts(BuilderRef b);
     Value * readConsumedItemCount(BuilderRef b, const size_t streamSet);
     void setConsumedItemCount(BuilderRef b, const size_t bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
@@ -569,6 +571,9 @@ protected:
     Vec<AllocaInst *, 4>                        mTruncatedInputBuffer;
     FixedVector<PHINode *>                      mInitiallyAvailableItemsPhi;
     FixedVector<Value *>                        mLocallyAvailableItems;
+
+    FixedVector<PHINode *>                      mExternalConsumedItemsPhi;
+
     FixedVector<Value *>                        mScalarValue;
 
     // partition state
@@ -772,6 +777,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mOutputPortSet(constructOutputPortMappings())
 , mInitiallyAvailableItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
 , mLocallyAvailableItems(FirstStreamSet, LastStreamSet, mAllocator)
+
+, mExternalConsumedItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
+
 , mScalarValue(FirstKernel, LastScalar, mAllocator)
 
 , mPartitionTerminationSignal(PartitionCount, mAllocator)

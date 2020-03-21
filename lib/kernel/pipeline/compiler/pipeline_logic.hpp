@@ -317,6 +317,11 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     } else {
         executeExternallySynchronizedKernel(b);
     }
+
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        verifyPostInvocationTerminationSignal(b);
+    }
+
     checkForPartitionExit(b);
 }
 

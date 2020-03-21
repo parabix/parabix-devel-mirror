@@ -2,9 +2,6 @@
 #define PIPELINE_OPTIMIZATION_LOGIC_HPP
 
 #include "pipeline_compiler.hpp"
-#ifndef NDEBUG
-#include <llvm/IR/Verifier.h>
-#endif
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
 // #include <llvm/Transforms/Scalar/DCE.h>
@@ -51,13 +48,6 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
     // detect any possible errors prior to optimizing it.
 
     Module * const m = b->getModule();
-
-    #ifndef NDEBUG
-    if (LLVM_UNLIKELY(verifyModule(*m, &errs(), nullptr))) {
-        m->print(errs(), nullptr);
-        report_fatal_error("Error during pipeline code generation!");
-    }
-    #endif
 
     simplifyPhiNodes(m);
     auto pm = make_unique<legacy::PassManager>();

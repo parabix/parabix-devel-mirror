@@ -350,6 +350,9 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
  * @brief anyInputClosed
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::anyInputClosed(BuilderRef b) {
+    if (LLVM_UNLIKELY(in_degree(mKernelId, mBufferGraph) == 0)) {
+        return ExternallySynchronized ? b->isFinal() : b->getFalse();
+    }
     Value * anyClosed = nullptr;
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & br =  mBufferGraph[e];
@@ -383,21 +386,16 @@ Value * PipelineCompiler::anyInputClosed(BuilderRef b) {
  * @brief determineIsFinal
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determineIsFinal(BuilderRef b) {
-    mKernelIsPenultimate = nullptr;
-    if (in_degree(mKernelId, mBufferGraph) == 0) {
-        mKernelIsFinal = b->isFinal();
+    if (mIsPartitionRoot) {
+        mKernelIsPenultimate = anyInputClosed(b);
     } else {
-        if (mIsPartitionRoot) {
-            mKernelIsPenultimate = anyInputClosed(b);
-        } else {
-            mKernelIsPenultimate = b->CreateIsNotNull(getCurrentPartitionTerminationSignal());
-        }
-        ConstantInt * const sz_ZERO = b->getSize(0);
-        Value * const noMoreStrides = b->CreateICmpEQ(mNumOfInputStrides, sz_ZERO);
-        mKernelIsFinal = b->CreateAnd(mKernelIsPenultimate, noMoreStrides);
-        Value * const hasMoreStrides = b->CreateICmpNE(mNumOfInputStrides, sz_ZERO);
-        mKernelIsPenultimate = b->CreateAnd(mKernelIsPenultimate, hasMoreStrides);
+        mKernelIsPenultimate = b->CreateIsNotNull(getCurrentTerminationSignal());
     }
+    ConstantInt * const sz_ZERO = b->getSize(0);
+    Value * const noMoreStrides = b->CreateICmpEQ(mNumOfInputStrides, sz_ZERO);
+    mKernelIsFinal = b->CreateAnd(mKernelIsPenultimate, noMoreStrides);
+    Value * const hasMoreStrides = b->CreateICmpNE(mNumOfInputStrides, sz_ZERO);
+    mKernelIsPenultimate = b->CreateAnd(mKernelIsPenultimate, hasMoreStrides);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
