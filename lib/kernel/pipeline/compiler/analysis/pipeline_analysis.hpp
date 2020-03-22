@@ -127,7 +127,6 @@ private:
 
     void addStreamSetsToBufferGraph(BuilderRef b);
     void generateInitialBufferGraph();
-    void verifyIOStructure() const;
     void identifyLinearBuffers();
     void identifyLocalPortIds();
 

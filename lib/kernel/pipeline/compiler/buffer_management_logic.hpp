@@ -114,6 +114,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
                     buffer->setHandle(handle);
                 }
                 assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || nonLocal));
+                assert (buffer->getHandle());
                 assert (isFromCurrentFunction(b, buffer->getHandle(), false));
                 buffer->allocateBuffer(b, expectedNumOfStrides);
             }
@@ -386,17 +387,16 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         }
         const BufferRateData & rd = mBufferGraph[e];
         const StreamSetPort port(rd.Port.Type, rd.Port.Number);
-        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(port);
-        assert (ptr);
+        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(port); assert (ptr);
         Value * vba = b->CreateLoad(ptr);
         StreamSetBuffer * const buffer = bn.Buffer;
         vba = b->CreatePointerCast(vba, buffer->getPointerType());
         buffer->setBaseAddress(b.get(), vba);
         buffer->setCapacity(b.get(), mProducedItemCount(port));
         const auto handleName = makeBufferName(mKernelId, port);
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        debugPrint(b, handleName + "_virtualBaseAddress = %" PRIu64, vba);
-//        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, handleName + "_updatedVirtualBaseAddress = 0x%" PRIx64, buffer->getBaseAddress(b));
+        #endif
         b->setScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS, vba);
     }
 }
@@ -713,7 +713,21 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
                         b->GetString(binding.getName()));
     }
 
-    Value * address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelId, rateData.Port);
+    debugPrint(b, prefix + "_baseAddress = 0x%" PRIx64, baseAddress);
+    debugPrint(b, prefix + "_blockIndex = %" PRIu64, blockIndex);
+    if (buffer->isLinear() && !isa<ExternalBuffer>(buffer)) {
+        debugPrint(b, prefix + "_mallocAddress = 0x%" PRIx64, buffer->getMallocAddress(b));
+    }
+    #endif
+
+    Value * const address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_virtualBaseAddress = 0x%" PRIx64, address);
+    #endif
+
     return b->CreatePointerCast(address, bufferType);
 }
 

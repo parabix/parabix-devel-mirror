@@ -77,12 +77,15 @@ public:
     PipelineBuilder(BaseDriver & driver,
                     Bindings && stream_inputs, Bindings && stream_outputs,
                     Bindings && scalar_inputs, Bindings && scalar_outputs,
-                    const unsigned numOfThreads,
-                    const bool requiresPipeline);
+                    const unsigned numOfThreads);
 
     virtual ~PipelineBuilder() {}
 
     virtual Kernel * makeKernel();
+
+    void setExternallySynchronized(const bool value = true) {
+        mExternallySynchronized = value;
+    }
 
 protected:
 
@@ -101,8 +104,7 @@ protected:
     BaseDriver &        mDriver;
     // eventual pipeline configuration
     unsigned            mNumOfThreads;
-    unsigned            mNumOfBufferSegments;
-    const bool          mRequiresPipeline;
+    bool                mExternallySynchronized = false;
     Bindings            mInputStreamSets;
     Bindings            mOutputStreamSets;
     Bindings            mInputScalars;
@@ -125,10 +127,6 @@ public:
 
     void setNumOfThreads(const unsigned threads) {
         mNumOfThreads = threads;
-    }
-
-    void setNumOfBufferSegments(const unsigned bufferSegments) {
-        mNumOfBufferSegments = bufferSegments;
     }
 
     ProgramBuilder(BaseDriver & driver,

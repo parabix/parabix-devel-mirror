@@ -298,16 +298,29 @@ Value * ExternalBuffer::getMallocAddress(BuilderPtr b) const {
 // Internal Buffer
 
 Value * InternalBuffer::getStreamBlockPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
-    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, LLVM_UNLIKELY(mLinear) ? blockIndex : modByCapacity(b, blockIndex));
+    Value * offset = nullptr;
+    if (LLVM_UNLIKELY(mLinear)) {
+        offset = blockIndex;
+    } else {
+        offset = modByCapacity(b, blockIndex);
+    }
+    return StreamSetBuffer::getStreamBlockPtr(b, baseAddress, streamIndex, offset);
 }
 
 Value * InternalBuffer::getStreamPackPtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex, Value * const packIndex) const {
-    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, LLVM_UNLIKELY(mLinear) ? blockIndex : modByCapacity(b, blockIndex), packIndex);
+    Value * offset = nullptr;
+    if (LLVM_UNLIKELY(mLinear)) {
+        offset = blockIndex;
+    } else {
+        offset = modByCapacity(b, blockIndex);
+    }
+    return StreamSetBuffer::getStreamPackPtr(b, baseAddress, streamIndex, offset, packIndex);
 }
 
 Value * InternalBuffer::getStreamLogicalBasePtr(BuilderPtr b, Value * const baseAddress, Value * const streamIndex, Value * const blockIndex) const {
     Value * baseBlockIndex = nullptr;
     if (LLVM_UNLIKELY(mLinear)) {
+        // NOTE: the base address of a linear buffer is always the virtual base ptr; just return it.
         baseBlockIndex = b->getSize(0);
     } else {
         baseBlockIndex = b->CreateSub(modByCapacity(b, blockIndex), blockIndex);
@@ -316,7 +329,13 @@ Value * InternalBuffer::getStreamLogicalBasePtr(BuilderPtr b, Value * const base
 }
 
 Value * InternalBuffer::getRawItemPointer(BuilderPtr b, Value * const streamIndex, Value * absolutePosition) const {
-    return StreamSetBuffer::getRawItemPointer(b, streamIndex, b->CreateURem(absolutePosition, getCapacity(b)));
+    Value * pos = nullptr;
+    if (LLVM_UNLIKELY(mLinear)) {
+        pos = absolutePosition;
+    } else {
+        pos = b->CreateURem(absolutePosition, getCapacity(b));
+    }
+    return StreamSetBuffer::getRawItemPointer(b, streamIndex, pos);
 }
 
 Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * const overflowItems) const {
@@ -733,7 +752,7 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
         Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
         Value * const capacity = b->CreateLoad(capacityField);
-        Value * consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
+        Value * const consumedChunks = b->CreateUDiv(consumed, BLOCK_WIDTH);
         Value * const producedChunks = b->CreateCeilUDiv(produced, BLOCK_WIDTH);
         Value * const requiredCapacity = b->CreateAdd(produced, required);
         Value * const requiredChunks = b->CreateCeilUDiv(requiredCapacity, BLOCK_WIDTH);
@@ -764,7 +783,6 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             Value * const chunksToOverwrite = b->CreateSub(requiredChunks, consumedChunks);
             Value * const overwriteUpToPtr = b->CreateInBoundsGEP(concreteAddress, chunksToOverwrite);
             Value * const canCopy = b->CreateICmpULE(overwriteUpToPtr, unreadDataPtr);
-
             b->CreateLikelyCondBr(canCopy, copyBack, expandAndCopyBack);
 
             b->SetInsertPoint(copyBack);
@@ -797,18 +815,14 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             PHINode * const newBaseBuffer = b->CreatePHI(virtualBase->getType(), 2);
             newBaseBuffer->addIncoming(concreteAddress, copyBackExit);
             newBaseBuffer->addIncoming(expandedBuffer, expandAndCopyBackExit);
+
+
             PHINode * const updatedCapacity = b->CreatePHI(sizeTy, 2);
             updatedCapacity->addIncoming(capacity, copyBackExit);
             updatedCapacity->addIncoming(newCapacity, expandAndCopyBackExit);
             Value * const newBaseAddress = b->CreateGEP(newBaseBuffer, b->CreateNeg(consumedChunks));
             b->CreateStore(newBaseAddress, virtualBaseField);
-            // how many item chunks between the virtual base address and the actual buffer start address?
-            Value * const virtualAddrInt = b->CreatePtrToInt(virtualBase, intPtrTy);
-            Value * const concreteAddrInt = b->CreatePtrToInt(concreteAddress, intPtrTy);
-            Value * firstItemOffset = b->CreateSub(concreteAddrInt, virtualAddrInt);
-            firstItemOffset = b->CreateUDiv(firstItemOffset, CHUNK_SIZE);
-            Value * const discarded = b->CreateSub(consumedChunks, firstItemOffset);
-            Value * const effectiveCapacity = b->CreateAdd(updatedCapacity, discarded);
+            Value * const effectiveCapacity = b->CreateAdd(producedChunks, updatedCapacity);
             b->CreateStore(effectiveCapacity, capacityField);
             b->CreateRetVoid();
 

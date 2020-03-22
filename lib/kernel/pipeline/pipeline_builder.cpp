@@ -290,7 +290,9 @@ Kernel * PipelineBuilder::makeKernel() {
     if (noFamilyKernels) {
         out << 'B' << codegen::BufferSegments;
     }
-
+    if (mExternallySynchronized) {
+        out << 'E';
+    }
     if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
         out << "+CYC";
     }
@@ -307,7 +309,6 @@ Kernel * PipelineBuilder::makeKernel() {
     for (unsigned i = 0; i < numOfKernels; ++i) {
         out << "_K" << mKernels[i]->getFamilyName();
     }
-
     for (unsigned i = 0; i < numOfCalls; ++i) {
         out << "_C" << mCallBindings[i].Name;
     }
@@ -335,6 +336,9 @@ Kernel * PipelineBuilder::makeKernel() {
                            std::move(mInputStreamSets), std::move(mOutputStreamSets),
                            std::move(mInputScalars), std::move(mOutputScalars),
                            std::move(mLengthAssertions));
+    if (mExternallySynchronized) {
+        pipeline->addAttribute(InternallySynchronized());
+    }
 
     addKernelProperties(pipeline->getKernels(), pipeline);
 
@@ -495,11 +499,9 @@ void PipelineBuilder::setOutputScalar(const StringRef name, Scalar * value) {
 PipelineBuilder::PipelineBuilder(BaseDriver & driver,
     Bindings && stream_inputs, Bindings && stream_outputs,
     Bindings && scalar_inputs, Bindings && scalar_outputs,
-    const unsigned numOfThreads, const bool requiresPipeline)
+    const unsigned numOfThreads)
 : mDriver(driver)
 , mNumOfThreads(numOfThreads)
-, mNumOfBufferSegments(numOfThreads)
-, mRequiresPipeline(requiresPipeline)
 , mInputStreamSets(stream_inputs)
 , mOutputStreamSets(stream_outputs)
 , mInputScalars(scalar_inputs)
@@ -538,7 +540,7 @@ PipelineBuilder::PipelineBuilder(Internal, BaseDriver & driver,
 : PipelineBuilder(driver,
                   std::move(stream_inputs), std::move(stream_outputs),
                   std::move(scalar_inputs), std::move(scalar_outputs),
-                  1, false) {
+                  1) {
 
 }
 
@@ -550,7 +552,7 @@ ProgramBuilder::ProgramBuilder(
       driver,
       std::move(stream_inputs), std::move(stream_outputs),
       std::move(scalar_inputs), std::move(scalar_outputs),
-      codegen::SegmentThreads, true) {
+      codegen::SegmentThreads) {
 
 }
 

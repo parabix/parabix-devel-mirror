@@ -485,6 +485,7 @@ public:
 
     void clearInternalStateForCurrentKernel();
     void initializeKernelAssertions(BuilderRef b);
+    void verifyBufferRelationships() const;
 
 protected:
 

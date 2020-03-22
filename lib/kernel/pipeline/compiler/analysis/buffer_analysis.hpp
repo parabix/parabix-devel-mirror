@@ -40,6 +40,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         IsExternal.insert(target(e, mBufferGraph));
     }
+
+
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         IsExternal.insert(source(e, mBufferGraph));
     }
@@ -60,8 +62,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & bn = mBufferGraph[streamSet];
-                const auto linear = output.hasAttribute(AttrId::Linear);
-                bn.Buffer = new ExternalBuffer(b, output.getType(), linear, 0);
+                // Every managed buffer is considered linear to the pipeline
+                bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
                 bn.Type = BufferType::Unowned | internalOrExternal(streamSet);
             }
         }
@@ -86,7 +88,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferRateData & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
-            if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) continue;
+            if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
+                continue;
+            }
             bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
             bn.Type = BufferType::UnownedExternal;
         }
@@ -261,9 +265,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         }
         bn.NonLocal = nonLocal;
         mInternalBuffers[streamSet - FirstStreamSet].reset(bn.Buffer);
-    }
-
-    verifyIOStructure();
+    }   
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -456,70 +458,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             }
         }
     }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief verifyIOStructure
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::verifyIOStructure() const {
-
-
-#if 0
-
-    // verify that the buffer config is valid
-    for (unsigned i = FirstStreamSet; i <= LastStreamSet; ++i) {
-
-        const BufferNode & bn = G[i];
-        const auto pe = in_edge(i, G);
-        const auto producerVertex = source(pe, G);
-        const Kernel * const producer = getKernel(producerVertex);
-        const BufferRateData & producerRate = G[pe];
-        const Binding & output = producerRate.Binding;
-
-
-
-
-        // Type check stream set I/O types.
-        Type * const baseType = output.getType();
-        for (const auto e : make_iterator_range(out_edges(i, G))) {
-            const BufferRateData & consumerRate = G[e];
-            const Binding & input = consumerRate.Binding;
-            if (LLVM_UNLIKELY(baseType != input.getType())) {
-                SmallVector<char, 256> tmp;
-                raw_svector_ostream msg(tmp);
-                msg << producer->getName() << ':' << output.getName()
-                    << " produces a ";
-                baseType->print(msg);
-                const Kernel * const consumer = getKernel(target(e, G));
-                msg << " but "
-                    << consumer->getName() << ':' << input.getName()
-                    << " expects ";
-                input.getType()->print(msg);
-                report_fatal_error(msg.str());
-            }
-        }
-
-        for (const auto ce : make_iterator_range(out_edges(i, G))) {
-            const Binding & input = G[ce].Binding;
-            if (LLVM_UNLIKELY(requiresLinearAccess(input))) {
-                SmallVector<char, 256> tmp;
-                raw_svector_ostream out(tmp);
-                const auto consumer = target(ce, G);
-                out << getKernel(consumer)->getName()
-                    << '.' << input.getName()
-                    << " requires that "
-                    << producer->getName()
-                    << '.' << output.getName()
-                    << " is a Linear buffer.";
-                report_fatal_error(out.str());
-            }
-        }
-
-
-    }
-
-#endif
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

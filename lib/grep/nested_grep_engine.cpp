@@ -141,7 +141,7 @@ public:
                          // stream inputs
                          , {{"basis", BasisBits}, {"u8index", u8index}, {"breaks", breaks}}
                          // stream outputs
-                         , {{"matches", matches, FixedRate(), Add1()}}
+                         , {{"matches", matches, FixedRate(), { Add1(), ManagedBuffer() }}}
                          // scalars
                          , {}, {}
                          // length assertions

@@ -48,7 +48,7 @@ public:
 
     using OwnedStreamSetBuffers = Vec<std::unique_ptr<StreamSetBuffer>>;
 
-    enum class InitializeScalarMapOptions {
+    enum class InitializeOptions {
         SkipThreadLocal
         , IncludeThreadLocal
     };
@@ -335,9 +335,11 @@ protected:
 
 private:
 
-    void initializeScalarMap(BuilderRef b, const InitializeScalarMapOptions options);
+    void initializeScalarMap(BuilderRef b, const InitializeOptions options);
 
     void initializeIOBindingMap();
+
+    void initializeOwnedBufferHandles(BuilderRef b, const InitializeOptions options);
 
 protected:
 

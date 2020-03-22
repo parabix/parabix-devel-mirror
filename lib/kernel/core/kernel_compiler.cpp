@@ -163,7 +163,7 @@ inline void KernelCompiler::callGenerateInitializeMethod(BuilderRef b) {
             b->CreateMProtect(mSharedHandle, CBuilder::Protect::WRITE);
         }
     }
-    initializeScalarMap(b, InitializeScalarMapOptions::SkipThreadLocal);
+    initializeScalarMap(b, InitializeOptions::SkipThreadLocal);
     for (const auto & binding : mInputScalars) {
         b->setScalarField(binding.getName(), nextArg());
     }
@@ -210,7 +210,7 @@ inline void KernelCompiler::callGenerateInitializeThreadLocalMethod(BuilderRef b
             setHandle(nextArg());
         }
         mThreadLocalHandle = b->CreateCacheAlignedMalloc(mTarget->getThreadLocalStateType());
-        initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
+        initializeScalarMap(b, InitializeOptions::IncludeThreadLocal);
         mTarget->generateInitializeThreadLocalMethod(b);
         b->CreateRet(mThreadLocalHandle);
         clearInternalStateAfterCodeGen();
@@ -238,7 +238,8 @@ inline void KernelCompiler::callGenerateAllocateSharedInternalStreamSets(Builder
             setHandle(nextArg());
         }
         Value * const expectedNumOfStrides = nextArg();
-        initializeScalarMap(b, InitializeScalarMapOptions::SkipThreadLocal);
+        initializeScalarMap(b, InitializeOptions::SkipThreadLocal);
+        initializeOwnedBufferHandles(b, InitializeOptions::SkipThreadLocal);
         mTarget->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
         b->CreateRetVoid();
         clearInternalStateAfterCodeGen();
@@ -267,7 +268,8 @@ inline void KernelCompiler::callGenerateAllocateThreadLocalInternalStreamSets(Bu
         }
         setThreadLocalHandle(nextArg());
         Value * const expectedNumOfStrides = nextArg();
-        initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
+        initializeScalarMap(b, InitializeOptions::IncludeThreadLocal);
+        initializeOwnedBufferHandles(b, InitializeOptions::IncludeThreadLocal);
         mTarget->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
         b->CreateRetVoid();
         clearInternalStateAfterCodeGen();
@@ -369,6 +371,9 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
 
     if (internallySynchronized || !mTarget->requiresExplicitPartialFinalStride()) {
         mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
+        if (LLVM_UNLIKELY(enableAsserts && mNumOfStrides)) {
+            b->CreateAssert(mNumOfStrides, getName() + " was given 0 strides.");
+        }
     } else {
         mIsFinal = b->CreateIsNull(mNumOfStrides);
         if (LLVM_LIKELY(!internallySynchronized)) {
@@ -376,7 +381,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         }
     }
 
-    initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
+    initializeScalarMap(b, InitializeOptions::IncludeThreadLocal);
 
     // NOTE: the disadvantage of passing the stream pointers as a parameter is that it becomes more difficult
     // to access a stream set from a LLVM function call. We could create a stream-set aware function creation
@@ -873,7 +878,7 @@ inline void KernelCompiler::callGenerateFinalizeThreadLocalMethod(BuilderRef b) 
             setHandle(nextArg());
         }
         mThreadLocalHandle = nextArg();
-        initializeScalarMap(b, InitializeScalarMapOptions::IncludeThreadLocal);
+        initializeScalarMap(b, InitializeOptions::IncludeThreadLocal);
         mTarget->generateFinalizeThreadLocalMethod(b);
         b->CreateRetVoid();
         clearInternalStateAfterCodeGen();
@@ -894,7 +899,7 @@ inline void KernelCompiler::callGenerateFinalizeMethod(BuilderRef b) {
         setHandle(&*(args++));
         assert (args == mCurrentMethod->arg_end());
     }
-    initializeScalarMap(b, InitializeScalarMapOptions::SkipThreadLocal);
+    initializeScalarMap(b, InitializeOptions::SkipThreadLocal);
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle,CBuilder::Protect::WRITE);
     }
@@ -932,7 +937,7 @@ std::vector<Value *> KernelCompiler::getFinalOutputScalars(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeScalarMap
  ** ------------------------------------------------------------------------------------------------------------- */
-void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMapOptions options) {
+void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeOptions options) {
 
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
@@ -943,7 +948,7 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
     assert ("incorrect shared handle/type!" && CHECK_TYPES(mSharedHandle, sharedTy));
     const auto sharedCount = sharedTy ? sharedTy->getStructNumElements() : 0U;
     const auto threadLocalTy = mTarget->getThreadLocalStateType();
-    if (options == InitializeScalarMapOptions::IncludeThreadLocal) {
+    if (options == InitializeOptions::IncludeThreadLocal) {
         assert ("incorrect thread local handle/type!" && CHECK_TYPES(mThreadLocalHandle, threadLocalTy));
     }
     #undef CHECK_TYPES
@@ -1043,7 +1048,7 @@ void KernelCompiler::initializeScalarMap(BuilderRef b, const InitializeScalarMap
                 scalar = b->CreateInBoundsGEP(mSharedHandle, indices);
                 break;
             case ScalarType::ThreadLocal:
-                if (options == InitializeScalarMapOptions::SkipThreadLocal) continue;
+                if (options == InitializeOptions::SkipThreadLocal) continue;
                 assert (threadLocalIndex < threadLocalCount);
                 indices[1] = b->getInt32(threadLocalIndex++);
                 scalar = b->CreateInBoundsGEP(mThreadLocalHandle, indices);
@@ -1095,6 +1100,21 @@ void KernelCompiler::initializeIOBindingMap() {
     enumerate(mInputStreamSets, BindingType::StreamInput);
     enumerate(mOutputStreamSets, BindingType::StreamOutput);
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initializeOwnedBufferHandles
+ ** ------------------------------------------------------------------------------------------------------------- */
+void KernelCompiler::initializeOwnedBufferHandles(BuilderRef b, const InitializeOptions /* options */) {
+    const auto numOfOutputs = getNumOfStreamOutputs();
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
+        const Binding & output = mOutputStreamSets[i];
+        if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
+            Value * const handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
+            buffer->setHandle(handle);
+        }
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

@@ -1003,7 +1003,6 @@ void __report_failure_v(const char * name, const char * fmt, const uintptr_t * t
     }
     char buffer[1024] = {0};
     const auto m = std::vsprintf(buffer, fmt, args);
-    assert (m > 0);
     out.write(buffer, m);
     if (trace == nullptr) {
         if (colourize) {
@@ -1933,8 +1932,6 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                                 isPoisonedCalls.insert(&ci);
                             }
                         }
-                        ++i;
-                        continue;
                     } else
                     #endif
                     if (ci.getCalledFunction() == assertFunc) {
@@ -1998,18 +1995,39 @@ bool RemoveRedundantAssertionsPass::runOnModule(Module & M) {
                             } else {
                                 remove = true;
                             }
-                        } else if (LLVM_UNLIKELY(assertions.count(check))) {
+                        } else { // non-static check
+
                             // a duplicate check will never be executed if true
-                            remove = true;
-                        } else {
-                            assertions.insert(check);
+                            if (assertions.count(check)) {
+                                remove = true;
+                            } else if (isa<PHINode>(check)) {
+                                // if all incoming values of this PHINode have been checked,
+                                // then this is an implicit duplicate check.
+                                PHINode * const phi = cast<PHINode>(check);
+                                const auto n = phi->getNumIncomingValues();
+                                bool allChecked = true;
+                                for (auto i = 0U; i != n; ++i) {
+                                    if (assertions.count(phi->getIncomingValue(i)) == 0) {
+                                        allChecked = false;
+                                        break;
+                                    }
+                                }
+                                if (allChecked) {
+                                    assertions.insert(check);
+                                    remove = true;
+                                }
+                            }
                         }
-                        if (LLVM_UNLIKELY(remove)) {
+
+                        if (remove) {
                             i = ci.eraseFromParent();
                             RecursivelyDeleteTriviallyDeadInstructions(check);
                             modified = true;
                             continue;
+                        } else {
+                            assertions.insert(check);
                         }
+
                     }
                 }
                 ++i;

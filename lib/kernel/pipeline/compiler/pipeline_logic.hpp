@@ -284,6 +284,7 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
+    verifyBufferRelationships();
     mScalarValue.reset(FirstKernel, LastScalar);
     readPipelineIOItemCounts(b);
     if (mNumOfThreads == 1) {
@@ -805,6 +806,101 @@ Value * PipelineCompiler::readTerminationSignalFromLocalState(BuilderRef b, Valu
     Value * const signal = b->CreateLoad(b->CreateInBoundsGEP(threadState, indices));
     assert (signal->getType()->isIntegerTy());
     return signal;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief verifyBufferRelationships
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::verifyBufferRelationships() const {
+
+    // If this pipeline is internally synchronized, it must own and manage its output buffers; otherwise
+    // the outer pipeline would have to be able to manage it without having correct knowledge of its
+    // current state in multithreaded mode. Verify that the correct attributes have been set.
+    if (LLVM_UNLIKELY(ExternallySynchronized)) {
+        for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+            const auto streamSet = source(e, mBufferGraph);
+            const auto producer = parent(streamSet, mBufferGraph);
+            const Kernel * const kernelObj = getKernel(producer); assert (kernelObj);
+            const auto synchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
+            const BufferRateData & br = mBufferGraph[e];
+            const Binding & output = br.Binding;
+            const auto unmanaged = !output.hasAttribute(AttrId::ManagedBuffer);
+
+            if (LLVM_UNLIKELY(synchronized ^ unmanaged)) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << mTarget->getName() << "." << output.getName()
+                    << " should ";
+                if (synchronized) {
+                    out << "not ";
+                }
+                out << "have been marked as a ManagedBuffer.";
+                report_fatal_error(out.str());
+            }
+
+
+        }
+    }
+
+
+
+#if 0
+
+    // verify that the buffer config is valid
+    for (unsigned i = FirstStreamSet; i <= LastStreamSet; ++i) {
+
+        const BufferNode & bn = G[i];
+        const auto pe = in_edge(i, G);
+        const auto producerVertex = source(pe, G);
+        const Kernel * const producer = getKernel(producerVertex);
+        const BufferRateData & producerRate = G[pe];
+        const Binding & output = producerRate.Binding;
+
+
+
+
+        // Type check stream set I/O types.
+        Type * const baseType = output.getType();
+        for (const auto e : make_iterator_range(out_edges(i, G))) {
+            const BufferRateData & consumerRate = G[e];
+            const Binding & input = consumerRate.Binding;
+            if (LLVM_UNLIKELY(baseType != input.getType())) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream msg(tmp);
+                msg << producer->getName() << ':' << output.getName()
+                    << " produces a ";
+                baseType->print(msg);
+                const Kernel * const consumer = getKernel(target(e, G));
+                msg << " but "
+                    << consumer->getName() << ':' << input.getName()
+                    << " expects ";
+                input.getType()->print(msg);
+                report_fatal_error(msg.str());
+            }
+        }
+
+        for (const auto ce : make_iterator_range(out_edges(i, G))) {
+            const Binding & input = G[ce].Binding;
+            if (LLVM_UNLIKELY(requiresLinearAccess(input))) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                const auto consumer = target(ce, G);
+                out << getKernel(consumer)->getName()
+                    << '.' << input.getName()
+                    << " requires that "
+                    << producer->getName()
+                    << '.' << output.getName()
+                    << " is a Linear buffer.";
+                report_fatal_error(out.str());
+            }
+        }
+
+
+    }
+
+#endif
+
 }
 
 }

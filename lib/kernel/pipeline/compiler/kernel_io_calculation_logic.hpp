@@ -550,21 +550,31 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
 void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort  outputPort) {
     const auto streamSet = getOutputBufferVertex(outputPort);
     const BufferNode & bn = mBufferGraph[streamSet];
-    if (LLVM_UNLIKELY(bn.isUnowned())) {
-        return;
-    }
+
+    const auto prefix = makeBufferName(mKernelId, outputPort);
     const StreamSetBuffer * const buffer = bn.Buffer;
+
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
     Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
     Value * const required = mLinearOutputItemsPhi(outputPort);
+
+
+    if (LLVM_UNLIKELY(bn.isUnowned())) {
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + "_unownedProduced = %" PRIu64, produced);
+        debugPrint(b, prefix + "_unownedRequired = %" PRIu64, required);
+        debugPrint(b, prefix + "_unownedCapacity = %" PRIu64, buffer->getCapacity(b));
+        #endif
+
+        return;
+    }
     ConstantInt * overflow = nullptr;
     if (bn.CopyBack || bn.Add) {
         overflow = b->getSize(std::max(bn.CopyBack, bn.Add));
     }
 
     Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, overflow);
-
-    const auto prefix = makeBufferName(mKernelId, outputPort);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_produced = %" PRIu64, produced);
@@ -578,8 +588,8 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
 
     BasicBlock * const expandBuffer = b->CreateBasicBlock(prefix + "_expandBuffer", mKernelCheckOutputSpace);
     BasicBlock * const expanded = b->CreateBasicBlock(prefix + "_expandedBuffer", mKernelCheckOutputSpace);
-
     Value * const hasEnoughSpace = b->CreateICmpULE(required, remaining);
+
     b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
 
     b->SetInsertPoint(expandBuffer);

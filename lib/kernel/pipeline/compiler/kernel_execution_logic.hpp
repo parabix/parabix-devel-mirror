@@ -186,6 +186,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             } else {
                 addr = mInputVirtualBaseAddressPhi(rt.Port);
             }
+
+
             addNextArg(addr);
 
             const auto addressable = mKernelIsInternallySynchronized | deferred;
@@ -230,7 +232,9 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             produced = mAlreadyProducedPhi(rt.Port);
         }
 
-        if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
+        const auto managed = bn.Type == BufferType::ManagedByKernel;
+
+        if (LLVM_UNLIKELY(managed)) {
             mReturnedOutputVirtualBaseAddressPtr(rt.Port) = addVirtualBaseAddressArg(b, buffer, args);
         } else {
             addNextArg(getVirtualBaseAddress(b, rt, buffer, produced));
