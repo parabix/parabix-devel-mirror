@@ -1,10 +1,10 @@
 #
-# greptest.py - Functional correctness testing for grep implementations.
+# .py - Functional correctness testing for grep implementations.
 # Robert D. Cameron, Dec. 28, 2013
 # Licensed under Academic Free License 3.0
 #
 # Uses an XML test suite with the following format.
-# <greptest>
+# <>
 # <datafile id="simple1">
 # A few lines of input
 # in this simple test file
@@ -15,7 +15,7 @@
 # <grepcase regexp="in" datafile="simple1" greplines="1 2"/>
 # <grepcase regexp="[A-Z]" datafile="simple1" greplines="1"/>
 #
-# </greptest>
+# </>
 
 
 import sys, subprocess, os, optparse, re, codecs, stat
@@ -113,12 +113,12 @@ def end_element_close_file(name):
         os.chmod(outfpath, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
         in_datafile = False
 
-def make_data_files(greptest_xml):
+def make_data_files(_xml):
     p = xml.parsers.expat.ParserCreate()
     p.StartElementHandler = start_element_open_file
     p.CharacterDataHandler = char_data_write_contents
     p.EndElementHandler = end_element_close_file
-    p.Parse(greptest_xml, 1)
+    p.Parse(_xml, 1)
 
 def escape_quotes(e):  return e.replace(u"'", u"'\\''")
 
@@ -213,11 +213,11 @@ def start_element_do_test(name, attrs):
                     expected_result = expected_grep_results(attrs['datafile'], lines, flags)
                     execute_grep_test(flags, attrs['regexp'], attrs['datafile'], expected_result)
 
-def run_tests(greptest_xml):
+def run_tests(_xml):
     global failure_count
     p = xml.parsers.expat.ParserCreate()
     p.StartElementHandler = start_element_do_test
-    p.Parse(greptest_xml, 1)
+    p.Parse(_xml, 1)
     if failure_count > 0: exit(1)
 
 if __name__ == '__main__':
@@ -227,7 +227,7 @@ if __name__ == '__main__':
                           dest = 'datafile_dir', type='string', default='testfiles',
                           help = 'directory for test files.')
     option_parser.add_option('-t', '--testcases',
-                          dest = 'testcases', type='string', default='greptest.xml',
+                          dest = 'testcases', type='string', default='.xml',
                           help = 'grep test case file (XML format).')
     option_parser.add_option('-e', '--exec_dir',
                           dest = 'exec_dir', type='string', default='.',
