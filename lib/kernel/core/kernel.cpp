@@ -570,7 +570,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     for (unsigned i = 0; i < m; ++i) {
         const Binding & output = mOutputStreamSets[i];
         // virtual base output address
-        const auto isLocal = isLocalBuffer(output);
+        const auto isLocal = internallySynchronized || isLocalBuffer(output);
         auto const bufferType = StreamSetBuffer::resolveType(b, output.getType())->getPointerTo();
         auto bufferParamType = bufferType;
         if (LLVM_UNLIKELY(isLocal)) {
@@ -590,7 +590,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
             fields.push_back(sizeTy); // constant
         }
         // consumed / writable item count
-        if (isLocal || internallySynchronized || requiresItemCount(output)) {
+        if (isLocal || requiresItemCount(output)) {
             fields.push_back(sizeTy);
         }
     }
@@ -662,8 +662,8 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
             if (LLVM_LIKELY(internallySynchronized || hasTerminationSignal || isAddressable(output) || isCountable(output))) {
                 setNextArgName(output.getName() + "_produced");
             }
-
-            if (LLVM_UNLIKELY(isLocalBuffer(output))) {
+            const auto isLocal = internallySynchronized || isLocalBuffer(output);
+            if (LLVM_UNLIKELY(isLocal)) {
                 setNextArgName(output.getName() + "_consumed");
             } else if (internallySynchronized || requiresItemCount(output)) {
                 setNextArgName(output.getName() + "_writable");

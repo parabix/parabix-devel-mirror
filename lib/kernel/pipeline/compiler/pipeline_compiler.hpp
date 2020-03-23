@@ -154,7 +154,7 @@ public:
     void addPipelineKernelProperties(BuilderRef b);
     void constructStreamSetBuffers(BuilderRef b) override;
     void generateInitializeMethod(BuilderRef b);
-    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides);
+    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides);
     void generateInitializeThreadLocalMethod(BuilderRef b);
     void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides);
     void generateKernelMethod(BuilderRef b);
@@ -180,8 +180,6 @@ public:
     void start(BuilderRef b);
     void setActiveKernel(BuilderRef b, const unsigned index, const bool allowThreadLocal);
     void executeKernel(BuilderRef b);
-    void executeExternallySynchronizedKernel(BuilderRef b);
-    void executeInternallySynchronizedKernel(BuilderRef b);
     void end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
@@ -344,8 +342,12 @@ public:
 
 // buffer management codegen functions
 
-    void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
+    enum StreamSetAllocationType {
+        Shared
+        , ThreadLocal
+    };
 
+    void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
     void allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal);
     void loadInternalStreamSetHandles(BuilderRef b, const bool nonLocal);
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);

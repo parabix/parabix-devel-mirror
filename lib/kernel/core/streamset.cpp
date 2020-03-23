@@ -396,14 +396,14 @@ void StaticBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplier
     indices[0] = b->getInt32(0);
     Value * const handle = getHandle();
     assert (handle && "has not been set prior to calling allocateBuffer");
-    Value * size = b->CreateMul(capacityMultiplier, b->getSize(mCapacity));
+    Value * const capacity = b->CreateMul(capacityMultiplier, b->getSize(mCapacity));
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        b->CreateAssert(size, "Static buffer capacity cannot be 0.");
+        b->CreateAssert(capacity, "Static buffer capacity cannot be 0.");
     }
 
     indices[1] = b->getInt32(BaseAddress);
-    size = b->CreateAdd(size, b->getSize(mUnderflow + mOverflow));
+    Value * const size = b->CreateAdd(capacity, b->getSize(mUnderflow + mOverflow));
     Value * const buffer = addUnderflow(b, b->CreateCacheAlignedMalloc(mType, size, mAddressSpace), mUnderflow);
     Value * const baseAddressField = b->CreateInBoundsGEP(handle, indices);
     b->CreateStore(buffer, baseAddressField);
@@ -411,7 +411,7 @@ void StaticBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplier
     if (mLinear) {
         indices[1] = b->getInt32(EffectiveCapacity);
         Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
-        b->CreateStore(size, capacityField);
+        b->CreateStore(capacity, capacityField);
 
         indices[1] = b->getInt32(MallocedAddress);
         Value * const concreteAddrField = b->CreateInBoundsGEP(handle, indices);
@@ -485,6 +485,14 @@ void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llv
     if (mLinear) {
 
         // NOTE: static linear buffers are assumed to be threadlocal.
+
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            Value * const canFit = b->CreateICmpEQ(produced, consumed);
+            b->CreateAssert(canFit,
+                            "Static linear buffer: produced item count "
+                            "(%" PRId64 ") does not match its consumed item count (%" PRId64 ")",
+                            produced, consumed);
+        }
 
         const auto blockWidth = b->getBitBlockWidth();
         assert (is_power_2(blockWidth));
@@ -571,20 +579,19 @@ void DynamicBuffer::allocateBuffer(BuilderPtr b, Value * const capacityMultiplie
     indices[0] = b->getInt32(0);
 
     Value * const handle = getHandle();
-    Value * size = b->CreateMul(capacityMultiplier, b->getSize(mInitialCapacity));
+    Value * const capacity = b->CreateMul(capacityMultiplier, b->getSize(mInitialCapacity));
 
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        b->CreateAssert(size, "Dynamic buffer capacity cannot be 0.");
+        b->CreateAssert(capacity, "Dynamic buffer capacity cannot be 0.");
     }
 
     indices[1] = b->getInt32(EffectiveCapacity);
     Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
-    Constant * const capacity = b->getSize(mInitialCapacity);
     b->CreateStore(capacity, capacityField);
 
     indices[1] = b->getInt32(BaseAddress);
     Value * const baseAddressField = b->CreateInBoundsGEP(handle, indices);
-    size = b->CreateAdd(size, b->getSize(mUnderflow + mOverflow));
+    Value * const size = b->CreateAdd(capacity, b->getSize(mUnderflow + mOverflow));
     Value * const baseAddress = b->CreateCacheAlignedMalloc(mType, size, mAddressSpace);
     Value * const adjBaseAddress = addUnderflow(b, baseAddress, mUnderflow);
     b->CreateStore(adjBaseAddress, baseAddressField);
@@ -783,23 +790,25 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             Value * const chunksToOverwrite = b->CreateSub(requiredChunks, consumedChunks);
             Value * const overwriteUpToPtr = b->CreateInBoundsGEP(concreteAddress, chunksToOverwrite);
             Value * const canCopy = b->CreateICmpULE(overwriteUpToPtr, unreadDataPtr);
+            b->CallPrintInt("canCopy", canCopy);
             b->CreateLikelyCondBr(canCopy, copyBack, expandAndCopyBack);
 
             b->SetInsertPoint(copyBack);
+            b->CallPrintInt("bytesToCopy", bytesToCopy);
             b->CreateMemCpy(concreteAddress, unreadDataPtr, bytesToCopy, blockSize);
             BasicBlock * const copyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 
             b->SetInsertPoint(expandAndCopyBack);
-            Value * const initialCapacity = b->getSize(mInitialCapacity);
-            Value * const newCapacity = b->CreateRoundUp(requiredChunks, initialCapacity);
+            Value * const newCapacity = b->CreateRoundUp(requiredChunks, capacity);
             Value * requiredCapacity = newCapacity;
             if (mUnderflow || mOverflow) {
                 Constant * const additionalCapacity = b->getSize(mUnderflow + mOverflow);
                 requiredCapacity = b->CreateAdd(newCapacity, additionalCapacity);
             }
-            Value * expandedBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);
+            Value * expandedBuffer = b->CreateCacheAlignedMalloc(mType, requiredCapacity, mAddressSpace);            
             expandedBuffer = addUnderflow(b, expandedBuffer, mUnderflow);
+            b->CallPrintInt("expandedBuffer", expandedBuffer);
 
             indices[1] = b->getInt32(PriorAddress);
             Value * const priorBufferField = b->CreateInBoundsGEP(handle, indices);
@@ -815,13 +824,12 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
             PHINode * const newBaseBuffer = b->CreatePHI(virtualBase->getType(), 2);
             newBaseBuffer->addIncoming(concreteAddress, copyBackExit);
             newBaseBuffer->addIncoming(expandedBuffer, expandAndCopyBackExit);
-
-
-            PHINode * const updatedCapacity = b->CreatePHI(sizeTy, 2);
+            PHINode * const updatedCapacity = b->CreatePHI(sizeTy, 2);            
             updatedCapacity->addIncoming(capacity, copyBackExit);
             updatedCapacity->addIncoming(newCapacity, expandAndCopyBackExit);
             Value * const newBaseAddress = b->CreateGEP(newBaseBuffer, b->CreateNeg(consumedChunks));
             b->CreateStore(newBaseAddress, virtualBaseField);
+            #error updated capacity is incorrect
             Value * const effectiveCapacity = b->CreateAdd(producedChunks, updatedCapacity);
             b->CreateStore(effectiveCapacity, capacityField);
             b->CreateRetVoid();

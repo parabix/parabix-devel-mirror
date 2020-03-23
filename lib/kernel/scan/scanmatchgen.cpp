@@ -241,15 +241,18 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
     Value * const endPtr = b->getRawInputPointer("InputStream", matchEndPos);
 
-//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-//        Value * const A = b->CreateSub(matchEndPos, matchStart);
-//        Value * const B = b->CreatePtrDiff(endPtr, startPtr);
-//        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
-//    }
-
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        IntegerType * const sizeTy = b->getSizeTy();
+        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
+        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
+        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
+        b->CheckAddress(startPtr, size, "ScanMatch: dispatcher");
+    }
+
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
 
     //  We've dealt with the match, now prepare for the next one, if any.
@@ -570,6 +573,15 @@ void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        IntegerType * const sizeTy = b->getSizeTy();
+        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
+        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
+        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
+        b->CheckAddress(startPtr, size, "ScanBatch: dispatcher");
+    }
+
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
 
     //  We've dealt with the match, now prepare for the next one, if any.
@@ -950,6 +962,15 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        IntegerType * const sizeTy = b->getSizeTy();
+        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
+        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
+        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
+        b->CheckAddress(startPtr, size, "MatchReporter: dispatcher");
+    }
+
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
     Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());
@@ -1245,6 +1266,15 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
     auto argi = dispatcher->arg_begin();
     const auto matchRecNumArg = &*(argi++);
     Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
+
+    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+        IntegerType * const sizeTy = b->getSizeTy();
+        Value * const startPtrInt = b->CreatePtrToInt(startPtr, sizeTy);
+        Value * const endPtrInt = b->CreatePtrToInt(endPtr, sizeTy);
+        Value * const size = b->CreateSub(endPtrInt, startPtrInt);
+        b->CheckAddress(startPtr, size, "ColorizedReporter: dispatcher");
+    }
+
     b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
     Value * haveMoreMatches = b->CreateICmpNE(nextMatchNum, matchesAvail);
     phiMatchNum->addIncoming(nextMatchNum, b->GetInsertBlock());

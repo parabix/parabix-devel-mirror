@@ -39,7 +39,7 @@ const static std::string TERMINATION_SIGNAL = "__termination_signal";
 // TODO: this check is a bit too strict in general; if the pipeline could request data/
 // EOF padding from the MemorySource kernel, it would be possible to re-enable.
 
-// #define CHECK_IO_ADDRESS_RANGE
+#define CHECK_IO_ADDRESS_RANGE
 
 // TODO: split the init/final into two methods each, one to do allocation/init, and the
 // other final/deallocate? Would potentially allow us to reuse the kernel/stream set
@@ -504,7 +504,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
 
         const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
         const Binding & output = mOutputStreamSets[i];
-        const auto isLocal = Kernel::isLocalBuffer(output);
+        const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output);
 
         if (LLVM_UNLIKELY(isLocal)) {
             // If an output is a managed buffer, the address is stored within the state instead
@@ -555,7 +555,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             assert (consumed->getType() == sizeTy);
             mConsumedOutputItems[i] = consumed;
         } else {
-            if (internallySynchronized || requiresItemCount(output)) {
+            if (requiresItemCount(output)) {
                 writable = nextArg();
                 assert (writable && writable->getType() == sizeTy);
             } else if (mFixedRateFactor) {
@@ -563,13 +563,13 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             }
             Value * const capacity = b->CreateAdd(produced, writable);
             buffer->setCapacity(b, capacity);
+            #ifdef CHECK_IO_ADDRESS_RANGE
+            if (LLVM_UNLIKELY(enableAsserts)) {
+                checkStreamRange(buffer, output, produced);
+            }
+            #endif
         }
         mWritableOutputItems[i] = writable;
-        #ifdef CHECK_IO_ADDRESS_RANGE
-        if (LLVM_UNLIKELY(enableAsserts)) {
-            checkStreamRange(buffer, output, produced);
-        }
-        #endif
     }
     assert (arg == args.end());
 
@@ -651,7 +651,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         const auto & buffer = mStreamSetOutputBuffers[i];
         const Binding & output = mOutputStreamSets[i];
-        const auto isLocal = Kernel::isLocalBuffer(output);
+        const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output);
         if (LLVM_UNLIKELY(isLocal)) {
             // If an output is a managed buffer, the address is stored within the state instead
             // of being passed in through the function call.
@@ -672,7 +672,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         if (LLVM_UNLIKELY(isLocal)) {
             props.push_back(mConsumedOutputItems[i]);
-        } else if (internallySynchronized || requiresItemCount(output)) {
+        } else if (requiresItemCount(output)) {
             props.push_back(mWritableOutputItems[i]);
         }
     }

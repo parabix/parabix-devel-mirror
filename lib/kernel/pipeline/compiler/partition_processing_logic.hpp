@@ -255,11 +255,9 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
     mKernelInitiallyTerminatedExit = exitBlock;
     b->CreateBr(mKernelJumpToNextUsefulPartition);
 
-    if (mKernelIsInternallySynchronized) {
-        return;
-    }
-
     mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
+
+
 
 
 #if 0

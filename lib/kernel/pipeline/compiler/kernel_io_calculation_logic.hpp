@@ -12,6 +12,81 @@
 
 namespace kernel {
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief readPipelineIOItemCounts
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
+
+    // TODO: this needs to be considered more: if we have multiple consumers of a pipeline input and
+    // they process the input data at differing rates, how do we ensure that we always resume processing
+    // at the correct position? We can store the actual item counts / delta of the consumed count
+    // internally but this would be problematic for optimization branches as we may have processed data
+    // using the alternate path and any internally stored counts/deltas are irrelevant.
+
+    // Would a simple "reset" be enough?
+
+    mKernelId = PipelineInput;
+
+    ConstantInt * const ZERO = b->getSize(0);
+
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        mLocallyAvailableItems[streamSet] = ZERO;
+    }
+
+    // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
+        Value * const available = getAvailableInputItems(inputPort.Number);
+        setLocallyAvailableItemCount(b, inputPort, available);
+        initializeConsumedItemCount(b, inputPort, available);
+    }
+
+    if (ExternallySynchronized) {
+        #warning read locally avail item counts here? values may be stale and inconsistent
+        return;
+    }
+
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+
+        const auto buffer = target(e, mBufferGraph);
+        const StreamSetPort inputPort = mBufferGraph[e].Port;
+        assert (inputPort.Type == PortType::Output);
+
+        Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
+        Value * const processed = b->CreateLoad(inPtr);
+        for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
+            const BufferRateData & rd = mBufferGraph[e];
+            const auto kernelIndex = target(e, mBufferGraph);
+            const auto prefix = makeBufferName(kernelIndex, rd.Port);
+            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+            b->CreateStore(processed, ptr);
+        }
+
+    }
+
+
+    mKernelId = PipelineOutput;
+
+    // NOTE: all inputs of PipelineOutput node are outputs of the PipelineKernel
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+        const auto buffer = source(e, mBufferGraph);
+        const StreamSetPort outputPort = mBufferGraph[e].Port;
+        assert (outputPort.Type == PortType::Input);
+        Value * outPtr = getProducedOutputItemsPtr(outputPort.Number);
+        Value * const produced = b->CreateLoad(outPtr);
+        for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
+            const BufferRateData & rd = mBufferGraph[e];
+            const auto kernelIndex = source(e, mBufferGraph);
+            const auto prefix = makeBufferName(kernelIndex, rd.Port);
+            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
+            b->CreateStore(produced, ptr);
+        }
+    }
+
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief determineNumOfLinearStrides
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -122,8 +197,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         updatePHINodesForLoopExit(b);
         b->SetInsertPoint(noStreamIsInsufficient);
     }
-
-    b->CreateBr(mKernelLoopCall);
 
 }
 

@@ -281,6 +281,44 @@ void PipelineCompiler::generateInitializeMethod(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    allocateOwnedBuffers(b, expectedNumOfStrides, true);
+    initializeBufferExpansionHistory(b);
+    resetInternalBufferHandles();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
+    assert (mTarget->hasThreadLocal());
+    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernel = getKernel(i);
+        if (kernel->hasThreadLocal()) {
+            setActiveKernel(b, i, true);
+            assert (mKernel == kernel);
+            Value * const f = getKernelInitializeThreadLocalFunction(b);
+            if (LLVM_UNLIKELY(f == nullptr)) {
+                report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
+            }
+            Value * const handle = b->CreateCall(f, mKernelSharedHandle);
+            b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateThreadLocalInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    assert (mTarget->hasThreadLocal());
+    allocateOwnedBuffers(b, expectedNumOfStrides, false);
+    resetInternalBufferHandles();
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
@@ -293,111 +331,6 @@ inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
         generateMultiThreadKernelMethod(b);
     }
     resetInternalBufferHandles();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief executeKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::executeKernel(BuilderRef b) {
-    clearInternalStateForCurrentKernel();
-
-    mKernelIsInternallySynchronized = mKernel->hasAttribute(AttrId::InternallySynchronized);
-    mKernelCanTerminateEarly = mKernel->canSetTerminateSignal();
-    mHasExplicitFinalPartialStride = mKernel->requiresExplicitPartialFinalStride();
-    mNextPartitionEntryPoint = getPartitionExitPoint(b);
-
-    mExhaustedPipelineInputAtExit = mExhaustedInput;
-
-    identifyPipelineInputs();
-    checkForPartitionEntry(b);
-
-    assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));
-
-    if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-        executeInternallySynchronizedKernel(b);
-    } else {
-        executeExternallySynchronizedKernel(b);
-    }
-
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        verifyPostInvocationTerminationSignal(b);
-    }
-
-    checkForPartitionExit(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief readPipelineIOItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
-
-    // TODO: this needs to be considered more: if we have multiple consumers of a pipeline input and
-    // they process the input data at differing rates, how do we ensure that we always resume processing
-    // at the correct position? We can store the actual item counts / delta of the consumed count
-    // internally but this would be problematic for optimization branches as we may have processed data
-    // using the alternate path and any internally stored counts/deltas are irrelevant.
-
-    // Would a simple "reset" be enough?
-
-    mKernelId = PipelineInput;
-
-    ConstantInt * const ZERO = b->getSize(0);
-
-    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
-        mLocallyAvailableItems[streamSet] = ZERO;
-    }
-
-    // NOTE: all outputs of PipelineInput node are inputs to the PipelineKernel
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const StreamSetPort inputPort = mBufferGraph[e].Port;
-        assert (inputPort.Type == PortType::Output);
-        Value * const available = getAvailableInputItems(inputPort.Number);
-        setLocallyAvailableItemCount(b, inputPort, available);
-        initializeConsumedItemCount(b, inputPort, available);
-    }
-
-    if (ExternallySynchronized) {
-        #warning read locally avail item counts here? values may be stale and inconsistent
-        return;
-    }
-
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-
-        const auto buffer = target(e, mBufferGraph);
-        const StreamSetPort inputPort = mBufferGraph[e].Port;
-        assert (inputPort.Type == PortType::Output);
-
-        Value * const inPtr = getProcessedInputItemsPtr(inputPort.Number);
-        Value * const processed = b->CreateLoad(inPtr);
-        for (const auto e : make_iterator_range(out_edges(buffer, mBufferGraph))) {
-            const BufferRateData & rd = mBufferGraph[e];
-            const auto kernelIndex = target(e, mBufferGraph);
-            const auto prefix = makeBufferName(kernelIndex, rd.Port);
-            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
-            b->CreateStore(processed, ptr);
-        }
-
-    }
-
-
-    mKernelId = PipelineOutput;
-
-    // NOTE: all inputs of PipelineOutput node are outputs of the PipelineKernel
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const auto buffer = source(e, mBufferGraph);
-        const StreamSetPort outputPort = mBufferGraph[e].Port;
-        assert (outputPort.Type == PortType::Input);
-        Value * outPtr = getProducedOutputItemsPtr(outputPort.Number);
-        Value * const produced = b->CreateLoad(outPtr);
-        for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
-            const BufferRateData & rd = mBufferGraph[e];
-            const auto kernelIndex = source(e, mBufferGraph);
-            const auto prefix = makeBufferName(kernelIndex, rd.Port);
-            Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
-            b->CreateStore(produced, ptr);
-        }
-    }
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -723,44 +656,6 @@ inline Value * PipelineCompiler::isProcessThread(BuilderRef b, Value * const thr
     indices[1] = b->getInt32(PROCESS_THREAD_ID);
     Value * const ptr = b->CreateInBoundsGEP(threadState, indices);
     return b->CreateIsNull(b->CreateLoad(ptr));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateInitializeThreadLocalMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::generateInitializeThreadLocalMethod(BuilderRef b) {
-    assert (mTarget->hasThreadLocal());
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        const Kernel * const kernel = getKernel(i);
-        if (kernel->hasThreadLocal()) {
-            setActiveKernel(b, i, true);
-            assert (mKernel == kernel);
-            Value * const f = getKernelInitializeThreadLocalFunction(b);
-            if (LLVM_UNLIKELY(f == nullptr)) {
-                report_fatal_error(mKernel->getName() + " does not have an initialize method for its threadlocal state");
-            }
-            Value * const handle = b->CreateCall(f, mKernelSharedHandle);
-            b->CreateStore(handle, getThreadLocalHandlePtr(b, i));
-        }
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateAllocateInternalStreamSetsMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {    
-    allocateOwnedBuffers(b, expectedNumOfStrides, true);
-    initializeBufferExpansionHistory(b);
-    resetInternalBufferHandles();
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateAllocateThreadLocalInternalStreamSetsMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * expectedNumOfStrides) {    
-    assert (mTarget->hasThreadLocal());
-    allocateOwnedBuffers(b, expectedNumOfStrides, false);
-    resetInternalBufferHandles();
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

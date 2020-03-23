@@ -242,11 +242,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         const auto addressable = mKernelIsInternallySynchronized | mKernelCanTerminateEarly;
         mReturnedProducedItemCountPtr(rt.Port) = addItemCountArg(b, output, addressable, produced, args);
 
-        if (LLVM_UNLIKELY(bn.Type == BufferType::ManagedByKernel)) {
+        if (LLVM_UNLIKELY(managed)) {
             addNextArg(mInitialConsumedItemCount[streamSet]);
-        } else if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-            Value * const consumed = mInitialConsumedItemCount[streamSet];
-            addNextArg(buffer->getLinearlyWritableItems(b, produced, consumed, nullptr));
         } else if (requiresItemCount(output)) {
             addNextArg(mLinearOutputItemsPhi(rt.Port));
         }

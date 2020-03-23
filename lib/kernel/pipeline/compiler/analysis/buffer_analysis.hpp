@@ -56,10 +56,12 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
     // fill in any known managed buffers
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        const Kernel * const kernelObj = getKernel(kernel);
+        const auto internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
         for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const BufferRateData & producerRate = mBufferGraph[e];
             const Binding & output = producerRate.Binding;
-            if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
+            if (LLVM_UNLIKELY(internallySynchronized || Kernel::isLocalBuffer(output))) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & bn = mBufferGraph[streamSet];
                 // Every managed buffer is considered linear to the pipeline
@@ -130,7 +132,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // be bounded a priori. During initialization, we could pass a "suggestion"
             // argument to indicate what the outer pipeline believes its I/O rates will be.
 
-            const BufferType bufferType = internalOrExternal(streamSet);
+            const auto bufferType = internalOrExternal(streamSet);
+
+
 
             bn.Type = bufferType;
 
@@ -465,9 +469,37 @@ void PipelineAnalysis::generateInitialBufferGraph() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::identifyLinearBuffers() {
 
+    auto isNonLinear = [](const Binding & binding) {
+        for (const Attribute & attr : binding.getAttributes()) {
+            switch (attr.getKind()) {
+                case AttrId::Linear:
+                case AttrId::ManagedBuffer:
+                    return false;
+                default: break;
+            }
+        }
+        return true;
+    };
+
+
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         BufferNode & N = mBufferGraph[streamSet];
-        N.NonLinear = true;
+        const auto output = in_edge(streamSet, mBufferGraph);
+        const BufferRateData & br = mBufferGraph[output];
+        N.NonLinear = isNonLinear(br.Binding);
+    }
+
+    // All pipeline I/O must be linear
+    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+        const auto streamSet = source(e, mBufferGraph);
+        BufferNode & N = mBufferGraph[streamSet];
+        N.NonLinear = false;
+    }
+
+    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+        const auto streamSet = source(e, mBufferGraph);
+        BufferNode & N = mBufferGraph[streamSet];
+        N.NonLinear = false;
     }
 
     // Any kernel that is internally synchronized or has a greedy rate input
@@ -552,6 +584,11 @@ void PipelineAnalysis::identifyLinearBuffers() {
             BufferNode & N = mBufferGraph[streamSet];
             N.NonLinear = false;
         }
+
+
+
+
+
     }
 
 #if 0
