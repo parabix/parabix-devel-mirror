@@ -30,4 +30,5 @@ UCD-scripts/generated*
 *.log
 *.aux
 *.bcf
-
+# Don't track testfiles built
+/testfiles
