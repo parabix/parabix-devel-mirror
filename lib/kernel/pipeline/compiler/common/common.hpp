@@ -32,13 +32,12 @@ struct FixedVector {
         reset(0, Size - 1U);
     }
 
-    T operator[](const size_t index) const {
+    inline T operator[](const size_t index) const {
         assert ("index exceeds allocated bounds!" && index >= mFirst && index <= mLast);
         return mArray[index];
     }
 
-
-    T & operator[](const size_t index) {
+    inline T & operator[](const size_t index) {
         assert ("index exceeds allocated bounds!" && index >= mFirst && index <= mLast);
         return mArray[index];
     }
@@ -56,6 +55,43 @@ private:
     const size_t mLast;
     #endif
 };
+
+template <typename T>
+struct InputPortVector {
+    inline InputPortVector(const size_t n, Allocator & A)
+    : mArray(n, A) {
+    }
+    inline T operator[](const StreamSetInputPort port) const {
+        return mArray[port.Number];
+    }
+    inline T & operator[](const StreamSetInputPort port) {
+        return mArray[port.Number];
+    }
+    inline void reset(const size_t n) {
+        mArray.reset(0, n);
+    }
+private:
+    FixedVector<T> mArray;
+};
+
+template <typename T>
+struct OutputPortVector {
+    inline OutputPortVector(const size_t n, Allocator & A)
+    : mArray(n, A) {
+    }
+    inline T operator[](const StreamSetOutputPort port) const {
+        return mArray[port.Number];
+    }
+    inline T & operator[](const StreamSetOutputPort port) {
+        return mArray[port.Number];
+    }
+    inline void reset(const size_t n) {
+        mArray.reset(0, n);
+    }
+private:
+    FixedVector<T> mArray;
+};
+
 
 template <typename T>
 using OwningVec = std::vector<std::unique_ptr<T>>;

@@ -320,13 +320,18 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         };
 
         // Evaluate the input/output ordering here and ensure that any reference port is stored first.
-
         const auto numOfInputs = in_degree(i, mStreamGraph);
-        const auto numOfPorts = numOfInputs + out_degree(i, mStreamGraph);
+        const auto numOfOutputs = out_degree(i, mStreamGraph);
 
-        if (numOfPorts == 0) {
+        const auto numOfPorts = numOfInputs + numOfOutputs;
+
+        if (LLVM_UNLIKELY(numOfPorts == 0)) {
             continue;
         }
+
+        // Record this information for the PipelineCompiler to use later to size its internal buffers.
+        MaxNumOfInputPorts = std::max(MaxNumOfInputPorts, numOfInputs);
+        MaxNumOfOutputPorts = std::max(MaxNumOfOutputPorts, numOfOutputs);
 
         Graph E(numOfPorts);
 

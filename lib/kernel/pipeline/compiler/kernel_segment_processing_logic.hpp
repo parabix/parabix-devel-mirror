@@ -17,7 +17,7 @@ void PipelineCompiler::start(BuilderRef b) {
 
     makePartitionEntryPoints(b);
 
-    if (mCheckAssertions) {
+    if (CheckAssertions) {
         mRethrowException = b->WriteDefaultRethrowBlock();
     }
     assert ((!!mNumOfStrides) ^ ExternallySynchronized);
@@ -315,7 +315,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     debugPrint(b, "* " + prefix + ".madeProgress = %" PRIu8, mPipelineProgress);
     #endif
 
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         verifyPostInvocationTerminationSignal(b);
     }
 
@@ -765,7 +765,7 @@ void PipelineCompiler::end(BuilderRef b) {
 
         Value * const done = b->CreateIsNotNull(terminated);
 
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
+        if (LLVM_UNLIKELY(CheckAssertions)) {
             Value * const progressedOrFinished = b->CreateOr(mPipelineProgress, done);
             Value * const live = b->CreateOr(mMadeProgressInLastSegment, progressedOrFinished);
             b->CreateAssert(live, "Dead lock detected: pipeline could not progress after two iterations");

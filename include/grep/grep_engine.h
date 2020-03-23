@@ -215,11 +215,16 @@ public:
     unsigned getFileCount() override;
     size_t getFileStartPos(unsigned fileNo) override;
     void setBatchLineNumber(unsigned fileNo, size_t batchLine) override;
-protected:
-    bool mShowFileNames;
-    bool mShowLineNumbers;
-    bool mContextGroups;
-    bool mInitialTab;
+
+    void reserve(const size_t expected);
+    void resize(const size_t capacity);
+
+private:
+    const bool mShowFileNames;
+    const bool mShowLineNumbers;
+    const bool mContextGroups;
+    const bool mInitialTab;
+
     unsigned mCurrentFile;
     size_t mLineCount;
     size_t mLineNum;

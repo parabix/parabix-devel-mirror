@@ -623,33 +623,38 @@ unsigned EmitMatch::getFileCount() {
 size_t EmitMatch::getFileStartPos(unsigned fileNo) {
     if (mFileStartPositions.size() == 0) return 0;
     assert(fileNo < mFileStartPositions.size());
-    //llvm::errs() << "getFileStartPos(" << fileNo << ") = " << mFileStartPositions[fileNo] << "  file = " << mFileNames[fileNo] << "\n";
+    // llvm::errs() << "getFileStartPos(" << fileNo << ") = " << mFileStartPositions[fileNo] << "  file = " << mFileNames[fileNo] << "\n";
     return mFileStartPositions[fileNo];
 }
 
 void EmitMatch::setBatchLineNumber(unsigned fileNo, size_t batchLine) {
-    //llvm::errs() << "setBatchLineNumber(" << fileNo << ", " << batchLine << ")  file = " << mFileNames[fileNo] << "\n";
+    // llvm::errs() << "setBatchLineNumber(" << fileNo << ", " << batchLine << ")  file = " << mFileNames[fileNo] << "\n";
     mFileStartLineNumbers[fileNo] = batchLine;
 }
 
 void EmitMatch::accumulate_match (const size_t lineNum, char * line_start, char * line_end) {
-    unsigned nextFile = mCurrentFile + 1;
-    unsigned nextLine = mFileStartLineNumbers[nextFile];
-    if ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0)) {
-        do {
-            mCurrentFile = nextFile;
-            nextFile++;
-            //llvm::errs() << "mCurrentFile = " << mCurrentFile << ", mFileStartLineNumbers[mCurrentFile] " << mFileStartLineNumbers[mCurrentFile] << "\n";
-            nextLine = mFileStartLineNumbers[nextFile];
-        } while ((nextFile < mFileNames.size()) && (lineNum >= nextLine) && (nextLine != 0));
-        setFileLabel(mFileNames[mCurrentFile]);
-        if (!mTerminated) {
-            *mResultStr << "\n";
-            mTerminated = true;
+    auto nextFile = mCurrentFile + 1U;
+    const auto n = mFileNames.size();
+    size_t startLineNum = 0;
+    for (;;) {
+        if (nextFile >= n) {
+            break;
         }
-        //llvm::errs() << "accumulate_match(" << lineNum << "), file " << mFileNames[mCurrentFile] << "\n";
+        assert (mFileStartLineNumbers.size() > nextFile);
+        const auto nextLine = mFileStartLineNumbers[nextFile];
+        if (lineNum < nextLine) {
+            setFileLabel(mFileNames[mCurrentFile]);
+            startLineNum = mFileStartLineNumbers[mCurrentFile];
+            if (!mTerminated) {
+                *mResultStr << "\n";
+                mTerminated = true;
+            }
+            break;
+        }
+        mCurrentFile = nextFile++;
     }
-    size_t relLineNum = mCurrentFile > 0 ? lineNum - mFileStartLineNumbers[mCurrentFile] : lineNum;
+
+    const auto relLineNum = lineNum - startLineNum;
     if (mContextGroups && (lineNum > mLineNum + 1) && (relLineNum > 0)) {
         *mResultStr << "--\n";
     }
@@ -952,92 +957,121 @@ void MatchOnlyEngine::showResult(uint64_t grepResult, const std::string & fileNa
 }
 
 uint64_t EmitMatchesEngine::doGrep(const std::vector<std::string> & fileNames, std::ostringstream & strm) {
-    if (fileNames.size() == 1) {
-        typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
-        auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
-        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
-        accum.setStringStream(&strm);
-        bool useMMap;
-        int32_t fileDescriptor;
+
+    typedef uint64_t (*GrepFunctionType)(bool useMMap, int32_t fileDescriptor, EmitMatch *, size_t maxCount);
+
+    typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
+
+    EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
+    accum.setStringStream(&strm);
+
+    const auto n = fileNames.size();
+
+    bool useMMap = false;
+    int32_t fileDescriptor = 0;
+
+    if (n == 1) {
+
         if (fileNames[0] == "-") {
             fileDescriptor = STDIN_FILENO;
             accum.setFileLabel(mStdinLabel);
             useMMap = false;
         } else {
-            fileDescriptor= openFile(fileNames[0], strm);
+            fileDescriptor = openFile(fileNames[0], strm);
             if (fileDescriptor == -1) return 0;
             accum.setFileLabel(fileNames[0]);
             useMMap = mPreferMMap && canMMap(fileNames[0]);
         }
-        f(useMMap, fileDescriptor, &accum, mMaxCount);
-        close(fileDescriptor);
-        if (accum.binaryFileSignalled()) {
-            accum.mResultStr->clear();
-            accum.mResultStr->str("");
-        }
-        if (accum.mLineCount > 0) grepMatchFound = true;
-        return accum.mLineCount;
+
     } else {
-        typedef uint64_t (*GrepBatchFunctionType)(char * buffer, size_t length, EmitMatch *, size_t maxCount);
+
         auto f = reinterpret_cast<GrepBatchFunctionType>(mBatchMethod);
-        EmitMatch accum(mShowFileNames, mShowLineNumbers, ((mBeforeContext > 0) || (mAfterContext > 0)), mInitialTab);
-        accum.setStringStream(&strm);
-        std::vector<int32_t> fileDescriptor(fileNames.size());
-        std::vector<size_t> fileSize(fileNames.size(), 0);
+
+        std::vector<int32_t> fileDescriptors(n);
+        std::vector<size_t> fileSizes(n, 0);
         size_t cumulativeSize = 0;
         unsigned filesOpened = 0;
-        for (unsigned i = 0; i < fileNames.size(); i++) {
-            fileDescriptor[i] = openFile(fileNames[i], strm);
-            if (fileDescriptor[i] == -1) continue;  // File error; skip.
+        for (unsigned i = 0; i < n; i++) {
+            fileDescriptors[i] = openFile(fileNames[i], strm);
+            if (fileDescriptors[i] == -1) continue;  // File error; skip.
             struct stat st;
-            if (fstat(fileDescriptor[i], &st) != 0) continue;
-            fileSize[i] = st.st_size;
+            if (fstat(fileDescriptors[i], &st) != 0) continue;
+            fileSizes[i] = st.st_size;
             cumulativeSize += st.st_size;
             filesOpened++;
         }
-        cumulativeSize += filesOpened;  // Add an extra byte per file for possible '\n'.
-        size_t aligned_size = (cumulativeSize + batch_alignment - 1) & -batch_alignment;
 
-        AlignedAllocator<char, batch_alignment> alloc;
-        accum.mBatchBuffer = alloc.allocate(aligned_size, 0);
-        if (accum.mBatchBuffer == nullptr) {
-            llvm::report_fatal_error("Unable to allocate batch buffer of size: " + std::to_string(aligned_size));
-        }
-        char * current_base = accum.mBatchBuffer;
-        size_t current_start_position = 0;
-        accum.mFileNames.reserve(filesOpened);
-        accum.mFileStartPositions.reserve(filesOpened);
+        if (LLVM_UNLIKELY(filesOpened <= 1)) {
 
-        for (unsigned i = 0; i < fileNames.size(); i++) {
-            if (fileDescriptor[i] == -1) continue;  // Error opening file; skip.
-            ssize_t bytes_read = read(fileDescriptor[i], current_base, fileSize[i]);
-            close(fileDescriptor[i]);
-            if (bytes_read <= 0) continue; // No data or error reading the file; skip.
-            if (mBinaryFilesMode == argv::WithoutMatch) {
-                auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
-                if (null_byte_ptr != nullptr) {
-                    continue;  // Binary file; skip.
+            if (LLVM_UNLIKELY(filesOpened == 0)) {
+                return 0;
+            }
+
+            fileDescriptor = fileDescriptors[0];
+        } else {
+            cumulativeSize += filesOpened;  // Add an extra byte per file for possible '\n'.
+
+            const auto aligned_size = (cumulativeSize + batch_alignment - 1) & -batch_alignment;
+            AlignedAllocator<char, batch_alignment> alloc;
+            accum.mBatchBuffer = alloc.allocate(aligned_size, 0);
+            if (accum.mBatchBuffer == nullptr) {
+                llvm::report_fatal_error("Unable to allocate batch buffer of size: " + std::to_string(aligned_size));
+            }
+            char * current_base = accum.mBatchBuffer;
+            size_t current_start_position = 0;
+            accum.mFileNames.reserve(filesOpened);
+            accum.mFileStartPositions.reserve(filesOpened);
+
+            for (unsigned i = 0; i < filesOpened; i++) {
+                ssize_t bytes_read = read(fileDescriptors[i], current_base, fileSizes[i]);
+                close(fileDescriptors[i]);
+                if (bytes_read <= 0) continue; // No data or error reading the file; skip.
+                if (mBinaryFilesMode == argv::WithoutMatch) {
+                    auto null_byte_ptr = memchr(current_base, char (0), bytes_read);
+                    if (null_byte_ptr != nullptr) {
+                        continue;  // Binary file; skip.
+                    }
+                }
+                accum.mFileNames.push_back(fileNames[i]);
+                accum.mFileStartPositions.push_back(current_start_position);
+
+                current_base += bytes_read;
+                current_start_position += bytes_read;
+                if (*(current_base - 1) != '\n') {
+                    *current_base = '\n';
+                    current_base++;
+                    current_start_position++;
                 }
             }
-            accum.mFileNames.push_back(fileNames[i]);
-            accum.mFileStartPositions.push_back(current_start_position);
-            current_base += bytes_read;
-            current_start_position += bytes_read;
-            if (*(current_base - 1) != '\n') {
-                *current_base = '\n';
-                current_base++;
-                current_start_position++;
+
+            const auto m = accum.mFileNames.size();
+            assert (accum.mFileStartPositions.size() == m);
+            if (LLVM_LIKELY(m > 0)) {
+                accum.mFileStartLineNumbers.resize(m + 1);
+                // add a sentinal start line number
+                accum.mFileStartLineNumbers[m] = std::numeric_limits<size_t>::max();
+                accum.setFileLabel(accum.mFileNames[0]);
+                f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
             }
+
+            alloc.deallocate(accum.mBatchBuffer, 0);
+            if (accum.mLineCount > 0) grepMatchFound = true;
+            return accum.mLineCount;
         }
-        if (accum.mFileNames.size() > 0) {
-            accum.setFileLabel(accum.mFileNames[0]);
-            accum.mFileStartLineNumbers.resize(accum.mFileNames.size());
-            f(accum.mBatchBuffer, current_start_position, &accum, mMaxCount);
-        }
-        alloc.deallocate(accum.mBatchBuffer, 0);
-        if (accum.mLineCount > 0) grepMatchFound = true;
-        return accum.mLineCount;
     }
+
+    // Handle one file
+
+    auto f = reinterpret_cast<GrepFunctionType>(mMainMethod);
+    f(useMMap, fileDescriptor, &accum, mMaxCount);
+    close(fileDescriptor);
+    if (accum.binaryFileSignalled()) {
+        accum.mResultStr->clear();
+        accum.mResultStr->str("");
+    }
+
+    if (accum.mLineCount > 0) grepMatchFound = true;
+    return accum.mLineCount;
 }
 
 // Open a file and return its file desciptor.

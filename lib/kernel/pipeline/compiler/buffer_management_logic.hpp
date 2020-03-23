@@ -67,7 +67,7 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
 void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool shared) {
     assert (expectedNumOfStrides);
 
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         Value * const valid = b->CreateIsNotNull(expectedNumOfStrides);
         b->CreateAssert(valid,
            "%s: expected number of strides for internally allocated buffers is 0",
@@ -704,7 +704,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
     PointerType * const bufferType = buffer->getPointerType();
     Value * const blockIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
     Value * const baseAddress = buffer->getBaseAddress(b);
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & binding = rateData.Binding;
         b->CreateAssert(baseAddress, "%s.%s: baseAddress cannot be null",
                         mCurrentKernelName,

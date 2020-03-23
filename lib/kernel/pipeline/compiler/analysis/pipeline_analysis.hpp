@@ -10,7 +10,7 @@
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
-#define PRINT_BUFFER_GRAPH
+// #define PRINT_BUFFER_GRAPH
 
 namespace kernel {
 
@@ -188,6 +188,9 @@ public:
     unsigned                        LastScalar = 0;
     unsigned                        PartitionCount = 0;
     bool                            HasZeroExtendedStream = false;
+
+    unsigned                        MaxNumOfInputPorts = 0;
+    unsigned                        MaxNumOfOutputPorts = 0;
 
     RelationshipGraph               mStreamGraph;
     RelationshipGraph               mScalarGraph;

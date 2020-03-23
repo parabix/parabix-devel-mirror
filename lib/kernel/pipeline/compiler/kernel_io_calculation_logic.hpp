@@ -354,13 +354,15 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort) {
 
-    Value * const accessible = getAccessibleInputItems(b, inputPort); assert (accessible);
     Value * const strideLength = getInputStrideLength(b, inputPort);
     Value * const required = addLookahead(b, inputPort, strideLength); assert (required);
     const auto prefix = makeBufferName(mKernelId, inputPort);
     #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, prefix + "_required = %" PRIu64, required);
+    debugPrint(b, prefix + "_requiredSpace = %" PRIu64, required);
     #endif
+
+    Value * const accessible = getAccessibleInputItems(b, inputPort); assert (accessible);
+
     Value * const hasEnough = b->CreateICmpUGE(accessible, required);
     Value * const closed = isClosed(b, inputPort);
     #ifdef PRINT_DEBUG_MESSAGES
@@ -546,8 +548,6 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
     const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const available = getLocallyAvailableItemCount(b, inputPort);
 
-
-
     Value * const processed = mAlreadyProcessedPhi(inputPort);
     Value * overflow = nullptr;
     if (LLVM_LIKELY(useOverflow)) {
@@ -556,12 +556,31 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
             ConstantInt * const add = b->getSize(bn.Add);
             ConstantInt * const lookAhead = b->getSize(bn.LookAhead);
             overflow = b->CreateSelect(closed, add, lookAhead);
-
         }
     }
 
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelId, inputPort);
+    debugPrint(b, prefix + "_available = %" PRIu64, available);
+    debugPrint(b, prefix + "_processed = %" PRIu64, processed);
+    if (overflow) {
+        debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
+    }
+    #endif
+
     const BufferRateData & rateData = mBufferGraph[input];
     Value * accessible = buffer->getLinearlyAccessibleItems(b, processed, available, overflow);
+
+//    if (LLVM_UNLIKELY(CheckAssertions)) {
+//        Value * intCapacity = buffer->getInternalCapacity(b);
+//        if (overflow) {
+//            intCapacity = b->CreateAdd(intCapacity, overflow);
+//        }
+//        Value * const ok = b->CreateICmpULE(accessible, intCapacity);
+//        const Binding & input = getInputBinding(inputPort);
+//        b->CreateAssert(ok, "%s.%s reported %" PRIu64 " accessible items but only has capacity for %" PRIu64,
+//                        mCurrentKernelName, b->GetString(input.getName()), accessible, intCapacity);
+//    }
 
     #ifndef DISABLE_ZERO_EXTEND
     if (LLVM_UNLIKELY(rateData.ZeroExtended)) {
@@ -587,15 +606,10 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
     #endif
 
     #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelId, inputPort);
-    debugPrint(b, prefix + "_available = %" PRIu64, available);
     debugPrint(b, prefix + "_processed = %" PRIu64, processed);
-    debugPrint(b, prefix + "_accessible = %" PRIu64, accessible);
-    if (overflow) {
-        debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
-    }
     #endif
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & inputBinding = rateData.Binding;
         Value * sanityCheck = b->CreateICmpULE(processed, available);
         if (mIsInputZeroExtended(mKernelId, inputPort)) {
@@ -607,6 +621,7 @@ Value * PipelineCompiler::getAccessibleInputItems(BuilderRef b, const StreamSetP
                         b->GetString(inputBinding.getName()),
                         processed, available);
     }
+
     // cache the values for later use
     if (useOverflow) {
         A[WITH_OVERFLOW] = accessible;
@@ -624,98 +639,125 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
     const auto streamSet = getOutputBufferVertex(outputPort);
     const BufferNode & bn = mBufferGraph[streamSet];
 
-    const auto prefix = makeBufferName(mKernelId, outputPort);
-    const StreamSetBuffer * const buffer = bn.Buffer;
+    if (LLVM_UNLIKELY(bn.isOwned())) {
 
-    Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
-    Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
-    Value * const required = mLinearOutputItemsPhi(outputPort);
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        const StreamSetBuffer * const buffer = bn.Buffer;
 
+        Value * const writable = getWritableOutputItems(b, outputPort, true);;
 
-    if (LLVM_UNLIKELY(bn.isUnowned())) {
-
+        Value * const required = mLinearOutputItemsPhi(outputPort);
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, prefix + "_unownedProduced = %" PRIu64, produced);
-        debugPrint(b, prefix + "_unownedRequired = %" PRIu64, required);
-        debugPrint(b, prefix + "_unownedCapacity = %" PRIu64, buffer->getCapacity(b));
+        debugPrint(b, prefix + "_required = %" PRIu64, required);
         #endif
 
-        return;
+        BasicBlock * const expandBuffer = b->CreateBasicBlock(prefix + "_expandBuffer", mKernelCheckOutputSpace);
+        BasicBlock * const expanded = b->CreateBasicBlock(prefix + "_expandedBuffer", mKernelCheckOutputSpace);
+        Value * const hasEnoughSpace = b->CreateICmpULE(required, writable);
+
+        b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
+
+        b->SetInsertPoint(expandBuffer);
+        Value * const cycleCounterAccumulator = getBufferExpansionCycleCounter(b);
+        Value * cycleCounterStart = nullptr;
+        if (cycleCounterAccumulator) {
+            cycleCounterStart = b->CreateReadCycleCounter();
+        }
+
+        // TODO: we need to calculate the total amount required assuming we process all input. This currently
+        // has a flaw in which if the input buffers had been expanded sufficiently yet processing had been
+        // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
+        // which could result in free'ing the "old" buffer twice.
+
+        Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
+        Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
+        ConstantInt * overflow = nullptr;
+        if (bn.CopyBack || bn.Add) {
+            overflow = b->getSize(std::max(bn.CopyBack, bn.Add));
+        }
+
+        buffer->reserveCapacity(b, produced, consumed, required, overflow);
+
+        recordBufferExpansionHistory(b, outputPort, buffer);
+        if (cycleCounterAccumulator) {
+            Value * const cycleCounterEnd = b->CreateReadCycleCounter();
+            Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);
+            Value * const accum = b->CreateAdd(b->CreateLoad(cycleCounterAccumulator), duration);
+            b->CreateStore(accum, cycleCounterAccumulator);
+        }
+        b->CreateBr(expanded);
+
+        b->SetInsertPoint(expanded);
+
     }
-    ConstantInt * overflow = nullptr;
-    if (bn.CopyBack || bn.Add) {
-        overflow = b->getSize(std::max(bn.CopyBack, bn.Add));
-    }
 
-    Value * const remaining = buffer->getLinearlyWritableItems(b, produced, consumed, overflow);
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, prefix + "_produced = %" PRIu64, produced);
-    debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
-    debugPrint(b, prefix + "_required = %" PRIu64, required);
-    if (overflow) {
-        debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
-    }
-    debugPrint(b, prefix + "_remaining = %" PRIu64, remaining);
-    #endif
-
-    BasicBlock * const expandBuffer = b->CreateBasicBlock(prefix + "_expandBuffer", mKernelCheckOutputSpace);
-    BasicBlock * const expanded = b->CreateBasicBlock(prefix + "_expandedBuffer", mKernelCheckOutputSpace);
-    Value * const hasEnoughSpace = b->CreateICmpULE(required, remaining);
-
-    b->CreateLikelyCondBr(hasEnoughSpace, expanded, expandBuffer);
-
-    b->SetInsertPoint(expandBuffer);
-    Value * const cycleCounterAccumulator = getBufferExpansionCycleCounter(b);
-    Value * cycleCounterStart = nullptr;
-    if (cycleCounterAccumulator) {
-        cycleCounterStart = b->CreateReadCycleCounter();
-    }
-
-    // TODO: we need to calculate the total amount required assuming we process all input. This currently
-    // has a flaw in which if the input buffers had been expanded sufficiently yet processing had been
-    // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
-    // which could result in free'ing the "old" buffer twice.
-
-    buffer->reserveCapacity(b, produced, consumed, required, overflow);
-
-    recordBufferExpansionHistory(b, outputPort, buffer);
-    if (cycleCounterAccumulator) {
-        Value * const cycleCounterEnd = b->CreateReadCycleCounter();
-        Value * const duration = b->CreateSub(cycleCounterEnd, cycleCounterStart);
-        Value * const accum = b->CreateAdd(b->CreateLoad(cycleCounterAccumulator), duration);
-        b->CreateStore(accum, cycleCounterAccumulator);
-    }
-    b->CreateBr(expanded);
-
-    b->SetInsertPoint(expanded);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getWritableOutputItems
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPort outputPort, const bool useOverflow) {
+
+    auto & W = mWritableOutputItems[outputPort.Number];
+    Value * const alreadyComputed = W[useOverflow ? WITH_OVERFLOW : WITHOUT_OVERFLOW];
+    if (alreadyComputed) {
+        return alreadyComputed;
+    }
+
     const auto streamSet = getOutputBufferVertex(outputPort);
     const BufferNode & bn = mBufferGraph[streamSet];
     const StreamSetBuffer * const buffer = bn.Buffer;
     Value * const produced = mAlreadyProducedPhi(outputPort); assert (produced);
     Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelId, outputPort);
+    debugPrint(b, prefix + "_produced = %" PRIu64, produced);
+    debugPrint(b, prefix + "_consumed = %" PRIu64, consumed);
+    #endif
+
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & output = getOutputBinding(outputPort);
         Value * const sanityCheck = b->CreateICmpULE(consumed, produced);
         b->CreateAssert(sanityCheck,
                         "%s.%s: consumed count (%" PRIu64 ") exceeds produced count (%" PRIu64 ")",
                         mCurrentKernelName,
                         b->GetString(output.getName()),
-                        consumed, produced);
+                        consumed, produced);        
     }
     ConstantInt * overflow = nullptr;
-    if (LLVM_LIKELY(useOverflow)) {
-        if (bn.CopyBack || bn.Add) {
-            overflow = b->getSize(std::max(bn.CopyBack, bn.Add));
-        }
+    if (useOverflow && (bn.CopyBack || bn.Add)) {
+        overflow = b->getSize(std::max(bn.CopyBack, bn.Add));
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + "_overflow = %" PRIu64, overflow);
+        #endif
     }
-    return buffer->getLinearlyWritableItems(b, produced, consumed, overflow);
+    Value * const writable = buffer->getLinearlyWritableItems(b, produced, consumed, overflow);
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, prefix + "_writable = %" PRIu64, writable);
+    #endif
+
+//    if (LLVM_UNLIKELY(CheckAssertions)) {
+//        Value * intCapacity = buffer->getInternalCapacity(b);
+//        if (overflow) {
+//            intCapacity = b->CreateAdd(intCapacity, overflow);
+//        }
+//        Value * const ok = b->CreateICmpULE(writable, intCapacity);
+//        const Binding & output = getOutputBinding(outputPort);
+//        b->CreateAssert(ok, "%s.%s reported %" PRIu64 " writable items but only has capacity for %" PRIu64,
+//                        mCurrentKernelName, b->GetString(output.getName()), writable, intCapacity);
+//    }
+
+    // cache the values for later use
+    if (useOverflow) {
+        W[WITH_OVERFLOW] = writable;
+    }
+    if (overflow == nullptr) {
+        W[WITHOUT_OVERFLOW] = writable;
+    }
+    return writable;
 }
 
 
@@ -764,7 +806,6 @@ Value * PipelineCompiler::getNumOfWritableStrides(BuilderRef b, const StreamSetP
         numOfStrides = getMaximumNumOfPartialSumStrides(b, outputPort);
     } else {
         Value * const writable = getWritableOutputItems(b, outputPort);
-        mWritableOutputItems(outputPort) = writable;
         Value * const strideLength = getOutputStrideLength(b, outputPort);
         numOfStrides = b->CreateUDiv(writable, strideLength);
     }
@@ -1060,7 +1101,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const size_t kern
     Value * position = mAlreadyProcessedPhi(mKernelId, ref);
 
     if (offset) {
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
+        if (LLVM_UNLIKELY(CheckAssertions)) {
             const auto & binding = getBinding(port);
             b->CreateAssert(b->CreateICmpNE(offset, ZERO),
                             "%s.%s: partial sum offset must be non-zero",
@@ -1076,7 +1117,7 @@ Value * PipelineCompiler::getPartialSumItemCount(BuilderRef b, const size_t kern
     if (mBranchToLoopExit) {
         current = b->CreateSelect(mBranchToLoopExit, prior, current);
     }
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const auto & binding = getBinding(port);
         b->CreateAssert(b->CreateICmpULE(prior, current),
                         "%s.%s: partial sum is not non-decreasing "
@@ -1179,7 +1220,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
     Value * const hasEnough = b->CreateICmpULE(requiredItems, sourceItemCount);
 
     // NOTE: popcount streams are produced with a 1 element lookbehind window.
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & input = getInputBinding(ref);
         Value * const inputName = b->GetString(input.getName());
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(numOfStrides, STEP), hasEnough),
@@ -1215,7 +1256,7 @@ Value * PipelineCompiler::getMaximumNumOfPartialSumStrides(BuilderRef b, const S
         Value * const useOverflow = b->CreateAnd(endedPriorToBufferEnd, canPeekIntoOverflow);
         finalNumOfStrides = b->CreateSelect(useOverflow, b->CreateAdd(numOfStridesPhi, ONE), numOfStridesPhi);
     }
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & binding = getInputBinding(ref);
         b->CreateAssert(b->CreateICmpNE(finalNumOfStrides, MAX_INT),
                         "%s.%s: attempting to use sentinal popcount entry",

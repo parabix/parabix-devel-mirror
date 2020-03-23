@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -21,8 +21,6 @@
 // #define DISABLE_OUTPUT_ZEROING
 
 // #define FORCE_PIPELINE_ASSERTIONS
-
-// TODO: create a preallocation phase for source kernels to add capacity suggestions
 
 using namespace boost;
 using namespace boost::math;
@@ -493,7 +491,7 @@ protected:
 
     Allocator									mAllocator;
 
-    const bool                       			mCheckAssertions;
+    const bool                       			CheckAssertions;
     const bool                                  mTraceProcessedProducedItemCounts;
     const bool                       			mTraceIndividualConsumedItemCounts;
 
@@ -661,12 +659,13 @@ protected:
     InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
 
     enum { WITH_OVERFLOW = 0, WITHOUT_OVERFLOW = 1};
+    using OverflowItemCounts = Vec<std::array<Value *, 2>, 8>;
 
     InputPortVec<Value *>                       mInputEpoch;
     InputPortVec<Value *>                       mIsInputZeroExtended;
     InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
     InputPortVec<Value *>                       mFirstInputStrideLength;
-    Vec<std::array<Value *, 2>, 8>              mAccessibleInputItems;
+    OverflowItemCounts                          mAccessibleInputItems;
     InputPortVec<PHINode *>                     mLinearInputItemsPhi;
     InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
     InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
@@ -684,7 +683,8 @@ protected:
     OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
     OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
     OutputPortVec<Value *>                      mFirstOutputStrideLength;
-    OutputPortVec<Value *>                      mWritableOutputItems;
+
+    OverflowItemCounts                          mWritableOutputItems;
     OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
     OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
     OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
@@ -739,7 +739,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 #ifdef FORCE_PIPELINE_ASSERTIONS
 , mCheckAssertions(true)
 #else
-, mCheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
+, CheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
 #endif
 , mTraceProcessedProducedItemCounts(codegen::DebugOptionIsSet(codegen::TraceCounts))
 , mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
@@ -821,7 +821,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mAlreadyProducedDelayedPhi(this)
 , mAlreadyProducedDeferredPhi(this)
 , mFirstOutputStrideLength(this)
-, mWritableOutputItems(this)
 , mLinearOutputItemsPhi(this)
 , mReturnedOutputVirtualBaseAddressPtr(this)
 , mReturnedProducedItemCountPtr(this)

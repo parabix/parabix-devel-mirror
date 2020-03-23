@@ -201,7 +201,7 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
     if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
         ptr = b->CreateInBoundsGEP(ptr, { b->getInt32(0), b->getInt32(slot) });
     }
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         Value * const prior = b->CreateLoad(ptr);
         const Binding & output = rd.Binding;
         // TODO: cross reference which slot the traced count is for?

@@ -1081,7 +1081,6 @@ void KernelCompiler::addAlias(llvm::StringRef alias, llvm::StringRef scalarName)
     mScalarAliasMap.emplace_back(alias, scalarName);
 }
 
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief initializeBindingMap
  ** ------------------------------------------------------------------------------------------------------------- */

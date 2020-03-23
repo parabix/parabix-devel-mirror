@@ -59,7 +59,7 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
 
         b->SetInsertPoint(acquire);
         Value * const currentSegNo = b->CreateAtomicLoadAcquire(waitingOnPtr);
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
+        if (LLVM_UNLIKELY(CheckAssertions)) {
             Value * const pendingOrReady = b->CreateICmpULE(currentSegNo, mSegNo);
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
@@ -87,14 +87,14 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned k
 
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
         Value * currentSegNo = nullptr;
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
+        if (LLVM_UNLIKELY(CheckAssertions)) {
             currentSegNo = b->CreateLoad(waitingOnPtr);
         }
         b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
 //        #ifdef PRINT_DEBUG_MESSAGES
 //        debugPrint(b, prefix + ": released %" PRIu64, mSegNo);
 //        #endif
-        if (LLVM_UNLIKELY(mCheckAssertions)) {
+        if (LLVM_UNLIKELY(CheckAssertions)) {
             Value * const unchanged = b->CreateICmpEQ(mSegNo, currentSegNo);
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);

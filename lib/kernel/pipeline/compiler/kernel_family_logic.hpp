@@ -55,7 +55,7 @@ void PipelineCompiler::bindFamilyInitializationArguments(BuilderRef b, ArgIterat
                 auto ptr = getScalarFieldPtr(b.get(), name); assert (ptr);
                 Value * value = nextArg();
 
-                if (LLVM_UNLIKELY(mCheckAssertions)) {
+                if (LLVM_UNLIKELY(CheckAssertions)) {
                     b->CreateAssert(value, "family parameter (%s) was given a null value", b->GetString(name));
                 }
                 b->CreateStore(value, ptr);
@@ -94,7 +94,7 @@ Value * PipelineCompiler::getFamilyFunctionFromKernelState(BuilderRef b, Type * 
     const auto prefix = makeKernelName(mKernelId);
     Value * const funcPtr = b->getScalarField(prefix + suffix);
     assert (funcPtr->getType() == b->getVoidPtrTy());
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         b->CreateAssert(funcPtr, prefix + suffix + " is null");
     }
     return b->CreatePointerCast(funcPtr, type);

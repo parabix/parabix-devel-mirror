@@ -282,7 +282,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                     const auto prefix = makeBufferName(mKernelId, inputPort);
                     debugPrint(b, prefix + "_processed_deferred' = %" PRIu64, mProcessedDeferredItemCount(inputPort));
                     #endif
-                    if (LLVM_UNLIKELY(mCheckAssertions)) {
+                    if (LLVM_UNLIKELY(CheckAssertions)) {
                         Value * const deferred = mProcessedDeferredItemCount(inputPort);
                         Value * const isDeferred = b->CreateICmpULE(deferred, processed);
                         Value * const isFinal = mIsFinalInvocationPhi;
@@ -337,7 +337,7 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
                     const auto prefix = makeBufferName(mKernelId, outputPort);
                     debugPrint(b, prefix + "_produced_deferred' = %" PRIu64, mProcessedDeferredItemCount(outputPort));
                     #endif
-                    if (LLVM_UNLIKELY(mCheckAssertions)) {
+                    if (LLVM_UNLIKELY(CheckAssertions)) {
                         Value * const deferred = mProducedDeferredItemCount(outputPort);
                         Value * const isDeferred = b->CreateICmpULE(deferred, produced);
                         Value * const isFinal = mIsFinalInvocationPhi;

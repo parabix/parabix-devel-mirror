@@ -103,7 +103,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const StreamSetPort in
         return itemCount;
     }
     Value * const closed = isClosed(b, inputPort);
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
+    if (LLVM_UNLIKELY(CheckAssertions)) {
         const Binding & binding = getInputBinding(inputPort);
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
                         "%s.%s: look ahead exceeds item count",
@@ -444,6 +444,8 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     const auto numOfInputs = in_degree(mKernelId, mBufferGraph);
     reset(mAccessibleInputItems, numOfInputs);
 
+    const auto numOfOutputs = out_degree(mKernelId, mBufferGraph);
+    reset(mWritableOutputItems, numOfOutputs);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
