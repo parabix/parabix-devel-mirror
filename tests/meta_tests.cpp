@@ -255,7 +255,7 @@ TEST_CASE(multi_input, multi_input_a, multi_input_b, multi_input_c) {
 
 
 RUN_TESTS(
-    CASE(simple_eq),
+    /*CASE(simple_eq),
     CASE(simple_ne),
     CASE(long_hex_ne),
     CASE(hex_binary_equivalence),
@@ -267,13 +267,13 @@ RUN_TESTS(
     CASE(single_rep),
     CASE(grouped_rep),
     CASE(rep_of_rep),
-    CASE(odd_bin),
+    CASE(odd_bin),*/
     CASE(hex_set),
-    CASE(hex_set_ne),
+    /*CASE(hex_set_ne),
     CASE(bin_set),
     CASE(small_set_select),
     CASE(int_set),
     CASE(int_set_select),
     CASE(int_set_ne),
-    CASE(multi_input),
+    CASE(multi_input),*/
 )

@@ -24,10 +24,8 @@ public:
     void generateInitializeMethod(BuilderRef b) override;
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
     void generateFinalizeMethod(BuilderRef b) override;
-    bool hasSignature() const override { return false; }
-    bool isCachable() const override { return true; }
 private:
-    Mode mMode;
+    const Mode mMode;
 };
 
 }
@@ -53,5 +51,15 @@ void AssertEQ(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamS
  *  - `lhs` and `rhs` must have the same number of elements
  */
 void AssertNE(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * lhs, kernel::StreamSet * rhs);
+
+/**
+ * Prints both `lhs` and `rhs` `StreamsSets` as a mean of debug within the test scripts.
+ *
+ * Warning:
+ * The test case will always fail when this function is called
+ * as this is not meant to be used in actual tests
+ *
+ */
+void AssertDebug(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * lhs, kernel::StreamSet * rhs);
 
 }

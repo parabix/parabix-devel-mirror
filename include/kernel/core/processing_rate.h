@@ -37,19 +37,19 @@ struct ProcessingRate  {
         __Count
     };
 
-    using RateValue = boost::rational<unsigned>;
+    using Rational = boost::rational<unsigned>;
 
     KindId getKind() const { return mKind; }
 
-    RateValue getRate() const {
+    Rational getRate() const {
         return mLowerBound;
     }
 
-    RateValue getLowerBound() const {
+    Rational getLowerBound() const {
         return mLowerBound;
     }
 
-    RateValue getUpperBound() const {
+    Rational getUpperBound() const {
         return mUpperBound;
     }
 
@@ -127,12 +127,12 @@ struct ProcessingRate  {
         }
     }
 
-    ProcessingRate() : ProcessingRate(KindId::Fixed, RateValue{1}, RateValue{1}) { }
+    ProcessingRate() : ProcessingRate(KindId::Fixed, Rational{1}, Rational{1}) { }
     ProcessingRate(ProcessingRate &&) = default;
     ProcessingRate(const ProcessingRate &) = default;
     ProcessingRate & operator = (const ProcessingRate & other) = default;
 
-    ProcessingRate(const KindId k, const RateValue lb, const RateValue ub)
+    ProcessingRate(const KindId k, const Rational lb, const Rational ub)
     : mKind(k)
     , mLowerBound(lb)
     , mUpperBound(ub)
@@ -140,7 +140,7 @@ struct ProcessingRate  {
 
     }
 
-    ProcessingRate(const KindId k, const RateValue lb, const RateValue ub, const llvm::StringRef ref)
+    ProcessingRate(const KindId k, const Rational lb, const Rational ub, const llvm::StringRef ref)
     : mKind(k)
     , mLowerBound(lb)
     , mUpperBound(ub)
@@ -152,12 +152,12 @@ struct ProcessingRate  {
 
 private:
     KindId          mKind;
-    RateValue       mLowerBound;
-    RateValue       mUpperBound;
+    Rational       mLowerBound;
+    Rational       mUpperBound;
     llvm::StringRef mReference;
 };
 
-inline ProcessingRate FixedRate(const ProcessingRate::RateValue rate = ProcessingRate::RateValue{1}) {
+inline ProcessingRate FixedRate(const ProcessingRate::Rational rate = ProcessingRate::Rational{1}) {
     assert (rate.numerator() > 0);
     return ProcessingRate(ProcessingRate::KindId::Fixed, rate, rate);
 }
@@ -167,15 +167,15 @@ inline ProcessingRate BoundedRate(const unsigned lower, const unsigned upper) {
         return FixedRate(lower);
     } else {
         assert (upper > lower);
-        return ProcessingRate(ProcessingRate::KindId::Bounded, ProcessingRate::RateValue(lower), ProcessingRate::RateValue(upper));
+        return ProcessingRate(ProcessingRate::KindId::Bounded, ProcessingRate::Rational(lower), ProcessingRate::Rational(upper));
     }
 }
 
-inline ProcessingRate GreedyRate(const ProcessingRate::RateValue lower = ProcessingRate::RateValue{0}) {
+inline ProcessingRate GreedyRate(const ProcessingRate::Rational lower = ProcessingRate::Rational{0}) {
     return ProcessingRate(ProcessingRate::KindId::Greedy, lower, 0);
 }
 
-inline ProcessingRate UnknownRate(const ProcessingRate::RateValue lower = ProcessingRate::RateValue{0}) {
+inline ProcessingRate UnknownRate(const ProcessingRate::Rational lower = ProcessingRate::Rational{0}) {
     return ProcessingRate(ProcessingRate::KindId::Unknown, lower, 0);
 }
 
@@ -195,16 +195,13 @@ inline ProcessingRate PartialSum(llvm::StringRef ref) {
     return ProcessingRate(ProcessingRate::KindId::PartialSum, 0, 1, ref);
 }
 
-ProcessingRate::RateValue lcm(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
+ProcessingRate::Rational lcm(const ProcessingRate::Rational & x, const ProcessingRate::Rational & y);
 
-ProcessingRate::RateValue gcd(const ProcessingRate::RateValue & x, const ProcessingRate::RateValue & y);
+ProcessingRate::Rational gcd(const ProcessingRate::Rational & x, const ProcessingRate::Rational & y);
 
-unsigned floor(const ProcessingRate::RateValue & r);
+unsigned floor(const ProcessingRate::Rational & r);
 
-unsigned ceiling(const ProcessingRate::RateValue & r);
-
-bool permits(const Kernel * const hostKernel, const Binding & host,
-             const Kernel * const visitorKernel, const Binding & visitor);
+unsigned ceiling(const ProcessingRate::Rational & r);
 
 }
 

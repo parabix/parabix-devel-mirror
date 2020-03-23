@@ -9,6 +9,7 @@
 #include <fstream>
 #include <string>
 #include <boost/filesystem.hpp>
+#include <chrono>
 #include <grep/nested_grep_engine.h>
 #include <grep/searchable_buffer.h>
 #include <llvm/Support/CommandLine.h>
@@ -84,8 +85,10 @@ static cl::opt<DevDirAction, true> DirectoriesOption("d", cl::desc("Processing m
 static cl::alias DirectoriesAlias("directories", cl::desc("Alias for -d"), cl::aliasopt(DirectoriesOption));
 
 static cl::opt<bool> TraceFileSelect("TraceFileSelect", cl::desc("Trace file selection"), cl::cat(Input_Options));
+static cl::opt<bool> TimeFileSelect("TimeFileSelect", cl::desc("Report the time required for file selection."), cl::cat(Input_Options));
 
 static cl::opt<unsigned> GitREcoalescing("git-RE-coalescing", cl::desc("gitignore RE coalescing factor"), cl::init(10), cl::cat(Input_Options));
+
 
 
 // Command line arguments to specify file and directory includes/excludes
@@ -201,7 +204,7 @@ void FileSelectAccumulator::addDirectory(fs::path dirPath, unsigned cumulativeEn
 
 void FileSelectAccumulator::accumulate_match(const size_t fileIdx, char * name_start, char * name_end) {
     assert(name_end > name_start);
-    assert(name_end - name_start <= 4096);
+    assert((name_end - name_start) <= 4096);
     fs::path p(std::string(name_start, name_end - name_start));
     if (fileIdx < mFullPathEntries) {
         selectPath(mCollectedPaths, std::move(p));
@@ -310,6 +313,7 @@ void recursiveFileSelect(CPUDriver & driver,
 }
 
 std::vector<fs::path> getFullFileList(CPUDriver & driver, cl::list<std::string> & inputFiles) {
+    auto file_select_start = std::chrono::high_resolution_clock::now();
     // The vector to accumulate the full list of collected files to be searched.
     std::vector<fs::path> collectedPaths;
 
@@ -381,6 +385,7 @@ std::vector<fs::path> getFullFileList(CPUDriver & driver, cl::list<std::string> 
     // them to the global list of selected files.
 
     grep::NestedInternalSearchEngine pathSelectEngine(driver);
+    pathSelectEngine.setNumOfThreads(1);
     pathSelectEngine.setRecordBreak(grep::GrepRecordBreakKind::Null);
     pathSelectEngine.init();
     pathSelectEngine.push(coalesceREs(getIncludeExcludePatterns(), GitREcoalescing));
@@ -412,6 +417,12 @@ std::vector<fs::path> getFullFileList(CPUDriver & driver, cl::list<std::string> 
         for (const auto & dirpath : selectedDirectories) {
             recursiveFileSelect(driver, dirpath, pathSelectEngine, collectedPaths);
         }
+    }
+    if (TimeFileSelect) {
+        auto file_select_done = std::chrono::high_resolution_clock::now();
+        auto file_select_time = file_select_done - file_select_start;
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(file_select_time).count();
+        llvm::errs() << "File select time: "<< duration << " msec.\n";
     }
     return collectedPaths;
 }

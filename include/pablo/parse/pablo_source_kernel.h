@@ -19,7 +19,7 @@ namespace parse {
 
 class PabloSourceKernel final : public PabloKernel {
 public:
-    PabloSourceKernel(std::unique_ptr<kernel::KernelBuilder> const & builder,
+    PabloSourceKernel(BuilderRef builder,
                       std::shared_ptr<parse::PabloParser> parser,
                       std::shared_ptr<parse::SourceFile> sourceFile,
                       std::string const & kernelName,
@@ -28,7 +28,7 @@ public:
                       kernel::Bindings inputScalarBindings = {},
                       kernel::Bindings outputScalarBindings = {});
 
-    PabloSourceKernel(std::unique_ptr<kernel::KernelBuilder> const & builder,
+    PabloSourceKernel(BuilderRef builder,
                       std::shared_ptr<parse::PabloParser> parser,
                       std::string const & sourceFile,
                       std::string const & kernelName,
@@ -37,13 +37,6 @@ public:
                       kernel::Bindings inputScalarBindings,
                       kernel::Bindings outputScalarBindings);
 
-    bool isCachable() const override {
-        return true;
-    }
-
-    bool hasSignature() const override {
-        return false;
-    }
 private:
     void generatePabloMethod() override;
 

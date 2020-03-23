@@ -47,8 +47,6 @@ public:
                            UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore,
                            NullCharMode nullMode = NullCharMode::Data,
                            kernel::Scalar * signalNullObject = nullptr);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     UnterminatedLineAtEOF mEOFmode;
@@ -69,8 +67,6 @@ public:
                         kernel::StreamSet * Source,
                         kernel::StreamSet * NullDelimiters,
                         UnterminatedLineAtEOF m = UnterminatedLineAtEOF::Ignore);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     UnterminatedLineAtEOF mEOFmode;
@@ -79,8 +75,6 @@ protected:
 class LineStartsKernel final : public pablo::PabloKernel {
 public:
     LineStartsKernel(BuilderRef b, kernel::StreamSet * LineEnds, kernel::StreamSet * LineStarts);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -88,8 +82,6 @@ protected:
 class LineSpansKernel final : public pablo::PabloKernel {
 public:
     LineSpansKernel(BuilderRef b, kernel::StreamSet * LineStarts, kernel::StreamSet * LineEnds, kernel::StreamSet * LineSpans);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

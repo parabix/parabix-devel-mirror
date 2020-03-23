@@ -4,56 +4,64 @@
 
 namespace kernel {
 
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addInternalKernelProperties
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::addInternalProperties(BuilderRef b) {
-    mCompiler = llvm::make_unique<OptimizationBranchCompiler>(this);
-    mCompiler->addBranchProperties(b);
-}
+#define COMPILER (reinterpret_cast<OptimizationBranchCompiler *>(b->getCompiler()))
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateInitializeMethod
+ * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateInitializeMethod(BuilderRef b) {
-    mCompiler->generateInitializeMethod(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateInitializeThreadLocalMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateInitializeThreadLocalMethod(BuilderRef b) {
-    mCompiler->generateInitializeThreadLocalMethod(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateDoSegmentMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateKernelMethod(BuilderRef b) {
-    mCompiler->generateKernelMethod(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateFinalizeThreadLocalMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateFinalizeThreadLocalMethod(BuilderRef b) {
-    mCompiler->generateFinalizeThreadLocalMethod(b);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief generateFinalizeMethod
- ** ------------------------------------------------------------------------------------------------------------- */
-void OptimizationBranch::generateFinalizeMethod(BuilderRef b) {
-    mCompiler->generateFinalizeMethod(b);
+std::unique_ptr<KernelCompiler> OptimizationBranch::instantiateKernelCompiler(BuilderRef b) const noexcept {
+    return llvm::make_unique<OptimizationBranchCompiler>(b, const_cast<OptimizationBranch *>(this));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addKernelDeclarations
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::addKernelDeclarations(BuilderRef b) {
-    mNonZeroKernel->addKernelDeclarations(b);
     mAllZeroKernel->addKernelDeclarations(b);
+    mNonZeroKernel->addKernelDeclarations(b);
     Kernel::addKernelDeclarations(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addInternalKernelProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::addInternalProperties(BuilderRef b) {
+    COMPILER->addBranchProperties(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateInitializeMethod(BuilderRef b) {
+    COMPILER->generateInitializeMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateInitializeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateInitializeThreadLocalMethod(BuilderRef b) {
+    COMPILER->generateInitializeThreadLocalMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateDoSegmentMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateKernelMethod(BuilderRef b) {
+    COMPILER->generateKernelMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeThreadLocalMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateFinalizeThreadLocalMethod(BuilderRef b) {
+    COMPILER->generateFinalizeThreadLocalMethod(b);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateFinalizeMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateFinalizeMethod(BuilderRef b) {
+    COMPILER->generateFinalizeMethod(b);
 }
 
 OptimizationBranch::OptimizationBranch(BuilderRef b,

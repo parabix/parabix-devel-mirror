@@ -14,25 +14,23 @@ class MMapSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
     MMapSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-    void linkExternalMethods(BuilderRef iBuilder) override {
-        mFileSizeFunction = linkFileSizeMethod(iBuilder);
+    void linkExternalMethods(BuilderRef b) override {
+        mFileSizeFunction = linkFileSizeMethod(b);
     }
-    void generateInitializeMethod(BuilderRef iBuilder) override {
-        generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, mStride, iBuilder);
+    void generateInitializeMethod(BuilderRef b) override {
+        generateInitializeMethod(mFileSizeFunction, mCodeUnitWidth, mStride, b);
     }
-    void generateDoSegmentMethod(BuilderRef iBuilder) override {
-        generateDoSegmentMethod(mCodeUnitWidth, mStride, iBuilder);
+    void generateDoSegmentMethod(BuilderRef b) override {
+        generateDoSegmentMethod(mCodeUnitWidth, mStride, b);
     }
-    void generateFinalizeMethod(BuilderRef iBuilder) override {
-        freeBuffer(iBuilder, mCodeUnitWidth);
+    void generateFinalizeMethod(BuilderRef b) override {
+        freeBuffer(b, mCodeUnitWidth);
     }
 protected:
     static llvm::Function * linkFileSizeMethod(BuilderRef b);
     static void generateInitializeMethod(llvm::Function * fileSize, const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
     static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
-    static void freeBuffer(BuilderRef iBuilder, const unsigned codeUnitWidth);
+    static void freeBuffer(BuilderRef b, const unsigned codeUnitWidth);
 protected:
     const unsigned mCodeUnitWidth;
     llvm::Function * mFileSizeFunction;
@@ -42,21 +40,20 @@ class ReadSourceKernel final : public SegmentOrientedKernel {
     friend class FDSourceKernel;
 public:
     ReadSourceKernel(BuilderRef b, Scalar * const fd, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-    void generateInitializeMethod(BuilderRef iBuilder) override {
-        generateInitializeMethod(mCodeUnitWidth, mStride, iBuilder);
+    void generateInitializeMethod(BuilderRef b) override {
+        generateInitializeMethod(mCodeUnitWidth, mStride, b);
     }
-    void generateDoSegmentMethod(BuilderRef iBuilder) override {
-        generateDoSegmentMethod(mCodeUnitWidth, mStride, iBuilder);
+    void generateDoSegmentMethod(BuilderRef b) override {
+        generateDoSegmentMethod(mCodeUnitWidth, mStride, b);
     }
-    void generateFinalizeMethod(BuilderRef iBuilder) override {
-        freeBuffer(iBuilder);
+    void generateFinalizeMethod(BuilderRef b) override {
+        freeBuffer(b);
     }
 protected:
-    static void generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef iBuilder);
-    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef iBuilder);
-    static void freeBuffer(BuilderRef iBuilder);
+    static void generateInitializeMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
+    static void generateDoSegmentMethod(const unsigned codeUnitWidth, const unsigned stride, BuilderRef b);
+    static void freeBuffer(BuilderRef b);
+    static void createInternalBuffer(BuilderRef b);
 private:
     const unsigned mCodeUnitWidth;
 };
@@ -64,12 +61,10 @@ private:
 class FDSourceKernel final : public SegmentOrientedKernel {
 public:
     FDSourceKernel(BuilderRef b, Scalar * const useMMap, Scalar * const fd, StreamSet * const outputStream);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-    void linkExternalMethods(BuilderRef iBuilder) override;
-    void generateInitializeMethod(BuilderRef iBuilder) override;
-    void generateDoSegmentMethod(BuilderRef iBuilder) override;
-    void generateFinalizeMethod(BuilderRef iBuilder) override;
+    void linkExternalMethods(BuilderRef b) override;
+    void generateInitializeMethod(BuilderRef b) override;
+    void generateDoSegmentMethod(BuilderRef b) override;
+    void generateFinalizeMethod(BuilderRef b) override;
 protected:
     const unsigned mCodeUnitWidth;
     llvm::Function * mFileSizeFunction;
@@ -78,14 +73,10 @@ protected:
 class MemorySourceKernel final : public SegmentOrientedKernel {
 public:
     MemorySourceKernel(BuilderRef b, Scalar * fileSource, Scalar * fileItems, StreamSet * const outputStream);
-    bool hasSignature() const override { return false; }
 protected:
-    void generateInitializeMethod(BuilderRef iBuilder) override;
-    void generateDoSegmentMethod(BuilderRef iBuilder) override;
-    void generateFinalizeMethod(BuilderRef iBuilder) override;
-private:
-    const unsigned mStreamSetCount;
-    const unsigned mCodeUnitWidth;
+    void generateInitializeMethod(BuilderRef b) override;
+    void generateDoSegmentMethod(BuilderRef b) override;
+    void generateFinalizeMethod(BuilderRef b) override;
 };
 
 }

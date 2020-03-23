@@ -8,11 +8,10 @@ public:
 
     NestedInternalSearchEngine(BaseDriver & driver);
 
-//    NestedInternalSearchEngine(const std::unique_ptr<grep::GrepEngine> & engine);
-
     ~NestedInternalSearchEngine();
 
     void setRecordBreak(GrepRecordBreakKind b) {mGrepRecordBreak = b;}
+
     void setCaseInsensitive()  {mCaseInsensitive = true;}
 
     void init();
@@ -24,6 +23,10 @@ public:
     void grepCodeGen();
 
     void doGrep(const char * search_buffer, size_t bufferLength, MatchAccumulator & accum);
+
+    void setNumOfThreads(unsigned numOfThreads) {
+        mNumOfThreads = numOfThreads;
+    }
 
 private:
     GrepRecordBreakKind mGrepRecordBreak;

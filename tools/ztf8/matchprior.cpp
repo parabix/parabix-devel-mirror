@@ -15,7 +15,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
 #include <pablo/builder.hpp>
-#include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/pe_zeroes.h>
 #include <toolchain/pablo_toolchain.h>
@@ -48,8 +47,6 @@ using namespace kernel;
 class MatchPriorKernel final: public pablo::PabloKernel {
 public:
     MatchPriorKernel(BuilderRef b, StreamSet * const countable, Scalar * countResult);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };

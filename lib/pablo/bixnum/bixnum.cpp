@@ -16,74 +16,95 @@ using namespace re;
 
 namespace pablo {
 
-PabloAST * BixNumCompiler::UGE(BixNum value, unsigned floor) {
+PabloAST * BixNumCompiler::UGE(BixNum value, unsigned floor, const llvm::StringRef &Name) {
     if (floor == 0) return mPB.createOnes();
-    return UGT(value, floor - 1);
+    return UGT(value, floor - 1, Name);
 }
 
-PabloAST * BixNumCompiler::UGT(BixNum value, unsigned floor) {
+PabloAST * BixNumCompiler::UGT(BixNum value, unsigned floor, const llvm::StringRef &Name) {
     if (floor >> value.size() != 0) return mPB.createZeroes();
     PabloAST * UGT_so_far = mPB.createZeroes();
-    for (unsigned i = 0; i < value.size(); i++) {
+    unsigned i_max = value.size() - 1;
+    for (unsigned i = 0; i < i_max; i++) {
         auto floor_bit = (floor >> i) & 1;
         if (floor_bit == 1) {
-            UGT_so_far = mPB.createAnd(value[i], UGT_so_far);
+            UGT_so_far = mPB.createAnd(value[i], UGT_so_far, Name);
         } else {
             UGT_so_far = mPB.createOr(value[i], UGT_so_far);
         }
     }
-    return UGT_so_far;
+    auto floor_bit = (floor >> i_max) & 1;
+    if (floor_bit == 1) return mPB.createAnd(value[i_max], UGT_so_far, Name);
+    return mPB.createOr(value[i_max], UGT_so_far, Name);
 }
 
-PabloAST * BixNumCompiler::ULE(BixNum value, unsigned floor) {
-    return mPB.createNot(UGT(value, floor));
+PabloAST * BixNumCompiler::ULE(BixNum value, unsigned floor, const llvm::StringRef &Name) {
+    return mPB.createNot(UGT(value, floor), Name);
 }
 
-PabloAST * BixNumCompiler::ULT(BixNum value, unsigned floor) {
-    return mPB.createNot(UGE(value, floor));
+PabloAST * BixNumCompiler::ULT(BixNum value, unsigned floor, const llvm::StringRef &Name) {
+    return mPB.createNot(UGE(value, floor), Name);
 }
 
-PabloAST * BixNumCompiler::UGE(BixNum value, BixNum floor) {
+PabloAST * BixNumCompiler::UGE(BixNum value, BixNum floor, const llvm::StringRef &Name) {
     PabloAST * UGE_so_far = mPB.createOnes();
-    unsigned common_bits = std::min(value.size(), floor.size());
-    for (unsigned i = 0; i < common_bits; i++) {
-        UGE_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGE_so_far),
-                                   mPB.createOr(value[i], UGE_so_far));
+    if (value.size() > floor.size()) {
+        for (unsigned i = 0; i < floor.size(); i++) {
+            UGE_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGE_so_far),
+                                       mPB.createOr(value[i], UGE_so_far));
+        }
+        auto i_max = value.size() - 1;
+        for (unsigned i = floor.size(); i < i_max; i++) {
+            UGE_so_far = mPB.createOr(UGE_so_far, value[i]);
+        }
+        return mPB.createOr(UGE_so_far, value[i_max], Name);
+    } else {
+        auto i_max = floor.size() - 1;
+        for (unsigned i = 0; i < value.size() - 1; i++) {
+            UGE_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGE_so_far),
+                                       mPB.createOr(value[i], UGE_so_far));
+        }
+        for (unsigned i = value.size() - 1; i < i_max; i++) {
+            UGE_so_far = mPB.createAnd(UGE_so_far, mPB.createNot(floor[i]));
+        }
+        return mPB.createAnd(UGE_so_far, mPB.createNot(floor[i_max]), Name);
     }
-    for (unsigned i = common_bits; i < floor.size(); i++) {
-        UGE_so_far = mPB.createAnd(UGE_so_far, mPB.createNot(floor[i]));
-    }
-    for (unsigned i = common_bits; i < value.size(); i++) {
-        UGE_so_far = mPB.createOr(UGE_so_far, value[i]);
-    }
-    return UGE_so_far;
 }
 
-PabloAST * BixNumCompiler::UGT(BixNum value, BixNum floor) {
+PabloAST * BixNumCompiler::UGT(BixNum value, BixNum floor, const llvm::StringRef &Name) {
     PabloAST * UGT_so_far = mPB.createZeroes();
-    unsigned common_bits = std::min(value.size(), floor.size());
-    for (unsigned i = 0; i < common_bits; i++) {
-        UGT_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGT_so_far),
-                                   mPB.createOr(value[i], UGT_so_far));
+    if (value.size() > floor.size()) {
+        for (unsigned i = 0; i < floor.size(); i++) {
+            UGT_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGT_so_far),
+                                       mPB.createOr(value[i], UGT_so_far));
+        }
+        auto i_max = value.size() - 1;
+        for (unsigned i = floor.size(); i < i_max; i++) {
+            UGT_so_far = mPB.createOr(UGT_so_far, value[i]);
+        }
+        return mPB.createOr(UGT_so_far, value[i_max], Name);
+    } else {
+        auto i_max = floor.size() - 1;
+        for (unsigned i = 0; i < value.size() - 1; i++) {
+            UGT_so_far = mPB.createSel(floor[i], mPB.createAnd(value[i], UGT_so_far),
+                                       mPB.createOr(value[i], UGT_so_far));
+        }
+        for (unsigned i = value.size() - 1; i < i_max; i++) {
+            UGT_so_far = mPB.createAnd(UGT_so_far, mPB.createNot(floor[i]));
+        }
+        return mPB.createAnd(UGT_so_far, mPB.createNot(floor[i_max]), Name);
     }
-    for (unsigned i = common_bits; i < floor.size(); i++) {
-        UGT_so_far = mPB.createAnd(UGT_so_far, mPB.createNot(floor[i]));
-    }
-    for (unsigned i = common_bits; i < value.size(); i++) {
-        UGT_so_far = mPB.createOr(UGT_so_far, value[i]);
-    }
-    return UGT_so_far;
 }
 
-PabloAST * BixNumCompiler::ULE(BixNum value, BixNum floor) {
-    return mPB.createNot(UGT(value, floor));
+PabloAST * BixNumCompiler::ULE(BixNum value, BixNum floor, const llvm::StringRef &Name) {
+    return mPB.createNot(UGT(value, floor), Name);
 }
 
-PabloAST * BixNumCompiler::ULT(BixNum value, BixNum floor) {
-    return mPB.createNot(UGE(value, floor));
+PabloAST * BixNumCompiler::ULT(BixNum value, BixNum floor, const llvm::StringRef &Name) {
+    return mPB.createNot(UGE(value, floor), Name);
 }
 
-PabloAST * BixNumCompiler::EQ(BixNum value, unsigned floor) {
+PabloAST * BixNumCompiler::EQ(BixNum value, unsigned floor, const llvm::StringRef &Name) {
     if (floor >> value.size() != 0) return mPB.createZeroes();
     PabloAST * EQ_1 = mPB.createOnes();
     PabloAST * EQ_0 = mPB.createZeroes();
@@ -95,26 +116,36 @@ PabloAST * BixNumCompiler::EQ(BixNum value, unsigned floor) {
             EQ_0 = mPB.createOr(value[i], EQ_0);
         }
     }
-    return mPB.createAnd(EQ_1, mPB.createNot(EQ_0));
+    return mPB.createAnd(EQ_1, mPB.createNot(EQ_0), Name);
 }
 
-PabloAST * BixNumCompiler::NEQ(BixNum value, unsigned floor) {
-    return mPB.createNot(EQ(value, floor));
+PabloAST * BixNumCompiler::NEQ(BixNum value, unsigned floor, const llvm::StringRef &Name) {
+    return mPB.createNot(EQ(value, floor), Name);
 }
 
-PabloAST * BixNumCompiler::NEQ(BixNum value, BixNum test) {
+PabloAST * BixNumCompiler::EQ(BixNum value, BixNum test, const llvm::StringRef &Name) {
+    return mPB.createNot(NEQ(value, test), Name);
+}
+
+PabloAST * BixNumCompiler::NEQ(BixNum value, BixNum test, const llvm::StringRef &Name) {
     PabloAST * any_NEQ = mPB.createZeroes();
-    unsigned common_bits = std::min(value.size(), test.size());
-    for (unsigned i = 0; i < common_bits; i++) {
-        any_NEQ = mPB.createOr(any_NEQ, mPB.createXor(value[i], test[i]));
+    if (value.size() > test.size()) {
+        for (unsigned i = 0; i < test.size(); i++) {
+            any_NEQ = mPB.createOr(any_NEQ, mPB.createXor(value[i], test[i]));
+        }
+        for (unsigned i = test.size(); i < value.size() - 1; i++) {
+            any_NEQ = mPB.createOr(any_NEQ, value[i]);
+        }
+        return mPB.createOr(any_NEQ, value[value.size() - 1], Name);
+    } else {
+        for (unsigned i = 0; i < value.size() - 1; i++) {
+            any_NEQ = mPB.createOr(any_NEQ, mPB.createXor(value[i], test[i]));
+        }
+        for (unsigned i = value.size() - 1; i < test.size() - 1; i++) {
+            any_NEQ = mPB.createOr(any_NEQ, test[i]);
+        }
+        return mPB.createOr(any_NEQ, test[test.size() - 1], Name);
     }
-    for (unsigned i = common_bits; i < test.size(); i++) {
-        any_NEQ = mPB.createOr(any_NEQ, test[i]);
-    }
-    for (unsigned i = common_bits; i < value.size(); i++) {
-        any_NEQ = mPB.createOr(any_NEQ, value[i]);
-    }
-    return any_NEQ;
 }
 
 BixNum BixNumCompiler::ZeroExtend(BixNum value, unsigned extended_size) {
@@ -158,10 +189,6 @@ BixNum BixNumCompiler::HighBits(BixNum value, unsigned highBitCount) {
         extracted[i] = value[i + offset];
     }
     return extracted;
-}
-
-PabloAST * BixNumCompiler::EQ(BixNum value, BixNum test) {
-    return mPB.createNot(NEQ(value, test));
 }
 
 BixNum BixNumCompiler::Create(unsigned value) {

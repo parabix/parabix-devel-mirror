@@ -158,25 +158,17 @@ inline bool isControlChar(char c) noexcept {
     return false;
 }
 
-constexpr uint8_t HexTable[] = {
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,   0x08, 0x09, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-
-    0xff, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,   0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-};
-
 struct HexConverter {
-    static uint8_t convert(char c) {
-        auto val = HexTable[(int) c];
-        if (val == 0xff) {
-            llvm::report_fatal_error(std::string("'").append(1, c).append("' is not a valid hex digit"));
+    static uint8_t convert(const char c) {
+        if (c >= '0' && c <= '9') {
+            return static_cast<uint8_t>(c - '0');
+        } else {
+            const auto val = c | 32;
+            if (LLVM_LIKELY(val >= 'a' && val <= 'f')) {
+                return static_cast<uint8_t>(val - 'a' + 10);
+            }
         }
-        return val;
+        llvm::report_fatal_error(std::string("'").append(1, c).append("' is not a valid hex digit"));
     }
 };
 
@@ -326,8 +318,8 @@ private:
     void parseExpression(std::vector<std::unique_ptr<ast::Node>> & accumList) {
         auto token = mTokenizer.emit();
         assertNotEOF(token);
-        if (llvm::isa<Char>(token)) {
-            auto ch = llvm::cast<Char>(std::move(token));
+        if (llvm::isa<Char>(token.get())) {
+            auto* ch = llvm::cast<Char>(token.get());
             switch (ch->value) {
             case '(':
                 parseGroup(accumList);
@@ -338,8 +330,8 @@ private:
             default:
                 llvm::report_fatal_error("stream parse error: unexpected token '" + std::string(1, ch->value) + "'");
             }
-        } else if (llvm::isa<Val>(token)) {
-            auto val = llvm::cast<Val>(std::move(token));
+        } else if (llvm::isa<Val>(token.get())) {
+            auto* val = llvm::cast<Val>(token.get());
             accumList.emplace_back(new ast::Digit(val->value));
         } else {
             llvm::report_fatal_error("stream parse error: unexpected token type");
@@ -363,7 +355,7 @@ private:
     void parseRep(std::vector<std::unique_ptr<ast::Node>> & accumList) {
         mTokenizer.expectNumber();
         auto token = mTokenizer.emit();
-        auto num = llvm::unique_dyn_cast<Number>(token);
+        auto* num = llvm::cast<Number>(token.get());
         auto closer = mTokenizer.emit();
         assertChar(closer, '}');
         if (accumList.size() == 0) {

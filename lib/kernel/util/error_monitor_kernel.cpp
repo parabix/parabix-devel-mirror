@@ -15,7 +15,7 @@ namespace kernel {
 
 void ErrorMonitorKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
 
-    const auto numErrorStreams = getInputStreamSet("errorStream")->getNumElements();
+    const auto numErrorStreams = b->getInputStreamSet("errorStream")->getNumElements();
     const auto blockWidth = b->getBitBlockWidth();
     IntegerType * const blockWidthTy = b->getIntNTy(blockWidth);
 
@@ -45,8 +45,8 @@ void ErrorMonitorKernel::generateMultiBlockLogic(BuilderRef b, Value * const num
 
     // copy blocks from in streams to out streams
     foreachMonitoredStreamSet([&](std::string const & iName, std::string const & oName) {
-        const uint32_t streamCount = getInputStreamSet(iName)->getNumElements();
-        assert(streamCount == getOutputStreamSet(oName)->getNumElements());
+        const uint32_t streamCount = b->getInputStreamSet(iName)->getNumElements();
+        assert(streamCount == b->getOutputStreamSet(oName)->getNumElements());
         for (uint32_t i = 0; i < streamCount; ++i) {
             Value * istreamBlock = b->loadInputStreamBlock(iName, b->getInt32(i), offset);
             b->storeOutputStreamBlock(oName, b->getInt32(i), offset, istreamBlock);
@@ -86,7 +86,7 @@ void ErrorMonitorKernel::generateMultiBlockLogic(BuilderRef b, Value * const num
     Value * mask = b->bitblock_mask_to(maskSize);
 
     foreachMonitoredStreamSet([&](std::string const & iName, std::string const & oName) {
-        const uint32_t streamCount = getInputStreamSet(iName)->getNumElements();
+        const uint32_t streamCount = b->getInputStreamSet(iName)->getNumElements();
         for (uint32_t i = 0; i < streamCount; ++i) {
             Value * const streamBlock = b->loadInputStreamBlock(iName, b->getInt32(i), offset);
             Value * const maskedBlock = b->simd_and(streamBlock, mask);

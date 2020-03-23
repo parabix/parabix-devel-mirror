@@ -1,5 +1,5 @@
 #include <kernel/pipeline/driver/cpudriver.h>
-
+#include <kernel/core/kernel_compiler.h>
 #include <kernel/core/idisa_target.h>
 #include <toolchain/toolchain.h>
 #include <llvm/Support/DynamicLibrary.h>           // for LoadLibraryPermanently
@@ -13,10 +13,12 @@
 #include <llvm/Support/Compiler.h>                 // for LLVM_UNLIKELY
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/FileSystem.h>
+#include <llvm/Support/Timer.h>
 #include <llvm/Target/TargetMachine.h>             // for TargetMachine, Tar...
 #include <llvm/Target/TargetOptions.h>             // for TargetOptions
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Utils/Local.h>
+#include <llvm/Transforms/Utils/Cloning.h>
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
 #include <llvm/Transforms/Scalar/GVN.h>
 #endif
@@ -50,6 +52,8 @@
 using namespace llvm;
 using namespace kernel;
 
+using AttrId = kernel::Attribute::KindId;
+
 CPUDriver::CPUDriver(std::string && moduleName)
 : BaseDriver(std::move(moduleName))
 , mTarget(nullptr)
@@ -69,7 +73,7 @@ CPUDriver::CPUDriver(std::string && moduleName)
     builder.setVerifyModules(false);
     builder.setEngineKind(EngineKind::JIT);
     builder.setTargetOptions(codegen::target_Options);
-    builder.setOptLevel(codegen::OptLevel);
+    builder.setOptLevel(codegen::BackEndOptLevel);
 
     StringMap<bool> HostCPUFeatures;
     if (sys::getHostCPUFeatures(HostCPUFeatures)) {
@@ -91,17 +95,22 @@ CPUDriver::CPUDriver(std::string && moduleName)
     if (mEngine == nullptr) {
         throw std::runtime_error("Could not create ExecutionEngine: " + errMessage);
     }
-    auto cache = ParabixObjectCache::getInstance();
-    if (cache) {
-        mEngine->setObjectCache(cache);
+    if (mObjectCache) {
+        mEngine->setObjectCache(mObjectCache.get());
     }
+    mEngine->DisableSymbolSearching(false);
+    mEngine->DisableLazyCompilation(true);
+    mEngine->DisableGVCompilation(true);
+
     auto triple = mTarget->getTargetTriple().getTriple();
     const DataLayout DL(mTarget->createDataLayout());
     mMainModule->setTargetTriple(triple);
     mMainModule->setDataLayout(DL);
-    iBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
-    iBuilder->setDriver(*this);
-    iBuilder->setModule(mMainModule);
+    mBuilder.reset(IDISA::GetIDISA_Builder(*mContext));
+    mBuilder->setDriver(*this);
+    mBuilder->setModule(mMainModule);
+
+
 }
 
 Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, FunctionType * type, void * functionPtr) const {
@@ -118,18 +127,6 @@ Function * CPUDriver::addLinkFunction(Module * mod, llvm::StringRef name, Functi
         report_fatal_error("Cannot link " + name + ": a function with a different signature already exists with that name in " + mod->getName());
     }
     return f;
-}
-
-std::string CPUDriver::getMangledName(std::string s) {
-    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 9, 0)
-    DataLayout DL(mTarget->createDataLayout());
-    std::string MangledName;
-    raw_string_ostream MangledNameStream(MangledName);
-    Mangler::getNameWithPrefix(MangledNameStream, s, DL);
-    return MangledName;
-    #else
-    return s;
-    #endif
 }
 
 inline void CPUDriver::preparePassManager() {
@@ -157,7 +154,7 @@ inline void CPUDriver::preparePassManager() {
         mPassManager->add(createVerifierPass());
     }
     if (LLVM_UNLIKELY(!codegen::TraceOption.empty())) {
-        mPassManager->add(createTracePass(iBuilder.get(), codegen::TraceOption));
+        mPassManager->add(createTracePass(mBuilder.get(), codegen::TraceOption));
     }
     if (LLVM_UNLIKELY(codegen::ShowIROption != codegen::OmittedOption)) {
         if (LLVM_LIKELY(mIROutputStream == nullptr)) {
@@ -173,7 +170,7 @@ inline void CPUDriver::preparePassManager() {
     mPassManager->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     mPassManager->add(createPromoteMemoryToRegisterPass());    // Promote stack variables to constants or PHI nodes
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(6, 0, 0)
-    mPassManager->add(createSROAPass());                       // Promote elements whose addresses are not taken of aggregate alloca to registers.
+    mPassManager->add(createSROAPass());                       // Promote elements of aggregate allocas whose addresses are not taken to registers.
     #endif
     mPassManager->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
     mPassManager->add(createEarlyCSEPass());                   // Simple common subexpression elimination pass
@@ -212,19 +209,25 @@ inline void CPUDriver::preparePassManager() {
 void CPUDriver::generateUncachedKernels() {
     if (mUncachedKernel.empty()) return;
     preparePassManager();
-    std::vector<std::unique_ptr<Kernel>> uncachedKernels;
-    mUncachedKernel.swap(uncachedKernels);
-    for (auto & kernel : uncachedKernels) {
-        kernel->prepareKernel(iBuilder);
+    mCachedKernel.reserve(mUncachedKernel.size());
+    for (auto & kernel : mUncachedKernel) {
+        {
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+            NamedRegionTimer T(kernel->getSignature(), kernel->getName(),
+                               "kernel", "Kernel Generation",
+                               codegen::TimeKernelsIsEnabled);
+#else
+            NamedRegionTimer T(kernel->getName(), "Kernel Generation",
+                               codegen::TimeKernelsIsEnabled);
+#endif
+            kernel->generateKernel(mBuilder);
+            Module * const module = kernel->getModule(); assert (module);
+            module->setTargetTriple(mMainModule->getTargetTriple());
+            mPassManager->run(*module);
+            mCachedKernel.emplace_back(kernel.release());
+        }
     }
-    mCachedKernel.reserve(uncachedKernels.size());
-    for (auto & kernel : uncachedKernels) {
-        kernel->generateKernel(iBuilder);
-        Module * const module = kernel->getModule(); assert (module);
-        module->setTargetTriple(mMainModule->getTargetTriple());
-        mPassManager->run(*module);
-        mCachedKernel.emplace_back(kernel.release());
-    }
+    mUncachedKernel.clear();
     #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(5, 0, 0)
     llvm::reportAndResetTimings();
     #endif
@@ -233,50 +236,79 @@ void CPUDriver::generateUncachedKernels() {
 
 void * CPUDriver::finalizeObject(kernel::Kernel * const pipeline) {
 
-    using ModuleSet = std::vector<Module *>;
+    using ModuleSet = llvm::SmallVector<Module *, 32>;
 
-    // write/declare the "main" method
-    ModuleSet O1;
-    ModuleSet O3;
+    ModuleSet Infrequent;
+    ModuleSet Normal;
 
-    Module * const mainModule = new Module("main", *mContext);
-    iBuilder->setModule(mainModule);
+    for (const auto & kernel : mCompiledKernel) {
+        kernel->ensureLoaded();
+    }
+
     for (const auto & kernel : mCachedKernel) {
         if (LLVM_UNLIKELY(kernel->getModule() == nullptr)) {
             report_fatal_error(kernel->getName() + " was neither loaded from cache nor generated prior to finalizeObject");
         }
-        kernel->addKernelDeclarations(iBuilder);
-        if (LLVM_UNLIKELY(kernel->hasAttribute(kernel::Attribute::KindId::InfrequentlyUsed))) {
-            O1.emplace_back(kernel->getModule());
+        Module * const m = kernel->getModule();
+        assert ("cached kernel has no module?" && m);
+        if (LLVM_UNLIKELY(kernel->hasAttribute(AttrId::InfrequentlyUsed))) {
+            Infrequent.emplace_back(m);
         } else {
-            O3.emplace_back(kernel->getModule());
+            Normal.emplace_back(m);
         }
     }
-    const auto method = pipeline->hasStaticMain() ? Kernel::DeclareExternal : Kernel::AddInternal;
-    Function * const main = pipeline->addOrDeclareMainFunction(iBuilder, method);
-    mCachedKernel.clear();
 
-    if (!O1.empty()) {
-        mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
-        for (const auto & m : O1) {
-            mEngine->addModule(std::unique_ptr<Module>(m));
+    auto addModules = [&](const ModuleSet & S, const CodeGenOpt::Level level) {
+        if (S.empty()) return;
+        mEngine->getTargetMachine()->setOptLevel(level);
+        for (Module * M : S) {
+            mEngine->addModule(std::unique_ptr<Module>(M));
         }
         mEngine->finalizeObject();
-    }
-    if (!O3.empty()) {
-        mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Aggressive);
-        for (const auto & m : O3) {
-            mEngine->addModule(std::unique_ptr<Module>(m));
+    };
+
+    auto removeModules = [&](const ModuleSet & S) {
+        for (Module * M : S) {
+            mEngine->removeModule(M);
         }
-        mEngine->finalizeObject();
-    }
-    // compile any uncompiled kernel/method
+    };
+
+    // compile any uncompiled kernels
+    addModules(Normal, codegen::BackEndOptLevel);
+    addModules(Infrequent, CodeGenOpt::None);
+
     // write/declare the "main" method
-    mEngine->addModule(std::unique_ptr<Module>(mainModule));
-    mEngine->finalizeObject();
+    auto mainModule = make_unique<Module>("main", *mContext);
+    mainModule->setTargetTriple(mMainModule->getTargetTriple());
+    mainModule->setDataLayout(mMainModule->getDataLayout());
+    mBuilder->setModule(mainModule.get());
+    pipeline->addKernelDeclarations(mBuilder);
+    const auto method = pipeline->externallyInitialized() ? Kernel::AddInternal : Kernel::DeclareExternal;
+    Function * const main = pipeline->addOrDeclareMainFunction(mBuilder, method);
+    mBuilder->setModule(mMainModule);
+
+    // NOTE: the pipeline kernel is destructed after calling clear unless this driver preserves kernels!
+    if (getPreservesKernels()) {
+        for (auto & kernel : mCachedKernel) {
+            mPreservedKernel.emplace_back(kernel.release());
+        }
+        for (auto & kernel : mCompiledKernel) {
+            mPreservedKernel.emplace_back(kernel.release());
+        }
+    } else {
+        mPreservedKernel.clear();
+    }
+    mCachedKernel.clear();
+    mCompiledKernel.clear();
+
     // return the compiled main method
-    iBuilder->setModule(mMainModule);
-    return mEngine->getPointerToFunction(main);
+    mEngine->getTargetMachine()->setOptLevel(CodeGenOpt::Less);
+    mEngine->addModule(std::move(mainModule));
+    mEngine->finalizeObject();
+    auto mainFnPtr = mEngine->getFunctionAddress(main->getName());
+    removeModules(Normal);
+    removeModules(Infrequent);
+    return reinterpret_cast<void *>(mainFnPtr);
 }
 
 bool CPUDriver::hasExternalFunction(llvm::StringRef functionName) const {
@@ -353,5 +385,5 @@ bool TracePass::runOnModule(Module & M) {
 }
 
 ModulePass * CPUDriver::createTracePass(kernel::KernelBuilder * kb, StringRef to_trace) {
-    return new TracePass(iBuilder.get(), to_trace);
+    return new TracePass(mBuilder.get(), to_trace);
 }

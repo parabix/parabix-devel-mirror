@@ -15,24 +15,28 @@ namespace llvm { class Function; }
 namespace kernel { class KernelBuilder; }
 namespace kernel { class ProgramBuilder; }
 class CBuilder;
+class ParabixObjectCache;
 
 class BaseDriver : public codegen::VirtualDriver {
     friend class CBuilder;
     friend class kernel::ProgramBuilder;
-
+    friend class kernel::Kernel;
 public:
 
     using Kernel = kernel::Kernel;
     using Relationship = kernel::Relationship;
     using Bindings = kernel::Bindings;
     using BuilderRef = Kernel::BuilderRef;
+    using KernelSet = std::vector<std::unique_ptr<Kernel>>;
+    using KernelMap = llvm::StringMap<std::unique_ptr<Kernel>>;
+
 
     std::unique_ptr<kernel::ProgramBuilder> makePipelineWithIO(Bindings stream_inputs = {}, Bindings stream_outputs = {}, Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
     std::unique_ptr<kernel::ProgramBuilder> makePipeline(Bindings scalar_inputs = {}, Bindings scalar_outputs = {});
 
     BuilderRef getBuilder() {
-        return iBuilder;
+        return mBuilder;
     }
 
     kernel::StreamSet * CreateStreamSet(const unsigned NumElements = 1, const unsigned FieldWidth = 1);
@@ -42,9 +46,6 @@ public:
     kernel::Scalar * CreateConstant(not_null<llvm::Constant *> value);
 
     void addKernel(not_null<Kernel *> kernel);
-
-    template <typename ExternalFunctionType>
-    llvm::Function * LinkFunction(not_null<Kernel *> kb, llvm::StringRef name, ExternalFunctionType & functionPtr) const;
 
     virtual bool hasExternalFunction(const llvm::StringRef functionName) const = 0;
 
@@ -62,9 +63,20 @@ public:
         return mMainModule;
     }
 
+    bool getPreservesKernels() const {
+        return mPreservesKernels;
+    }
+
+    void setPreserveKernels(const bool value = true) {
+        mPreservesKernels = value;
+    }
+
 protected:
 
     BaseDriver(std::string && moduleName);
+
+    template <typename ExternalFunctionType>
+    void LinkFunction(not_null<Kernel *> kernel, llvm::StringRef name, ExternalFunctionType & functionPtr) const;
 
     virtual llvm::Function * addLinkFunction(llvm::Module * mod, llvm::StringRef name, llvm::FunctionType * type, void * functionPtr) const = 0;
 
@@ -72,17 +84,20 @@ protected:
 
     std::unique_ptr<llvm::LLVMContext>                      mContext;
     llvm::Module * const                                    mMainModule;
-    std::unique_ptr<kernel::KernelBuilder>                  iBuilder;
-    std::vector<std::unique_ptr<Kernel>>                    mUncachedKernel;
-    std::vector<std::unique_ptr<Kernel>>                    mCachedKernel;
+    std::unique_ptr<kernel::KernelBuilder>                  mBuilder;
+    std::unique_ptr<ParabixObjectCache>                     mObjectCache;
+
+    bool                                                    mPreservesKernels = false;
+    KernelSet                                               mUncachedKernel;
+    KernelSet                                               mCachedKernel;
+    KernelSet                                               mCompiledKernel;
+    KernelSet                                               mPreservedKernel;    
     SlabAllocator<>                                         mAllocator;
 };
 
 template <typename ExternalFunctionType>
-llvm::Function * BaseDriver::LinkFunction(not_null<Kernel *> kb, llvm::StringRef name, ExternalFunctionType & functionPtr) const {
-    llvm::FunctionType * const type = FunctionTypeBuilder<ExternalFunctionType>::get(getContext());
-    assert ("FunctionTypeBuilder did not resolve a function type." && type);
-    return addLinkFunction(kb->getModule(), name, type, reinterpret_cast<void *>(functionPtr));
+void BaseDriver::LinkFunction(not_null<Kernel *> kernel, llvm::StringRef name, ExternalFunctionType & functionPtr) const {
+    kernel->link<ExternalFunctionType>(name, functionPtr);
 }
 
 #endif // DRIVER_H

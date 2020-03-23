@@ -17,6 +17,7 @@
 #include <pablo/pe_scanthru.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_everynth.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_zeroes.h>
@@ -88,7 +89,9 @@ void PabloCompiler::clearCarryData(BuilderRef b) {
 }
 
 void PabloCompiler::compile(BuilderRef b) {
+    assert (mCarryManager);
     mCarryManager->initializeCodeGen(b);
+    assert (mKernel);
     PabloBlock * const entryBlock = mKernel->getEntryScope(); assert (entryBlock);
     mMarker.emplace(entryBlock->createZeroes(), b->allZeroes());
     mMarker.emplace(entryBlock->createOnes(), b->allOnes());
@@ -167,6 +170,9 @@ void PabloCompiler::examineBlock(BuilderRef b, const PabloBlock * const block) {
             examineBlock(b, cast<Branch>(stmt)->getBody());
         } else if (LLVM_UNLIKELY(isa<Count>(stmt))) {
             mKernel->addInternalScalar(stmt->getType(), stmt->getName().str());
+        } else if (LLVM_UNLIKELY(isa<EveryNth>(stmt))) {
+            const auto fieldWidth = b->getSizeTy()->getBitWidth();
+            mKernel->addInternalScalar(b->getIntNTy(fieldWidth), stmt->getName().str());
         }
     }
 }
@@ -598,6 +604,33 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             Value * bitBlockCount = b->simd_popcount(b->getBitBlockWidth(), to_count);
             value = b->CreateAdd(b->mvmd_extract(fieldWidth, bitBlockCount, 0), countSoFar, "countSoFar");
             b->CreateAlignedStore(value, ptr, alignment);
+        } else if (const EveryNth * e = dyn_cast<EveryNth>(stmt)) {
+            Value * EOFbit = b->getScalarField("EOFbit");
+            Value * EOFmask = b->getScalarField("EOFmask");
+            Value * const to_count = b->simd_and(b->simd_or(b->simd_not(EOFmask), EOFbit), compileExpression(b, e->getExpr()));
+            Value * const ptr = b->getScalarFieldPtr(stmt->getName().str());
+            const auto alignment = getPointerElementAlignment(ptr);
+            Value * const pending = b->CreateAlignedLoad(ptr, alignment, e->getName() + "_accumulator");
+            const auto fieldWidth = b->getSizeTy()->getBitWidth();
+            const auto blockWidth = b->getBitBlockWidth();
+            const auto hiBlock = (blockWidth / fieldWidth) - 1;
+            const uint64_t n = e->getN()->value();
+            size_t mask = 0x0;
+            for (unsigned i = 0; i < sizeof(size_t) * 8; i += n) { mask = (mask << n) | 0x1; }
+            Value * const vmask = b->getIntN(fieldWidth, mask);
+            Value * const vn = b->getIntN(fieldWidth, n);
+            Value * const fieldCounts = b->simd_popcount(fieldWidth, to_count);
+            Value * const sumCounts = b->hsimd_partial_sum(fieldWidth, fieldCounts);
+            Value * const splatPending = b->simd_fill(fieldWidth, pending);
+            Value * const sumCountPend = b->simd_add(fieldWidth, sumCounts, splatPending);
+            Value * const splatN = b->simd_fill(fieldWidth, vn);
+            Value * const finalSumCounts = b->mvmd_dslli(fieldWidth, sumCountPend, splatPending, 1);
+            Value * const shift = b->CreateURem(b->CreateSub(splatN, b->CreateURem(finalSumCounts, splatN)), splatN);
+            Value * const splatMask = b->simd_fill(fieldWidth, vmask);
+            Value * const finalNthMask = b->simd_sllv(fieldWidth, splatMask, shift);
+            value = b->simd_pdep(fieldWidth, finalNthMask, to_count);
+            Value * const pendingOut = b->CreateURem(b->mvmd_extract(fieldWidth, sumCountPend, hiBlock), vn);
+            b->CreateAlignedStore(pendingOut, ptr, alignment);
         } else if (const Lookahead * l = dyn_cast<Lookahead>(stmt)) {
             const Var * stream = findInputParam(l, cast<Var>(l->getExpression()));
             Value * index = nullptr;
@@ -685,71 +718,63 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
             value = b->simd_ternary(mask, b->bitCast(op0), b->bitCast(op1), b->bitCast(op2));
         } else if (const IntrinsicCall * const call = dyn_cast<IntrinsicCall>(stmt)) {
             const auto n = call->getNumOperands();
-            std::vector<Value *> argv{};
+            SmallVector<Value *, 2> argv;
             for (unsigned i = 0; i < n; ++i) {
                 PabloAST * const arg = call->getOperand(i);
                 argv.push_back(compileExpression(b, arg));
             }
 
-            size_t expectedArgCount = 0;
-            bool validIntrinsic = true;
-
-            #define ASSERT_ARG_COUNT(N) \
-            expectedArgCount = N; \
-            if (argv.size() != expectedArgCount) { break; } \
+            auto assertArgCount = [&](const size_t expectedArgCount) {
+                if (LLVM_UNLIKELY(expectedArgCount != n)) {
+                    SmallVector<char, 256> tmp;
+                    raw_svector_ostream out(tmp);
+                    out << "PabloCompiler: intrinsic id "
+                        << (uint32_t) call->getIntrinsic() << ": "
+                        << "invlaid number of arguments, "
+                        << "expected " << expectedArgCount << ","
+                        << "got " << argv.size();
+                    report_fatal_error(out.str());
+                }
+            };
 
             switch (call->getIntrinsic()) {
-            case Intrinsic::SpanUpTo:
-                ASSERT_ARG_COUNT(2);
-                value = mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]);
-                break;
-            case Intrinsic::InclusiveSpan:
-                ASSERT_ARG_COUNT(2);
-                value = b->simd_or(argv[1], mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
-                break;
-            case Intrinsic::ExclusiveSpan:
-                ASSERT_ARG_COUNT(2);
-                value = b->simd_and(b->simd_not(argv[0]), mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
-                break;
-            case Intrinsic::PrintRegister:
-                ASSERT_ARG_COUNT(1);
-                {
-                    std::string tmp;
-                    raw_string_ostream out(tmp);
-                    PabloPrinter::print(cast<PabloAST>(stmt), out);
-                    b->CallPrintRegister(out.str(), argv[0]);
-                }
-                value = argv[0];
-                break;
-            default:
-                validIntrinsic = false;
-                break;
+                case Intrinsic::SpanUpTo:
+                    assertArgCount(2);
+                    value = mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]);
+                    break;
+                case Intrinsic::InclusiveSpan:
+                    assertArgCount(2);
+                    value = b->simd_or(argv[1], mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
+                    break;
+                case Intrinsic::ExclusiveSpan:
+                    assertArgCount(2);
+                    value = b->simd_and(b->simd_not(argv[0]), mCarryManager->subBorrowInBorrowOut(b, stmt, argv[1], argv[0]));
+                    break;
+                case Intrinsic::PrintRegister:
+                    assertArgCount(1);
+                    {
+                        SmallVector<char, 256> tmp;
+                        raw_svector_ostream out(tmp);
+                        PabloPrinter::print(cast<PabloAST>(stmt), out);
+                        b->CallPrintRegister(out.str(), argv[0]);
+                    }
+                    value = argv[0];
+                    break;
+                default:
+                    {
+                        SmallVector<char, 256> tmp;
+                        raw_svector_ostream out(tmp);
+                        out << "PabloCompiler: intrinsic id "
+                            << (uint32_t) call->getIntrinsic()
+                            << " was not recognized by the compiler";
+                        report_fatal_error(out.str());
+                    }
+                    break;
             }
 
-            #undef ASSERT_ARG_COUNT
-
-            // error checking
-            if (!validIntrinsic) {
-                std::string tmp;
-                raw_string_ostream out(tmp);
-                out << "PabloCompiler: intrinsic id "
-                    << (uint32_t) call->getIntrinsic()
-                    << " was not recognized by the compiler";
-                report_fatal_error(out.str());
-            }
-            if (expectedArgCount != argv.size()) {
-                std::string tmp;
-                raw_string_ostream out(tmp);
-                out << "PabloCompiler: intrinsic id "
-                    << (uint32_t) call->getIntrinsic() << ": "
-                    << "invlaid number of arguments, "
-                    << "expected " << expectedArgCount << ","
-                    << "got " << argv.size();
-                report_fatal_error(out.str());
-            }
         } else {
-            std::string tmp;
-            raw_string_ostream out(tmp);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
             out << "PabloCompiler: ";
             stmt->print(out);
             out << " was not recognized by the compiler";
@@ -759,8 +784,8 @@ void PabloCompiler::compileStatement(BuilderRef b, const Statement * const stmt)
         assert (value);
         mMarker[expr] = value;
         if (DebugOptionIsSet(DumpTrace)) {
-            std::string tmp;
-            raw_string_ostream name(tmp);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream name(tmp);
             expr->print(name);
             if (value->getType()->isVectorTy()) {
                 b->CallPrintRegister(name.str(), value);
@@ -1032,7 +1057,7 @@ Value * PabloCompiler::getPointerToVar(BuilderRef b, const Var * var, Value * in
         return ptr;
     } else {
         Value * const ptr = compileExpression(b, var, false);
-        std::vector<Value *> offsets;
+        SmallVector<Value *, 3> offsets;
         offsets.push_back(ConstantInt::getNullValue(index1->getType()));
         offsets.push_back(index1);
         if (index2) offsets.push_back(index2);
@@ -1040,14 +1065,22 @@ Value * PabloCompiler::getPointerToVar(BuilderRef b, const Var * var, Value * in
     }
 }
 
-PabloCompiler::PabloCompiler(PabloKernel * const kernel)
-: mKernel(kernel)
-, mCarryManager(CarryMode == PabloCarryMode::BitBlock ? make_unique<CarryManager>() : make_unique<CompressedCarryManager>())
-, mBranchCount(0) {
-    assert ("PabloKernel cannot be null!" && kernel);
+inline std::unique_ptr<CarryManager> makeCarryManager() {
+    switch (CarryMode) {
+        case PabloCarryMode::BitBlock:
+            return make_unique<CarryManager>();
+        case PabloCarryMode::Compressed:
+            return make_unique<CompressedCarryManager>();
+    }
+    llvm_unreachable("Unknown CarryManager type!");
 }
 
-PabloCompiler::~PabloCompiler() {
+PabloCompiler::PabloCompiler(PabloKernel * const kernel)
+: BlockKernelCompiler(kernel)
+, mKernel(kernel)
+, mCarryManager(makeCarryManager())
+, mBranchCount(0) {
+    assert ("PabloKernel cannot be null!" && kernel);
 }
 
 }

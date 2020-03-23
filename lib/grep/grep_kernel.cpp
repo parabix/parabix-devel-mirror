@@ -18,6 +18,7 @@
 #include <pablo/pe_var.h>           // for Var
 #include <pablo/pe_zeroes.h>        // for Zeroes
 #include <pablo/pe_infile.h>
+#include <pablo/pe_advance.h>
 #include <pablo/boolean.h>
 #include <pablo/pe_count.h>
 #include <pablo/pe_matchstar.h>
@@ -28,10 +29,14 @@
 #include <re/alphabet/alphabet.h>
 #include <re/toolchain/toolchain.h>
 #include <re/transforms/re_reverse.h>
+#include <re/analysis/collect_ccs.h>
+#include <re/transforms/exclude_CC.h>
+#include <re/transforms/re_multiplex.h>
 #include <kernel/unicode/UCD_property_kernel.h>
 #include <re/analysis/re_name_gather.h>
 #include <re/unicode/grapheme_clusters.h>
 #include <re/unicode/re_name_resolve.h>
+#include <kernel/unicode/charclasses.h>
 #include <re/cc/cc_compiler.h>         // for CC_Compiler
 #include <re/cc/cc_compiler_target.h>
 #include <re/cc/multiplex_CCs.h>
@@ -213,54 +218,61 @@ Bindings GrepKernelOptions::scalarOutputBindings() {
     return {};
 }
 
-std::string GrepKernelOptions::getSignature() {
-    if (mSignature == "") {
-        if (mSource) {
-            mSignature = std::to_string(mSource->getNumElements()) + "x" + std::to_string(mSource->getFieldWidth());
-            if (mSource->getFieldWidth() == 8) {
-                mSignature += ":" + std::to_string(grep::ByteCClimit);
-            }
-            mSignature += "/" + mCodeUnitAlphabet->getName();
-        }
-        if (mEncodingTransformer) {
-            mSignature += ":" + mEncodingTransformer->getIndexingAlphabet()->getName();
-        }
-        for (const auto & e : mExternals) {
-            mSignature += "_" + e.getName();
-        }
-        for (const auto & a: mAlphabets) {
-            mSignature += "_" + a.first->getName();
-        }
-        if (mCombiningType == GrepCombiningType::Exclude) {
-            mSignature += "&~";
-        } else if (mCombiningType == GrepCombiningType::Include) {
-            mSignature += "|=";
-        }
-        if (mPrefixRE) {
-            mSignature += ":" + Printer_RE::PrintRE(mPrefixRE);
-        }
-        mSignature += ":" + Printer_RE::PrintRE(mRE);
-    }
-    return mSignature;
+GrepKernelOptions::GrepKernelOptions(const cc::Alphabet * codeUnitAlphabet, re::EncodingTransformer * encodingTransformer)
+: mCodeUnitAlphabet(codeUnitAlphabet)
+, mEncodingTransformer(encodingTransformer) {
+
 }
 
-ICGrepKernel::ICGrepKernel(BuilderRef b, std::unique_ptr<GrepKernelOptions> options)
-: PabloKernel(b, AnnotateWithREflags("ic") + getStringHash(options->getSignature()),
+std::string GrepKernelOptions::makeSignature() {
+    std::string tmp;
+    raw_string_ostream sig(tmp);
+    if (mSource) {
+        sig << mSource->getNumElements() << 'x' << mSource->getFieldWidth();
+        if (mSource->getFieldWidth() == 8) {
+            sig << ':' << grep::ByteCClimit;
+        }
+        sig << '/' << mCodeUnitAlphabet->getName();
+    }
+    if (mEncodingTransformer) {
+        sig << ':' << mEncodingTransformer->getIndexingAlphabet()->getName();
+    }
+    for (const auto & e : mExternals) {
+        sig << '_' << e.getName();
+    }
+    for (const auto & a: mAlphabets) {
+        sig << '_' << a.first->getName();
+    }
+    if (mCombiningType == GrepCombiningType::Exclude) {
+        sig << "&~";
+    } else if (mCombiningType == GrepCombiningType::Include) {
+        sig << "|=";
+    }
+    if (mPrefixRE) {
+        sig << ':' << Printer_RE::PrintRE(mPrefixRE);
+    }
+    sig << ':' << Printer_RE::PrintRE(mRE);
+    sig.flush();
+    return tmp;
+}
+
+ICGrepKernel::ICGrepKernel(BuilderRef b, std::unique_ptr<GrepKernelOptions> && options)
+: PabloKernel(b, AnnotateWithREflags("ic") + getStringHash(options->makeSignature()),
 options->streamSetInputBindings(),
 options->streamSetOutputBindings(),
 options->scalarInputBindings(),
 options->scalarOutputBindings()),
-mOptions(std::move(options)) {
-    addAttribute(InfrequentlyUsed());
+mOptions(std::move(options)),
+mSignature(mOptions->makeSignature()) {
+    addAttribute(InfrequentlyUsed());    
 }
 
-std::string ICGrepKernel::makeSignature(BuilderRef) const {
-    return mOptions->getSignature();
+StringRef ICGrepKernel::getSignature() const {
+    return mSignature;
 }
 
 void ICGrepKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    std::unique_ptr<cc::CC_Compiler> ccc;
     RE_Compiler re_compiler(getEntryScope(), mOptions->mCodeUnitAlphabet);
     if (mOptions->mSource) {
         std::vector<pablo::PabloAST *> basis_set = getInputStreamSet(mOptions->mCodeUnitAlphabet->getName() + "_basis");
@@ -271,19 +283,19 @@ void ICGrepKernel::generatePabloMethod() {
         auto basis = getInputStreamSet(alpha->getName() + "_basis");
         re_compiler.addAlphabet(alpha, basis);
     }
-    if ((mOptions->mEncodingTransformer)) {
-        auto alphabetName = mOptions->mEncodingTransformer->getIndexingAlphabet()->getName();
+    if (mOptions->mEncodingTransformer) {
         PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
         re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
     }
     for (const auto & e : mOptions->mExternals) {
-        re_compiler.addPrecompiled(e.getName(), pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0)));
+        PabloAST * extStrm = pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0));
+        re_compiler.addPrecompiled(e.getName(), RE_Compiler::Marker(extStrm));
     }
     Var * const final_matches = pb.createVar("final_matches", pb.createZeroes());
     if (mOptions->mPrefixRE) {
-        PabloAST * const prefixMatches = re_compiler.compile(mOptions->mPrefixRE);
+        RE_Compiler::Marker prefixMatches = re_compiler.compileRE(mOptions->mPrefixRE);
         PabloBlock * scope1 = getEntryScope()->createScope();
-        pb.createIf(prefixMatches, scope1);
+        pb.createIf(prefixMatches.stream(), scope1);
 
         PabloAST * u8bytes = pb.createExtract(getInput(0), pb.getInteger(0));
         PabloAST * nybbles[2];
@@ -303,21 +315,29 @@ void ICGrepKernel::generatePabloMethod() {
         }
         RE_Compiler re_compiler(scope1, mOptions->mCodeUnitAlphabet);
         re_compiler.addAlphabet(mOptions->mCodeUnitAlphabet, basis);
-        scope1->createAssign(final_matches, re_compiler.compile(mOptions->mRE, prefixMatches));
+        RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
+        PabloAST * matchResult = matches.stream();
+        if (matches.offset() == 0) matchResult = scope1->createAdvance(matchResult, scope1->getInteger(1));
+        scope1->createAssign(final_matches, matchResult);
     } else {
-        pb.createAssign(final_matches, re_compiler.compile(mOptions->mRE));
+        RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE);
+        PabloAST * matchResult = matches.stream();
+        if (matches.offset() == 0) matchResult = pb.createAdvance(matchResult, 1);
+        pb.createAssign(final_matches, matchResult);
     }
-    Var * const output = getOutputStreamVar("matches");
+    Var * const output = pb.createExtract(getOutputStreamVar("matches"), pb.getInteger(0));
+    PabloAST * value = nullptr;
     if (mOptions->mCombiningType == GrepCombiningType::None) {
-        pb.createAssign(pb.createExtract(output, pb.getInteger(0)),final_matches);
+        value = final_matches;
     } else {
         PabloAST * toCombine = pb.createExtract(getInputStreamVar("toCombine"), pb.getInteger(0));
         if (mOptions->mCombiningType == GrepCombiningType::Exclude) {
-            pb.createAssign(pb.createExtract(output, pb.getInteger(0)), pb.createAnd(toCombine, pb.createNot(final_matches)));
+            value = pb.createAnd(toCombine, pb.createNot(final_matches), "toCombine");
         } else {
-            pb.createAssign(pb.createExtract(output, pb.getInteger(0)), pb.createOr(toCombine, final_matches));
+            value = pb.createOr(toCombine, final_matches, "toCombine");
         }
     }
+    pb.createAssign(output, value);
 }
 
 void MatchedLinesKernel::generatePabloMethod() {
@@ -367,15 +387,14 @@ mMatchLength(length) {}
 void FixedMatchPairsKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
     Var * matchResults = getInputStreamVar("MatchResults");
-    Var * matchEnds = pb.createExtract(matchResults, pb.getInteger(0));
+    PabloAST * matchFollows = pb.createExtract(matchResults, pb.getInteger(0));
     Var * matchPairsVar = getOutputStreamVar("MatchPairs");
-    PabloAST * starts = pb.createLookahead(matchEnds, mMatchLength-1);
-    PabloAST * follows = pb.createAdvance(matchEnds, 1);
-    PabloAST * disjoint = pb.createXor(starts, follows);
+    PabloAST * starts = pb.createLookahead(matchFollows, mMatchLength);
+    PabloAST * disjoint = pb.createXor(starts, matchFollows);
     starts = pb.createAnd(starts, disjoint);
-    follows = pb.createAnd(follows, disjoint);
+    matchFollows = pb.createAnd(matchFollows, disjoint);
     pb.createAssign(pb.createExtract(matchPairsVar, 0), starts);
-    pb.createAssign(pb.createExtract(matchPairsVar, 1), follows);
+    pb.createAssign(pb.createExtract(matchPairsVar, 1), matchFollows);
 }
 
 void PopcountKernel::generatePabloMethod() {
@@ -430,7 +449,7 @@ void AbortOnNull::generateMultiBlockLogic(BuilderRef b, llvm::Value * const numO
         blockMin[i] = b->fwCast(8, b->allOnes());
     }
     // If we're in the final block bypass the fast loop.
-    b->CreateCondBr(mIsFinal, finalStride, strideLoop);
+    b->CreateCondBr(b->isFinal(), finalStride, strideLoop);
 
     b->SetInsertPoint(strideLoop);
     PHINode * const baseBlockIndex = b->CreatePHI(b->getSizeTy(), 2);
@@ -541,27 +560,18 @@ void kernel::GraphemeClusterLogic(const std::unique_ptr<ProgramBuilder> & P, UTF
 
     re::RE * GCB = re::generateGraphemeClusterBoundaryRule();
     GCB = re::resolveUnicodeNames(GCB);
-    std::set<re::Name *> externals;
-    re::gatherNames(GCB, externals);
-    std::map<std::string, kernel::StreamSet *> propertyStreamMap;
-    for (auto e : externals) {
-        auto name = e->getFullName();
-        StreamSet * property = P->CreateStreamSet(1, 1);
-        propertyStreamMap.emplace(name, property);
-        P->CreateKernelCall<UnicodePropertyKernelBuilder>(e, Source, property);
-    }
+    const auto GCB_Sets = re::collectCCs(GCB, cc::Unicode);
+    auto GCB_mpx = std::make_shared<cc::MultiplexedAlphabet>("GCB_mpx", GCB_Sets);
+    GCB = transformCCs(GCB_mpx, GCB);
+    auto GCB_basis = GCB_mpx->getMultiplexedCCs();
+    StreamSet * const GCB_Classes = P->CreateStreamSet(GCB_basis.size());
+    P->CreateKernelCall<CharClassesKernel>(std::move(GCB_basis), Source, GCB_Classes);
     std::unique_ptr<GrepKernelOptions> options = make_unique<GrepKernelOptions>();
     options->setIndexingTransformer(t, U8index);
-    options->setSource(Source);
-    options->setResults(GCBstream);
     options->setRE(GCB);
+    options->setSource(GCB_Classes);
+    options->addAlphabet(GCB_mpx, GCB_Classes);
+    options->setResults(GCBstream);
     options->addExternal("UTF8_index", U8index);
-    for (const auto & e : externals) {
-        auto name = e->getFullName();
-        const auto f = propertyStreamMap.find(name);
-        if (f != propertyStreamMap.end()) {
-            options->addExternal(name, f->second);
-        }
-    }
     P->CreateKernelCall<ICGrepKernel>(std::move(options));
 }

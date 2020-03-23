@@ -29,7 +29,7 @@ inline unsigned getPageSize() {
 static cl::OptionCategory CodeGenOptions("Code Generation Options", "These options control code generation.");
 
 static cl::bits<DebugFlags>
-DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
+DebugOptions(cl::desc("Debugging Options"), cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(SerializeThreads, "Force segment threads to run sequentially."),
                         clEnumVal(TraceCounts, "Trace kernel processed, consumed and produced item counts."),
                         clEnumVal(TraceDynamicBuffers, "Trace dynamic buffer allocations and deallocations."),
@@ -40,9 +40,7 @@ DebugOptions(cl::values(clEnumVal(VerifyIR, "Run the IR verification pass."),
                         clEnumVal(TraceUnconsumedItemCounts, "Trace unconsumed item counts over segments."),
                         clEnumVal(EnableAsserts, "Enable built-in Parabix framework asserts in generated IR."),
                         clEnumVal(EnableMProtect, "Use mprotect to cause a write fault when erroneously "
-                                                  "overwriting kernel state / stream space.\n"
-                                                  "NOTE: this requires memory to be page-aligned, which "
-                                                  "may still hide errors."),
+                                                  "overwriting kernel state / stream space."),
                         clEnumVal(EnableCycleCounter, "Count and report CPU cycles per kernel."),
                         clEnumVal(EnableBlockingIOCounter, "Count and report the number of blocked kernel "
                                                            "executions due to insufficient data/space of a "
@@ -66,9 +64,22 @@ static cl::opt<std::string, true> ASMOutputFilenameOption("ShowASM", cl::locatio
                                                          cl::desc("Print generated assembly code to stderr (by omitting =<filename> or a file"), cl::value_desc("filename"), cl::cat(CodeGenOptions));
 #endif
 
-static cl::opt<char> OptLevelOption("O", cl::desc("Optimization level. [-O0, -O1, -O2, or -O3] (default = '-O1')"),
-                                    cl::cat(CodeGenOptions), cl::Prefix, cl::ZeroOrMore, cl::init('1'));
 
+// Enable Debug Options to be specified on the command line
+static cl::opt<CodeGenOpt::Level, true>
+OptimizationLevel("optimization-level", cl::location(OptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the front-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
+                             clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
+                  CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
+static cl::opt<CodeGenOpt::Level, true>
+BackEndOptOption("backend-optimization-level", cl::location(BackEndOptLevel), cl::init(CodeGenOpt::Less), cl::desc("Set the back-end optimization level:"),
+                  cl::values(clEnumValN(CodeGenOpt::None, "none", "no optimizations"),
+                             clEnumValN(CodeGenOpt::Less, "less", "trivial optimizations (default)"),
+                             clEnumValN(CodeGenOpt::Default, "standard", "standard optimizations"),
+                             clEnumValN(CodeGenOpt::Aggressive, "aggressive", "aggressive optimizations")
+                CL_ENUM_VAL_SENTINEL), cl::cat(CodeGenOptions));
 
 static cl::opt<bool, true> EnableObjectCacheOption("enable-object-cache", cl::location(EnableObjectCache), cl::init(true),
                                                    cl::desc("Enable object caching"), cl::cat(CodeGenOptions));
@@ -94,32 +105,46 @@ static cl::opt<unsigned, true> SegmentSizeOption("segment-size", cl::location(Se
 static cl::opt<unsigned, true> BufferSegmentsOption("buffer-segments", cl::location(BufferSegments), cl::init(1),
                                                cl::desc("Buffer Segments"), cl::value_desc("positive integer"));
 
+static cl::opt<unsigned, true>
+MaxTaskThreadsOption("max-task-threads", cl::location(TaskThreads),
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(0),
-                                          cl::desc("Number of threads used for segment pipeline parallel (relative to number of cores if 0 or negative"), cl::value_desc("integer"));
+                     cl::init(llvm::sys::getHostNumPhysicalCores()),
 #else
-static cl::opt<int, true> ThreadNumOption("thread-num", cl::location(ThreadNum), cl::init(2),
-                                          cl::desc("Number of threads used for segment pipeline parallel"), cl::value_desc("positive integer"));
+                     cl::init(2),
 #endif
+                     cl::desc("Maximum number of threads to assign for separate pipeline tasks."),
+                     cl::value_desc("positive integer"));
+
+static cl::opt<unsigned, true>
+ThreadNumOption("thread-num", cl::location(SegmentThreads),
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+                cl::init(llvm::sys::getHostNumPhysicalCores()),
+#else
+                cl::init(2),
+#endif
+                cl::desc("Number of threads used for segment pipeline parallel"),
+                cl::value_desc("positive integer"));
 
 static cl::opt<unsigned, true> ScanBlocksOption("scan-blocks", cl::location(ScanBlocks), cl::init(4),
                                           cl::desc("Number of blocks per stride for scanning kernels"), cl::value_desc("positive initeger"));
-
-static cl::opt<bool, true> NVPTXOption("NVPTX", cl::location(NVPTX), cl::init(false),
-                                 cl::desc("Run on GPU only."), cl::cat(CodeGenOptions));
 
 static cl::opt<unsigned, true> GroupNumOption("group-num", cl::location(GroupNum), cl::init(256),
                                          cl::desc("NUmber of groups declared on GPU"), cl::value_desc("positive integer"), cl::cat(CodeGenOptions));
 
 std::string TraceOption = "";
 static cl::opt<std::string, true> TraceValueOption("trace", cl::location(TraceOption),
-                                            cl::desc("The char"), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
+                                            cl::desc("Trace the values of variables beginning with the given prefix."), cl::value_desc("prefix"), cl::cat(CodeGenOptions));
 
 std::string CCCOption = "";
 static cl::opt<std::string, true> CCTypeOption("ccc-type", cl::location(CCCOption), cl::init("binary"),
                                             cl::desc("The character class compiler"), cl::value_desc("[binary, ternary]"));
 
+bool TimeKernelsIsEnabled;
+static cl::opt<bool, true> OptCompileTime("time-kernels", cl::location(TimeKernelsIsEnabled),
+                                        cl::desc("Times each kernel, printing elapsed time for each on exit"), cl::init(false));
+
 CodeGenOpt::Level OptLevel;
+CodeGenOpt::Level BackEndOptLevel;
 
 const char * ObjectCacheDir;
 
@@ -128,8 +153,8 @@ unsigned BlockSize;
 unsigned SegmentSize;
 
 unsigned BufferSegments;
-
-int ThreadNum;
+unsigned TaskThreads;
+unsigned SegmentThreads;
 
 unsigned ScanBlocks;
 
@@ -139,15 +164,6 @@ bool TraceObjectCache;
 unsigned CacheDaysLimit;
 
 int FreeCallBisectLimit;
-
-bool NVPTX = [](const bool nvptx) {
-    #ifndef CUDA_ENABLED
-    if (nvptx) {
-        report_fatal_error("CUDA compiler is not supported.");
-    }
-    #endif
-    return nvptx;
-}(NVPTXOption);
 
 unsigned GroupNum;
 
@@ -164,6 +180,19 @@ bool LLVM_READONLY DebugOptionIsSet(const DebugFlags flag) {
 
 std::string ProgramName;
 
+inline bool disableObjectCacheDueToCommandLineOptions() {
+    if (!TraceOption.empty()) return true;
+    // if (!DebugOptions.empty()) return true;
+    if (ShowIROption != OmittedOption) return true;
+    if (ShowUnoptimizedIROption != OmittedOption) return true;
+    #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
+    if (ShowASMOption != OmittedOption) return true;
+    #endif
+    if (pablo::ShowPabloOption != OmittedOption) return true;
+    if (pablo::ShowOptimizedPabloOption != OmittedOption) return true;
+    return false;
+}
+
 void ParseCommandLineOptions(int argc, const char * const *argv, std::initializer_list<const cl::OptionCategory *> hiding) {
     AddParabixVersionPrinter();
 
@@ -174,40 +203,12 @@ void ParseCommandLineOptions(int argc, const char * const *argv, std::initialize
     }
 #endif
     cl::ParseCommandLineOptions(argc, argv);
-    if (!TraceOption.empty()) {
-        EnableObjectCache = false;
-        // Maybe we need to force generation of names.
-        //if (ShowIROption == OmittedOption) {
-            // ShowIROption = "/dev/null";
-        //}
-    }
-    if (DebugOptions.getBits() || (ShowIROption != OmittedOption) || (ShowUnoptimizedIROption != OmittedOption)
-        #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
-        || (ShowASMOption != OmittedOption)
-        #endif
-        || (pablo::ShowPabloOption != OmittedOption) || (pablo::ShowOptimizedPabloOption != OmittedOption)) {
+    if (disableObjectCacheDueToCommandLineOptions()) {
         EnableObjectCache = false;
     }
     ObjectCacheDir = ObjectCacheDirOption.empty() ? nullptr : ObjectCacheDirOption.data();
 #if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(3, 7, 0)
     target_Options.MCOptions.AsmVerbose = true;
-#endif
-    switch (OptLevelOption) {
-        case '0': OptLevel = CodeGenOpt::None; break;
-        case '1': OptLevel = CodeGenOpt::Less; break;
-        case '2': OptLevel = CodeGenOpt::Default; break;
-        case '3': OptLevel = CodeGenOpt::Aggressive; break;
-        default: report_fatal_error(std::string(1, OptLevelOption) + " is an invalid optimization level.");
-    }
-#ifndef CUDA_ENABLED
-    if (NVPTX) {
-        report_fatal_error("CUDA compiler is not supported.");
-    }
-#endif
-#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
-    if (ThreadNum <= 0) {
-        ThreadNum = llvm::sys::getHostNumPhysicalCores() + ThreadNum;
-    }
 #endif
 }
 
@@ -225,6 +226,17 @@ void printParabixVersion (raw_ostream & outs) {
 
 void AddParabixVersionPrinter() {
     cl::AddExtraVersionPrinter(&printParabixVersion);
+}
+
+void setTaskThreads(unsigned taskThreads) {
+    TaskThreads = std::max(taskThreads, 1u);
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+    unsigned coresPerTask = llvm::sys::getHostNumPhysicalCores()/TaskThreads;
+#else
+    unsigned coresPerTask = 2;  // assumption
+#endif
+    SegmentThreads = std::min(coresPerTask, SegmentThreads);
+    //llvm::errs() << "Task threads: " << taskThreads << ", segment threads: " << SegmentThreads << "\n";
 }
 
 }

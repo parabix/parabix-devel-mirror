@@ -25,10 +25,10 @@ namespace grep {
 
 class PropertyValueAccumulator : public grep::MatchAccumulator {
 public:
-    
+
     PropertyValueAccumulator(std::vector<std::string> & accumulatedPropertyValues)
     : mParsedPropertyValueSet(accumulatedPropertyValues) {}
-    
+
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
 private:
     std::vector<std::string> & mParsedPropertyValueSet;
@@ -43,13 +43,13 @@ void PropertyValueAccumulator::accumulate_match(const size_t lineNum, char * lin
 
 class SetByLineNumberAccumulator : public grep::MatchAccumulator {
 public:
-    
+
     SetByLineNumberAccumulator(const std::vector<UCD::codepoint_t> & cps, const UCD::UnicodeSet & defaultValueSet)
     : mCodepointTableByLineNum(cps)
     , mDefaultValueSet(defaultValueSet) {
 
     }
-    
+
     void accumulate_match(const size_t lineNum, char * line_start, char * line_end) override;
     UCD::UnicodeSet && getAccumulatedSet() { return std::move(mAccumSet); }
 private:
@@ -93,29 +93,28 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::BinaryPropertyObject *
 const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::EnumeratedPropertyObject * propObj, re::RE * pattern) {
     AlignedAllocator<char, 32> alloc;
     std::vector<std::string> accumulatedValues;
-    
+
     const std::string & str = propObj->GetPropertyValueGrepString();
-    
+
     const unsigned segmentSize = 8;
     const auto n = str.length();
     const auto w = 256 * segmentSize;
     const auto m = w - (n % w);
-    
+
     char * aligned = alloc.allocate(n + m, 0);
     std::memcpy(aligned, str.data(), n);
     std::memset(aligned + n, 0, m);
-    
+
     PropertyValueAccumulator accum(accumulatedValues);
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     engine.grepCodeGen(pattern);
     engine.doGrep(aligned, n, accum);
-    //grepBuffer(pattern, aligned, n, & accum);
     alloc.deallocate(aligned, 0);
-    
+
     UCD::UnicodeSet a;
-    for (const auto & v : accumulatedValues) {       
+    for (const auto & v : accumulatedValues) {
         const auto e = propObj->GetPropertyValueEnumCode(v);
         a.insert(propObj->GetCodepointSet(e));
     }
@@ -125,20 +124,20 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::EnumeratedPropertyObje
 const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::ExtensionPropertyObject * propObj, re::RE * pattern) {
     AlignedAllocator<char, 32> alloc;
     std::vector<std::string> accumulatedValues;
-    
+
     UCD::EnumeratedPropertyObject * baseObj = llvm::cast<UCD::EnumeratedPropertyObject>(UCD::property_object_table[propObj->base_property]);
-    
+
     const std::string & str = baseObj->GetPropertyValueGrepString();
-    
+
     const unsigned segmentSize = 8;
     const auto n = str.length();
     const auto w = 256 * segmentSize;
     const auto m = w - (n % w);
-    
+
     char * aligned = alloc.allocate(n + m, 0);
     std::memcpy(aligned, str.data(), n);
     std::memset(aligned + n, 0, m);
-    
+
     PropertyValueAccumulator accum(accumulatedValues);
     CPUDriver driver("driver");
     grep::InternalSearchEngine engine(driver);
@@ -146,7 +145,7 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::ExtensionPropertyObjec
     engine.grepCodeGen(pattern);
     engine.doGrep(aligned, n, accum);
     alloc.deallocate(aligned, 0);
-    
+
     UCD::UnicodeSet a;
     for (const auto & v : accumulatedValues) {
         int e = baseObj->GetPropertyValueEnumCode(v);
@@ -162,7 +161,6 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::NumericPropertyObject 
     engine.setRecordBreak(grep::GrepRecordBreakKind::LF);
     engine.grepCodeGen(pattern);
     engine.doGrep(propObj->mStringBuffer, propObj->mBufSize, accum);
-    //grepBuffer(pattern, mStringBuffer, mBufSize, &accum);
     return accum.getAccumulatedSet();
 }
 
@@ -183,7 +181,7 @@ const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::StringPropertyObject *
 }
 
 const UCD::UnicodeSet GetCodepointSetMatchingPattern(UCD::StringOverridePropertyObject * propObj, re::RE * pattern) {
-    UCD::UnicodeSet base_set = GetCodepointSetMatchingPattern(UCD::getPropertyObject(propObj->mBaseProperty), pattern) 
+    UCD::UnicodeSet base_set = GetCodepointSetMatchingPattern(UCD::getPropertyObject(propObj->mBaseProperty), pattern)
                              - propObj->mOverriddenSet;
     SetByLineNumberAccumulator accum(propObj->mExplicitCps, UCD::UnicodeSet());
     CPUDriver driver("driver");

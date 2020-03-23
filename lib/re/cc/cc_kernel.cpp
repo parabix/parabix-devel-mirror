@@ -17,12 +17,37 @@ using namespace pablo;
 using namespace re;
 using namespace llvm;
 
-// ccNameStr, std::vector<re::CC *>{cc}, ByteStream, ccStream
+inline std::string signature(const std::vector<re::CC *> & ccs) {
+    if (LLVM_UNLIKELY(ccs.empty())) {
+        return "[]";
+    } else {
+        std::string tmp;
+        raw_string_ostream out(tmp);
+        char joiner = '[';
+        for (const auto & set : ccs) {
+            out << joiner;
+            set->print(out);
+            joiner = ',';
+        }
+        out << ']';
+        return out.str();
+    }
+}
+
+CharacterClassesSignature::CharacterClassesSignature(const std::vector<CC *> &ccs, StreamSet * source, Scalar * signalNullObject)
+: mSignature(std::to_string(source->getNumElements()) + "x" +
+             std::to_string(source->getFieldWidth()) + "_" + signature(ccs) +
+             (signalNullObject ? "_abort_on_null" : "")) {
+}
+
+StringRef CharacterClassKernelBuilder::getSignature() const {
+    return mSignature;
+}
 
 CharacterClassKernelBuilder::CharacterClassKernelBuilder(
-        BuilderRef b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * sourceStream, StreamSet * ccStream, Scalar * signalNullObject)
-: PabloKernel(b, ccSetName + std::to_string(sourceStream->getNumElements()) + "x" + std::to_string(sourceStream->getFieldWidth())
-                           + (signalNullObject ? "_abort_on_null" : ""),
+        BuilderRef b, std::vector<re::CC *> charClasses, StreamSet * sourceStream, StreamSet * ccStream, Scalar * signalNullObject)
+: CharacterClassesSignature(charClasses, sourceStream, signalNullObject),
+  PabloKernel(b, "ccK" + getStringHash(mSignature),
 // input
 {Binding{"sourceStream", sourceStream}},
 // output

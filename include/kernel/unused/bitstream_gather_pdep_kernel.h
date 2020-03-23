@@ -11,8 +11,6 @@ namespace kernel {
 class BitStreamGatherPDEPKernel final : public MultiBlockKernel {
 public:
     BitStreamGatherPDEPKernel(BuilderRef b, const unsigned numberOfStream = 8, std::string name = "BitStreamGatherPDEPKernel");
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 private:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final;
 private:

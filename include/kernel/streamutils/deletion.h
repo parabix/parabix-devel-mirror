@@ -47,8 +47,6 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
 class DeletionKernel final : public BlockOrientedKernel {
 public:
     DeletionKernel(BuilderRef b, unsigned fw, unsigned streamCount);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
     void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;
@@ -63,8 +61,6 @@ public:
     FieldCompressKernel(BuilderRef b,
                         StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
                         Scalar * inputBase, unsigned fieldWidth = 64);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
@@ -75,8 +71,6 @@ private:
 class PEXTFieldCompressKernel final : public MultiBlockKernel {
 public:
     PEXTFieldCompressKernel(BuilderRef b, unsigned fw, unsigned streamCount);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfStrides) override;
 private:
@@ -94,9 +88,6 @@ public:
                          , StreamSet * source
                          , StreamSet * compressedOutput
                          , const unsigned FieldWidth = sizeof(size_t) * 8);
-
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) override;
 private:
@@ -115,8 +106,6 @@ public:
                                , StreamSet * selectors, StreamSet * inputStreamSet
                                , const std::vector<StreamSet *> & outputs
                                , unsigned PEXTWidth = sizeof(size_t) * 8);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfBlocks) override;
 private:
@@ -131,8 +120,6 @@ private:
 class DeleteByPEXTkernel final : public BlockOrientedKernel {
 public:
     DeleteByPEXTkernel(BuilderRef b, unsigned fw, unsigned streamCount, unsigned PEXT_width = sizeof(size_t) * 8);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
     void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;
@@ -147,8 +134,6 @@ private:
 class SwizzledBitstreamCompressByCount final : public BlockOrientedKernel {
 public:
     SwizzledBitstreamCompressByCount(BuilderRef b, unsigned bitStreamCount, unsigned fieldWidth = sizeof(size_t) * 8);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
     void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) override;

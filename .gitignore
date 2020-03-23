@@ -25,4 +25,9 @@ llvm-[0-9]*.src
 # Don't track UCD files
 UCD-scripts/UCD-*
 UCD-scripts/generated*
+#
+# Don't track tex generated files
+*.log
+*.aux
+*.bcf
 

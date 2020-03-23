@@ -449,7 +449,7 @@ std::string InsertString(StreamSet * mask, InsertPosition p) {
     return s + (p == InsertPosition::Before ? "Before" : "After");
 }
 
-class UnitInsertionExtractionMasks : public BlockOrientedKernel {
+class UnitInsertionExtractionMasks final : public BlockOrientedKernel {
 public:
     UnitInsertionExtractionMasks(BuilderRef b,
                                  StreamSet * insertion_mask, StreamSet * stream01, StreamSet * valid01, InsertPosition p = InsertPosition::Before)
@@ -459,18 +459,18 @@ public:
         {}, {},
         {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"}}),
     mInsertPos(p) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef b) override;
     void generateFinalBlockMethod(BuilderRef b, llvm::Value * const remainingBytes) override;
-    InsertPosition mInsertPos;
+private:
+    const InsertPosition mInsertPos;
 };
 
 void UnitInsertionExtractionMasks::generateDoBlockMethod(BuilderRef b) {
     Value * fileExtentMask = b->CreateNot(b->getScalarField("EOFmask"));
     Value * insertion_mask = b->loadInputStreamBlock("insertion_mask", b->getSize(0), b->getSize(0));
-    for (unsigned i = 1; i < getInputStreamSet("insertion_mask")->getNumElements(); i++) {
+    const auto n = b->getInputStreamSet("insertion_mask")->getNumElements();
+    for (unsigned i = 1; i < n; i++) {
         insertion_mask = b->CreateOr(insertion_mask, b->loadInputStreamBlock("insertion_mask", b->getSize(i), b->getSize(0)));
     }
     Constant * mask01 = nullptr;
@@ -495,7 +495,7 @@ void UnitInsertionExtractionMasks::generateFinalBlockMethod(BuilderRef b, Value 
     // Standard Pablo convention for final block processing: set a bit marking
     // the position just past EOF, as well as a mask marking all positions past EOF.
     b->setScalarField("EOFmask", b->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(b);
+    RepeatDoBlockLogic(b);
 }
 
 StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, StreamSet * insertion_mask, InsertPosition p) {
@@ -507,16 +507,15 @@ StreamSet * UnitInsertionSpreadMask(const std::unique_ptr<ProgramBuilder> & P, S
     return spread_mask;
 }
 
-class UGT_Kernel : public pablo::PabloKernel {
+class UGT_Kernel final : public pablo::PabloKernel {
 public:
     UGT_Kernel(BuilderRef b, StreamSet * bixnum, unsigned immediate, StreamSet * result) :
     pablo::PabloKernel(b, "ugt_" + std::to_string(immediate) + "_" + std::to_string(bixnum->getNumElements()),
                 {Binding{"bixnum", bixnum}}, {Binding{"result", result}}), mTestVal(immediate) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
+protected:
     void generatePabloMethod() override;
 private:
-    unsigned mTestVal;
+    const unsigned mTestVal;
 };
 
 void UGT_Kernel::generatePabloMethod() {
@@ -527,7 +526,7 @@ void UGT_Kernel::generatePabloMethod() {
     pb.createAssign(pb.createExtract(output, 0), bnc.UGT(bixnum, mTestVal));
 }
 
-class SpreadMaskStep : public pablo::PabloKernel {
+class SpreadMaskStep final : public pablo::PabloKernel {
 public:
     SpreadMaskStep(BuilderRef b,
                    StreamSet * bixnum, StreamSet * result, InsertPosition p = InsertPosition::Before) :
@@ -535,10 +534,9 @@ public:
                 {Binding{"bixnum", bixnum, FixedRate(1), LookAhead(1)}},
                 {Binding{"result", result}}), mInsertPos(p) {}
 protected:
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
-    InsertPosition mInsertPos;
+private:
+    const InsertPosition mInsertPos;
 };
 
 void SpreadMaskStep::generatePabloMethod() {

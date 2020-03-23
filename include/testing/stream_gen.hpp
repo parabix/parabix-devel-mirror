@@ -205,10 +205,12 @@ struct text_decoder {
     }
 };
 
+/*
 constexpr uint8_t rev_hex_table[] = {
     0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
     0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf
 };
+*/
 
 /**
  * A decoder for converting a string of hexadecimal digits into a buffer.
@@ -228,8 +230,13 @@ struct hex_decoder {
         int counter = 0;
         size_t len = 0;
         uint8_t builder = 0;
-        ssn::ast::walk(node, [&](uint8_t v) {
-            builder |= rev_hex_table[(int) v] << (counter * 4);
+        ssn::ast::walk(node, [&](const uint8_t v) {
+            // Not sure what rev_hex_table is for here? It just swaps one legal
+            // hex range digit for another? Makes it harder to understand the
+            // problem if a test case fails.
+
+            // builder |= rev_hex_table[static_cast<unsigned>(v)] << (counter * 4);
+            builder |= v << (counter * 4);
             counter++;
             len++;
             if (counter == 2) {

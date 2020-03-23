@@ -22,7 +22,7 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     TerminationGraph G(PipelineOutput + 1);
 
     for (unsigned consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
-        for (const auto & e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
+        for (const auto e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
             const auto buffer = source(e, mBufferGraph);
             const auto producer = parent(buffer, mBufferGraph);
             const BufferRateData & rd = mBufferGraph[e];
@@ -35,9 +35,9 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
     }
 
     for (unsigned consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
-        for (const auto & relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
+        for (const auto relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
             const auto r = source(relationship, mScalarGraph);
-            for (const auto & producer : make_iterator_range(in_edges(r, mScalarGraph))) {
+            for (const auto producer : make_iterator_range(in_edges(r, mScalarGraph))) {
                 const auto k = source(producer, mScalarGraph);
                 assert ("cannot occur" && k != PipelineOutput);
                 add_edge(k, PipelineOutput, G);
@@ -109,33 +109,18 @@ TerminationGraph PipelineCompiler::makeTerminationGraph() {
  * @brief addTerminationProperties
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const unsigned kernel) {
-    mPipelineKernel->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(kernel));
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief initiallyTerminated
- ** ------------------------------------------------------------------------------------------------------------- */
-inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
-    b->setKernel(mPipelineKernel);
-    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
-    b->setKernel(mKernel);
-    Value * signal = b->CreateLoad(ptr, true);
-
-
-
-    mTerminationSignals[mKernelIndex] = signal;
-    mTerminatedInitially = signal;
-    return hasKernelTerminated(b, mKernelIndex);
+    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(kernel));
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief hasKernelTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const unsigned kernel, const bool normally) const {
+Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const size_t kernel, const bool normally) const {
     // any pipeline input streams are considered produced by the P_{in} vertex.
-    if (LLVM_UNLIKELY(kernel == PipelineInput || kernel == PipelineOutput)) {
-        return mPipelineKernel->isFinal();
+    if (LLVM_UNLIKELY(kernel == PipelineInput)) {
+        return isFinal();
     } else {
+        assert (kernel != PipelineOutput);
         Value * const terminated = mTerminationSignals[kernel];
         if (normally) {
             Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
@@ -152,7 +137,7 @@ Value * PipelineCompiler::hasKernelTerminated(BuilderRef b, const unsigned kerne
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
 
-    Value * hard = b->getFalse();
+    Value * hard = mIsFinal;
     Value * soft = b->getTrue();
 
     Constant * const unterminated = getTerminationSignal(b, TerminationSignal::None);
@@ -180,7 +165,7 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
-Constant * PipelineCompiler::getTerminationSignal(BuilderRef b, const TerminationSignal type) {
+/* static */ Constant * PipelineCompiler::getTerminationSignal(BuilderRef b, const TerminationSignal type) {
     return b->getSize(static_cast<unsigned>(type));
 }
 
@@ -188,7 +173,8 @@ Constant * PipelineCompiler::getTerminationSignal(BuilderRef b, const Terminatio
  * @brief signalAbnormalTermination
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::signalAbnormalTermination(BuilderRef b) {
-    mTerminatedSignalPhi->addIncoming(mTerminatedExplicitly, b->GetInsertBlock());
+    Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
+    mTerminatedSignalPhi->addIncoming(aborted, b->GetInsertBlock());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -227,13 +213,65 @@ void PipelineCompiler::updateTerminationSignal(Value * const signal) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initiallyTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
+    Value * const signal = readTerminationSignal(b);
+    updateTerminationSignal(signal);
+    mTerminatedInitially = signal;
+    return hasKernelTerminated(b, mKernelIndex);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief initiallyTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline Value * PipelineCompiler::readTerminationSignal(BuilderRef b) {
+    Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
+    return b->CreateLoad(ptr, true);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief setTerminated
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::setTerminated(BuilderRef b, Value * const signal) {
-    b->setKernel(mPipelineKernel);
+void PipelineCompiler::writeTerminationSignal(BuilderRef b, Value * const signal) {
     Value * const ptr = b->getScalarFieldPtr(TERMINATION_PREFIX + std::to_string(mKernelIndex));
     b->CreateStore(signal, ptr, true);
-    b->setKernel(mKernel);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief loadItemCountsOfCountableRateStreams
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRef b) {
+
+    auto isCountableType = [this](const Value * const ptr, const Binding & binding) {
+        if (ptr == nullptr || mKernelIsInternallySynchronized) {
+            return false;
+        }
+        return isCountable(binding);
+    };
+
+    Vec<Value *> finalProcessed(mProcessedItemCount);
+    Vec<Value *> finalProduced(mProducedItemCount);
+
+    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        if (isCountableType(mReturnedProcessedItemCountPtr[i], getInputBinding(i))) {
+            finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
+        }
+    }
+    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        if (isCountableType(mReturnedProducedItemCountPtr[i], getOutputBinding(i))) {
+            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
+        }
+    }
+    BasicBlock * const exitBlock = b->GetInsertBlock();
+    for (unsigned i = 0; i < numOfInputs; i++) {
+        mFinalProcessedPhi[i]->addIncoming(finalProcessed[i], exitBlock);
+    }
+    for (unsigned i = 0; i < numOfOutputs; i++) {
+        mFinalProducedPhi[i]->addIncoming(finalProduced[i], exitBlock);
+    }
 }
 
 }

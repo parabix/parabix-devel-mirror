@@ -25,16 +25,16 @@ using namespace llvm;
 namespace kernel {
 
 using PortType = Kernel::PortType;
-using StreamPort = Kernel::StreamSetPort;
+using StreamSetPort = Kernel::StreamSetPort;
 using AttrId = Attribute::KindId;
 using RateId = ProcessingRate::KindId;
-using RateValue = ProcessingRate::RateValue;
+using Rational = ProcessingRate::Rational;
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void MultiBlockKernel::generateKernelMethod(BuilderRef b) {
-    generateMultiBlockLogic(b, b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides));
+    generateMultiBlockLogic(b, b->CreateSelect(b->isFinal(), b->getSize(1), b->getNumOfStrides()));
 }
 
 // MULTI-BLOCK KERNEL CONSTRUCTOR

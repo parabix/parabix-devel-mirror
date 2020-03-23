@@ -91,14 +91,18 @@ void editdCPUKernel::generateDoBlockMethod(BuilderRef idb) {
 
 void editdCPUKernel::generateFinalBlockMethod(BuilderRef idb, Value * remainingBytes) {
     idb->setScalarField("EOFmask", idb->bitblock_mask_from(remainingBytes));
-    CreateDoBlockMethodCall(idb);
+    RepeatDoBlockLogic(idb);
 }
 
+
+
 editdCPUKernel::editdCPUKernel(BuilderRef b,
-                               const unsigned patternLen, const unsigned groupSize,
+                               const unsigned editDistance,
+                               const unsigned patternLen,
+                               const unsigned groupSize,
                                Scalar * const pattStream,
                                StreamSet * const CCStream, StreamSet * const ResultStream)
-: BlockOrientedKernel(b, "editd_cpu" + std::to_string(patternLen) + "x" + std::to_string(groupSize),
+: BlockOrientedKernel(b, "EditDistanceCPU" + std::to_string(patternLen) + ":" + std::to_string(groupSize),
 // input stream
 {Binding{"CCStream", CCStream}},
 // output stream
@@ -109,7 +113,10 @@ editdCPUKernel::editdCPUKernel(BuilderRef b,
 {},
 // internal scalars
 {InternalScalar{ScalarType::NonPersistent, b->getBitBlockType(), "EOFmask"},
- InternalScalar{ScalarType::Internal, ArrayType::get(b->getBitBlockType(), (patternLen * groupSize * 4 * ResultStream->getNumElements())), "strideCarry"}}) {
+ InternalScalar{ScalarType::Internal, ArrayType::get(b->getBitBlockType(), (patternLen * groupSize * 4 * ResultStream->getNumElements())), "strideCarry"}})
+, mEditDistance(editDistance)
+, mPatternLen(patternLen)
+, mGroupSize(groupSize) {
 
 }
 

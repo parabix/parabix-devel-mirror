@@ -8,6 +8,9 @@
 #include <boost/filesystem.hpp>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
+#include <re/adt/adt.h>
+#include <re/unicode/resolve_properties.h>
+#include <re/ucd/ucd_compiler.hpp>
 #include <kernel/core/kernel_builder.h>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/basis/s2p_kernel.h>
@@ -17,8 +20,9 @@
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
-#include <pablo/pablo_compiler.h>
 #include <pablo/pablo_kernel.h>
+#include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
 #include <toolchain/pablo_toolchain.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
@@ -76,6 +80,7 @@ uint64_t TotalBytes = 0;
 using namespace pablo;
 using namespace kernel;
 using namespace cc;
+using namespace re;
 
 //  The callback routine that records counts in progress.
 //
@@ -95,8 +100,6 @@ extern "C" {
 class WordCountKernel final: public pablo::PabloKernel {
 public:
     WordCountKernel(BuilderRef b, StreamSet * const countable);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -118,6 +121,85 @@ void WordCountKernel::generatePabloMethod() {
     } else {
         ccc = make_unique<cc::Direct_CC_Compiler>(getEntryScope(), pb.createExtract(getInput(0), pb.getInteger(0)));
     }
+    
+    PabloAST * u8final = nullptr;
+    if (CountWords || CountChars) {
+        Zeroes * const ZEROES = pb.createZeroes();
+        PabloAST * const u8pfx = ccc->compileCC(re::makeByte(0xC0, 0xFF));
+
+        Var * const nonFinal = pb.createVar("nonFinal", u8pfx);
+        Var * const u8invalid = pb.createVar("u8invalid", ZEROES);
+        Var * const valid_pfx = pb.createVar("valid_pfx", u8pfx);
+
+        auto it = pb.createScope();
+        pb.createIf(u8pfx, it);
+        PabloAST * const u8pfx2 = ccc->compileCC(re::makeByte(0xC2, 0xDF), it);
+        PabloAST * const u8pfx3 = ccc->compileCC(re::makeByte(0xE0, 0xEF), it);
+        PabloAST * const u8pfx4 = ccc->compileCC(re::makeByte(0xF0, 0xF4), it);
+
+        //
+        // Two-byte sequences
+        Var * const anyscope = it.createVar("anyscope", ZEROES);
+        auto it2 = it.createScope();
+        it.createIf(u8pfx2, it2);
+        it2.createAssign(anyscope, it2.createAdvance(u8pfx2, 1));
+
+
+        //
+        // Three-byte sequences
+        Var * const EF_invalid = it.createVar("EF_invalid", ZEROES);
+        auto it3 = it.createScope();
+        it.createIf(u8pfx3, it3);
+        PabloAST * const u8scope32 = it3.createAdvance(u8pfx3, 1);
+        it3.createAssign(nonFinal, it3.createOr(nonFinal, u8scope32));
+        PabloAST * const u8scope33 = it3.createAdvance(u8pfx3, 2);
+        PabloAST * const u8scope3X = it3.createOr(u8scope32, u8scope33);
+        it3.createAssign(anyscope, it3.createOr(anyscope, u8scope3X));
+
+        PabloAST * const advE0 = it3.createAdvance(ccc->compileCC(re::makeByte(0xE0), it3), 1, "advEO");
+        PabloAST * const range80_9F = ccc->compileCC(re::makeByte(0x80, 0x9F), it3);
+        PabloAST * const E0_invalid = it3.createAnd(advE0, range80_9F, "E0_invalid");
+
+        PabloAST * const advED = it3.createAdvance(ccc->compileCC(re::makeByte(0xED), it3), 1, "advED");
+        PabloAST * const rangeA0_BF = ccc->compileCC(re::makeByte(0xA0, 0xBF), it3);
+        PabloAST * const ED_invalid = it3.createAnd(advED, rangeA0_BF, "ED_invalid");
+
+        PabloAST * const EX_invalid = it3.createOr(E0_invalid, ED_invalid);
+        it3.createAssign(EF_invalid, EX_invalid);
+
+        //
+        // Four-byte sequences
+        auto it4 = it.createScope();
+        it.createIf(u8pfx4, it4);
+        PabloAST * const u8scope42 = it4.createAdvance(u8pfx4, 1, "u8scope42");
+        PabloAST * const u8scope43 = it4.createAdvance(u8scope42, 1, "u8scope43");
+        PabloAST * const u8scope44 = it4.createAdvance(u8scope43, 1, "u8scope44");
+        PabloAST * const u8scope4nonfinal = it4.createOr(u8scope42, u8scope43);
+        it4.createAssign(nonFinal, it4.createOr(nonFinal, u8scope4nonfinal));
+        PabloAST * const u8scope4X = it4.createOr(u8scope4nonfinal, u8scope44);
+        it4.createAssign(anyscope, it4.createOr(anyscope, u8scope4X));
+        PabloAST * const F0_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(re::makeByte(0xF0), it4), 1), ccc->compileCC(re::makeByte(0x80, 0x8F), it4));
+        PabloAST * const F4_invalid = it4.createAnd(it4.createAdvance(ccc->compileCC(re::makeByte(0xF4), it4), 1), ccc->compileCC(re::makeByte(0x90, 0xBF), it4));
+        PabloAST * const FX_invalid = it4.createOr(F0_invalid, F4_invalid);
+        it4.createAssign(EF_invalid, it4.createOr(EF_invalid, FX_invalid));
+
+        //
+        // Invalid cases
+        PabloAST * const legalpfx = it.createOr(it.createOr(u8pfx2, u8pfx3), u8pfx4);
+        //  Any scope that does not have a suffix byte, and any suffix byte that is not in
+        //  a scope is a mismatch, i.e., invalid UTF-8.
+        PabloAST * const u8suffix = ccc->compileCC("u8suffix", re::makeByte(0x80, 0xBF), it);
+        PabloAST * const mismatch = it.createXor(anyscope, u8suffix);
+        //
+        PabloAST * const pfx_invalid = it.createXor(valid_pfx, legalpfx);
+        it.createAssign(u8invalid, it.createOr(pfx_invalid, it.createOr(mismatch, EF_invalid)));
+        PabloAST * const u8valid = it.createNot(u8invalid, "u8valid");
+        //
+        //
+        it.createAssign(nonFinal, it.createAnd(nonFinal, u8valid));
+
+        u8final = pb.createInFile(pb.createNot(nonFinal));
+    }
 
     //  output: 3 counters
     Var * lc = getOutputScalarVar("lineCount");
@@ -129,20 +211,24 @@ void WordCountKernel::generatePabloMethod() {
         pb.createAssign(lc, pb.createCount(LF));
     }
     if (CountWords) {
-        PabloAST * WS = ccc->compileCC(re::makeCC(re::makeByte(0x09, 0x0D), re::makeByte(0x20)));
-        PabloAST * wordChar = pb.createNot(WS);
+        re::Name * WS_name = re::makeName("space", re::Name::Type::UnicodeProperty);
+        WS_name->setDefinition(re::makeCC(UCD::resolveUnicodeSet(WS_name), &cc::Unicode));
+        UCD::UCDCompiler unicodeCompiler(*ccc.get());
+        UCD::UCDCompiler::NameMap nameMap;
+        nameMap.emplace(WS_name, nullptr);
+        unicodeCompiler.generateWithDefaultIfHierarchy(nameMap, pb);
+        auto f = nameMap.find(WS_name);
+        if (f == nameMap.end()) llvm::report_fatal_error("Cannot resolve whitespace property");
+        PabloAST * WS = f-> second;
+        //PabloAST * WS = ccc->compileCC(re::makeCC(re::re::makeByte(0x09, 0x0D), re::re::makeByte(0x20)));
+        PabloAST * wordChar = pb.createAnd(pb.createNot(WS), u8final, "wordChar");
         // WS_follow_or_start = 1 past WS or at start of file
-        PabloAST * WS_follow_or_start = pb.createNot(pb.createAdvance(wordChar, 1));
-        PabloAST * wordStart = pb.createInFile(pb.createAnd(wordChar, WS_follow_or_start));
+        PabloAST * WS_follow_or_start = pb.createNot(pb.createIndexedAdvance(wordChar, u8final, 1), "WS_follow_or_start");
+        PabloAST * wordStart = pb.createInFile(pb.createAnd(wordChar, WS_follow_or_start), "wordStart");
         pb.createAssign(wc, pb.createCount(wordStart));
     }
     if (CountChars) {
-        //
-        // FIXME: This correctly counts characters assuming valid UTF-8 input.  But what if input is
-        // not UTF-8, or is not valid?
-        //
-        PabloAST * u8Begin = ccc->compileCC(re::makeCC(re::makeByte(0, 0x7F), re::makeByte(0xC2, 0xF4)));
-        pb.createAssign(cc, pb.createCount(u8Begin));
+        pb.createAssign(cc, pb.createCount(u8final));
     }
 }
 
@@ -172,10 +258,10 @@ WordCountFunctionType wcPipelineGen(CPUDriver & pxDriver) {
 
     Kernel * const wck = P->CreateKernelCall<WordCountKernel>(CountableStream);
 
-    Scalar * const lineCount = wck->getOutputScalar("lineCount");
-    Scalar * const wordCount = wck->getOutputScalar("wordCount");
-    Scalar * const charCount = wck->getOutputScalar("charCount");
-    Scalar * const fileSize = mmapK->getOutputScalar("fileItems");
+    Scalar * const lineCount = wck->getOutputScalarAt(0);
+    Scalar * const wordCount = wck->getOutputScalarAt(1);
+    Scalar * const charCount = wck->getOutputScalarAt(2);
+    Scalar * const fileSize = mmapK->getOutputScalarAt(0);
 
     P->CreateCall("record_counts", record_counts, {lineCount, wordCount, charCount, fileSize, fileIdx});
 

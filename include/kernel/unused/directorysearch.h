@@ -14,10 +14,6 @@ public:
                     StreamSet * const directoryNameStream, StreamSet * const fileDirectoryStream, StreamSet * const fileNameStream,
                     const unsigned filesPerSegment = 1024, const bool recursive = true, const bool includeHidden = false);
 
-    bool isCachable() const override { return true; }
-
-    bool hasSignature() const override { return false; }
-
     void linkExternalMethods(BuilderRef b) override;
 
     void generateInitializeMethod(BuilderRef b) override;

@@ -16,7 +16,7 @@ const std::string CURRENT_COUNT = "currentCount";
 const std::string POSITIVE_COUNT = "positiveCount";
 const std::string NEGATIVE_COUNT = "negativeCount";
 
-using RateValue = ProcessingRate::RateValue;
+using Rational = ProcessingRate::Rational;
 
 bool isNotConstantOne(Value * const value) {
     return !isa<Constant>(value) || !cast<Constant>(value)->isOneValue();
@@ -38,9 +38,9 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
     Constant * const NEG_ONE = ConstantExpr::getNeg(ONE);
     IntegerType * const sizeTy = b->getSizeTy();
 
-    const Binding & input = getInputStreamSetBinding(INPUT);
+    const Binding & input = b->getInputStreamSetBinding(INPUT);
     const ProcessingRate & rate = input.getRate();
-    const RateValue & rv = rate.getRate();
+    const Rational & rv = rate.getRate();
     assert (rv.denominator() == 1);
     const auto inputWidth = rv.numerator();
     const auto blockWidth = b->getBitBlockWidth();
@@ -66,7 +66,7 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
 
     if (LLVM_LIKELY(mType == PopCountType::POSITIVE || mType == PopCountType::NEGATIVE)) {
         Value * const array = b->getRawOutputPointer(OUTPUT_STREAM, position);
-        Value * const count = b->CreateLoad(b->CreateGEP(array, NEG_ONE));
+        Value * const count = b->CreateLoad(b->CreateInBoundsGEP(array, NEG_ONE));
         if (LLVM_LIKELY(mType == PopCountType::POSITIVE)) {
             positiveArray = array;
             initialPositiveCount = count;
@@ -76,9 +76,9 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         }
     } else { // if (mType == PopCountType::BOTH) {
         positiveArray = b->getRawOutputPointer(POSITIVE_STREAM, position);
-        initialPositiveCount = b->CreateLoad(b->CreateGEP(positiveArray, NEG_ONE));
+        initialPositiveCount = b->CreateLoad(b->CreateInBoundsGEP(positiveArray, NEG_ONE));
         negativeArray = b->getRawOutputPointer(NEGATIVE_STREAM, position);
-        initialNegativeCount = b->CreateLoad(b->CreateGEP(negativeArray, NEG_ONE));
+        initialNegativeCount = b->CreateLoad(b->CreateInBoundsGEP(negativeArray, NEG_ONE));
     }
 
     BasicBlock * const entry = b->GetInsertBlock();
@@ -178,7 +178,7 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
     if (positiveArray) {
         positivePartialSum = b->CreateAdd(positiveSum, sum);
         positiveSum->addIncoming(positivePartialSum, popCountLoop);
-        Value * const ptr = b->CreateGEP(positiveArray, index);
+        Value * const ptr = b->CreateInBoundsGEP(positiveArray, index);
         b->CreateStore(positivePartialSum, ptr);
     }
 
@@ -191,7 +191,7 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         }
         negativePartialSum = b->CreateAdd(negativeSum, negSum);
         negativeSum->addIncoming(negativePartialSum, popCountLoop);
-        Value * const ptr = b->CreateGEP(negativeArray, index);
+        Value * const ptr = b->CreateInBoundsGEP(negativeArray, index);
         b->CreateStore(negativePartialSum, ptr);
     }
 

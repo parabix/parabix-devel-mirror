@@ -48,9 +48,6 @@ protected:
         ScanWordContext(BuilderRef b, unsigned strideWidth);
     };
 
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
-
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) final override;
 
     virtual void initialize(BuilderRef b) { }

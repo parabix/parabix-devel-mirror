@@ -62,23 +62,26 @@ extern const char * ObjectCacheDir;
 extern unsigned CacheDaysLimit;  // set from command line
 extern int FreeCallBisectLimit;  // set from command line
 extern llvm::CodeGenOpt::Level OptLevel;  // set from command line
+extern llvm::CodeGenOpt::Level BackEndOptLevel;  // set from command line
 const unsigned LaneWidth = 64;
 extern unsigned BlockSize;  // set from command line
 extern unsigned SegmentSize; // set from command line
 extern unsigned BufferSegments;
-extern int ThreadNum;
+extern unsigned TaskThreads;
+extern unsigned SegmentThreads;
 extern unsigned ScanBlocks;
 extern bool EnableObjectCache;
 extern bool TraceObjectCache;
-extern bool NVPTX;
 extern unsigned GroupNum;
 extern std::string ProgramName;
 extern llvm::TargetOptions target_Options;
+extern bool TimeKernelsIsEnabled;
 
 void ParseCommandLineOptions(int argc, const char *const *argv, std::initializer_list<const llvm::cl::OptionCategory *> hiding = {});
 
 void AddParabixVersionPrinter();
 
+void setTaskThreads(unsigned taskThreads);
 }
 
 #endif

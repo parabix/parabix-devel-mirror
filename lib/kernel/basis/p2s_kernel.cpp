@@ -49,7 +49,7 @@ inline void p2s(BuilderRef iBuilder, Value * p[], Value * s[]) {
 }
 
 void P2SKernel::generateDoBlockMethod(BuilderRef b) {
-    const auto numOfStreams = getInputStreamSet("basisBits")->getNumElements();
+    const auto numOfStreams = b->getInputStreamSet("basisBits")->getNumElements();
     Value * p_bitblock[8];
     // todo: generalize this to the nearest pow 2?
     for (unsigned i = 0; i < 8; i++) {

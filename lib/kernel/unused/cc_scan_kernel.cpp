@@ -60,7 +60,7 @@ Function * CCScanKernel::generateScanWordRoutine(BuilderRef iBuilder) const {
     basePos->setName("basePos");
 
     FunctionType * fTy = FunctionType::get(iBuilder->getVoidTy(), {T, iBuilder->getInt32Ty()}, false);
-    Function * const matchProcessor = Function::Create(fTy, Function::InternalLinkage, "wrapped_report_pos", m);
+    Function * const matchProcessor = Function::Create(fTy, Function::ExternalLinkage, "wrapped_report_pos", m);
 
     BasicBlock * entryBlock = BasicBlock::Create(m->getContext(), "entry", scanFunc, 0);
 

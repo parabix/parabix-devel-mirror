@@ -5,33 +5,26 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief reset
- ** ------------------------------------------------------------------------------------------------------------- */
-template <typename Vec>
-inline void reset(Vec & vec, const unsigned n) {
-    vec.resize(n);
-    std::fill_n(vec.begin(), n, nullptr);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief beginKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index) {
     assert (index >= FirstKernel && index <= LastKernel);
     mKernelIndex = index;
     mKernel = getKernel(index);
-    b->setKernel(mPipelineKernel);
+    mKernelHandle = nullptr;
     if (LLVM_LIKELY(mKernel->isStateful())) {
-        Value * handle = nullptr;
-        if (mKernel->hasFamilyName()) {
-            handle = b->getScalarField(makeKernelName(index));
-            handle = b->CreateBitCast(handle, mKernel->getSharedStateType()->getPointerTo());
-        } else {
-            handle = b->getScalarField(makeKernelName(index));
+        Value * handle = b->getScalarField(makeKernelName(index));
+        if (LLVM_UNLIKELY(mKernel->externallyInitialized())) {
+            handle = b->CreatePointerCast(handle, mKernel->getSharedStateType()->getPointerTo());
         }
-        mKernel->setHandle(b, handle);
+        mKernelHandle = handle;
     }
-    b->setKernel(mKernel);
+    if (LLVM_UNLIKELY(mCheckAssertions)) {
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << mKernelIndex << "." << mKernel->getName();
+        mKernelAssertionName = b->GetString(out.str());
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -67,11 +60,11 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             new StoreInst(ConstantPointerNull::get(int8PtrTy), bufferStorage, nextNode);
             mTruncatedInputBuffer.push_back(bufferStorage);
 
-            const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
+            const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Input, i});
             const StreamSetBuffer * const buffer = getInputBuffer(i);
             const auto itemWidth = getItemWidth(buffer->getBaseType());
             Constant * const ITEM_WIDTH = b->getSize(itemWidth);
-            const RateValue stridesPerBlock(mKernel->getStride(), blockWidth);
+            const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
             const auto strideRate = rate.getRate() * stridesPerBlock;
             const auto stridesPerSegment = ceiling(strideRate); assert (stridesPerSegment >= 1);
             Constant * const STRIDES_PER_SEGMENT = b->getSize(stridesPerSegment);
@@ -97,7 +90,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             // the truncated input stream.
 
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + " truncating item count (" + std::to_string(itemWidth) + ") to ", accessibleItems[i]);
+            debugPrint(b, prefix + " truncating item count from %" PRIu64 " to %" PRIu64, mAccessibleInputItems[i], accessibleItems[i]);
             #endif
 
             // TODO: if we can prove that this will be the last kernel invocation that will ever touch this stream)
@@ -296,272 +289,6 @@ void PipelineCompiler::prepareLocalZeroExtendSpace(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeKernelCall
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeKernelCall(BuilderRef b) {
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-
-    mNumOfAddressableItemCount = 0;
-
-    // TODO: add MProtect to buffers and their handles.
-
-    // TODO: send in the # of output items we want in the external buffers
-
-
-
-    ArgVec args;
-    args.reserve(4 + (numOfInputs + numOfOutputs) * 4);
-    if (LLVM_LIKELY(mKernel->isStateful())) {
-        args.push_back(mKernel->getHandle()); assert (mKernel->getHandle());
-    }
-    if (LLVM_UNLIKELY(mKernel->hasThreadLocal())) {
-        args.push_back(b->CreateLoad(getThreadLocalHandlePtr(b, mKernelIndex)));
-    }
-
-    // If a kernel is internally synchronized, pass the segno to
-    // allow the kernel to initialize its current "position"
-    if (mKernel->hasAttribute(AttrId::InternallySynchronized)) {
-        args.push_back(mSegNo);
-    }
-    args.push_back(mNumOfLinearStrides); assert (mNumOfLinearStrides);
-
-    if (mFixedRateFactorPhi) {
-        args.push_back(mFixedRateFactorPhi);
-    }
-
-    RelationshipType prior_in{};
-
-    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
-        const BufferRateData & rt = mBufferGraph[e];
-        assert (rt.Port.Type == PortType::Input);
-        assert (prior_in < rt.Port);
-        prior_in = rt.Port;
-
-        if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
-
-            // calculate the deferred processed item count
-            PHINode * processed = nullptr;
-            bool deferred = false;
-
-            const auto i = rt.Port.Number;
-            if (mAlreadyProcessedDeferredPhi[i]) {
-                processed = mAlreadyProcessedDeferredPhi[i];
-                deferred = true;
-            } else {
-                processed = mAlreadyProcessedPhi[i];
-            }
-
-            const Binding & input = rt.Binding;
-            #ifndef NDEBUG
-            const auto buffer = source(e, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[buffer];
-            assert ("input buffer type mismatch?" && (input.getType() == bn.Buffer->getBaseType()));
-            #endif
-            args.push_back(mInputEpochPhi[i]);
-
-            mReturnedProcessedItemCountPtr[i] = addItemCountArg(b, input, deferred, processed, args);
-
-            if (LLVM_UNLIKELY(requiresItemCount(input))) {
-                // calculate how many linear items are from the *deferred* position
-                Value * inputItems = mLinearInputItemsPhi[i];
-                if (deferred) {
-                    Value * diff = b->CreateSub(mAlreadyProcessedPhi[i], mAlreadyProcessedDeferredPhi[i]);
-                    inputItems = b->CreateAdd(inputItems, diff);
-                }
-                args.push_back(inputItems); assert (inputItems);
-            }
-
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-                //args.push_back(getPositivePopCountArray(b, i));
-                assert (false);
-            }
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-                // args.push_back(getNegativePopCountArray(b, i));
-                assert (false);
-            }
-
-        }
-    }
-
-    const auto canTerminate = mKernel->canSetTerminateSignal();
-
-    RelationshipType prior_out{};
-    for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
-        const BufferRateData & rt = mBufferGraph[e];
-        assert (rt.Port.Reason == ReasonType::Explicit);
-        assert (rt.Port.Type == PortType::Output);
-        assert (prior_out < rt.Port);
-        prior_out = rt.Port;
-        const auto i = rt.Port.Number;
-
-        PHINode * const produced = mAlreadyProducedPhi[i];
-        const auto buffer = target(e, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[buffer];
-        const Binding & output = rt.Binding;
-
-        assert ("output buffer type mismatch?" && (output.getType() == bn.Buffer->getBaseType()));
-
-        if (LLVM_LIKELY(bn.Type != BufferType::Managed)) {
-            args.push_back(epoch(b, output, bn.Buffer, produced, nullptr));
-        }
-        mReturnedProducedItemCountPtr[i] = addItemCountArg(b, output, canTerminate, produced, args);
-        if (LLVM_LIKELY(bn.Type == BufferType::Managed)) {
-            args.push_back(mConsumedItemCount[i]); assert (mConsumedItemCount[i]);
-        } else if (LLVM_UNLIKELY(requiresItemCount(output))) {
-            args.push_back(mLinearOutputItemsPhi[i]);  assert (mLinearOutputItemsPhi[i]);
-        }
-    }
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mPipelineKernel->getHandle(), CBuilder::Protect::NONE);
-    }
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeKernelName(mKernelIndex);
-    b->CallPrintInt("* " + prefix + "_executing", mNumOfLinearStrides);
-    #endif
-
-    startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
-
-    Value * const doSegment = getDoSegmentFunction(b);
-    if (mRethrowException) {
-        BasicBlock * const invokeOk = b->CreateBasicBlock("", mKernelTerminationCheck);
-        mTerminatedExplicitly = b->CreateInvoke(doSegment, invokeOk, mRethrowException, args);
-        b->SetInsertPoint(invokeOk);
-    } else {
-        mTerminatedExplicitly = b->CreateCall(getDoSegmentFunction(b), args);
-    }
-
-    updateCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
-
-    mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStrides, mNumOfLinearStrides);
-    if (LLVM_LIKELY(!canTerminate)) {
-        mTerminatedExplicitly = getTerminationSignal(b, TerminationSignal::None);
-    }
-
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
-        b->CreateMProtect(mPipelineKernel->getHandle(), CBuilder::Protect::WRITE);
-    }
-
-    // calculate or read the item counts (assuming this kernel did not terminate)
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const Binding & input = getInputBinding(i);
-        const ProcessingRate & rate = input.getRate();
-        if (rate.isFixed() || rate.isPartialSum() || rate.isGreedy()) {
-            mProcessedItemCount[i] = b->CreateAdd(mAlreadyProcessedPhi[i], mLinearInputItemsPhi[i]);
-            if (mAlreadyProcessedDeferredPhi[i]) {
-                assert (mReturnedProcessedItemCountPtr[i]);
-                mProcessedDeferredItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
-                if (LLVM_UNLIKELY(mCheckAssertions)) {
-                    Value * const deferred = mProcessedDeferredItemCount[i];
-                    Value * const processed = mProcessedItemCount[i];
-                    Value * const isDeferred = b->CreateICmpULE(deferred, processed);
-                    b->CreateAssert(isDeferred, input.getName() +
-                                    ": deferred processed item count (%d) "
-                                    "exceeds non-deferred (%d)",
-                                    deferred, processed);
-                }
-                #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
-                b->CallPrintInt(prefix + "_processed_deferred'", mProcessedDeferredItemCount[i]);
-                #endif
-            }
-        } else if (rate.isBounded() || rate.isUnknown()) {
-            mProcessedItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
-        } else {
-            llvm_unreachable("unexpected input rate");
-        }
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Input, i});
-        b->CallPrintInt(prefix + "_processed'", mProcessedItemCount[i]);
-        #endif
-    }
-
-
-
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const Binding & output = getOutputBinding(i);
-        const ProcessingRate & rate = output.getRate();
-        if (rate.isFixed() || rate.isPartialSum()) {
-            mProducedItemCount[i] = b->CreateAdd(mAlreadyProducedPhi[i], mLinearOutputItemsPhi[i]);
-        } else if (rate.isBounded() || rate.isUnknown()) {
-            mProducedItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
-        } else {
-            llvm_unreachable("unexpected output rate");
-        }
-
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
-        b->CallPrintInt(prefix + "_produced'", mProducedItemCount[i]);
-        #endif
-    }
-
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addItemCountArg
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
-                                          const bool addressable,
-                                          PHINode * const itemCount,
-                                          ArgVec & args) {
-    const ProcessingRate & rate = binding.getRate();
-    if (LLVM_UNLIKELY(rate.isRelative())) {
-        return nullptr;
-    }
-    Value * ptr = nullptr;
-    if (addressable || isAddressable(binding)) {
-        if (LLVM_UNLIKELY(mNumOfAddressableItemCount == mAddressableItemCountPtr.size())) {
-            auto aic = b->CreateAllocaAtEntryPoint(b->getSizeTy());
-            mAddressableItemCountPtr.push_back(aic);
-        }
-        ptr = mAddressableItemCountPtr[mNumOfAddressableItemCount++];
-        b->CreateStore(itemCount, ptr);
-        args.push_back(ptr);
-    } else if (isCountable(binding)) {
-        args.push_back(itemCount);
-    }
-    return ptr;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief loadItemCountsOfCountableRateStreams
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::loadItemCountsOfCountableRateStreams(BuilderRef b) {
-
-    auto load = [](const Value * const ptr, const Binding & binding) {
-        if (ptr == nullptr) {
-            return false;
-        }
-        const ProcessingRate & rate = binding.getRate();
-        return rate.isFixed() || rate.isPartialSum();
-    };
-
-    const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        const Binding & input = getInputBinding(i);
-        if (load(mReturnedProcessedItemCountPtr[i], input)) {
-            mProcessedItemCount[i] = b->CreateLoad(mReturnedProcessedItemCountPtr[i]);
-        }
-    }
-    const auto numOfOutputs = getNumOfStreamOutputs(mKernelIndex);
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = getOutputBinding(i);
-        if (load(mReturnedProducedItemCountPtr[i], output)) {
-            mProducedItemCount[i] = b->CreateLoad(mReturnedProducedItemCountPtr[i]);
-        }
-    }
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        mFinalProcessedPhi[i]->addIncoming(mProcessedItemCount[i], exitBlock);
-    }
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        mFinalProducedPhi[i]->addIncoming(mProducedItemCount[i], exitBlock);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief clearUnwrittenOutputData
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
@@ -581,21 +308,11 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             // stream, any clearing of data is the responsibility of the owner.
             // Simply ignore any external buffers for the purpose of zeroing out
             // unnecessary data.
-
-            // NOTE: this does open up the potential for unexpected behaviour if
-            // an external stream is produced by this kernel but also read before
-            // leaving a nested pipeline since it will not be cleared until after
-            // it's left. This could leave unexpected data in the stream for
-            // the inner consumer and/or mean the data that the inner consumer
-            // processes will be inconsistent with the data the outer kernel sees.
-            // If this becomes an issue, it can be easily resolved by checking whether
-            // the stream has a local consumer and zero-ing it knowing that the outer
-            // kernel will do the same but will leave the stream in the same state.
             continue;
         }
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
-        const auto prefix = makeBufferName(mKernelIndex, StreamPort{PortType::Output, i});
+        const auto prefix = makeBufferName(mKernelIndex, StreamSetPort{PortType::Output, i});
         Value * const produced = mFinalProducedPhi[i];
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);
@@ -609,8 +326,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         }
 
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);
-        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
+        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelInsufficientIOExit);
+        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelInsufficientIOExit);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
         Value * const baseAddress = buffer->getBaseAddress(b);
         #ifdef PRINT_DEBUG_MESSAGES
@@ -647,8 +364,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
             Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_zeroFill_packStart", b->CreateSub(startInt, epochInt));
-            b->CallPrintInt(prefix + "_zeroFill_remainingPackBytes", remainingPackBytes);
+            debugPrint(b, prefix + "_zeroFill_packStart = %" PRIu64, b->CreateSub(startInt, epochInt));
+            debugPrint(b, prefix + "_zeroFill_remainingPackBytes = %" PRIu64, remainingPackBytes);
             #endif
             b->CreateMemZero(start, remainingPackBytes, blockWidth / 8);
         }
@@ -661,20 +378,20 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         b->SetInsertPoint(maskExit);
         // Zero out any blocks we could potentially touch
 
-        RateValue strideLength{0};
+        Rational strideLength{0};
         const auto bufferVertex = getOutputBufferVertex(i);
-        for (const auto & e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
+        for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
             const Binding & input = rd.Binding;
 
-            RateValue R{rd.Maximum};
+            Rational R{rd.Maximum};
             if (LLVM_UNLIKELY(input.hasLookahead())) {
                 R += input.getLookahead();
             }
             strideLength = std::max(strideLength, R);
         }
 
-        const auto blocksToZero = ceiling(strideLength * RateValue{1, blockWidth});
+        const auto blocksToZero = ceiling(strideLength * Rational{1, blockWidth});
 
         if (blocksToZero > 1) {
             Value * const nextBlockIndex = b->CreateAdd(blockIndex, ONE);
@@ -687,8 +404,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
             Value * const remainingBytes = b->CreateSub(endPtrInt, startPtrInt);
             #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_zeroFill_bufferStart", b->CreateSub(startPtrInt, epochInt));
-            b->CallPrintInt(prefix + "_zeroFill_remainingBufferBytes", remainingBytes);
+            debugPrint(b, prefix + "_zeroFill_bufferStart = %" PRIu64, b->CreateSub(startPtrInt, epochInt));
+            debugPrint(b, prefix + "_zeroFill_remainingBufferBytes = %" PRIu64, remainingBytes);
             #endif
             b->CreateMemZero(startPtr, remainingBytes, blockWidth / 8);
         }
@@ -731,7 +448,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
         if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
             const auto & D = output.findAttribute(AttrId::Delayed);
             Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
-            Value * const terminated = b->CreateIsNotNull(mTerminatedPhi);
+            Value * const terminated = b->CreateIsNotNull(mTerminatedAtLoopExitPhi);
             produced = b->CreateSelect(terminated, produced, delayed);
         }
         produced = truncateBlockSize(b, output, produced);
@@ -770,7 +487,9 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const unsigned inputPo
     if (LLVM_UNLIKELY(mCheckAssertions)) {
         const Binding & binding = getInputBinding(inputPort);
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
-                        binding.getName() + ": look ahead exceeds item count");
+                        "%s.%s: look ahead exceeds item count",
+                        mKernelAssertionName,
+                        b->GetString(binding.getName()));
     }
     Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
     return b->CreateSelect(closed, itemCount, reducedItemCount);
@@ -811,21 +530,7 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializationFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getFunctionFromKernelState(BuilderRef b, Type * const type, const std::string & suffix) const {
-    const auto prefix = makeKernelName(mKernelIndex);
-    b->setKernel(mPipelineKernel);
-    Value * const funcPtr = b->getScalarField(prefix + suffix);
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        b->CreateAssert(funcPtr, prefix + suffix + " is null");
-    }
-    b->setKernel(mKernel);
-    return b->CreateBitCast(funcPtr, type);
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInitializationFunction
- ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
+Value * PipelineCompiler::getKernelInitializeFunction(BuilderRef b) const {    
     Function * const init = mKernel->getInitializeFunction(b);
     assert (!mKernel->hasFamilyName());
     return init;
@@ -834,10 +539,10 @@ Value * PipelineCompiler::getInitializeFunction(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializationThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getInitializeThreadLocalFunction(BuilderRef b) const {
+Value * PipelineCompiler::getKernelInitializeThreadLocalFunction(BuilderRef b) const {
     Function * const init = mKernel->getInitializeThreadLocalFunction(b);
     if (mKernel->hasFamilyName()) {
-        return getFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+        return getFamilyFunctionFromKernelState(b, init->getType(), INITIALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
     return init;
 }
@@ -845,10 +550,10 @@ Value * PipelineCompiler::getInitializeThreadLocalFunction(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getDoSegmentFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
+Value * PipelineCompiler::getKernelDoSegmentFunction(BuilderRef b) const {
     Function * const doSegment = mKernel->getDoSegmentFunction(b);
     if (mKernel->hasFamilyName()) {
-        return getFunctionFromKernelState(b, doSegment->getType(), DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
+        return getFamilyFunctionFromKernelState(b, doSegment->getType(), DO_SEGMENT_FUNCTION_POINTER_SUFFIX);
     }
     return doSegment;
 }
@@ -856,10 +561,10 @@ Value * PipelineCompiler::getDoSegmentFunction(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInitializationThreadLocalFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) const {
+Value * PipelineCompiler::getKernelFinalizeThreadLocalFunction(BuilderRef b) const {
     Function * const finalize = mKernel->getFinalizeThreadLocalFunction(b);
     if (mKernel->hasFamilyName()) {
-        return getFunctionFromKernelState(b, finalize->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
+        return getFamilyFunctionFromKernelState(b, finalize->getType(), FINALIZE_THREAD_LOCAL_FUNCTION_POINTER_SUFFIX);
     }
     return finalize;
 }
@@ -867,98 +572,44 @@ Value * PipelineCompiler::getFinalizeThreadLocalFunction(BuilderRef b) const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getFinalizeFunction
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::getFinalizeFunction(BuilderRef b) const {
+Value * PipelineCompiler::getKernelFinalizeFunction(BuilderRef b) const {
     Function * const term = mKernel->getFinalizeFunction(b);
     if (mKernel->hasFamilyName()) {
-        return getFunctionFromKernelState(b, term->getType(), FINALIZE_FUNCTION_POINTER_SUFFIX);
+        return getFamilyFunctionFromKernelState(b, term->getType(), FINALIZE_FUNCTION_POINTER_SUFFIX);
     }
     return term;
-}
-
-#if 0
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief verifyInputItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::verifyInputItemCount(BuilderRef b, Value * processed, const unsigned inputPort) const {
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        const Binding & input = getInputBinding(inputPort);
-        Value * const expected = b->CreateAdd(mAlreadyProcessedPhi[inputPort], mLinearInputItemsPhi[inputPort]);
-        itemCountSanityCheck(b, input, "processed", processed, expected);
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief verifyOutputItemCount
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::verifyOutputItemCount(BuilderRef b, Value * produced, const unsigned outputPort) const {
-    if (LLVM_UNLIKELY(mCheckAssertions)) {
-        const Binding & output = getOutputBinding(outputPort);
-        Value * const expected = b->CreateAdd(mAlreadyProducedPhi[outputPort], mLinearOutputItemsPhi[outputPort]);
-        itemCountSanityCheck(b, output, "produced", produced, expected);
-    }
-}
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief itemCountSanityCheck
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::itemCountSanityCheck(BuilderRef b, const Binding & binding,
-                                            const std::string & label,
-                                            Value * const itemCount, Value * const expected) const {
-
-    const auto prefix = makeBufferName(mKernelIndex, binding);
-    const auto lb = mKernel->getLowerBound(binding);
-    if (lb > 0 && !binding.hasAttribute(AttrId::Deferred)) {
-        Constant * const strideSize = b->getSize(ceiling(lb * mKernel->getStride()));
-        Value * hasEnough = b->CreateICmpULE(itemCount, strideSize);
-        hasEnough = b->CreateOr(hasEnough, mTerminationExplicitly);
-        b->CreateAssert(hasEnough, prefix + " " + label + " fewer items than expected");
-    }
-    Value * const withinBounds = b->CreateICmpULE(itemCount, expected);
-    b->CreateAssert(withinBounds, prefix + " " + label + " more items than expected");
-
-}
-
-#endif
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief phiOutItemCounts
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::phiOutItemCounts(BuilderRef b,
-                                        const Vec<Value *> & accessibleItems,
-                                        const Vec<Value *> & inputEpoch,
-                                        const Vec<Value *> & writableItems,
-                                        Value * const fixedRateFactor) const {
-    BasicBlock * const exitBlock = b->GetInsertBlock();
-    const auto numOfInputs = accessibleItems.size();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        mLinearInputItemsPhi[i]->addIncoming(accessibleItems[i], exitBlock);
-        mInputEpochPhi[i]->addIncoming(inputEpoch[i], exitBlock);
-    }
-    const auto numOfOutputs = writableItems.size();
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        mLinearOutputItemsPhi[i]->addIncoming(writableItems[i], exitBlock);
-    }
-    if (fixedRateFactor) {
-        mFixedRateFactorPhi->addIncoming(fixedRateFactor, exitBlock);
-    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getThreadLocalHandlePtr
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getThreadLocalHandlePtr(BuilderRef b, const unsigned kernelIndex) const {
-    assert ("getThreadLocalHandlePtr should not have been called" && getKernel(kernelIndex)->hasThreadLocal());
-    const auto prefix = makeKernelName(kernelIndex) + KERNEL_THREAD_LOCAL_SUFFIX;
-    Value * const handlePtr = mPipelineKernel->getScalarValuePtr(b.get(), prefix); assert (handlePtr);
-    return handlePtr;
+    const Kernel * const kernel = getKernel(kernelIndex);
+    assert ("getThreadLocalHandlePtr should not have been called" && kernel->hasThreadLocal());
+    const auto prefix = makeKernelName(kernelIndex);
+    Value * handle = getScalarFieldPtr(b.get(), prefix + KERNEL_THREAD_LOCAL_SUFFIX);
+    if (LLVM_UNLIKELY(kernel->externallyInitialized())) {
+        PointerType * const localStateTy = kernel->getThreadLocalStateType()->getPointerTo();
+        handle = b->CreatePointerCast(handle, localStateTy->getPointerTo());
+    }
+    return handle;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief reset
+ ** ------------------------------------------------------------------------------------------------------------- */
+namespace {
+template <typename Vec>
+inline void reset(Vec & vec, const size_t n) {
+    vec.resize(n);
+    std::fill_n(vec.begin(), n, nullptr);
+}
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief resetMemoizedFields
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::resetMemoizedFields() {
+void PipelineCompiler::resetMemoizedFields() {       
     const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
     reset(mIsInputZeroExtended, numOfInputs);
     reset(mInitiallyProcessedItemCount, numOfInputs);
@@ -985,7 +636,8 @@ void PipelineCompiler::resetMemoizedFields() {
     reset(mFirstOutputStrideLength, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
     reset(mConsumedItemCount, numOfOutputs);
-    reset(mLinearOutputItemsPhi, numOfOutputs);
+    reset(mLinearOutputItemsPhi, numOfOutputs);    
+    reset(mReturnedOutputVirtualBaseAddressPtr, numOfOutputs);
     reset(mReturnedProducedItemCountPtr, numOfOutputs);
     reset(mProducedItemCount, numOfOutputs);
     reset(mProducedDeferredItemCount, numOfOutputs);
@@ -993,6 +645,9 @@ void PipelineCompiler::resetMemoizedFields() {
     reset(mUpdatedProducedPhi, numOfOutputs);
     reset(mUpdatedProducedDeferredPhi, numOfOutputs);
     reset(mFullyProducedItemCount, numOfOutputs);
+    mNumOfAddressableItemCount = 0;
+    mNumOfVirtualBaseAddresses = 0;
+    mHasClosedInputStream = nullptr;
 }
 
 }

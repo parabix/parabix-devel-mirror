@@ -93,8 +93,6 @@ public:
         std::string const & callbackName,
         std::initializer_list<StreamSet *> additionalStreams);
 protected:
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 private:
     std::string              mCallbackName;
@@ -148,13 +146,13 @@ CallbackPair<U...> make_callback_pair(std::string const & name, void(* func)(U..
 /**
  * Invokes the `ScanReader` kernel to perform a callback for each item in
  * `scanIndicies`.
- * 
+ *
  * The `scanIndicies` stream set may contain multiple streams, all of which are
  * converted to pointers to items in the `source` stream before invoking the
  * callback function.
- * 
+ *
  * The `callback` parameter should be supplied via the `SCAN_CALLBACK` marco.
- * 
+ *
  * Callback Type:
  *  The template parameter pack `Args...` is inferred via the parameters in the
  *  callback function. These parameters must line up with the input streams
@@ -162,25 +160,25 @@ CallbackPair<U...> make_callback_pair(std::string const & name, void(* func)(U..
  *  same number of parameters as there are streams in `scanIndices` with each
  *  parameter being a constant pointer to an integer with the same field width
  *  as `source`.
- * 
+ *
  *  The callback function must have a return type of `void` and be declared
  *  extern "C".
- * 
+ *
  *  Example:
  *      Given the following types for the input stream sets:
- * 
+ *
  *          source: <i8>[1]
  *          scanIndicies: <i64>[2]
- * 
+ *
  *      `callback` must have the following prototype (disregarding function name):
- * 
+ *
  *          extern "C" void callback(const uint8_t *, const uint8_t *);
- * 
+ *
  *      or possibly (due to an implicit cast from uint8_t to char):
- * 
+ *
  *          extern "C" void callback(const char *, const char *);
- * 
- * 
+ *
+ *
  * Preconditions:
  *  - `source` must contain only a string stream (i.e., <iN>[1])
  *  - `source` may not have a field width of 1
@@ -201,32 +199,32 @@ void Reader(
     assert(scanIndices->getFieldWidth() == 64);
     assert(source->getFieldWidth() != 1);
     Kernel * const reader = P-> template CreateKernelCall<ScanReader>(source, scanIndices, callback.name);
-    driver.LinkFunction<Fn>(reader, callback.name, *callback.func);
+    reader->link<Fn>(callback.name, *callback.func);
 }
 
 /**
  * An overload of `scan::Reader` allowing additional streams to pass items to
  * the callback.
- * 
+ *
  * Items in `additionalStreams` are not converted to pointers unlike the items
  * in `scanIndicies`. As such, they may be of varying field widths.
- * 
+ *
  * Callback Type:
  *  Along with the pointers from `scanIndicies`, the callback function must also
  *  contain parameters for each stream from the `additionalStreams` stream set
  *  list.
- * 
+ *
  *  Example:
  *      Given a source stream of type <i8>, 1 `scanIndicies` stream, and the
  *      following additional streams:
- * 
+ *
  *          additional stream 0: <i8>[1]
  *          additional stream 1: <i64>[1]
- * 
+ *
  *      `callback` must have the following prototype:
- *  
+ *
  *          extern "C" void callback(const uint8_t *, int8_t, int64_t)
- * 
+ *
  *      Note that unsigned varients will also work.
  */
 template<typename... Args>
@@ -241,13 +239,13 @@ void Reader(
 {
     using Fn = typename CallbackPair<Args...>::FunctionType;
     Kernel * const reader = P-> template CreateKernelCall<ScanReader>(source, scanIndices, callback.name, std::move(additionalStreams));
-    driver.LinkFunction<Fn>(reader, callback.name, *callback.func);
+    reader->link<Fn>(callback.name, *callback.func);
 }
 
 /**
  * An overloaded `scan::Reader` allowing multiple stream sets to be passed as
  * scan indicies.
- * 
+ *
  * Equivalent to calling `streamutils::Select(P, {ptrStreams...})` and passing
  * the result into `scanIndicies`.
  */
@@ -264,13 +262,13 @@ void Reader(
     using Fn = typename CallbackPair<Args...>::FunctionType;
     StreamSet * const indices = su::Select(P, std::vector<StreamSet *>(ptrStreams));
     Kernel * const reader = P-> template CreateKernelCall<ScanReader>(source, indices, callback.name);
-    driver.LinkFunction<Fn>(reader, callback.name, *callback.func);
+    reader->link<Fn>(callback.name, *callback.func);
 }
 
 /**
  * An overloaded `scan::Reader` allowing multiple stream sets to be passed as
  * scan indicies while also allowing `additionalStreams`.
- * 
+ *
  * Equivalent to calling `streamutils::Select(P, {ptrStreams...})` and passing
  * the result into `scanIndicies`.
  */
@@ -288,7 +286,7 @@ void Reader(
     using Fn = typename CallbackPair<Args...>::FunctionType;
     StreamSet * const indices = su::Select(P, std::move(ptrStreams));
     Kernel * const reader = P-> template CreateKernelCall<ScanReader>(source, indices, callback.name, std::move(additionalStreams));
-    driver.LinkFunction<Fn>(reader, callback.name, *callback.func);
+    reader->link<Fn>(callback.name, *callback.func);
 }
 
 } // namespace kernel::scan

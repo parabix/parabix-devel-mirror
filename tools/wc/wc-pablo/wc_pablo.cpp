@@ -18,7 +18,6 @@
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/Path.h>
 #include <llvm/Support/raw_ostream.h>
-#include <pablo/pablo_compiler.h>
 #include <pablo/pablo_source_kernel.h>
 #include <toolchain/pablo_toolchain.h>
 #include <pablo/parser/error.h>

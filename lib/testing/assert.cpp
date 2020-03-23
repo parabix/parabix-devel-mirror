@@ -6,6 +6,7 @@
 #include <testing/assert.h>
 
 #include <kernel/core/kernel_builder.h>
+#include <kernel/util/debug_display.h>
 #include <llvm/Support/raw_ostream.h>
 
 using namespace llvm;
@@ -50,7 +51,7 @@ void StreamEquivalenceKernel::generateInitializeMethod(BuilderRef b) {
 }
 
 void StreamEquivalenceKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
-    auto istreamset = getInputStreamSet("lhs");
+    auto istreamset = b->getInputStreamSet("lhs");
     const uint32_t FW = istreamset->getFieldWidth();
     const uint32_t COUNT = istreamset->getNumElements();
     const uint32_t ITEMS_PER_BLOCK = b->getBitBlockWidth() / FW;
@@ -153,6 +154,18 @@ void AssertNE(const std::unique_ptr<kernel::ProgramBuilder> & P, StreamSet * lhs
     auto ptr = P->getInputScalar("output");
     P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, lhs, rhs, ptr);
     P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, rhs, lhs, ptr);
+}
+
+void AssertDebug(const std::unique_ptr<kernel::ProgramBuilder> & P, kernel::StreamSet * lhs, kernel::StreamSet * rhs) {
+    using namespace kernel;
+    errs() << "\n\n";
+    P->CreateKernelCall<DebugDisplayKernel>("lhs", lhs);
+    P->CreateKernelCall<DebugDisplayKernel>("rhs", rhs);
+    errs() << "\n\n";
+
+    // return false
+    auto ptr = P->getInputScalar("output");
+    P->CreateKernelCall<StreamEquivalenceKernel>(StreamEquivalenceKernel::Mode::NE, lhs, lhs, ptr);
 }
 
 } // namespace testing

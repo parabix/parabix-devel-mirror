@@ -10,8 +10,6 @@ class AddSentinel final : public pablo::PabloKernel {
 public:
     AddSentinel(BuilderRef b,
                StreamSet * const input, StreamSet * const output);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
     void generatePabloMethod() override;
 };
 

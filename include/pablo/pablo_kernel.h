@@ -32,7 +32,6 @@ class PabloKernel : public kernel::BlockOrientedKernel, public PabloAST {
     friend class PabloBlock;
     friend class CarryManager;
     friend class CarryPackManager;
-    friend class ParabixObjectCache;
 
 public:
 
@@ -171,33 +170,31 @@ protected:
     // A custom method for preparing kernel declarations is needed,
     // so that the carry data requirements may be accommodated before
     // finalizing the KernelStateType.
-    void addInternalProperties(BuilderRef iBuilder) final;
+    void addInternalProperties(BuilderRef b) final;
+
+    std::unique_ptr<kernel::KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
 
 private:
 
-    void generateDoBlockMethod(BuilderRef iBuilder) final;
+    void generateDoBlockMethod(BuilderRef b) final;
 
     // The default method for Pablo final block processing sets the
     // EOFmark bit and then calls the standard DoBlock function.
     // This may be overridden for specialized processing.
-    void generateFinalBlockMethod(BuilderRef iBuilder, llvm::Value * remainingBytes) final;
+    void generateFinalBlockMethod(BuilderRef b, llvm::Value * remainingBytes) final;
 
-    void generateFinalizeMethod(BuilderRef iBuilder) final;
-
-    #if 0
-    void beginConditionalRegion(BuilderRef b) final;
-    #endif
+    void generateFinalizeMethod(BuilderRef b) final;
 
 private:
 
     Allocator                        mAllocator;
-    std::unique_ptr<PabloCompiler>   mPabloCompiler;
+    mutable PabloCompiler *          mPabloCompiler = nullptr;
     std::unique_ptr<SymbolGenerator> mSymbolTable;
-    PabloBlock *                     mEntryScope;
-    llvm::IntegerType *              mSizeTy;
-    llvm::VectorType *               mStreamTy;
-    llvm::StructType *               mCarryDataTy;
-    llvm::LLVMContext *              mContext;
+    PabloBlock *                     mEntryScope = nullptr;
+    llvm::IntegerType *              mSizeTy = nullptr;
+    llvm::VectorType *               mStreamTy = nullptr;
+    llvm::StructType *               mCarryDataTy = nullptr;
+    llvm::LLVMContext *              mContext = nullptr;
 
     Vec<Var *, 16>                   mInputs;
     Vec<Var *, 16>                   mOutputs;

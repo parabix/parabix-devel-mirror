@@ -78,7 +78,7 @@ std::vector<re::RE *> readExpressions() {
     if (REs.size() > 1) {
         if (REsPerGroup == 0) {
             // If no grouping factor is specified, we use a default formula.
-            REsPerGroup = (REs.size() + codegen::ThreadNum) / (codegen::ThreadNum + 1);
+            REsPerGroup = (REs.size() + codegen::SegmentThreads) / (codegen::SegmentThreads + 1);
         }
         std::vector<re::RE *> groups;
         auto start = REs.begin();

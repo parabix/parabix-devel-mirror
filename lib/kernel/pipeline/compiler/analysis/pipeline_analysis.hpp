@@ -43,7 +43,7 @@ void printGraph(const Graph & G, raw_ostream & out, const StringRef name = "G") 
 void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, const StringRef name = "G") {
 
 
-    auto write = [](const RateValue & v, llvm::raw_ostream & out)  {
+    auto write = [](const Rational & v, llvm::raw_ostream & out)  {
         if (LLVM_LIKELY(v.denominator() == 1)) {
             out << v.numerator();
         } else {
@@ -134,7 +134,7 @@ void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, cons
 
 
 
-    for (const auto & e : make_iterator_range(edges(G))) {
+    for (const auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
         out << "v" << s << " -> v" << t << " [label=\"";
@@ -249,6 +249,45 @@ void addConsumerRelationships(const PortType portType, const CallBinding & call,
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getReferencePort
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StreamSetPort getReferencePort(const Kernel * const kernel, const StringRef ref) {
+    const Bindings & inputs = kernel->getInputStreamSetBindings();
+    const auto n = inputs.size();
+    for (unsigned i = 0; i != n; ++i) {
+        if (ref.equals(inputs[i].getName())) {
+            return StreamSetPort{PortType::Input, i};
+        }
+    }
+    const Bindings & outputs = kernel->getInputStreamSetBindings();
+    const auto m = outputs.size();
+    for (unsigned i = 0; i != m; ++i) {
+        if (ref.equals(outputs[i].getName())) {
+            return StreamSetPort{PortType::Output, i};
+        }
+    }
+    SmallVector<char, 256> tmp;
+    raw_svector_ostream msg(tmp);
+    msg << "Invalid reference name: "
+        << kernel->getName()
+        << " does not contain a StreamSet called "
+        << ref;
+    report_fatal_error(msg.str());
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getReferenceBinding
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const Binding & getReferenceBinding(const Kernel * const kernel, const StreamSetPort port) {
+    if (port.Type == PortType::Input) {
+        return kernel->getInputStreamSetBinding(port.Number);
+    } else if (port.Type == PortType::Output) {
+        return kernel->getOutputStreamSetBinding(port.Number);
+    }
+    llvm_unreachable("unknown port type?");
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addReferenceRelationships
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void addReferenceRelationships(const PortType portType, const unsigned index, const Bindings & array, Relationships & G) {
@@ -256,23 +295,23 @@ inline void addReferenceRelationships(const PortType portType, const unsigned in
     if (LLVM_UNLIKELY(n == 0)) {
         return;
     }
-    for (unsigned i = 0; i < n; ++i) {
+    for (unsigned i = 0; i != n; ++i) {
         const Binding & item = array[i];
         const ProcessingRate & rate = item.getRate();
         if (LLVM_UNLIKELY(rate.hasReference())) {
             const Kernel * const kernel = G[index].Kernel;
-            const StreamPort refPort = kernel->getStreamPort(rate.getReference());
+            const StreamSetPort refPort = getReferencePort(kernel, rate.getReference());
             if (LLVM_UNLIKELY(portType == PortType::Input && refPort.Type == PortType::Output)) {
-                std::string tmp;
-                raw_string_ostream msg(tmp);
-                msg << "input stream "
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream msg(tmp);
+                msg << "Reference of input stream "
                     << kernel->getName()
                     << "."
                     << item.getName()
                     << " cannot refer to an output stream";
                 report_fatal_error(msg.str());
             }
-            const Binding & ref = kernel->getStreamBinding(refPort);
+            const Binding & ref = getReferenceBinding(kernel, refPort);
             assert (isa<StreamSet>(ref.getRelationship()));
             // To preserve acyclicity, reference bindings always point to the binding that refers to it.
             // To simplify later I/O lookup, the edge stores the info of the reference port.
@@ -435,7 +474,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
             const RelationshipNode::RelationshipNodeType type) {
         for (const auto j : V) {
             const auto v = subsitution[j];
-            for (const auto & e : make_iterator_range(in_edges(j, G))) {
+            for (const auto e : make_iterator_range(in_edges(j, G))) {
                 const auto i = source(e, G);
                 if (G[i].Type == type) {
                     const auto u = subsitution[i];
@@ -455,7 +494,7 @@ PipelineGraphBundle PipelineCompiler::makePipelineGraph(BuilderRef b, PipelineKe
             const RelationshipNode::RelationshipNodeType type) {
         for (const auto j : V) {
             const auto v = subsitution[j];
-            for (const auto & e : make_iterator_range(out_edges(j, G))) {
+            for (const auto e : make_iterator_range(out_edges(j, G))) {
                 const auto i = target(e, G);
                 if (G[i].Type == type) {
                     const auto w = subsitution[i];
@@ -621,7 +660,7 @@ void PipelineCompiler::addRegionSelectorKernels(BuilderRef b, Kernels & kernels,
             auto setIfAttributeExists = [&](const AttrId attrId, const unsigned index) {
                 if (LLVM_UNLIKELY(input.hasAttribute(attrId))) {
                     const ProcessingRate & rate = input.getRate();
-                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != RateValue(1))) {
+                    if (LLVM_UNLIKELY(!rate.isFixed() || rate.getRate() != Rational(1))) {
                         report_fatal_error(kernel->getName() + ": region streams must be FixedRate(1).");
                     }
                     if (LLVM_UNLIKELY(std::get<0>(cond[index]) != nullptr)) {
@@ -701,10 +740,10 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
     struct Edge {
         CountingType Type;
-        StreamPort   Port;
+        StreamSetPort   Port;
         unsigned     StrideLength;
         Edge() : Type(Unknown), Port(), StrideLength() { }
-        Edge(const CountingType type, const StreamPort port, unsigned stepFactor) : Type(type), Port(port), StrideLength(stepFactor) { }
+        Edge(const CountingType type, const StreamSetPort port, unsigned stepFactor) : Type(type), Port(port), StrideLength(stepFactor) { }
     };
 
     using Graph = adjacency_list<vecS, vecS, directedS, Relationship *, Edge>;
@@ -729,7 +768,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
             const ProcessingRate & rate = binding.getRate();
             if (LLVM_UNLIKELY(rate.isPopCount() || rate.isNegatedPopCount())) {
                 // determine which port this I/O port refers to
-                for (const auto & e : make_iterator_range(in_edges(bindingVertex, G))) {
+                for (const auto e : make_iterator_range(in_edges(bindingVertex, G))) {
                     const RelationshipType & rt = G[e];
                     if (rt.Reason == ReasonType::Reference) {
                         const auto refStreamVertex = source(e, G);
@@ -755,7 +794,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
                             refVertex = add_vertex(refStream, H);
                             M.emplace(refStream, refVertex);
                         }
-                        const RateValue strideLength = refRate.getRate() * kernel->getStride();
+                        const Rational strideLength = refRate.getRate() * kernel->getStride();
                         if (LLVM_UNLIKELY(strideLength.denominator() != 1)) {
                             SmallVector<char, 0> tmp;
                             raw_svector_ostream msg(tmp);
@@ -776,10 +815,10 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
         const auto j = G.find(kernel);
 
-        for (const auto & e : make_iterator_range(in_edges(j, G))) {
+        for (const auto e : make_iterator_range(in_edges(j, G))) {
             addPopCountDependency(source(e, G), G[e]);
         }
-        for (const auto & e : make_iterator_range(out_edges(j, G))) {
+        for (const auto e : make_iterator_range(out_edges(j, G))) {
             addPopCountDependency(target(e, G), G[e]);
         }
     }
@@ -799,7 +838,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
         unsigned strideLength = 0;
         CountingType type = CountingType::Unknown;
-        for (const auto & e : make_iterator_range(out_edges(i, H))) {
+        for (const auto e : make_iterator_range(out_edges(i, H))) {
             const Edge & ed = H[e];
             type |= ed.Type;
             if (strideLength == 0) {
@@ -845,7 +884,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
         addProducerRelationships(PortType::Output, k, popCountKernel->getOutputStreamSetBindings(), G);
 
         // subsitute the popcount relationships
-        for (const auto & e : make_iterator_range(out_edges(i, H))) {
+        for (const auto e : make_iterator_range(out_edges(i, H))) {
             const Edge & ed = H[e];
             const Kernel * const kernel = kernels[target(e, H)];
             const auto consumer = G.find(kernel);
@@ -854,7 +893,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
             const auto streamVertex = G.find(stream);
 
             // append the popcount rate stream to the kernel
-            RateValue stepRate{ed.StrideLength, strideLength * kernel->getStride()};
+            Rational stepRate{ed.StrideLength, strideLength * kernel->getStride()};
             Binding * const popCount = new Binding("#popcount" + std::to_string(ed.Port.Number), stream, FixedRate(stepRate));
             internalBindings.emplace_back(popCount);
             const auto popCountBinding = G.add(popCount);
@@ -895,7 +934,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
 
             bool notFound = true;
             if (ed.Port.Type == PortType::Input) {
-                for (const auto & e : make_iterator_range(in_edges(consumer, G))) {
+                for (const auto e : make_iterator_range(in_edges(consumer, G))) {
                     const RelationshipType & type = G[e];
                     if (type.Number == ed.Port.Number) {
                         assert (type.Type == PortType::Input);
@@ -905,7 +944,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
                     }
                 }
             } else { // if (ed.Port.Type == PortType::Output) {
-                for (const auto & e : make_iterator_range(out_edges(consumer, G))) {
+                for (const auto e : make_iterator_range(out_edges(consumer, G))) {
                     const RelationshipType & type = G[e];
                     if (type.Number == ed.Port.Number) {
                         assert (type.Type == PortType::Output);
@@ -928,7 +967,7 @@ void PipelineCompiler::addPopCountKernels(BuilderRef b, Kernels & kernels, Relat
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & kernels, Relationships & G) {
 
-    using StreamSetVector = std::vector<std::pair<unsigned, StreamPort>>;
+    using StreamSetVector = std::vector<std::pair<unsigned, StreamSetPort>>;
     using ScalarVector = std::vector<unsigned>;
 
     struct KernelId {
@@ -972,7 +1011,7 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                 const Kernel * const kernel = bn.Kernel;
                 // We cannot reason about a family of kernels nor safely combine two
                 // side-effecting kernels.
-                if (kernel->hasFamilyName() || kernel->hasAttribute(AttrId::SideEffecting)) {
+                if (kernel->externallyInitialized() || kernel->hasAttribute(AttrId::SideEffecting)) {
                     continue;
                 }
 
@@ -981,14 +1020,14 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                 scalars.resize(n);
                 unsigned numOfStreams = 0;
 
-                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                for (const auto e : make_iterator_range(in_edges(i, G))) {
                     const RelationshipType & port = G[e];
                     const auto input = source(e, G);
                     const RelationshipNode & node = G[input];
                     if (node.Type == RelationshipNode::IsBinding) {
                         unsigned relationship = 0;
-                        StreamPort ref{};
-                        for (const auto & e : make_iterator_range(in_edges(input, G))) {
+                        StreamSetPort ref{};
+                        for (const auto e : make_iterator_range(in_edges(input, G))) {
                             RelationshipType & rt = G[e];
                             if (rt.Reason == ReasonType::Reference) {
                                 ref = rt;
@@ -1027,7 +1066,7 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                         outputs.resize(m);
                         scalars.resize(m);
                         unsigned numOfStreams = 0;
-                        for (const auto & e : make_iterator_range(out_edges(j, G))) {
+                        for (const auto e : make_iterator_range(out_edges(j, G))) {
 
                             const RelationshipType & port = G[e];
                             const auto output = target(e, G);
@@ -1047,8 +1086,8 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                         scalars.resize(m - numOfStreams);
 
                         // Replace the consumers of kernel i's outputs with j's.
-                        for (const auto & e : make_iterator_range(out_edges(i, G))) {
-                            const StreamPort & port = G[e];
+                        for (const auto e : make_iterator_range(out_edges(i, G))) {
+                            const StreamSetPort & port = G[e];
                             const auto output = target(e, G);
                             const RelationshipNode & node = G[output];
                             unsigned original = 0;
@@ -1080,7 +1119,7 @@ void PipelineCompiler::combineDuplicateKernels(BuilderRef b, const Kernels & ker
                                 break;
                             }
 
-                            for (const auto & e : make_iterator_range(out_edges(original, G))) {
+                            for (const auto e : make_iterator_range(out_edges(original, G))) {
                                 add_edge(replacement, target(e, G), G[e], G);
                             }
                             clear_out_edges(original, G);
@@ -1140,7 +1179,7 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
     // determine the inputs for each of the required nodes
     for (;;) {
         const auto v = pending.front(); pending.pop();
-        for (const auto & e : make_iterator_range(in_edges(v, G))) {
+        for (const auto e : make_iterator_range(in_edges(v, G))) {
             const auto input = source(e, G);
             if (visited.insert(input).second) {
                 pending.push(input);
@@ -1161,7 +1200,7 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
         const RelationshipNode & rn = G[v];
         if (rn.Type == RelationshipNode::IsKernel) {
             if (LLVM_LIKELY(visited.count(v) != 0)) {
-                for (const auto & e : make_iterator_range(out_edges(v, G))) {
+                for (const auto e : make_iterator_range(out_edges(v, G))) {
                     const auto b = target(e, G);
                     const RelationshipNode & rb = G[b];
                     assert (rb.Type == RelationshipNode::IsBinding || rb.Type == RelationshipNode::IsRelationship);
@@ -1192,7 +1231,7 @@ inline void PipelineCompiler::removeUnusedKernels(const PipelineKernel * pipelin
  * @brief getReferenceVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 BOOST_NOINLINE
-RelationshipGraph::edge_descriptor PipelineCompiler::getReferenceEdge(const unsigned kernel, const StreamPort port) const {
+RelationshipGraph::edge_descriptor PipelineCompiler::getReferenceEdge(const size_t kernel, const StreamSetPort port) const {
     using InEdgeIterator = graph_traits<RelationshipGraph>::in_edge_iterator;
     using OutEdgeIterator = graph_traits<RelationshipGraph>::out_edge_iterator;
     RelationshipGraph::vertex_descriptor binding = 0;
@@ -1225,18 +1264,18 @@ RelationshipGraph::edge_descriptor PipelineCompiler::getReferenceEdge(const unsi
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReferenceBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCompiler::getReferenceBufferVertex(const unsigned kernel, const StreamPort port) const {
+inline unsigned PipelineCompiler::getReferenceBufferVertex(const size_t kernel, const StreamSetPort port) const {
     return parent(source(getReferenceEdge(kernel, port), mStreamGraph), mStreamGraph);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReference
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const StreamPort PipelineCompiler::getReference(const unsigned kernel, const StreamPort port) const {
+inline const StreamSetPort PipelineCompiler::getReference(const size_t kernel, const StreamSetPort port) const {
     return mStreamGraph[getReferenceEdge(kernel, port)];
 }
 
-inline const StreamPort PipelineCompiler::getReference(const StreamPort port) const {
+inline const StreamSetPort PipelineCompiler::getReference(const StreamSetPort port) const {
     return getReference(mKernelIndex, port);
 }
 
@@ -1264,7 +1303,7 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
         Graph G(numOfInputs + 1);
 
         // enumerate the input relations
-        for (const auto & e : make_iterator_range(in_edges(i, mStreamGraph))) {
+        for (const auto e : make_iterator_range(in_edges(i, mStreamGraph))) {
             const auto k = source(e, mStreamGraph);
             const RelationshipNode & rn = mStreamGraph[k];
             assert (rn.Type == RelationshipNode::IsBinding);
@@ -1319,12 +1358,12 @@ bool PipelineCompiler::hasZeroExtendedStream() const {
  * Returns a lexographically sorted list of ports s.t. the inputs will be ordered as close as possible (baring
  * any constraints) to the kernel's original I/O ordering.
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
+void PipelineCompiler::determineEvaluationOrderOfKernelIO(const size_t kernelIndex) {
 
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
 
-    const auto numOfInputs = in_degree(mKernelIndex, mBufferGraph);
-    const auto numOfOutputs = out_degree(mKernelIndex, mBufferGraph);
+    const auto numOfInputs = in_degree(kernelIndex, mBufferGraph);
+    const auto numOfOutputs = out_degree(kernelIndex, mBufferGraph);
     const auto firstOutput = numOfInputs;
     const auto numOfPorts = numOfInputs + numOfOutputs;
 
@@ -1335,12 +1374,12 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 
     SmallVector<unsigned, 16> zext(numOfInputs);
 
-    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(in_edges(kernelIndex, mBufferGraph))) {
         const BufferRateData & bd = mBufferGraph[e];
         const Binding & input = bd.Binding;
         const ProcessingRate & rate = input.getRate();
         if (rate.hasReference()) {
-            const StreamPort ref = getReference(bd.Port);
+            const StreamSetPort ref = getReference(kernelIndex, bd.Port);
             assert ("input stream cannot refer to an output stream" && ref.Type == PortType::Input);
             add_edge(ref.Number, bd.Port.Number, G);
         }
@@ -1351,12 +1390,12 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
     assert (std::is_sorted(zext.begin(), zext.end()));
 
     // and then enumerate the output relations
-    for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mBufferGraph))) {
+    for (const auto e : make_iterator_range(out_edges(kernelIndex, mBufferGraph))) {
         const BufferRateData & bd = mBufferGraph[e];
         const Binding & output = bd.Binding;
         const ProcessingRate & rate = output.getRate();
         if (rate.hasReference()) {
-            StreamPort ref = getReference(bd.Port);
+            StreamSetPort ref = getReference(kernelIndex, bd.Port);
             if (LLVM_UNLIKELY(ref.Type == PortType::Output)) {
                 ref.Number += firstOutput;
             }
@@ -1385,7 +1424,7 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
     // check any pipeline input first
     if (out_degree(PipelineInput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto buffer = getInputBufferVertex(i);
+            const auto buffer = getInputBufferVertex(kernelIndex, i);
             if (LLVM_UNLIKELY(is_parent(buffer, PipelineInput, mBufferGraph))) {
                 for (unsigned j = 0; j < i; ++j) {
                     add_edge_if_no_induced_cycle(i, j, G);
@@ -1400,7 +1439,7 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
     // ... and check any pipeline output first
     if (in_degree(PipelineOutput, mBufferGraph)) {
         for (unsigned i = 0; i < numOfOutputs; ++i) {
-            const auto buffer = getOutputBufferVertex(i);
+            const auto buffer = getOutputBufferVertex(kernelIndex, i);
             if (LLVM_UNLIKELY(has_child(buffer, PipelineOutput, mBufferGraph))) {
                 const auto k = firstOutput + i;
                 for (unsigned j = 0; j < k; ++j) {
@@ -1417,7 +1456,7 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
     std::vector<unsigned> D;
     D.reserve(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        if (LLVM_UNLIKELY(isa<DynamicBuffer>(getOutputBuffer(i)))) {
+        if (LLVM_UNLIKELY(isa<DynamicBuffer>(getOutputBuffer(kernelIndex, i)))) {
             D.push_back(i);
         }
     }
@@ -1451,17 +1490,17 @@ void PipelineCompiler::determineEvaluationOrderOfKernelIO() {
 PipelineIOGraph PipelineCompiler::makePipelineIOGraph() const {
 
     PipelineIOGraph G((PipelineOutput - PipelineInput) + 1);
-    for (const auto & p : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+    for (const auto p : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto buffer = target(p, mBufferGraph);
-        for (const auto & c : make_iterator_range(out_edges(buffer, mBufferGraph))) {
+        for (const auto c : make_iterator_range(out_edges(buffer, mBufferGraph))) {
             const auto consumer = target(c, mBufferGraph);
             const BufferRateData & cr = mBufferGraph[c];
             add_edge(PipelineInput, consumer, cr.Port.Number, G);
         }
     }
-    for (const auto & c : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+    for (const auto c : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto buffer = source(c, mBufferGraph);
-        const auto & p = in_edge(buffer, mBufferGraph);
+        const auto p = in_edge(buffer, mBufferGraph);
         const auto producer = source(p, mBufferGraph);
         const BufferRateData & pr = mBufferGraph[p];
         add_edge(producer, PipelineOutput, pr.Port.Number, G);
@@ -1483,7 +1522,7 @@ bool PipelineCompiler::isPipelineInput(const unsigned inputPort) const {
     if (LLVM_LIKELY(in_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
         return false;
     }
-    for (const auto & e : make_iterator_range(in_edges(mKernelIndex, mPipelineIOGraph))) {
+    for (const auto e : make_iterator_range(in_edges(mKernelIndex, mPipelineIOGraph))) {
         if (LLVM_LIKELY(mPipelineIOGraph[e] == inputPort)) {
             return true;
         }
@@ -1498,7 +1537,7 @@ bool PipelineCompiler::isPipelineOutput(const unsigned outputPort) const {
     if (LLVM_LIKELY(out_degree(mKernelIndex, mPipelineIOGraph) == 0)) {
         return false;
     }
-    for (const auto & e : make_iterator_range(out_edges(mKernelIndex, mPipelineIOGraph))) {
+    for (const auto e : make_iterator_range(out_edges(mKernelIndex, mPipelineIOGraph))) {
         if (LLVM_LIKELY(mPipelineIOGraph[e] == outputPort)) {
             return true;
         }
@@ -1520,7 +1559,7 @@ AddGraph PipelineCompiler::makeAddGraph() const {
         if (LLVM_LIKELY(in_degree(i, mBufferGraph) > 0)) {
             bool noPrincipal = true;
 
-            for (const auto & e : make_iterator_range(in_edges(i, mBufferGraph))) {
+            for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto buffer = source(e, mBufferGraph);
                 const BufferRateData & br = mBufferGraph[e];
                 const Binding & input = br.Binding;
@@ -1551,14 +1590,14 @@ AddGraph PipelineCompiler::makeAddGraph() const {
 
             if (LLVM_LIKELY(noPrincipal)) {
                 minAddK = std::numeric_limits<int>::max();
-                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                for (const auto e : make_iterator_range(in_edges(i, G))) {
                     minAddK = std::min<int>(minAddK, G[e]);
                 }
-                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                for (const auto e : make_iterator_range(in_edges(i, G))) {
                     G[e] -= minAddK;
                 }
             } else {
-                for (const auto & e : make_iterator_range(in_edges(i, G))) {
+                for (const auto e : make_iterator_range(in_edges(i, G))) {
                     G[e] = 0;
                 }
             }
@@ -1567,7 +1606,7 @@ AddGraph PipelineCompiler::makeAddGraph() const {
 
         G[i] = minAddK;
 
-        for (const auto & e : make_iterator_range(out_edges(i, mBufferGraph))) {
+        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto buffer = target(e, mBufferGraph);
             const BufferRateData & br = mBufferGraph[e];
             const Binding & output = br.Binding;
@@ -1597,7 +1636,7 @@ AddGraph PipelineCompiler::makeAddGraph() const {
     for (const auto v : make_iterator_range(vertices(G))) {
         out << "v" << v << " [label=\"" << v << " (" << (int)G[v] << ")\"];\n";
     }
-    for (const auto & e : make_iterator_range(edges(G))) {
+    for (const auto e : make_iterator_range(edges(G))) {
         const auto s = source(e, G);
         const auto t = target(e, G);
         const BufferRateData & r = mBufferGraph[edge(s, t, mBufferGraph).first];
@@ -1615,7 +1654,7 @@ AddGraph PipelineCompiler::makeAddGraph() const {
  * @brief hasFixedRateLCM
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::hasFixedRateLCM() {
-    RateValue rateLCM(1);
+    Rational rateLCM(1);
     bool hasFixedRate = false;
     const auto numOfInputs = getNumOfStreamInputs(mKernelIndex);
     for (unsigned i = 0; i < numOfInputs; ++i) {

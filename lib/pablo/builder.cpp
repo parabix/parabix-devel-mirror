@@ -12,6 +12,7 @@
 #include <pablo/pe_pack.h>
 #include <pablo/pe_infile.h>
 #include <pablo/pe_count.h>
+#include <pablo/pe_everynth.h>
 #include <pablo/pe_integer.h>
 #include <pablo/pe_string.h>
 #include <pablo/pe_zeroes.h>
@@ -244,6 +245,14 @@ PabloAST * PabloBuilder::createCount(PabloAST * expr) {
 
 PabloAST * PabloBuilder::createCount(PabloAST * expr, const llvm::StringRef prefix) {
     return MAKE_NAMED_UNARY(Count, prefix, expr);
+}
+
+PabloAST * PabloBuilder::createEveryNth(PabloAST * expr, not_null<Integer *> n) {
+    return MAKE_BINARY(EveryNth, expr, n.get());
+}
+
+PabloAST * PabloBuilder::createEveryNth(PabloAST * expr, not_null<Integer *> n, const llvm::StringRef prefix) {
+    return MAKE_NAMED_BINARY(EveryNth, prefix, expr, n.get());
 }
 
 PabloAST * PabloBuilder::createRepeat(not_null<Integer *> fieldWidth, PabloAST * value) {

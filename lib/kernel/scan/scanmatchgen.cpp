@@ -53,13 +53,13 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     ScanWordParameters sw(b, mStride);
 
     Module * const m = b->getModule();
-    Constant * sz_STRIDE = b->getSize(mStride);
-    Constant * sz_BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
-    Constant * sz_ZERO = b->getSize(0);
-    Constant * sz_ONE = b->getSize(1);
-    Constant * sz_BITS = b->getSize(SIZE_T_BITS);
-    Constant * sz_MAXBIT = b->getSize(SIZE_T_BITS - 1);
-    Type * sizeTy = b->getSizeTy();
+    Constant * const STRIDE = b->getSize(mStride);
+    Constant * const BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
+    Constant * const BITS = b->getSize(SIZE_T_BITS);
+    Constant * const MAXBIT = b->getSize(SIZE_T_BITS - 1);
+    Type * const sizeTy = b->getSizeTy();
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
@@ -74,7 +74,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
 
     Value * const initialPos = b->getProcessedItemCount("matchResult");
-    Value * accumulator = b->getScalarField("accumulator_address");
+    Value * const accumulator = b->getScalarField("accumulator_address");
     Value * const avail = b->getAvailableItemCount("InputStream");
     Value * const initialLineStart = b->getProcessedItemCount("InputStream");
     Value * initialLineNum = nullptr;
@@ -84,7 +84,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         initialLineNum = b->getScalarField("LineNum");
         lineCountArrayBlockPtr = b->CreateAlignedAlloca(b->getBitBlockType(),
                                                         b->getBitBlockWidth()/BITS_PER_BYTE,
-                                                        sz_BLOCKS_PER_STRIDE);
+                                                        BLOCKS_PER_STRIDE);
         // Bitcast the lineNumberArrayptr to access by scanWord number
         lineCountArrayWordPtr = b->CreateBitCast(lineCountArrayBlockPtr, sw.pointerTy);
     }
@@ -93,7 +93,7 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     b->SetInsertPoint(stridePrologue);
     // Set up the loop variables as PHI nodes at the beginning of each stride.
     PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
-    strideNo->addIncoming(sz_ZERO, entryBlock);
+    strideNo->addIncoming(ZERO, entryBlock);
     PHINode * const pendingLineStart = b->CreatePHI(sizeTy, 2);
     pendingLineStart->addIncoming(initialLineStart, entryBlock);
     PHINode * pendingLineNum = nullptr;
@@ -101,27 +101,29 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         pendingLineNum = b->CreatePHI(sizeTy, 2);
         pendingLineNum->addIncoming(initialLineNum, entryBlock);
     }
-    Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, sz_STRIDE));
-    Value * strideBlockOffset = b->CreateMul(strideNo, sz_BLOCKS_PER_STRIDE);
-    Value * nextStrideNo = b->CreateAdd(strideNo, sz_ONE);
+    Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, STRIDE));
+    Value * strideBlockOffset = b->CreateMul(strideNo, BLOCKS_PER_STRIDE);
+    Value * nextStrideNo = b->CreateAdd(strideNo, ONE);
     b->CreateBr(stridePrecomputation);
+
+
     // Precompute index masks for one stride of the match result and line break streams,
     // as well as a partial sum popcount of line numbers if line numbering is on.
     b->SetInsertPoint(stridePrecomputation);
     PHINode * const matchMaskAccum = b->CreatePHI(sizeTy, 2);
-    matchMaskAccum->addIncoming(sz_ZERO, stridePrologue);
+    matchMaskAccum->addIncoming(ZERO, stridePrologue);
     PHINode * const breakMaskAccum = b->CreatePHI(sizeTy, 2);
-    breakMaskAccum->addIncoming(sz_ZERO, stridePrologue);
+    breakMaskAccum->addIncoming(ZERO, stridePrologue);
     PHINode * const blockNo = b->CreatePHI(sizeTy, 2);
-    blockNo->addIncoming(sz_ZERO, stridePrologue);
+    blockNo->addIncoming(ZERO, stridePrologue);
     PHINode * baseCounts = nullptr;
     if (mLineNumbering) {
         baseCounts = b->CreatePHI(b->getBitBlockType(), 2);
         baseCounts->addIncoming(b->allZeroes(), stridePrologue);
     }
     Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
-    Value * matchBitBlock = b->loadInputStreamBlock("matchResult", sz_ZERO, strideBlockIndex);
-    Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", sz_ZERO, strideBlockIndex);
+    Value * matchBitBlock = b->loadInputStreamBlock("matchResult", ZERO, strideBlockIndex);
+    Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", ZERO, strideBlockIndex);
 
     Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
     Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
@@ -132,33 +134,33 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         Value * baseCountsNext = b->bitCast(b->simd_fill(sw.width, b->mvmd_extract(sw.width, breakCounts, b->getBitBlockWidth()/sw.width - 1)));
         baseCounts->addIncoming(baseCountsNext, stridePrecomputation);
     }
-    Value * matchWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
-    Value * breakWordMask = b->CreateZExtOrTrunc(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
+    Value * matchWordMask = b->CreateZExt(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
+    Value * breakWordMask = b->CreateZExt(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
     Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "matchMask");
     Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "breakMask");
-    Value * const nextBlockNo = b->CreateAdd(blockNo, sz_ONE);
+    Value * const nextBlockNo = b->CreateAdd(blockNo, ONE);
 
     matchMaskAccum->addIncoming(matchMask, stridePrecomputation);
     breakMaskAccum->addIncoming(breakMask, stridePrecomputation);
     blockNo->addIncoming(nextBlockNo, stridePrecomputation);
-    b->CreateCondBr(b->CreateICmpNE(nextBlockNo, sz_BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
+    b->CreateCondBr(b->CreateICmpNE(nextBlockNo, BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
 
     b->SetInsertPoint(strideMasksReady);
     // If there are no breaks in the stride, there are no matches.   We can move on to
     // the next stride immediately.
-    b->CreateUnlikelyCondBr(b->CreateICmpEQ(breakMask, sz_ZERO), matchesDone, updateLineInfo);
+    b->CreateUnlikelyCondBr(b->CreateICmpEQ(breakMask, ZERO), matchesDone, updateLineInfo);
 
     b->SetInsertPoint(updateLineInfo);
     // We have at least one line break.   Determine the end-of-stride line start position
     // and line number, if needed.
-    Value * matchWordBasePtr = b->getInputStreamBlockPtr("matchResult", sz_ZERO, strideBlockOffset);
-    matchWordBasePtr = b->CreateBitCast(matchWordBasePtr, sw.pointerTy);
-    Value * breakWordBasePtr = b->getInputStreamBlockPtr("lineBreak", sz_ZERO, strideBlockOffset);
-    breakWordBasePtr = b->CreateBitCast(breakWordBasePtr, sw.pointerTy);
+    Value * matchWordBasePtr = b->getInputStreamBlockPtr("matchResult", ZERO, strideBlockOffset);
+    matchWordBasePtr = b->CreatePointerCast(matchWordBasePtr, sw.pointerTy);
+    Value * breakWordBasePtr = b->getInputStreamBlockPtr("lineBreak", ZERO, strideBlockOffset);
+    breakWordBasePtr = b->CreatePointerCast(breakWordBasePtr, sw.pointerTy);
 
-    Value * finalBreakIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(breakMask), "finalBreakIdx");
+    Value * finalBreakIdx = b->CreateSub(MAXBIT, b->CreateCountReverseZeroes(breakMask), "finalBreakIdx");
     Value * finalBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, finalBreakIdx)), sizeTy);
-    Value * finalLineStartInWord = b->CreateSub(sz_BITS, b->CreateCountReverseZeroes(finalBreakWord));
+    Value * finalLineStartInWord = b->CreateSub(BITS, b->CreateCountReverseZeroes(finalBreakWord));
     Value * finalLineStartPos = b->CreateAdd(stridePos, b->CreateMul(finalBreakIdx, sw.WIDTH));
     finalLineStartPos = b->CreateAdd(finalLineStartInWord, finalLineStartPos);
     Value * strideFinalLineNum = nullptr;
@@ -171,21 +173,21 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     // can immediately move on to the next stride.
     // We optimize for the case of no matches; the cost of the branch penalty
     // is expected to be small relative to the processing of each match.
-    b->CreateLikelyCondBr(b->CreateICmpEQ(matchMask, sz_ZERO), matchesDone, strideMatchLoop);
+    b->CreateLikelyCondBr(b->CreateICmpEQ(matchMask, ZERO), matchesDone, strideMatchLoop);
 
     // Precondition: we have at least one more match to process.
     b->SetInsertPoint(strideMatchLoop);
     PHINode * const matchMaskPhi = b->CreatePHI(sizeTy, 2);
     matchMaskPhi->addIncoming(matchMask, updateLineInfo);
     PHINode * const matchWordPhi = b->CreatePHI(sizeTy, 2);
-    matchWordPhi->addIncoming(sz_ZERO, updateLineInfo);
+    matchWordPhi->addIncoming(ZERO, updateLineInfo);
 
     // If we have any bits in the current matchWordPhi, continue with those, otherwise load
     // the next match word.
     Value * matchWordIdx = b->CreateCountForwardZeroes(matchMaskPhi, "matchWordIdx");
     Value * nextMatchWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(matchWordBasePtr, matchWordIdx)), sizeTy);
     Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
-    Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, sz_ZERO), nextMatchWord, matchWordPhi);
+    Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, ZERO), nextMatchWord, matchWordPhi);
     Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
     Value * matchEndPosInWord = b->CreateCountForwardZeroes(theMatchWord);
     Value * matchEndPos = b->CreateAdd(matchWordPos, matchEndPosInWord, "matchEndPos");
@@ -198,15 +200,16 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     // using selects to handle cases (a) and (c).
     Value * priorBreaksThisWord = b->CreateZeroHiBitsFrom(matchBreakWord, matchEndPosInWord);
     Value * priorBreaksInStride = b->CreateZeroHiBitsFrom(breakMask, matchWordIdx);
-    Value * inWordCond = b->CreateICmpNE(priorBreaksThisWord, sz_ZERO);
-    Value * inStrideCond = b->CreateICmpNE(priorBreaksInStride, sz_ZERO);
-    Value * breakWordIdx = b->CreateSub(sz_MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride), "breakWordIdx_");
+    Value * inWordCond = b->CreateICmpNE(priorBreaksThisWord, ZERO);
+    Value * inStrideCond = b->CreateICmpNE(priorBreaksInStride, ZERO);
+    Value * breakWordIdx = b->CreateSub(MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride), "breakWordIdx_");
     // Create a safe index to load; the loaded value will be ignored for cases (a), (c).
-    breakWordIdx = b->CreateSelect(inWordCond, matchWordIdx, b->CreateSelect(inStrideCond, breakWordIdx, sz_ZERO), "breakWordIdx");
+    breakWordIdx = b->CreateSelect(inStrideCond, breakWordIdx, ZERO);
+    breakWordIdx = b->CreateSelect(inWordCond, matchWordIdx, breakWordIdx, "breakWordIdx");
     Value * breakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx)), sizeTy);
     // For case (a), we use the previously masked value of the break word.
     breakWord = b->CreateSelect(inWordCond, priorBreaksThisWord, breakWord);   // cases (a) and (b)
-    Value * lineStartInWord = b->CreateSub(sz_BITS, b->CreateCountReverseZeroes(breakWord));
+    Value * lineStartInWord = b->CreateSub(BITS, b->CreateCountReverseZeroes(breakWord));
     Value * lineStartBase = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx, sw.WIDTH));
     Value * lineStartPos = b->CreateAdd(lineStartBase, lineStartInWord);
     // The break position is the line start for cases (a), (b); otherwise use the pending value.
@@ -220,12 +223,13 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         Value * extraBreaks = b->CreateXor(breakWord, b->CreateSelect(inWordCond, matchBreakWord, breakWord));
         lineCountInStride = b->CreateSub(lineCountInStride, b->CreatePopcount(extraBreaks));
         // For case (c), there are no line breaks.
-        lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, sz_ZERO);
+        lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, ZERO);
         matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
     }
+
     // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
     // to access past EOF.
-    Value * const bufLimit = b->CreateSub(avail, sz_ONE);
+    Value * const bufLimit = b->CreateSub(avail, ONE);
     matchEndPos = b->CreateUMin(matchEndPos, bufLimit);
     // matchStart should never be past EOF, but in case it is....
     //b->CreateAssert(b->CreateICmpULT(matchStart, avail), "match position past EOF");
@@ -251,14 +255,14 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
     //  We've dealt with the match, now prepare for the next one, if any.
     // There may be more matches in the current word.
     Value * dropMatch = b->CreateResetLowestBit(theMatchWord, "dropMatch");
-    Value * thisWordDone = b->CreateIsNull(dropMatch);
+    Value * thisWordDone = b->CreateICmpEQ(dropMatch, ZERO);
     // There may be more matches in the match mask.
     Value * resetMatchMask = b->CreateResetLowestBit(matchMaskPhi, "nextMatchMask");
     Value * nextMatchMask = b->CreateSelect(thisWordDone, resetMatchMask, matchMaskPhi);
     BasicBlock * currentBB = b->GetInsertBlock();
     matchMaskPhi->addIncoming(nextMatchMask, currentBB);
     matchWordPhi->addIncoming(dropMatch, currentBB);
-    b->CreateCondBr(b->CreateICmpNE(nextMatchMask, sz_ZERO), strideMatchLoop, matchesDone);
+    b->CreateCondBr(b->CreateICmpNE(nextMatchMask, ZERO), strideMatchLoop, matchesDone);
 
     b->SetInsertPoint(matchesDone);
     PHINode * strideFinalLineStart = b->CreatePHI(sizeTy, 3);
@@ -284,10 +288,9 @@ void ScanMatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfS
         b->setScalarField("LineNum", strideFinalLineNumPhi);
     }
     b->setProcessedItemCount("InputStream", strideFinalLineStart);
-    b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
+    b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
-    b->setProcessedItemCount("InputStream", avail);
     Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
     Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
     b->CreateCall(finalizer, {accumulator, bufferEnd});
@@ -313,6 +316,328 @@ ScanMatchKernel::ScanMatchKernel(BuilderRef b, StreamSet * const Matches, Stream
     addAttribute(SideEffecting());
     setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
 }
+
+void ScanBatchKernel::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+    const bool mLineNumbering = true;
+    // Determine the parameters for two-level scanning.
+    ScanWordParameters sw(b, mStride);
+
+    Module * const m = b->getModule();
+    Constant * const STRIDE = b->getSize(mStride);
+    Constant * const BLOCKS_PER_STRIDE = b->getSize(mStride/b->getBitBlockWidth());
+    Constant * const ZERO = b->getSize(0);
+    Constant * const ONE = b->getSize(1);
+    Constant * const BITS = b->getSize(SIZE_T_BITS);
+    Constant * const MAXBIT = b->getSize(SIZE_T_BITS - 1);
+    Type * const sizeTy = b->getSizeTy();
+
+    Function * const getFileCount = m->getFunction("get_file_count_wrapper"); assert (getFileCount);
+    Function * const getFileStartPos = m->getFunction("get_file_start_pos_wrapper"); assert (getFileStartPos);
+    Function * const setBatchLineNumber = m->getFunction("set_batch_line_number_wrapper"); assert (setBatchLineNumber);
+
+    BasicBlock * const entryBlock = b->GetInsertBlock();
+    BasicBlock * const stridePrologue = b->CreateBasicBlock("stridePrologue");
+    BasicBlock * const stridePrecomputation = b->CreateBasicBlock("stridePrecomputation");
+    BasicBlock * const strideMasksReady = b->CreateBasicBlock("strideMasksReady");
+    BasicBlock * const updateLineInfo = b->CreateBasicBlock("updateLineInfo");
+    BasicBlock * const updateFileLimit = b->CreateBasicBlock("updateFileLimit");
+    BasicBlock * const processMatches = b->CreateBasicBlock("processMatches");
+    BasicBlock * const strideMatchLoop = b->CreateBasicBlock("strideMatchLoop");
+    BasicBlock * const dispatch = b->CreateBasicBlock("dispatch");
+    BasicBlock * const matchesDone = b->CreateBasicBlock("matchesDone");
+    BasicBlock * const stridesDone = b->CreateBasicBlock("stridesDone");
+    BasicBlock * const callFinalizeScan = b->CreateBasicBlock("callFinalizeScan");
+    BasicBlock * const scanReturn = b->CreateBasicBlock("scanReturn");
+
+    Value * const initialPos = b->getProcessedItemCount("matchResult");
+    Value * const accumulator = b->getScalarField("accumulator_address");
+    Value * const avail = b->getAvailableItemCount("InputStream");
+    Value * const initialLineStart = b->getProcessedItemCount("InputStream");
+    Value * initialLineNum = nullptr;
+    Value * lineCountArrayBlockPtr = nullptr;
+    Value * lineCountArrayWordPtr = nullptr;
+    Value * maxFileNum = nullptr;
+    Value * inFinalFile = nullptr;
+    Value * availableLimit = nullptr;
+    if (mLineNumbering) {
+        initialLineNum = b->getScalarField("LineNum");
+        lineCountArrayBlockPtr = b->CreateAlignedAlloca(b->getBitBlockType(),
+                                                        b->getBitBlockWidth()/BITS_PER_BYTE,
+                                                        BLOCKS_PER_STRIDE);
+        // Bitcast the lineNumberArrayptr to access by scanWord number
+        lineCountArrayWordPtr = b->CreateBitCast(lineCountArrayBlockPtr, sw.pointerTy);
+        maxFileNum = b->CreateSub(b->CreateCall(getFileCount, {accumulator}), b->getInt32(1));
+        Value * initialFileNum = b->getScalarField("batchFileNum");
+        Value * nextFileNum = b->CreateAdd(initialFileNum, b->getInt32(1));
+        availableLimit = b->getAvailableItemCount("matchResult");
+        inFinalFile = b->CreateICmpEQ(initialFileNum, maxFileNum);
+        Value * fileLimit = b->CreateCall(getFileStartPos, {accumulator, b->CreateSelect(inFinalFile, maxFileNum, nextFileNum)});
+        Value * initialFileLimit = b->CreateSelect(inFinalFile, availableLimit, fileLimit);
+        b->setScalarField("pendingFileLimit", initialFileLimit);
+}
+    b->CreateBr(stridePrologue);
+
+    b->SetInsertPoint(stridePrologue);
+    // Set up the loop variables as PHI nodes at the beginning of each stride.
+    PHINode * const strideNo = b->CreatePHI(sizeTy, 2);
+    strideNo->addIncoming(ZERO, entryBlock);
+    PHINode * const pendingLineStart = b->CreatePHI(sizeTy, 2);
+    pendingLineStart->addIncoming(initialLineStart, entryBlock);
+    PHINode * pendingLineNum = nullptr;
+    if (mLineNumbering) {
+        pendingLineNum = b->CreatePHI(sizeTy, 2);
+        pendingLineNum->addIncoming(initialLineNum, entryBlock);
+        //b->CallPrintInt("stride pendingLineNum", pendingLineNum);
+    }
+    Value * stridePos = b->CreateAdd(initialPos, b->CreateMul(strideNo, STRIDE));
+    Value * strideBlockOffset = b->CreateMul(strideNo, BLOCKS_PER_STRIDE);
+    Value * nextStrideNo = b->CreateAdd(strideNo, ONE);
+    b->CreateBr(stridePrecomputation);
+
+
+    // Precompute index masks for one stride of the match result and line break streams,
+    // as well as a partial sum popcount of line numbers if line numbering is on.
+    b->SetInsertPoint(stridePrecomputation);
+    PHINode * const matchMaskAccum = b->CreatePHI(sizeTy, 2);
+    matchMaskAccum->addIncoming(ZERO, stridePrologue);
+    PHINode * const breakMaskAccum = b->CreatePHI(sizeTy, 2);
+    breakMaskAccum->addIncoming(ZERO, stridePrologue);
+    PHINode * const blockNo = b->CreatePHI(sizeTy, 2);
+    blockNo->addIncoming(ZERO, stridePrologue);
+    PHINode * baseCounts = nullptr;
+    if (mLineNumbering) {
+        baseCounts = b->CreatePHI(b->getBitBlockType(), 2);
+        baseCounts->addIncoming(b->allZeroes(), stridePrologue);
+    }
+    Value * strideBlockIndex = b->CreateAdd(strideBlockOffset, blockNo);
+    Value * matchBitBlock = b->loadInputStreamBlock("matchResult", ZERO, strideBlockIndex);
+    Value * breakBitBlock = b->loadInputStreamBlock("lineBreak", ZERO, strideBlockIndex);
+
+    Value * const anyMatch = b->simd_any(sw.width, matchBitBlock);
+    Value * const anyBreak = b->simd_any(sw.width, breakBitBlock);
+    if (mLineNumbering) {
+        Value * breakCounts = b->hsimd_partial_sum(sw.width, b->simd_popcount(sw.width, breakBitBlock));
+        breakCounts = b->simd_add(sw.width, breakCounts, baseCounts);
+        b->CreateBlockAlignedStore(b->bitCast(breakCounts), b->CreateGEP(lineCountArrayBlockPtr, blockNo));
+        Value * baseCountsNext = b->bitCast(b->simd_fill(sw.width, b->mvmd_extract(sw.width, breakCounts, b->getBitBlockWidth()/sw.width - 1)));
+        baseCounts->addIncoming(baseCountsNext, stridePrecomputation);
+    }
+    Value * matchWordMask = b->CreateZExt(b->hsimd_signmask(sw.width, anyMatch), sizeTy);
+    Value * breakWordMask = b->CreateZExt(b->hsimd_signmask(sw.width, anyBreak), sizeTy);
+    Value * matchMask = b->CreateOr(matchMaskAccum, b->CreateShl(matchWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "matchMask");
+    Value * breakMask = b->CreateOr(breakMaskAccum, b->CreateShl(breakWordMask, b->CreateMul(blockNo, sw.WORDS_PER_BLOCK)), "breakMask");
+    Value * const nextBlockNo = b->CreateAdd(blockNo, ONE);
+
+    matchMaskAccum->addIncoming(matchMask, stridePrecomputation);
+    breakMaskAccum->addIncoming(breakMask, stridePrecomputation);
+    blockNo->addIncoming(nextBlockNo, stridePrecomputation);
+    b->CreateCondBr(b->CreateICmpNE(nextBlockNo, BLOCKS_PER_STRIDE), stridePrecomputation, strideMasksReady);
+
+    b->SetInsertPoint(strideMasksReady);
+    // If there are no breaks in the stride, there are no matches.   We can move on to
+    // the next stride immediately.
+    b->CreateUnlikelyCondBr(b->CreateICmpEQ(breakMask, ZERO), matchesDone, updateLineInfo);
+
+    b->SetInsertPoint(updateLineInfo);
+    // We have at least one line break.   Determine the end-of-stride line start position
+    // and line number, if needed.
+    Value * matchWordBasePtr = b->getInputStreamBlockPtr("matchResult", ZERO, strideBlockOffset);
+    matchWordBasePtr = b->CreatePointerCast(matchWordBasePtr, sw.pointerTy);
+    Value * breakWordBasePtr = b->getInputStreamBlockPtr("lineBreak", ZERO, strideBlockOffset);
+    breakWordBasePtr = b->CreatePointerCast(breakWordBasePtr, sw.pointerTy);
+
+    Value * finalBreakIdx = b->CreateSub(MAXBIT, b->CreateCountReverseZeroes(breakMask), "finalBreakIdx");
+    Value * finalBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, finalBreakIdx)), sizeTy);
+    Value * finalLineStartInWord = b->CreateSub(BITS, b->CreateCountReverseZeroes(finalBreakWord));
+    Value * finalLineStartPos = b->CreateAdd(stridePos, b->CreateMul(finalBreakIdx, sw.WIDTH));
+    finalLineStartPos = b->CreateAdd(finalLineStartInWord, finalLineStartPos);
+    Value * strideFinalLineNum = nullptr;
+    if (mLineNumbering) {
+        // compute the final line number.
+        Value * strideLineCount = b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, sw.ix_MAXBIT));
+        strideFinalLineNum = b->CreateAdd(pendingLineNum, b->CreateZExtOrTrunc(strideLineCount, sizeTy));
+        //b->CallPrintInt("finalLineStartPos", finalLineStartPos);
+        //b->CallPrintInt("strideFinalLineNum", strideFinalLineNum);
+        Value * pendingFileLimit = b->getScalarField("pendingFileLimit");
+        Value * notFinalFile = b->CreateICmpNE(b->getScalarField("batchFileNum"), maxFileNum);
+        Value * beyondFileEnd = b->CreateICmpUGE(finalLineStartPos, pendingFileLimit);
+        beyondFileEnd = b->CreateAnd(beyondFileEnd, notFinalFile);
+        b->CreateUnlikelyCondBr(beyondFileEnd, updateFileLimit, processMatches);
+
+        b->SetInsertPoint(updateFileLimit);
+        pendingFileLimit = b->getScalarField("pendingFileLimit");
+        Value * fileNum = b->CreateAdd(b->getScalarField("batchFileNum"), b->getInt32(1));
+        b->setScalarField("batchFileNum", fileNum);
+        Value * strideOffsetPos = b->CreateSub(pendingFileLimit, stridePos);
+        Value * offsetIdx = b->CreateUDiv(strideOffsetPos, sw.WIDTH);
+        Value * offsetPosInWord = b->CreateURem(strideOffsetPos, sw.WIDTH);
+        // Get the count of all line breaks including the offset word.
+        Value * offsetLineCount = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, offsetIdx)), sizeTy);
+        // Subtract the breaaks that are past the start position.
+        Value * fileBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, offsetIdx)), sizeTy);
+        Value * excess = b->CreatePopcount(b->CreateLShr(fileBreakWord, offsetPosInWord));
+        Value * priorLineCount = b->CreateAdd(b->CreateSub(offsetLineCount, excess), pendingLineNum);
+        //b->CallPrintInt("priorLineCount", priorLineCount);
+        b->CreateCall(setBatchLineNumber, {accumulator, fileNum, priorLineCount});
+        notFinalFile = b->CreateICmpNE(fileNum, maxFileNum);
+        //b->CallPrintInt("notFinalFile", notFinalFile);
+        Value * nextFileNum = b->CreateAdd(fileNum, b->getInt32(1));
+        Value * fileLimit = b->CreateCall(getFileStartPos, {accumulator, b->CreateSelect(notFinalFile, nextFileNum, maxFileNum)});
+        Value * nextFileLimit = b->CreateSelect(notFinalFile, fileLimit, availableLimit);
+        b->setScalarField("pendingFileLimit", nextFileLimit);
+        beyondFileEnd = b->CreateAnd(b->CreateICmpUGE(finalLineStartPos, nextFileLimit), notFinalFile);
+        b->CreateUnlikelyCondBr(beyondFileEnd, updateFileLimit, processMatches);
+        b->SetInsertPoint(processMatches);
+    }
+    // Now check whether there are any matches at all in the stride.   If not, we
+    // can immediately move on to the next stride.
+    // We optimize for the case of no matches; the cost of the branch penalty
+    // is expected to be small relative to the processing of each match.
+    b->CreateLikelyCondBr(b->CreateICmpEQ(matchMask, ZERO), matchesDone, strideMatchLoop);
+
+    // Precondition: we have at least one more match to process.
+    b->SetInsertPoint(strideMatchLoop);
+    PHINode * const matchMaskPhi = b->CreatePHI(sizeTy, 2);
+    matchMaskPhi->addIncoming(matchMask, processMatches);
+    PHINode * const matchWordPhi = b->CreatePHI(sizeTy, 2);
+    matchWordPhi->addIncoming(ZERO, processMatches);
+
+    // If we have any bits in the current matchWordPhi, continue with those, otherwise load
+    // the next match word.
+    Value * matchWordIdx = b->CreateCountForwardZeroes(matchMaskPhi, "matchWordIdx");
+    Value * nextMatchWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(matchWordBasePtr, matchWordIdx)), sizeTy);
+    Value * matchBreakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, matchWordIdx)), sizeTy);
+    Value * theMatchWord = b->CreateSelect(b->CreateICmpEQ(matchWordPhi, ZERO), nextMatchWord, matchWordPhi);
+    Value * matchWordPos = b->CreateAdd(stridePos, b->CreateMul(matchWordIdx, sw.WIDTH));
+    Value * matchEndPosInWord = b->CreateCountForwardZeroes(theMatchWord);
+    Value * matchEndPos = b->CreateAdd(matchWordPos, matchEndPosInWord, "matchEndPos");
+    // Find the prior line break.  There are three possibilities.
+    // (a) a prior break in the break word corresponding to the current match word.
+    // (b) the last break in a prior word within the current stride.
+    // (c) the pending line start from previous iterations.
+    // Case (b) is most likely and requires a load of the prior break word.
+    // We avoid branching by safely loading a prior word in any case and then
+    // using selects to handle cases (a) and (c).
+    Value * priorBreaksThisWord = b->CreateZeroHiBitsFrom(matchBreakWord, matchEndPosInWord);
+    Value * priorBreaksInStride = b->CreateZeroHiBitsFrom(breakMask, matchWordIdx);
+    Value * inWordCond = b->CreateICmpNE(priorBreaksThisWord, ZERO);
+    Value * inStrideCond = b->CreateICmpNE(priorBreaksInStride, ZERO);
+    Value * breakWordIdx = b->CreateSub(MAXBIT, b->CreateCountReverseZeroes(priorBreaksInStride), "breakWordIdx_");
+    // Create a safe index to load; the loaded value will be ignored for cases (a), (c).
+    breakWordIdx = b->CreateSelect(inStrideCond, breakWordIdx, ZERO);
+    breakWordIdx = b->CreateSelect(inWordCond, matchWordIdx, breakWordIdx, "breakWordIdx");
+    Value * breakWord = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(breakWordBasePtr, breakWordIdx)), sizeTy);
+    // For case (a), we use the previously masked value of the break word.
+    breakWord = b->CreateSelect(inWordCond, priorBreaksThisWord, breakWord);   // cases (a) and (b)
+    Value * lineStartInWord = b->CreateSub(BITS, b->CreateCountReverseZeroes(breakWord));
+    Value * lineStartBase = b->CreateAdd(stridePos, b->CreateMul(breakWordIdx, sw.WIDTH));
+    Value * lineStartPos = b->CreateAdd(lineStartBase, lineStartInWord);
+    // The break position is the line start for cases (a), (b); otherwise use the pending value.
+    Value * const matchStart = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineStartPos, pendingLineStart, "matchStart");
+    Value * matchRecordNum = nullptr;
+    if (mLineNumbering) {
+        // We must handle cases (a), (b), (c)
+        // Get the line number for all positions up to and including the break word.
+        Value * lineCountInStride = b->CreateZExtOrTrunc(b->CreateLoad(b->CreateGEP(lineCountArrayWordPtr, breakWordIdx)), sizeTy);
+        // For case (a), we may need to subtract some breaks, if they are at the match end or later.
+        Value * extraBreaks = b->CreateXor(breakWord, b->CreateSelect(inWordCond, matchBreakWord, breakWord));
+        lineCountInStride = b->CreateSub(lineCountInStride, b->CreatePopcount(extraBreaks));
+        // For case (c), there are no line breaks.
+        lineCountInStride = b->CreateSelect(b->CreateOr(inWordCond, inStrideCond), lineCountInStride, ZERO);
+        matchRecordNum = b->CreateAdd(pendingLineNum, lineCountInStride);
+    }
+
+    // It is possible that the matchRecordEnd position is one past EOF.  Make sure not
+    // to access past EOF.
+    Value * const bufLimit = b->CreateSub(avail, ONE);
+    matchEndPos = b->CreateUMin(matchEndPos, bufLimit);
+    // matchStart should never be past EOF, but in case it is....
+    //b->CreateAssert(b->CreateICmpULT(matchStart, avail), "match position past EOF");
+    b->CreateCondBr(b->CreateICmpULT(matchStart, avail), dispatch, callFinalizeScan);
+
+    b->SetInsertPoint(dispatch);
+    Function * const dispatcher = m->getFunction("accumulate_match_wrapper"); assert (dispatcher);
+
+    Value * const startPtr = b->getRawInputPointer("InputStream", matchStart);
+    Value * const endPtr = b->getRawInputPointer("InputStream", matchEndPos);
+
+//    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+//        Value * const A = b->CreateSub(matchEndPos, matchStart);
+//        Value * const B = b->CreatePtrDiff(endPtr, startPtr);
+//        b->CreateAssert(b->CreateICmpEQ(A, B), "InputStream is not contiguous");
+//    }
+
+    auto argi = dispatcher->arg_begin();
+    const auto matchRecNumArg = &*(argi++);
+    Value * const matchRecNum = b->CreateZExtOrTrunc(matchRecordNum, matchRecNumArg->getType());
+    b->CreateCall(dispatcher, {accumulator, matchRecNum, startPtr, endPtr});
+
+    //  We've dealt with the match, now prepare for the next one, if any.
+    // There may be more matches in the current word.
+    Value * dropMatch = b->CreateResetLowestBit(theMatchWord, "dropMatch");
+    Value * thisWordDone = b->CreateICmpEQ(dropMatch, ZERO);
+    // There may be more matches in the match mask.
+    Value * resetMatchMask = b->CreateResetLowestBit(matchMaskPhi, "nextMatchMask");
+    Value * nextMatchMask = b->CreateSelect(thisWordDone, resetMatchMask, matchMaskPhi);
+    BasicBlock * currentBB = b->GetInsertBlock();
+    matchMaskPhi->addIncoming(nextMatchMask, currentBB);
+    matchWordPhi->addIncoming(dropMatch, currentBB);
+    b->CreateCondBr(b->CreateICmpNE(nextMatchMask, ZERO), strideMatchLoop, matchesDone);
+
+    b->SetInsertPoint(matchesDone);
+    PHINode * strideFinalLineStart = b->CreatePHI(sizeTy, 3);
+    strideFinalLineStart->addIncoming(pendingLineStart, strideMasksReady);
+    strideFinalLineStart->addIncoming(finalLineStartPos, processMatches);
+    strideFinalLineStart->addIncoming(finalLineStartPos, currentBB);
+    PHINode * strideFinalLineNumPhi = nullptr;
+    if (mLineNumbering) {
+        strideFinalLineNumPhi = b->CreatePHI(sizeTy, 3);
+        strideFinalLineNumPhi->addIncoming(pendingLineNum, strideMasksReady);
+        strideFinalLineNumPhi->addIncoming(strideFinalLineNum, processMatches);
+        strideFinalLineNumPhi->addIncoming(strideFinalLineNum, currentBB);
+    }
+    strideNo->addIncoming(nextStrideNo, matchesDone);
+    pendingLineStart->addIncoming(strideFinalLineStart, matchesDone);
+    if (mLineNumbering) {
+        pendingLineNum->addIncoming(strideFinalLineNumPhi, matchesDone);
+    }
+    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), stridePrologue, stridesDone);
+
+    b->SetInsertPoint(stridesDone);
+    if (mLineNumbering) {
+        b->setScalarField("LineNum", strideFinalLineNumPhi);
+    }
+    b->setProcessedItemCount("InputStream", strideFinalLineStart);
+    b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
+
+    b->SetInsertPoint(callFinalizeScan);
+    Function * finalizer = m->getFunction("finalize_match_wrapper"); assert (finalizer);
+    Value * const bufferEnd = b->getRawInputPointer("InputStream", avail);
+    b->CreateCall(finalizer, {accumulator, bufferEnd});
+    b->CreateBr(scanReturn);
+
+    b->SetInsertPoint(scanReturn);
+}
+
+ScanBatchKernel::ScanBatchKernel(BuilderRef b, StreamSet * const Matches, StreamSet * const LineBreakStream, StreamSet * const ByteStream, Scalar * const callbackObject, unsigned strideBlocks)
+    : MultiBlockKernel(b, "scanBatch" + std::to_string(strideBlocks),
+// inputs
+{Binding{"matchResult", Matches}
+,Binding{"lineBreak", LineBreakStream}
+,Binding{"InputStream", ByteStream, FixedRate(), { Deferred() }}},
+// outputs
+{},
+// input scalars
+{Binding{"accumulator_address", callbackObject}},
+// output scalars
+{},
+// kernel state
+{InternalScalar{b->getSizeTy(), "LineNum"}, InternalScalar{b->getInt32Ty(), "batchFileNum"}, InternalScalar{b->getSizeTy(), "pendingFileLimit"}}) {
+    addAttribute(SideEffecting());
+    setStride(std::min(b->getBitBlockWidth() * strideBlocks, SIZE_T_BITS * SIZE_T_BITS));
+}
+
+
 
 enum MatchCoordinatesEnum {LINE_STARTS = 0, LINE_ENDS = 1, LINE_NUMBERS = 2};
 
@@ -632,7 +957,7 @@ void MatchReporter::generateDoSegmentMethod(BuilderRef b) {
 
     b->SetInsertPoint(coordinatesDone);
     //b->setProcessedItemCount("InputStream", matchRecordEnd);
-    b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
+    b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
     b->setProcessedItemCount("InputStream", avail);
@@ -925,7 +1250,7 @@ void ColorizedReporter::generateDoSegmentMethod(BuilderRef b) {
 
     b->SetInsertPoint(coordinatesDone);
     //b->setProcessedItemCount("InputStream", matchRecordEnd);
-    b->CreateCondBr(mIsFinal, callFinalizeScan, scanReturn);
+    b->CreateCondBr(b->isFinal(), callFinalizeScan, scanReturn);
 
     b->SetInsertPoint(callFinalizeScan);
     b->setProcessedItemCount("InputStream", avail);

@@ -13,10 +13,18 @@ namespace re { class CC; }
 
 namespace kernel {
 
-class CharacterClassKernelBuilder final : public pablo::PabloKernel {
-public:    
-    CharacterClassKernelBuilder(BuilderRef b, std::string ccSetName, std::vector<re::CC *> charClasses, StreamSet * byteStream, StreamSet * ccStream, Scalar * signalNullObject = nullptr);
+struct CharacterClassesSignature {
+    CharacterClassesSignature(const std::vector<re::CC *> & ccs, StreamSet * source, Scalar * signal);
 protected:
+    const std::string mSignature;
+};
+
+class CharacterClassKernelBuilder final : public CharacterClassesSignature, public pablo::PabloKernel {
+public:    
+    CharacterClassKernelBuilder(BuilderRef b, std::vector<re::CC *> charClasses, StreamSet * source, StreamSet * ccStream, Scalar * signalNullObject = nullptr);
+protected:
+    bool hasSignature() const override { return true; }
+    llvm::StringRef getSignature() const override;
     void generatePabloMethod() override;
     Bindings makeInputScalarBindings(Scalar * signalNullObject);
 private:

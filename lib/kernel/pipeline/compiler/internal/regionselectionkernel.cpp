@@ -410,7 +410,7 @@ void RegionSelectionKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * 
     // span up to it.
 
     // NOTE: if we planned to reverse the stream later, we cannot do this.
-    Value * writeToEnd = mIsFinal;
+    Value * writeToEnd = b->isFinal();
     if (mAlwaysExtendSelectedRegionsToRegionEnds) {
         writeToEnd = b->CreateOr(writeToEnd, b->bitblock_any(selectedReadCarryOut));
     }
@@ -436,7 +436,7 @@ void RegionSelectionKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * 
 
     Value * const finalRegionFill = splatCarryBit(b, fieldWidth, numOfFields, selectedWriteCarryOut);
     Value * const extendFinalSpan = b->CreateICmpNE(lastRegionStartIndexPhi, numOfStrides);
-    Value * const writableOutputItems = getWritableOutputItems(0);
+    Value * const writableOutputItems = b->getWritableOutputItems("regionSpans");
     b->CreateCondBr(extendFinalSpan, extendFinal, exit);
 
     b->SetInsertPoint(extendFinal);

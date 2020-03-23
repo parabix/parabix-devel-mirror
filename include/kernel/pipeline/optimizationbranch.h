@@ -35,6 +35,8 @@ public:
         return mCondition;
     }
 
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
+
 protected:
 
     OptimizationBranch(BuilderRef b,
@@ -47,26 +49,26 @@ protected:
                        Bindings && scalar_inputs,
                        Bindings && scalar_outputs);
 
-    void addInternalProperties(BuilderRef b) final;
+    void addKernelDeclarations(BuilderRef b) override;
 
-    void addKernelDeclarations(BuilderRef b) final;
+    void addInternalProperties(BuilderRef b) override;
 
-    void generateInitializeMethod(BuilderRef b) final;
+    void generateInitializeMethod(BuilderRef b) override;
 
-    void generateInitializeThreadLocalMethod(BuilderRef b) final;
+    void generateInitializeThreadLocalMethod(BuilderRef b) override;
 
-    void generateKernelMethod(BuilderRef b) final;
+    void generateKernelMethod(BuilderRef b) override;
 
-    void generateFinalizeThreadLocalMethod(BuilderRef b) final;
+    void generateFinalizeThreadLocalMethod(BuilderRef b) override;
 
-    void generateFinalizeMethod(BuilderRef b) final;
+    void generateFinalizeMethod(BuilderRef b) override;
 
 private:
 
     Relationship * const                        mCondition;
     Kernel * const                              mNonZeroKernel;
     Kernel * const                              mAllZeroKernel;
-    std::unique_ptr<OptimizationBranchCompiler> mCompiler;
+
 };
 
 }

@@ -11,31 +11,41 @@
 
 namespace pablo {
 
-using BixNum = std::vector<PabloAST *>;
 
+//  A BixNum is a Parabix representation of a stream of (nonnegative) integers.
+//  For example, we can represent 4-bit integers using a vector of 4 bit streams.
+//  If the stream is {3, 0, 2, 14, 9}, then the corresponding BixNum b consists of
+//  4 bit streams of length 5.
+//  b[3] = 00011
+//  b[2] = 00010
+//  b[1] = 10110
+//  b[0] = 10001
+
+using BixNum = std::vector<PabloAST *>;
 
 class BixNumCompiler {
 public:
     BixNumCompiler(PabloBuilder & pb) : mPB(pb) {}
     BixNum Create(unsigned val);
-    PabloAST * EQ(BixNum value, unsigned test);
-    PabloAST * EQ(BixNum value, BixNum test);
-    PabloAST * NEQ(BixNum value, unsigned test);
-    PabloAST * NEQ(BixNum value, BixNum test);
-    PabloAST * UGE(BixNum value, unsigned floor);
-    PabloAST * UGE(BixNum value, BixNum floor);
-    PabloAST * UGT(BixNum value, unsigned floor);
-    PabloAST * UGT(BixNum value, BixNum floor);
-    PabloAST * ULE(BixNum value, unsigned floor);
-    PabloAST * ULE(BixNum value, BixNum floor);
-    PabloAST * ULT(BixNum value, unsigned floor);
-    PabloAST * ULT(BixNum value, BixNum floor);
+    PabloAST * EQ(BixNum value, unsigned test, const llvm::StringRef &Name = "");
+    PabloAST * EQ(BixNum value, BixNum test, const llvm::StringRef &Name = "");
+    PabloAST * NEQ(BixNum value, unsigned test, const llvm::StringRef &Name = "");
+    PabloAST * NEQ(BixNum value, BixNum test, const llvm::StringRef &Name = "");
+    PabloAST * UGE(BixNum value, unsigned floor, const llvm::StringRef &Name = "");
+    PabloAST * UGE(BixNum value, BixNum floor, const llvm::StringRef &Name = "");
+    PabloAST * UGT(BixNum value, unsigned floor, const llvm::StringRef &Name = "");
+    PabloAST * UGT(BixNum value, BixNum floor, const llvm::StringRef &Name = "");
+    PabloAST * ULE(BixNum value, unsigned floor, const llvm::StringRef &Name = "");
+    PabloAST * ULE(BixNum value, BixNum floor, const llvm::StringRef &Name = "");
+    PabloAST * ULT(BixNum value, unsigned floor, const llvm::StringRef &Name = "");
+    PabloAST * ULT(BixNum value, BixNum floor, const llvm::StringRef &Name = "");
     BixNum ZeroExtend(BixNum value, unsigned extended_size);
     BixNum SignExtend(BixNum value, unsigned extended_size);
     BixNum Truncate(BixNum value, unsigned truncated_size);
     BixNum HighBits(BixNum value, unsigned highBitCount);
     //
-    // Modular arithmetic operations
+    // Modular arithmetic operations; the results have the same
+    // length as the first argument in each case.
     BixNum AddModular(BixNum augend, unsigned addend);
     BixNum AddModular(BixNum augend, BixNum addend);
     BixNum SubModular(BixNum minuend, unsigned subtrahend);

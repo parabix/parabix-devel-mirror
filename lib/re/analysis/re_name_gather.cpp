@@ -18,8 +18,6 @@ struct NameCollector final : public RE_Inspector {
     }
 
     void inspectName(Name * n) final {
-        RE * defn = n->getDefinition();
-        if (defn) inspect(defn);
         mNameSet.insert(n);
     }
 

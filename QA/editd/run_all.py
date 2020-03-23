@@ -10,15 +10,15 @@ if __name__ == "__main__":
     output_home = 'OutputFiles'
     if os.path.exists(output_home + ".bak" ):
         shutil.rmtree(output_home + ".bak")
-        if os.path.exists(output_home):
-          shutil.move(output_home, output_home + ".bak")
-          os.mkdir(output_home)
-          out_f = open(output_home + '/reads2', 'w')
-          expected_f = open('ExpectedOutput/reads2', 'r')
-          call([options.exec_dir+'/editd', '-f', 'TestFiles/reads2', 'chr.fa', '-display'], stdout=out_f)
-          out_f.close()
-          if open(output_home + '/reads2', 'r').read()==expected_f.read():
-              print('Edit Distance test succeeded.')
-          else:
-              print('Edit Distance test failed.')
-              exit(1)
+    if os.path.exists(output_home):
+      shutil.move(output_home, output_home + ".bak")
+    os.mkdir(output_home)
+    out_f = open(output_home + '/reads2', 'w')
+    expected_f = open('ExpectedOutput/reads2', 'r')
+    call([options.exec_dir+'/editd', '-f', 'TestFiles/reads2', 'chr.fa', '-display'], stdout=out_f)
+    out_f.close()
+    if open(output_home + '/reads2', 'r').read()==expected_f.read():
+        print('Edit Distance test succeeded.')
+    else:
+        print('Edit Distance test failed.')
+        exit(1)

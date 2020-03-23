@@ -1,6 +1,7 @@
 #ifndef OPTIMIZATIONBRANCH_COMPILER_HPP
 #define OPTIMIZATIONBRANCH_COMPILER_HPP
 
+#include <kernel/core/kernel_compiler.h>
 #include <kernel/pipeline/optimizationbranch.h>
 #include <kernel/pipeline/pipeline_kernel.h>
 #include <kernel/core/streamset.h>
@@ -55,7 +56,7 @@ using RelationshipCache = flat_map<RelationshipGraph::vertex_descriptor, Value *
 
 
 using PortType = Kernel::PortType;
-using StreamPort = Kernel::StreamSetPort;
+using StreamSetPort = Kernel::StreamSetPort;
 using BuilderRef = BuilderRef;
 using AttrId = Attribute::KindId;
 
@@ -75,8 +76,9 @@ static_assert (ALL_ZERO_BRANCH < NON_ZERO_BRANCH, "invalid branch type ordering"
 static_assert (OTHER_BRANCH(ALL_ZERO_BRANCH) == NON_ZERO_BRANCH, "invalid branch type ordering");
 static_assert (OTHER_BRANCH(NON_ZERO_BRANCH) == ALL_ZERO_BRANCH, "invalid branch type ordering");
 
+using CompilerArray = std::array<std::unique_ptr<KernelCompiler>, 4>;
 
-class OptimizationBranchCompiler {
+class OptimizationBranchCompiler final : public KernelCompiler {
 
     enum class RelationshipType : unsigned {
         StreamSet
@@ -84,7 +86,8 @@ class OptimizationBranchCompiler {
     };
 
 public:
-    OptimizationBranchCompiler(OptimizationBranch * const branch);
+
+    OptimizationBranchCompiler(BuilderRef b, OptimizationBranch * const branch) noexcept;
 
     void addBranchProperties(BuilderRef b);
     void generateInitializeMethod(BuilderRef b);
@@ -92,7 +95,8 @@ public:
     void generateKernelMethod(BuilderRef b);
     void generateFinalizeThreadLocalMethod(BuilderRef b);
     void generateFinalizeMethod(BuilderRef b);
-    std::vector<Value *> getFinalOutputScalars(BuilderRef b);
+
+    std::vector<Value *> getFinalOutputScalars(BuilderRef b) override;
 
 private:
 
@@ -132,9 +136,11 @@ private:
 
 private:
 
+    const Relationship * const          mCondition;
 
-    OptimizationBranch * const          mBranch;
     const std::array<const Kernel *, 4> mBranches;
+
+    const CompilerArray                 mBranchCompiler;
 
     Value *                             mFirstBranchPath = nullptr;
     PHINode *                           mBranchDemarcationArray = nullptr;
@@ -206,6 +212,15 @@ inline const Binding & OptimizationBranchCompiler::getOutputBinding(const Kernel
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief concat
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline StringRef concat(StringRef A, StringRef B, SmallVector<char, 256> & tmp) {
+    Twine C = A + B;
+    tmp.clear();
+    return C.toStringRef(tmp);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeRelationshipGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const RelationshipType type) const {
@@ -216,7 +231,7 @@ RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const Relati
     RelationshipGraph G(INITIAL_GRAPH_SIZE);
     Map M;
 
-    auto addRelationship = [&](Relationship * const rel) {
+    auto addRelationship = [&](const Relationship * const rel) {
         const auto f = M.find(rel);
         if (LLVM_UNLIKELY(f != M.end())) {
             return f->second;
@@ -227,27 +242,27 @@ RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const Relati
         }
     };
 
-    const auto numOfInputs = getNumOfInputBindings(mBranch, type);
+    const auto numOfInputs = getNumOfInputBindings(mTarget, type);
     for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto & input = getInputBinding(mBranch, type, i);
+        const auto & input = getInputBinding(mTarget, type, i);
         const auto r = addRelationship(input.getRelationship());
         add_edge(BRANCH_INPUT, r, RelationshipRef{i, input.getName(), input}, G);
     }
 
-    const auto numOfOutputs = getNumOfOutputBindings(mBranch, type);
+    const auto numOfOutputs = getNumOfOutputBindings(mTarget, type);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto & output = getOutputBinding(mBranch, type, i);
+        const auto & output = getOutputBinding(mTarget, type, i);
         const auto r = addRelationship(output.getRelationship());
         add_edge(r, BRANCH_OUTPUT, RelationshipRef{i, output.getName(), output}, G);
     }
 
-    if (type == RelationshipType::StreamSet && isa<StreamSet>(mBranch->getCondition())) {
-        const auto r = addRelationship(mBranch->getCondition());
+    if (type == RelationshipType::StreamSet && isa<StreamSet>(mCondition)) {
+        const auto r = addRelationship(mCondition);
         add_edge(r, CONDITION_VARIABLE, RelationshipRef{}, G);
     }
 
-    if (type == RelationshipType::Scalar && isa<Scalar>(mBranch->getCondition())) {
-        const auto r = addRelationship(mBranch->getCondition());
+    if (type == RelationshipType::Scalar && isa<Scalar>(mCondition)) {
+        const auto r = addRelationship(mCondition);
         add_edge(r, CONDITION_VARIABLE, RelationshipRef{}, G);
     }
 
@@ -282,7 +297,7 @@ RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const Relati
 
         const auto numOfInputs = getNumOfInputBindings(kernel, type);
         for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto & input = getInputBinding(mBranch, type, i);
+            const auto & input = getInputBinding(mTarget, type, i);
             const auto r = findRelationship(input);
             add_edge(r, branch, RelationshipRef{i, input.getName(), input}, G);
         }
@@ -295,8 +310,8 @@ RelationshipGraph OptimizationBranchCompiler::makeRelationshipGraph(const Relati
         }
     };
 
-    linkRelationships(mBranch->getAllZeroKernel(), ALL_ZERO_BRANCH);
-    linkRelationships(mBranch->getNonZeroKernel(), NON_ZERO_BRANCH);
+    linkRelationships(mBranches[ALL_ZERO_BRANCH], ALL_ZERO_BRANCH);
+    linkRelationships(mBranches[NON_ZERO_BRANCH], NON_ZERO_BRANCH);
 
     return G;
 }
@@ -316,11 +331,11 @@ void OptimizationBranchCompiler::addBranchProperties(BuilderRef b) {
             } else {
                 handlePtrType = kernel->getSharedStateType()->getPointerTo();
             }
-            mBranch->addInternalScalar(handlePtrType, SHARED_PREFIX + std::to_string(i));
+            mTarget->addInternalScalar(handlePtrType, SHARED_PREFIX + std::to_string(i));
         }
 
         if (kernel->hasThreadLocal()) {
-            mBranch->addThreadLocalScalar(kernel->getThreadLocalStateType(), THREAD_LOCAL_PREFIX + std::to_string(i));
+            mTarget->addThreadLocalScalar(kernel->getThreadLocalStateType(), THREAD_LOCAL_PREFIX + std::to_string(i));
         }
     }
 }
@@ -355,7 +370,7 @@ void OptimizationBranchCompiler::generateInitializeMethod(BuilderRef b) {
         Value * const terminatedOnInit = b->CreateCall(kernel->getInitializeFunction(b), args);
         terminated = b->CreateOr(terminated, terminatedOnInit);
     }
-    b->CreateStore(terminated, mBranch->getTerminationSignalPtr());
+    b->CreateStore(terminated, getTerminationSignalPtr());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -388,7 +403,7 @@ Value * OptimizationBranchCompiler::loadHandle(BuilderRef b, const unsigned bran
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranchCompiler::generateKernelMethod(BuilderRef b) {
-    if (LLVM_LIKELY(isa<StreamSet>(mBranch->getCondition()))) {
+    if (LLVM_LIKELY(isa<StreamSet>(mCondition))) {
         generateStreamSetBranchMethod(b);
     } else {
 
@@ -432,7 +447,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     Constant * const ONE = b->getSize(1);
     UndefValue * const unknownState = UndefValue::get(boolTy);
 
-    Constant * const BLOCKS_PER_STRIDE = b->getSize(mBranch->getStride() / b->getBitBlockWidth());
+    Constant * const BLOCKS_PER_STRIDE = b->getSize(mTarget->getStride() / b->getBitBlockWidth());
     VectorType * const bitBlockTy = b->getBitBlockType();
 
     BasicBlock * const entry = b->GetInsertBlock();
@@ -444,7 +459,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
 
 
     const RelationshipRef & condRef = getConditionRef(mStreamSetGraph);
-    const StreamSetBuffer * const condBuffer = mBranch->getInputStreamSetBuffer(condRef.Index);
+    const StreamSetBuffer * const condBuffer = getInputStreamSetBuffer(condRef.Index);
 
     Value * const numOfConditionStreams = condBuffer->getStreamSetCount(b);
     Value * const numOfConditionBlocks = b->CreateMul(numOfConditionStreams, BLOCKS_PER_STRIDE);
@@ -458,7 +473,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
     Value * const spanCapacity = b->CreateLoad(spanCapacityPtr);
     Value * const spanBufferPtr = b->getScalarFieldPtr(SPAN_BUFFER);
     Value * const initialSpanBuffer = b->CreateLoad(spanBufferPtr);
-    Value * const numOfStrides = mBranch->getNumOfStrides();
+    Value * const numOfStrides = getNumOfStrides();
     Value * const largeEnough = b->CreateICmpULT(numOfStrides, spanCapacity);
     b->CreateLikelyCondBr(largeEnough, summarizeDemarcations, resizeSpan);
 
@@ -565,7 +580,7 @@ void OptimizationBranchCompiler::findBranchDemarcations(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranchCompiler::waitForPriorThreads(BuilderRef b) {
 
-    Value * const myLogicalSegmentNum = mBranch->getExternalSegNo();
+    Value * const myLogicalSegmentNum = getExternalSegNo();
     mLogicalSegmentNumber[BRANCH_INPUT] = b->getScalarFieldPtr(LOGICAL_SEGMENT_NUMBER);
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -614,7 +629,7 @@ inline void OptimizationBranchCompiler::executeBranches(BuilderRef b) {
 
     b->SetInsertPoint(exitLoop);
     mTerminatedPhi = nullptr;
-    if (mBranch->canSetTerminateSignal()) {
+    if (canSetTerminateSignal()) {
         mTerminatedPhi = b->CreatePHI(b->getInt1Ty(), 2);
     }
 
@@ -654,7 +669,7 @@ inline void OptimizationBranchCompiler::executeBranches(BuilderRef b) {
 
     b->SetInsertPoint(exitLoop);
     if (mTerminatedPhi) {
-        b->CreateStore(mTerminatedPhi, mBranch->getTerminationSignalPtr());
+        b->CreateStore(mTerminatedPhi, getTerminationSignalPtr());
     }
 }
 
@@ -696,8 +711,10 @@ Value * OptimizationBranchCompiler::enterBranch(BuilderRef b, const unsigned bra
 
     const Kernel * const kernel = mBranches[branchType];
     const auto prefix = kernel->getName();
-    BasicBlock * const otherWait = b->CreateBasicBlock(prefix + "_waitForOtherBranch");
-    BasicBlock * const kernelStart = b->CreateBasicBlock(prefix + "_start");
+
+    SmallVector<char, 256> tmp;
+    BasicBlock * const otherWait = b->CreateBasicBlock(concat(prefix, "_waitForOtherBranch", tmp));
+    BasicBlock * const kernelStart = b->CreateBasicBlock(concat(prefix, "_start", tmp));
     b->CreateCondBr(isBranchReady(b, branchType), kernelStart, otherWait);
     b->SetInsertPoint(otherWait);
     b->CreatePThreadYield();
@@ -713,7 +730,7 @@ Value * OptimizationBranchCompiler::enterBranch(BuilderRef b, const unsigned bra
     Value * const nextBranchSegmentNum = b->CreateAdd(branchSegmentNum, ONE);
     b->CreateStore(nextBranchSegmentNum, mLogicalSegmentNumber[branchType]);
 
-    Value * const mySegmentNum = mBranch->getExternalSegNo();
+    Value * const mySegmentNum = getExternalSegNo();
     Value * const nextSegmentNum = b->CreateAdd(mySegmentNum, b->CreateZExt(noMore, b->getSizeTy()));
     b->CreateAtomicStoreRelease(nextSegmentNum, mLogicalSegmentNumber[BRANCH_INPUT]);
 
@@ -773,39 +790,27 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
         reset(mPopCountRateArray, numOfInputs);
         reset(mNegatedPopCountRateArray, numOfInputs);
 
-        #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = kernel->getName();
-        b->CallPrintInt(prefix + "_numOfStrides", numOfStrides);
-        #endif
-
         for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
             const RelationshipRef & host = mStreamSetGraph[e];
             const RelationshipRef & path = mStreamSetGraph[preceding(e, mStreamSetGraph)];
             const Binding & input = kernel->getInputStreamSetBinding(path.Index);
             // processed input items
-            Value * processed = mBranch->getProcessedInputItemsPtr(host.Index);
+            Value * processed = getProcessedInputItemsPtr(host.Index);
             mProcessedInputItemPtr[path.Index] = processed;
             processed = b->CreateLoad(processed);
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = kernel->getName() + ":" + input.getName();
-            b->CallPrintInt(prefix + "_processedIn", processed);
-            #endif
             mProcessedInputItems[path.Index] = processed;
             // logical base input address
-            const StreamSetBuffer * const buffer = mBranch->getInputStreamSetBuffer(host.Index);
+            const StreamSetBuffer * const buffer = getInputStreamSetBuffer(host.Index);
             mBaseInputAddress[path.Index] = buffer->getBaseAddress(b);
             // accessible input items (after non-deferred processed item count)
-            Value * const accessible = mBranch->getAccessibleInputItems(path.Index);
+            Value * const accessible = getAccessibleInputItems(path.Index);
             Value * const provided = calculateAccessibleOrWritableItems(b, kernel, input, firstIndex, lastIndex, accessible);
             mAccessibleInputItems[path.Index] = b->CreateSelect(isFinal, accessible, provided);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_accessible", mAccessibleInputItems[path.Index]);
-            #endif
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresPopCountArray))) {
-                mPopCountRateArray[path.Index] = b->CreateGEP(mBranch->mPopCountRateArray[host.Index], firstIndex);
+                mPopCountRateArray[path.Index] = b->CreateGEP(mPopCountRateArray[host.Index], firstIndex);
             }
             if (LLVM_UNLIKELY(input.hasAttribute(AttrId::RequiresNegatedPopCountArray))) {
-                mNegatedPopCountRateArray[path.Index] = b->CreateGEP(mBranch->mNegatedPopCountRateArray[host.Index], firstIndex);
+                mNegatedPopCountRateArray[path.Index] = b->CreateGEP(mNegatedPopCountRateArray[host.Index], firstIndex);
             }
         }
 
@@ -820,24 +825,17 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             const RelationshipRef & path = mStreamSetGraph[descending(e, mStreamSetGraph)];
             const Binding & output = kernel->getOutputStreamSetBinding(path.Index);
             // produced output items
-            Value * produced = mBranch->getProducedOutputItemsPtr(host.Index);
+            Value * produced = getProducedOutputItemsPtr(host.Index);
             mProducedOutputItemPtr[path.Index] = produced;
             produced = b->CreateLoad(produced);
             mProducedOutputItems[path.Index] = produced;
-            #ifdef PRINT_DEBUG_MESSAGES
-            const auto prefix = kernel->getName() + ":" + output.getName();
-            b->CallPrintInt(prefix + "_producedIn", produced);
-            #endif
             // logical base input address
-            const StreamSetBuffer * const buffer = mBranch->getOutputStreamSetBuffer(host.Index);
+            const StreamSetBuffer * const buffer = getOutputStreamSetBuffer(host.Index);
             mBaseOutputAddress[path.Index] = buffer->getBaseAddress(b);
             // writable output items
-            Value * const writable = mBranch->getWritableOutputItems(path.Index);
+            Value * const writable = getWritableOutputItems(path.Index);
             Value * const provided = calculateAccessibleOrWritableItems(b, kernel, output, firstIndex, lastIndex, writable);
             mWritableOutputItems[path.Index] = b->CreateSelect(isFinal, writable, provided);
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(prefix + "_writable", mWritableOutputItems[path.Index]);
-            #endif
         }
 
         calculateFinalOutputItemCounts(b, isFinal, branchType);
@@ -907,9 +905,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             } else {
                 processed = b->CreateLoad(mProcessedInputItemPtr[i]);
             }
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(kernel->getName() + "." + input.getName() + "_processedOut", processed);
-            #endif
         }
 
         for (unsigned i = 0; i < numOfOutputs; ++i) {
@@ -922,9 +917,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
             } else {
                 produced = b->CreateLoad(mProducedOutputItemPtr[i]);
             }
-            #ifdef PRINT_DEBUG_MESSAGES
-            b->CallPrintInt(kernel->getName() + "." + output.getName() + "_producedOut", produced);
-            #endif
         }
 
         if (mTerminatedPhi) {
@@ -949,7 +941,7 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRef b, Value * const isFinal, const unsigned branchType) {
 
-    using RateValue = ProcessingRate::RateValue;
+    using Rational = ProcessingRate::Rational;
 
     const Kernel * const kernel = mBranches[branchType];
 
@@ -957,7 +949,7 @@ inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRe
 
     //   CEILING(PRINCIPAL_OR_MIN(Accessible Item Count / Fixed Input Rate) * Fixed Output Rate)
 
-    RateValue rateLCM(1);
+    Rational rateLCM(1);
     bool noPrincipalStream = true;
 
     for (const auto & e : make_iterator_range(in_edges(branchType, mStreamSetGraph))) {
@@ -1017,10 +1009,6 @@ inline void OptimizationBranchCompiler::calculateFinalOutputItemCounts(BuilderRe
             const ProcessingRate & rate = output.getRate();
             if (rate.isFixed()) {
                 pendingOutputItems[path.Index] = b->CreateCeilUDivRate(minScaledInverseOfAccessibleInput, rateLCM / rate.getUpperBound());
-                #ifdef PRINT_DEBUG_MESSAGES
-                const auto prefix = kernel->getName() + ":" + output.getName();
-                b->CallPrintInt(prefix + "_writable'", pendingOutputItems[path.Index]);
-                #endif
             }
         }
         b->CreateBr(executeKernel);
@@ -1050,13 +1038,13 @@ Value * OptimizationBranchCompiler::calculateAccessibleOrWritableItems(BuilderRe
         Value * const numOfStrides = b->CreateSub(last, first);
         return b->CreateMul(numOfStrides, strideLength);
     } else if (rate.isPopCount() || rate.isNegatedPopCount()) {
-        const auto refPort = mBranch->getStreamPort(rate.getReference());
+        const auto refPort = getStreamPort(rate.getReference());
         assert (refPort.Type == PortType::Input);
         Value * array = nullptr;
         if (rate.isNegatedPopCount()) {
-            array = mBranch->mNegatedPopCountRateArray[refPort.Number];
+            array = mNegatedPopCountRateArray[refPort.Number];
         } else {
-            array = mBranch->mPopCountRateArray[refPort.Number];
+            array = mPopCountRateArray[refPort.Number];
         }
         Constant * const ONE = b->getSize(1);
         Value * const currentIndex = b->CreateSub(last, ONE);
@@ -1084,15 +1072,6 @@ inline Value * OptimizationBranchCompiler::getInputScalar(BuilderRef b, const un
     return value;
 }
 
-inline std::array<const Kernel *, 4> makeBranches(const OptimizationBranch * const branch) {
-    std::array<const Kernel *, 4> branches;
-    branches[BRANCH_INPUT] = branch;
-    branches[ALL_ZERO_BRANCH] = branch->getAllZeroKernel();
-    branches[NON_ZERO_BRANCH] = branch->getNonZeroKernel();
-    branches[BRANCH_OUTPUT] = branch;
-    return branches;
-}
-
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateFinalizeThreadLocalMethod
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -1113,11 +1092,45 @@ void OptimizationBranchCompiler::generateFinalizeMethod(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getFinalOutputScalars
+ ** ------------------------------------------------------------------------------------------------------------- */
+std::vector<Value *> OptimizationBranchCompiler::getFinalOutputScalars(BuilderRef b) {
+    // TODO: IMPLEMENT THIS!
+    return std::vector<Value *>{};
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeBranches
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline std::array<const Kernel *, 4> makeBranches(const OptimizationBranch * const branch) {
+    std::array<const Kernel *, 4> branches;
+    branches[BRANCH_INPUT] = branch;
+    branches[ALL_ZERO_BRANCH] = branch->getAllZeroKernel();
+    branches[NON_ZERO_BRANCH] = branch->getNonZeroKernel();
+    branches[BRANCH_OUTPUT] = branch;
+    return branches;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeBranchCompilers
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline CompilerArray makeBranchCompilers(BuilderRef b, const OptimizationBranch * const branch) {
+    CompilerArray branches;
+    branches[BRANCH_INPUT] = nullptr;
+    branches[ALL_ZERO_BRANCH] = branch->getAllZeroKernel()->instantiateKernelCompiler(b);
+    branches[NON_ZERO_BRANCH] = branch->getNonZeroKernel()->instantiateKernelCompiler(b);
+    branches[BRANCH_OUTPUT] = nullptr;
+    return branches;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief constructor
  ** ------------------------------------------------------------------------------------------------------------- */
-OptimizationBranchCompiler::OptimizationBranchCompiler(OptimizationBranch * const branch)
-: mBranch(branch)
+OptimizationBranchCompiler::OptimizationBranchCompiler(BuilderRef b, OptimizationBranch * const branch) noexcept
+: KernelCompiler(branch)
+, mCondition(branch->getCondition())
 , mBranches(makeBranches(branch))
+, mBranchCompiler(makeBranchCompilers(b, branch))
 , mStreamSetGraph(makeRelationshipGraph(RelationshipType::StreamSet))
 , mScalarGraph(makeRelationshipGraph(RelationshipType::Scalar)) {
 

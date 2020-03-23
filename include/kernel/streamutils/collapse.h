@@ -19,9 +19,6 @@ namespace kernel {
 class CollapseStreamSet : public BlockOrientedKernel {
 public:
     CollapseStreamSet(BuilderRef iBuilder, StreamSet * input, StreamSet * output);
-
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generateDoBlockMethod(BuilderRef iBuilder) override;
 };

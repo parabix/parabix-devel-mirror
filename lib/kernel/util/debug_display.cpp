@@ -58,7 +58,7 @@ void DebugDisplayKernel::generateMultiBlockLogic(BuilderRef b, Value * const num
     if (!useBitblocks) {
         // Since stride width == 1, an extra final call to this kernel is made.
         // We don't want to print anything out on this final call.
-        b->CreateCondBr(isFinal(), exit, loop);
+        b->CreateCondBr(b->isFinal(), exit, loop);
     } else {
         b->CreateBr(loop);
     }

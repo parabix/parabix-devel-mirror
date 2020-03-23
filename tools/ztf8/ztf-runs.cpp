@@ -58,8 +58,6 @@ public:
                          {Binding{"runMask", runMask, FixedRate(1), LookAhead(1)},
                           Binding{"runIndex", runIndex}},
                          {Binding{"compressionMask", compressionMask}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -82,8 +80,6 @@ public:
     : PabloKernel(b, "ZTF_Run_Replacement",
                          {Binding{"basis", basis}, Binding{"runIndex", runIndex}},
                          {Binding{"output", output}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -114,8 +110,6 @@ public:
                          {Binding{"basis", ztf_basis}},
                          {Binding{"runLengths", runLengths}}),
                          mLengthBits(runLengths->getNumElements()) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     unsigned mLengthBits;
@@ -143,8 +137,6 @@ public:
                    Binding{"runSpreadMask", runMask},
                    Binding{"ztf_u8_indexed", ztf_u8_indexed}},
                   {Binding{"u8output", u8output}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -223,7 +215,7 @@ ztfRunsFunctionType ztfRuns_decompression_gen (CPUDriver & driver) {
     SpreadByMask(P, ztfRunSpreadMask, ztfRunsBasis, ztfRuns_u8_Basis);
     StreamSet * const ztfRunCodes = P->CreateStreamSet(1);
     re::CC * const runCodeCC = re::makeByte(0xF9, 0xFF);
-    P->CreateKernelCall<CharacterClassKernelBuilder>("runCodes", std::vector<re::CC *>{runCodeCC}, ztfRuns_u8_Basis, ztfRunCodes);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{runCodeCC}, ztfRuns_u8_Basis, ztfRunCodes);
     StreamSet * const u8basis = P->CreateStreamSet(8);
     P->CreateKernelCall<ZTF_Run_Decompression>(ztfRunCodes, ztfRunSpreadMask, ztfRuns_u8_Basis, u8basis);
     StreamSet * const u8bytes = P->CreateStreamSet(1, 8);

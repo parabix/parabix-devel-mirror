@@ -54,8 +54,7 @@ inline bool useAVX2() {
 class U8U16Kernel final: public pablo::PabloKernel {
 public:
     U8U16Kernel(BuilderRef b, StreamSet * BasisBits, StreamSet * u8bits, StreamSet * DelMask);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
+protected:
     void generatePabloMethod() override;
 };
 
@@ -371,7 +370,7 @@ u8u16FunctionType generatePipeline2(CPUDriver & pxDriver, cc::ByteNumbering byte
 
     CC * const nonAsciiCC = makeByte(0x80, 0xFF);
     P->CreateKernelCall<CharacterClassKernelBuilder>(
-        "nonASCII", std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
+        std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
 
     auto B = P->CreateOptimizationBranch(nonAscii,
         {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}},

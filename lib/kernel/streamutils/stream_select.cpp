@@ -333,7 +333,7 @@ void IStreamSelect::generateMultiBlockLogic(BuilderRef b, Value * const numOfStr
     BasicBlock * const block_Loop = b->CreateBasicBlock("loop");
     BasicBlock * const block_Exit = b->CreateBasicBlock("exit");
     Value * const initialStride = b->getProducedItemCount("output");
-    b->CreateCondBr(mIsFinal, block_Exit, block_Loop);
+    b->CreateCondBr(b->isFinal(), block_Exit, block_Loop);
 
     b->SetInsertPoint(block_Loop);
     PHINode * const strideNo = b->CreatePHI(b->getSizeTy(), 2);

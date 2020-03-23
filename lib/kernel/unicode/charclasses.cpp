@@ -54,7 +54,7 @@ CharClassesKernel::CharClassesKernel(BuilderRef b, std::vector<CC *> && ccs, Str
 
 }
 
-std::string CharClassesKernel::makeSignature(BuilderRef) const {
+llvm::StringRef CharClassesKernel::getSignature() const {
     return mSignature;
 }
 
@@ -104,7 +104,7 @@ CharClassesSignature(ccs, inputStream->getNumElements() == 1)
 
 }
 
-std::string ByteClassesKernel::makeSignature(BuilderRef) const {
+StringRef ByteClassesKernel::getSignature() const {
     return mSignature;
 }
 

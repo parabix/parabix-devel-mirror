@@ -26,21 +26,19 @@ class EncodingInfo {
 public:
     EncodingInfo(unsigned maxHashBits, std::vector<LengthGroupInfo> lengthGroups) :
         MAX_HASH_BITS(maxHashBits), byLength(lengthGroups) {}
-    unsigned MAX_HASH_BITS;
-    std::vector<LengthGroupInfo> byLength;
+    const unsigned MAX_HASH_BITS;
+    const std::vector<LengthGroupInfo> byLength;
 public:
-    unsigned getLengthGroupNo(unsigned lgth);
-    unsigned maxSymbolLength();
-    unsigned maxEncodingBytes();
-    unsigned prefixLengthOffset(unsigned lgth);
-    std::string uniqueSuffix();
+    unsigned getLengthGroupNo(unsigned lgth) const;
+    unsigned maxSymbolLength() const;
+    unsigned maxEncodingBytes() const;
+    unsigned prefixLengthOffset(unsigned lgth) const;
+    std::string uniqueSuffix() const;
 };
 
 class WordMarkKernel : public pablo::PabloKernel {
 public:
     WordMarkKernel(BuilderRef kb, StreamSet * BasisBits, StreamSet * WordMarks);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -49,8 +47,6 @@ class ByteRun final: public pablo::PabloKernel {
 public:
     ByteRun(BuilderRef b, StreamSet * const basis, StreamSet * excluded, StreamSet * runMask)
     : pablo::PabloKernel(b, "byteRun", {Binding{"basis", basis}, Binding{"excluded", excluded}}, {Binding{"runMask", runMask}}) {}
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -68,8 +64,6 @@ public:
                          EncodingInfo & encodingScheme,
                          StreamSet * const basis,
                          StreamSet * insertBixNum);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     EncodingInfo & mEncodingScheme;
@@ -81,8 +75,6 @@ public:
                       EncodingInfo & encodingScheme,
                       StreamSet * basisBits,
                       StreamSet * groupStreams);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     EncodingInfo & mEncodingScheme;
@@ -99,8 +91,6 @@ public:
                          {Binding{"basisBits", basisBits, FixedRate(1), LookAhead(1)},
                              Binding{"wordChar", wordChar, FixedRate(1), LookAhead(3)}},
                          {Binding{"symbolRuns", symbolRuns}}) { }
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -114,8 +104,6 @@ public:
                          {Binding{"symbolRuns", symbolRuns, FixedRate(1), LookAhead(1)},
                           Binding{"overflow", overflow}},
                          {Binding{"symbolEnds", symbolEnds}}) { }
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
 };
@@ -129,8 +117,6 @@ public:
                       StreamSet * extractionMask,
                       StreamSet * runIdx,
                       StreamSet * encoded);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     EncodingInfo & mEncodingScheme;
@@ -144,8 +130,6 @@ public:
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
                  StreamSet * overflow,
                  StreamSet * selected);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     EncodingInfo & mEncodingScheme;
@@ -159,8 +143,6 @@ public:
                  StreamSet * symbolRun, StreamSet * const lengthBixNum,
                  StreamSet * overflow,
                  StreamSet * groupStreams);
-    bool isCachable() const override { return true; }
-    bool hasSignature() const override { return false; }
 protected:
     void generatePabloMethod() override;
     EncodingInfo & mEncodingScheme;
