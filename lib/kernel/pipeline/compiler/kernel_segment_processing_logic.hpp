@@ -85,8 +85,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     if (kernelRequiresSynchronization) {
         mMayHaveNonLinearIO = mayHaveNonLinearIO(mKernelId);
         mCanTruncatedInput = canTruncateInputBuffer();
-        mMayLoopToEntry = in_degree(mKernelId, mBufferGraph) > 0;
         mIsBounded = isBounded();
+        mMayLoopToEntry = (mMayHaveNonLinearIO || mHasExplicitFinalPartialStride);
+        assert (in_degree(mKernelId, mBufferGraph) != 0 || !mMayLoopToEntry);
     } else {
         mMayHaveNonLinearIO = false;
         mCanTruncatedInput = false;

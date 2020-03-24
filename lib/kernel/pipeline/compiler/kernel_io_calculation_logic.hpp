@@ -137,17 +137,23 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             const BufferRateData & br = mBufferGraph[e];
             const auto streamSet = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
-            if (bn.NonLocal || bn.NonLinear) {
+            if (bn.NonLocal && bn.NonLinear) {
                 Value * const strides = getNumOfAccessibleStrides(b, br.Port);
                 mNumOfInputStrides = b->CreateUMin(mNumOfInputStrides, strides);
             }
         }
+        // If this is a source kernel or a kernel with pure greedy rates, attempt to
+        // determine whether this is the final stride or not.
+        if (mNumOfInputStrides == nullptr) {
+            Value * const anyClosed = anyInputClosed(b);
+            Value * const negStride = b->CreateZExt(anyClosed, b->getSizeTy());
+            ConstantInt * const ONE = b->getSize(1);
+            // Equivalent to computing "anyClosed ? ZERO : ONE";
+            mNumOfInputStrides = b->CreateXor(negStride, ONE);
+        }
     }
 
-    if (mNumOfInputStrides == nullptr) {
-        // If this kernel is source kernel, just assume it has one stride.
-        mNumOfInputStrides = b->getSize(1);
-    }
+    assert (mNumOfInputStrides);
 
     mNumOfOutputStrides = mNumOfInputStrides;
 

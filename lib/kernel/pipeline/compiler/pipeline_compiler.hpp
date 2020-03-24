@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -410,12 +410,13 @@ public:
     void simplifyPhiNodes(Module * const m) const;
     void replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock *& toReplace, BasicBlock * const phiContainer);
 
-// buffer management analysis functions
+// kernel config functions
 
     BufferPortMap constructInputPortMappings() const;
     BufferPortMap constructOutputPortMappings() const;
     bool supportsInternalSynchronization() const;
     bool isBounded() const;
+    bool mayLoopBackToEntry() const;
     bool canTruncateInputBuffer() const;
     void identifyPipelineInputs();
 
