@@ -37,13 +37,33 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief obtainNextSegmentNumber
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::obtainNextSegmentNumber(BuilderRef b) {
+    #ifndef PRINT_DEBUG_MESSAGES
+    if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
+    #endif
+        ConstantInt * const ONE = b->getSize(1);
+        if (ExternallySynchronized) {
+            mSegNo = b->getExternalSegNo(); assert (mSegNo);
+        } else {
+            Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
+            mSegNo = b->CreateAtomicFetchAndAdd(ONE, segNoPtr);
+        }
+        mNextSegNo = b->CreateAdd(mSegNo, ONE);
+    #ifndef PRINT_DEBUG_MESSAGES
+    }
+    #endif
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief acquireCurrentSegment
  *
  * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous
  * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start) {
-    if (mNumOfThreads > 1 || ExternallySynchronized) {
+    if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
         const auto prefix = makeKernelName(kernelId);
         const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
         const unsigned waitingOnIdx = serialize ? LastKernel : kernelId;
@@ -81,16 +101,14 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
  * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned kernelId) {
-    if (mNumOfThreads > 1 || ExternallySynchronized) {
-        Value * const nextSegNo = b->CreateAdd(mSegNo, b->getSize(1));
+    if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
         const auto prefix = makeKernelName(kernelId);
-
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
         Value * currentSegNo = nullptr;
         if (LLVM_UNLIKELY(CheckAssertions)) {
             currentSegNo = b->CreateLoad(waitingOnPtr);
         }
-        b->CreateAtomicStoreRelease(nextSegNo, waitingOnPtr);
+        b->CreateAtomicStoreRelease(mNextSegNo, waitingOnPtr);
 //        #ifdef PRINT_DEBUG_MESSAGES
 //        debugPrint(b, prefix + ": released %" PRIu64, mSegNo);
 //        #endif

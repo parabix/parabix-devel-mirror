@@ -56,12 +56,7 @@ void PipelineCompiler::start(BuilderRef b) {
     mPipelineProgress = i1_FALSE;
     mExhaustedInput = i1_FALSE;
 
-    if (ExternallySynchronized) {
-        mSegNo = b->getExternalSegNo();
-    } else {
-        Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
-        mSegNo = b->CreateAtomicFetchAndAdd(b->getSize(1), segNoPtr);
-    }
+    obtainNextSegmentNumber(b);
 
     branchToInitialPartition(b);
 }

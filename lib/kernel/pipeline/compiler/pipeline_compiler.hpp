@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -421,6 +421,7 @@ public:
 
 // synchronization functions
 
+    void obtainNextSegmentNumber(BuilderRef b);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start);
     void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
 
@@ -544,6 +545,7 @@ protected:
     Value *                                     mZeroExtendBuffer = nullptr;
     Value *                                     mZeroExtendSpace = nullptr;
     Value *                                     mSegNo = nullptr;
+    Value *                                     mNextSegNo = nullptr;
     Value *                                     mExhaustedInput = nullptr;
     PHINode *                                   mMadeProgressInLastSegment = nullptr;
     Value *                                     mPipelineProgress = nullptr;

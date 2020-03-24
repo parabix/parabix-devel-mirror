@@ -142,7 +142,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                 mNumOfInputStrides = b->CreateUMin(mNumOfInputStrides, strides);
             }
         }
-        assert (in_degree(mKernelId, mBufferGraph) == 0 || mNumOfInputStrides);
     }
 
     if (mNumOfInputStrides == nullptr) {
@@ -867,12 +866,6 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         }
     }
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    if (principalFixedRateFactor) {
-        debugPrint(b, makeKernelName(mKernelId) + "_principalFixedRateFactor = %" PRIu64, principalFixedRateFactor);
-    }
-    #endif
-
     for (unsigned i = 0; i < numOfInputs; ++i) {
         Value * accessible = accessibleItems[i];
         const auto inputPort = StreamSetPort{ PortType::Input, i };
@@ -908,12 +901,6 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
             }
         }
     }
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    if (principalFixedRateFactor == nullptr) {
-        debugPrint(b, makeKernelName(mKernelId) + "_minFixedRateFactor = %" PRIu64, minFixedRateFactor);
-    }
-    #endif
 
     Value * maxFixedRateFactor = minFixedRateFactor;
 
@@ -978,11 +965,6 @@ std::pair<Value *, Value *> PipelineCompiler::calculateFinalItemCounts(BuilderRe
         }
     }
 
-    #ifdef PRINT_DEBUG_MESSAGES
-    if (principalFixedRateFactor == nullptr) {
-        debugPrint(b, makeKernelName(mKernelId) + "_maxFixedRateFactor = %" PRIu64, maxFixedRateFactor);
-    }
-    #endif
 
     Constant * const ONE = b->getSize(1);
     Value * numOfOutputStrides = nullptr;

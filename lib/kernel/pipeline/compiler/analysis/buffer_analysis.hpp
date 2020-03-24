@@ -330,8 +330,8 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         }
 
         // Record this information for the PipelineCompiler to use later to size its internal buffers.
-        MaxNumOfInputPorts = std::max(MaxNumOfInputPorts, numOfInputs);
-        MaxNumOfOutputPorts = std::max(MaxNumOfOutputPorts, numOfOutputs);
+        MaxNumOfInputPorts = std::max<unsigned>(MaxNumOfInputPorts, numOfInputs);
+        MaxNumOfOutputPorts = std::max<unsigned>(MaxNumOfOutputPorts, numOfOutputs);
 
         Graph E(numOfPorts);
 
