@@ -664,16 +664,10 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
         const StreamSetBuffer * const buffer = bn.Buffer;
         if (bn.isOwned() && buffer->isLinear()) {
             Value * const produced = mInitiallyProducedItemCount[streamSet];
-            Value * const consumed = mInitialConsumedItemCount[streamSet];
-            #ifdef PRINT_DEBUG_MESSAGES
-            const BufferRateData & br = mBufferGraph[e];
-            const auto prefix = makeBufferName(mKernelId, br.Port);
-            debugPrint(b, prefix + "_linear_initiallyProduced = %" PRIu64, produced);
-            debugPrint(b, prefix + "_linear_consumed = %" PRIu64, consumed);
-            if (bn.LookBehind) {
-                debugPrint(b, prefix + "_linear_lookBehind = %" PRIu64, b->getSize(bn.LookBehind));
+            Value * consumed = produced;
+            if (LLVM_UNLIKELY(bn.NonLocal)) {
+                consumed = mInitialConsumedItemCount[streamSet];
             }
-            #endif
             buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind);
         }
     }

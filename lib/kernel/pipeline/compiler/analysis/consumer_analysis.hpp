@@ -18,6 +18,9 @@ void PipelineAnalysis::makeConsumerGraph() {
 
     flat_set<unsigned> observedGlobalPortIds;
 
+    const auto enableAsserts = codegen::DebugOptionIsSet(codegen::EnableAsserts);
+
+
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         // copy the producing edge
         const auto pe = in_edge(streamSet, mBufferGraph);
@@ -39,7 +42,7 @@ void PipelineAnalysis::makeConsumerGraph() {
                 const auto consumer = target(ce, mBufferGraph);
                 lastConsumer = std::max(lastConsumer, consumer);
                 // check if any consumer has a rate we have not yet observed
-                if (observedGlobalPortIds.insert(br.GlobalPortId).second) {
+                if (enableAsserts || observedGlobalPortIds.insert(br.GlobalPortId).second) {
                     add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
                 }
             }

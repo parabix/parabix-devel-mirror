@@ -462,7 +462,9 @@ Value * StaticBuffer::getCapacity(BuilderPtr b) const {
     indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
     Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
-    return b->CreateMul(b->CreateLoad(ptr), BLOCK_WIDTH, "capacity");
+    Value * const capacity = b->CreateLoad(ptr);
+    assert (capacity->getType()->isIntegerTy());
+    return b->CreateMul(capacity, BLOCK_WIDTH, "capacity");
 }
 
 Value * StaticBuffer::getInternalCapacity(BuilderPtr b) const {
@@ -471,7 +473,9 @@ Value * StaticBuffer::getInternalCapacity(BuilderPtr b) const {
     indices[1] = b->getInt32(InternalCapacity);
     Value * const intCapacityField = b->CreateInBoundsGEP(getHandle(), indices);
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
-    return b->CreateMul(b->CreateLoad(intCapacityField), BLOCK_WIDTH, "internalCapacity");
+    Value * const capacity = b->CreateLoad(intCapacityField);
+    assert (capacity->getType()->isIntegerTy());
+    return b->CreateMul(capacity, BLOCK_WIDTH, "internalCapacity");
 }
 
 void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
@@ -506,16 +510,6 @@ Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
 
 void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const {
     if (mLinear) {
-
-        // NOTE: static linear buffers are assumed to be threadlocal.
-
-        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-            Value * const canFit = b->CreateICmpEQ(produced, consumed);
-            b->CreateAssert(canFit,
-                            "Static linear buffer: produced item count "
-                            "(%" PRId64 ") does not match its consumed item count (%" PRId64 ")",
-                            produced, consumed);
-        }
 
         const auto blockWidth = b->getBitBlockWidth();
         assert (is_power_2(blockWidth));
@@ -673,9 +667,10 @@ Value * DynamicBuffer::getOverflowAddress(BuilderPtr b) const {
     assert (getHandle());
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    indices[1] = b->getInt32(EffectiveCapacity);
     Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), indices);
     Value * const capacity = b->CreateLoad(capacityPtr);
+    assert (capacity->getType()->isIntegerTy());
     return b->CreateInBoundsGEP(getBaseAddress(b), capacity);
 }
 
@@ -685,16 +680,26 @@ Value * DynamicBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
         return offset;
     } else {
         assert (getHandle());
-        Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(EffectiveCapacity)});
+        FixedArray<Value *, 2> indices;
+        indices[0] = b->getInt32(0);
+        indices[1] = b->getInt32(EffectiveCapacity);
+        Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), indices);
         Value * const capacity = b->CreateLoad(capacityPtr);
+        assert (capacity->getType()->isIntegerTy());
         return b->CreateURem(b->CreateZExtOrTrunc(offset, capacity->getType()), capacity);
     }
 }
 
 Value * DynamicBuffer::getCapacity(BuilderPtr b) const {
     assert (getHandle());
-    Value * ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(EffectiveCapacity)});
-    return b->CreateMul(b->CreateLoad(ptr), b->getSize(b->getBitBlockWidth()));
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(EffectiveCapacity);
+    Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
+    ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    Value * const capacity = b->CreateLoad(ptr);
+    assert (capacity->getType()->isIntegerTy());
+    return b->CreateMul(capacity, BLOCK_WIDTH, "capacity");
 }
 
 Value * DynamicBuffer::getInternalCapacity(BuilderPtr b) const {
@@ -703,7 +708,9 @@ Value * DynamicBuffer::getInternalCapacity(BuilderPtr b) const {
     indices[1] = b->getInt32(InternalCapacity);
     Value * const intCapacityField = b->CreateInBoundsGEP(getHandle(), indices);
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
-    return b->CreateMul(b->CreateLoad(intCapacityField), BLOCK_WIDTH);
+    Value * const capacity = b->CreateLoad(intCapacityField);
+    assert (capacity->getType()->isIntegerTy());
+    return b->CreateMul(capacity, BLOCK_WIDTH);
 }
 
 void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {

@@ -205,13 +205,32 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
         Value * const prior = b->CreateLoad(ptr);
         const Binding & output = rd.Binding;
         // TODO: cross reference which slot the traced count is for?
+
+        Constant * const bindingName = b->GetString(output.getName());
+
         b->CreateAssert(b->CreateICmpULE(prior, consumed),
                         "%s.%s: consumed item count is not monotonically nondecreasing "
                         "(prior %" PRIu64 " > current %" PRIu64 ")",
-                        mCurrentKernelName,
-                        b->GetString(output.getName()),
+                        mCurrentKernelName, bindingName,
                         prior, consumed);
+
+        const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
+        if (!bn.NonLocal && bn.isOwned() && buffer->isLinear()) {
+            Value * const produced = mLocallyAvailableItems[streamSet];
+            // NOTE: static linear buffers are assumed to be threadlocal.
+            Value * const fullyConsumed = b->CreateICmpEQ(produced, consumed);
+            b->CreateAssert(fullyConsumed,
+                            "%s.%s: produced item count "
+                            "(%" PRId64 ") does not match its consumed item count (%" PRId64 ")",
+                            mCurrentKernelName, bindingName,
+                            produced, consumed);
+        }
+
     }
+
+
+
     b->CreateStore(consumed, ptr);
 }
 
