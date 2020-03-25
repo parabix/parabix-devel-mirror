@@ -56,7 +56,7 @@ void PipelineCompiler::start(BuilderRef b) {
     mPipelineProgress = i1_FALSE;
     mExhaustedInput = i1_FALSE;
 
-    obtainNextSegmentNumber(b);
+    obtainCurrentSegmentNumber(b);
 
     branchToInitialPartition(b);
 }
@@ -174,7 +174,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     if (kernelRequiresSynchronization) {
         determineNumOfLinearStrides(b);
     } else {
-        mKernelIsFinal = anyInputClosed(b);
+        determineIsFinal(b);
         // FIXME: temporary change to minimize changes to PHI nodes
         mUpdatedNumOfStrides = b->getSize(0);
     }

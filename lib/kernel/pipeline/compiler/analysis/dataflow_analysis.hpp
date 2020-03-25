@@ -1103,19 +1103,9 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
     GlobalPortIds globalPortIds;
     LocalPortIds localPortIds;
-    unsigned nextLocalPortId = 0;
     unsigned nextGlobalPortId = 0;
-    unsigned currentPartitionId = 0;
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-
-        // reset the local port ids with each new partition
-        const auto partitionId = KernelPartitionId[kernel];
-        if (currentPartitionId != partitionId) {
-            localPortIds.clear();
-            nextLocalPortId = 0;
-            currentPartitionId = partitionId;
-        }
 
         auto getGlobalPortId = [&](const BitSet & B) {
             const auto f = globalPortIds.find(B);
@@ -1127,6 +1117,16 @@ void PipelineAnalysis::identifyLocalPortIds() {
             return f->second;
         };
 
+        GInIter ei_begin, ei_end;
+        std::tie(ei_begin, ei_end) = in_edges(kernel, mBufferGraph);
+        HInIter fi_begin, fi_end;
+        std::tie(fi_begin, fi_end) = in_edges(kernel, H);
+
+        assert (std::distance(ei_begin, ei_end) == std::distance(fi_begin, fi_end));
+
+        localPortIds.clear();
+        unsigned nextLocalPortId = 0;
+
         auto getLocalPortId = [&](const unsigned globalId) {
             const auto f = localPortIds.find(globalId);
             if (f == localPortIds.end()) {
@@ -1137,13 +1137,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
             return f->second;
         };
 
-        GInIter ei, ei_end;
-        std::tie(ei, ei_end) = in_edges(kernel, mBufferGraph);
-        HInIter fi, fi_end;
-        std::tie(fi, fi_end) = in_edges(kernel, H);
-
-        assert (std::distance(ei, ei_end) == std::distance(fi, fi_end));
-
+        auto ei = ei_begin;
+        auto fi = fi_begin;
         for (; ei != ei_end; ++ei, ++fi) {
             assert (fi != fi_end);
             BufferRateData & br = mBufferGraph[*ei];
@@ -1152,16 +1147,27 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 rateSet.resize(nextRateId);
             }
             br.GlobalPortId = getGlobalPortId(rateSet);
-            br.LocalPortId = getLocalPortId(br.GlobalPortId);
+
+            const auto streamSet = source(*ei, mBufferGraph);
+            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            if (bn.NonLinear) {
+                // TODO: this is overly conservative
+                br.LocalPortId = nextLocalPortId++;
+            } else {
+                br.LocalPortId = getLocalPortId(br.GlobalPortId);
+            }
         }
 
-        GOutIter ej, ej_end;
-        std::tie(ej, ej_end) = out_edges(kernel, mBufferGraph);
-        HOutIter fj, fj_end;
-        std::tie(fj, fj_end) = out_edges(kernel, H);
+        GOutIter ej_begin, ej_end;
+        std::tie(ej_begin, ej_end) = out_edges(kernel, mBufferGraph);
+        HOutIter fj_begin, fj_end;
+        std::tie(fj_begin, fj_end) = out_edges(kernel, H);
 
-        assert (std::distance(ej, ej_end) == std::distance(fj, fj_end));
+        assert (std::distance(ej_begin, ej_end) == std::distance(fj_begin, fj_end));
 
+        auto ej = ej_begin;
+        auto fj = fj_begin;
         for (; ej != ej_end; ++ej, ++fj) {
             assert (fj != fj_end);
             BufferRateData & br = mBufferGraph[*ej];
@@ -1170,9 +1176,24 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 rateSet.resize(nextRateId);
             }
             br.GlobalPortId = getGlobalPortId(rateSet);
-            br.LocalPortId = getLocalPortId(br.GlobalPortId);
 
+            const auto streamSet = target(*ej, mBufferGraph);
+            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            if (bn.NonLinear) {
+                br.LocalPortId = nextLocalPortId++;
+            } else {
+                br.LocalPortId = getLocalPortId(br.GlobalPortId);
+            }
         }
+
+
+
+
+
+
+
+
     }
 
 }

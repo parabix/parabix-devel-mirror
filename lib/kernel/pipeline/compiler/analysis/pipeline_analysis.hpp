@@ -10,7 +10,7 @@
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 namespace kernel {
 

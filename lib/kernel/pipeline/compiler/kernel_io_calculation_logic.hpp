@@ -109,6 +109,8 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     // kernels within the partition will execute. Otherwise we begin by bounding the kernel by the expected number
     // of strides w.r.t. its partition's root.
 
+    assert (mKernelIsFinal == nullptr);
+
     if (mIsPartitionRoot) {
         mNumOfInputStrides = nullptr;
     } else {
@@ -123,21 +125,40 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     }
 
     if (mIsPartitionRoot || mMayHaveNonLinearIO) {
+
+        // If two streams have the same global id then they are guaranteed to have an equivalent
+        // number of items at the start and end of each kernel. When two streams share a local id,
+        // they will have the exact same state within the kernel processing them.
+
+        SmallVector<unsigned, 8> testedPortIds;
+
+        auto unchecked = [&](const unsigned globalId) {
+            for (const auto checked : testedPortIds) {
+                if (checked == globalId) {
+                    return false;
+                }
+            }
+            testedPortIds.push_back(globalId);
+            return true;
+        };
+
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const auto streamSet = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
             const BufferRateData & br = mBufferGraph[e];
-            if (bn.NonLocal && bn.NonLinear) {
+            if (mIsBounded && bn.NonLocal && unchecked(br.GlobalPortId)) {
                 checkForSufficientInputData(b, br.Port);
             } else { // ensure the accessible input count dominates all uses
                 getAccessibleInputItems(b, br.Port);
             }
         }
+        testedPortIds.clear();
+
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
             const BufferRateData & br = mBufferGraph[e];
             const auto streamSet = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
-            if (bn.NonLocal && bn.NonLinear) {
+            if ((bn.NonLocal || bn.NonLinear) && unchecked(br.LocalPortId)) {
                 Value * const strides = getNumOfAccessibleStrides(b, br.Port);
                 mNumOfInputStrides = b->CreateUMin(mNumOfInputStrides, strides);
             }
@@ -145,10 +166,10 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         // If this is a source kernel or a kernel with pure greedy rates, attempt to
         // determine whether this is the final stride or not.
         if (mNumOfInputStrides == nullptr) {
-            Value * const anyClosed = anyInputClosed(b);
-            Value * const negStride = b->CreateZExt(anyClosed, b->getSizeTy());
+            determineIsFinal(b);
+            Value * const negStride = b->CreateZExt(mKernelIsFinal, b->getSizeTy());
             ConstantInt * const ONE = b->getSize(1);
-            // Equivalent to computing "anyClosed ? ZERO : ONE";
+            // Equivalent to computing "mIsFinal ? ZERO : ONE";
             mNumOfInputStrides = b->CreateXor(negStride, ONE);
         }
     }
@@ -202,6 +223,8 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         updatePHINodesForLoopExit(b);
         b->SetInsertPoint(noStreamIsInsufficient);
     }
+
+    assert (mIsFinal);
 
 }
 
@@ -359,6 +382,8 @@ void PipelineCompiler::calculateItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort) {
 
+    assert (mIsBounded);
+
     Value * const strideLength = getInputStrideLength(b, inputPort);
     Value * const required = addLookahead(b, inputPort, strideLength); assert (required);
     const auto prefix = makeBufferName(mKernelId, inputPort);
@@ -431,51 +456,62 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::anyInputClosed(BuilderRef b) {
     if (LLVM_UNLIKELY(in_degree(mKernelId, mBufferGraph) == 0)) {
-        return ExternallySynchronized ? b->isFinal() : b->getFalse();
-    }
-    Value * anyClosed = nullptr;
-    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br =  mBufferGraph[e];
-        if (LLVM_UNLIKELY(br.ZeroExtended)) {
-            continue;
-        }
-        const auto streamSet = source(e, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[streamSet];
-        Value * const closed = isClosed(b, br.Port); assert (closed);
-        Value * fullyConsumed = closed;
-        if (bn.NonLinear) {
-            assert (!mKernelIsInternallySynchronized);
-            Value * const processed = mAlreadyProcessedPhi(br.Port);
-            Value * const accessible = getAccessibleInputItems(b, br.Port);
-            Value * const total = b->CreateAdd(processed, accessible);
-            Value * const avail = getLocallyAvailableItemCount(b, br.Port);
-            Value * const fullyReadable = b->CreateICmpEQ(total, avail);
-            fullyConsumed = b->CreateAnd(closed, fullyReadable);
-        }
-        if (anyClosed) {
-            anyClosed = b->CreateOr(anyClosed, closed);
+        if (ExternallySynchronized) {
+            return b->isFinal();
         } else {
-            anyClosed = fullyConsumed;
+            return b->getFalse();
         }
     }
-    assert (anyClosed && "non-zero-extended stream is required");
-    return anyClosed;
+    if (mIsPartitionRoot) {
+        Value * anyClosed = nullptr;
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const BufferRateData & br =  mBufferGraph[e];
+            if (LLVM_UNLIKELY(br.ZeroExtended)) {
+                continue;
+            }
+            const auto streamSet = source(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            Value * const closed = isClosed(b, br.Port); assert (closed);
+            Value * fullyConsumed = closed;
+            if (bn.NonLinear) {
+                Value * const processed = mAlreadyProcessedPhi(br.Port);
+                Value * const accessible = getAccessibleInputItems(b, br.Port);
+                Value * const total = b->CreateAdd(processed, accessible);
+                Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+                Value * const fullyReadable = b->CreateICmpEQ(total, avail);
+                fullyConsumed = b->CreateAnd(closed, fullyReadable);
+            }
+            if (anyClosed) {
+                anyClosed = b->CreateOr(anyClosed, closed);
+            } else {
+                anyClosed = fullyConsumed;
+            }
+        }
+        assert (anyClosed && "non-zero-extended stream is required");
+        return anyClosed;
+    }
+    Value * const signal = getCurrentTerminationSignal(); assert (signal);
+    return b->CreateIsNotNull(signal);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief determineIsFinal
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determineIsFinal(BuilderRef b) {
-    if (mIsPartitionRoot) {
-        mKernelIsPenultimate = anyInputClosed(b);
-    } else {
-        mKernelIsPenultimate = b->CreateIsNotNull(getCurrentTerminationSignal());
+    if (mKernelIsFinal == nullptr) {
+        Value * const anyClosed = anyInputClosed(b); assert (anyClosed);
+        if (mMayLoopToEntry && mNumOfInputStrides) {
+            mKernelIsPenultimate = anyClosed;
+            ConstantInt * const sz_ZERO = b->getSize(0);
+            Value * const noMoreStrides = b->CreateICmpEQ(mNumOfInputStrides, sz_ZERO);
+            mKernelIsFinal = b->CreateAnd(mKernelIsPenultimate, noMoreStrides);
+            Value * const hasMoreStrides = b->CreateICmpNE(mNumOfInputStrides, sz_ZERO);
+            mKernelIsPenultimate = b->CreateAnd(mKernelIsPenultimate, hasMoreStrides);
+        } else {
+            mKernelIsPenultimate = nullptr;
+            mKernelIsFinal = anyClosed;
+        }
     }
-    ConstantInt * const sz_ZERO = b->getSize(0);
-    Value * const noMoreStrides = b->CreateICmpEQ(mNumOfInputStrides, sz_ZERO);
-    mKernelIsFinal = b->CreateAnd(mKernelIsPenultimate, noMoreStrides);
-    Value * const hasMoreStrides = b->CreateICmpNE(mNumOfInputStrides, sz_ZERO);
-    mKernelIsPenultimate = b->CreateAnd(mKernelIsPenultimate, hasMoreStrides);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -524,9 +560,16 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
         b->CreateBr(lastTestExit);
 
         b->SetInsertPoint(lastTestExit);
-        return b->CreateOr(mKernelIsPenultimate, enoughInputPhi);
+        Value * hasMore = enoughInputPhi;
+        if (mKernelIsPenultimate) {
+            hasMore = b->CreateOr(mKernelIsPenultimate, hasMore);
+        }
+        return hasMore;
     } else {
+        assert (mUpdatedNumOfStrides);
+        assert (mMaximumNumOfStrides);
         Value * hasMoreStrides = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
+        assert (mKernelIsPenultimate);
         hasMoreStrides = b->CreateAnd(hasMoreStrides, b->CreateNot(mKernelIsFinal));
         return b->CreateOr(mKernelIsPenultimate, hasMoreStrides);
     }

@@ -457,14 +457,12 @@ Value * StaticBuffer::modByCapacity(BuilderPtr b, Value * const offset) const {
 }
 
 Value * StaticBuffer::getCapacity(BuilderPtr b) const {
-    if (mLinear) {
-        assert (getHandle());
-        Value * ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(EffectiveCapacity)});
-        ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
-        return b->CreateMul(b->CreateLoad(ptr), BLOCK_WIDTH);
-    } else {
-        return b->getSize(b->getBitBlockWidth() * mCapacity);
-    }
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
+    Value * ptr = b->CreateInBoundsGEP(getHandle(), indices);
+    ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
+    return b->CreateMul(b->CreateLoad(ptr), BLOCK_WIDTH, "capacity");
 }
 
 Value * StaticBuffer::getInternalCapacity(BuilderPtr b) const {
@@ -473,7 +471,7 @@ Value * StaticBuffer::getInternalCapacity(BuilderPtr b) const {
     indices[1] = b->getInt32(InternalCapacity);
     Value * const intCapacityField = b->CreateInBoundsGEP(getHandle(), indices);
     ConstantInt * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
-    return b->CreateMul(b->CreateLoad(intCapacityField), BLOCK_WIDTH);
+    return b->CreateMul(b->CreateLoad(intCapacityField), BLOCK_WIDTH, "internalCapacity");
 }
 
 void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
@@ -481,9 +479,12 @@ void StaticBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
 }
 
 Value * StaticBuffer::getBaseAddress(BuilderPtr b) const {
-    Value * const ptr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(BaseAddress)});
-    Value * const addr = b->CreateLoad(ptr);
-    return addr;
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(BaseAddress);
+    Value * const handle = getHandle(); assert (handle);
+    Value * const base = b->CreateInBoundsGEP(handle, indices);
+    return b->CreateLoad(base, "baseAddress");
 }
 
 void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const {
@@ -491,12 +492,16 @@ void StaticBuffer::setBaseAddress(BuilderPtr /* b */, Value * /* addr */) const 
 }
 
 Value * StaticBuffer::getOverflowAddress(BuilderPtr b) const {
-    assert (getHandle());
     FixedArray<Value *, 2> indices;
     indices[0] = b->getInt32(0);
-    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
-    Value * const base = b->CreateInBoundsGEP(getHandle(), indices);
-    return b->CreateInBoundsGEP(base, b->getSize(mCapacity));
+    indices[1] = b->getInt32(BaseAddress);
+    Value * const handle = getHandle(); assert (handle);
+    Value * const base = b->CreateInBoundsGEP(handle, indices);
+    indices[1] = b->getInt32(mLinear ? EffectiveCapacity : InternalCapacity);
+    Value * const capacityField = b->CreateInBoundsGEP(handle, indices);
+    Value * const capacity = b->CreateLoad(capacityField);
+    assert (capacity->getType() == b->getSizeTy());
+    return b->CreateInBoundsGEP(base, capacity, "overflow");
 }
 
 void StaticBuffer::prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const {
@@ -666,8 +671,10 @@ Value * DynamicBuffer::getMallocAddress(BuilderPtr b) const {
 
 Value * DynamicBuffer::getOverflowAddress(BuilderPtr b) const {
     assert (getHandle());
-    const auto type = (mLinear && mUnderflow) ? InternalCapacity : EffectiveCapacity;
-    Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), {b->getInt32(0), b->getInt32(type)});
+    FixedArray<Value *, 2> indices;
+    indices[0] = b->getInt32(0);
+    indices[1] = b->getInt32(mLinear ? MallocedAddress : BaseAddress);
+    Value * const capacityPtr = b->CreateInBoundsGEP(getHandle(), indices);
     Value * const capacity = b->CreateLoad(capacityPtr);
     return b->CreateInBoundsGEP(getBaseAddress(b), capacity);
 }
@@ -986,7 +993,7 @@ inline StreamSetBuffer::StreamSetBuffer(const BufferKind k, BuilderPtr b, Type *
 , mUnderflow(underflowSize)
 , mAddressSpace(AddressSpace)
 , mBaseType(baseType)
-, mLinear(linear) {
+, mLinear(linear || isEmptySet()) {
 
 }
 

@@ -458,8 +458,8 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
         if (bn.LookBehind) {
-            const StreamSetBuffer * const buffer = bn.Buffer;
             const BufferRateData & br = mBufferGraph[e];
             Value * needsCopy = nullptr;
             Constant * const underflow = b->getSize(bn.LookBehind);
@@ -472,7 +472,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
                 Value * const producedOffset = b->CreateURem(produced, capacity);
                 needsCopy = b->CreateICmpULT(producedOffset, underflow);
             }
-            copy(b, CopyMode::LookBehind, needsCopy, br.Port, bn.Buffer, bn.LookBehind);
+            copy(b, CopyMode::LookBehind, needsCopy, br.Port, buffer, bn.LookBehind);
         }
     }
 }
@@ -484,15 +484,15 @@ void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
         if (bn.LookBehindReflection) {
-            const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
             Value * const produced = mAlreadyProducedPhi(mKernelId, br.Port);
             Constant * const reflection = b->getSize(bn.LookBehindReflection);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const needsCopy = b->CreateICmpULT(producedOffset, reflection);
-            copy(b, CopyMode::LookBehindReflection, needsCopy, br.Port, bn.Buffer, bn.LookBehindReflection);
+            copy(b, CopyMode::LookBehindReflection, needsCopy, br.Port, buffer, bn.LookBehindReflection);
         }
     }
 }
@@ -504,13 +504,13 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
         if (bn.CopyBack) {
-            const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
-            Value * const alreadyProduced = mAlreadyProducedPhi(mKernelId, br.Port);
+            Value * const alreadyProduced = mAlreadyProducedPhi(br.Port);
             Value * const priorOffset = b->CreateURem(alreadyProduced, capacity);
-            Value * const produced = mProducedItemCount(mKernelId, br.Port);
+            Value * const produced = mProducedItemCount(br.Port);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
@@ -529,8 +529,8 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
+        const StreamSetBuffer * const buffer = bn.Buffer;
         if (bn.LookAhead) {
-            const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
             Value * const initial = mInitiallyProducedItemCount[streamSet];
@@ -594,7 +594,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         llvm_unreachable("unknown copy mode!");
     };
 
-    const auto prefix = makeBufferName(mKernelId, outputPort) + "_copy" + makeSuffix(mode);
+    const auto prefix = makeBufferName(mKernelId, outputPort) + "_" + makeSuffix(mode);
 
     BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
     BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
@@ -606,12 +606,13 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     startCycleCounter(b, CycleCounter::BEFORE_COPY);
 
     const auto itemWidth = getItemWidth(buffer->getBaseType());
+    assert (is_power_2(itemWidth));
     const auto blockWidth = b->getBitBlockWidth();
     const auto bitsToCopy = round_up_to(itemsToCopy * itemWidth, blockWidth);
 
     Value * const numOfStreams = buffer->getStreamSetCount(b);
-    Value * const bytesPerSteam = b->getSize(bitsToCopy / 8);
-    Value * const bytesToCopy = b->CreateMul(bytesPerSteam, numOfStreams);
+    Value * const bytesPerStream = b->getSize(bitsToCopy / 8);
+    Value * const bytesToCopy = b->CreateMul(bytesPerStream, numOfStreams);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + std::to_string(itemsToCopy) + "_bytesToCopy = %" PRIu64, bytesToCopy);
@@ -620,29 +621,22 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     Value * source = nullptr;
     Value * target = nullptr;
 
-    PointerType * const int8PtrTy = b->getInt8PtrTy();
-
-    // TODO: Wrong base address here. Needs base from prior to linearize
+    source = buffer->getOverflowAddress(b);
     if (buffer->isLinear()) {
-//        source = buffer->getBaseAddress(b);
-//        source = b->CreatePointerCast(source, int8PtrTy);
-        const auto streamSet = getOutputBufferVertex(outputPort);
-        source = b->CreatePointerCast(mOriginalBaseAddress[streamSet], int8PtrTy);
-        Value * offset = b->CreateMul(mInitialConsumedItemCount[streamSet], bytesPerSteam);
-        source = b->CreateGEP(source, offset);
         target = buffer->getMallocAddress(b);
     } else {
-        source = buffer->getOverflowAddress(b);
         target = buffer->getBaseAddress(b);
     }
+
+    PointerType * const int8PtrTy = b->getInt8PtrTy();
+    source = b->CreatePointerCast(source, int8PtrTy);
+    target = b->CreatePointerCast(target, int8PtrTy);
 
     if (mode == CopyMode::LookBehind || mode == CopyMode::LookBehindReflection) {
         DataLayout DL(b->getModule());
         Type * const intPtrTy = DL.getIntPtrType(source->getType());
         Value * const offset = b->CreateNeg(b->CreateZExt(bytesToCopy, intPtrTy));
-        source = b->CreatePointerCast(source, int8PtrTy);
         source = b->CreateInBoundsGEP(source, offset);
-        target = b->CreatePointerCast(target, int8PtrTy);
         target = b->CreateInBoundsGEP(target, offset);
     }
 
@@ -680,10 +674,6 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
                 debugPrint(b, prefix + "_linear_lookBehind = %" PRIu64, b->getSize(bn.LookBehind));
             }
             #endif
-
-            Value * const baseAddress = buffer->getBaseAddress(b);
-            mOriginalBaseAddress[streamSet] = baseAddress;
-
             buffer->prepareLinearBuffer(b, produced, consumed, bn.LookBehind);
         }
     }
@@ -749,53 +739,6 @@ void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> &
         baseAddresses[rt.Port.Number] = getVirtualBaseAddress(b, rt, bn.Buffer, processed);
     }
 }
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief prepareExternallySynchronizedBuffers
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::prepareExternallySynchronizedBuffers(BuilderRef b) {
-
-//    // If this pipeline is externally synchronized then the outer kernel does
-//    // not attempt to calculate the true VBA for this pipeline's I/O buffers;
-//    // instead the outer kernel provides the expected VBA but assumes we'll
-//    // determine the correct one after we acquire the internal lock.
-
-//    if (ExternallySynchronized) {
-
-//        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-//            const BufferRateData & br = mBufferGraph[e];
-//            const auto inputPort = br.Port;
-//            if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
-//                const auto streamSet = source(e, mBufferGraph);
-//                const auto port = in_edge(streamSet, mBufferGraph);
-//                const BufferRateData & external = mBufferGraph[port];
-//                Value * const ptr = getProcessedInputItemsPtr(external.Port.Number);
-//                Value * const externallyProcessed = b->CreateLoad(ptr);
-//                const Binding & binding = br.Binding;
-//                Value * processed = nullptr;
-//                if (binding.isDeferred()) {
-//                    processed = mInitiallyProcessedDeferredItemCount(inputPort);
-//                } else {
-//                    processed = mInitiallyProcessedItemCount(inputPort);
-//                }
-//                Value * const diff = b->CreateSub(processed, externallyProcessed);
-
-
-
-
-
-
-
-//            }
-//        }
-
-
-//    }
-
-
-}
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputPortIndex

@@ -289,23 +289,20 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 // FIXME: we want a single streamset type here but may get one with multiple elements;
                 // there should be an abstraction for this in case we modify stream set base types.
 
-                IntegerType * const itemWidthTy = IntegerType::getIntNTy(C, itemWidth);
-                VectorType * const vecItemWidthTy = VectorType::get(itemWidthTy, 0);
-                ArrayType * const baseStreamSetTy = ArrayType::get(vecItemWidthTy, 1);
+                Type * const elemTy = bufferType->getPointerElementType();
+                ArrayType * const baseStreamSetTy = ArrayType::get(elemTy->getArrayElementType(), 1);
+                PointerType * const streamSetTy = baseStreamSetTy->getPointerTo();
+                DataLayout DL(b->getModule());
+                Type * const intPtrTy = DL.getIntPtrType(streamSetTy);
 
-                inputAddress = b->CreatePointerCast(inputAddress, baseStreamSetTy->getPointerTo());
-
-                ExternalBuffer tmp(b, baseStreamSetTy, true, 0);
+                inputAddress = b->CreatePointerCast(inputAddress, streamSetTy);
 
                 Value * const start = b->CreateLShr(processed, LOG_2_BLOCK_WIDTH);
-
-                DataLayout DL(b->getModule());
-                Value * const startPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, start);
-                Type * const intPtrTy = DL.getIntPtrType(startPtr->getType());
+                Value * const startPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, start });
                 Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
 
                 Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
-                Value * const limitPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, limit);
+                Value * const limitPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, limit });
                 Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
 
                 Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
@@ -322,7 +319,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 if (stridesPerSegment != 1 || isDeferred) {
                     if (isDeferred) {
                         initial = b->CreateLShr(processedDeferred, LOG_2_BLOCK_WIDTH);
-                        initialPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, initial);
+                        initialPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, initial });
                         initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
                     }
                     // if a kernel reads in multiple strides of data per segment, we may be able to
@@ -331,7 +328,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                     if (stridesPerSegment  != 1) {
                         end = b->CreateAdd(processed, accessible);
                         end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                        Value * const endPtr = tmp.getStreamBlockPtr(b, inputAddress, ZERO, end);
+                        Value * const endPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, end });
                         endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                     }
                     fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
@@ -339,12 +336,12 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 }
 
                 Value * const maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
-                Value * maskedAddress = b->CreatePointerCast(maskedBuffer, bufferType, "maskedBuffer");
+                Value * maskedAddress = b->CreatePointerCast(maskedBuffer, streamSetTy, "maskedBuffer");
                 if (fullBytesToCopy) {
                     b->CreateMemCpy(maskedAddress, initialPtr, fullBytesToCopy, blockWidth / 8);
                 }
-                maskedAddress = tmp.getStreamBlockPtr(b, maskedAddress, ZERO, b->CreateNeg(initial));
-                maskedAddress = b->CreatePointerCast(maskedAddress, bufferType);
+                maskedAddress = b->CreateInBoundsGEP(maskedAddress, { ZERO, b->CreateNeg(initial) });
+                maskedAddress = b->CreatePointerCast(maskedAddress, streamSetTy);
 
                 Value * packIndex = nullptr;
                 Value * maskOffset = b->CreateAnd(accessible, BLOCK_MASK);
@@ -365,29 +362,29 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
                 streamIndex->addIncoming(ZERO, loopEntryBlock);
 
-                Value * inputPtr = tmp.getStreamBlockPtr(b, inputAddress, streamIndex, end);
-                Value * outputPtr = tmp.getStreamBlockPtr(b, maskedAddress, streamIndex, end);
+                Value * inputPtr = b->CreateInBoundsGEP(inputAddress, { streamIndex, end });
+                Value * outputPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end });
 
                 if (itemWidth > 1) {
                     Value * const endPtr = inputPtr;
                     Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
-                    inputPtr = tmp.getStreamPackPtr(b, inputAddress, streamIndex, end, packIndex);
+                    inputPtr = b->CreateInBoundsGEP(inputAddress, { streamIndex, end, packIndex});
                     Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
                     Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
                     b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
-                    outputPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, packIndex);
+                    outputPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end, packIndex});
                 }
-
                 assert (inputPtr->getType() == outputPtr->getType());
+
                 Value * const val = b->CreateBlockAlignedLoad(inputPtr);
                 Value * const maskedVal = b->CreateAnd(val, mask);
                 b->CreateBlockAlignedStore(maskedVal, outputPtr);
 
                 if (itemWidth > 1) {
                     Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
-                    Value * const clearPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, nextPackIndex);
+                    Value * const clearPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end, nextPackIndex });
                     Value * const clearPtrInt = b->CreatePtrToInt(clearPtr, intPtrTy);
-                    Value * const clearEndPtr = tmp.getStreamPackPtr(b, maskedAddress, streamIndex, end, ITEM_WIDTH);
+                    Value * const clearEndPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end, ITEM_WIDTH });
                     Value * const clearEndPtrInt = b->CreatePtrToInt(clearEndPtr, intPtrTy);
                     Value * const bytesToClear = b->CreateSub(clearEndPtrInt, clearPtrInt);
                     b->CreateMemZero(clearPtr, bytesToClear, blockWidth / 8);

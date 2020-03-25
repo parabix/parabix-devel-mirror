@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-// #define PRINT_DEBUG_MESSAGES
+#define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -351,7 +351,6 @@ public:
     void releaseOwnedBuffers(BuilderRef b, const bool nonLocal);
     void resetInternalBufferHandles();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
-    void prepareExternallySynchronizedBuffers(BuilderRef b);
     LLVM_READNONE bool requiresCopyBack(const unsigned bufferVertex) const;
     LLVM_READNONE bool requiresLookAhead(const unsigned bufferVertex) const;
     LLVM_READNONE unsigned getCopyBack(const unsigned bufferVertex) const;
@@ -422,7 +421,7 @@ public:
 
 // synchronization functions
 
-    void obtainNextSegmentNumber(BuilderRef b);
+    void obtainCurrentSegmentNumber(BuilderRef b);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start);
     void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
 
@@ -595,7 +594,6 @@ protected:
     FixedVector<PHINode *>                      mExhaustedPipelineInputAtPartitionEntry;
 
     FixedVector<Value *>                        mInitialConsumedItemCount;
-    FixedVector<Value *>                        mOriginalBaseAddress;
 
     PartitionPhiNodeTable                       mPartitionProducedItemCountPhi;
     PartitionPhiNodeTable                       mPartitionConsumedItemCountPhi;
@@ -791,7 +789,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mPartitionTerminationSignal(PartitionCount, mAllocator)
 , mExhaustedPipelineInputAtPartitionEntry(PartitionCount, mAllocator)
 , mInitialConsumedItemCount(FirstStreamSet, LastStreamSet, mAllocator)
-, mOriginalBaseAddress(FirstStreamSet, LastStreamSet, mAllocator)
 
 , mPartitionProducedItemCountPhi(extents[PartitionCount][LastStreamSet - FirstStreamSet + 1])
 , mPartitionConsumedItemCountPhi(extents[PartitionCount][LastStreamSet - FirstStreamSet + 1])

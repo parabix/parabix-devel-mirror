@@ -39,7 +39,7 @@ namespace kernel {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief obtainNextSegmentNumber
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::obtainNextSegmentNumber(BuilderRef b) {
+void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b) {
     #ifndef PRINT_DEBUG_MESSAGES
     if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
     #endif
