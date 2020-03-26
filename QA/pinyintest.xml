@@ -13,13 +13,17 @@
 我喜欢唱，跳，rap，篮球，music！
 </datafile>
 
-<grepcase regexp="zhong wen" datafile="simple_pinyin" greplines="2 3 4"/>
-<grepcase regexp="zhong yao" datafile="simple_pinyin" greplines="5 6 8 9"/>
+<grepcase regexp="zhong wen" datafile="simple_pinyin" greplines="3 4"/>
+<grepcase regexp="zhong yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
 <grepcase regexp="lian xi" datafile="simple_pinyin" greplines="8 11"/>
 
 
+<grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
+<grepcase regexp="zhong4 yao4" datafile="simple_pinyin" greplines="5 9"/>
+<grepcase regexp="zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
+<grepcase regexp="zhòng" datafile="simple_pinyin" greplines="5 7 9"/>
 
-<test2x>
+
 <datafile id = "test2">
 我名字叫小明,家里在上海。
 今年十二岁。
