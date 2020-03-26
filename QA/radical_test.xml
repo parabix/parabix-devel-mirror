@@ -17,13 +17,13 @@ unicode采用部首为主、先繁后简、笔划为辅的方式进行排列
 汁 2
 </datafile>
 
-<grepcase regexp= “⺮” datafile = “test_simple” greplines = 2 7/>
-<grepcase regexp= “辶” datafile = “test_simple” greplines = 4 7/>
-<grepcase regexp= “亻心” datafile = “test_simple” greplines = 3/>
+<grepcase regexp= "⺮" datafile = "test_simple" greplines = 2 7/>
+<grepcase regexp= "辶" datafile = "test_simple" greplines = 4 7/>
+<grepcase regexp= "亻心" datafile = "test_simple" greplines = 3/>
 
 
-<grepcase regexp= “氵[5-7]” datafile = “test_stroke” greplines = 3 5/>
-<grepcase regexp= “氵[7-?]” datafile = “test_stroke” greplines = 4 5/>
-<grepcase regexp= “氵[3]”   datafile = “test_stroke” greplines = 2 6/>
-<grepcase regexp= “氵[?-3]” datafile = “test_stroke” greplines = 2 6 7/>
+<grepcase regexp= "氵[5-7]" datafile = "test_stroke" greplines = 3 5/>
+<grepcase regexp= "氵[7-?]" datafile = "test_stroke" greplines = 4 5/>
+<grepcase regexp= "氵[3]"   datafile = "test_stroke" greplines = 2 6/>
+<grepcase regexp= "氵[?-3]" datafile = "test_stroke" greplines = 2 6 7/>
 </radical_test>
