@@ -342,10 +342,10 @@ void ICGrepKernel::generatePabloMethod() {
 
 void MatchedLinesKernel::generatePabloMethod() {
     PabloBuilder pb(getEntryScope());
-    auto matchResults = getInputStreamSet("matchResults");
+    PabloAST * matchResults = getInputStreamSet("matchResults").back();
     PabloAST * lineBreaks = pb.createExtract(getInputStreamVar("lineBreaks"), pb.getInteger(0));
     PabloAST * notLB = pb.createNot(lineBreaks);
-    PabloAST * match_follow = pb.createMatchStar(matchResults.back(), notLB);
+    PabloAST * match_follow = pb.createMatchStar(matchResults, notLB);
     Var * const matchedLines = getOutputStreamVar("matchedLines");
     pb.createAssign(pb.createExtract(matchedLines, pb.getInteger(0)), pb.createAnd(match_follow, lineBreaks, "matchedLines"));
 }

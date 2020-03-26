@@ -694,22 +694,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
                         mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    const auto prefix = makeBufferName(mKernelId, rateData.Port);
-    debugPrint(b, prefix + "_baseAddress = 0x%" PRIx64, baseAddress);
-    debugPrint(b, prefix + "_blockIndex = %" PRIu64, blockIndex);
-    if (buffer->isLinear() && !isa<ExternalBuffer>(buffer)) {
-        debugPrint(b, prefix + "_mallocAddress = 0x%" PRIx64, buffer->getMallocAddress(b));
-    }
-    #endif
-
     Value * const address = buffer->getStreamLogicalBasePtr(b, baseAddress, ZERO, blockIndex);
-
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, prefix + "_virtualBaseAddress = 0x%" PRIx64, address);
-    #endif
-
     return b->CreatePointerCast(address, bufferType);
 }
 

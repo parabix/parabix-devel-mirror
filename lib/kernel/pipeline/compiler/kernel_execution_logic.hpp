@@ -187,7 +187,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                 addr = mInputVirtualBaseAddressPhi(rt.Port);
             }
 
-
             addNextArg(addr);
 
             const auto addressable = mKernelIsInternallySynchronized | deferred;

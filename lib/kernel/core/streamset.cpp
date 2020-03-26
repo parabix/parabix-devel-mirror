@@ -342,31 +342,34 @@ Value * InternalBuffer::getRawItemPointer(BuilderPtr b, Value * const streamInde
     return StreamSetBuffer::getRawItemPointer(b, streamIndex, pos);
 }
 
-Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const fromPosition, Value * const totalItems, Value * const overflowItems) const {
+Value * InternalBuffer::getLinearlyAccessibleItems(BuilderPtr b, Value * const processedItems, Value * const totalItems, Value * const overflowItems) const {
     if (mLinear) {
-        return b->CreateSub(totalItems, fromPosition);
+        return b->CreateSub(totalItems, processedItems);
     } else {
         Value * const capacity = getCapacity(b);
-        Value * const fromOffset = b->CreateURem(fromPosition, capacity);
+        Value * const fromOffset = b->CreateURem(processedItems, capacity);
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
         Value * const linearSpace = b->CreateSub(capacityWithOverflow, fromOffset);
-        Value * const availableItems = b->CreateSub(totalItems, fromPosition);
+        Value * const availableItems = b->CreateSub(totalItems, processedItems);
         return b->CreateUMin(availableItems, linearSpace);
     }
 }
 
-Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const fromPosition, Value * const consumedItems, Value * const overflowItems) const {
+Value * InternalBuffer::getLinearlyWritableItems(BuilderPtr b, Value * const producedItems, Value * const consumedItems, Value * const overflowItems) const {
     Value * const capacity = getCapacity(b);
     ConstantInt * const ZERO = b->getSize(0);
     if (LLVM_UNLIKELY(mLinear)) {
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, nullptr);
-        Value * const full = b->CreateICmpUGE(fromPosition, capacityWithOverflow);
-        Value * const remaining = b->CreateSub(capacityWithOverflow, fromPosition);
-        return b->CreateSelect(full, ZERO, remaining);
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
+            Value * const valid = b->CreateICmpULE(producedItems, capacityWithOverflow);
+            b->CreateAssert(valid, "produced item count (%" PRIu64 ") exceeds capacity (%" PRIu64 ").",
+                            producedItems, capacityWithOverflow);
+        }
+        return b->CreateSub(capacityWithOverflow, producedItems);
      } else {
-        Value * const unconsumedItems = b->CreateSub(fromPosition, consumedItems);
+        Value * const unconsumedItems = b->CreateSub(producedItems, consumedItems);
         Value * const full = b->CreateICmpUGE(unconsumedItems, capacity);
-        Value * const fromOffset = b->CreateURem(fromPosition, capacity);
+        Value * const fromOffset = b->CreateURem(producedItems, capacity);
         Value * const consumedOffset = b->CreateURem(consumedItems, capacity);
         Value * const toEnd = b->CreateICmpULE(consumedOffset, fromOffset);
         Value * const capacityWithOverflow = addOverflow(b, capacity, overflowItems, consumedOffset);

@@ -137,8 +137,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
 
-    // TODO: reuse mask calculations for same global ids
-
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
 
         const auto streamSet = source(e, mBufferGraph);
@@ -153,7 +151,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
         if (LLVM_LIKELY(rate.isFixed())) {
 
-
             // TODO: support popcount/partialsum
 
             // TODO: for fixed rate inputs, so long as the actual number of items is aa even
@@ -165,10 +162,8 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
 
             AllocaInst * bufferStorage = nullptr;
-            bool potentiallyReused = false;
             if (mNumOfTruncatedInputBuffers < mTruncatedInputBuffer.size()) {
                 bufferStorage = mTruncatedInputBuffer[mNumOfTruncatedInputBuffers];
-                potentiallyReused = true;
             } else { // create a stack entry for this buffer at the start of the pipeline
                 PointerType * const int8PtrTy = b->getInt8PtrTy();
                 bufferStorage = b->CreateAllocaAtEntryPoint(int8PtrTy);
@@ -181,25 +176,14 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             const auto prefix = makeBufferName(mKernelId, port);
             const auto itemWidth = getItemWidth(buffer->getBaseType());
             Constant * const ITEM_WIDTH = b->getSize(itemWidth);
-            const Rational stridesPerBlock(mKernel->getStride(), blockWidth);
-            const auto strideRate = rate.getUpperBound() * stridesPerBlock;
 
-
-            const auto inputRate = Rational{mKernel->getStride()} * rate.getUpperBound();
-            assert (inputRate.denominator() == 1);
-
-            const auto stridesPerSegment = ceiling(strideRate); assert (stridesPerSegment >= 1);
-
-            const auto isDeferred = input.isDeferred();
+            const Rational bytesPerStride(mKernel->getStride() * itemWidth, 8);
+            const auto bytesPerSegment = ceiling(rate.getUpperBound() * bytesPerStride); assert (bytesPerSegment >= 1);
 
             PointerType * const bufferType = buffer->getPointerType();
-
             PointerType * const voidPtrTy = b->getVoidPtrTy();
 
-            Constant * const STRIDES_PER_SEGMENT = b->getSize(stridesPerSegment);
-
             BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_maskInput", mKernelCheckOutputSpace);
-//            BasicBlock * const maskedInputLoop = b->CreateBasicBlock(prefix + "_genMaskedInputLoop", mKernelCheckOutputSpace);
             BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectInput", mKernelCheckOutputSpace);
 
             Value * selected = accessibleItems[port.Number];
@@ -224,19 +208,11 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                       getAccessibleInputItems(b, port), accessibleItems[port.Number]);
             #endif
 
-            if (potentiallyReused) {
-                b->CreateFree(b->CreateLoad(bufferStorage));
-            }
-
             // Generate a name to describe this masking function.
             SmallVector<char, 256> tmp;
             raw_svector_ostream name(tmp);
 
-            name << "__maskInput" << stridesPerSegment;
-            if (isDeferred) {
-                name << 'D';
-            }
-            name << 'x' << itemWidth;
+            name << "__maskInput" << itemWidth;
 
             Module * const m = b->getModule();
 
@@ -248,14 +224,14 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
                 const auto ip = b->saveIP();
 
-                SmallVector<Type *, 5> params;
-                params.push_back(voidPtrTy); // input buffer
-                params.push_back(sizeTy); // processed
-                if (isDeferred) {
-                    params.push_back(sizeTy); // processed (deferred)
-                }
-                params.push_back(sizeTy); // accessible
-                params.push_back(sizeTy); // numOfStreams
+                FixedArray<Type *, 7> params;
+                params[0] = voidPtrTy; // input buffer
+                params[1] = sizeTy; // bytes per segment
+                params[2] = sizeTy; // processed
+                params[3] = sizeTy; // processed (deferred)
+                params[4] = sizeTy; // accessible
+                params[5] = sizeTy; // numOfStreams
+                params[6] = voidPtrTy->getPointerTo(); // masked buffer storage ptr
 
                 LLVMContext & C = m->getContext();
 
@@ -273,18 +249,20 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
                 Value * inputAddress = nextArg();
                 inputAddress->setName("inputAddress");
+                Value * const bytesPerSegment = nextArg();
+                bytesPerSegment->setName("bytesPerSegment");
                 Value * const processed = nextArg();
                 processed->setName("processed");
-                Value * processedDeferred = nullptr;
-                if (isDeferred) {
-                    processedDeferred = nextArg();
-                    processed->setName("processedDeferred");
-                }
+                Value * processedDeferred = nextArg();
+                processed->setName("processedDeferred");
                 Value * const accessible = nextArg();
                 accessible->setName("accessible");
                 Value * const numOfStreams = nextArg();
                 numOfStreams->setName("numOfStreams");
+                Value * const bufferStorage = nextArg();
+                bufferStorage->setName("bufferStorage");
                 assert (arg == maskInput->arg_end());
+
 
                 // FIXME: we want a single streamset type here but may get one with multiple elements;
                 // there should be an abstraction for this in case we modify stream set base types.
@@ -297,49 +275,29 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
                 inputAddress = b->CreatePointerCast(inputAddress, streamSetTy);
 
-                Value * const start = b->CreateLShr(processed, LOG_2_BLOCK_WIDTH);
-                Value * const startPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, start });
-                Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
+                Value * const initial = b->CreateLShr(processedDeferred, LOG_2_BLOCK_WIDTH);
+                Value * const initialPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, initial });
+                Value * const initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
 
-                Value * const limit = b->CreateAdd(start, STRIDES_PER_SEGMENT);
-                Value * const limitPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, limit });
-                Value * const limitPtrInt = b->CreatePtrToInt(limitPtr, intPtrTy);
+                // if a kernel reads in multiple strides of data per segment, we may be able to
+                // copy over a portion of it with a single memcpy.
 
-                Value * const strideBytes = b->CreateSub(limitPtrInt, startPtrInt);
+                Value * end = b->CreateAdd(processed, accessible);
+                end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
+                Value * const endPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, end });
+                Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
 
-                Value * segmentBytes = strideBytes;
+                Value * const fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
+                Value * const segmentBytes = b->CreateAdd(fullBytesToCopy, bytesPerSegment);
 
-                Value * initial = start;
-                Value * initialPtr = startPtr;
-                Value * initialPtrInt = startPtrInt;
-
-                Value * end = start;
-                Value * fullBytesToCopy = nullptr;
-
-                if (stridesPerSegment != 1 || isDeferred) {
-                    if (isDeferred) {
-                        initial = b->CreateLShr(processedDeferred, LOG_2_BLOCK_WIDTH);
-                        initialPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, initial });
-                        initialPtrInt = b->CreatePtrToInt(initialPtr, intPtrTy);
-                    }
-                    // if a kernel reads in multiple strides of data per segment, we may be able to
-                    // copy over a portion of it with a single memcpy.
-                    Value * endPtrInt = startPtrInt;
-                    if (stridesPerSegment  != 1) {
-                        end = b->CreateAdd(processed, accessible);
-                        end = b->CreateLShr(end, LOG_2_BLOCK_WIDTH);
-                        Value * const endPtr = b->CreateInBoundsGEP(inputAddress, { ZERO, end });
-                        endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
-                    }
-                    fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
-                    segmentBytes = b->CreateAdd(fullBytesToCopy, strideBytes);
-                }
-
+                // TODO: look into checking whether the OS supports aligned realloc.
+                b->CreateFree(b->CreateLoad(bufferStorage));
                 Value * const maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
+                b->CreateStore(maskedBuffer, bufferStorage);
+
                 Value * maskedAddress = b->CreatePointerCast(maskedBuffer, streamSetTy, "maskedBuffer");
-                if (fullBytesToCopy) {
-                    b->CreateMemCpy(maskedAddress, initialPtr, fullBytesToCopy, blockWidth / 8);
-                }
+                b->CreateMemCpy(maskedAddress, initialPtr, fullBytesToCopy, blockWidth / 8);
+
                 maskedAddress = b->CreateInBoundsGEP(maskedAddress, { ZERO, b->CreateNeg(initial) });
                 maskedAddress = b->CreatePointerCast(maskedAddress, streamSetTy);
 
@@ -398,22 +356,24 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 b->CreateCondBr(notDone, maskedInputLoop, maskedInputExit);
 
                 b->SetInsertPoint(maskedInputExit);
-                b->CreateRet(maskedBuffer);
+                b->CreateRet(b->CreatePointerCast(maskedAddress, voidPtrTy));
 
                 b->restoreIP(ip);
             }
 
-            SmallVector<Value *, 5> args;
-            args.push_back(b->CreatePointerCast(inputBaseAddresses[port.Number], voidPtrTy));
-            args.push_back(mAlreadyProcessedPhi(port));
-            if (isDeferred) {
-                args.push_back(mAlreadyProcessedDeferredPhi(port));
+            FixedArray<Value *, 7> args;
+            args[0] = b->CreatePointerCast(inputBaseAddresses[port.Number], voidPtrTy);
+            args[1] = b->getSize(bytesPerSegment);
+            args[2] = mAlreadyProcessedPhi(port);
+            if (input.isDeferred()) {
+                args[3] = mAlreadyProcessedDeferredPhi(port);
+            } else {
+                args[3] = mAlreadyProcessedPhi(port);
             }
-            args.push_back(accessibleItems[port.Number]);
-            args.push_back(buffer->getStreamSetCount(b));
-            Value * const maskedBuffer = b->CreateCall(maskInput, args);
-            b->CreateStore(maskedBuffer, bufferStorage);
-            Value * const maskedAddress = b->CreatePointerCast(maskedBuffer, bufferType);
+            args[4] = accessibleItems[port.Number];
+            args[5] = buffer->getStreamSetCount(b);
+            args[6] = bufferStorage;
+            Value * const maskedAddress = b->CreatePointerCast(b->CreateCall(maskInput, args), bufferType);
             BasicBlock * const maskedInputLoopExit = b->GetInsertBlock();
             b->CreateBr(selectedInput);
 
@@ -440,25 +400,31 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     Constant * const ONE = b->getSize(1);
     Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
 
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort port{PortType::Output, i};
-        const StreamSetBuffer * const buffer = getOutputBuffer(port);
-        if (LLVM_UNLIKELY(isa<ExternalBuffer>(buffer))) {
-            // If this stream is either controlled by this kernel or is an external
-            // stream, any clearing of data is the responsibility of the owner.
-            // Simply ignore any external buffers for the purpose of zeroing out
-            // unnecessary data.
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+
+        // If this stream is either controlled by this kernel or is an external
+        // stream, any clearing of data is the responsibility of the owner.
+        // Simply ignore any external buffers for the purpose of zeroing out
+        // unnecessary data.
+        if (bn.isUnowned()) {
             continue;
         }
+
+        const StreamSetBuffer * const buffer = bn.Buffer;
+        const BufferRateData & rt = mBufferGraph[e];
+        assert (rt.Port.Type == PortType::Output);
+        const auto port = rt.Port;
+
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
         const auto prefix = makeBufferName(mKernelId, port);
-        Value * produced = nullptr;
+        Value * produced = mProducedItemCount(port);
         if (mKernelIsInternallySynchronized) {
             produced = mProducedItemCount(port);
         } else {
-            produced = mFinalProducedPhi(port);
+            produced = mProducedAtTerminationPhi(port);
         }
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);

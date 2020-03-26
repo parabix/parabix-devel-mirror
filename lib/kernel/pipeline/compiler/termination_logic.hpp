@@ -195,15 +195,6 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
         return isCountable(binding);
     };
 
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    Vec<Value *> finalProcessed(numOfInputs);
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        const StreamSetPort port (PortType::Input, i);
-        finalProcessed[i] = mProcessedItemCount(port);
-        if (isCountableType(mReturnedProcessedItemCountPtr(port), getInputBinding(port))) {
-            finalProcessed[i] = b->CreateLoad(mReturnedProcessedItemCountPtr(port));
-        }
-    }
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     Vec<Value *> finalProduced(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; i++) {
@@ -211,16 +202,17 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
         finalProduced[i] = mProducedItemCount(port);
         if (isCountableType(mReturnedProducedItemCountPtr(port), getOutputBinding(port))) {
             finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr(port));
+            #ifdef PRINT_DEBUG_MESSAGES
+            debugPrint(b, makeBufferName(mKernelId, port) +
+                       "_producedAfterAbnormalTermination = %" PRIu64, finalProduced[i]);
+            #endif
         }
     }
     BasicBlock * const exitBlock = b->GetInsertBlock();
-    for (unsigned i = 0; i < numOfInputs; i++) {
-        const StreamSetPort port (PortType::Input, i);
-        mFinalProcessedPhi(port)->addIncoming(finalProcessed[i], exitBlock);
-    }
+
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const StreamSetPort port (PortType::Output, i);
-        mFinalProducedPhi(port)->addIncoming(finalProduced[i], exitBlock);
+        mProducedAtTerminationPhi(port)->addIncoming(finalProduced[i], exitBlock);
     }
 }
 

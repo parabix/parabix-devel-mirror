@@ -32,6 +32,7 @@ void BlockKernelCompiler::generateMultiBlockLogic(BuilderRef b, Value * const nu
     BasicBlock * const entryBlock = b->GetInsertBlock();
     mStrideLoopBody = b->CreateBasicBlock(getName() + "_strideLoopBody");
 
+
     BasicBlock * const incrementCountableItems = b->CreateBasicBlock(getName() + "_incrementCountableItems");
     BasicBlock * const stridesDone = b->CreateBasicBlock(getName() + "_stridesDone");
     BasicBlock * doFinalBlock = nullptr;

@@ -37,23 +37,31 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief obtainNextSegmentNumber
+ * @brief obtainCurrentSegmentNumber
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b) {
-    #ifndef PRINT_DEBUG_MESSAGES
-    if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
-    #endif
-        ConstantInt * const ONE = b->getSize(1);
-        if (ExternallySynchronized) {
-            mSegNo = b->getExternalSegNo(); assert (mSegNo);
-        } else {
-            Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
-            mSegNo = b->CreateAtomicFetchAndAdd(ONE, segNoPtr);
-        }
-        mNextSegNo = b->CreateAdd(mSegNo, ONE);
-    #ifndef PRINT_DEBUG_MESSAGES
+void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock) {
+    ConstantInt * const ONE = b->getSize(1);
+    if (ExternallySynchronized) {
+        mSegNo = b->getExternalSegNo(); assert (mSegNo);
+    } else if (LLVM_LIKELY(mNumOfThreads > 1)) {
+        Value * const segNoPtr = b->getScalarFieldPtr(NEXT_LOGICAL_SEGMENT_NUMBER);
+        mSegNo = b->CreateAtomicFetchAndAdd(ONE, segNoPtr);
+    } else {
+        PHINode * const segNo = b->CreatePHI(b->getSizeTy(), 2);
+        segNo->addIncoming(b->getSize(0), entryBlock);
+        mSegNo = segNo;
     }
-    #endif
+    mNextSegNo = b->CreateAdd(mSegNo, ONE);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief incrementCurrentSegNo
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::incrementCurrentSegNo(BuilderRef /* b */, BasicBlock * const exitBlock) {
+    if (LLVM_LIKELY(ExternallySynchronized || mNumOfThreads > 1)) {
+        return;
+    }
+    cast<PHINode>(mSegNo)->addIncoming(mNextSegNo, exitBlock);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

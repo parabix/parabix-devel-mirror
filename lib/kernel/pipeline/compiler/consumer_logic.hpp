@@ -215,14 +215,17 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
                         prior, consumed);
 
         const BufferNode & bn = mBufferGraph[streamSet];
-        const StreamSetBuffer * const buffer = bn.Buffer;
-        if (!bn.NonLocal && bn.isOwned() && buffer->isLinear()) {
+        if (!bn.NonLocal) {
             Value * const produced = mLocallyAvailableItems[streamSet];
             // NOTE: static linear buffers are assumed to be threadlocal.
             Value * const fullyConsumed = b->CreateICmpEQ(produced, consumed);
-            b->CreateAssert(fullyConsumed,
-                            "%s.%s: produced item count "
-                            "(%" PRId64 ") does not match its consumed item count (%" PRId64 ")",
+            Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
+            Value * const fatalError = b->CreateICmpEQ(mTerminatedAtLoopExitPhi, fatal);
+            Value * const valid = b->CreateOr(fullyConsumed, fatalError);
+
+            b->CreateAssert(valid,
+                            "%s.%s: local available item count (%" PRId64 ") does not match "
+                            "its consumed item count (%" PRId64 ")",
                             mCurrentKernelName, bindingName,
                             produced, consumed);
         }

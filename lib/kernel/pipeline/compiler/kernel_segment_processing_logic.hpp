@@ -55,8 +55,7 @@ void PipelineCompiler::start(BuilderRef b) {
     Constant * const i1_FALSE = b->getFalse();
     mPipelineProgress = i1_FALSE;
     mExhaustedInput = i1_FALSE;
-
-    obtainCurrentSegmentNumber(b);
+    obtainCurrentSegmentNumber(b, entryBlock);
 
     branchToInitialPartition(b);
 }
@@ -380,19 +379,11 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
 
     if (mIsPartitionRoot) {
-
         // update KernelTerminated phi nodes
-
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto port = StreamSetPort{ PortType::Input, i };
-            mFinalProcessedPhi(port)->addIncoming(mProcessedItemCount(port), exitBlock);
-        }
-
         for (unsigned i = 0; i < numOfOutputs; ++i) {
             const auto port = StreamSetPort{ PortType::Output, i };
-            mFinalProducedPhi(port)->addIncoming(mProducedItemCount(port), exitBlock);
+            mProducedAtTerminationPhi(port)->addIncoming(mProducedItemCount(port), exitBlock);
         }
-
         mTerminatedSignalPhi->addIncoming(terminationSignal, exitBlock);
         b->CreateLikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
 
@@ -416,14 +407,10 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
             mUpdatedProducedDeferredPhi(port)->addIncoming(mProducedDeferredItemCount(port), exitBlock);
         }
     }
-
     mTerminatedAtLoopExitPhi->addIncoming(terminationSignal, exitBlock);
     mAnyProgressedAtLoopExitPhi->addIncoming(i1_TRUE, exitBlock);
     mTotalNumOfStridesAtLoopExitPhi->addIncoming(mUpdatedNumOfStrides, exitBlock);
     mExhaustedPipelineInputAtLoopExitPhi->addIncoming(mExhaustedInput, exitBlock);
-
-
-
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -513,17 +500,12 @@ inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
     Type * const sizeTy = b->getSizeTy();
     const auto prefix = makeKernelName(mKernelId);
     mTerminatedSignalPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedSignal");
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Input, i };
-        const auto prefix = makeBufferName(mKernelId, port);
-        mFinalProcessedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_finalProcessed");
-    }
+
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto port = StreamSetPort{ PortType::Output, i };
         const auto prefix = makeBufferName(mKernelId, port);
-        mFinalProducedPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_finalProduced");
+        mProducedAtTerminationPhi(port) = b->CreatePHI(sizeTy, 2, prefix + "_finalProduced");
     }
 }
 
@@ -724,9 +706,15 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto port = StreamSetPort{ PortType::Output, i };
-        mUpdatedProducedPhi(port)->addIncoming(mFinalProducedPhi(port), exitBlock);
+        Value * const produced = mProducedAtTerminationPhi(port);
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, makeBufferName(mKernelId, port) + "_producedAtTermination = %" PRIu64, produced);
+        #endif
+
+        mUpdatedProducedPhi(port)->addIncoming(produced, exitBlock);
         if (mUpdatedProducedDeferredPhi(port)) {
-            mUpdatedProducedDeferredPhi(port)->addIncoming(mFinalProducedPhi(port), exitBlock);
+            mUpdatedProducedDeferredPhi(port)->addIncoming(produced, exitBlock);
         }
     }
 }
@@ -769,6 +757,7 @@ void PipelineCompiler::end(BuilderRef b) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mMadeProgressInLastSegment->addIncoming(mPipelineProgress, exitBlock);
         updateLocallyAvailableItemCounts(b, exitBlock);
+        incrementCurrentSegNo(b, exitBlock);
         b->CreateUnlikelyCondBr(done, mPipelineEnd, mPipelineLoop);
     }
     b->SetInsertPoint(mPipelineEnd);

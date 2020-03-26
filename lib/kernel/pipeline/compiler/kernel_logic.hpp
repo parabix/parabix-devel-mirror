@@ -40,7 +40,7 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
         } else {
             processed = mUpdatedProcessedPhi(port);
         }
-        Value * const fullyProcessed = truncateBlockSize(b, input, processed, mTerminatedAtLoopExitPhi);
+        Value * const fullyProcessed = truncateBlockSize(b, input, processed, mKernelIsFinal);
         mFullyProcessedItemCount(port) = fullyProcessed;
     }
 }
@@ -54,7 +54,7 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
         Value * produced = mUpdatedProducedPhi(port);
-        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mTerminatedAtLoopExitPhi);
+        Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mKernelIsFinal);
         mFullyProducedItemCount(port)->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
     }
 }
@@ -77,8 +77,7 @@ Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b,
     if (LLVM_UNLIKELY(output.hasAttribute(AttrId::Delayed))) {
         const auto & D = output.findAttribute(AttrId::Delayed);
         Value * const delayed = b->CreateSaturatingSub(produced, b->getSize(D.amount()));
-        Value * const terminated = b->CreateIsNotNull(terminationSignal);
-        produced = b->CreateSelect(terminated, produced, delayed);
+        produced = b->CreateSelect(terminationSignal, produced, delayed);
     }
     return truncateBlockSize(b, output, produced, terminationSignal);
 }
@@ -140,8 +139,7 @@ Value * PipelineCompiler::truncateBlockSize(BuilderRef b, const Binding & bindin
         // stride has been processed.
         Constant * const BLOCK_WIDTH = b->getSize(b->getBitBlockWidth());
         Value * const maskedItemCount = b->CreateAnd(itemCount, ConstantExpr::getNeg(BLOCK_WIDTH));
-        Value * const terminated = b->CreateIsNotNull(terminationSignal);
-        itemCount = b->CreateSelect(terminated, itemCount, maskedItemCount);
+        itemCount = b->CreateSelect(terminationSignal, itemCount, maskedItemCount);
     }
     return itemCount;
 }

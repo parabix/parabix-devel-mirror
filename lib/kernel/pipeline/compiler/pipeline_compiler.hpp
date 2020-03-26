@@ -10,7 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-#define PRINT_DEBUG_MESSAGES
+// #define PRINT_DEBUG_MESSAGES
 
 // #define PERMIT_THREAD_LOCAL_BUFFERS
 
@@ -421,7 +421,8 @@ public:
 
 // synchronization functions
 
-    void obtainCurrentSegmentNumber(BuilderRef b);
+    void obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock);
+    void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start);
     void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
 
@@ -600,11 +601,8 @@ protected:
     PartitionPhiNodeTable                       mPartitionTerminationSignalPhi;
     FixedVector<PHINode *>                      mPartitionPipelineProgressPhi;
 
-
-
     // kernel state
     Value *                                     mTerminatedInitially = nullptr;
-    Value *                                     mTerminatedInitiallyCheck = nullptr;
     Value *                                     mMaximumNumOfStrides = nullptr;
     PHINode *                                   mCurrentNumOfStridesAtLoopEntryPhi = nullptr;
     Value *                                     mUpdatedNumOfStrides = nullptr;
@@ -671,7 +669,6 @@ protected:
     InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
     InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
     InputPortVec<Value *>                       mProcessedDeferredItemCount;
-    InputPortVec<PHINode *>                     mFinalProcessedPhi; // exiting after termination
     InputPortVec<PHINode *>                     mInsufficientIOProcessedPhi; // exiting insufficient io
     InputPortVec<PHINode *>                     mInsufficientIOProcessedDeferredPhi;
     InputPortVec<PHINode *>                     mUpdatedProcessedPhi; // exiting the kernel
@@ -691,7 +688,7 @@ protected:
     OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
     OutputPortVec<Value *>                      mProducedItemCount; // exiting the segment loop
     OutputPortVec<Value *>                      mProducedDeferredItemCount;
-    OutputPortVec<PHINode *>                    mFinalProducedPhi; // exiting after termination
+    OutputPortVec<PHINode *>                    mProducedAtTerminationPhi; // exiting after termination
     OutputPortVec<PHINode *>                    mInsufficientIOProducedPhi; // exiting insufficient io
     OutputPortVec<PHINode *>                    mInsufficientIOProducedDeferredPhi;
     OutputPortVec<PHINode *>                    mUpdatedProducedPhi; // exiting the kernel
@@ -807,7 +804,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mReturnedProcessedItemCountPtr(this)
 , mProcessedItemCount(this)
 , mProcessedDeferredItemCount(this)
-, mFinalProcessedPhi(this)
 , mInsufficientIOProcessedPhi(this)
 , mInsufficientIOProcessedDeferredPhi(this)
 , mUpdatedProcessedPhi(this)
@@ -826,7 +822,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mReturnedProducedItemCountPtr(this)
 , mProducedItemCount(this)
 , mProducedDeferredItemCount(this)
-, mFinalProducedPhi(this)
+, mProducedAtTerminationPhi(this)
 , mInsufficientIOProducedPhi(this)
 , mInsufficientIOProducedDeferredPhi(this)
 , mUpdatedProducedPhi(this)
