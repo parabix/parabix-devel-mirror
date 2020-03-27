@@ -1,0 +1,31 @@
+<pinyin_test>
+<datafile id = "T1_pinyin">
+这列子可能是重要
+喝中药一定要吃山楂饼
+玩乐都没时间
+写完了去睡觉
+</datafile>
+
+<datafile id = "T2_regex">
+这几天太忙了，
+每天慢慢做作业。
+没时间见亲人，
+睡眠不足，没有梦想。
+我听说明天会很晴朗，也许明天会更好。
+</datafile>
+
+<grepcase regexp = "zhong yao" datafile = "T1_pinyin" greplines = "2 3"/>
+<grepcase regexp = "wan le" datafile = "T1_pinyin" greplines = "4 5"/>
+
+<grepcase regexp = "zhong4 yao4" datafile = "T1_pinyin" greplines = "2"/>
+<grepcase regexp = "zhong1 yao4" datafile = "T1_pinyin" greplines = "3"/>
+<grepcase regexp = "wan2 le4" datafile = "T1_pinyin" greplines = "4"/>
+
+<grepcase regexp = "yào" datafile = "T1_pinyin" greplines = "2 3"/>
+<grepcase regexp = "wán" datafile = "T1_pinyin" greplines = "4 5"/>
+
+
+<grepcase regexp = "m.ng" datafile = "T2_regex" greplines = "2 5 6"/>
+<grepcase regexp = "mang?" datafile = "T2_regex" greplines = "2 3"/>
+<grepcase regexp = "qing?" datafile = "T2_regex" greplines = "4 6"/>
+
