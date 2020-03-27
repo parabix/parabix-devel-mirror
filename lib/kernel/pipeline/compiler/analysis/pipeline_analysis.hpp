@@ -10,7 +10,7 @@
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
-// #define PRINT_BUFFER_GRAPH
+#define PRINT_BUFFER_GRAPH
 
 namespace kernel {
 
@@ -37,6 +37,8 @@ public:
             P.transcribeRelationshipGraph();
             P.generateInitialBufferGraph();
 
+            P.identifyTerminationChecks();
+
             P.computeDataFlowRates();
             P.generatePartitioningGraph();
 
@@ -58,8 +60,7 @@ public:
         P.identifyZeroExtendedStreamSets();
 
         // Make the remaining graphs
-        P.makeConsumerGraph();
-        P.makeTerminationGraph();
+        P.makeConsumerGraph();        
         P.makePartitionJumpTree();
         P.makeKernelIOGraph();
 
@@ -146,7 +147,7 @@ private:
 
     // termination analysis functions
 
-    void makeTerminationGraph();
+    void identifyTerminationChecks();
 
     // add(k) analysis functions
 
@@ -163,6 +164,7 @@ private:
     // Debug functions
 
     void printBufferGraph(raw_ostream & out) const;
+    void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, const StringRef name = "G");
 
 private:
 
@@ -189,8 +191,8 @@ public:
     unsigned                        PartitionCount = 0;
     bool                            HasZeroExtendedStream = false;
 
-    unsigned                        MaxNumOfInputPorts = 0;
-    unsigned                        MaxNumOfOutputPorts = 0;
+    unsigned                        MaxNumOfLocalInputPortIds = 0;
+    unsigned                        MaxNumOfLocalOutputPortIds = 0;
 
     RelationshipGraph               mStreamGraph;
     RelationshipGraph               mScalarGraph;
@@ -211,7 +213,8 @@ public:
 
     ConsumerGraph                   mConsumerGraph;
 
-    TerminationGraph                mTerminationGraph;    
+    TerminationChecks               mTerminationCheck;
+
     InputTruncationGraph            mInputTruncationGraph;
     IOCheckGraph                    mIOCheckGraph;
 

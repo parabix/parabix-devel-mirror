@@ -254,7 +254,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 Value * const processed = nextArg();
                 processed->setName("processed");
                 Value * processedDeferred = nextArg();
-                processed->setName("processedDeferred");
+                processedDeferred->setName("processedDeferred");
                 Value * const accessible = nextArg();
                 accessible->setName("accessible");
                 Value * const numOfStreams = nextArg();
@@ -388,6 +388,201 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
     #endif
 }
 
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief clearUnwrittenOutputData
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
+    #ifndef DISABLE_OUTPUT_ZEROING
+
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+
+        // If this stream is either controlled by this kernel or is an external
+        // stream, any clearing of data is the responsibility of the owner.
+        // Simply ignore any external buffers for the purpose of zeroing out
+        // unnecessary data.
+
+        const StreamSetBuffer * const buffer = bn.Buffer;
+
+        if (bn.isUnowned() || buffer->isEmptySet()) {
+            continue;
+        }
+
+        const BufferRateData & rt = mBufferGraph[e];
+        assert (rt.Port.Type == PortType::Output);
+        const auto port = rt.Port;
+
+        const auto itemWidth = getItemWidth(buffer->getBaseType());
+
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream name(tmp);
+        name << "__maskOutput" << itemWidth;
+
+        Module * const m = b->getModule();
+        PointerType * const voidPtrTy = b->getVoidPtrTy();
+
+        const auto blockWidth = b->getBitBlockWidth();
+
+        Function * maskOutput = m->getFunction(name.str());
+
+        if (maskOutput == nullptr) {
+
+            IntegerType * const sizeTy = b->getSizeTy();
+            FixedArray<Type *, 4> params;
+            params[0] = voidPtrTy; // base address
+            params[1] = sizeTy; // produced
+            params[2] = sizeTy; // numOfStreams
+            params[3] = sizeTy; // blocksToZero
+
+            LLVMContext & C = m->getContext();
+
+            const auto ip = b->saveIP();
+
+            FunctionType * const funcTy = FunctionType::get(b->getVoidTy(), params, false);
+            maskOutput = Function::Create(funcTy, Function::InternalLinkage, name.str(), m);
+            b->SetInsertPoint(BasicBlock::Create(C, "entry", maskOutput));
+
+            auto arg = maskOutput->arg_begin();
+            auto nextArg = [&]() {
+                assert (arg != maskOutput->arg_end());
+                Value * const v = &*arg;
+                std::advance(arg, 1);
+                return v;
+            };
+
+            Value * baseAddress = nextArg();
+            baseAddress->setName("inputAddress");
+
+            PointerType * const bufferType = buffer->getPointerType();
+            Type * const elemTy = bufferType->getPointerElementType();
+            ArrayType * const baseStreamSetTy = ArrayType::get(elemTy->getArrayElementType(), 1);
+            PointerType * const streamSetTy = baseStreamSetTy->getPointerTo();
+
+            baseAddress = b->CreatePointerCast(baseAddress, streamSetTy);
+
+            Value * const produced = nextArg();
+            produced->setName("produced");
+            Value * const numOfStreams = nextArg();
+            numOfStreams->setName("numOfStreams");
+            Value * const blocksToZero = nextArg();
+            blocksToZero->setName("blocksToZero");
+            assert (arg == maskOutput->arg_end());
+
+
+            const auto log2BlockWidth = floor_log2(blockWidth);
+            Constant * const LOG_2_BLOCK_WIDTH = b->getSize(log2BlockWidth);
+            Constant * const ZERO = b->getSize(0);
+            Constant * const ONE = b->getSize(1);
+            Constant * const BLOCK_MASK = b->getSize(blockWidth - 1);
+
+            Value * const blockIndex = b->CreateMul(b->CreateLShr(produced, LOG_2_BLOCK_WIDTH), numOfStreams);
+
+            Constant * const ITEM_WIDTH = b->getSize(itemWidth);
+            Value * packIndex = nullptr;
+            Value * maskOffset = b->CreateAnd(produced, BLOCK_MASK);
+            if (itemWidth > 1) {
+                Value * const position = b->CreateMul(maskOffset, ITEM_WIDTH);
+                packIndex = b->CreateLShr(position, LOG_2_BLOCK_WIDTH);
+                maskOffset = b->CreateAnd(position, BLOCK_MASK);
+            }
+            Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
+            BasicBlock * const maskLoop = BasicBlock::Create(C, "maskLoop", maskOutput);
+            BasicBlock * const maskLoopEnd = BasicBlock::Create(C, "maskLoopExit", maskOutput);
+            BasicBlock * const maskZeroRemaining = BasicBlock::Create(C, "maskZeroRemaining", maskOutput);
+            BasicBlock * const maskExit = BasicBlock::Create(C, "maskExit", maskOutput);
+
+            BasicBlock * const entry = b->GetInsertBlock();
+            b->CreateBr(maskLoop);
+
+            b->SetInsertPoint(maskLoop);
+            PHINode * const streamIndex = b->CreatePHI(b->getSizeTy(), 2);
+            streamIndex->addIncoming(ZERO, entry);
+            Value * ptr = nullptr;
+            Value * const idx = b->CreateAdd(blockIndex, streamIndex);
+            if (itemWidth > 1) {
+                ptr = b->CreateInBoundsGEP(baseAddress, { idx, packIndex });
+            } else {
+                ptr = b->CreateInBoundsGEP(baseAddress, { idx });
+            }
+            Value * const value = b->CreateBlockAlignedLoad(ptr);
+            Value * const maskedValue = b->CreateAnd(value, mask);
+            b->CreateBlockAlignedStore(maskedValue, ptr);
+
+            DataLayout DL(b->getModule());
+            Type * const intPtrTy = DL.getIntPtrType(ptr->getType());
+            if (itemWidth > 1) {
+                // Since packs are laid out sequentially in memory, it will hopefully be cheaper to zero them out here
+                // because they may be within the same cache line.
+                Value * const nextPackIndex = b->CreateAdd(packIndex, ONE);
+                Value * const start = b->CreateInBoundsGEP(baseAddress, { idx, nextPackIndex} );
+                Value * const startInt = b->CreatePtrToInt(start, intPtrTy);
+                Value * const end = b->CreateInBoundsGEP(baseAddress, { idx, ITEM_WIDTH });
+                Value * const endInt = b->CreatePtrToInt(end, intPtrTy);
+                Value * const remainingPackBytes = b->CreateSub(endInt, startInt);
+                b->CreateMemZero(start, remainingPackBytes, blockWidth / 8);
+            }
+            BasicBlock * const maskLoopExit = b->GetInsertBlock();
+            Value * const nextStreamIndex = b->CreateAdd(streamIndex, ONE);
+            streamIndex->addIncoming(nextStreamIndex, maskLoopExit);
+            Value * const notDone = b->CreateICmpNE(nextStreamIndex, numOfStreams);
+            b->CreateCondBr(notDone, maskLoop, maskLoopEnd);
+
+            b->SetInsertPoint(maskLoopEnd);
+            // Zero out any blocks we could potentially touch
+            Value * const anyToZero = b->CreateICmpUGE(blocksToZero, ONE);
+            b->CreateCondBr(anyToZero, maskZeroRemaining, maskExit);
+
+            b->SetInsertPoint(maskZeroRemaining);
+            Value * const nextOffset = b->CreateAdd(blockIndex, numOfStreams);
+            Value * const startPtr = b->CreateInBoundsGEP(baseAddress, nextOffset);
+            Value * const startPtrInt = b->CreatePtrToInt(startPtr, intPtrTy);
+            Value * const endOffset = b->CreateRoundUp(nextOffset, b->CreateMul(blocksToZero, numOfStreams));
+            Value * const endPtr = b->CreateInBoundsGEP(baseAddress, endOffset);
+            Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
+            Value * const remainingBytes = b->CreateSub(endPtrInt, startPtrInt);
+            b->CreateMemZero(startPtr, remainingBytes, blockWidth / 8);
+            b->CreateBr(maskExit);
+
+            b->SetInsertPoint(maskExit);
+            b->CreateRetVoid();
+
+            b->restoreIP(ip);
+        }
+
+        Value * produced = nullptr;
+        if (mKernelIsInternallySynchronized) {
+            produced = mProducedItemCount(port);
+        } else {
+            produced = mProducedAtTerminationPhi(port);
+        }
+
+        FixedArray<Value *, 4> args;
+        args[0] = b->CreatePointerCast(buffer->getHandle(), voidPtrTy);
+        args[1] = produced;
+        args[2] = buffer->getStreamSetCount(b);
+        Rational strideLength{0};
+        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const BufferRateData & rd = mBufferGraph[e];
+            const Binding & input = rd.Binding;
+
+            Rational R{rd.Maximum};
+            if (LLVM_UNLIKELY(input.hasLookahead())) {
+                R += input.getLookahead();
+            }
+            strideLength = std::max(strideLength, R);
+        }
+        args[3] = b->getSize(ceiling(strideLength * Rational{1, blockWidth}));
+        b->CreateCall(maskOutput, args);
+    }
+    #endif
+}
+
+
+#else
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief clearUnwrittenOutputData
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -436,8 +631,10 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelInsufficientInput);
-        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelInsufficientInput);
+
+        BasicBlock * const nextNode = mIsBounded ? mKernelInsufficientInput : mKernelLoopExit; assert (nextNode);
+        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", nextNode);
+        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", nextNode);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
         Value * const baseAddress = buffer->getBaseAddress(b);
         #ifdef PRINT_DEBUG_MESSAGES
@@ -524,6 +721,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
     }
     #endif
 }
+
+#endif
 
 }
 

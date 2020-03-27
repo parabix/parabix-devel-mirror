@@ -359,7 +359,12 @@ enum TerminationSignal : unsigned {
     , Completed = Aborted | Fatal
 };
 
-using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS, no_property, bool>;
+enum TerminationCheckFlag : unsigned {
+    Soft = 1
+    , Hard = 2
+};
+
+using TerminationChecks = std::vector<unsigned>;
 
 enum CountingType : unsigned {
     Unknown = 0

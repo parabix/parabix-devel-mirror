@@ -30,7 +30,7 @@ void printGraph(const Graph & G, raw_ostream & out, const StringRef name = "G") 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief printRelationshipGraph
  ** ------------------------------------------------------------------------------------------------------------- */
-void printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, const StringRef name = "G") {
+void PipelineAnalysis::printRelationshipGraph(const RelationshipGraph & G, raw_ostream & out, const StringRef name) {
 
 
     auto write = [](const Rational & v, llvm::raw_ostream & out)  {

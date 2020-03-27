@@ -10,9 +10,7 @@
 #include "analysis/pipeline_analysis.hpp"
 #include <boost/multi_array.hpp>
 
-// #define PRINT_DEBUG_MESSAGES
-
-// #define PERMIT_THREAD_LOCAL_BUFFERS
+#define PRINT_DEBUG_MESSAGES
 
 // #define DISABLE_ZERO_EXTEND
 
@@ -417,7 +415,8 @@ public:
     bool isBounded() const;
     bool mayLoopBackToEntry() const;
     bool canTruncateInputBuffer() const;
-    void identifyPipelineInputs();
+    void identifyPipelineInputs(const unsigned kernelId);
+    void identifyLocalPortIds(const unsigned kernelId);
 
 // synchronization functions
 
@@ -532,7 +531,7 @@ protected:
     const std::vector<unsigned>                 mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
     const ConsumerGraph                         mConsumerGraph;
-    const TerminationGraph                      mTerminationGraph;
+    const TerminationChecks                     mTerminationCheck;
     const IOCheckGraph                          mIOCheckGraph;
 
     const BufferPortMap                         mInputPortSet;
@@ -649,6 +648,9 @@ protected:
     unsigned                                    mNumOfAddressableItemCount = 0;
     unsigned                                    mNumOfVirtualBaseAddresses = 0;
     unsigned                                    mNumOfTruncatedInputBuffers = 0;
+
+    unsigned                                    mNumOfLocalInputPortIds = 0;
+    unsigned                                    mNumOfLocalOutputPortIds = 0;
 
     PHINode *                                   mZeroExtendBufferPhi = nullptr;
 
@@ -771,7 +773,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
 , mPartitionJumpTree(std::move(P.mPartitionJumpTree))
 , mConsumerGraph(std::move(P.mConsumerGraph))
-, mTerminationGraph(std::move(P.mTerminationGraph))
+, mTerminationCheck(std::move(P.mTerminationCheck))
 , mIOCheckGraph(std::move(P.mIOCheckGraph))
 
 , mInputPortSet(constructInputPortMappings())

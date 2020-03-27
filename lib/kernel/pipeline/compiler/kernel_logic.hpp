@@ -365,12 +365,12 @@ bool PipelineCompiler::canTruncateInputBuffer() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyPipelineInputs
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::identifyPipelineInputs() {
+void PipelineCompiler::identifyPipelineInputs(const unsigned kernelId) {
     mHasPipelineInput.reset();
-    mHasPipelineInput.resize(in_degree(mKernelId, mBufferGraph));
+    mHasPipelineInput.resize(in_degree(kernelId, mBufferGraph));
 
     if (LLVM_LIKELY(out_degree(PipelineInput, mBufferGraph) > 0)) {
-        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
             const auto streamSet = source(e, mBufferGraph);
             const auto producer = parent(streamSet, mBufferGraph);
             if (LLVM_UNLIKELY(producer == PipelineInput)) {
@@ -381,6 +381,50 @@ void PipelineCompiler::identifyPipelineInputs() {
     }
 }
 
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyPipelineInputs
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifyLocalPortIds(const unsigned kernelId) {
+
+    // Although this function simply just counts the number of local I/O ids,
+    // it does perform a sanity test in debug mode. If any of these assertions
+    // were to trigger, there is likely a serious problem in the analysis for
+    // any to occur. Verify how local port ids are being assigned and update the
+    // assertions only after proving its correct.
+
+    #ifndef NDEBUG
+    const auto numOfInputs = in_degree(kernelId, mBufferGraph);
+    BitVector inputs(numOfInputs + 1U);
+    #endif
+    mNumOfLocalInputPortIds = 0;
+    for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto id = br.LocalPortId;
+        #ifndef NDEBUG
+        assert ("local port id exceeded num of input ports?" && (id < numOfInputs));
+        inputs.set(id);
+        #endif
+        mNumOfLocalInputPortIds = std::max(mNumOfLocalInputPortIds, id);
+    }
+    assert ("gap in local input port ids?" && (static_cast<int>(inputs.count()) == inputs.find_first_unset()));
+
+    #ifndef NDEBUG
+    const auto numOfOutputs = out_degree(kernelId, mBufferGraph);
+    BitVector outputs(numOfOutputs + 1U);
+    #endif
+    mNumOfLocalOutputPortIds = 0;
+    for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const auto id = br.LocalPortId;
+        #ifndef NDEBUG
+        assert ("local port id exceeded num of output ports?" && (id < numOfOutputs));
+        outputs.set(id);
+        #endif
+        mNumOfLocalOutputPortIds = std::max(mNumOfLocalOutputPortIds, id);
+    }
+    assert ("gap in local output port ids?" && (static_cast<int>(outputs.count()) == outputs.find_first_unset()));
+
+}
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex

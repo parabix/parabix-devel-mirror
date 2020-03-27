@@ -2180,6 +2180,8 @@ bool PipelineAnalysis::determinePartitionJumpIndices() {
     }
     END_SCOPED_REGION
 
+    printGraph(G, errs(), "J1");
+
     // Now compute the transitive reduction of the partition relationships
     BEGIN_SCOPED_REGION
     ReverseTopologicalOrdering ordering(PartitionCount);
@@ -2187,6 +2189,8 @@ bool PipelineAnalysis::determinePartitionJumpIndices() {
     transitive_closure_dag(ordering, G);
     transitive_reduction_dag(ordering, G);
     END_SCOPED_REGION
+
+    printGraph(G, errs(), "J2");
 
     // Add a special sink node that marks the end of the processing loop.
     for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
@@ -2332,6 +2336,9 @@ void PipelineAnalysis::makePartitionJumpTree() {
     for (auto i = 0U; i < (PartitionCount - 1); ++i) {        
         add_edge(i, mPartitionJumpIndex[i], mPartitionJumpTree);
     }
+
+    printGraph(mPartitionJumpTree, errs(), "P");
+
 //    for (auto i = 1U; i < (PartitionCount - 1); ++i) {
 //        add_edge(i, (i + 1U), mPartitionJumpTree);
 //    }

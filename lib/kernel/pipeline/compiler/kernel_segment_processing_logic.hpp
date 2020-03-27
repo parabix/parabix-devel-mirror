@@ -74,7 +74,8 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     mExhaustedPipelineInputAtExit = mExhaustedInput;
 
-    identifyPipelineInputs();
+    identifyPipelineInputs(mKernelId);
+    identifyLocalPortIds(mKernelId);
     checkForPartitionEntry(b);
 
     assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));

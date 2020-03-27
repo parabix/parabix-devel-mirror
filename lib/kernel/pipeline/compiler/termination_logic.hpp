@@ -69,15 +69,13 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
     Constant * const aborted = getTerminationSignal(b, TerminationSignal::Aborted);
     Constant * const fatal = getTerminationSignal(b, TerminationSignal::Fatal);
 
-    // check whether every sink has terminated
-    for (const auto e : make_iterator_range(in_edges((PartitionCount - 1), mTerminationGraph))) {
-        const auto partitionId = source(e, mTerminationGraph);
-        Value * const signal = mPartitionTerminationSignal[partitionId]; assert (signal);
-        assert (signal->getType() == unterminated->getType());
-        // if this is a hard termination, such as a fatal error, any can terminate the pipeline.
-        // however, a kernel that can terminate with a fatal error, may not necessarily do so.
-        // otherwise its a soft termination and all must agree that the pipeline has terminated
-        if (mTerminationGraph[e]) {
+    for (auto partitionId = 0u; partitionId < PartitionCount; ++partitionId) {
+        Value * const signal = mPartitionTerminationSignal[partitionId];
+        const auto type = mTerminationCheck[partitionId];
+        if (type) {
+            b->CallPrintInt("termSignal" + std::to_string(partitionId), signal);
+        }
+        if (type & TerminationCheckFlag::Hard) {
             Value * const final = b->CreateICmpEQ(signal, fatal);
             if (hard) {
                 hard = b->CreateOr(hard, final);
@@ -85,11 +83,13 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
                 hard = final;
             }
         }
-        Value * const final = b->CreateICmpNE(signal, unterminated);
-        if (soft) {
-            soft = b->CreateAnd(soft, final);
-        } else {
-            soft = final;
+        if (type & TerminationCheckFlag::Soft) {
+            Value * const final = b->CreateICmpNE(signal, unterminated);
+            if (soft) {
+                soft = b->CreateAnd(soft, final);
+            } else {
+                soft = final;
+            }
         }
     }
     assert (soft);

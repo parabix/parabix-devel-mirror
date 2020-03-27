@@ -1104,18 +1104,34 @@ void PipelineAnalysis::identifyLocalPortIds() {
     GlobalPortIds globalPortIds;
     LocalPortIds localPortIds;
     unsigned nextGlobalPortId = 0;
+    unsigned nextLocalPortId = 0;
+
+    auto getGlobalPortId = [&](const BitSet & B) {
+        const auto f = globalPortIds.find(B);
+        if (f == globalPortIds.end()) {
+            const auto id = nextGlobalPortId++;
+            globalPortIds.emplace(std::move(B), id);
+            return id;
+        }
+        return f->second;
+    };
+
+    auto getLocalPortId = [&](const unsigned globalId) {
+        const auto f = localPortIds.find(globalId);
+        if (f == localPortIds.end()) {
+            const auto id = nextLocalPortId++;
+            localPortIds.emplace(globalId, id);
+            return id;
+        }
+        return f->second;
+    };
+
+    auto resetLocalPortIds = [&]() {
+        localPortIds.clear();
+        nextLocalPortId = 0;
+    };
 
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
-
-        auto getGlobalPortId = [&](const BitSet & B) {
-            const auto f = globalPortIds.find(B);
-            if (f == globalPortIds.end()) {
-                const auto id = nextGlobalPortId++;
-                globalPortIds.emplace(std::move(B), id);
-                return id;
-            }
-            return f->second;
-        };
 
         GInIter ei_begin, ei_end;
         std::tie(ei_begin, ei_end) = in_edges(kernel, mBufferGraph);
@@ -1124,18 +1140,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
         assert (std::distance(ei_begin, ei_end) == std::distance(fi_begin, fi_end));
 
-        localPortIds.clear();
-        unsigned nextLocalPortId = 0;
-
-        auto getLocalPortId = [&](const unsigned globalId) {
-            const auto f = localPortIds.find(globalId);
-            if (f == localPortIds.end()) {
-                const auto id = nextLocalPortId++;
-                localPortIds.emplace(globalId, id);
-                return id;
-            }
-            return f->second;
-        };
+        resetLocalPortIds();
 
         auto ei = ei_begin;
         auto fi = fi_begin;
@@ -1159,12 +1164,17 @@ void PipelineAnalysis::identifyLocalPortIds() {
             }
         }
 
+        // Record this information for the PipelineCompiler to use later to size its internal buffers.
+        MaxNumOfLocalInputPortIds = std::max<unsigned>(MaxNumOfLocalInputPortIds, nextLocalPortId);
+
         GOutIter ej_begin, ej_end;
         std::tie(ej_begin, ej_end) = out_edges(kernel, mBufferGraph);
         HOutIter fj_begin, fj_end;
         std::tie(fj_begin, fj_end) = out_edges(kernel, H);
 
         assert (std::distance(ej_begin, ej_end) == std::distance(fj_begin, fj_end));
+
+        resetLocalPortIds();
 
         auto ej = ej_begin;
         auto fj = fj_begin;
@@ -1187,12 +1197,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
             }
         }
 
-
-
-
-
-
-
+        MaxNumOfLocalOutputPortIds = std::max<unsigned>(MaxNumOfLocalOutputPortIds, nextLocalPortId);
 
     }
 

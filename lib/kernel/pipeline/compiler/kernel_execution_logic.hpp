@@ -46,7 +46,15 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     debugResume(b);
     #endif
 
-    mTerminatedExplicitly = mKernelCanTerminateEarly ? doSegmentRetVal : nullptr;
+    if (mKernelCanTerminateEarly) {
+        mTerminatedExplicitly = doSegmentRetVal;
+        #ifdef PRINT_DEBUG_MESSAGES
+        const auto prefix = makeKernelName(mKernelId);
+        debugPrint(b, "* " + prefix + "_terminatedExplicitly = %" PRIu64, mTerminatedExplicitly);
+        #endif
+    } else {
+        mTerminatedExplicitly = nullptr;
+    }
 
     updateProcessedAndProducedItemCounts(b);
     readReturnedOutputVirtualBaseAddresses(b);

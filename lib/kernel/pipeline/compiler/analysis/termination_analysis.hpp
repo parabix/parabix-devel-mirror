@@ -6,18 +6,20 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeTerminationGraph
+ * @brief identifyTerminationChecks
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::makeTerminationGraph() {
+void PipelineAnalysis::identifyTerminationChecks() {
 
-    mTerminationGraph = TerminationGraph(PartitionCount);
+    using TerminationGraph = adjacency_list<hash_setS, vecS, bidirectionalS>;
+
+    TerminationGraph G(PartitionCount);
 
     // Although every kernel will eventually terminate, we only need to observe one kernel
     // in each partition terminating to know whether *all* of the kernels will terminate.
     // Since only the root of a partition could be a kernel that explicitly terminates,
     // we can "share" its termination state.
 
-    const auto terminal = PartitionCount - 1;
+    const auto terminal = PartitionCount - 1U;
 
     for (auto consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
         const auto cid = KernelPartitionId[consumer];
@@ -27,76 +29,53 @@ void PipelineAnalysis::makeTerminationGraph() {
             const auto pid = KernelPartitionId[producer];
             assert (pid <= cid);
             if (pid != cid) {
-                add_edge(pid, cid, false, mTerminationGraph);
+                add_edge(pid, cid, G);
             }
         }
     }
-
-    for (auto consumer = FirstCall; consumer <= LastCall; ++consumer) {
-        for (const auto relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
-            const auto r = source(relationship, mScalarGraph);
-            for (const auto producer : make_iterator_range(in_edges(r, mScalarGraph))) {
-                const auto k = source(producer, mScalarGraph);
-                assert ("cannot occur" && k != PipelineOutput);
-                const auto pid = KernelPartitionId[k];
-                add_edge(pid, terminal, false, mTerminationGraph);
-            }
-        }
-    }
-
-    auto any_termination = [](const Kernel * const kernel) {
-        for (const Attribute & attr : kernel->getAttributes()) {
-            switch (attr.getKind()) {
-                case AttrId::CanTerminateEarly:
-                case AttrId::MustExplicitlyTerminate:
-                case AttrId::MayFatallyTerminate:
-                case AttrId::SideEffecting:
-                    return true;
-                default: break;
-            }
-        }
-        return false;
-    };
 
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        if (any_termination(getKernel(i))) {
+        const Kernel * const kernelObj = getKernel(i); assert (kernelObj);
+        if (LLVM_UNLIKELY(kernelObj->hasAttribute(AttrId::SideEffecting))) {
             const auto pid = KernelPartitionId[i];
-            add_edge(pid, terminal, false, mTerminationGraph);
+            add_edge(pid, terminal, G);
         }
     }
 
-    transitive_reduction_dag(mTerminationGraph);
+    assert (FirstCall == (PipelineOutput + 1U));
+
+    for (auto consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
+        for (const auto relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
+            const auto scalar = source(relationship, mScalarGraph);
+            const auto producer = parent(scalar, mScalarGraph);
+            const auto partitionId = KernelPartitionId[producer];
+            assert ("cannot occur" && partitionId != terminal);
+            add_edge(partitionId, terminal, G);
+        }
+    }
+
+    assert ("pipeline has no observable outputs?" && (in_degree(terminal, G) > 0));
+
+    printGraph(G, errs(), "T1");
+
+    transitive_reduction_dag(G);
+
+    printGraph(G, errs(), "T2");
+
+    mTerminationCheck.resize(PartitionCount, 0U);
 
     // we are only interested in the incoming edges of the pipeline output
-    for (unsigned i = 0; i < terminal; ++i) {
-        clear_in_edges(i, mTerminationGraph);
+    for (const auto e : make_iterator_range(in_edges(terminal, G))) {
+        mTerminationCheck[source(e, G)] = TerminationCheckFlag::Soft;
     }
 
     // hard terminations
-    auto hard_termination = [](const Kernel * const kernel) {
-        for (const Attribute & attr : kernel->getAttributes()) {
-            switch (attr.getKind()) {
-                case AttrId::MayFatallyTerminate:
-                    return true;
-                default: break;
-            }
-        }
-        return false;
-    };
-
-    for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        if (hard_termination(getKernel(i))) {
-            // in case we already have the edge in G, set the
-            // hard termination flag to true after "adding" it.
-            const auto pid = KernelPartitionId[i];
-            mTerminationGraph[add_edge(pid, terminal, true, mTerminationGraph).first] = true;
+    for (auto i = FirstKernel; i <= LastKernel; ++i) {
+        const Kernel * const kernelObj = getKernel(i);
+        if (LLVM_UNLIKELY(kernelObj->hasAttribute(AttrId::MayFatallyTerminate))) {
+            mTerminationCheck[KernelPartitionId[i]] |= TerminationCheckFlag::Hard;
         }
     }
-
-    assert ("a pipeline with no sinks ought to produce no observable data"
-            && in_degree(terminal, mTerminationGraph) > 0);
-    assert ("termination graph construction error?"
-            && out_degree(terminal, mTerminationGraph) == 0);
 
 }
 

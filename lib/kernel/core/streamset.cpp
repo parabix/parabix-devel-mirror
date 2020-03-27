@@ -235,7 +235,7 @@ Value * ExternalBuffer::getBaseAddress(BuilderPtr b) const {
 
 Value * ExternalBuffer::getOverflowAddress(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getBaseAddress");
-    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
+    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(EffectiveCapacity)});
     return b->CreateLoad(p);
 }
 
@@ -244,13 +244,13 @@ void ExternalBuffer::setCapacity(BuilderPtr b, Value * const capacity) const {
 //    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
 //        b->CreateAssert(capacity, "External buffer capacity cannot be 0.");
 //    }
-    Value *  const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
+    Value *  const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(EffectiveCapacity)});
     b->CreateStore(b->CreateZExt(capacity, b->getSizeTy()), p);
 }
 
 Value * ExternalBuffer::getCapacity(BuilderPtr b) const {
     assert (mHandle && "has not been set prior to calling getCapacity");
-    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(Capacity)});
+    Value * const p = b->CreateInBoundsGEP(mHandle, {b->getInt32(0), b->getInt32(EffectiveCapacity)});
     return b->CreateLoad(p);
 }
 

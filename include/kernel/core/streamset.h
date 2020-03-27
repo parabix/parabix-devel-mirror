@@ -164,7 +164,7 @@ public:
         return b->getBufferKind() == BufferKind::ExternalBuffer;
     }
 
-    enum Field {BaseAddress, Capacity};
+    enum Field { BaseAddress, EffectiveCapacity };
 
     ExternalBuffer(BuilderPtr b, llvm::Type * const type, const bool linear, const unsigned AddressSpace);
 
@@ -244,7 +244,7 @@ public:
                  const size_t capacity, const size_t overflowBlocks, const size_t underflowSize,
                  const bool linear, const unsigned AddressSpace);
 
-    enum Field { BaseAddress, InternalCapacity, EffectiveCapacity, MallocedAddress};
+    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress, InternalCapacity, PriorAddress };
 
     void allocateBuffer(BuilderPtr b, llvm::Value * const capacityMultiplier) override;
 
@@ -284,7 +284,7 @@ private:
 
 class DynamicBuffer final : public InternalBuffer {
 
-    enum Field { BaseAddress, EffectiveCapacity, PriorAddress, MallocedAddress, InternalCapacity };
+    enum Field { BaseAddress, EffectiveCapacity, MallocedAddress, InternalCapacity, PriorAddress };
 
 public:
 
