@@ -20,3 +20,9 @@ In the first iteration, the pinyin grep is supposed to handle pinyin inputs of E
 * Input: “qing?” Equivalent to "qin|qing".
 * "?" is only for the last "g". Equivalent to "qin|qing".
 
+6. Use of space character in pinyin, " "
+* eg. One space character: "zhong yao" matches "重要","中要","中药", or any other combination with pinyin of "zhong" and "yao", with no space between the characters.
+* Two space characters: "zhong  yao" (two spaces between zhong and yao) matches "重 要","中 要","中 药" or any other combination 
+with pinyin of "zhong" and "yao" and one space character between the two chinese characters.
+
+
