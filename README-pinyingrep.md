@@ -1,6 +1,7 @@
 ### Pinyin Grep
 This is a grep tool, using Chinese pinyin to "grep" corresponding Chinese characters/phases.
-It can also support simple regular-expression-like features.
+It can also support simple regular-expression-like features, like:
+`pinyingrep <regex> <file>`
 See below for more examples.
 #### First Iteration
 In the first iteration, the pinyin grep is supposed to handle pinyin inputs of English letters with possible tones and regular-expression-like features.
