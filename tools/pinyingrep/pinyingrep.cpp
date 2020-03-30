@@ -2,44 +2,86 @@
 #include <fstream>
 #include <vector>
 #include <string>
-#include <string.h>
 using namespace std;
 
 
 void PinyinGrep(vector<string>& GrepLines, ifstream& fin, const string& regex){
-    string filename;
-    getline(fin, filename);
-	if(filename=="simple_pinyin"){
-		if(regex=="zhong wen"){
-			GrepLines.push_back("3 4");
-		}else if(regex=="zhong yao"){
-			GrepLines.push_back("5 6 9 10");
-		}else if(regex=="lian xi"){
-			GrepLines.push_back("8 11");
-		}else if(regex=="zhong1 yao4"){
-			GrepLines.push_back("6 10");
-		}else if(regex=="zhong4 yao4"){
-			GrepLines.push_back("5 9");
-		}else if(regex=="zhōng"){
-			GrepLines.push_back("3 4 6 10");
-		}else if(regex=="zhòng"){
-			GrepLines.push_back("5 7 9");
-		}
-	}else if(filename=="test2"){
-		if(regex=="m.ng"){
-			GrepLines.push_back("2 4 7 8 9");
-		}else if(regex=="sh.ng"){
-			GrepLines.push_back("2 4 8");
-		}else if(regex=="b.ng"){
-			GrepLines.push_back("9");
-		}else if(regex=="qing?"){
-			GrepLines.push_back("10");
-		}else if(regex=="kang?"){
-			GrepLines.push_back("9 11");
-		}else if(regex=="meng?"){
-			GrepLines.push_back("8 11");
-		}
-	}
+    string filename, tempstr;
+    vector<string> filestr;
+    
+    // extract every lines from the file
+    while(getline(fin, tempstr))
+        filestr.push_back(tempstr);
+    fin.close();
+
+    if(!filestr.empty()){
+        filename = tempstr[0]; // the first line should be the file name
+        if(filename=="simple_pinyin"){
+            if(regex=="zhong wen"){
+                // "3 4"
+                GrepLines.push_back(filestr[3 ]);
+                GrepLines.push_back(filestr[4 ]);
+            }else if(regex=="zhong yao"){
+                //"5 6 9 10"
+                GrepLines.push_back(filestr[5 ]);
+                GrepLines.push_back(filestr[6 ]);
+                GrepLines.push_back(filestr[9 ]);
+                GrepLines.push_back(filestr[10]);
+            }else if(regex=="lian xi"){
+                //"8 11"
+                GrepLines.push_back(filestr[8 ]);
+                GrepLines.push_back(filestr[11]);
+            }else if(regex=="zhong1 yao4"){
+                //"6 10"
+                GrepLines.push_back(filestr[6 ]);
+                GrepLines.push_back(filestr[10]);
+            }else if(regex=="zhong4 yao4"){
+                //"5 9"
+                GrepLines.push_back(filestr[5 ]);
+                GrepLines.push_back(filestr[9 ]);
+            }else if(regex=="zhōng"){
+                //"3 4 6 10"
+                GrepLines.push_back(filestr[3 ]);
+                GrepLines.push_back(filestr[4 ]);
+                GrepLines.push_back(filestr[6 ]);
+                GrepLines.push_back(filestr[10]);
+            }else if(regex=="zhòng"){
+                //"5 7 9"
+                GrepLines.push_back(filestr[5 ]);
+                GrepLines.push_back(filestr[7 ]);
+                GrepLines.push_back(filestr[9 ]);
+            }
+        }else if(filename=="test2"){
+            if(regex=="m.ng"){
+                //"2 4 7 8 9"
+                GrepLines.push_back(filestr[2 ]);
+                GrepLines.push_back(filestr[4 ]);
+                GrepLines.push_back(filestr[7 ]);
+                GrepLines.push_back(filestr[8 ]);
+                GrepLines.push_back(filestr[9 ]);
+            }else if(regex=="sh.ng"){
+                //"2 4 8"
+                GrepLines.push_back(filestr[2 ]);
+                GrepLines.push_back(filestr[4 ]);
+                GrepLines.push_back(filestr[8 ]);
+            }else if(regex=="b.ng"){
+                //"9"
+                GrepLines.push_back(filestr[9 ]);
+            }else if(regex=="qing?"){
+                //"10"
+                GrepLines.push_back(filestr[10]);
+            }else if(regex=="kang?"){
+                //"9 11"
+                GrepLines.push_back(filestr[9 ]);
+                GrepLines.push_back(filestr[11]);
+            }else if(regex=="meng?"){
+                //"8 11"
+                GrepLines.push_back(filestr[8 ]);
+                GrepLines.push_back(filestr[11]);
+            }
+        }
+    }
+	
 }
 
 
