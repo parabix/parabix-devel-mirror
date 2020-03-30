@@ -9,11 +9,16 @@ void PinyinGrep(vector<string>& GrepLines, ifstream& fin, const string& regex, c
     string tempstr;
     vector<string> filestr;
     
+    filestr.push_back(filename); // no special meaning
+                                 // just to make sure that 
+                                 // lines are counted from 1
+                                 // instead of 0
+
     // extract every lines from the file
     while(getline(fin, tempstr))
         filestr.push_back(tempstr);
     fin.close();
-
+    
     if(!filestr.empty()){
         if(filename=="simple_pinyin"){
             if(regex=="zhong wen"){
