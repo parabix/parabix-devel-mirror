@@ -5,8 +5,8 @@
 using namespace std;
 
 
-void PinyinGrep(vector<string>& GrepLines, ifstream& fin, const string& regex){
-    string filename, tempstr;
+void PinyinGrep(vector<string>& GrepLines, ifstream& fin, const string& regex, const string& filename){
+    string tempstr;
     vector<string> filestr;
     
     // extract every lines from the file
@@ -15,7 +15,6 @@ void PinyinGrep(vector<string>& GrepLines, ifstream& fin, const string& regex){
     fin.close();
 
     if(!filestr.empty()){
-        filename = tempstr[0]; // the first line should be the file name
         if(filename=="simple_pinyin"){
             if(regex=="zhong wen"){
                 // "3 4"
@@ -100,12 +99,14 @@ int main(int argc, char* argv[])
     {
         vector<string> GrepLines;
         string regex(argv[1]);
+        string filename(argv[2]);
         ifstream fin(argv[2]);
+
+        filename = filename.substr(filename.find_last_of("/")+1);// remove the path
 
         if(fin.is_open())
         {
-            cout<<"Pinyini Grep "<<regex<<" in "<<argv[2]<<"."<<endl;
-            PinyinGrep(GrepLines, fin, regex);
+            PinyinGrep(GrepLines, fin, regex, filename);
             Output(GrepLines);
         }
         else 
