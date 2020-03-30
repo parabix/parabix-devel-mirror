@@ -1,4 +1,4 @@
-<pinyintest>
+<greptest>
 <datafile id = "simple_pinyin">
 你好！
 欢迎来到中文世界。
@@ -43,3 +43,5 @@
 <grepcase regexp="qing?" datafile="test2" greplines="10"/>
 <grepcase regexp="kang?" datafile="test2" greplines="9 11"/>
 <grepcase regexp="meng?" datafile="test2" greplines="8 11"/>
+
+</greptest>
