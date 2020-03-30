@@ -7,9 +7,5 @@ NAME
     pinyingrep
 SRC
     pinyingrep.cpp
-DEPS
-    kernel.basis
-    kernel.io
-    kernel.pipeline
-    kernel.util
+
 )
