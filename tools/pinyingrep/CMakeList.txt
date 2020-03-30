@@ -1,0 +1,15 @@
+# This software is licensed to the public under the Open Software License 3.0.
+
+# module: pinyingrep
+
+parabix_add_executable(
+NAME
+    pinyingrep
+SRC
+    pinyingrep.cpp
+DEPS
+    kernel.basis
+    kernel.io
+    kernel.pipeline
+    kernel.util
+)
