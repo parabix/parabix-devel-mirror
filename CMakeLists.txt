@@ -344,7 +344,6 @@ add_subdirectory(tools/beta-csv)
 
 # Kernel Tests
 add_subdirectory(tests)
-add_subdirectory(tests/)
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
