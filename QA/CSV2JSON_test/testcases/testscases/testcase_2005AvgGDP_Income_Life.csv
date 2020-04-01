@@ -1,0 +1,185 @@
+﻿count,country,life-exp,income,region
+0,Afghanistan,53.9,1140, AS
+1,Albania,74.9,7460, EU
+2,Algeria,75.4,12300, AF
+3,Angola,56.5,3950, AF
+4,Antigua and Barbuda,75.9,20100, NA
+5,Argentina,75.2,15500, AS
+6,Armenia,72.5,5360, AS
+7,Australia,81.1,38900, OA
+8,Austria,79.5,41200, EU
+9,Azerbaijan,67.6,8050, AS
+10,Bahamas,73,25400, NA
+11,Bahrain,73.6,43800, AS
+12,Bangladesh,68,1930, AS
+13,Barbados,75.9,15100, NA
+14,Belarus,68.9,11200, EU
+15,Belgium,79.1,39900, EU
+16,Belize,70,7870, NA
+17,Benin,59.5,1740, AF
+18,Bhutan,69.6,4520, AS
+19,Bolivia,70.1,4700, SA
+20,Bosnia and Herzegovina,75.7,8320, EU
+21,Botswana,47.8,11600, AF
+22,Brazil,73,12300, SA
+23,Brunei,76.8,83000, AS
+24,Bulgaria,72.7,12700, EU
+25,Burkina Faso,55.1,1230, Unknown
+26,Burundi,53.1,724, AF
+27,Cambodia,62.9,1970, AS
+28,Cameroon,54.9,2640, AF
+29,Canada,80.2,40500, NA
+30,Cape Verde,71.1,4640, AF
+31,Central African Republic,45,816, AF
+32,Chad,53.9,1790, AF
+33,Chile,78.4,17000, SA
+34,China,72.4,5720, AS
+35,Colombia,75,9260, SA
+36,Comoros,64.3,1470, AF
+37,"Congo, Dem. Rep.",55.4,549, Unknown
+38,"Congo, Rep.",56.6,4740, Unknown
+39,Costa Rica,79.3,11000, NA
+40,Cote d'Ivoire,53.7,2680, AF
+41,Croatia,75.1,19500, EU
+42,Cuba,77.6,14100, NA
+43,Cyprus,78,33700, AS
+44,Czech Republic,76.2,25700, EU
+45,Denmark,78.1,44600, EU
+46,Djibouti,62,2260, AF
+47,Dominican Republic,73.5,8780, NA
+48,Ecuador,75.6,8610, SA
+49,Egypt,70.3,8000, AF
+50,El Salvador,73.1,6960, NA
+51,Equatorial Guinea,58.1,31400, AF
+52,Eritrea,60.5,1630, AF
+53,Estonia,72.8,22800, EU
+54,Ethiopia,56.1,732, AF
+55,Fiji,64.9,7430, OA
+56,Finland,78.9,39100, EU
+57,France,80.3,36500, EU
+58,Gabon,60,17000, AF
+59,Gambia,64.3,1540, AF
+60,Georgia,72,4900, AN
+61,Germany,79.2,37700, EU
+62,Ghana,60.1,2540, AF
+63,Greece,79.6,29600, EU
+64,Grenada,71.1,11900, NA
+65,Guatemala,69.8,6270, NA
+66,Guinea,56.2,1200, AF
+67,Guinea-Bissau,53.2,1340, AF
+68,Guyana,64.8,4690, SA
+69,Haiti,58,1560, NA
+70,Honduras,70.6,3700, NA
+71,Hungary,73.1,22300, EU
+72,Iceland,81.2,39800, EU
+73,India,64.2,3180, AF
+74,Indonesia,68.6,6830, AS
+75,Iran,72.5,14600, AS
+76,Iraq,64.8,10900, AS
+77,Ireland,78.9,48900, EU
+78,Israel,79.7,26300, AS
+79,Italy,80.8,37600, EU
+80,Jamaica,74.7,8410, NA
+81,Japan,82,35700, AS
+82,Jordan,73.1,8800, AS
+83,Kazakhstan,65,16000, AS
+84,Kenya,57.4,2220, AF
+85,Kiribati,60.2,1980, OA
+86,Kuwait,77,93500, AS
+87,Kyrgyz Republic,66.6,2370, Unknown
+88,Lao,60.3,2940, AS
+89,Latvia,70.8,17500, EU
+90,Lebanon,78.3,12300, AS
+91,Lesotho,43.3,1960, AF
+92,Liberia,58.2,598, AF
+93,Libya,75.2,26000, AF
+94,Lithuania,71.4,18500, EU
+95,Luxembourg,80,88600, EU
+96,"Macedonia, FYR",72.9,9390, Unknown
+97,Madagascar,60.1,1390, AF
+98,Malawi,47.6,840, AF
+99,Malaysia,73.9,18600, AS
+100,Maldives,75.7,7960, AS
+101,Mali,56.5,1760, AF
+102,Malta,79.1,26300, EU
+103,Mauritania,65.7,2990, AF
+104,Mauritius,72.4,12400, AF
+105,Mexico,75.2,15300, NA
+106,"Micronesia, Fed. Sts.",65.6,3300, Unknown
+107,Moldova,68.5,3310, EU
+108,Mongolia,64,6050, AS
+109,Montenegro,75,11400, EU
+110,Morocco,72.2,5360, AF
+111,Mozambique,52.4,742, AF
+112,Myanmar,63.6,2280, AS
+113,Namibia,51.6,7260, AF
+114,Nepal,66,1680, AS
+115,Netherlands,79.4,43500, EU
+116,New Zealand,79.8,32100, OA
+117,Nicaragua,76.6,3770, NA
+118,Niger,55.6,763, AF
+119,Nigeria,56.9,4150, AF
+120,North Korea,69.8,1460, AS
+121,Norway,80.1,62900, EU
+122,Oman,76,41500, AS
+123,Pakistan,62.6,4010, AS
+124,Palestine,71.9,2200, Unknown
+125,Panama,77.5,11900, NA
+126,Papua New Guinea,57.6,1760, OA
+127,Paraguay,74.1,6120, SA
+128,Peru,77.1,7600, SA
+129,Philippines,68.3,4780, AS
+130,Poland,75.2,17200, EU
+131,Portugal,78.3,26600, EU
+132,Qatar,76.9,110000, AS
+133,Romania,72.4,14700, EU
+134,Russia,65.9,19300, EU
+135,Rwanda,57.7,1030, AF
+136,Samoa,71.2,5340, OA
+137,Sao Tome and Principe,66.1,2230, AF
+138,Saudi Arabia,73.9,45500, AS
+139,Senegal,61.7,2100, AF
+140,Serbia,73.2,10900, EU
+141,Seychelles,72.1,17800, AF
+142,Sierra Leone,52.5,1050, AF
+143,Singapore,80.9,62000, AS
+144,Slovak Republic,74.2,20000, EU
+145,Slovenia,77.5,27000, EU
+146,Solomon Islands,61,1600, OA
+147,Somalia,53.9,616, AF
+148,South Africa,51.1,11100, AF
+149,South Korea,78.3,25500, AS
+150,South Sudan,56.6,3170, AF
+151,Spain,80.5,32900, EU
+152,Sri Lanka,74.1,6530, AS
+153,St. Lucia,74.2,10400, NA
+154,St. Vincent and the Grenadines,71.2,9320, NA
+155,Sudan,64.9,2710, AF
+156,Suriname,69.5,12200, SA
+157,Swaziland,42.3,6750, AF
+158,Sweden,80.5,41200, EU
+159,Switzerland,81.2,52400, EU
+160,Syria,74.9,5740, AS
+161,Tajikistan,67.3,1710, AS
+162,Tanzania,55.3,1820, AF
+163,Thailand,74.2,11500, AS
+164,Timor-Leste,67.2,1340, AS
+165,Togo,56.4,1180, AF
+166,Tonga,69.5,4950, OA
+167,Trinidad and Tobago,71.3,26400, NA
+168,Tunisia,76.1,8800, AF
+169,Turkey,76.7,16300, AS
+170,Turkmenistan,65.3,6500, AS
+171,Uganda,52.8,1240, AF
+172,Ukraine,67.3,7250, EU
+173,United Arab Emirates,76.6,92300, AS
+174,United Kingdom,79,36900, EU
+175,United States,77.7,49800, NA
+176,Uruguay,75.6,13000, SA
+177,Uzbekistan,66.7,3070, AS
+178,Vanuatu,62.3,2610, OA
+179,Venezuela,75.1,14900, SA
+180,Vietnam,71.8,3490, AS
+181,Yemen,65,4160, AS
+182,Zambia,46,2480, AF
+183,Zimbabwe,45.3,1650, AF

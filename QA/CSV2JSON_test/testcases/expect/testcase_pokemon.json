@@ -1,0 +1,65 @@
+[
+  {
+    "name": "MOUSEY",
+    "species": "pikachu",
+    "lvl": "25",
+    "type": "electric",
+    "hp": "55"
+  },
+  {
+    "name": "LULULEMONS",
+    "species": "lucario",
+    "lvl": "30",
+    "type": "fighting/steel",
+    "hp": "80"
+  },
+  {
+    "name": "VINEZZZZ",
+    "species": "bulbasaur",
+    "lvl": "1",
+    "type": "grass",
+    "hp": "20"
+  },
+  {
+    "name": "OMANYTE",
+    "species": "omanyte",
+    "lvl": "29",
+    "type": "rock/water",
+    "hp": "99"
+  },
+  {
+    "name": "AAABAAAJSS",
+    "species": "pidgeot",
+    "lvl": "45",
+    "type": "normal/flying",
+    "hp": "100"
+  },
+  {
+    "name": "AATTVVV",
+    "species": "venomoth",
+    "lvl": "60",
+    "type": "bug/poision",
+    "hp": "150"
+  },
+  {
+    "name": "AA-j",
+    "species": "zapdos",
+    "lvl": "45",
+    "type": "electric/flying",
+    "hp": "130"
+  },
+  {
+    "name": "AIIIIIIRRR",
+    "species": "lapras",
+    "lvl": "51",
+    "type": "ice/water",
+    "hp": "180"
+  },
+  {
+    "name": "AAAAAAAAAA",
+    "species": "nidoking",
+    "lvl": "45",
+    "type": "poison/ground",
+    "hp": "100"
+  }
+]

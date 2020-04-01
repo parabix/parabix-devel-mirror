@@ -1,0 +1,26 @@
+[
+  {
+    "group": "alpha",
+    "project": "csv",
+    "numer of members": "4",
+    "comment": ""
+  },
+  {
+    "group": "beta",
+    "project": "",
+    "numer of members": "3",
+    "comment": "our group"
+  },
+  {
+    "group": "gamma",
+    "project": "",
+    "numer of members": "4",
+    "comment": ""
+  },
+  {
+    "group": "delta",
+    "project": "radicalgrep",
+    "numer of members": "3",
+    "comment": ""
+  }
+]

@@ -335,13 +335,16 @@ add_subdirectory(tools/icgrep)
 add_subdirectory(tools/idisa_test)
 add_subdirectory(tools/transcoders)
 add_subdirectory(tools/wc)
+
 # add_subdirectory(tools/wc/wc-pablo)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
+add_subdirectory(tools/beta-csv)
 
 # Kernel Tests
 add_subdirectory(tests)
+add_subdirectory(tests/)
 
 # Target definition for single library
 if(ARTIFACT_MODE STREQUAL "Single")
