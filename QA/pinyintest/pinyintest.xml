@@ -1,0 +1,47 @@
+<greptest>
+<datafile id = "simple_pinyin">
+你好！
+欢迎来到中文世界。
+在这里你可以感受中文的博大精深。
+重要的事情说三遍：
+中药主要用于轻症患者。
+如果你觉得这个桌子太重，要换一张，
+那请联系“123456789”。
+种药的人觉得现在卖不出好价钱，
+所以把筐子中要卖的药都烧了。
+我是练习时长两年半的练习生cxk，
+我喜欢唱，跳，rap，篮球，music！
+</datafile>
+
+<grepcase regexp="zhong wen" datafile="simple_pinyin" greplines="3 4"/>
+<grepcase regexp="zhong yao" datafile="simple_pinyin" greplines="5 6 9 10"/>
+<grepcase regexp="lian xi" datafile="simple_pinyin" greplines="8 11"/>
+
+
+<grepcase regexp="zhong1 yao4" datafile="simple_pinyin" greplines="6 10"/>
+<grepcase regexp="zhong4 yao4" datafile="simple_pinyin" greplines="5 9"/>
+<grepcase regexp="zhōng" datafile="simple_pinyin" greplines="3 4 6 10"/>
+<grepcase regexp="zhòng" datafile="simple_pinyin" greplines="5 7 9"/>
+
+
+<datafile id = "test2">
+我名字叫小明,家里在上海。
+今年十二岁。
+我的叔叔是盲的，今天我要忙着带他去看医生。
+我家里有一只猫。
+它一秒会发喵喵的声音，一秒会睡觉。
+明天我会去打篮球。
+我有个梦想做医生。
+看了我叔叔收到的歧视，我想帮盲人。
+不仅是我的亲人。
+虽然他们不能康复，但可以变更好。
+</datafile>
+
+<grepcase regexp="m.ng" datafile="test2" greplines="2 4 7 8 9"/>
+<grepcase regexp="sh.ng" datafile="test2" greplines="2 4 8"/>
+<grepcase regexp="b.ng" datafile="test2" greplines="9"/>
+<grepcase regexp="qing?" datafile="test2" greplines="10"/>
+<grepcase regexp="kang?" datafile="test2" greplines="9 11"/>
+<grepcase regexp="meng?" datafile="test2" greplines="8 11"/>
+
+</greptest>
