@@ -339,6 +339,7 @@ add_subdirectory(tools/wc)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
+add_subdirectory(tools/pinyingrep)
 
 # Kernel Tests
 add_subdirectory(tests)
