@@ -353,11 +353,15 @@ endif()
 
 set(QA_DIR ${PROJECT_SOURCE_DIR}/QA)
 set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
-
+add_executable(pinyingrep.exe)
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${QA_DIR}
   COMMAND python greptest.py --random_flag_count=2 --tests_per_grepcase=2 ${BIN_DIR}/icgrep)
+
+add_Test(
+  NAME pinyintest
+  COMMAND pinyin greptest.cpp -d ${QA_DIR} -t ${QA_DIR}/pinyintest.cpp ${BIN_DIR}/icgrep)
 
 add_test(
   NAME proptest
