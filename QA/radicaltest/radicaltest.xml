@@ -1,4 +1,4 @@
-<radicaltest>
+<greptest>
 <datafile id = "test1">
 这是一个简单的例子
 以下是一些关于部首分类的信息
@@ -21,4 +21,4 @@
 </datafile>
 <grepcase regexp= "氵_宀 _" datafile = "test2" greplines = 4 5 6 8/>
 <grepcase regexp= "扌_刂_ " datafile = "test2" greplines = 6 8/>
-</radical_test>
+</greptest>
