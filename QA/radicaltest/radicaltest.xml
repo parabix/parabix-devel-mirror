@@ -1,0 +1,24 @@
+<radicaltest>
+<datafile id = "test1">
+这是一个简单的例子
+以下是一些关于部首分类的信息
+部首分类也是使用汉字之文化圈少数的共通点
+中国大陆的国标码使用汉语拼音排列
+部首检字也有其局限性，许多汉字难以归部
+</datafile>
+<grepcase regexp= "亻_心_" datafile = "test1" greplines = 3/>
+<grepcase regexp= "氵_宀 _" datafile = "test1" greplines = 4 6/>
+<grepcase regexp= "扌_刂_ " datafile = "test1" greplines = 5/>
+
+<datafile id = "test2">
+偏旁是从造字构形的角度定义的
+习惯上有“左偏右旁”的说法
+这是采用“两分法”对汉字进行结构分析得出的认识
+由于汉字结构复杂，许多汉字并不是左右结构的
+排列在一起，并把这种排字方法叫做“分别部居”
+每“部”第一个字就是“部首”
+可见，部首也是偏旁，是用来作为排列和检索汉字依据的特殊“偏旁”
+</datafile>
+<grepcase regexp= "氵_宀 _" datafile = "test2" greplines = 4 5 6 8/>
+<grepcase regexp= "扌_刂_ " datafile = "test2" greplines = 6 8/>
+</radical_test>
