@@ -39,7 +39,7 @@ const static std::string TERMINATION_SIGNAL = "__termination_signal";
 // TODO: this check is a bit too strict in general; if the pipeline could request data/
 // EOF padding from the MemorySource kernel, it would be possible to re-enable.
 
-#define CHECK_IO_ADDRESS_RANGE
+// #define CHECK_IO_ADDRESS_RANGE
 
 // TODO: split the init/final into two methods each, one to do allocation/init, and the
 // other final/deallocate? Would potentially allow us to reuse the kernel/stream set
@@ -354,30 +354,26 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         }
     }    
     const auto internallySynchronized = mTarget->hasAttribute(AttrId::InternallySynchronized);
+    const auto greedy = mTarget->isGreedy();
 
     Rational fixedRateLCM{0};
     mFixedRateFactor = nullptr;
-    if (LLVM_UNLIKELY(internallySynchronized)) {
-        mExternalSegNo = nextArg();
+    if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
+        if (internallySynchronized) {
+            mExternalSegNo = nextArg();
+        } else {
+            mExternalSegNo = nullptr;
+        }
         mNumOfStrides = nullptr;
+        mIsFinal = nextArg();
     } else {
         mExternalSegNo = nullptr;
         mNumOfStrides = nextArg();
+        mIsFinal = b->CreateIsNull(mNumOfStrides);
+        mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
         if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
             fixedRateLCM = getLCMOfFixedRateInputs(mTarget);
             mFixedRateFactor = nextArg();
-        }
-    }
-
-    if (internallySynchronized || !mTarget->requiresExplicitPartialFinalStride()) {
-        mIsFinal = nextArg(); assert (mIsFinal->getType() == b->getInt1Ty());
-        if (LLVM_UNLIKELY(enableAsserts && mNumOfStrides)) {
-            b->CreateAssert(mNumOfStrides, getName() + " was given 0 strides.");
-        }
-    } else {
-        mIsFinal = b->CreateIsNull(mNumOfStrides);
-        if (LLVM_LIKELY(!internallySynchronized)) {
-            mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
         }
     }
 
@@ -605,16 +601,17 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         props.push_back(mThreadLocalHandle); assert (mThreadLocalHandle);
     }
     const auto internallySynchronized = mTarget->hasAttribute(AttrId::InternallySynchronized);
-    if (LLVM_UNLIKELY(internallySynchronized)) {
-        props.push_back(mExternalSegNo);
+    const auto greedy = mTarget->isGreedy();
+    if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
+        if (internallySynchronized) {
+            props.push_back(mExternalSegNo);
+        }
+        props.push_back(mIsFinal);
     } else {
         props.push_back(mNumOfStrides); assert (mNumOfStrides);
         if (LLVM_LIKELY(mTarget->hasFixedRateInput())) {
             props.push_back(mFixedRateFactor);
         }
-    }
-    if (internallySynchronized || !mTarget->requiresExplicitPartialFinalStride()) {
-        props.push_back(mIsFinal);
     }
 
     const auto numOfInputs = getNumOfStreamInputs();

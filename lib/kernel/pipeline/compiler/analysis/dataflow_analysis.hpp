@@ -937,8 +937,6 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
     using BitSet = dynamic_bitset<>;
     using Vertex = BufferGraph::vertex_descriptor;
-    using GlobalPortIds = std::map<BitSet, unsigned>;
-    using LocalPortIds = flat_map<unsigned, unsigned>;
     using Graph = adjacency_list<vecS, vecS, bidirectionalS, no_property, BitSet>;
 
 
@@ -969,8 +967,6 @@ void PipelineAnalysis::identifyLocalPortIds() {
        dst |= src;
     };
 
-
-
     for (auto start = firstKernel; start <= lastKernel; ) {
         // Determine which kernels are in this partition
         const auto partitionId = KernelPartitionId[start];
@@ -982,9 +978,6 @@ void PipelineAnalysis::identifyLocalPortIds() {
         }
 
         const auto partRateId = nextRateId++;
-
-
-
         for (auto kernel = start; kernel < end; ++kernel) {
 
             BitSet K;
@@ -1055,10 +1048,10 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     }
                     relativeRefId.emplace(data.Port, S);
                 }                
-                if (data.ZeroExtended) {
+                if (data.IsZeroExtended) {
                     addRateId(S, nextRateId++);
                 }
-                insertAddId(S, data.Add);
+                insertAddId(S, data.TransitiveAdd);
                 combine(K, S);
             }
             addId.clear();
@@ -1088,12 +1081,17 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     }
                     relativeRefId.emplace(data.Port, S);
                 }
-                insertAddId(S, data.Add);
+                insertAddId(S, data.TransitiveAdd);
             }
             relativeRefId.clear();
         }
         start = end;
     }
+
+
+
+
+
 
     using GInIter = graph_traits<BufferGraph>::in_edge_iterator;
     using GOutIter = graph_traits<BufferGraph>::out_edge_iterator;
@@ -1101,10 +1099,10 @@ void PipelineAnalysis::identifyLocalPortIds() {
     using HInIter = graph_traits<Graph>::in_edge_iterator;
     using HOutIter = graph_traits<Graph>::out_edge_iterator;
 
+    using GlobalPortIds = std::map<BitSet, unsigned>;
+
     GlobalPortIds globalPortIds;
-    LocalPortIds localPortIds;
     unsigned nextGlobalPortId = 0;
-    unsigned nextLocalPortId = 0;
 
     auto getGlobalPortId = [&](const BitSet & B) {
         const auto f = globalPortIds.find(B);
@@ -1116,21 +1114,6 @@ void PipelineAnalysis::identifyLocalPortIds() {
         return f->second;
     };
 
-    auto getLocalPortId = [&](const unsigned globalId) {
-        const auto f = localPortIds.find(globalId);
-        if (f == localPortIds.end()) {
-            const auto id = nextLocalPortId++;
-            localPortIds.emplace(globalId, id);
-            return id;
-        }
-        return f->second;
-    };
-
-    auto resetLocalPortIds = [&]() {
-        localPortIds.clear();
-        nextLocalPortId = 0;
-    };
-
     for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
 
         GInIter ei_begin, ei_end;
@@ -1139,8 +1122,6 @@ void PipelineAnalysis::identifyLocalPortIds() {
         std::tie(fi_begin, fi_end) = in_edges(kernel, H);
 
         assert (std::distance(ei_begin, ei_end) == std::distance(fi_begin, fi_end));
-
-        resetLocalPortIds();
 
         auto ei = ei_begin;
         auto fi = fi_begin;
@@ -1152,20 +1133,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 rateSet.resize(nextRateId);
             }
             br.GlobalPortId = getGlobalPortId(rateSet);
-
-            const auto streamSet = source(*ei, mBufferGraph);
-            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-            const BufferNode & bn = mBufferGraph[streamSet];
-            if (bn.NonLinear) {
-                // TODO: this is overly conservative
-                br.LocalPortId = nextLocalPortId++;
-            } else {
-                br.LocalPortId = getLocalPortId(br.GlobalPortId);
-            }
         }
-
-        // Record this information for the PipelineCompiler to use later to size its internal buffers.
-        MaxNumOfLocalInputPortIds = std::max<unsigned>(MaxNumOfLocalInputPortIds, nextLocalPortId);
 
         GOutIter ej_begin, ej_end;
         std::tie(ej_begin, ej_end) = out_edges(kernel, mBufferGraph);
@@ -1173,8 +1141,6 @@ void PipelineAnalysis::identifyLocalPortIds() {
         std::tie(fj_begin, fj_end) = out_edges(kernel, H);
 
         assert (std::distance(ej_begin, ej_end) == std::distance(fj_begin, fj_end));
-
-        resetLocalPortIds();
 
         auto ej = ej_begin;
         auto fj = fj_begin;
@@ -1186,22 +1152,174 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 rateSet.resize(nextRateId);
             }
             br.GlobalPortId = getGlobalPortId(rateSet);
-
-            const auto streamSet = target(*ej, mBufferGraph);
-            assert (FirstStreamSet <= streamSet && streamSet <= LastStreamSet);
-            const BufferNode & bn = mBufferGraph[streamSet];
-            if (bn.NonLinear) {
-                br.LocalPortId = nextLocalPortId++;
-            } else {
-                br.LocalPortId = getLocalPortId(br.GlobalPortId);
-            }
         }
-
-        MaxNumOfLocalOutputPortIds = std::max<unsigned>(MaxNumOfLocalOutputPortIds, nextLocalPortId);
 
     }
 
+    using LocalPortIdSet = SmallFlatSet<unsigned, 4>;
+    using LocalPortIds = flat_map<std::pair<LocalPortIdSet, Rational>, unsigned>;
+
+
+    LocalPortIds localPortIds;
+    LocalPortIdSet ids;
+    unsigned nextLocalPortId = 0;
+
+    auto getLocalPortId = [&](const BufferNode & node, const BufferRateData & rateData) {
+
+        Rational fillRate{};
+        if (node.NonLinear) {
+            const StreamSetBuffer * const buffer = node.Buffer;
+            assert (buffer);
+            if (isa<DynamicBuffer>(buffer)) {
+                return nextLocalPortId++;
+            } else if (isa<StaticBuffer>(buffer)) {
+                const Binding & binding = rateData.Binding;
+                const ProcessingRate & rate = binding.getRate();
+                if (LLVM_LIKELY(rate.isFixed())) {
+                    const StaticBuffer * const sbuffer = cast<StaticBuffer>(buffer);
+                    const Rational capacity{sbuffer->getCapacity()};
+                    fillRate = capacity / rateData.Minimum;
+                } else {
+                    return nextLocalPortId++;
+                }
+            }
+        }
+
+        auto key = std::make_pair(ids, fillRate);
+        const auto f = localPortIds.find(key);
+        if (f == localPortIds.end()) {
+            const auto id = nextLocalPortId++;
+            localPortIds.emplace(std::move(key), id);
+            return id;
+        } else {
+            return f->second;
+        }
+    };
+
+    auto resetLocalPortIds = [&]() {
+        localPortIds.clear();
+        nextLocalPortId = 0;
+    };
+
+    auto calculateFillRatio = [&](const BufferNode & node, const BufferRateData & rateData) {
+        const StreamSetBuffer * const buffer = node.Buffer;
+        if (isa<StaticBuffer>(buffer)) {
+            const Binding & binding = rateData.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            if (LLVM_LIKELY(rate.isFixed())) {
+                const StaticBuffer * const sbuffer = cast<StaticBuffer>(buffer);
+                const Rational capacity{sbuffer->getCapacity()};
+                return capacity / rateData.Minimum;
+            }
+        }
+        return Rational{};
+    };
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        assert (localPortIds.empty());
+
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto streamSet = source(input, mBufferGraph);
+            const auto output = in_edge(streamSet, mBufferGraph);
+
+            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
+
+            assert (ids.empty());
+
+            const BufferNode & node = mBufferGraph[streamSet];
+
+            BufferRateData & I = mBufferGraph[input];
+            if (node.NonLocal) {
+                I.LocalPortId = nextLocalPortId++;
+            } else {
+                ids.insert(I.GlobalPortId);
+                const BufferRateData & O = mBufferGraph[output];
+                ids.insert(O.GlobalPortId);
+                I.LocalPortId = getLocalPortId(node, I);
+                ids.clear();
+            }
+
+        }
+
+        assert (nextLocalPortId <= in_degree(kernel, mBufferGraph));
+
+        MaxNumOfLocalInputPortIds = std::max<unsigned>(MaxNumOfLocalInputPortIds, nextLocalPortId);
+
+        resetLocalPortIds();
+
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            assert (ids.empty());
+
+            BufferRateData & O = mBufferGraph[output];
+            ids.insert(O.GlobalPortId);
+
+            const auto streamSet = target(output, mBufferGraph);
+
+            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
+
+            for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                BufferRateData & I = mBufferGraph[input];
+                ids.insert(I.GlobalPortId);
+            }
+
+            const BufferNode & node = mBufferGraph[streamSet];
+            O.LocalPortId = getLocalPortId(node, O);
+            ids.clear();
+        }
+
+        assert (nextLocalPortId <= out_degree(kernel, mBufferGraph));
+
+        MaxNumOfLocalOutputPortIds = std::max<unsigned>(MaxNumOfLocalOutputPortIds, nextLocalPortId);
+
+        resetLocalPortIds();
+    }
+
 }
+
+#if 0
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyLinearBuffers
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyPortsToCheck() {
+
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+
+        bool hasDynamic = false;
+        Rational fixedRateLCM{1};
+
+        auto updateLCM = [&](const BufferNode & node, const BufferRateData & br) {
+            const Binding & binding = br.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            if (rate.isFixed()) {
+                const StreamSetBuffer * const buffer = node.Buffer;
+                if (const StaticBuffer * sbuffer = dyn_cast<StaticBuffer>(buffer)) {
+                    const Rational capacity{sbuffer->getCapacity()};
+                    const auto ratio = capacity / br.Minimum;
+                    fixedRateLCM = lcm(fixedRateLCM, ratio);
+                }
+            }
+        };
+
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto streamSet = source(input, mBufferGraph);
+            BufferNode & node = mBufferGraph[streamSet];
+            node.CheckRequired = node.NonLinear || node.NonLocal;
+            updateLCM(node, mBufferGraph[input]);
+        }
+
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            const auto streamSet = target(output, mBufferGraph);
+            BufferNode & node = mBufferGraph[streamSet];
+            node.CheckRequired = node.NonLinear || node.NonLocal;
+            updateLCM(node, mBufferGraph[output]);
+        }
+
+    }
+}
+
+#endif
 
 } // end of kernel namespace
 

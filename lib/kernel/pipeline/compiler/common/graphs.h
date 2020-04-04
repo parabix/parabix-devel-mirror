@@ -269,11 +269,11 @@ struct BufferNode {
     BufferType Type = BufferType::None;
     bool NonLocal = false;
     bool NonLinear = false;
-    unsigned LookBehind = 0;
-    unsigned LookBehindReflection = 0;
-    unsigned CopyBack = 0;
-    unsigned LookAhead = 0;
-    unsigned Add = 0;
+//    unsigned LookBehind = 0;
+//    unsigned LookBehindReflection = 0;
+//    unsigned CopyBack = 0;
+//    unsigned LookAhead = 0;
+    unsigned MaxAdd = 0;
 
     bool isOwned() const {
         return (Type & BufferType::Unowned) == BufferType::None;
@@ -299,10 +299,22 @@ struct BufferRateData {
     BindingRef Binding;
     Rational Minimum;
     Rational Maximum;
-    bool ZeroExtended = false;
+
     unsigned LocalPortId = 0U;
     unsigned GlobalPortId = 0U;
-    int Add = 0;
+
+    // binding attributes
+    unsigned Add = 0;
+    unsigned Truncate = 0;
+    unsigned CopyBack = 0;
+    unsigned Delay = 0;
+    unsigned LookAhead = 0;
+    unsigned LookBehind = 0;
+    bool IsPrincipal = false;
+    bool IsZeroExtended = false;
+    bool IsDeferred = false;
+
+    int TransitiveAdd = 0;
 
     bool operator < (const BufferRateData & rn) const {
         if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {
@@ -314,9 +326,18 @@ struct BufferRateData {
     BufferRateData() = default;
 
     BufferRateData(RelationshipType port, BindingRef binding,
-                   Rational minRate, Rational maxRate)
+                   Rational minRate, Rational maxRate,
+                   unsigned add, unsigned truncate,
+                   unsigned copyBack, unsigned delay,
+                   unsigned lookAhead, unsigned lookBehind,
+                   bool isPrincipal, bool isDeferred)
     : Port(port), Binding(binding)
-    , Minimum(minRate), Maximum(maxRate) {
+    , Minimum(minRate), Maximum(maxRate)
+    , Add(add), Truncate(truncate)
+    , CopyBack(copyBack), Delay(delay)
+    , LookAhead(lookAhead), LookBehind(lookBehind)
+    , IsPrincipal(isPrincipal)
+    , IsDeferred(isDeferred) {
 
     }
 
@@ -336,17 +357,17 @@ struct ConsumerEdge {
     enum ConsumerTypeFlags : unsigned {
         None = 0
         , UpdatePhi = 1
-        , WriteFinalCount = 2
+        , WriteConsumedCount = 2
         , UpdateExternalCount = 4
     };
 
     unsigned Port = 0;
     unsigned Index = 0;
-    ConsumerTypeFlags Flags = ConsumerEdge::None;
+    unsigned Flags = ConsumerEdge::None;
 
     ConsumerEdge() = default;
 
-    ConsumerEdge(StreamSetPort port, unsigned index, ConsumerTypeFlags flags)
+    ConsumerEdge(const StreamSetPort port, const unsigned index, const unsigned flags)
     : Port(port.Number), Index(index), Flags(flags) { }
 };
 
@@ -365,6 +386,8 @@ enum TerminationCheckFlag : unsigned {
 };
 
 using TerminationChecks = std::vector<unsigned>;
+
+using TerminationPropagationGraph = adjacency_list<vecS, vecS, bidirectionalS>;
 
 enum CountingType : unsigned {
     Unknown = 0

@@ -433,6 +433,8 @@ protected:
 
     LLVM_READNONE bool hasFixedRateInput() const;
 
+    LLVM_READNONE bool isGreedy() const;
+
     virtual void addInternalProperties(BuilderRef) { }
 
     virtual void addAdditionalFunctions(BuilderRef) { }

@@ -47,20 +47,18 @@ void PipelineAnalysis::identifyTerminationChecks() {
     for (auto consumer = PipelineOutput; consumer <= LastCall; ++consumer) {
         for (const auto relationship : make_iterator_range(in_edges(consumer, mScalarGraph))) {
             const auto scalar = source(relationship, mScalarGraph);
-            const auto producer = parent(scalar, mScalarGraph);
-            const auto partitionId = KernelPartitionId[producer];
-            assert ("cannot occur" && partitionId != terminal);
-            add_edge(partitionId, terminal, G);
+            for (const auto production : make_iterator_range(in_edges(scalar, mScalarGraph))) {
+                const auto producer = source(production, mScalarGraph);
+                const auto partitionId = KernelPartitionId[producer];
+                assert ("cannot occur" && partitionId != terminal);
+                add_edge(partitionId, terminal, G);
+            }
         }
     }
 
     assert ("pipeline has no observable outputs?" && (in_degree(terminal, G) > 0));
 
-    printGraph(G, errs(), "T1");
-
     transitive_reduction_dag(G);
-
-    printGraph(G, errs(), "T2");
 
     mTerminationCheck.resize(PartitionCount, 0U);
 
@@ -76,6 +74,97 @@ void PipelineAnalysis::identifyTerminationChecks() {
             mTerminationCheck[KernelPartitionId[i]] |= TerminationCheckFlag::Hard;
         }
     }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief makeTerminationPropagationGraph
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::makeTerminationPropagationGraph() {
+
+    // When a partition terminates, we want to inform any kernels that supply information to it that
+    // one of their consumers has finished processing data. In a pipeline with a single output, this
+    // isn't necessary but if a pipeline has multiple outputs, we could end up needlessly producing
+    // data that will never be consumed.
+
+    mTerminationPropagationGraph = TerminationPropagationGraph(PartitionCount);
+
+    unsigned outputs = 0;
+    for (unsigned i = 0; i < PartitionCount; ++i) {
+        if (mTerminationCheck[i] & TerminationCheckFlag::Soft) {
+            ++outputs;
+        }
+    }
+
+    if (outputs < 2) {
+        return;
+    }
+
+    BitVector inputs(PartitionCount);
+
+    for (auto start = FirstKernel; start <= PipelineOutput; ) {
+        const auto pid = KernelPartitionId[start];
+        auto end = start + 1;
+        for (; end <= PipelineOutput; ++end) {
+            if (pid != KernelPartitionId[end]) {
+                break;
+            }
+        }
+
+        for (auto i = start; i < end; ++i) {
+            for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
+                const auto streamSet = source(e, mBufferGraph);
+                const auto producer = parent(streamSet, mBufferGraph);
+                const auto partitionId = KernelPartitionId[producer];
+                inputs.set(partitionId);
+            }
+        }
+        inputs.reset(pid);
+        for (const auto i : inputs.set_bits()) {
+            add_edge(pid, i, mTerminationPropagationGraph);
+        }
+        inputs.reset();
+
+        start = end;
+    }
+
+    transitive_reduction_dag(mTerminationPropagationGraph);
+
+    for (auto end = LastKernel; end >= FirstKernel; ) {
+        const auto pid = KernelPartitionId[end];
+        auto start = end;
+        for (; start > FirstKernel; --start) {
+            if (pid != KernelPartitionId[start - 1U]) {
+                break;
+            }
+        }
+
+
+
+        const Kernel * const kernelObj = getKernel(start);
+
+        auto prior = pid;
+        if (kernelObj->canSetTerminateSignal()) {
+            auto fork = pid;
+            for (;;) {
+                const auto n = out_degree(fork, mTerminationPropagationGraph);
+                if (n != 1) {
+                    break;
+                }
+                prior = fork;
+                fork = child(fork, mTerminationPropagationGraph);
+            }
+        }
+
+        clear_out_edges(pid, mTerminationPropagationGraph);
+        if (prior != pid) {
+            add_edge(pid, prior, mTerminationPropagationGraph);
+        }
+
+        end = start - 1U;
+    }
+
+    printGraph(mTerminationPropagationGraph, errs(), "TP");
 
 }
 

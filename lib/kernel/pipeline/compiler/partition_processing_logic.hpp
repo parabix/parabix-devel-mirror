@@ -10,7 +10,6 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {    
     mPipelineLoop = b->CreateBasicBlock("PipelineLoop");
-    mPartitionEntryPoint.resize(PartitionCount);
 
     // the zeroth partition may be a fake one if this pipeline has I/O
     const auto firstPartition = KernelPartitionId[FirstKernel];
@@ -53,7 +52,7 @@ inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief checkInputDataOnPartitionEntry
+ * @brief checkForPartitionEntry
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);    
@@ -61,24 +60,54 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
     mIsPartitionRoot = false;
     const auto partitionId = KernelPartitionId[mKernelId];
     if (partitionId != mCurrentPartitionId) {
-        mPartitionRootKernelId = mKernelId;
         mCurrentPartitionId = partitionId;
+        identifyPartitionKernelRange();
+        determinePartitionStrideRates();
+
         const auto jumpIdx = mPartitionJumpIndex[partitionId];
-        mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];
+        mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];        
         mIsPartitionRoot = true;
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
+        #endif
     }
     assert (KernelPartitionId[mKernelId - 1U] <= mCurrentPartitionId);
     assert ((KernelPartitionId[mKernelId - 1U] + 1U) >= mCurrentPartitionId);
-    #ifdef PRINT_DEBUG_MESSAGES
-    debugPrint(b, "  *** entering partition %" PRIu64, b->getSize(mCurrentPartitionId));
-    #endif
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyPartitionKernelRange
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifyPartitionKernelRange() {
+    FirstKernelInPartition = mKernelId;
+    for (auto i = mKernelId + 1U; i <= PipelineOutput; ++i) {
+        if (KernelPartitionId[i] != mCurrentPartitionId) {
+            LastKernelInPartition = i - 1U;
+            break;
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief determinePartitionStrideRates
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::determinePartitionStrideRates() {
+    const auto & max = MaximumNumOfStrides[FirstKernelInPartition];
+    Rational minMaxNumOfStrides = max;
+    MaxPartitionStrideRate = max;
+    for (auto i = FirstKernelInPartition + 1U; i <= LastKernelInPartition; ++i) {
+        const auto & max = MaximumNumOfStrides[i];
+        minMaxNumOfStrides = std::min(minMaxNumOfStrides, max);
+        MaxPartitionStrideRate = std::max(MaxPartitionStrideRate, max);
+    }
+    PartitionStrideFactor = max / minMaxNumOfStrides;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief loadLastGoodVirtualBaseAddressesOfUnownedBuffersInCurrentPartition
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const {
-    for (auto i = mPartitionRootKernelId; i <= LastKernel; ++i) {
+    for (auto i = FirstKernelInPartition; i <= LastKernel; ++i) {
         if (KernelPartitionId[i] != mCurrentPartitionId) {
             break;
         }
@@ -120,11 +149,9 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
         if (kernel < mKernelId) {
             produced = mLocallyAvailableItems[streamSet];
         } else {
-            const Binding & output = br.Binding;
-            const auto deferred = output.isDeferred();
             if (kernel == mKernelId) {
                 if (fromKernelEntry) {
-                    if (LLVM_UNLIKELY(deferred)) {
+                    if (LLVM_UNLIKELY(br.IsDeferred)) {
                         produced = mInitiallyProducedDeferredItemCount[streamSet];
                     } else {
                         produced = mInitiallyProducedItemCount[streamSet];
@@ -132,7 +159,7 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                 } else {
                     Value * initiallyProduced;
                     Value * alreadyProduced;
-                    if (LLVM_UNLIKELY(deferred)) {
+                    if (LLVM_UNLIKELY(br.IsDeferred)) {
                         initiallyProduced = mInitiallyProducedDeferredItemCount[streamSet];
                         alreadyProduced = mAlreadyProducedDeferredPhi(br.Port);
                     } else {
@@ -229,6 +256,9 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
 
     for (auto partitionId = 0U; partitionId != targetPartitionId; ++partitionId) {
         PHINode * const termPhi = findOrAddPhi(mPartitionTerminationSignalPhi, partitionId, "partitionTerminationSignalPhi");
+
+        errs() << "  "; termPhi->print(errs()); errs() << "\n";
+
         Value * term = nullptr;
         if (partitionId <= mCurrentPartitionId) {
             term = mPartitionTerminationSignal[partitionId];
@@ -238,10 +268,32 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
         termPhi->addIncoming(term, exitBlock);
     }
 
-    PHINode * const progressPhi = mPartitionPipelineProgressPhi[targetPartitionId];
-    Value * const progress = fromKernelEntry ? mPipelineProgress : b->getTrue();
+    PHINode * const progressPhi = mPartitionPipelineProgressPhi[targetPartitionId]; assert (progressPhi);
+    Value * const progress = mPipelineProgress; // fromKernelEntry ? mPipelineProgress : mAlreadyProgressedPhi;
     progressPhi->addIncoming(progress, exitBlock);
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief releaseAllSynchronizationLocksUntil
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId) {
+    // Find the first kernel in the partition we're jumping to and acquire the LSN
+    // then release all of the kernels we skipped over.
+    auto firstKernelInNextPartition = mKernelId + 1U;
+    for (; firstKernelInNextPartition <= LastKernel; ++firstKernelInNextPartition) {
+        if (KernelPartitionId[firstKernelInNextPartition] == partitionId) {
+            break;
+        }
+    }
+
+    // TODO: experiment with a mutex lock here.
+    const auto lockingKernel = std::min(firstKernelInNextPartition, LastKernel);
+    assert ((firstKernelInNextPartition == lockingKernel) || (firstKernelInNextPartition == PipelineOutput));
+    acquireSynchronizationLock(b, lockingKernel, CycleCounter::INITIAL);
+    for (auto kernel = mKernelId; kernel < firstKernelInNextPartition; ++kernel) {
+        releaseSynchronizationLock(b, kernel);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -250,32 +302,62 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
 void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
-    BasicBlock * const exitBlock = b->GetInsertBlock();
 
-    mKernelInitiallyTerminatedExit = exitBlock;
-    b->CreateBr(mKernelJumpToNextUsefulPartition);
-
-    mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
-
-
-
-
-#if 0
+    #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
 
     // create a temporary basic block to act a constant exit block of any phi nodes;
     // once we've determined the actual exit block of this portion of the program,
     // replace the phi catch with it.
-    BasicBlock * phiCatchBlock = b->CreateBasicBlock();
+
+    const auto nextPartitionId = mCurrentPartitionId + 1U;
+    const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+    if (LLVM_LIKELY(nextPartitionId < jumpId)) {
+        BasicBlock * phiCatchBlock = b->CreateBasicBlock();
+        PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
+        exhaustedInputPhi->addIncoming(mExhaustedInput, phiCatchBlock);
+
+        for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
+            phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, phiCatchBlock);
+        }
+        for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
+            if (KernelPartitionId[kernel] != mCurrentPartitionId) {
+                break;
+            }
+            phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, phiCatchBlock);
+        }
+
+        phiOutPartitionStatusFlags(b, nextPartitionId, true, phiCatchBlock);
+        acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
+        replacePhiCatchWithCurrentBlock(b, phiCatchBlock, mNextPartitionEntryPoint);
+
+        b->CreateBr(mNextPartitionEntryPoint);
+    } else {
+    #endif
+        BasicBlock * const exitBlock = b->GetInsertBlock();
+        mKernelInitiallyTerminatedExit = exitBlock;
+        b->CreateBr(mKernelJumpToNextUsefulPartition);
+        if (mIsBounded) {
+            mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
+        }
+    #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
+    }
+    #endif
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief gotoToNextPartition
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::gotoToNextPartition(BuilderRef b) {
 
     const auto nextPartitionId = mCurrentPartitionId + 1U;
 
+    BasicBlock * phiCatchBlock = b->CreateBasicBlock();
     PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
     exhaustedInputPhi->addIncoming(mExhaustedInput, phiCatchBlock);
 
     for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, phiCatchBlock);
     }
-
     for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
         if (KernelPartitionId[kernel] != mCurrentPartitionId) {
             break;
@@ -284,22 +366,16 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
     }
 
     phiOutPartitionStatusFlags(b, nextPartitionId, true, phiCatchBlock);
-
-    releaseSynchronizationLock(b, mKernelId, LockType::Segment);
-
+    acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
     replacePhiCatchWithCurrentBlock(b, phiCatchBlock, mNextPartitionEntryPoint);
 
     b->CreateBr(mNextPartitionEntryPoint);
-
-#endif
 }
-
-
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeOnInitialTerminationJumpToNextPartitionToCheck
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToCheck(BuilderRef b) {
+inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
 
     const auto nextPartitionId = mPartitionJumpIndex[mCurrentPartitionId];
     assert (mCurrentPartitionId < nextPartitionId);
@@ -326,23 +402,7 @@ inline void PipelineCompiler::writeOnInitialTerminationJumpToNextPartitionToChec
         updatePipelineInputConsumedItemCounts(b, exitBlock);
     }
 
-    // Find the first kernel in the partition we're jumping to and acquire the LSN
-    // then release all of the kernels we skipped over.
-    auto firstKernelInNextPartition = mKernelId + 1U;
-    for (; firstKernelInNextPartition <= LastKernel; ++firstKernelInNextPartition) {
-        if (KernelPartitionId[firstKernelInNextPartition] == nextPartitionId) {
-            break;
-        }
-    }
-
-    // TODO: experiment with a mutex lock here.
-    const auto lockingKernel = std::min(firstKernelInNextPartition, LastKernel);
-    assert ((firstKernelInNextPartition == lockingKernel) || (firstKernelInNextPartition == PipelineOutput));
-    acquireSynchronizationLock(b, lockingKernel, CycleCounter::INITIAL);
-    for (auto kernel = mKernelId; kernel < firstKernelInNextPartition; ++kernel) {
-        releaseSynchronizationLock(b, kernel);
-    }
-
+    acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
     replacePhiCatchWithCurrentBlock(b, exitBlock, mNextPartitionWithPotentialInput);
 
     b->CreateBr(mNextPartitionWithPotentialInput);
@@ -391,7 +451,8 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
             PHINode * const phi = mPartitionConsumedItemCountPhi[nextPartitionId][i];
             if (phi) {
                 const auto streamSet = FirstStreamSet + i;
-                const ConsumerNode & cn = mConsumerGraph[streamSet]; assert (cn.Consumed);
+                const ConsumerNode & cn = mConsumerGraph[streamSet];
+                assert (cn.Consumed);
                 phi->addIncoming(cn.Consumed, exitBlock);
                 cn.Consumed = phi;
                 // The consumed phi node propagates the *initial* consumed item count for

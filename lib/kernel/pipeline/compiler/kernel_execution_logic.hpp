@@ -122,25 +122,22 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     #ifdef PRINT_DEBUG_MESSAGES
     const auto prefix = makeKernelName(mKernelId);
     #endif
-    if (mKernelIsInternallySynchronized) {
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* " + prefix + "_internalSegNo = %" PRIu64, mSegNo);
-        #endif
-        addNextArg(mSegNo);
+
+    const auto greedy = mTarget->isGreedy();
+
+    if (mKernelIsInternallySynchronized || greedy) {
+        if (mKernelIsInternallySynchronized) {
+            addNextArg(mSegNo);
+        }
+        addNextArg(mKernelIsFinal);
     } else {
-        addNextArg(mNumOfLinearStridesPhi);
+        addNextArg(mNumOfLinearStrides);
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStridesPhi);
+        debugPrint(b, "* " + prefix + "_executing = %" PRIu64, mNumOfLinearStrides);
         #endif
         if (mFixedRateFactorPhi) {
             addNextArg(mFixedRateFactorPhi);
         }
-    }
-    if (mKernelIsInternallySynchronized || !mHasExplicitFinalPartialStride) {
-        addNextArg(mKernelIsFinal);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* " + prefix + "_isFinal = %" PRIu64, mKernelIsFinal);
-        #endif
     }
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto port = getInput(mKernelId, StreamSetPort(PortType::Input, i));

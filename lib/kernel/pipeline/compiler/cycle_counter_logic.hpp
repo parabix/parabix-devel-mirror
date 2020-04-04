@@ -73,7 +73,7 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
  * @brief startOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
         assert ((unsigned)type < mCycleCounters.size());
         mCycleCounters[(unsigned)type] = b->CreateReadCycleCounter();
     }
@@ -84,7 +84,7 @@ void PipelineCompiler::startCycleCounter(BuilderRef b, const CycleCounter type) 
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
     Value * ptr = nullptr;
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
         const auto prefix = makeKernelName(mKernelId) + STATISTICS_CYCLE_COUNT_SUFFIX;
         ptr = b->getScalarFieldPtr(prefix + std::to_string(BUFFER_EXPANSION));
     }
@@ -95,7 +95,7 @@ Value * PipelineCompiler::getBufferExpansionCycleCounter(BuilderRef b) const {
  * @brief updateOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
         Value * const endCount = b->CreateReadCycleCounter();
         Value * const duration = b->CreateSub(endCount, mCycleCounters[start]);
         const auto prefix = makeKernelName(mKernelId) + STATISTICS_CYCLE_COUNT_SUFFIX;
@@ -130,7 +130,7 @@ StreamSetPort PipelineCompiler::selectPrincipleCycleCountBinding(const unsigned 
  * @brief printOptionalCycleCounter
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printOptionalCycleCounter(BuilderRef b) {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableCycleCounter))) {
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
 
         // Print the title line
 

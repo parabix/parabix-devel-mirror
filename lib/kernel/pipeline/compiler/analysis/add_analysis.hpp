@@ -9,9 +9,8 @@ namespace kernel {
  * @brief makeAddGraph
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
-    // TODO: this should generate formulas to take roundup into account
 
-    // TODO: this doesn't handle fixed I/O rate conversions correctly. E.g., 2 input items to 3 output items.
+    SmallVector<int, 64> transitiveAdd(LastStreamSet - FirstStreamSet + 1);
 
     for (auto i = PipelineInput; i <= PipelineOutput; ++i) {
         int minAddK = 0;
@@ -20,71 +19,40 @@ void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
             minAddK = std::numeric_limits<int>::max();
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto streamSet = source(e, mBufferGraph);
-                const BufferNode & bn = mBufferGraph[streamSet];
-
+                int k = transitiveAdd[streamSet - FirstStreamSet];
                 BufferRateData & br = mBufferGraph[e];
-                const Binding & input = br.Binding;
-
-                int k = bn.Add;
-                bool isPrincipal = false;
-                for (const Attribute & attr : input.getAttributes()) {
-                    switch (attr.getKind()) {
-                        case AttrId::Add:
-                            k += attr.amount();
-                            break;
-                        case AttrId::Truncate:
-                            k -= attr.amount();
-                            break;
-                        case AttrId::Principal:
-                            isPrincipal = true;
-                            break;
-                        default: break;
-                    }
-                }
+                k += br.Add;
+                k -= br.Truncate;
                 minAddK = std::min(minAddK, k);
-                if (LLVM_UNLIKELY(isPrincipal)) {
+                if (LLVM_UNLIKELY(br.IsPrincipal)) {
                     minAddK = k;
                     noPrincipal = false;
                     break;
                 }
-                br.Add = k;
+                br.TransitiveAdd = k;
             }
 
             if (LLVM_LIKELY(noPrincipal)) {
                 for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                     BufferRateData & br = mBufferGraph[e];
-                    br.Add -= minAddK;
+                    br.TransitiveAdd -= minAddK;
                 }
             } else {
                 for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                     BufferRateData & br = mBufferGraph[e];
-                    br.Add = 0;
+                    br.TransitiveAdd = 0;
                 }
             }
         }
 
-
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             BufferRateData & br = mBufferGraph[e];
-            const Binding & output = br.Binding;
-
             auto k = minAddK;
-            for (const Attribute & attr : output.getAttributes()) {
-                switch (attr.getKind()) {
-                    case AttrId::Add:
-                        k += attr.amount();
-                        break;
-                    case AttrId::Truncate:
-                        k -= attr.amount();
-                        break;
-                    default: break;
-                }
-            }
-            br.Add = k;
-
+            k += br.Add;
+            k -= br.Truncate;
+            br.TransitiveAdd = k;
             const auto streamSet = target(e, mBufferGraph);
-            BufferNode & bn = mBufferGraph[streamSet];
-            bn.Add = k;
+            transitiveAdd[streamSet - FirstStreamSet] = k;
         }
     }
 
@@ -96,21 +64,21 @@ void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
         int maxK = 0;
         for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
             const BufferRateData & rate = mBufferGraph[e];
-            maxK = std::max(maxK, rate.Add);
+            maxK = std::max(maxK, rate.TransitiveAdd);
         }
         for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const BufferRateData & rate = mBufferGraph[e];
-            maxK = std::max(maxK, rate.Add);
+            maxK = std::max(maxK, rate.TransitiveAdd);
         }
         for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
             const auto streamSet = source(e, mBufferGraph);
             BufferNode & bn = mBufferGraph[streamSet];
-            bn.Add = std::max<unsigned>(bn.Add, maxK);
+            bn.MaxAdd = std::max<unsigned>(bn.MaxAdd, maxK);
         }
         for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             const auto streamSet = target(e, mBufferGraph);
             BufferNode & bn = mBufferGraph[streamSet];
-            bn.Add = std::max<unsigned>(bn.Add, maxK);
+            bn.MaxAdd = std::max<unsigned>(bn.MaxAdd, maxK);
         }
     }
 

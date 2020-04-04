@@ -261,18 +261,8 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 default: llvm_unreachable("unknown buffer type");
             }
         }
-
-        if (bn.LookBehind) {
-            out << "|LB:" << bn.LookBehind;
-        }
-        if (bn.CopyBack) {
-            out << "|CB:" << bn.CopyBack;
-        }
-        if (bn.LookAhead) {
-            out << "|LA:" << bn.LookAhead;
-        }
-        if (bn.Add) {
-            out << "|+" << bn.Add;
+        if (bn.MaxAdd) {
+            out << "|+" << bn.MaxAdd;
         }
         out << "}}\"];\n";
 
@@ -407,19 +397,30 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
         out << " {" << pd.GlobalPortId << "}";
-        if (binding.hasAttribute(AttrId::Principal)) {
+        if (pd.IsPrincipal) {
             out << " [P]";
         }
-        if (pd.Add) {
-            out << " +" << pd.Add;
+        if (pd.TransitiveAdd) {
+            out << " +" << pd.TransitiveAdd;
         }
         if (binding.hasAttribute(AttrId::ZeroExtended)) {
-            if (pd.ZeroExtended) {
+            if (pd.IsZeroExtended) {
                 out << " [Z]";
             } else {
                 out << " [z&#x336;]";
             }
         }
+
+        if (pd.LookBehind) {
+            out << " [LB:" << pd.LookBehind << ']';
+        }
+        if (pd.CopyBack) {
+            out << " [CB:" << pd.CopyBack << ']';
+        }
+        if (pd.LookAhead) {
+            out << " [LA:" << pd.LookAhead << ']';
+        }
+
         std::string name = binding.getName();
         boost::replace_all(name, "\"", "\\\"");
         out << "\\n" << name << "\"";

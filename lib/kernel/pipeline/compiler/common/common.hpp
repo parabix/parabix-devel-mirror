@@ -138,12 +138,14 @@ public:
     LLVM_READNONE unsigned getInputBufferVertex(const size_t kernel, const StreamSetPort inputPort) const;
     LLVM_READNONE StreamSetBuffer * getInputBuffer(const size_t kernel, const StreamSetPort inputPort) const;
     LLVM_READNONE const Binding & getInputBinding(const size_t kernel, const StreamSetPort inputPort) const;
+    LLVM_READNONE const BufferRateData & getInputPort(const size_t kernel, const StreamSetPort inputPort) const;
     LLVM_READNONE const BufferGraph::edge_descriptor getInput(const size_t kernel, const StreamSetPort outputPort) const;
 
 
     LLVM_READNONE unsigned getOutputBufferVertex(const size_t kernel, const StreamSetPort outputPort) const;
     LLVM_READNONE StreamSetBuffer * getOutputBuffer(const size_t kernel, const StreamSetPort outputPort) const;
     LLVM_READNONE const Binding & getOutputBinding(const size_t kernel, const StreamSetPort outputPort) const;
+    LLVM_READNONE const BufferRateData & getOutputPort(const size_t kernel, const StreamSetPort outputPort) const;
     LLVM_READNONE const BufferGraph::edge_descriptor getOutput(const size_t kernel, const StreamSetPort outputPort) const;
 
 
@@ -317,6 +319,21 @@ const Binding & PipelineCommonGraphFunctions::getInputBinding(const size_t kerne
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInput
  ** ------------------------------------------------------------------------------------------------------------- */
+inline const BufferRateData & PipelineCommonGraphFunctions::getInputPort(const size_t kernel, const StreamSetPort inputPort) const {
+    assert (inputPort.Type == PortType::Input);
+    assert (inputPort.Number < in_degree(kernel, mBufferGraphRef));
+    for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
+        const BufferRateData & br = mBufferGraphRef[e];
+        if (br.Port.Number == inputPort.Number) {
+            return br;
+        }
+    }
+    llvm_unreachable("could not find input port");
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getInput
+ ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getInput(const size_t kernel, const StreamSetPort inputPort) const {
     assert (inputPort.Type == PortType::Input);
     assert (inputPort.Number < in_degree(kernel, mBufferGraphRef));
@@ -365,7 +382,7 @@ StreamSetBuffer * PipelineCommonGraphFunctions::getOutputBuffer(const size_t ker
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief getInput
+ * @brief getOutput
  ** ------------------------------------------------------------------------------------------------------------- */
 inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getOutput(const size_t kernel, const StreamSetPort outputPort) const {
     assert (outputPort.Type == PortType::Output);
@@ -374,6 +391,22 @@ inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getOutpu
         const BufferRateData & br = mBufferGraphRef[e];
         if (br.Port.Number == outputPort.Number) {
             return e;
+        }
+    }
+    llvm_unreachable("could not find output port");
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief getOutputPort
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline const BufferRateData & PipelineCommonGraphFunctions::getOutputPort(const size_t kernel, const StreamSetPort outputPort) const {
+    assert (outputPort.Type == PortType::Output);
+    assert (outputPort.Number < out_degree(kernel, mBufferGraphRef));
+    for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
+        const BufferRateData & br = mBufferGraphRef[e];
+        if (br.Port.Number == outputPort.Number) {
+            return br;
         }
     }
     llvm_unreachable("could not find output port");
@@ -426,12 +459,21 @@ bool PipelineCommonGraphFunctions::mayHaveNonLinearIO(const size_t kernel) const
     // able to execute its full segment without splitting the work across
     // two or more linear sub-segments.
 
+    Rational fixedRateLCM;
+
+
     for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = source(input, mBufferGraphRef);
         const BufferNode & node = mBufferGraphRef[streamSet];
         if (node.NonLinear) {
             return true;
         }
+        const BufferRateData & br = mBufferGraphRef[input];
+
+
+//        if (br.Add) {
+//            return true;
+//        }
     }
     for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraphRef))) {
         const auto streamSet = target(output, mBufferGraphRef);

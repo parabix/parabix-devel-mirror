@@ -18,20 +18,22 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
 
     Constant * const ZERO = b->getSize(0);
     Constant * const ONE = b->getSize(1);
-    Value * const numOfStrides = b->CreateUMax(mNumOfInputStrides, ONE);
+    Value * const numOfStrides = b->CreateUMax(mNumOfLinearStrides, ONE);
 
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const StreamSetPort port{PortType::Input, i};
-        if (mIsInputZeroExtended(port)) {
-            const auto bufferVertex = getInputBufferVertex(port);
-            const BufferNode & bn = mBufferGraph[bufferVertex];
-            const Binding & input = getInputBinding(port);
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+
+        const BufferRateData & br = mBufferGraph[e];
+        if (br.IsZeroExtended) {
+
+            const auto streamSet = source(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            const Binding & input = br.Binding;
 
             const auto itemWidth = getItemWidth(input.getType());
             Constant * const strideFactor = b->getSize(itemWidth * strideSize / 8);
             Value * requiredBytes = b->CreateMul(numOfStrides, strideFactor); assert (requiredBytes);
-            if (bn.LookAhead) {
-                const auto lh = (bn.LookAhead * itemWidth);
+            if (br.LookAhead) {
+                const auto lh = (br.LookAhead * itemWidth);
                 requiredBytes = b->CreateAdd(requiredBytes, b->getSize(lh));
             }
             if (LLVM_LIKELY(itemWidth < blockWidth)) {
@@ -46,7 +48,7 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
             } else if (fieldWidth > 8) {
                 requiredBytes = b->CreateMul(requiredBytes, b->getSize(fieldWidth / 8));
             }
-            requiredBytes = b->CreateSelect(mIsInputZeroExtended(port), requiredBytes, ZERO);
+            requiredBytes = b->CreateSelect(mIsInputZeroExtended(br.Port), requiredBytes, ZERO);
             requiredSpace = b->CreateUMax(requiredSpace, requiredBytes);
         }
     }
@@ -290,13 +292,18 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                 Value * const fullBytesToCopy = b->CreateSub(endPtrInt, initialPtrInt);
                 Value * const segmentBytes = b->CreateAdd(fullBytesToCopy, bytesPerSegment);
 
+                const auto blockSize = blockWidth / 8;
+
+                Value * mallocBytes = b->CreateRoundUp(segmentBytes, b->getSize(itemWidth * blockSize));
+                mallocBytes = b->CreateMul(mallocBytes, numOfStreams);
+
                 // TODO: look into checking whether the OS supports aligned realloc.
                 b->CreateFree(b->CreateLoad(bufferStorage));
-                Value * const maskedBuffer = b->CreateAlignedMalloc(segmentBytes, blockWidth / 8);
+                Value * const maskedBuffer = b->CreateAlignedMalloc(mallocBytes, blockSize);
                 b->CreateStore(maskedBuffer, bufferStorage);
 
                 Value * maskedAddress = b->CreatePointerCast(maskedBuffer, streamSetTy, "maskedBuffer");
-                b->CreateMemCpy(maskedAddress, initialPtr, fullBytesToCopy, blockWidth / 8);
+                b->CreateMemCpy(maskedAddress, initialPtr, fullBytesToCopy, blockSize);
 
                 maskedAddress = b->CreateInBoundsGEP(maskedAddress, { ZERO, b->CreateNeg(initial) });
                 maskedAddress = b->CreatePointerCast(maskedAddress, streamSetTy);
@@ -313,7 +320,6 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
                 BasicBlock * const maskedInputLoop = BasicBlock::Create(C, "maskInputLoop", maskInput);
                 BasicBlock * const maskedInputExit = BasicBlock::Create(C, "maskInputExit", maskInput);
-
                 b->CreateBr(maskedInputLoop);
 
                 b->SetInsertPoint(maskedInputLoop);
@@ -322,14 +328,13 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
                 Value * inputPtr = b->CreateInBoundsGEP(inputAddress, { streamIndex, end });
                 Value * outputPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end });
-
                 if (itemWidth > 1) {
                     Value * const endPtr = inputPtr;
                     Value * const endPtrInt = b->CreatePtrToInt(endPtr, intPtrTy);
                     inputPtr = b->CreateInBoundsGEP(inputAddress, { streamIndex, end, packIndex});
                     Value * const inputPtrInt = b->CreatePtrToInt(inputPtr, intPtrTy);
                     Value * const bytesToCopy = b->CreateSub(inputPtrInt, endPtrInt);
-                    b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockWidth / 8);
+                    b->CreateMemCpy(outputPtr, endPtr, bytesToCopy, blockSize);
                     outputPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end, packIndex});
                 }
                 assert (inputPtr->getType() == outputPtr->getType());
@@ -345,13 +350,12 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
                     Value * const clearEndPtr = b->CreateInBoundsGEP(maskedAddress, { streamIndex, end, ITEM_WIDTH });
                     Value * const clearEndPtrInt = b->CreatePtrToInt(clearEndPtr, intPtrTy);
                     Value * const bytesToClear = b->CreateSub(clearEndPtrInt, clearPtrInt);
-                    b->CreateMemZero(clearPtr, bytesToClear, blockWidth / 8);
+                    b->CreateMemZero(clearPtr, bytesToClear, blockSize);
                 }
 
                 Value * const nextIndex = b->CreateAdd(streamIndex, ONE);
                 Value * const notDone = b->CreateICmpNE(nextIndex, numOfStreams);
                 streamIndex->addIncoming(nextIndex, maskedInputLoop);
-
 
                 b->CreateCondBr(notDone, maskedInputLoop, maskedInputExit);
 
@@ -631,10 +635,8 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
             maskOffset = b->CreateAnd(position, BLOCK_MASK);
         }
         Value * const mask = b->CreateNot(b->bitblock_mask_from(maskOffset));
-
-        BasicBlock * const nextNode = mIsBounded ? mKernelInsufficientInput : mKernelLoopExit; assert (nextNode);
-        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", nextNode);
-        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", nextNode);
+        BasicBlock * const maskLoop = b->CreateBasicBlock(prefix + "_zeroFillLoop", mKernelLoopExit);
+        BasicBlock * const maskExit = b->CreateBasicBlock(prefix + "_zeroFillExit", mKernelLoopExit);
         Value * const numOfStreams = buffer->getStreamSetCount(b);
         Value * const baseAddress = buffer->getBaseAddress(b);
         #ifdef PRINT_DEBUG_MESSAGES

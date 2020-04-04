@@ -10,7 +10,11 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::addTerminationProperties(BuilderRef b, const size_t kernel) {
     const auto id = KernelPartitionId[kernel];
-    mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_PREFIX + std::to_string(id), kernel);
+    IntegerType * const sizeTy = b->getSizeTy();
+    mTarget->addInternalScalar(sizeTy, TERMINATION_PREFIX + std::to_string(id), kernel);
+    if (in_degree(id, mTerminationPropagationGraph) > 0) {
+        mTarget->addInternalScalar(sizeTy, CONSUMER_TERMINATION_COUNT_PREFIX + std::to_string(id), kernel);
+    }
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -72,9 +76,6 @@ inline Value * PipelineCompiler::hasPipelineTerminated(BuilderRef b) const {
     for (auto partitionId = 0u; partitionId < PartitionCount; ++partitionId) {
         Value * const signal = mPartitionTerminationSignal[partitionId];
         const auto type = mTerminationCheck[partitionId];
-        if (type) {
-            b->CallPrintInt("termSignal" + std::to_string(partitionId), signal);
-        }
         if (type & TerminationCheckFlag::Hard) {
             Value * const final = b->CreateICmpEQ(signal, fatal);
             if (hard) {
@@ -157,10 +158,21 @@ Value * PipelineCompiler::isClosedNormally(BuilderRef b, const StreamSetPort inp
  ** ------------------------------------------------------------------------------------------------------------- */
 inline Value * PipelineCompiler::initiallyTerminated(BuilderRef b) {
     if (mIsPartitionRoot) {
-        Value * const signal = readTerminationSignal(b, KernelPartitionId[mKernelId]);
+        const auto id = KernelPartitionId[mKernelId];
+        Value * const signal = readTerminationSignal(b, id);
+
         mTerminatedInitially = signal; assert (signal);
         setCurrentTerminationSignal(b, signal);
-        return hasKernelTerminated(b, mKernelId);
+        Value * terminated = hasKernelTerminated(b, mKernelId);
+
+        const auto n = in_degree(id, mTerminationPropagationGraph);
+        if (LLVM_UNLIKELY(n > 0)) {
+            Value * const ptr = b->getScalarFieldPtr(CONSUMER_TERMINATION_COUNT_PREFIX + std::to_string(id));
+            Value * const conSignal = b->CreateLoad(ptr);
+            Value * const allConsumersFinished = b->CreateICmpEQ(conSignal, b->getSize(n));
+            terminated = b->CreateOr(terminated, allConsumersFinished);
+        }
+        return terminated;
     }
     return nullptr;
 }
@@ -217,11 +229,28 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief informInputKernelsOfTermination
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
+
+    // When a partition terminates, we want to inform any kernels that supply information to it that
+    // one of their consumers has finished processing data.
+    ConstantInt * const ONE = b->getSize(1);
+    for (const auto e : make_iterator_range(out_edges(mCurrentPartitionId, mTerminationPropagationGraph))) {
+        const auto id = target(e, mTerminationPropagationGraph);
+        Value * const signal = b->getScalarFieldPtr(CONSUMER_TERMINATION_COUNT_PREFIX + std::to_string(id));
+        b->CreateAtomicFetchAndAdd(ONE, signal);
+    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief verifyPostInvocationTerminationSignal
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
 
     if (mIsPartitionRoot) {
+        #ifndef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
         Value * anyUnterminated = nullptr;
         ConstantInt * const ZERO = b->getSize(0);
         if (mCurrentPartitionId > 0) {
@@ -251,9 +280,8 @@ void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
             b->CreateAssert(valid, msg,
                 mCurrentKernelName, b->getSize(mCurrentPartitionId));
         }
-
+        #endif
         mPartitionRootTerminationSignal = b->CreateIsNotNull(mTerminatedAtExitPhi);
-
     } else {
         constexpr auto msg =
             "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
@@ -262,7 +290,7 @@ void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
         Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
         b->CreateAssert(valid, msg,
             mCurrentKernelName, b->getSize(mCurrentPartitionId),
-            mKernelName[mPartitionRootKernelId]);
+            mKernelName[FirstKernelInPartition]);
     }
 
 }

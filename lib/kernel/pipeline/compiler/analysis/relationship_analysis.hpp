@@ -265,17 +265,27 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
         assert (subsitution[in] == -1U);
         const auto out = PipelineInput + i;
         subsitution[in] = out;
+
         const auto f = mPartitionIds.find(in);
         assert (f != mPartitionIds.end());
         const auto id = f->second;
         // renumber the partitions to reflect the selected ordering instead
         // of the lexical (program input) ordering
+
+        #ifndef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
         if (id != inputPartitionId) {
+        #else
+        if (id != inputPartitionId || i > FirstKernel) {
+        #endif
             ++outputPartitionId;
             inputPartitionId = id;
         }
         KernelPartitionId[out] = outputPartitionId;
     }
+
+    #ifdef FORCE_EACH_KERNEL_INTO_UNIQUE_PARTITION
+    PartitionCount = outputPartitionId + 1U;
+    #endif
 
     assert (outputPartitionId == (PartitionCount - 1));
     assert (mRelationships[kernels[PipelineInput]].Kernel == mPipelineKernel);
@@ -383,8 +393,8 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
 
     transcribe(scalars, mScalarGraph);
 
-//    printRelationshipGraph(P.Streams, errs(), "Streams");
-//    printRelationshipGraph(P.Scalars, errs(), "Scalars");
+//    printRelationshipGraph(mStreamGraph, errs(), "Streams");
+//    printRelationshipGraph(mScalarGraph, errs(), "Scalars");
 
 }
 

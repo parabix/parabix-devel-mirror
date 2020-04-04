@@ -102,7 +102,7 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
                 BufferRateData & inputData = mBufferGraph[input];
                 const Binding & binding = inputData.Binding;
                 if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::ZeroExtended))) {
-                    inputData.ZeroExtended = true;
+                    inputData.IsZeroExtended = true;
                 }
             }
             HasZeroExtendedStream = true;

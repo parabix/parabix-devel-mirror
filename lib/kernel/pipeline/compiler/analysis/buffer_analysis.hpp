@@ -144,24 +144,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // Similarly if any internal consumer has a deferred rate, we cannot analyze
             // any consumption rates.
 
-            bool dynamic = nonLocal || (bufferType == BufferType::External) || output.hasAttribute(AttrId::Deferred);
+            bool dynamic = nonLocal || (bufferType == BufferType::External) || producerRate.IsDeferred;
 
-            unsigned lookAhead = 0;
-            unsigned lookBehind = 0;
-            unsigned reflection = 0;
+            auto maxCopyBack = producerRate.CopyBack;
+            auto maxDelay = producerRate.Delay;
+            auto maxLookAhead = producerRate.LookAhead;
+            auto maxLookBehind = producerRate.LookBehind;
 
-            const Binding & outputBinding = producerRate.Binding;
-            for (const Attribute & attr : outputBinding.getAttributes()) {
-                switch (attr.getKind()) {
-                    case AttrId::LookBehind:
-                        lookBehind = std::max(lookBehind, attr.amount());
-                        break;
-                    case AttrId::Delayed:
-                        reflection = std::max(reflection, attr.amount());
-                        break;
-                    default: break;
-                }
-            }
 
 //            const auto pMin = producerRate.Minimum * MinimumNumOfStrides[producer];
             const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
@@ -192,7 +181,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 if (consumerRate.Minimum < consumerRate.Maximum) {
                     dynamic = true;
                 // Or is the data consumption rate unpredictable despite its type?
-                } else if (LLVM_UNLIKELY(input.hasAttribute(AttrId::Deferred))) {
+                } else if (LLVM_UNLIKELY(consumerRate.IsDeferred)) {
                     dynamic = true;
                 }
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
@@ -204,29 +193,21 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
                 const Binding & inputBinding = consumerRate.Binding;
                 // Get output overflow size
-                unsigned tmpLookAhead = 0;
-                for (const Attribute & attr : inputBinding.getAttributes()) {
-                    switch (attr.getKind()) {
-                        case AttrId::LookAhead:
-                            tmpLookAhead = std::max(tmpLookAhead, attr.amount());
-                            break;
-                        case AttrId::LookBehind:
-                            lookBehind = std::max(lookBehind, attr.amount());
-                            break;
-                        default: break;
-                    }
-                }
+                auto lookAhead = consumerRate.LookAhead;
                 if (consumerRate.Maximum > consumerRate.Minimum) {
-                    tmpLookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
+                    lookAhead += ceiling(consumerRate.Maximum - consumerRate.Minimum);
                 }
-                lookAhead = std::max(tmpLookAhead, lookAhead);
+
+                maxCopyBack = std::max(maxCopyBack, consumerRate.CopyBack);
+                maxDelay = std::max(maxDelay, consumerRate.Delay);
+                maxLookAhead = std::max(maxLookAhead, lookAhead);
+                maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
+
             }
 
-            const auto copyBack = ceiling(producerRate.Maximum - producerRate.Minimum);
-
-            auto reqOverflow = std::max(copyBack, lookAhead);
-            if (bn.Add > 0) {
-                reqOverflow = std::max(reqOverflow, bn.Add);
+            auto reqOverflow = std::max(maxCopyBack, maxLookAhead);
+            if (bn.MaxAdd) {
+                reqOverflow = std::max(reqOverflow, bn.MaxAdd);
             }
             if (reqOverflow > 0)  {
                 reqOverflow = std::max(reqOverflow, ceiling(consumeMax));
@@ -234,7 +215,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto overflowSize = round_up_to(reqOverflow, blockWidth) / blockWidth;
-            const auto underflowSize = round_up_to(std::max(lookBehind, reflection), blockWidth) / blockWidth;
+            const auto underflowSize = round_up_to(std::max(maxLookBehind, maxDelay), blockWidth) / blockWidth;
             const auto spillover = std::max((consumeMax * Rational{2}) - consumeMin, pMax);
             const auto reqSize0 = round_up_to(ceiling(spillover), blockWidth) / blockWidth;
             const auto reqSize1 = 2 * (overflowSize + underflowSize);
@@ -242,14 +223,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
 
             // if this buffer is "stateful", we cannot make it *thread* local
-            if (lookBehind || reflection || copyBack || lookAhead) {
+            if (maxLookBehind || maxDelay || maxCopyBack || maxLookAhead) {
                 nonLocal = true;
             }
-
-            bn.LookBehind = lookBehind;
-            bn.LookBehindReflection = reflection;
-            bn.CopyBack = copyBack;
-            bn.LookAhead = lookAhead;
 
             Type * const baseType = output.getType();
 
@@ -267,6 +243,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             }
             bn.Buffer = buffer;
         }
+
+        assert ("missing buffer?" && bn.Buffer);
+
         bn.NonLocal = nonLocal;
         mInternalBuffers[streamSet - FirstStreamSet].reset(bn.Buffer);
     }   
@@ -286,9 +265,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
         const RelationshipNode & node = mStreamGraph[i];
         const Kernel * const kernelObj = node.Kernel; assert (kernelObj);
 
-        auto computeBufferRateBounds = [&](const RelationshipType port,
-                                           const RelationshipNode & bindingNode,
-                                           const unsigned streamSet) {
+        auto makeBufferPort = [&](const RelationshipType port,
+                                  const RelationshipNode & bindingNode,
+                                  const unsigned streamSet) {
             assert (bindingNode.Type == RelationshipNode::IsBinding);
             const Binding & binding = bindingNode.Binding;
             const ProcessingRate & rate = binding.getRate();
@@ -316,7 +295,49 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 lb *= strideLength;
                 ub *= strideLength;
             }
-            return BufferRateData{port, binding, lb, ub};
+
+            auto add = 0U;
+            auto delay = 0U;
+            auto lookAhead = 0U;
+            auto lookBehind = 0U;
+            auto truncate = 0U;
+            auto isPrincipal = false;
+            auto isDeferred = false;
+
+            for (const Attribute & attr : binding.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::Add:
+                        add = std::max(add, attr.amount());
+                        break;
+                    case AttrId::Delayed:
+                        delay = std::max(delay, attr.amount());
+                        break;
+                    case AttrId::LookAhead:
+                        lookAhead = std::max(lookAhead, attr.amount());
+                        break;
+                    case AttrId::LookBehind:
+                        lookBehind = std::max(lookBehind, attr.amount());
+                        break;
+                    case AttrId::Truncate:
+                        truncate = std::max(truncate, attr.amount());
+                        break;
+                    case AttrId::Principal:
+                        isPrincipal = true;
+                        break;
+                    case AttrId::Deferred:
+                        isDeferred = true;
+                        break;
+                    default: break;
+                }
+            }
+
+            auto copyBack = 0U;
+            if (port.Type == PortType::Input) {
+                copyBack = ceiling(ub - lb);
+            }
+            return BufferRateData{port, binding, lb, ub, add, truncate,
+                                  copyBack, delay, lookAhead, lookBehind,
+                                  isPrincipal, isDeferred};
         };
 
         // Evaluate the input/output ordering here and ensure that any reference port is stored first.
@@ -449,7 +470,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 const auto streamSet = source(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                add_edge(streamSet, i, computeBufferRateBounds(port, rn, streamSet), mBufferGraph);
+                add_edge(streamSet, i, makeBufferPort(port, rn, streamSet), mBufferGraph);
             } else {
                 const auto binding = target(e, mStreamGraph);
                 const RelationshipNode & rn = mStreamGraph[binding];
@@ -459,7 +480,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 const auto streamSet = target(f, mStreamGraph);
                 assert (mStreamGraph[streamSet].Type == RelationshipNode::IsRelationship);
                 assert (isa<StreamSet>(mStreamGraph[streamSet].Relationship));
-                add_edge(i, streamSet, computeBufferRateBounds(port, rn, streamSet), mBufferGraph);
+                add_edge(i, streamSet, makeBufferPort(port, rn, streamSet), mBufferGraph);
+
+
             }
         }
     }

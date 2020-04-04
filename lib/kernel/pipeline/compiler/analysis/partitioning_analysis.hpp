@@ -276,6 +276,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                             switch (attr.getKind()) {
                                 case AttrId::Delayed:
                                 case AttrId::Deferred:
+                                case AttrId::BlockSize:
                                     // A deferred output rate is closer to an bounded rate than a
                                     // countable rate but a deferred input rate simply means the
                                     // buffer must be dynamic.
@@ -303,7 +304,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                 // place each input source kernel in its own partition
                 addRateId(H[kernel], nextRateId++);
                 const auto sourceKernelRateId = nextRateId++;
-                for (const auto output : make_iterator_range(out_edges(u, H))) {
+                for (const auto output : make_iterator_range(out_edges(kernel, H))) {
                     const auto buffer = target(output, H);
                     addRateId(H[buffer], sourceKernelRateId);
                 }
@@ -2140,47 +2141,38 @@ skip_edge_2:        // -----------------
  * I.e., the one with input from some disjoint path. If none exists, we'll begin jump to "PartitionCount", which
  * marks the end of the processing loop.
  ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineAnalysis::determinePartitionJumpIndices() {
+void PipelineAnalysis::determinePartitionJumpIndices() {
 
     using BV = dynamic_bitset<>;
-    using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
+    using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
     using Vertex = Graph::vertex_descriptor;
 
     // Summarize the partitioning graph to only represent the existance of a dataflow relationship
     // between the partitions.
+
     Graph G(PartitionCount);
+    std::vector<BV> paths(PartitionCount);
 
-    BEGIN_SCOPED_REGION
-    std::queue<Vertex> Q;
-    BV observed(num_vertices(mPartitioningGraph));
-    for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
-        assert (mPartitioningGraph[partitionId].Type == PartitioningGraphNode::Partition);
-        Vertex u = partitionId;
-        for (;;) {
-            for (const auto e : make_iterator_range(out_edges(u, mPartitioningGraph))) {
-                const auto v = target(e, mPartitioningGraph);
-                if (observed.test(v)) continue;
-                observed.set(v);
-
-                assert ((v < PartitionCount) ^ (mPartitioningGraph[v].Type != PartitioningGraphNode::Partition));
-
-                if (v < PartitionCount) {
-                    add_edge(partitionId, v, G);
-                } else {
-                    Q.push(v);
-                }
-            }
-            if (LLVM_UNLIKELY(Q.empty())) {
-                break;
-            }
-            u = Q.front();
-            Q.pop();
-        }
-        observed.reset();
+    for (auto consumer = FirstKernel; consumer <= PipelineOutput; ++consumer) {
+       const auto cid = KernelPartitionId[consumer];
+       for (const auto e : make_iterator_range(in_edges(consumer, mBufferGraph))) {
+           const auto buffer = source(e, mBufferGraph);
+           const auto producer = parent(buffer, mBufferGraph);
+           const auto pid = KernelPartitionId[producer];
+           assert (pid <= cid);
+           if (pid != cid) {
+               add_edge(pid, cid, G);
+           }
+       }
     }
-    END_SCOPED_REGION
 
-    printGraph(G, errs(), "J1");
+    const auto terminal = PartitionCount - 1U;
+
+    for (auto partitionId = 0U; partitionId < terminal; ++partitionId) {
+       if (out_degree(partitionId, G) == 0) {
+           add_edge(partitionId, terminal, G);
+       }
+    }
 
     // Now compute the transitive reduction of the partition relationships
     BEGIN_SCOPED_REGION
@@ -2190,14 +2182,12 @@ bool PipelineAnalysis::determinePartitionJumpIndices() {
     transitive_reduction_dag(ordering, G);
     END_SCOPED_REGION
 
-    printGraph(G, errs(), "J2");
-
-    // Add a special sink node that marks the end of the processing loop.
-    for (auto partitionId = 0U; partitionId < PartitionCount; ++partitionId) {
-        if (LLVM_UNLIKELY(out_degree(partitionId, G) == 0)) {
-            add_edge(partitionId, (PartitionCount - 1), G);
+    for (auto partitionId = 0U; partitionId < terminal; ++partitionId) {
+        if (mTerminationCheck[partitionId] & TerminationCheckFlag::Soft) {
+            add_edge(partitionId, partitionId + 1U, G);
         }
     }
+    add_edge(terminal, terminal, G);
 
     // Generate a post dominator tree of G. If we do not have enough data to execute
     // a partition along some branched path, it's possible a post dominator of the paths
@@ -2207,89 +2197,59 @@ bool PipelineAnalysis::determinePartitionJumpIndices() {
 
     BEGIN_SCOPED_REGION
 
-    const auto m = num_edges(G);
-
-    std::vector<BV> paths(PartitionCount);
-    unsigned p = 0;
-    for (unsigned u = 0; u < PartitionCount; ++u) { // forward topological ordering
+    for (auto u = 0U; u < PartitionCount; ++u) {
         BV & P = paths[u];
-        P.resize(m);
-        for (const auto e : make_iterator_range(in_edges(u, G))) {
-            const auto v = source(e, G);
-            assert (v < PartitionCount);
-            P |= paths[v];
-        }
+        P.resize(PartitionCount);
+        P.set(u);
+    }
+
+    BV M(PartitionCount);
+
+    for (auto u = PartitionCount; u--; ) { // forward topological ordering
+        assert (out_degree(u, G) > 0);
+        M.set(0, PartitionCount, true);
+        assert (M.count() == PartitionCount);
         for (const auto e : make_iterator_range(out_edges(u, G))) {
             const auto v = target(e, G);
             assert (v < PartitionCount);
-            BV & O = paths[v];
-            O = P;
-            assert (p < m);
-            O.set(p++);
+            M &= paths[v];
         }
+        BV & P = paths[u];
+        P |= M;
     }
 
-    BV M(m);
-
     // reverse topological ordering starting at (PartitionCount - 1)
-    for (auto u = (PartitionCount - 1); u--; ) {
+    for (auto u = terminal; u--; ) {
+
+        const BV & P = paths[u];
 
         auto v = u;
 
-        if (LLVM_UNLIKELY(out_degree(u, G) > 1)) {
-
-            assert (M.none());
-
-            for (const auto output : make_iterator_range(out_edges(u, G))) {
-                const auto v = target(output, G);
-                const BV & O = paths[v];
-                M |= O;
+        while (++v < terminal) {
+            const BV & O = paths[v];
+            if (LLVM_UNLIKELY(!O.is_subset_of(P))) {
+                break;
             }
-
-            while (++v < PartitionCount) {
-                const BV & O = paths[v];
-                // since each output of partition u is assigned a new rate id,
-                // the only way that M ⊆ O is if v post dominates u.
-                if (LLVM_UNLIKELY(M.is_subset_of(O))) {
-                    break;
-                }
-            }
-
-            M.reset();
-
         }
-
-        assert ("an immediate post dominator is guaranteed!" && v < PartitionCount);
 
         // v is the immediate post-dominator of u; however, since this graph indicates
         // that we could not execute u nor any of its branched paths, we search for the
         // first non-immediate post dominator with an in-degree > 1. We're guaranteed
         // to find one since the common sink must have an in-degree >= 2.
 
-        // NOTE: the sole child of the common sink sentinal is itself.
-
-        for (;;) {
-            v = child(v, G);
-            if (LLVM_UNLIKELY(in_degree(v, G) > 1)) {
-                break;
-            }            
-        }
-
         clear_out_edges(u, G);
         assert (u != v);
         add_edge(u, v, G);
-
     }
 
     END_SCOPED_REGION
-
-    bool valid = true;
 
     mPartitionJumpIndex.resize(PartitionCount);
     for (unsigned i = 0; i < PartitionCount; ++i) {
         const auto j = child(i, G);
         assert ("jump target cannot preceed source" && i <= j);
         mPartitionJumpIndex[i] = j;
+        #ifndef NDEBUG
         for (unsigned k = 0; k < i; ++k) {
 
             /* Recall that G is a tree where each node is numbered
@@ -2306,26 +2266,18 @@ bool PipelineAnalysis::determinePartitionJumpIndices() {
             If we jump from partition 2 to 5, we'll miss processing
             partition 3 and 4 and the pipeline will never able to
             progress further. In such a case, the chosen partition
-            ordering is degenerate and must be corrected.
+            ordering is degenerate and in general could result in an
+            infinite loop / backlog of unprocessed input.
 
             By simply verifying that we touch every child of the
             a node before looking at another node, we prove the tree
             has a valid jump structure. */
 
-            if (mPartitionJumpIndex[k] > j) {
-                valid = false;
-            }
+            assert ("degenerate jump tree structure!" && (mPartitionJumpIndex[k] <= j));
         }
+        #endif
     }
 
-    return valid;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief addPartitionJumpConstraintsToRelationshipGraph
- ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineAnalysis::addPartitionJumpConstraintsToRelationshipGraph() {
-    assert (false);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -2336,9 +2288,6 @@ void PipelineAnalysis::makePartitionJumpTree() {
     for (auto i = 0U; i < (PartitionCount - 1); ++i) {        
         add_edge(i, mPartitionJumpIndex[i], mPartitionJumpTree);
     }
-
-    printGraph(mPartitionJumpTree, errs(), "P");
-
 //    for (auto i = 1U; i < (PartitionCount - 1); ++i) {
 //        add_edge(i, (i + 1U), mPartitionJumpTree);
 //    }

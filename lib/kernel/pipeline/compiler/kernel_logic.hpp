@@ -323,6 +323,48 @@ bool PipelineCompiler::isBounded() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief requiresExplicitFinalStride
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::requiresExplicitFinalStride() const {
+    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
+    if (mKernel->requiresExplicitPartialFinalStride()) {
+        return true;
+    }
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = source(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.isOwned()) {
+            const BufferRateData & br = mBufferGraph[e];
+            const Binding & binding = br.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            switch (rate.getKind()) {
+                case RateId::Fixed:
+                case RateId::PartialSum:
+                    return true;
+                default: break;
+            }
+        }
+    }
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.isOwned()) {
+            const BufferRateData & br = mBufferGraph[e];
+            const Binding & binding = br.Binding;
+            const ProcessingRate & rate = binding.getRate();
+            switch (rate.getKind()) {
+                case RateId::Fixed:
+                case RateId::PartialSum:
+                    return true;
+                default: break;
+            }
+        }
+    }
+    return false;
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief mayLoopBackToEntry
  ** ------------------------------------------------------------------------------------------------------------- */
 bool PipelineCompiler::mayLoopBackToEntry() const {

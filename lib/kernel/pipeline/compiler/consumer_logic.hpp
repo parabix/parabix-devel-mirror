@@ -92,15 +92,15 @@ Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t strea
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced) {
     Value * initiallyConsumed = produced;
-    const Binding & binding = getOutputBinding(outputPort);
-    if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::LookBehind))) {
-        const Attribute & attr = binding.findAttribute(AttrId::LookBehind);
-        Constant * const lookBehind = b->getSize(attr.amount());
+    const auto output = getOutput(mKernelId, outputPort);
+    const BufferRateData & br = mBufferGraph[output];
+    if (br.LookBehind) {
+        Constant * const lookBehind = b->getSize(br.LookBehind);
         Value * consumed = b->CreateSub(initiallyConsumed, lookBehind);
         Value * const satisfies = b->CreateICmpUGT(initiallyConsumed, lookBehind);
         initiallyConsumed = b->CreateSelect(satisfies, consumed, b->getSize(0));
     }
-    const auto streamSet = getOutputBufferVertex(outputPort);
+    const auto streamSet = target(output, mBufferGraph);
     const ConsumerNode & cn = mConsumerGraph[streamSet];
     cn.Consumed = initiallyConsumed;
 }
@@ -161,7 +161,7 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeFinalConsumedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
+inline void PipelineCompiler::writeConsumedItemCounts(BuilderRef b) {
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mConsumerGraph))) {
         const ConsumerEdge & c = mConsumerGraph[e];
@@ -174,7 +174,7 @@ inline void PipelineCompiler::writeFinalConsumedItemCounts(BuilderRef b) {
                 cn.PhiNode = nullptr;
             }
             // check to see if we've fully finished processing any stream
-            if (c.Flags & ConsumerEdge::WriteFinalCount) {
+            if (c.Flags & ConsumerEdge::WriteConsumedCount) {
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto output = in_edge(streamSet, mBufferGraph);
                 const BufferRateData & br = mBufferGraph[output];

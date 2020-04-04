@@ -1,6 +1,7 @@
 #ifndef PIPELINE_KERNEL_ANALYSIS_HPP
 #define PIPELINE_KERNEL_ANALYSIS_HPP
 
+#include "../config.h"
 #include "../common/common.hpp"
 #include <algorithm>
 #include <queue>
@@ -10,7 +11,6 @@
 #include <kernel/core/streamset.h>
 #include <kernel/core/kernel_builder.h>
 
-#define PRINT_BUFFER_GRAPH
 
 namespace kernel {
 
@@ -31,41 +31,31 @@ public:
 
         P.partitionRelationshipGraphIntoSynchronousRegions();
 
-        for (;;) {
+        // Construct the Stream and Scalar graphs
+        P.transcribeRelationshipGraph();
+        P.generateInitialBufferGraph();
 
-            // Construct the Stream and Scalar graphs
-            P.transcribeRelationshipGraph();
-            P.generateInitialBufferGraph();
+        P.computeDataFlowRates();
+        P.generatePartitioningGraph();
 
-            P.identifyTerminationChecks();
-
-            P.computeDataFlowRates();
-            P.generatePartitioningGraph();
-
-            if (LLVM_LIKELY(P.determinePartitionJumpIndices())) {
-                break;
-            }
-
-            // If we get here, the partition jump tree was degenerate.
-            // We need to modify the relation ship graph
-            P.addPartitionJumpConstraintsToRelationshipGraph();
-
-        }
+        P.identifyTerminationChecks();
+        P.determinePartitionJumpIndices();
 
         P.annotateBufferGraphWithAddAttributes();
 
         // Finish annotating the buffer graph       
-        P.identifyLocalPortIds();
         P.identifyLinearBuffers();
         P.identifyZeroExtendedStreamSets();
 
         // Make the remaining graphs
         P.makeConsumerGraph();        
         P.makePartitionJumpTree();
-        P.makeKernelIOGraph();
+        P.makeKernelIOGraph();       
+        P.makeTerminationPropagationGraph();
 
         // Finish the buffer graph
         P.addStreamSetsToBufferGraph(b);
+        P.identifyLocalPortIds();
 
         P.makeInputTruncationGraph();
 
@@ -118,9 +108,7 @@ private:
 
     void generatePartitioningGraph();
 
-    bool determinePartitionJumpIndices();
-
-    void addPartitionJumpConstraintsToRelationshipGraph();
+    void determinePartitionJumpIndices();
 
     void makePartitionJumpTree();
 
@@ -130,6 +118,7 @@ private:
     void generateInitialBufferGraph();
     void identifyLinearBuffers();
     void identifyLocalPortIds();
+    void identifyPortsToCheck();
 
     // consumer analysis functions
 
@@ -148,6 +137,7 @@ private:
     // termination analysis functions
 
     void identifyTerminationChecks();
+    void makeTerminationPropagationGraph();
 
     // add(k) analysis functions
 
@@ -214,6 +204,8 @@ public:
     ConsumerGraph                   mConsumerGraph;
 
     TerminationChecks               mTerminationCheck;
+
+    TerminationPropagationGraph     mTerminationPropagationGraph;
 
     InputTruncationGraph            mInputTruncationGraph;
     IOCheckGraph                    mIOCheckGraph;

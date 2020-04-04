@@ -86,6 +86,21 @@ bool Kernel::hasFixedRateInput() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief isGreedy
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool Kernel::isGreedy() const {
+    const auto n = getNumOfStreamInputs();
+    for (unsigned i = 0; i < n; ++i) {
+        const Binding & input = getInputStreamSetBinding(i);
+        const ProcessingRate & rate = input.getRate();
+        if (LLVM_LIKELY(!rate.isGreedy())) {
+            return false;
+        }
+    }
+    return (n > 0);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief canSetTerminateSignal
  ** ------------------------------------------------------------------------------------------------------------ */
 bool Kernel::canSetTerminateSignal() const {
@@ -526,6 +541,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     fields.reserve(4 + 3 * (n + m));
 
     const auto internallySynchronized = hasAttribute(AttrId::InternallySynchronized);
+    const auto greedy = isGreedy();
 
     if (LLVM_LIKELY(isStateful())) {
         fields.push_back(getSharedStateType()->getPointerTo());  // handle
@@ -539,13 +555,18 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     // this kernel. We want to avoid that and simply treat invoking an internally synchronized
     // kernel as a "function call" and allow this kernel to update its own internal state.
 
-    fields.push_back(sizeTy); // numOfStrides or external SegNo
-    if (LLVM_LIKELY(!internallySynchronized && hasFixedRateInput())) {
-        fields.push_back(sizeTy); // fixedRateFactor
-    }
-    if (internallySynchronized || !requiresExplicitPartialFinalStride()) {
+    if (LLVM_LIKELY(internallySynchronized || greedy)) {
+        if (internallySynchronized) {
+            fields.push_back(sizeTy); // external SegNo
+        }
         fields.push_back(b->getInt1Ty()); // isFinal
+    } else {
+        fields.push_back(sizeTy); // numOfStrides
+        if (hasFixedRateInput()) {
+            fields.push_back(sizeTy); // fixed rate factor
+        }
     }
+
 
     for (unsigned i = 0; i < n; ++i) {
         const Binding & input = mInputStreamSets[i];
@@ -631,16 +652,17 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
             setNextArgName("threadLocal");
         }
         const auto internallySynchronized = hasAttribute(AttrId::InternallySynchronized);
-        if (internallySynchronized) {
-            setNextArgName("externalSegNo");
+        const auto greedy = isGreedy();
+        if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
+            if (internallySynchronized) {
+                setNextArgName("externalSegNo");
+            }
+            setNextArgName("isFinal");
         } else {
             setNextArgName("numOfStrides");
-            if (LLVM_LIKELY(hasFixedRateInput())) {
+            if (hasFixedRateInput()) {
                 setNextArgName("fixedRateFactor");
             }
-        }
-        if (internallySynchronized || !requiresExplicitPartialFinalStride()) {
-            setNextArgName("isFinal");
         }
 
         for (unsigned i = 0; i < mInputStreamSets.size(); ++i) {
@@ -808,11 +830,6 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     if (hasThreadLocal()) {
         suppliedArgs += 1;
     }
-    const auto hasIsFinalParam = !requiresExplicitPartialFinalStride();
-    if (LLVM_LIKELY(hasIsFinalParam)) {
-        suppliedArgs += 1;
-    }
-
 
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(b, false); assert (doSegment);
@@ -900,9 +917,6 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     }
     Value * const ONE = b->getSize(1);
     segmentArgs[suppliedArgCount++] = ONE; // numOfStrides
-    if (LLVM_LIKELY(hasIsFinalParam)) {
-        segmentArgs[suppliedArgCount++] = b->getTrue();
-    }
     assert (suppliedArgCount == suppliedArgs);
 
     // allocate any internal stream sets
