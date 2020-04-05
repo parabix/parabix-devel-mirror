@@ -339,6 +339,7 @@ add_subdirectory(tools/wc)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
+add_subdirectory(tools/radicalgrep)
 
 # Kernel Tests
 add_subdirectory(tests)
@@ -353,6 +354,12 @@ endif()
 
 set(QA_DIR ${PROJECT_SOURCE_DIR}/QA)
 set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
+
+#Radical Grep
+add_test(
+    NAME radicaltest
+    WORKING_DIRECTORY ${QA_DIR}/radicaltest
+    COMMAND python ../greptest.py -d ${QA_DIR}/radicaltest/testfiles -t ${QA_DIR}/radicaltest ${BIN_DIR}/radicalgrep)
 
 add_test(
   NAME greptest
@@ -399,6 +406,11 @@ add_test(
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
+
+#Radical Grep
+add_custom_target (radicaltest
+    WORKING_DIRECTORY ${QA_DIR}/radicaltest
+    COMMAND python ../greptest.py -d ${QA_DIR}/radicaltest/testfiles -t ${QA_DIR}/radicaltest ${BIN_DIR}/radicalgrep)
 
 
 add_custom_target (greptest
