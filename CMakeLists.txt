@@ -339,7 +339,6 @@ add_subdirectory(tools/wc)
 add_subdirectory(tools/xml)
 add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
-add_subdirectory(tools/pinyingrep)
 
 # Kernel Tests
 add_subdirectory(tests)
@@ -354,17 +353,14 @@ endif()
 
 set(QA_DIR ${PROJECT_SOURCE_DIR}/QA)
 set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
-
-# Pinyin Grep
-add_test(
-  NAME pinyintest
-  WORKING_DIRECTORY ${QA_DIR}/pinyintest
-  COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyintest/testfiles -t ${QA_DIR}/pinyintest ${BIN_DIR}/pinyingrep)
-
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${QA_DIR}
   COMMAND python greptest.py --random_flag_count=2 --tests_per_grepcase=2 ${BIN_DIR}/icgrep)
+
+add_test(
+  NAME pinyintest
+  COMMAND python greptest.cpp -d ${QA_DIR} -t ${QA_DIR}/pinyingrep.cpp ${BIN_DIR}/icgrep)
 
 add_test(
   NAME proptest
@@ -407,10 +403,6 @@ SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
-# Pinyin Grep
-add_custom_target(pinyintest
-    WORKING_DIRECTORY ${QA_DIR}/pinyintest
-    COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyintest/testfiles -t ${QA_DIR}/pinyintest/pinyintest.xml ${BIN_DIR}/pinyingrep)
 
 add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}
