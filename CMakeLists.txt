@@ -359,7 +359,7 @@ set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
 add_test(
     NAME radicaltest
     WORKING_DIRECTORY ${QA_DIR}/radicaltest
-    COMMAND python ../greptest.py -d ${QA_DIR}/radicaltest/testfiles -t ${QA_DIR}/radicaltest ${BIN_DIR}/radicalgrep)
+    COMMAND python ../greptest.py -d ${QA_DIR}/radicaltest/testfiles -t ${QA_DIR}/radicaltest/radicaltest.xml ${BIN_DIR}/radicalgrep)
 
 add_test(
   NAME greptest
@@ -410,7 +410,7 @@ SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 #Radical Grep
 add_custom_target (radicaltest
     WORKING_DIRECTORY ${QA_DIR}/radicaltest
-    COMMAND python ../greptest.py -d ${QA_DIR}/radicaltest/testfiles -t ${QA_DIR}/radicaltest ${BIN_DIR}/radicalgrep)
+    COMMAND python ../greptest.py -d ${QA_DIR}/radicaltest/testfiles -t ${QA_DIR}/radicaltest/radicaltest.xml ${BIN_DIR}/radicalgrep)
 
 
 add_custom_target (greptest
