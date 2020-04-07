@@ -68,9 +68,40 @@
 #include <kernel/util/debug_display.h>
 #include <util/aligned_allocator.h>
 
+
+#include <pablo/builder.hpp>
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
+#include <re/adt/re_cc.h>
+
 using namespace llvm;
 using namespace cc;
 using namespace kernel;
+
+namespace kernel {
+
+class SelectFieldKernel : public pablo::PabloKernel {
+public:
+    SelectFieldKernel(BuilderRef b, StreamSet * BasisBits, StreamSet * Selected)
+    : PabloKernel(b, "SelectFieldKernel", {Binding{"basis", BasisBits}}, {Binding{"selected", Selected}}) { }
+protected:
+    void generatePabloMethod() override;
+};
+
+void SelectFieldKernel::generatePabloMethod() {
+    pablo::PabloBuilder pb(getEntryScope());
+    std::vector<PabloAST *> basis = getInputStreamSet("basis");
+    pablo::Var * selectedOut = getOutputStreamVar("selected");
+
+    cc::Parabix_CC_Compiler_Builder ccc(getEntryScope(), getInputStreamSet("basis"));
+    pablo::PabloAST * Zs = ccc.compileCC(re::makeByte(0x2C));
+    pablo::PabloAST * E2 = pb.createEveryNth(Zs, pb.getInteger(2));
+    pablo::PabloAST * St = pb.createScanTo(E2, pb.createXor(E2, Zs));
+    pablo::PabloAST * Sp = pb.createIntrinsicCall(pablo::Intrinsic::SpanUpTo, {St, pb.createAdvance(pb.createXor(St, Zs), pb.getInteger(1))});
+    pb.createAssign(pb.createExtract(selectedOut, pb.getInteger(0)), Sp);
+}
+
+}
 
 namespace grep {
 
@@ -347,6 +378,15 @@ StreamSet * GrepEngine::getBasis(const std::unique_ptr<ProgramBuilder> & P, Stre
             P->CreateKernelCall<S2P_PabloKernel>(ByteStream, BasisBits);
         } else {
             P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
+            StreamSet * compression_mask = P->CreateStreamSet(1);
+            P->CreateKernelCall<SelectFieldKernel>(BasisBits, compression_mask);
+            P->CreateKernelCall<DebugDisplayKernel>("sdss", compression_mask);
+            StreamSet * Output = P->CreateStreamSet(ENCODING_BITS, 1);
+            FilterByMask(P, compression_mask, BasisBits, Output);
+            StreamSet * Jaca = P->CreateStreamSet(1, 8);
+            P->CreateKernelCall<P2SKernel>(Output, Jaca);
+            P->CreateKernelCall<StdOutKernel>(Jaca);
+            return Jaca;
         }
         return BasisBits;
     }
