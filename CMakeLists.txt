@@ -360,8 +360,7 @@ add_test(
 
 add_test(
   NAME pinyintest
-  WORKING_DIRECTORY ${QA_DIR}
-  COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/pinyingrep.cpp ${BIN_DIR}/icgrep)
+  COMMAND python greptest.cpp -d ${QA_DIR} -t ${QA_DIR}/pinyingrep.cpp ${BIN_DIR}/icgrep)
 
 add_test(
   NAME proptest
