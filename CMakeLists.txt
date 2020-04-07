@@ -404,6 +404,9 @@ SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
+add_custom_target(pinyintest
+    WORKING_DIRECTORY ${QA_DIR}
+    COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/pinyingrep.cpp "${BIN_DIR}/icgrep")
 
 add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}
