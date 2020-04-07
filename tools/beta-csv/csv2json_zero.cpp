@@ -1,4 +1,6 @@
-//This csv2json file_zero can pass the examples with no separators and backflash in them. And some field values can be empty but the field names.
+//This csv2json file_zero can pass the examples with no separators and backflash in them.
+//And some field values can be empty but the field names.
+
 
 #include<iostream>
 #include<fstream>
@@ -7,11 +9,16 @@
 #include<vector>
 using namespace std;
 
-int main() {
-	//change ipath(input file path) and opath(output file path) to where your .csv and .json file are. 
-	//And please notice that you should use double backslashes to specify a separator in file paths.   
-	const char* ipath = "D:\\ZJU\\sophomore\\Spring_Summer\\SoftwareEngneering\\project\\codes\\example\\eg0.csv";
-	const char* opath = "D:\\ZJU\\sophomore\\Spring_Summer\\SoftwareEngneering\\project\\codes\\example\\eg0.json";
+int main(int argc, char* argv[]) {
+	 string ipath, opath;
+	if (argc != 3) {
+		cout << "arguement error";
+		system("pause");
+		exit(-1);
+	}
+	//argv[0] is the path of the path of the .exe file.
+	ipath = string(argv[1]);
+	opath = string(argv[2]);
 	const char separater = ',';
 	ifstream csvInput;
 	ofstream jsonOutput;
