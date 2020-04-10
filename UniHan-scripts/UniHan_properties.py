@@ -37,18 +37,18 @@ def write_array_format(propertyValue, uset_array, indent = 4 ):
     # propertyValue is without "_Set" postfix
     str = (" " * indent) + "}\n\n" + \
                 (" " * indent) + \
-                "const static UnicodeSet %s_Set[] = {\n" % propertyValue
+                "const static std::array<UnicodeSet, 5> %s_Set = {\n" % propertyValue
     for index, uset in enumerate(uset_array):
         if(index != 0):
             str += ',\n'
         if(uset != None):
-            str += (" " * indent) + "{const_cast<UnicodeSet::run_t *>(__%s_runs), %i, 0, " \
-                    "const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0}" \
+            str += (" " * (2*indent)) + "UnicodeSet(const_cast<UnicodeSet::run_t *>(__%s_runs), %i, 0, " \
+                    "const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0)" \
                     % (propertyValue+'%d_Set'%index, len(uset.runs),
                     propertyValue+'%d_Set'%index, len(uset.quads))
         else:
-            str += (" " * indent) + "{ }"
-    str += '};\n\n'
+            str += (" " * (2*indent)) + "UnicodeSet()"
+    str += '\n' + (2*indent)*" " + '};\n\n'
     return str
 
 def emit_enumerated_property(f, property_code, independent_prop_values, prop_values, value_map, property_type = "single"):
@@ -107,7 +107,7 @@ class UniHan_generator():
         prop_values, independent_prop_values, value_map = parse_property_file(filename_root, property_code)
         property_name = get_property_full_name(property_code)
         f = cformat.open_header_file_for_write(property_name)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['<array>','"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code, prop_values, independent_prop_values, value_map)
         f.write("}\n")
