@@ -1,4 +1,4 @@
-//This csv2json file_zero can pass the examples with no separators and backslash in them.
+//This csv2json file_zero can pass the examples with no separator and slash in them.
 //And some field values can be empty but the field names.
 
 
@@ -7,6 +7,7 @@
 #include<sstream>
 #include<string>
 #include<vector>
+#include<stdlib.h>
 using namespace std;
 
 int main(int argc, char* argv[]) {
@@ -36,8 +37,11 @@ int main(int argc, char* argv[]) {
 
 	while (getline(csvInput, Oneline))
 	{
-		Oneline = Oneline.replace(Oneline.find("\r"), 1, "\0");
+#ifdef _unix_ or #ifdef_linux_
+Oneline = Oneline.replace(Oneline.find("\r"),1,"\0");
+#endif
 		vector<string> fieldArray;
+		fieldArray.clear();
 		stringstream ss(Oneline);
 		LineCounter++;
 
@@ -48,7 +52,6 @@ int main(int argc, char* argv[]) {
 			jsonOutput << "{";
 		}
 		while (getline(ss, str, separater)) {
-			
 			if (LineCounter == 1) {
 				FieldNumber++;
 				fieldnameArray.push_back(str);
