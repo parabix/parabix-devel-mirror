@@ -261,6 +261,15 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 default: llvm_unreachable("unknown buffer type");
             }
         }
+        if (bn.CopyBack) {
+            out << "|CB:" << bn.CopyBack;
+        }
+        if (bn.LookAhead) {
+            out << "|LA:" << bn.LookAhead;
+        }
+        if (bn.LookBehind) {
+            out << "|LB:" << bn.LookBehind;
+        }
         if (bn.MaxAdd) {
             out << "|+" << bn.MaxAdd;
         }
@@ -413,9 +422,6 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
 
         if (pd.LookBehind) {
             out << " [LB:" << pd.LookBehind << ']';
-        }
-        if (pd.CopyBack) {
-            out << " [CB:" << pd.CopyBack << ']';
         }
         if (pd.LookAhead) {
             out << " [LA:" << pd.LookAhead << ']';

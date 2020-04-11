@@ -48,6 +48,8 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
 inline BasicBlock * PipelineCompiler::getPartitionExitPoint(BuilderRef b) {
     assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
     const auto partitionId = KernelPartitionId[mKernelId];
+    assert ("partition exit cannot loop to current entry!" &&
+            mPartitionEntryPoint[partitionId] != mPartitionEntryPoint[partitionId + 1]);
     return mPartitionEntryPoint[partitionId + 1];
 }
 
@@ -65,6 +67,7 @@ inline void PipelineCompiler::checkForPartitionEntry(BuilderRef b) {
         determinePartitionStrideRates();
 
         const auto jumpIdx = mPartitionJumpIndex[partitionId];
+        assert (partitionId != jumpIdx);
         mNextPartitionWithPotentialInput = mPartitionEntryPoint[jumpIdx];        
         mIsPartitionRoot = true;
         #ifdef PRINT_DEBUG_MESSAGES
@@ -256,9 +259,6 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
 
     for (auto partitionId = 0U; partitionId != targetPartitionId; ++partitionId) {
         PHINode * const termPhi = findOrAddPhi(mPartitionTerminationSignalPhi, partitionId, "partitionTerminationSignalPhi");
-
-        errs() << "  "; termPhi->print(errs()); errs() << "\n";
-
         Value * term = nullptr;
         if (partitionId <= mCurrentPartitionId) {
             term = mPartitionTerminationSignal[partitionId];
@@ -336,7 +336,7 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
         BasicBlock * const exitBlock = b->GetInsertBlock();
         mKernelInitiallyTerminatedExit = exitBlock;
         b->CreateBr(mKernelJumpToNextUsefulPartition);
-        if (mIsBounded) {
+        if (mExhaustedInputAtJumpPhi) {
             mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, exitBlock);
         }
     #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION

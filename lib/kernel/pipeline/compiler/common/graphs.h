@@ -269,10 +269,12 @@ struct BufferNode {
     BufferType Type = BufferType::None;
     bool NonLocal = false;
     bool NonLinear = false;
-//    unsigned LookBehind = 0;
-//    unsigned LookBehindReflection = 0;
-//    unsigned CopyBack = 0;
-//    unsigned LookAhead = 0;
+
+    unsigned CopyBack = 0;
+    unsigned CopyBackReflection = 0;
+
+    unsigned LookAhead = 0;
+    unsigned LookBehind = 0;
     unsigned MaxAdd = 0;
 
     bool isOwned() const {
@@ -306,7 +308,6 @@ struct BufferRateData {
     // binding attributes
     unsigned Add = 0;
     unsigned Truncate = 0;
-    unsigned CopyBack = 0;
     unsigned Delay = 0;
     unsigned LookAhead = 0;
     unsigned LookBehind = 0;
@@ -328,13 +329,13 @@ struct BufferRateData {
     BufferRateData(RelationshipType port, BindingRef binding,
                    Rational minRate, Rational maxRate,
                    unsigned add, unsigned truncate,
-                   unsigned copyBack, unsigned delay,
+                   unsigned delay,
                    unsigned lookAhead, unsigned lookBehind,
                    bool isPrincipal, bool isDeferred)
     : Port(port), Binding(binding)
     , Minimum(minRate), Maximum(maxRate)
     , Add(add), Truncate(truncate)
-    , CopyBack(copyBack), Delay(delay)
+    , Delay(delay)
     , LookAhead(lookAhead), LookBehind(lookBehind)
     , IsPrincipal(isPrincipal)
     , IsDeferred(isDeferred) {

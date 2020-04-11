@@ -545,6 +545,7 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mZeroExtendBufferPhi = nullptr;
     mAnyRemainingInput = nullptr;
     mExhaustedPipelineInputPhi = nullptr;
+    mExhaustedInputAtJumpPhi = nullptr;
 
     mKernelIsFinal = nullptr;
     mKernelIsPenultimate = nullptr;

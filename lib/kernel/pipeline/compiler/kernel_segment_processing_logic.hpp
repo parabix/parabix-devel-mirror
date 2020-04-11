@@ -85,6 +85,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     if (kernelRequiresSynchronization) {
         mMayHaveNonLinearIO = mayHaveNonLinearIO(mKernelId);
+        assert (!mMayHaveNonLinearIO);
         mCanTruncatedInput = canTruncateInputBuffer();
         mIsBounded = isBounded();
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
@@ -101,7 +102,10 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     }
 
     #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
-    const auto canJumpToAnotherPartition = mIsPartitionRoot && mIsBounded;
+
+    const auto nextPartitionId = mCurrentPartitionId + 1U;
+    const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+    const auto canJumpToAnotherPartition = mIsPartitionRoot && (mIsBounded || nextPartitionId == jumpId);
     const auto handleNoUpdateExit = mIsPartitionRoot || !canJumpToAnotherPartition;
     #else
     const auto canJumpToAnotherPartition = mIsPartitionRoot;
@@ -211,7 +215,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     writeKernelCall(b);
     if (kernelRequiresSynchronization) {
         writeCopyBackLogic(b);
-        writeLookBehindReflectionLogic(b);
+        // writeDelayReflectionLogic(b);
     }
 
     /// -------------------------------------------------------------------------------------
@@ -287,9 +291,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     if (handleNoUpdateExit) {
         b->SetInsertPoint(mKernelInitiallyTerminated);
-        #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, "* " + prefix + ".bypassed = %" PRIu64, mSegNo);
-        #endif
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        debugPrint(b, "* " + prefix + ".bypassed = %" PRIu64, mSegNo);
+//        #endif
         writeInitiallyTerminatedPartitionExit(b);
     }
 

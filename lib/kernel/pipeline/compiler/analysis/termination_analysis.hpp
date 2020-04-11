@@ -164,8 +164,6 @@ void PipelineAnalysis::makeTerminationPropagationGraph() {
         end = start - 1U;
     }
 
-    printGraph(mTerminationPropagationGraph, errs(), "TP");
-
 }
 
 }

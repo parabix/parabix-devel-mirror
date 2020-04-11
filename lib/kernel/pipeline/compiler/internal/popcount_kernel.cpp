@@ -180,9 +180,9 @@ void PopCountKernel::generateMultiBlockLogic(BuilderRef b, llvm::Value * const n
         Value * const ptr = b->CreateInBoundsGEP(positiveArray, index);
         b->CreateStore(positivePartialSum, ptr);
 
-        b->CreateDprintfCall(b->getInt32(STDERR_FILENO),
-                             "> pop[%" PRIu64 "] = %" PRIu64 " (0x%" PRIx64 ")\n",
-                             b->CreateAdd(position, index), positivePartialSum, ptr);
+//        b->CreateDprintfCall(b->getInt32(STDERR_FILENO),
+//                             "> pop[%" PRIu64 "] = %" PRIu64 " (0x%" PRIx64 ")\n",
+//                             b->CreateAdd(position, index), positivePartialSum, ptr);
     }
 
     Value * negativePartialSum = nullptr;

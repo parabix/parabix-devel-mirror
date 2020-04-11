@@ -249,8 +249,8 @@ public:
     void writeCopyBackLogic(BuilderRef b);
     void writeLookAheadLogic(BuilderRef b);
     void writeLookBehindLogic(BuilderRef b);
-    void writeLookBehindReflectionLogic(BuilderRef b);
-    enum class CopyMode { CopyBack, LookAhead, LookBehind, LookBehindReflection };
+    void writeDelayReflectionLogic(BuilderRef b);
+    enum class CopyMode { CopyBack, LookAhead, LookBehind, Delay };
     void copy(BuilderRef b, const CopyMode mode, Value * cond, const StreamSetPort outputPort, const StreamSetBuffer * const buffer, const unsigned itemsToCopy);
 
 

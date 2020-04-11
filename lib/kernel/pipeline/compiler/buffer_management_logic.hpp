@@ -425,33 +425,35 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
  * @brief writeLookBehindLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
+#if 0
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        if (br.LookBehind) {
-            const auto streamSet = target(e, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[streamSet];
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.LookBehind) {
+            const BufferRateData & br = mBufferGraph[e];
             const StreamSetBuffer * const buffer = bn.Buffer;
-            Constant * const underflow = b->getSize(br.LookBehind);
+            Constant * const underflow = b->getSize(bn.LookBehind);
             Value * const produced = mAlreadyProducedPhi(br.Port);
             Value * const capacity = buffer->getCapacity(b);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const needsCopy = b->CreateICmpULE(producedOffset, underflow);
-            copy(b, CopyMode::LookBehind, needsCopy, br.Port, buffer, br.LookBehind);
+            copy(b, CopyMode::LookBehind, needsCopy, br.Port, buffer, bn.LookBehind);
         }
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeLookBehindReflectionLogic
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
+void PipelineCompiler::writeDelayReflectionLogic(BuilderRef b) {
+#if 0
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & br = mBufferGraph[e];
         if (br.Delay) {
             const auto streamSet = target(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
             const StreamSetBuffer * const buffer = bn.Buffer;
-
             Value * const capacity = buffer->getCapacity(b);
             const BufferRateData & br = mBufferGraph[e];
             Value * const produced = mAlreadyProducedPhi(mKernelId, br.Port);
@@ -459,22 +461,23 @@ void PipelineCompiler::writeLookBehindReflectionLogic(BuilderRef b) {
             Constant * const reflection = b->getSize(size);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const needsCopy = b->CreateICmpULT(producedOffset, reflection);
-            copy(b, CopyMode::LookBehindReflection, needsCopy, br.Port, buffer, br.Delay);
+            copy(b, CopyMode::Delay, needsCopy, br.Port, buffer, br.Delay);
         }
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeCopyBackLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
+#if 0
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        if (br.CopyBack) {
-            const auto streamSet = target(e, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[streamSet];
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.CopyBack) {
+            const BufferRateData & br = mBufferGraph[e];
             const StreamSetBuffer * const buffer = bn.Buffer;
-
             Value * const capacity = buffer->getCapacity(b);
             Value * const alreadyProduced = mAlreadyProducedPhi(br.Port);
             Value * const priorOffset = b->CreateURem(alreadyProduced, capacity);
@@ -483,24 +486,26 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
             Value * const needsCopy = b->CreateAnd(nonCapacityAlignedWrite, wroteToOverflow);
-            copy(b, CopyMode::CopyBack, needsCopy, br.Port, buffer, br.CopyBack);
+            copy(b, CopyMode::CopyBack, needsCopy, br.Port, buffer, bn.CopyBack);
         }
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeLookAheadLogic
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
+#if 0
     // Unless we modified the portion of data that ought to be reflected in the overflow region, do not copy
     // any data. To do so would incur extra writes and pollute the cache with potentially unnecessary data.
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
 
-        if (br.LookAhead) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.CopyBackReflection) {
 
-            const auto streamSet = target(e, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[streamSet];
+            const BufferRateData & br = mBufferGraph[e];
             const StreamSetBuffer * const buffer = bn.Buffer;
 
             Value * const capacity = buffer->getCapacity(b);
@@ -526,7 +531,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             }
 
             // And we started writing within the first block ...
-            const auto size = round_up_to(br.LookAhead, b->getBitBlockWidth());
+            const auto size = round_up_to(bn.CopyBackReflection, b->getBitBlockWidth());
             Constant * const overflowSize = b->getSize(size);
             Value * const initialOffset = b->CreateURem(initial, capacity);
             Value * const startedWithinFirstBlock = b->CreateICmpULT(initialOffset, overflowSize);
@@ -543,9 +548,10 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
             // the overflow. Should be enough just to have a "copyback flag" phi node to say it that was the
             // last thing it did to the buffer.
 
-            copy(b, CopyMode::LookAhead, needsCopy, br.Port, buffer, br.LookAhead);
+            copy(b, CopyMode::LookAhead, needsCopy, br.Port, buffer, bn.CopyBackReflection);
         }
     }
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -554,32 +560,18 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
 void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
                             const StreamSetPort outputPort, const StreamSetBuffer * const buffer,
                             const unsigned itemsToCopy) {
-
+#if 0
     auto makeSuffix = [](CopyMode mode) {
         switch (mode) {
             case CopyMode::LookAhead: return "LookAhead";
             case CopyMode::CopyBack: return "CopyBack";
             case CopyMode::LookBehind: return "LookBehind";
-            case CopyMode::LookBehindReflection: return "Reflection";
+            case CopyMode::Delay: return "Delay";
         }
         llvm_unreachable("unknown copy mode!");
     };
 
     const auto prefix = makeBufferName(mKernelId, outputPort) + "_" + makeSuffix(mode);
-
-    BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
-    BasicBlock * const copyLoop = b->CreateBasicBlock(prefix + "Loop", mKernelExit);
-    BasicBlock * recordCopyCycleCount = nullptr;
-    if (EnableCycleCounter) {
-        recordCopyCycleCount = b->CreateBasicBlock(prefix + "RecordCycleCount", mKernelExit);
-    }
-    BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
-
-    b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
-
-    b->SetInsertPoint(copyStart);
-
-    startCycleCounter(b, CycleCounter::BEFORE_COPY);
 
     const auto itemWidth = getItemWidth(buffer->getBaseType());
     assert (is_power_2(itemWidth));
@@ -591,14 +583,23 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     Value * const bytesToCopy = b->getSize(bitsToCopy / 8);
     Value * const bytesPerStream = b->getSize(bitsPerBlock / 8);
 
+    BasicBlock * const copyStart = b->CreateBasicBlock(prefix, mKernelExit);
+    BasicBlock * copyLoop = nullptr;
+    if ((bytesToCopy < bytesPerStream) && !(isa<ConstantInt>(numOfStreams) && cast<ConstantInt>(numOfStreams)->isOne())) {
+        copyLoop = b->CreateBasicBlock(prefix + "Loop", mKernelExit);
+    }
+    BasicBlock * const copyExit = b->CreateBasicBlock(prefix + "Exit", mKernelExit);
+
+    b->CreateUnlikelyCondBr(cond, copyStart, copyExit);
+
+    b->SetInsertPoint(copyStart);
+
+    startCycleCounter(b, CycleCounter::BEFORE_COPY);
+
   //  Value * const bytesToCopy = b->CreateMul(bytesPerStream, numOfStreams);
 
     Value * source =  buffer->getOverflowAddress(b);
     Value * target = nullptr;
-
-    b->CallPrintInt("overflow", source);
-    b->CallPrintInt("bytesToCopy", bytesToCopy);
-    b->CallPrintInt("bytesPerStream", bytesPerStream);
 
     if (buffer->isLinear()) {
         target = buffer->getMallocAddress(b);
@@ -610,7 +611,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
     source = b->CreatePointerCast(source, int8PtrTy);
     target = b->CreatePointerCast(target, int8PtrTy);
 
-    if (mode == CopyMode::LookBehind || mode == CopyMode::LookBehindReflection) {
+    if (mode == CopyMode::LookBehind || mode == CopyMode::Delay) {
         DataLayout DL(b->getModule());
         Type * const intPtrTy = DL.getIntPtrType(source->getType());
         Value * const offset = b->CreateNeg(b->CreateZExt(bytesToCopy, intPtrTy));
@@ -618,50 +619,60 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         target = b->CreateInBoundsGEP(target, offset);
     }
 
-    if (mode == CopyMode::LookAhead || mode == CopyMode::LookBehindReflection) {
+    if (mode == CopyMode::LookAhead || mode == CopyMode::Delay) {
         std::swap(target, source);
     }
-
-    b->CallPrintInt("source", source);
-    b->CallPrintInt("target", target);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + std::to_string(itemsToCopy) + "_bytesToCopy = %" PRIu64, bytesToCopy);
     #endif
 
-    b->CreateBr(copyLoop);
+    if (copyLoop) {
 
-    ConstantInt * const ZERO = b->getSize(0);
+        BasicBlock * recordCopyCycleCount = nullptr;
+        if (EnableCycleCounter) {
+            recordCopyCycleCount = b->CreateBasicBlock(prefix + "RecordCycleCount", copyExit);
+        }
 
-    b->SetInsertPoint(copyLoop);
-    PHINode * const idx = b->CreatePHI(b->getSizeTy(), 2);
-    idx->addIncoming(ZERO, copyStart);
-    Value * const offset = b->CreateMul(idx, bytesPerStream);
-    Value * const sourcePtr = b->CreateGEP(source, offset);
-    Value * const targetPtr = b->CreateGEP(target, offset);
+        b->CreateBr(copyLoop);
 
-    b->CallPrintInt("sourcePtr", sourcePtr);
-    b->CallPrintInt("targetPtr", targetPtr);
+        ConstantInt * const ZERO = b->getSize(0);
 
+        b->SetInsertPoint(copyLoop);
+        PHINode * const idx = b->CreatePHI(b->getSizeTy(), 2);
+        idx->addIncoming(ZERO, copyStart);
+        Value * const offset = b->CreateMul(idx, bytesPerStream);
+        Value * const sourcePtr = b->CreateGEP(source, offset);
+        Value * const targetPtr = b->CreateGEP(target, offset);
 
-    b->CreateMemCpy(targetPtr, sourcePtr, bytesToCopy, bitsToCopy / 8);
+        b->CreateMemCpy(targetPtr, sourcePtr, bytesToCopy, bitsToCopy / 8);
 
-    Value * const nextIdx = b->CreateAdd(idx, b->getSize(1));
-    idx->addIncoming(nextIdx, copyLoop);
-    Value * const done = b->CreateICmpEQ(nextIdx, numOfStreams);
-    BasicBlock * const loopExit = EnableCycleCounter ? recordCopyCycleCount : copyExit;
-    b->CreateCondBr(done, loopExit, copyLoop);
+        Value * const nextIdx = b->CreateAdd(idx, b->getSize(1));
+        idx->addIncoming(nextIdx, copyLoop);
+        Value * const done = b->CreateICmpEQ(nextIdx, numOfStreams);
 
-    if (EnableCycleCounter) {
-        b->SetInsertPoint(recordCopyCycleCount);
-        updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
+        BasicBlock * const loopExit = EnableCycleCounter ? recordCopyCycleCount : copyExit;
+        b->CreateCondBr(done, loopExit, copyLoop);
+
+        if (EnableCycleCounter) {
+            b->SetInsertPoint(recordCopyCycleCount);
+            updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
+            b->CreateBr(copyExit);
+        }
+
+    } else {
+
+        Value * const totalBytesToCopy = b->CreateMul(bytesToCopy, numOfStreams);
+        b->CreateMemCpy(target, source, totalBytesToCopy, bitsToCopy / 8);
+        if (EnableCycleCounter) {
+            updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
+        }
         b->CreateBr(copyExit);
+
     }
 
     b->SetInsertPoint(copyExit);
-
-
-
+#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

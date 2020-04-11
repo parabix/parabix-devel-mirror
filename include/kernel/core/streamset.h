@@ -130,7 +130,7 @@ public:
 
     virtual void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const = 0;
 
-    virtual void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const = 0;
+    virtual void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const = 0;
 
     static llvm::Type * resolveType(BuilderPtr b, llvm::Type * const streamSetType);
 
@@ -194,7 +194,7 @@ public:
 
     void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
 
-    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
     void setBaseAddress(BuilderPtr b, llvm::Value * addr) const override;
 
@@ -270,7 +270,7 @@ public:
 
     void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
 
-    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
     size_t getCapacity() const {
         return mCapacity;
@@ -312,7 +312,7 @@ public:
 
     void prepareLinearBuffer(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, const unsigned lookBehind) const override;
 
-    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required, llvm::Constant * const overflowItems) const override;
+    void reserveCapacity(BuilderPtr b, llvm::Value * produced, llvm::Value * consumed, llvm::Value * required) const override;
 
     size_t getInitialCapacity() const {
         return mInitialCapacity;

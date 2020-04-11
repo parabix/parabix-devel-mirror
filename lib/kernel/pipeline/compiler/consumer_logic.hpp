@@ -139,10 +139,10 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
             // To support the lookbehind attribute, we need to withhold the items from
             // our consumed count and rely on the initial buffer underflow to access any
             // items before the start of the physical buffer.
-            const Binding & input = getBinding(port);
-            if (LLVM_UNLIKELY(input.hasAttribute(AttrId::LookBehind))) {
-                const auto & lookBehind = input.findAttribute(AttrId::LookBehind);
-                ConstantInt * const amount = b->getSize(lookBehind.amount());
+            const auto input = getInput(mKernelId, port);
+            const BufferRateData & br = mBufferGraph[input];
+            if (LLVM_UNLIKELY(br.LookBehind != 0)) {
+                ConstantInt * const amount = b->getSize(br.LookBehind);
                 processed = b->CreateSaturatingSub(processed, amount);
             }
             const auto streamSet = source(e, mConsumerGraph);

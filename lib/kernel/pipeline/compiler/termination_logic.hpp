@@ -233,6 +233,53 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
 
+    if (CheckAssertions) {
+
+        bool hasPrincipal = false;
+        Value * atLeastOneExhausted = nullptr;
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const BufferRateData & br = mBufferGraph[e];
+            if (LLVM_UNLIKELY(br.IsZeroExtended)) continue;
+            Value * const closed = isClosed(b, br.Port);
+            Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+            Value * const processed = mProcessedItemCount(br.Port); assert (processed);
+
+            Value * const fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
+            if (LLVM_UNLIKELY(br.IsPrincipal)) {
+                if (atLeastOneExhausted) {
+                    RecursivelyDeleteTriviallyDeadInstructions(atLeastOneExhausted);
+                }
+                atLeastOneExhausted = fullyConsumed;
+                hasPrincipal = true;
+                break;
+            }
+            if (atLeastOneExhausted) {
+                atLeastOneExhausted = b->CreateOr(atLeastOneExhausted, fullyConsumed);
+            } else {
+                atLeastOneExhausted = fullyConsumed;
+            }
+        }
+
+        if (atLeastOneExhausted) {
+            Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+            Value * const notTerminatedNormally = b->CreateICmpNE(mTerminatedSignalPhi, completed);
+            Value * const expectedTermination = b->CreateOr(notTerminatedNormally, atLeastOneExhausted);
+            SmallVector<char, 256> tmp;
+            raw_svector_ostream out(tmp);
+            out << "Kernel %s in partition %" PRId64 " was terminated before exhausting ";
+            if (hasPrincipal) {
+                out << "its principal input.";
+            } else {
+                out << "at least one of its inputs.";
+            }
+            b->CreateAssert(expectedTermination, out.str(),
+                mCurrentKernelName, b->getSize(mCurrentPartitionId),
+                mKernelName[FirstKernelInPartition]);
+        }
+
+    }
+
+
     // When a partition terminates, we want to inform any kernels that supply information to it that
     // one of their consumers has finished processing data.
     ConstantInt * const ONE = b->getSize(1);
@@ -283,10 +330,10 @@ void PipelineCompiler::verifyPostInvocationTerminationSignal(BuilderRef b) {
         #endif
         mPartitionRootTerminationSignal = b->CreateIsNotNull(mTerminatedAtExitPhi);
     } else {
+        Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
         constexpr auto msg =
             "Kernel %s in partition %" PRId64 " should have been flagged as terminated "
             "after partition root %s was terminated.";
-        Value * const isTerminated = b->CreateIsNotNull(mTerminatedAtExitPhi);
         Value * const valid = b->CreateICmpEQ(mPartitionRootTerminationSignal, isTerminated);
         b->CreateAssert(valid, msg,
             mCurrentKernelName, b->getSize(mCurrentPartitionId),
