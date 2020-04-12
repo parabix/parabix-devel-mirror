@@ -58,7 +58,7 @@ void convert(const string& seperator, const string& file)
         for(int i=0;i<n;i++)// output field values after field titles  
         {
             ofile<<"    \""<<fields[i]<<"\": \""<<record[i]<<"\"";
-            if(i==n-1) ofile<<endl;
+            if(i==n-1)ofile<<endl;
             else ofile<<","<<endl;
         }
         ofile<<"  }";
@@ -81,7 +81,8 @@ map<int,string> getFields(const string& seperator, const string& s)
         left=right+1;//
     }
     //store the final field after the fine "seperator" 
-    fields[n++]=s.substr(left);
+    right=s.find_first_of("\r");
+    fields[n]=s.substr(left,right-left);
     return fields;
 }
 
