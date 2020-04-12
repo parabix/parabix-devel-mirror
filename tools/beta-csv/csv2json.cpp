@@ -48,21 +48,38 @@ void convert(const string& seperator, const string& file)
     ofstream ofile;
     ofile.open(filename.c_str());
     fields=getFields(seperator,line); //fields of header
+    cout<<"["<<endl;
     ofile<<"["<<endl;
     int n= fields.size();
     while(getline(ifile,line))
     {
-        if(!record.empty())ofile<<","<<endl;
+        if(!record.empty())
+        {
+            cout<<","<<endl;
+            ofile<<","<<endl;
+        }
         record=getFields(seperator,line);
         ofile<<"  {"<<endl;
+        cout<<"  {"<<endl;
         for(int i=0;i<n;i++)// output field values after field titles  
         {
+            cout<<"    \""<<fields[i]<<"\": \""<<record[i]<<"\"";
             ofile<<"    \""<<fields[i]<<"\": \""<<record[i]<<"\"";
-            if(i==n-1)ofile<<endl;
-            else ofile<<","<<endl;
+            if(i==n-1)
+            {
+                cout<<endl;
+                ofile<<endl;
+            }
+            else 
+            {
+                cout<<","<<endl;
+                ofile<<","<<endl;
+            }
         }
+        cout<<"  }";
         ofile<<"  }";
     }
+    cout<<endl<<"]";
     ofile<<endl<<"]";
     ifile.close();
     ofile.close();

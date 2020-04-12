@@ -37,7 +37,8 @@ int main(int argc, char* argv[]) {
 
 	while (getline(csvInput, Oneline))
 	{
-#ifdef _unix_ or #ifdef_linux_
+#ifdef _WIN32 //works for windows 32-bit and 64-bit
+#else 
 Oneline = Oneline.replace(Oneline.find("\r"),1,"\0");
 #endif
 		vector<string> fieldArray;

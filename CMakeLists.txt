@@ -356,6 +356,12 @@ endif()
 set(QA_DIR ${PROJECT_SOURCE_DIR}/QA)
 set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
 
+#csv2json
+add_test(
+  NAME csv2jsontest
+  WORKING_DIRECTORY ${QA_DIR}/csv2json
+  COMMAND python ../QA/greptest.py -v -d ${QA_DIR}/csv2jsontest/testcases/testfiles -t ${QA_DIR}/csv2json ${BIN_DIR}/csv2json)
+
 add_test(
   NAME greptest
   WORKING_DIRECTORY ${QA_DIR}
@@ -402,6 +408,10 @@ SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
+# csv2json 
+add_custom_target(csv2jsontest
+    WORKING_DIRECTORY ${QA_DIR}/csv2json/testcases
+    COMMAND python ../QA/greptest.py -v -d ${QA_DIR}/csv2json/testcases/testfiles -t ${QA_DIR}/csv2json/testcases/testcase_group.csv ${BIN_DIR}/csv2json)
 
 add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}
