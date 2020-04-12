@@ -358,10 +358,7 @@ add_test(
   WORKING_DIRECTORY ${QA_DIR}
   COMMAND python greptest.py --random_flag_count=2 --tests_per_grepcase=2 ${BIN_DIR}/icgrep)
 
-add_test(
-  NAME pinyintest
-  WORKING_DIRECTORY ${QA_DIR}
-  COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/pinyingrep.cpp ${BIN_DIR}/icgrep)
+
 
 add_test(
   NAME proptest
@@ -398,6 +395,10 @@ add_test(
     NAME base64_test
     WORKING_DIRECTORY ${QA_DIR}/base64
     COMMAND python base64test.py ${BIN_DIR}/base64)
+add_test(
+  NAME pinyintest
+  WORKING_DIRECTORY ${QA_DIR}/pinyin_test
+  COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/pinyin_test/pinyin_test.xml "${BIN_DIR}/icgrep")
 
 
 SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
@@ -405,8 +406,8 @@ SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
 add_custom_target(pinyintest
-    WORKING_DIRECTORY ${QA_DIR}
-    COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/pinyingrep.cpp "${BIN_DIR}/icgrep")
+    WORKING_DIRECTORY ${QA_DIR}/pinyin_test
+    COMMAND python greptest.py -d ${QA_DIR} -t ${QA_DIR}/pinyin_test/pinyin_test.xml "${BIN_DIR}/icgrep")
 
 add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}
