@@ -4,15 +4,23 @@
 //
 
 #include <iostream>
-#include <string>
+#include <string.h>
 #include <vector>
 #include <fstream>
-using namespace std;
+#include <llvm/Support/CommandLine.h>
 
+using namespace std;
+using namespace llvm;
+
+//cl::opt<std::string> outputFile("o", cl::desc("specify name of output file."), cl::value_desc("filename"));
+//cl::OptionCategory optionsPrompt("Options for Radical Grep");
 void radical_grep(const string regex,const string filename,ifstream&search);
+
 
 int main(int argc, char* argv[])
 {
+    cl::ParseCommandLineOptions(argc, argv);
+
     if(argc==3)     //argv[0]=radicalgrep.exe; argv[1]=regex; argv[2]=filepath
     {
         string regex;
