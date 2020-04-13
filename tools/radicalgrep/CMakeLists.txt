@@ -7,5 +7,6 @@ NAME
     radicalgrep
 SRC
     radicalgrep.cpp
-
+DEPS
+    toolchain
 )
