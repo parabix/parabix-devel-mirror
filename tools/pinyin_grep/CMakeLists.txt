@@ -2,7 +2,7 @@
 
 parabix_add_executable(
 NAME
-	pinyin_grep
+    pinyin_grep
 SRC
-	pinyingrep.cpp
+    pinyingrep.cpp
 )

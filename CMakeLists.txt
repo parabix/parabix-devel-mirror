@@ -356,9 +356,9 @@ set(QA_DIR ${PROJECT_SOURCE_DIR}/QA)
 set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
 
 add_test(
-	NAME pinyin_test
-	WORKING_DIRECTORY ${QA_DIR}/pinyin_test
-	COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyin_test/testfiles -t ${QA_DIR}/pinyin_test/pinyin_test.xml ${BIN_DIR}/pinyin_grep)
+  NAME pinyin_test
+  WORKING_DIRECTORY ${QA_DIR}/pinyin_test
+  COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyin_test/testfiles -t ${QA_DIR}/pinyin_test ${BIN_DIR}/pinyin_grep)
 
 add_test(
   NAME greptest
@@ -406,8 +406,8 @@ SET_PROPERTY(TEST proptest PROPERTY TIMEOUT 1500)
 SET_PROPERTY(TEST abc_test PROPERTY TIMEOUT 100)
 SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 
-add_custom_target(pinyintest
-    WORKING_DIRECTORY ${QA_DIR}/pinyin_test
+add_custom_target (pinyin_test
+    WORKING DIRECTORY ${QA_DIR}/pinyin_test
     COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyin_test/testfiles -t ${QA_DIR}/pinyin_test/pinyin_test.xml ${BIN_DIR}/pinyin_grep)
 
 add_custom_target (greptest

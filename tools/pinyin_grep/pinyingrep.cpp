@@ -2,7 +2,7 @@
 #include<string>
 #include<fstream>
 using namespace std;
-void pingyin_Grep(string& res, ifstream& fin, const string target, const string filename)
+void pinyin_Grep(string& res, ifstream& fin, const string target, const string filename)
 {
     //case T1_pinyin
     if(!filename.compare("T1_pinyin"))
@@ -75,7 +75,7 @@ int main(int argc, char* argv[])
     filename = filename.substr(filename.find_last_of("/")+1);
     if(fin.is_open())
     {
-        pingying_Grep(res,fin,target,filename);
+        pinyin_Grep(res,fin,target,filename);
     }
     
     cout << res;
