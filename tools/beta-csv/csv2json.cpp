@@ -11,27 +11,38 @@
 #include <fstream>
 #include <map>
 #include <queue>
+#include <sys/stat.h>
 using namespace std;
 #define DEFAULT_SEP "," //default seperator
 
 //input a default seperator and a file name
 //function convers a .csv file and creates a .json file.
-void convert(const string&,const string&);
+void convert(const string&,const string&,const string&);
 
 //put every field seperated by "seperator" from string "s" in "fields"map and return map
 map<int,string> getFields(const string&,const string&);
 
 int main(int args, char* argv[])
 {
-    if(args<2)cout<<"please specific input file\n"<<endl;
-    else for(int i=1;i<args;i++)convert(DEFAULT_SEP,string(argv[i]));
-
+    cout<<argv[1]<<endl;
+    if(args<2)
+        cout<<"please specific input file\n"<<endl;
+    else 
+    {
+        string dir="",filename,file=string(argv[1]);
+        int start = file.find_last_of("/")+1;
+        if(start==file.npos)start=0;
+        else dir=file.substr(0,start)+"output/";
+        filename=file.substr(start,file.find(".csv"));
+        mkdir((dir.substr(0,dir.length()-1)).c_str(),0777);
+        for(int i=1;i<args;i++)convert(DEFAULT_SEP,string(argv[i]),dir);
+    }
     //uncomment below to manually type in file name and test the program
     //convert(DEFAULT_SEP,"testcase_group.csv");
     return 0;
 }
 
-void convert(const string& seperator, const string& file)
+void convert(const string& seperator, const string& file, const string& dir)
 {
     ifstream ifile;
     ifile.open(file.c_str());
@@ -43,10 +54,13 @@ void convert(const string& seperator, const string& file)
         cout<<"empty file"<<endl;
         return;
     }
-    string filename = file.substr(0,file.find(".")); //get "file" without extension
+    //string dir="";
+    int start = file.find_last_of("/")+1;
+    if(start==file.npos)start=0;
+    string filename = file.substr(start,file.find(".csv")); //get "file" without extension
     filename += ".json";
     ofstream ofile;
-    ofile.open(filename.c_str());
+    ofile.open(dir+filename.c_str());
     fields=getFields(seperator,line); //fields of header
     cout<<"["<<endl;
     ofile<<"["<<endl;
@@ -79,7 +93,7 @@ void convert(const string& seperator, const string& file)
         cout<<"  }";
         ofile<<"  }";
     }
-    cout<<endl<<"]";
+    cout<<endl<<"]"<<endl;
     ofile<<endl<<"]";
     ifile.close();
     ofile.close();
@@ -89,9 +103,9 @@ void convert(const string& seperator, const string& file)
 map<int,string> getFields(const string& seperator, const string& s)
 {
     map<int,string>fields;
-    int right,left=0,len,n=0;
+    int right,left=0,n=0;
     //continuously find "seperator" index from "left" to the end of "s"
-    while((right=s.find_first_of(seperator,left))<s.length())  
+    while((right=s.find_first_of(seperator,left))!=s.npos)  
     {
         //store field from "left" to right before the "seperator"
         fields[n++]=s.substr(left,right-left);

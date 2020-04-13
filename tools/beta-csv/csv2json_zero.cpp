@@ -1,4 +1,4 @@
-//This csv2json file_zero can pass the examples with no separator and slash in them.
+//This csv2json file_zero can pass the examples with no separators and slash in them.
 //And some field values can be empty but the field names.
 
 
@@ -30,20 +30,20 @@ int main(int argc, char* argv[]) {
 	string Oneline;
 	string str;
 	vector<string> fieldnameArray;
-	vector<string>::iterator it1;
 	int LineCounter = 0;
 	int FieldNumber = 0;
+	int ValueCounter = 0;
 	jsonOutput << "[\n";
 
 	while (getline(csvInput, Oneline))
 	{
-#ifdef _WIN32 //works for windows 32-bit and 64-bit
+#ifdef _WIN32 		//works for windows 32-bit and 64-bit
 #else 
-Oneline = Oneline.replace(Oneline.find("\r"),1,"\0");
+Oneline = Oneline.replace(Oneline.find("\r"), 1, "");
 #endif
 		vector<string> fieldArray;
-		fieldArray.clear();
 		stringstream ss(Oneline);
+		ValueCounter = 0;
 		LineCounter++;
 
 		if (LineCounter >= 3) {
@@ -58,6 +58,7 @@ Oneline = Oneline.replace(Oneline.find("\r"),1,"\0");
 				fieldnameArray.push_back(str);
 			}
 			else {
+				ValueCounter++;
 				fieldArray.push_back(str);
 			}
 		}
@@ -68,7 +69,11 @@ Oneline = Oneline.replace(Oneline.find("\r"),1,"\0");
 					jsonOutput << separater;
 				}
 //change the jsonOutput format if we want to change the .json format.
-				jsonOutput << "\"" << fieldnameArray[FieldCounter] << "\":\"" << fieldArray[FieldCounter] << "\"";
+				jsonOutput << "\"" << fieldnameArray[FieldCounter] << "\":\"";
+				if (ValueCounter > FieldCounter) {
+				jsonOutput << fieldArray[FieldCounter];
+				}
+				jsonOutput<< "\"";
 				FieldCounter++;			
 			}
 
