@@ -1,4 +1,4 @@
-#module: pinyin_test
+#module: pinyin_grep
 
 parabix_add_executable(
 NAME
