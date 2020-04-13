@@ -4,7 +4,7 @@ This is a CSV to JSON conversion tool, which converts Comma Separated Value   to
 
 ### Iteration 1
 
-In the first iteration, the “CSV to JSON” program is supposed to convert a  Comma Separated Value file with no **comma** or **backslash** in it and creates a JavaScript Object Notation file. In the JavaScript Object Notation file, each record occupies one line.
+In the first iteration, the “CSV to JSON” program is supposed to convert a  Comma Separated Value file with no **comma** or **newline** in the values and creates a JavaScript Object Notation file. In the JavaScript Object Notation file, each record occupies one line.
 
 See as the following examples.
 
