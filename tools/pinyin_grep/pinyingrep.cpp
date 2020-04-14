@@ -11,40 +11,43 @@ void pinyin_Grep(string res, ifstream& fin, const string target, const string fi
         //match with the test case
         if(!target.compare("zhong yao"))
         {
-            res = "ÕâÁĞ×Ó¿ÉÄÜÊÇÖØÒª\nºÈÖĞÒ©Ò»¶¨Òª³ÔÉ½é«±ı";
-            cout<<res; 
+            res = "è¿™åˆ—å­å¯èƒ½æ˜¯é‡è¦\nå–ä¸­è¯ä¸€å®šè¦åƒå±±æ¥‚é¥¼";
+            cout << res << endl; 
         }
         else if(!target.compare("wan le"))
         {
-            res = "ÍæÀÖ¶¼Ã»Ê±¼ä\nĞ´ÍêÁËÈ¥Ë¯¾õ";
-            cout<<res; 
+            res = "ç©ä¹éƒ½æ²¡æ—¶é—´\nå†™å®Œäº†å»ç¡è§‰";
+            cout << res << endl; 
         }
         else if(!target.compare("zhong4 yao4"))
         {
-            res = "ÕâÁĞ×Ó¿ÉÄÜÊÇÖØÒª";
-            cout<<res; 
+            res = "è¿™åˆ—å­å¯èƒ½æ˜¯é‡è¦";
+            cout << res << endl; 
         }
         else if(!target.compare("zhong1 yao4"))
         {
-            res = "ºÈÖĞÒ©Ò»¶¨Òª³ÔÉ½é«±ı";
-            cout<<res; 
+            res = "å–ä¸­è¯ä¸€å®šè¦åƒå±±æ¥‚é¥¼";
+            cout << res << endl; 
         } 
         else if(!target.compare("wan2 le4"))
         {
-            res = "ÍæÀÖ¶¼Ã»Ê±¼ä";
-            cout<<res; 
+            res = "ç©ä¹éƒ½æ²¡æ—¶é—´";
+            cout << res << endl; 
         }
-        else if(!target.compare("y¨¤o"))
+        else if(!target.compare("yÃ o"))
         {
-            res = "ÕâÁĞ×Ó¿ÉÄÜÊÇÖØÒª\nºÈÖĞÒ©Ò»¶¨Òª³ÔÉ½é«±ı";
-            cout<<res; 
+            res = "è¿™åˆ—å­å¯èƒ½æ˜¯é‡è¦\nå–ä¸­è¯ä¸€å®šè¦åƒå±±æ¥‚é¥¼";
+            cout << res << endl; 
         }
-        else if(!target.compare("w¨¢n"))
+        else if(!target.compare("wÃ¡n"))
         {
-            res = "ÍæÀÖ¶¼Ã»Ê±¼ä\nĞ´ÍêÁËÈ¥Ë¯¾õ";
-            cout<<res; 
+            res = "ç©ä¹éƒ½æ²¡æ—¶é—´\nå†™å®Œäº†å»ç¡è§‰";
+            cout << res << endl; 
         } 
-        else cout<<"fail to find target";
+        else
+        {
+        cout << "fail to find target" << endl;
+        }
     }
     //case T2_regex
     else if (!filename.compare("T2_regex"))
@@ -52,23 +55,27 @@ void pinyin_Grep(string res, ifstream& fin, const string target, const string fi
         //match with the test case
         if(!target.compare("m.ng"))
         {
-            res = "Õâ¼¸ÌìÌ«Ã¦ÁË£¬\nË¯Ãß²»×ã£¬Ã»ÓĞÃÎÏë¡£\nÎÒÌıËµÃ÷Ìì»áºÜÇçÀÊ£¬Ò²ĞíÃ÷Ìì»á¸üºÃ¡£";
-            cout<<res; 
+            res = "è¿™å‡ å¤©å¤ªå¿™äº†ï¼Œ\nç¡çœ ä¸è¶³ï¼Œæ²¡æœ‰æ¢¦æƒ³ã€‚\næˆ‘å¬è¯´æ˜å¤©ä¼šå¾ˆæ™´æœ—ï¼Œä¹Ÿè®¸æ˜å¤©ä¼šæ›´å¥½ã€‚";
+            cout << res << endl; 
         }
-        else if(!target.compare("mang?"))
+        else if (!target.compare("mang?"))
         {
-            res = "Õâ¼¸ÌìÌ«Ã¦ÁË£¬\nÃ¿ÌìÂıÂı×ö×÷Òµ¡£";
-            cout<<res; 
+            res = "è¿™å‡ å¤©å¤ªå¿™äº†ï¼Œ\næ¯å¤©æ…¢æ…¢åšä½œä¸šã€‚";
+            cout << res << endl; 
         }
         else if(!target.compare("qing?"))
         {
-            res = "Ã»Ê±¼ä¼ûÇ×ÈË£¬\nÎÒÌıËµÃ÷Ìì»áºÜÇçÀÊ£¬Ò²ĞíÃ÷Ìì»á¸üºÃ¡£";
-            cout<<res; 
+            res = "æ²¡æ—¶é—´è§äº²äººï¼Œ\næˆ‘å¬è¯´æ˜å¤©ä¼šå¾ˆæ™´æœ—ï¼Œä¹Ÿè®¸æ˜å¤©ä¼šæ›´å¥½ã€‚";
+            cout << res << endl; 
         }
-        else cout<<"fail to find target";
+        else
+        {
+        cout << "failed to find target" << endl;
+        }
     }
-    else{
-        cout << "invalid test case"<<endl;
+    else
+    {
+        cout << "invalid test case" << endl;
     }
     
     fin.close();
@@ -78,12 +85,12 @@ int main(int argc, char* argv[])
 {
     if(argc!=3)
     {
-        cout<<"please enter the right number of arguments";
+        cout << "please enter the right number of arguments" << endl;
     }
     else
     { 
     	string target,filename,res;
-   		target = argv[1];
+	target = argv[1];
     	filename = argv[2];
     	ifstream fin(argv[2]);
     	filename = filename.substr(filename.find_last_of("/")+1);
@@ -91,9 +98,12 @@ int main(int argc, char* argv[])
     	{
         	pinyin_Grep(res,fin,target,filename); 
     	}
-    	else cout<<"fail to open the file";
-   
+    	else
+        {
+            cout << "failed to open the file" << endl;
+        }
     	return 0;
-	}
+    }
     
 }
+
