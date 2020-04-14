@@ -1,4 +1,4 @@
-<pinyin_test>
+<greptest>
 <datafile id = "T1_pinyin">
 这列子可能是重要
 喝中药一定要吃山楂饼
@@ -29,3 +29,4 @@
 <grepcase regexp = "mang?" datafile = "T2_regex" greplines = "2 3"/>
 <grepcase regexp = "qing?" datafile = "T2_regex" greplines = "4 6"/>
 
+</greptest>
