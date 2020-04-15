@@ -119,7 +119,7 @@ bool Kernel::canSetTerminateSignal() const {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief instantiateKernelCompiler
  ** ------------------------------------------------------------------------------------------------------------- */
-std::unique_ptr<KernelCompiler> Kernel::instantiateKernelCompiler(BuilderRef /* b */) const noexcept {
+std::unique_ptr<KernelCompiler> Kernel::instantiateKernelCompiler(BuilderRef /* b */) const {
     return make_unique<KernelCompiler>(const_cast<Kernel *>(this));
 }
 

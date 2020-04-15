@@ -762,6 +762,8 @@ void PipelineAnalysis::computeDataFlowRates() {
         Z3_solver_assert(ctx, solver, Z3_mk_eq(ctx, A, B));
     }
 
+   // errs() << "DATAFLOW Z3\n";
+
     if (LLVM_UNLIKELY(Z3_solver_check(ctx, solver) == Z3_L_FALSE)) {
         report_fatal_error("Z3 failed to find a solution to the core dataflow graph");
     }
@@ -813,6 +815,8 @@ void PipelineAnalysis::computeDataFlowRates() {
             const auto & A = assumptions[bound];
 
             if (LLVM_UNLIKELY(A.empty())) continue;
+
+           // errs() << "DATAFLOW Z3 " << bound << "\n";
 
             Z3_solver_push(ctx, solver);
 
@@ -887,6 +891,7 @@ void PipelineAnalysis::computeDataFlowRates() {
         }
     }
 
+
     // Then write them out
     MinimumNumOfStrides.resize(PipelineOutput + 1);
     MaximumNumOfStrides.resize(PipelineOutput + 1);
@@ -922,6 +927,39 @@ void PipelineAnalysis::computeDataFlowRates() {
     #endif
 
 }
+
+///** ------------------------------------------------------------------------------------------------------------- *
+// * @brief computeBufferSizes
+// ** ------------------------------------------------------------------------------------------------------------- */
+//void PipelineAnalysis::computeBufferSizes() {
+
+//    const auto cfg = Z3_mk_config();
+//    Z3_set_param_value(cfg, "model", "true");
+//    Z3_set_param_value(cfg, "proof", "false");
+//    const auto ctx = Z3_mk_context(cfg);
+//    Z3_del_config(cfg);
+//    const auto solver = Z3_mk_solver(ctx);
+//    Z3_solver_inc_ref(ctx, solver);
+
+//    Z3_mk_int_sort(ctx);
+
+//    const auto varType = Z3_mk_real_sort(ctx);
+
+//    auto constant = [&](const Rational value) {
+//        return Z3_mk_real(ctx, value.numerator(), value.denominator());
+//    };
+
+//    const auto ONE = constant(1);
+
+//    auto multiply =[&](Z3_ast X, Z3_ast Y) {
+//        Z3_ast args[2] = { X, Y };
+//        return Z3_mk_mul(ctx, 2, args);
+//    };
+
+
+
+
+//}
 
 #endif
 

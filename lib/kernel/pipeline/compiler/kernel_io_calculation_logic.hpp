@@ -93,8 +93,7 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
     const auto & max = MaximumNumOfStrides[mKernelId];
     if (mIsPartitionRoot) {
-        assert (max.denominator() == 1);
-        mMaximumNumOfStrides = b->getSize(max.numerator());
+        mMaximumNumOfStrides = b->getSize(ceiling(max));
     } else {
         const auto factor = (max / MaxPartitionStrideRate);
         assert (mNumOfPartitionStrides);
@@ -158,8 +157,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
             getAccessibleInputItems(b, br.Port);
         }
     }
-
-    assert (mCheckIO || CheckAssertions);
 
     Value * numOfOutputStrides = nullptr;
     Value * numOfActualInputStrides = numOfLinearStrides;
@@ -605,14 +602,15 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
 
         bool firstTest = true;
 
-        Value * required = nullptr;
-
         graph_traits<BufferGraph>::in_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = in_edges(mKernelId, mBufferGraph);
 
         ConstantInt * const i1_TRUE = b->getTrue();
 
-        Value * enoughInput = i1_TRUE;
+        Value * enoughInput = b->CreateNot(mKernelIsFinal);
+
+        ConstantInt * const amount = b->getSize(1); // ceiling(PartitionStrideFactor));
+        Value * const nextStrideIndex = b->CreateAdd(mNumOfLinearStrides, amount);
 
         while (ei != ei_end) {
             const auto e = *ei++;
@@ -624,25 +622,34 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
             const BufferNode & bn = mBufferGraph[streamSet];
             if (LLVM_UNLIKELY(bn.NonLocal)) {
                 Value * const processed =  mProcessedItemCount(br.Port);
-                Value * const avail = getLocallyAvailableItemCount(b, br.Port);
+                Value * avail = getLocallyAvailableItemCount(b, br.Port);
+
+                Value * const closed = isClosed(b, br.Port);
+
+                if (br.Add) {
+                    Constant * const ZERO = b->getSize(0);
+                    Constant * const ADD = b->getSize(br.Add);
+                    Value * const added = b->CreateSelect(closed, ADD, ZERO);
+                    avail = b->CreateAdd(avail, added);
+                }
+
+
+
 
                 Value * const remaining = b->CreateSub(avail, processed);
 
+//                const auto prefix = makeBufferName(mKernelId, br.Port) + "_next";
+//                b->CallPrintInt(prefix + "_remaining", remaining);
+
                 const Binding & binding = br.Binding;
 
-                if (required == nullptr) {
-                    ConstantInt * const amount = b->getSize(ceiling(PartitionStrideFactor));
-                    required = b->CreateAdd(mNumOfLinearStrides, amount);
-                }
+                Value * const required = calculateNumOfLinearItems(b, br.Port, nextStrideIndex);
 
-                Value * const strideLength = calculateNumOfLinearItems(b, br.Port, required);
+//                b->CallPrintInt(prefix + "_required", required);
 
-                Value * hasEnough = b->CreateICmpUGE(remaining, strideLength);
+                Value * hasEnough = b->CreateOr(closed, b->CreateICmpUGE(remaining, required));
 
-                // TODO: should locally avail incorporate the add attribute?
-                if (br.Add) {
-                    hasEnough = b->CreateAnd(hasEnough, b->CreateICmpULE(processed, avail));
-                }
+//                b->CallPrintInt(prefix + "_hasEnough", hasEnough);
 
                 // If the next rate we check is a PartialSum, always check it; otherwise we expect that
                 // if this test passes the first check, it will pass the remaining ones so don't bother
@@ -653,9 +660,13 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
                     if (LLVM_UNLIKELY(next.IsZeroExtended)) {
                         continue;
                     }
-                    const Binding & binding = next.Binding;
-                    const ProcessingRate & rate = binding.getRate();
-                    useBranch = rate.isPartialSum();
+                    const auto streamSet = source(e, mBufferGraph);
+                    const BufferNode & bn = mBufferGraph[streamSet];
+                    if (LLVM_UNLIKELY(bn.NonLocal)) {
+                        const Binding & binding = next.Binding;
+                        const ProcessingRate & rate = binding.getRate();
+                        useBranch = rate.isPartialSum();
+                    }
                     break;
                 }
 
@@ -665,18 +676,16 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
                     enoughInputPhi->addIncoming(b->getFalse(), exitBlock);
 
                     if (firstTest) {
+                        enoughInput = b->CreateAnd(enoughInput, hasEnough);
 
-                        Value * const hasMore = b->CreateOr(hasEnough, mKernelIsPenultimate);
-                        Value * const supportsAnotherStride = b->CreateAnd(hasMore, notAtSegmentLimit);
-
-                        // Value * supportsAnotherStride = b->CreateSelect(hasEnough, notAtSegmentLimit, mKernelIsPenultimate);
-
+                        // Value * const hasMore = hasEnough; // b->CreateOr(hasEnough, mKernelIsPenultimate);
+                        Value * const supportsAnotherStride = b->CreateAnd(enoughInput, notAtSegmentLimit);
                         b->CreateUnlikelyCondBr(supportsAnotherStride, nextTest, lastTestExit);
                         firstTest = false;
                     } else {
                         assert (enoughInput);
                         enoughInput = b->CreateAnd(enoughInput, hasEnough);
-                        Value * const supportsAnotherStride = b->CreateOr(enoughInput, mKernelIsPenultimate);
+                        Value * const supportsAnotherStride = enoughInput; // b->CreateOr(enoughInput, mKernelIsPenultimate);
 
                         b->CreateLikelyCondBr(supportsAnotherStride, nextTest, lastTestExit);
                     }
@@ -697,6 +706,9 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
         } else {
             hasMore = enoughInputPhi;
         }
+
+//        b->CallPrintInt("hasMore", hasMore);
+
 //        if (mKernelIsPenultimate) {
 //            hasMore = b->CreateOr(mKernelIsPenultimate, hasMore);
 //        }
@@ -1216,18 +1228,16 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
         }
     }
 
-
-
+    partialPartitionStrides = nullptr;
     if (LLVM_LIKELY(mIsPartitionRoot)) {
         const auto scale = MaxPartitionStrideRate / MaximumNumOfStrides[mKernelId];
-        if (minFixedRateFactor && scale.numerator() == 1 && scale.denominator() == 1) {
+        if (minFixedRateFactor == nullptr || (scale.numerator() == 1 && scale.denominator() == 1)) {
             partialPartitionStrides = b->getSize(0);
         } else {
             const auto factor = scale / (mFixedRateLCM * mKernel->getStride());
             partialPartitionStrides = b->CreateMulRate(minFixedRateFactor, factor);
         }
-    } else {
-        partialPartitionStrides = nullptr;
+        assert (partialPartitionStrides);
     }
 
     Constant * const ONE = b->getSize(1);

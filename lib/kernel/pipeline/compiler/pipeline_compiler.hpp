@@ -524,7 +524,7 @@ protected:
     const RelationshipGraph                     mScalarGraph;
     const InputTruncationGraph                  mInputTruncationGraph;
     const BufferGraph                           mBufferGraph;
-    const PartitioningGraph                     mPartitioningGraph;
+//    const PartitioningGraph                     mPartitioningGraph;
     const std::vector<unsigned>                 mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
     const ConsumerGraph                         mConsumerGraph;
@@ -770,7 +770,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mScalarGraph(std::move(P.mScalarGraph))
 , mInputTruncationGraph(std::move(P.mInputTruncationGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
-, mPartitioningGraph(std::move(P.mPartitioningGraph))
+// , mPartitioningGraph(std::move(P.mPartitioningGraph))
 , mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
 , mPartitionJumpTree(std::move(P.mPartitionJumpTree))
 , mConsumerGraph(std::move(P.mConsumerGraph))

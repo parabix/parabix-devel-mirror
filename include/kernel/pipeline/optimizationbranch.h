@@ -35,7 +35,7 @@ public:
         return mCondition;
     }
 
-    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const final;
 
 protected:
 

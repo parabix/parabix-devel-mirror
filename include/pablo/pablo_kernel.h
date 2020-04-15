@@ -174,7 +174,7 @@ protected:
     // finalizing the KernelStateType.
     void addInternalProperties(BuilderRef b) final;
 
-    std::unique_ptr<kernel::KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept override;
+    std::unique_ptr<kernel::KernelCompiler> instantiateKernelCompiler(BuilderRef b) const override;
 
 private:
 

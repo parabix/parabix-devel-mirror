@@ -102,6 +102,35 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
     mInternalBuffers.resize(LastStreamSet - FirstStreamSet + 1);
 
+    std::vector<unsigned> partitionRoot(LastKernel + 1U);
+
+    std::vector<unsigned> minStride(LastKernel + 1U);
+
+    unsigned partitionRootId = 0U;
+    unsigned currentPartitionId = -1U;
+
+    std::vector<unsigned> minFactor(PipelineOutput + 1U);
+    std::vector<unsigned> maxFactor(PipelineOutput + 1U);
+
+
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        const auto pId = KernelPartitionId[kernel];
+        if (pId != currentPartitionId) {
+            currentPartitionId = pId;
+            partitionRootId = kernel;
+            minFactor[kernel] = floor(MinimumNumOfStrides[kernel]);
+            maxFactor[kernel] = ceiling(MaximumNumOfStrides[kernel]);
+        } else {
+            const auto m = MaximumNumOfStrides[kernel] / MaximumNumOfStrides[partitionRootId];
+            minFactor[kernel] = floor(m * minFactor[partitionRootId]);
+            maxFactor[kernel] = ceiling(m * maxFactor[partitionRootId]);
+        }
+        partitionRoot[kernel] = partitionRootId;
+    }
+    minFactor[PipelineOutput] = 1;
+    maxFactor[PipelineOutput] = 1;
+
+
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
@@ -118,6 +147,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             nonLocal = true;
         }
         const auto producerPartitionId = KernelPartitionId[producer];
+        const auto root = partitionRoot[producer];
+
         for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
             const auto consumer = target(ce, mBufferGraph);
             if (producerPartitionId != KernelPartitionId[consumer]) {
@@ -134,8 +165,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             const auto bufferType = internalOrExternal(streamSet);
 
-
-
             bn.Type = bufferType;
 
             // If this buffer is externally used, we cannot analyze the dataflow rate of
@@ -150,9 +179,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             auto maxLookAhead = producerRate.LookAhead;
             auto maxLookBehind = producerRate.LookBehind;
 
-
-//            const auto pMin = producerRate.Minimum * MinimumNumOfStrides[producer];
-            const auto pMax = producerRate.Maximum * MaximumNumOfStrides[producer];
+            auto bMin = floor(producerRate.Minimum) * minFactor[producer];
+            auto bMax = ceiling(producerRate.Maximum) * maxFactor[producer];
 
             assert (producerRate.Maximum >= producerRate.Minimum);
 
@@ -160,21 +188,17 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 nonLocal = true;
             }
 
-            // TODO: dataflow analysis must take lookahead/delay into account to permit
-            // this optimization.
+            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
 
-            Rational consumeMin(std::numeric_limits<unsigned>::max());
-            Rational consumeMax(std::numeric_limits<unsigned>::min());
-
-            for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-
-                const BufferRateData & consumerRate = mBufferGraph[ce];
+                const BufferRateData & consumerRate = mBufferGraph[e];
                 const Binding & input = consumerRate.Binding;
 
-                const auto consumer = target(ce, mBufferGraph);
+                const auto consumer = target(e, mBufferGraph);
 
-                const auto cMin = consumerRate.Minimum * MinimumNumOfStrides[consumer];
-                const auto cMax = consumerRate.Maximum * MaximumNumOfStrides[consumer];
+                const auto cMin = floor(consumerRate.Minimum) * minFactor[consumer];
+                const auto cMax = ceiling(consumerRate.Maximum) * maxFactor[consumer];
+
+                assert (cMax >= cMin);
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
@@ -185,10 +209,8 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 }
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
 
-                consumeMin = std::min(consumeMin, cMin);
-                consumeMax = std::max(consumeMax, cMax);
-
-                assert (consumeMax >= consumeMin);
+                bMin = std::min(bMin, cMin);
+                bMax = std::max(bMax, cMax);
 
                 const Binding & inputBinding = consumerRate.Binding;
 //                // Get output overflow size
@@ -206,6 +228,11 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             bn.LookAhead = maxLookAhead;
             bn.LookBehind = maxLookBehind;
 
+
+
+
+
+
 //            reqOverflow = std::max(bn.MaxAdd, maxLookAhead);
 //            if (bn.MaxAdd) {
 //                reqOverflow = std::max(reqOverflow, bn.MaxAdd);
@@ -217,11 +244,11 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // calculate overflow (copyback) and fascimile (copyforward) space
             const auto overflowSize = round_up_to(std::max(bn.MaxAdd, bn.LookAhead), blockWidth) / blockWidth;
             const auto underflowSize = round_up_to(std::max(bn.LookBehind, maxDelay), blockWidth) / blockWidth;
-            const auto spillover = std::max((consumeMax * Rational{2}) - consumeMin, pMax);
-            const auto reqSize0 = round_up_to(ceiling(spillover), blockWidth) / blockWidth;
-            const auto reqSize1 = 2 * (overflowSize + underflowSize);
-            const auto requiredSize = std::max(reqSize0, reqSize1);
+            const auto required = (bMax * 2) - bMin;
 
+            const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
+            const auto reqSize2 = 2 * (overflowSize + underflowSize);
+            auto requiredSize = std::max(reqSize1, reqSize2);
 
             // if this buffer is "stateful", we cannot make it *thread* local
             if (maxLookBehind || maxDelay || bn.CopyBack || maxLookAhead) {

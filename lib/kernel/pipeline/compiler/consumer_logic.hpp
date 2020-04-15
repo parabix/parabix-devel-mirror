@@ -242,14 +242,25 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::readExternalConsumerItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const auto buffer = source(e, mBufferGraph);
-        const BufferNode & bn = mBufferGraph[buffer];
+        const auto streamSet = source(e, mBufferGraph);
+
+
+
+        const BufferNode & bn = mBufferGraph[streamSet];
         if (LLVM_LIKELY(bn.isOwned())) {
-            const auto p = in_edge(buffer, mBufferGraph);
-            const BufferRateData & rd = mBufferGraph[p];
-            Value * const consumed = getConsumedOutputItems(rd.Port.Number); assert (consumed);
+            const BufferRateData & externalPort = mBufferGraph[e];
+            Value * const consumed = getConsumedOutputItems(externalPort.Port.Number); assert (consumed);
+
+            const auto p = in_edge(streamSet, mBufferGraph);
             const auto producer = source(p, mBufferGraph);
-            const auto name = makeBufferName(producer, rd.Port);
+
+            const auto numOfIndependentConsumers = out_degree(streamSet, mConsumerGraph);
+            if (LLVM_UNLIKELY((numOfIndependentConsumers == 0) && (producer != PipelineInput))) {
+                continue;
+            }
+
+            const BufferRateData & internalPort = mBufferGraph[p];
+            const auto name = makeBufferName(producer, internalPort.Port);
             b->setScalarField(name + CONSUMED_ITEM_COUNT_SUFFIX, consumed);
         }
     }

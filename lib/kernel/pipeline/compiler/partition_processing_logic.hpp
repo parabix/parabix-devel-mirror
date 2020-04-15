@@ -96,14 +96,11 @@ void PipelineCompiler::identifyPartitionKernelRange() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::determinePartitionStrideRates() {
     const auto & max = MaximumNumOfStrides[FirstKernelInPartition];
-    Rational minMaxNumOfStrides = max;
     MaxPartitionStrideRate = max;
     for (auto i = FirstKernelInPartition + 1U; i <= LastKernelInPartition; ++i) {
         const auto & max = MaximumNumOfStrides[i];
-        minMaxNumOfStrides = std::min(minMaxNumOfStrides, max);
         MaxPartitionStrideRate = std::max(MaxPartitionStrideRate, max);
     }
-    PartitionStrideFactor = max / minMaxNumOfStrides;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

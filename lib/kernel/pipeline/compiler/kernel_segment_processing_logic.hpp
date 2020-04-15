@@ -715,7 +715,9 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
             mExhaustedInputAtJumpPhi->addIncoming(mExhaustedPipelineInputPhi, exitBlock);
         }
         if (mMayLoopToEntry) {
-            mPartialPartitionStridesAtLoopExitPhi->addIncoming(ZERO, exitBlock);
+            if (mIsPartitionRoot) {
+                mPartialPartitionStridesAtLoopExitPhi->addIncoming(ZERO, exitBlock);
+            }
             b->CreateLikelyCondBr(mExecutedAtLeastOnceAtLoopEntryPhi, mKernelLoopExit, mKernelJumpToNextUsefulPartition);
         } else {
             b->CreateBr(mKernelJumpToNextUsefulPartition);

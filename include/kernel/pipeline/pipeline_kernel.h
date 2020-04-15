@@ -90,7 +90,7 @@ public:
 
     void addKernelDeclarations(BuilderRef b) final;
 
-    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept final;
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const final;
 
     virtual ~PipelineKernel();
 

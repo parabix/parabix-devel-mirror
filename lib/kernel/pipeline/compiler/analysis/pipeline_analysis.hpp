@@ -46,6 +46,7 @@ public:
         // Finish annotating the buffer graph       
         P.identifyLinearBuffers();
         P.identifyZeroExtendedStreamSets();
+        P.identifyLocalPortIds();
 
         // Make the remaining graphs
         P.makeConsumerGraph();        
@@ -55,7 +56,6 @@ public:
 
         // Finish the buffer graph
         P.addStreamSetsToBufferGraph(b);
-        P.identifyLocalPortIds();
 
         P.makeInputTruncationGraph();
 

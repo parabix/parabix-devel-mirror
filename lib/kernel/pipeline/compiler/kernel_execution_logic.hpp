@@ -123,8 +123,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelId);
     #endif
 
-    const auto greedy = mTarget->isGreedy();
-
+    const auto greedy = mKernel->isGreedy();
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);

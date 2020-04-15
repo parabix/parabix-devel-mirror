@@ -105,9 +105,10 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         }
     };
 
-    PartialSumMap P;
+    PartialSumMap PI;
+    PartialSumMap PO;
 
-    auto checkForPartialSumEntry = [&](const Vertex streamSet) -> Vertex {
+    auto checkForPartialSumEntry = [&](const Vertex streamSet, PartialSumMap & P) -> Vertex {
         const auto f = P.find(streamSet);
         if (LLVM_LIKELY(f == P.end())) {
             const auto partialSum = add_vertex(H);
@@ -180,7 +181,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                             break;
                         case RateId::PartialSum:
                             BEGIN_SCOPED_REGION
-                            const auto partialSum = checkForPartialSumEntry(buffer);
+                            const auto partialSum = checkForPartialSumEntry(buffer, PI);
                             add_edge(buffer, partialSum, 0, H);
                             buffer = partialSum;
                             END_SCOPED_REGION
@@ -290,7 +291,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                             break;
                         case RateId::PartialSum:
                             BEGIN_SCOPED_REGION
-                            const auto partialSum = checkForPartialSumEntry(buffer);
+                            const auto partialSum = checkForPartialSumEntry(buffer, PO);
                             add_edge(partialSum, buffer, 0, H);
                             END_SCOPED_REGION
                             break;
@@ -378,6 +379,8 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         out.flush();
     };
 
+   // printGraph(H, errs(), "G");
+
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));
     assert (nextKernel == kernels);
@@ -414,9 +417,10 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
     unsigned nextPartitionId = 1;
 
+    #if 1
+
     KernelPartitionIds partitionIds;
     partitionIds.reserve(kernels);
-
 
 
     // Now that we've tainted the kernels with any influencing rates,
@@ -528,6 +532,8 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         }
     }
 
+    #endif
+
     mPartitionIds.reserve(kernels);
     partitionSets.clear();
     nextPartitionId = 0;
@@ -546,9 +552,9 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         }
         mPartitionIds.emplace(mappedKernel[u], id);
     }
-    assert (partitionIds.size() == kernels);
-
+    assert (mPartitionIds.size() == kernels);
     PartitionCount = nextPartitionId;
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -559,6 +565,8 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     using ConstraintGraph = adjacency_list<hash_setS, vecS, bidirectionalS, BitVector, no_property>;
     using BitSet = BitVector;
     using EdgeIterator = graph_traits<ConstraintGraph>::edge_iterator;
+
+
 
     std::vector<unsigned> kernels;
     for (const auto u : orderingOfG) {
@@ -578,6 +586,25 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     }
 
     const auto numOfKernels = kernels.size();
+
+    // Rewrite the ordering w.r.t. the chosen partitions.
+
+//    BEGIN_SCOPED_REGION
+//    std::vector<unsigned> temp;
+//    temp.reserve(numOfKernels);
+//    for (unsigned selectedPartitionId = 0; selectedPartitionId < PartitionCount; ++selectedPartitionId) {
+//        for (auto u : kernels) {
+//            const auto f = mPartitionIds.find(u);
+//            assert (f != mPartitionIds.end());
+//            const auto id = f->second;
+//            if (id == selectedPartitionId) {
+//                temp.push_back(u);
+//            }
+//        }
+//    }
+//    kernels.swap(temp);
+//    END_SCOPED_REGION
+
     flat_map<unsigned, unsigned> mapping;
     mapping.reserve(numOfKernels);
 
@@ -587,29 +614,49 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     };
 
     flat_map<unsigned, unsigned> reverse_mapping;
+    reverse_mapping.reserve(numOfKernels);
 
     auto to_original =[&](const unsigned u) {
         const auto f = reverse_mapping.find(u); assert (f != reverse_mapping.end());
         return f->second;
     };
 
-    BEGIN_SCOPED_REGION
-
     unsigned i = 0;
     for (const auto u : kernels) {
-        mapping.emplace(u, i++);
+        mapping.emplace(u, i);
+        reverse_mapping.emplace(i, u);
+        ++i;
     }
 
-    assert (i == numOfKernels);
+    bool canRemake = true;
 
-    // pregenerate the reverse mapping for when we translate the
-    // constraint graph back to the original graph G.
-    reverse_mapping.reserve(numOfKernels);
-    for (auto a : mapping) {
-        reverse_mapping.emplace(a.second, a.first);
-    }
+    auto print_constraint_graph = [&](ConstraintGraph & G, raw_ostream & out, const StringRef name = "G") {
 
-    END_SCOPED_REGION
+        out << "digraph \"" << name << "\" {\n";
+        for (auto v : make_iterator_range(vertices(G))) {
+            out << "v" << v << " [label=\"" << v << " : {";
+            const BitSet & V = G[v];
+            bool comma = false;
+            for (auto i : V.set_bits()) {
+                if (comma) out << ',';
+                out << i;
+                comma = true;
+            }
+            out << "}\"];\n";
+        }
+        for (auto e : make_iterator_range(edges(G))) {
+            const auto s = source(e, G);
+            const auto t = target(e, G);
+            out << "v" << s << " -> v" << t << ";\n";
+        }
+
+        out << "}\n\n";
+        out.flush();
+
+    };
+
+
+remake_constraint_graphs:
 
     ConstraintGraph P(PartitionCount);
     ConstraintGraph C(numOfKernels);
@@ -617,6 +664,10 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     flat_set<unsigned> inputs;
 
     for (const auto kernel : kernels) {
+        const auto partitionId = get(kernel, mPartitionIds);
+        assert (partitionId != -1U);
+
+
         const RelationshipNode & K = mRelationships[kernel];
         assert (K.Type == RelationshipNode::IsKernel);
         assert (inputs.empty());
@@ -651,18 +702,11 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
         }
 
         // then write them and any summarized partition constraints
-        const auto f = mPartitionIds.find(kernel);
-        assert (f != mPartitionIds.end());
-        const auto partitionId = f->second;
-
-        assert (partitionId != -1U);
         const auto u = from_original(kernel);
         for (const auto input : inputs) {
             const auto v = from_original(input);
             add_edge(v, u, C);
-            const auto f = mPartitionIds.find(input);
-            assert (f != mPartitionIds.end());
-            const auto producerPartitionId = f->second;
+            const auto producerPartitionId = get(input, mPartitionIds);
             if (partitionId != producerPartitionId && producerPartitionId != -1U) {
                 add_edge(producerPartitionId, partitionId, P);
             }
@@ -675,12 +719,35 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     // Take the transitive reduction of the constraint graphs to reduce the number of
     // constraints we'll add to the formula.
 
-    ReverseTopologicalOrdering orderingOfP;
-    orderingOfP.reserve(PartitionCount);
-    ReverseTopologicalOrdering orderingOfC;
+    std::vector<unsigned> orderingOfP;
+    orderingOfP.reserve(num_vertices(P));
+    lexical_ordering(P, orderingOfP);
+
+    // If the original ordering of the program wasn't a topological ordering, the
+    // partition ids should be renumbered.
+
+    for (unsigned i = 0; i < PartitionCount; ++i) {
+        if (i != orderingOfP[i]) {
+            for (auto & i : mPartitionIds) {
+                i.second = orderingOfP[i.second];
+            }
+            assert (canRemake);
+            canRemake = false;
+    //        errs() << "REMAKE CONSTRAINT GRAPH\n";
+
+    //        print_constraint_graph(P, errs(), "P");
+
+            goto remake_constraint_graphs;
+
+        }
+    }
+
+    std::vector<unsigned> orderingOfC;
     orderingOfC.reserve(numOfKernels);
-    topological_sort(P, std::back_inserter(orderingOfP));
-    topological_sort(C, std::back_inserter(orderingOfC));
+    lexical_ordering(C, orderingOfC);
+
+    std::reverse(orderingOfP.begin(), orderingOfP.end());
+    std::reverse(orderingOfC.begin(), orderingOfC.end());
 
     transitive_closure_dag(orderingOfP, P);
     transitive_closure_dag(orderingOfC, C);
@@ -694,41 +761,14 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
 
     std::vector<unsigned> mappedPartitionId(numOfKernels);
 
-
-
-    auto print_constraint_graph = [&](ConstraintGraph & G, raw_ostream & out, const StringRef name = "G") {
-
-        out << "digraph \"" << name << "\" {\n";
-        for (auto v : make_iterator_range(vertices(G))) {
-            out << "v" << v << " [label=\"" << v << " : {";
-            const BitSet & V = G[v];
-            bool comma = false;
-            for (auto i : V.set_bits()) {
-                if (comma) out << ',';
-                out << i;
-                comma = true;
-            }
-            out << "}\"];\n";
-        }
-        for (auto e : make_iterator_range(edges(G))) {
-            const auto s = source(e, G);
-            const auto t = target(e, G);
-            out << "v" << s << " -> v" << t << ";\n";
-        }
-
-        out << "}\n\n";
-        out.flush();
-
-    };
-
-    auto contract_constraint_graph = [&](ConstraintGraph & H, const ReverseTopologicalOrdering & O, const bool checkPartition) {
+    auto contract_constraint_graph = [&](ConstraintGraph & H, const std::vector<unsigned> & O, const bool checkPartition) {
 
         assert (num_vertices(H) == O.size());
 
         const auto m = O.size();
 
         for (unsigned i = 0; i < m; ++i) {
-            BitSet & B = H[i];
+            BitSet & B = H[i]; // O[m - i - 1]
             B.resize(m);
             B.set(i);
         }
@@ -858,6 +898,8 @@ found:  ++i;
     // TODO: is there any advantage in one ordering over another? If the the last partition of one cluster
     // shares the same kernels as the first partition of another and we can schedule one after the other,
     // this may improve I-Cache utilization.
+
+    // errs() << "CONTRACTED Z3\n";
 
     if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution");
@@ -1142,6 +1184,8 @@ found:  ++i;
 
     END_SCOPED_REGION
 
+   // errs() << "CONTRACTED Z3 #2\n";
+
     if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a kernel ordering solution");
     }
@@ -1252,7 +1296,7 @@ void PipelineAnalysis::generatePartitioningGraph() {
 
     mPartitioningGraph = PartitioningGraph(PartitionCount);
 
-    #if 0
+    #if 1
 
     auto printG =[&]() {
 
@@ -1702,40 +1746,9 @@ skip_edge_2:        // -----------------
 
     }
 
-
-
-
     END_SCOPED_REGION
 
 //    printG();
-
-//    const auto cfg = Z3_mk_config();
-//    Z3_set_param_value(cfg, "model", "false");
-//    Z3_set_param_value(cfg, "proof", "false");
-//    const auto ctx = Z3_mk_context(cfg);
-//    Z3_del_config(cfg);
-//    const auto solver = Z3_mk_solver(ctx);
-//    Z3_solver_inc_ref(ctx, solver);
-
-//    for (unsigned partition = 0; partition < PartitionCount; ++partition) {
-
-//        for (const auto input : make_iterator_range(in_edges(partition, G))) {
-//            const auto buffer = source(input, G);
-
-
-
-
-//        }
-
-
-
-
-//    }
-
-//    Z3_solver_dec_ref(ctx, solver);
-//    Z3_del_context(ctx);
-
-//    Z3_reset_memory();
 
 }
 

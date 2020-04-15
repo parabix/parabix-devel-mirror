@@ -361,7 +361,7 @@ public:
 
     virtual void addKernelDeclarations(BuilderRef b);
 
-    virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+    virtual std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const;
 
     virtual ~Kernel() = 0;
 
@@ -568,7 +568,7 @@ public:
 
     static bool classof(const void *) { return false; }
 
-    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const noexcept;
+    std::unique_ptr<KernelCompiler> instantiateKernelCompiler(BuilderRef b) const;
 
 protected:
 
