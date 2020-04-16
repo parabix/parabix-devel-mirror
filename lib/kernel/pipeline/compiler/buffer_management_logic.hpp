@@ -285,64 +285,39 @@ void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const St
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief writeUpdatedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b, const ItemCountSource source) {
+void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
 
-    auto getProcessedArg = [&](const StreamSetPort port) -> Value * {
-        switch (source) {
-            case ItemCountSource::ComputedAtKernelCall:
-                return mProcessedItemCount(mKernelId, port);
-            case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProcessedPhi(mKernelId, port);
-        }
-        llvm_unreachable("unknown source type");
-    };
-    auto getProcessedDeferredArg = [&](const StreamSetPort port) -> Value * {
-        switch (source) {
-            case ItemCountSource::ComputedAtKernelCall:
-                return mProcessedDeferredItemCount(mKernelId, port);
-            case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProcessedDeferredPhi(mKernelId, port);
-        }
-        llvm_unreachable("unknown source type");
-    };
-    auto getProducedArg = [&](const StreamSetPort port) -> Value * {
-        switch (source) {
-            case ItemCountSource::ComputedAtKernelCall:
-                return mProducedItemCount(mKernelId, port);
-            case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProducedPhi(mKernelId, port);
-        }
-        llvm_unreachable("unknown source type");
-    };
-    auto getProducedDeferredArg = [&](const StreamSetPort port) -> Value * {
-        switch (source) {
-            case ItemCountSource::ComputedAtKernelCall:
-                return mProducedDeferredItemCount(mKernelId, port);
-            case ItemCountSource::UpdatedItemCountsFromLoopExit:
-                return mUpdatedProducedDeferredPhi(mKernelId, port);
-        }
-        llvm_unreachable("unknown source type");
-    };
-
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const StreamSetPort inputPort{PortType::Input, i};
-        const Binding & input = getInputBinding(inputPort);
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const StreamSetPort inputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, inputPort);
-        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, getProcessedArg(inputPort));
-        if (input.isDeferred()) {
-            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, getProcessedDeferredArg(inputPort));
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProcessedPhi(inputPort));
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, " @ writing " + prefix + "_processed = %" PRIu64, mUpdatedProcessedPhi(inputPort));
+        #endif
+
+        if (br.IsDeferred) {
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProcessedDeferredPhi(inputPort));
+            #ifdef PRINT_DEBUG_MESSAGES
+            debugPrint(b, " @ writing " + prefix + "_processed(deferred) = %" PRIu64, mUpdatedProcessedDeferredPhi(inputPort));
+            #endif
         }
     }
 
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const StreamSetPort outputPort{PortType::Output, i};
-        const Binding & output = getOutputBinding(outputPort);
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const BufferRateData & br = mBufferGraph[e];
+        const StreamSetPort outputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, outputPort);
-        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, getProducedArg(outputPort));
-        if (output.isDeferred()) {
-            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, getProducedDeferredArg(outputPort));
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProducedPhi(outputPort));
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, " @ writing " + prefix + "_produced = %" PRIu64, mUpdatedProducedPhi(outputPort));
+        #endif
+        if (br.IsDeferred) {
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProducedDeferredPhi(outputPort));
+            #ifdef PRINT_DEBUG_MESSAGES
+            debugPrint(b, " @ writing " + prefix + "_produced(deferred) = %" PRIu64, mUpdatedProducedDeferredPhi(outputPort));
+            #endif
         }
     }
 }
@@ -360,10 +335,18 @@ void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
         } else {
             fullyProduced = mFullyProducedItemCount(outputPort);
         }
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        out << " * -> " << prefix << "_avail = %" PRIu64;
+        debugPrint(b, out.str(), fullyProduced);
+        #endif
+
         setLocallyAvailableItemCount(b, outputPort, fullyProduced);
         initializeConsumedItemCount(b, outputPort, fullyProduced);
         #ifdef PRINT_DEBUG_MESSAGES
-        const auto prefix = makeBufferName(mKernelId, outputPort);
         const auto streamSet = getOutputBufferVertex(outputPort);
         Value * const producedDelta = b->CreateSub(fullyProduced, mInitiallyProducedItemCount[streamSet]);
         debugPrint(b, prefix + "_producedΔ = %" PRIu64, producedDelta);

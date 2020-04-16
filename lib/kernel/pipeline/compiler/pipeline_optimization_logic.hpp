@@ -23,6 +23,7 @@ void PipelineCompiler::replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock 
     assert (toReplace);
 
     BasicBlock * const to = b->GetInsertBlock();
+
     for (Instruction & inst : phiContainer->getInstList()) {
         if (LLVM_LIKELY(isa<PHINode>(inst))) {
             PHINode & pn = cast<PHINode>(inst);
@@ -35,8 +36,23 @@ void PipelineCompiler::replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock 
             break;
         }
     }
+
+    if (!toReplace->empty()) {
+        Instruction * toMove = &toReplace->front();
+        auto & list = to->getInstList();
+        while (toMove) {
+            Instruction * const next = toMove->getNextNode();
+            toMove->removeFromParent();
+            list.push_back(toMove);
+            toMove = next;
+        }
+
+    }
+
+
     toReplace->eraseFromParent();
     toReplace = to;
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

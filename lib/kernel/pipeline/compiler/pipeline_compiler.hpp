@@ -243,7 +243,6 @@ public:
     void normalCompletionCheck(BuilderRef b);
 
     void writeInsufficientIOExit(BuilderRef b);
-    void gotoToNextPartition(BuilderRef b);
     void writeJumpToNextPartition(BuilderRef b);
 
     void writeCopyBackLogic(BuilderRef b);
@@ -265,13 +264,7 @@ public:
     void computeMinimumConsumedItemCounts(BuilderRef b);
     void writeConsumedItemCounts(BuilderRef b);
     void recordFinalProducedItemCounts(BuilderRef b);
-
-    enum class ItemCountSource {
-        ComputedAtKernelCall
-        , UpdatedItemCountsFromLoopExit
-    };
-
-    void writeUpdatedItemCounts(BuilderRef b, const ItemCountSource source);
+    void writeUpdatedItemCounts(BuilderRef b);
 
     void writeOutputScalars(BuilderRef b, const size_t index, std::vector<Value *> & args);
     Value * getScalar(BuilderRef b, const size_t index);
@@ -416,6 +409,7 @@ public:
 
 // synchronization functions
 
+    void identifyAllInternallySynchronizedKernels();
     void obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock);
     void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
     void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start);
@@ -576,6 +570,7 @@ protected:
     FixedVector<PHINode *>                      mExternalConsumedItemsPhi;
 
     FixedVector<Value *>                        mScalarValue;
+    FixedVector<bool>                           RequiresSynchronization;
 
     // partition state
     FixedVector<BasicBlock *>                   mPartitionEntryPoint;
@@ -786,6 +781,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mExternalConsumedItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
 
 , mScalarValue(FirstKernel, LastScalar, mAllocator)
+, RequiresSynchronization(PipelineInput, PipelineOutput, mAllocator)
 
 , mPartitionEntryPoint(PartitionCount, mAllocator)
 

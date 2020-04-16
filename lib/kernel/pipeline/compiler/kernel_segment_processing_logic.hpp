@@ -41,6 +41,7 @@ void PipelineCompiler::start(BuilderRef b) {
     loadInternalStreamSetHandles(b, false);
     readExternalConsumerItemCounts(b);
     initializePipelineInputTerminationSignal(b);
+    identifyAllInternallySynchronizedKernels();
 
     mKernel = nullptr;
     mKernelId = 0;
@@ -57,6 +58,7 @@ void PipelineCompiler::start(BuilderRef b) {
     mExhaustedInput = i1_FALSE;
     obtainCurrentSegmentNumber(b, entryBlock);
 
+    acquireSynchronizationLock(b, FirstKernel, CycleCounter::INITIAL);
     branchToInitialPartition(b);
 }
 
@@ -81,7 +83,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     assert ("non-partition-root kernel can terminate early?" && (!mKernelCanTerminateEarly || mIsPartitionRoot));
 
-    const auto kernelRequiresSynchronization = !mKernelIsInternallySynchronized;
+    const auto kernelRequiresSynchronization = RequiresSynchronization[mKernelId];
 
     if (kernelRequiresSynchronization) {
         mMayHaveNonLinearIO = mayHaveNonLinearIO(mKernelId);
@@ -111,10 +113,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     const auto canJumpToAnotherPartition = mIsPartitionRoot;
     const auto handleNoUpdateExit = mCheckIO;
     #endif
-
-    if (kernelRequiresSynchronization) {
-        acquireSynchronizationLock(b, mKernelId, CycleCounter::INITIAL);
-    }
 
     const auto prefix = makeKernelName(mKernelId);
 
@@ -253,6 +251,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelTerminated);
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "** " + prefix + ".terminated = %" PRIu64, mSegNo);
+    #endif
     writeTerminationSignal(b, mTerminatedSignalPhi);
     informInputKernelsOfTermination(b);
     if (kernelRequiresSynchronization) {
@@ -267,6 +268,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     if (mCheckIO) {
         b->SetInsertPoint(mKernelInsufficientInput);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "** " + prefix + ".insufficientIO = %" PRIu64, mSegNo);
+        #endif
         writeInsufficientIOExit(b);
     }
 
@@ -275,7 +279,10 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     /// -------------------------------------------------------------------------------------
 
     b->SetInsertPoint(mKernelLoopExit);
-    writeUpdatedItemCounts(b, ItemCountSource::UpdatedItemCountsFromLoopExit);
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "** " + prefix + ".loopExit = %" PRIu64, mSegNo);
+    #endif
+    writeUpdatedItemCounts(b);
     computeFullyProcessedItemCounts(b);
     computeMinimumConsumedItemCounts(b);
     if (kernelRequiresSynchronization) {
@@ -291,9 +298,9 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
 
     if (handleNoUpdateExit) {
         b->SetInsertPoint(mKernelInitiallyTerminated);
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        debugPrint(b, "* " + prefix + ".bypassed = %" PRIu64, mSegNo);
-//        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "** " + prefix + ".initiallyTerminated = %" PRIu64, mSegNo);
+        #endif
         writeInitiallyTerminatedPartitionExit(b);
     }
 
@@ -340,10 +347,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     if (LLVM_UNLIKELY(CheckAssertions)) {        
         verifyPostInvocationTerminationSignal(b);
         verifyExpectedNumOfStrides(b);
-    }
-
-    if (kernelRequiresSynchronization) {
-        releaseSynchronizationLock(b, mKernelId);
     }
 
     checkForPartitionExit(b);

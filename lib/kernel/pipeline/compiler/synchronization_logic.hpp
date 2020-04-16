@@ -37,6 +37,17 @@
 namespace kernel {
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyAllInternallySynchronizedKernels
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::identifyAllInternallySynchronizedKernels() {
+    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+        const Kernel * const kernelObj = getKernel(kernel);
+        const auto flag = kernelObj->hasAttribute(AttrId::InternallySynchronized);
+        RequiresSynchronization[kernel] = !flag;
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief obtainCurrentSegmentNumber
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock) {
@@ -51,6 +62,11 @@ void PipelineCompiler::obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * con
         segNo->addIncoming(b->getSize(0), entryBlock);
         mSegNo = segNo;
     }
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    debugPrint(b, "# obtained SegNo %" PRIu64, mSegNo);
+    #endif
+
     mNextSegNo = b->CreateAdd(mSegNo, ONE);
 }
 
@@ -71,7 +87,8 @@ void PipelineCompiler::incrementCurrentSegNo(BuilderRef /* b */, BasicBlock * co
  * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start) {
-    if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
+
+    if (LLVM_LIKELY(RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized))) {
         const auto prefix = makeKernelName(kernelId);
         const auto serialize = codegen::DebugOptionIsSet(codegen::SerializeThreads);
         const unsigned waitingOnIdx = serialize ? LastKernel : kernelId;
@@ -100,6 +117,10 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
 
         b->SetInsertPoint(acquired);
         updateCycleCounter(b, start, CycleCounter::AFTER_SYNCHRONIZATION);
+
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, "# " + prefix + " acquired SegNo %" PRIu64, mSegNo);
+        #endif
     }
 }
 
@@ -109,7 +130,7 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
  * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned kernelId) {
-    if (LLVM_LIKELY(mNumOfThreads > 1 || ExternallySynchronized)) {
+    if (LLVM_LIKELY(RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized))) {
         const auto prefix = makeKernelName(kernelId);
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
         Value * currentSegNo = nullptr;

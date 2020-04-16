@@ -59,16 +59,7 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t streamSet) {
 
-    bool neverUpdated = true;
-    for (const auto e : make_iterator_range(out_edges(streamSet, mConsumerGraph))) {
-        const ConsumerEdge & c = mConsumerGraph[e];
-        if (c.Flags & ConsumerEdge::UpdatePhi) {
-            neverUpdated = false;
-            break;
-        }
-    }
-
-    if (neverUpdated) {
+    if (out_degree(streamSet, mConsumerGraph) == 0) {
         // This stream either has no consumers or we've proven that
         // its consumption rate is identical to its production rate.
         return mInitiallyProducedItemCount[streamSet];

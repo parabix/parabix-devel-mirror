@@ -86,6 +86,34 @@ void PipelineAnalysis::makeConsumerGraph() {
         }
     }
 
+//    auto & out = errs();
+
+//    out << "digraph \"C\" {\n";
+//    for (auto v : make_iterator_range(vertices(mConsumerGraph))) {
+//        out << "v" << v << " [label=\"" << v << "\"];\n";
+//    }
+//    for (auto e : make_iterator_range(edges(mConsumerGraph))) {
+//        const auto s = source(e, mConsumerGraph);
+//        const auto t = target(e, mConsumerGraph);
+//        out << "v" << s << " -> v" << t <<
+//               " [label=\"";
+//        const ConsumerEdge & c = mConsumerGraph[e];
+//        if (c.Flags & ConsumerEdge::UpdatePhi) {
+//            out << 'U';
+//        }
+//        if (c.Flags & ConsumerEdge::WriteConsumedCount) {
+//            out << 'W';
+//        }
+//        if (c.Flags & ConsumerEdge::UpdateExternalCount) {
+//            out << 'E';
+//        }
+//        out << "\"];\n";
+//    }
+
+//    out << "}\n\n";
+//    out.flush();
+
+
 }
 
 }
