@@ -31,7 +31,7 @@ static std::string to_string(StreamSet * ss, uint32_t index) {
     return "<i" + std::to_string(ss->getFieldWidth()) + ">[" + std::to_string(ss->getNumElements()) + "]@" + std::to_string(index);
 }
 
-static std::string to_string(__selop<StreamSet *> const & selop) {
+static std::string to_string(SelectOperation const & selop) {
     std::string s = to_string(selop.operation);
     uint32_t index = 0;
     for (auto binding : selop.bindings) {
@@ -126,11 +126,11 @@ SelectOperation Intersect(std::vector<StreamSet *> sets) {
     return __selops::__selop_init(__selops::__op::__intersect, std::move(sets));
 }
 
-static inline std::string genSignature(__selops::__selop<StreamSet *> const & operation) {
+std::string genSignature(SelectOperation const & operation) {
     return "_" + __selops::to_string(operation);
 }
 
-static std::string genSignature(std::vector<__selops::__selop<StreamSet *>> const & operations) {
+std::string genSignature(SelectOperationList const & operations) {
     std::string s = "";
     for (auto const & op : operations) {
         s += "_";
@@ -139,7 +139,7 @@ static std::string genSignature(std::vector<__selops::__selop<StreamSet *>> cons
     return s;
 }
 
-static uint32_t resultStreamCount(__selops::__selop<StreamSet *> const & selop) {
+static uint32_t resultStreamCount(SelectOperation const & selop) {
     if (selop.operation == __selops::__op::__select) {
         // select operations return the same number of streams as the number of specified indices
         uint32_t rt = 0;
@@ -153,7 +153,7 @@ static uint32_t resultStreamCount(__selops::__selop<StreamSet *> const & selop) 
     }
 }
 
-static uint32_t resultStreamFieldWidth(__selops::__selop<StreamSet *> const & selop) {
+static uint32_t resultStreamFieldWidth(SelectOperation const & selop) {
     assert (selop.bindings.size() > 0);
     uint32_t fw = 0;
     for (auto const & binding : selop.bindings) {
@@ -170,7 +170,7 @@ static uint32_t resultStreamFieldWidth(__selops::__selop<StreamSet *> const & se
     return fw;
 }
 
-static uint32_t resultStreamCount(std::vector<__selops::__selop<StreamSet *>> const & ops) {
+static uint32_t resultStreamCount(SelectOperationList const & ops) {
     uint32_t count = 0;
     for (auto const & op : ops) {
         count += resultStreamCount(op);
@@ -179,9 +179,9 @@ static uint32_t resultStreamCount(std::vector<__selops::__selop<StreamSet *>> co
 }
 
 // returns { mappedOperations, kernelBindings }
-static std::pair<std::vector<__selops::__selop<std::string>>, std::unordered_map<StreamSet *, std::string>>
+static std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
 mapOperationsToStreamNames(__selops::__selop<StreamSet *> const & operation) {
-    __selops::__selop<std::string> rt{};
+    SelectedInput rt{};
     rt.operation = operation.operation;
     uint32_t idx = 0;
     std::unordered_map<StreamSet *, std::string> namingMap{};
@@ -197,13 +197,13 @@ mapOperationsToStreamNames(__selops::__selop<StreamSet *> const & operation) {
         }
         rt.bindings.push_back({name, pair.second});
     }
-    return std::make_pair(std::vector<__selops::__selop<std::string>>{rt}, namingMap);
+    return std::make_pair(SelectedInputList{rt}, namingMap);
 }
 
 // returns { mappedOperations, kernelBindings }
-static std::pair<std::vector<__selops::__selop<std::string>>, std::unordered_map<StreamSet *, std::string>>
-mapOperationsToStreamNames(std::vector<__selops::__selop<StreamSet *>> const & operations) {
-    std::vector<__selops::__selop<std::string>> mapped{};
+std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
+mapOperationsToStreamNames(SelectOperationList const & operations) {
+    SelectedInputList mapped{};
     mapped.reserve(operations.size());
     uint32_t idx = 0;
     std::unordered_map<StreamSet *, std::string> namingMap{};
@@ -225,6 +225,53 @@ mapOperationsToStreamNames(std::vector<__selops::__selop<StreamSet *>> const & o
         mapped.push_back(mappedOp);
     }
     return std::make_pair(mapped, namingMap);
+}
+
+using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+std::vector<Value *> loadInputSelectionsBlock(BuilderRef b, SelectedInputList ops, Value * blockOffset) {
+    std::vector<Value *> selectedSet;
+    for (auto const & selop : ops) {
+        if (selop.operation == __selops::__op::__select) {
+            for (auto const & binding : selop.bindings) {
+                std::string const & iStreamSetName = binding.first;
+                for (auto const & index : binding.second) {
+                    Value * const block = b->loadInputStreamBlock(iStreamSetName, b->getInt32(index), blockOffset);
+                    selectedSet.push_back(block);
+                }
+            }
+        } else if (selop.operation == __selops::__op::__merge) {
+            Value * accumulator = nullptr;
+            for (auto const & binding : selop.bindings) {
+                std::string const & iStreamSetName = binding.first;
+                for (auto const & index : binding.second) {
+                    Value * const block = b->loadInputStreamBlock(iStreamSetName, b->getInt32(index), blockOffset);
+                    if (accumulator == nullptr) {
+                        accumulator = block;
+                    } else {
+                        accumulator = b->simd_or(accumulator, block);
+                    }
+                }
+            }
+            selectedSet.push_back(accumulator);
+        } else if (selop.operation == __selops::__op::__intersect) {
+            Value * accumulator = nullptr;
+            for (auto const & binding : selop.bindings) {
+                std::string const & iStreamSetName = binding.first;
+                for (auto const & index : binding.second) {
+                    Value * const block = b->loadInputStreamBlock(iStreamSetName, b->getInt32(index), blockOffset);
+                    if (accumulator == nullptr) {
+                        accumulator = block;
+                    } else {
+                        accumulator = b->simd_and(accumulator, block);
+                    }
+                }
+            }
+            selectedSet.push_back(accumulator);
+        } else {
+            llvm_unreachable("invalid enum kernel::__selops::__op value");
+        }
+    }
+    return selectedSet;
 }
 
 StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation) 
@@ -255,53 +302,11 @@ StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList
 }
 
 void StreamSelect::generateDoBlockMethod(BuilderRef b) {
-    uint32_t outIdx = 0;
-    for (auto const & selop : mOperations) {
-        if (selop.operation == __selops::__op::__select) {
-            for (auto const & binding : selop.bindings) {
-                std::string const & iStreamSetName = binding.first;
-                for (auto const & index : binding.second) {
-                    Value * const block = b->loadInputStreamBlock(iStreamSetName, b->getInt32(index));
-                    b->storeOutputStreamBlock("output", b->getInt32(outIdx), block);
-                    outIdx++;
-                }
-            }
-        } else if (selop.operation == __selops::__op::__merge) {
-            Value * accumulator = nullptr;
-            for (auto const & binding : selop.bindings) {
-                std::string const & iStreamSetName = binding.first;
-                for (auto const & index : binding.second) {
-                    Value * const block = b->loadInputStreamBlock(iStreamSetName, b->getInt32(index));
-                    if (accumulator == nullptr) {
-                        accumulator = block;
-                    } else {
-                        accumulator = b->simd_or(accumulator, block);
-                    }
-                }
-            }
-            b->storeOutputStreamBlock("output", b->getInt32(outIdx), accumulator);
-            outIdx++;
-        } else if (selop.operation == __selops::__op::__intersect) {
-            Value * accumulator = nullptr;
-            for (auto const & binding : selop.bindings) {
-                std::string const & iStreamSetName = binding.first;
-                for (auto const & index : binding.second) {
-                    Value * const block = b->loadInputStreamBlock(iStreamSetName, b->getInt32(index));
-                    if (accumulator == nullptr) {
-                        accumulator = block;
-                    } else {
-                        accumulator = b->simd_and(accumulator, block);
-                    }
-                }
-            }
-            b->storeOutputStreamBlock("output", b->getInt32(outIdx), accumulator);
-            outIdx++;
-        } else {
-            llvm_unreachable("invalid enum kernel::__selops::__op value");
-        }
+    std::vector<Value *> selectedSet = loadInputSelectionsBlock(b, mOperations, b->getSize(0));
+    for (unsigned i = 0; i < selectedSet.size(); i++) {
+        b->storeOutputStreamBlock("output", b->getInt32(i), selectedSet[i]);
     }
 }
-
 
 
 IStreamSelect::IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation)
