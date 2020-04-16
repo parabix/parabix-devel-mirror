@@ -8,5 +8,5 @@ Generating UCD data files.
 
 #  Needs to be updated, 
 4. python3 generate_UCD_tests.py
-    copy output to icgrep-devel/QA/proptest.xml
+    copy output to parabix-devel/QA/proptest.xml
 
