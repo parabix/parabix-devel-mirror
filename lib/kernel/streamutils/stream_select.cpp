@@ -126,6 +126,96 @@ SelectOperation Intersect(std::vector<StreamSet *> sets) {
     return __selops::__selop_init(__selops::__op::__intersect, std::move(sets));
 }
 
+StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation)
+: BlockOrientedKernel(b, "StreamSelect" + streamutils::genSignature(operation), {}, {{"output", output}}, {}, {}, {})
+{
+    assert (resultStreamCount(operation) == output->getNumElements());
+    for (auto const & kv : operation.bindings) {
+        if (kv.first->getFieldWidth() != 1) {
+            llvm::report_fatal_error("StreamSelect: operations with this kernel are only supported for bitstreams");
+        }
+    }
+    std::unordered_map<StreamSet *, std::string> inputBindings;
+    std::tie(mOperations, inputBindings) = streamutils::mapOperationsToStreamNames(operation);
+    for (auto const & kv : inputBindings) {
+        mInputStreamSets.push_back({kv.second, kv.first});
+    }
+}
+
+StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList operations)
+: BlockOrientedKernel(b, "StreamSelect" + streamutils::genSignature(operations), {}, {{"output", output}}, {}, {}, {})
+{
+    assert (resultStreamCount(operations) == output->getNumElements());
+    std::unordered_map<StreamSet *, std::string> inputBindings;
+    std::tie(mOperations, inputBindings) = streamutils::mapOperationsToStreamNames(operations);
+    for (auto const & kv : inputBindings) {
+        mInputStreamSets.push_back({kv.second, kv.first});
+    }
+}
+
+void StreamSelect::generateDoBlockMethod(BuilderRef b) {
+    std::vector<Value *> selectedSet = streamutils::loadInputSelectionsBlock(b, mOperations, b->getSize(0));
+    for (unsigned i = 0; i < selectedSet.size(); i++) {
+        b->storeOutputStreamBlock("output", b->getInt32(i), selectedSet[i]);
+    }
+}
+
+IStreamSelect::IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation)
+: MultiBlockKernel(b, "IStreamSelect" + streamutils::genSignature(operation),
+    {},
+    {{"output", output, BoundedRate(0, 1)}},
+    {}, {}, {})
+{
+    assert(resultStreamCount(operation) == output->getNumElements());
+    std::unordered_map<StreamSet *, std::string> inputBindings;
+    std::vector<__selops::__selop<std::string>> ops;
+    std::tie(ops, inputBindings) = streamutils::mapOperationsToStreamNames(operation);
+    assert(ops.size() == 1);
+    mOperation = ops[0];
+    if (mOperation.operation != __selops::__op::__select) {
+        llvm::report_fatal_error("IStreamSelect only supports the Select operation");
+    }
+    for (auto const & kv : inputBindings) {
+        assert(mFieldWidth == 0 ? true : mFieldWidth == kv.first->getFieldWidth());
+        mFieldWidth = kv.first->getFieldWidth();
+        assert(mFieldWidth == output->getFieldWidth());
+        mInputStreamSets.push_back({kv.second, kv.first, BoundedRate(0, 1)});
+    }
+    setStride(1);
+}
+
+void IStreamSelect::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
+    BasicBlock * const block_Entry = b->GetInsertBlock();
+    BasicBlock * const block_Loop = b->CreateBasicBlock("loop");
+    BasicBlock * const block_Exit = b->CreateBasicBlock("exit");
+    Value * const initialStride = b->getProducedItemCount("output");
+    b->CreateCondBr(b->isFinal(), block_Exit, block_Loop);
+
+    b->SetInsertPoint(block_Loop);
+    PHINode * const strideNo = b->CreatePHI(b->getSizeTy(), 2);
+    strideNo->addIncoming(b->getSize(0), block_Entry);
+    uint32_t outIdx = 0;
+    Value * const absPos = b->CreateAdd(strideNo, initialStride);
+    for (auto const & binding : mOperation.bindings) {
+        auto const & name = binding.first;
+        for (auto const & idx : binding.second) {
+            Value * const val = b->CreateLoad(b->getRawInputPointer(name, b->getInt32(idx), absPos));
+            b->CreateStore(val, b->getRawOutputPointer("output", b->getInt32(outIdx), absPos));
+            outIdx++;
+        }
+        b->setProcessedItemCount(name, b->CreateAdd(b->getProcessedItemCount(name), b->getSize(1)));
+    }
+    b->setProducedItemCount("output", b->CreateAdd(b->getProducedItemCount("output"), b->getSize(1)));
+    Value * const nextStrideNo = b->CreateAdd(strideNo, b->getSize(1));
+    strideNo->addIncoming(nextStrideNo, block_Loop);
+    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), block_Loop, block_Exit);
+
+    b->SetInsertPoint(block_Exit);
+}
+
+
+namespace streamutils {
+
 std::string genSignature(SelectOperation const & operation) {
     return "_" + __selops::to_string(operation);
 }
@@ -139,7 +229,7 @@ std::string genSignature(SelectOperationList const & operations) {
     return s;
 }
 
-static uint32_t resultStreamCount(SelectOperation const & selop) {
+uint32_t resultStreamCount(SelectOperation const & selop) {
     if (selop.operation == __selops::__op::__select) {
         // select operations return the same number of streams as the number of specified indices
         uint32_t rt = 0;
@@ -153,7 +243,7 @@ static uint32_t resultStreamCount(SelectOperation const & selop) {
     }
 }
 
-static uint32_t resultStreamFieldWidth(SelectOperation const & selop) {
+uint32_t resultStreamFieldWidth(SelectOperation const & selop) {
     assert (selop.bindings.size() > 0);
     uint32_t fw = 0;
     for (auto const & binding : selop.bindings) {
@@ -170,7 +260,7 @@ static uint32_t resultStreamFieldWidth(SelectOperation const & selop) {
     return fw;
 }
 
-static uint32_t resultStreamCount(SelectOperationList const & ops) {
+uint32_t resultStreamCount(SelectOperationList const & ops) {
     uint32_t count = 0;
     for (auto const & op : ops) {
         count += resultStreamCount(op);
@@ -178,8 +268,9 @@ static uint32_t resultStreamCount(SelectOperationList const & ops) {
     return count;
 }
 
+
 // returns { mappedOperations, kernelBindings }
-static std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
+std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
 mapOperationsToStreamNames(__selops::__selop<StreamSet *> const & operation) {
     SelectedInput rt{};
     rt.operation = operation.operation;
@@ -273,97 +364,6 @@ std::vector<Value *> loadInputSelectionsBlock(BuilderRef b, SelectedInputList op
     }
     return selectedSet;
 }
-
-StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation) 
-: BlockOrientedKernel(b, "StreamSelect" + genSignature(operation), {}, {{"output", output}}, {}, {}, {})
-{
-    assert (resultStreamCount(operation) == output->getNumElements());
-    for (auto const & kv : operation.bindings) {
-        if (kv.first->getFieldWidth() != 1) {
-            llvm::report_fatal_error("StreamSelect: operations with this kernel are only supported for bitstreams");
-        }
-    }
-    std::unordered_map<StreamSet *, std::string> inputBindings;
-    std::tie(mOperations, inputBindings) = mapOperationsToStreamNames(operation);
-    for (auto const & kv : inputBindings) {
-        mInputStreamSets.push_back({kv.second, kv.first});
-    }
-}
-
-StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList operations)
-: BlockOrientedKernel(b, "StreamSelect" + genSignature(operations), {}, {{"output", output}}, {}, {}, {})
-{
-    assert (resultStreamCount(operations) == output->getNumElements());
-    std::unordered_map<StreamSet *, std::string> inputBindings;
-    std::tie(mOperations, inputBindings) = mapOperationsToStreamNames(operations);
-    for (auto const & kv : inputBindings) {
-        mInputStreamSets.push_back({kv.second, kv.first});
-    }
-}
-
-void StreamSelect::generateDoBlockMethod(BuilderRef b) {
-    std::vector<Value *> selectedSet = loadInputSelectionsBlock(b, mOperations, b->getSize(0));
-    for (unsigned i = 0; i < selectedSet.size(); i++) {
-        b->storeOutputStreamBlock("output", b->getInt32(i), selectedSet[i]);
-    }
-}
-
-
-IStreamSelect::IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation)
-: MultiBlockKernel(b, "IStreamSelect" + genSignature(operation), 
-    {}, 
-    {{"output", output, BoundedRate(0, 1)}}, 
-    {}, {}, {})
-{
-    assert(resultStreamCount(operation) == output->getNumElements());
-    std::unordered_map<StreamSet *, std::string> inputBindings;
-    std::vector<__selops::__selop<std::string>> ops;
-    std::tie(ops, inputBindings) = mapOperationsToStreamNames(operation);
-    assert(ops.size() == 1);
-    mOperation = ops[0];
-    if (mOperation.operation != __selops::__op::__select) {
-        llvm::report_fatal_error("IStreamSelect only supports the Select operation");
-    }
-    for (auto const & kv : inputBindings) {
-        assert(mFieldWidth == 0 ? true : mFieldWidth == kv.first->getFieldWidth());
-        mFieldWidth = kv.first->getFieldWidth();
-        assert(mFieldWidth == output->getFieldWidth());
-        mInputStreamSets.push_back({kv.second, kv.first, BoundedRate(0, 1)});
-    }
-    setStride(1);
-}
-
-void IStreamSelect::generateMultiBlockLogic(BuilderRef b, Value * const numOfStrides) {
-    BasicBlock * const block_Entry = b->GetInsertBlock();
-    BasicBlock * const block_Loop = b->CreateBasicBlock("loop");
-    BasicBlock * const block_Exit = b->CreateBasicBlock("exit");
-    Value * const initialStride = b->getProducedItemCount("output");
-    b->CreateCondBr(b->isFinal(), block_Exit, block_Loop);
-
-    b->SetInsertPoint(block_Loop);
-    PHINode * const strideNo = b->CreatePHI(b->getSizeTy(), 2);
-    strideNo->addIncoming(b->getSize(0), block_Entry);
-    uint32_t outIdx = 0;
-    Value * const absPos = b->CreateAdd(strideNo, initialStride);
-    for (auto const & binding : mOperation.bindings) {
-        auto const & name = binding.first;
-        for (auto const & idx : binding.second) {
-            Value * const val = b->CreateLoad(b->getRawInputPointer(name, b->getInt32(idx), absPos));
-            b->CreateStore(val, b->getRawOutputPointer("output", b->getInt32(outIdx), absPos));
-            outIdx++;
-        }
-        b->setProcessedItemCount(name, b->CreateAdd(b->getProcessedItemCount(name), b->getSize(1)));
-    }
-    b->setProducedItemCount("output", b->CreateAdd(b->getProducedItemCount("output"), b->getSize(1)));
-    Value * const nextStrideNo = b->CreateAdd(strideNo, b->getSize(1));
-    strideNo->addIncoming(nextStrideNo, block_Loop);
-    b->CreateCondBr(b->CreateICmpNE(nextStrideNo, numOfStrides), block_Loop, block_Exit);
-
-    b->SetInsertPoint(block_Exit);
-}
-
-
-namespace streamutils {
 
 using ProgramBuilderRef = const std::unique_ptr<ProgramBuilder> &;
 

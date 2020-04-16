@@ -259,6 +259,15 @@ std::string genSignature(SelectOperation const & operation);
 
 std::string genSignature(SelectOperationList const & operations);
 
+uint32_t resultStreamCount(SelectOperation const & op);
+
+uint32_t resultStreamFieldWidth(SelectOperation const & op);
+
+uint32_t resultStreamCount(SelectOperationList const & ops);
+
+std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
+mapOperationsToStreamNames(SelectOperation const & operations);
+
 std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
 mapOperationsToStreamNames(SelectOperationList const & operations);
 
