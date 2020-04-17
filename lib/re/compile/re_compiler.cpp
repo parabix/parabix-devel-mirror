@@ -98,8 +98,6 @@ Marker RE_Compiler::process(RE * const re, Marker marker, PabloBuilder & pb) {
         llvm::report_fatal_error("back references not supported in icgrep.");
     } else if (isa<Seq>(re)) {
         return compileSeq(cast<Seq>(re), marker, pb);
-    } else if (isa<Seq>(re)) {
-        return compileSeq(cast<Seq>(re), marker, pb);
     } else if (isa<Alt>(re)) {
         return compileAlt(cast<Alt>(re), marker, pb);
     } else if (isa<Rep>(re)) {
