@@ -498,6 +498,8 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// logical buffer base address
         /// ----------------------------------------------------
 
+
+
         const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
         const Binding & output = mOutputStreamSets[i];
         const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output);
@@ -557,7 +559,12 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             } else if (mFixedRateFactor) {
                 writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
             }
-            Value * const capacity = b->CreateAdd(produced, writable);
+            Value * capacity = nullptr;
+            if (writable) {
+                capacity = b->CreateAdd(produced, writable);
+            } else {
+                capacity = ConstantExpr::getNeg(b->getSize(1));
+            }
             buffer->setCapacity(b, capacity);
             #ifdef CHECK_IO_ADDRESS_RANGE
             if (LLVM_UNLIKELY(enableAsserts)) {

@@ -63,7 +63,6 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
             Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
             b->CreateStore(processed, ptr);
         }
-
     }
 
 
@@ -78,12 +77,13 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         Value * const produced = b->CreateLoad(outPtr);
         for (const auto e : make_iterator_range(in_edges(buffer, mBufferGraph))) {
             const BufferRateData & rd = mBufferGraph[e];
-            const auto kernelIndex = source(e, mBufferGraph);
-            const auto prefix = makeBufferName(kernelIndex, rd.Port);
+            const auto kernelId = source(e, mBufferGraph);
+            const auto prefix = makeBufferName(kernelId, rd.Port);
             Value * const ptr = b->getScalarFieldPtr(prefix + ITEM_COUNT_SUFFIX);
             b->CreateStore(produced, ptr);
         }
     }
+
 
 }
 

@@ -151,6 +151,10 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
             const Kernel * const kernelObj = node.Kernel;
 
+            if (kernelObj == mPipelineKernel) {
+                continue;
+            }
+
             bool isNewPartitionRoot = false;
 
             // Iterate through the inputs
@@ -379,8 +383,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         out.flush();
     };
 
-   // printGraph(H, errs(), "G");
-
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));
     assert (nextKernel == kernels);
@@ -394,7 +396,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
 
     const auto sink = orderingOfH.back();
-    addRateId(H[sink], nextRateId++);
+    addRateId(H[sink], nextRateId++);    
 
     std::vector<Vertex> kernelOrdering;
     kernelOrdering.reserve(kernels);
@@ -655,7 +657,6 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
 
     };
 
-
 remake_constraint_graphs:
 
     ConstraintGraph P(PartitionCount);
@@ -731,14 +732,7 @@ remake_constraint_graphs:
             for (auto & i : mPartitionIds) {
                 i.second = orderingOfP[i.second];
             }
-            assert (canRemake);
-            canRemake = false;
-    //        errs() << "REMAKE CONSTRAINT GRAPH\n";
-
-    //        print_constraint_graph(P, errs(), "P");
-
             goto remake_constraint_graphs;
-
         }
     }
 

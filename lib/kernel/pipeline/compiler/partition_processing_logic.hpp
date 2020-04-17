@@ -318,9 +318,9 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
         PHINode * const termPhi = findOrAddPhi(mPartitionTerminationSignalPhi, partitionId, "partitionTerminationSignalPhi");
         Value * term = nullptr;
         if (partitionId <= mCurrentPartitionId) {
-            term = mPartitionTerminationSignal[partitionId];
+            term = mPartitionTerminationSignal[partitionId]; assert (term);
         } else {
-            term = readTerminationSignal(b, partitionId);
+            term = readTerminationSignal(b, partitionId); assert (term);
         }
         termPhi->addIncoming(term, phiCatchBlock);
     }

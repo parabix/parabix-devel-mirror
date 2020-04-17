@@ -27,7 +27,7 @@ void BlockKernelCompiler::generateMultiBlockLogic(BuilderRef b, Value * const nu
         report_fatal_error(out.str());
     }
 
-    const auto hasFinalBlock = mTarget->requiresExplicitPartialFinalStride();
+    const auto hasFinalBlock = true; // mTarget->requiresExplicitPartialFinalStride();
 
     BasicBlock * const entryBlock = b->GetInsertBlock();
     mStrideLoopBody = b->CreateBasicBlock(getName() + "_strideLoopBody");
