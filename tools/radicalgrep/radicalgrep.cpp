@@ -12,41 +12,34 @@
 using namespace std;
 using namespace llvm;
 
+cl::OptionCategory optionsPrompt("Options for Radical Grep");
+
+static cl::opt<std::string> regex(cl::Positional, cl::desc("<radical expression>"), cl::Required, cl::cat(optionsPrompt));
+static cl::opt<std::string> filepath(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(optionsPrompt));
 //cl::opt<std::string> outputFile("o", cl::desc("specify name of output file."), cl::value_desc("filename"));
-//cl::OptionCategory optionsPrompt("Options for Radical Grep");
+
 void radical_grep(const string regex,const string filename,ifstream&search);
 
 
 int main(int argc, char* argv[])
 {
+
     cl::ParseCommandLineOptions(argc, argv);
 
-    if(argc==3)     //argv[0]=radicalgrep.exe; argv[1]=regex; argv[2]=filepath
-    {
-        string regex;
-        
-        string filepath;
-        string filename;
-        const char* pos;
-        
-        ifstream search(argv[2]);
-        
-        regex=argv[1];
-        filepath=argv[2];
+    string filename;
+    const char * pos;
 
-        pos=strrchr(filepath.c_str(),'/');
-        filename=pos+1;     //get the filename from the filepath
-        
-        if(search.is_open()==0)
-            cout<<"Fail to open the file!"<<endl;
-        else
-        {
-            radical_grep(regex,filename,search);
-        }
-    }
+    ifstream search(filepath);
+
+    pos = strrchr(filepath.c_str(),'/');
+    filename=pos+1;     //get the filename from the filepath
+
+    if(search.is_open()==0)
+        cout<<"Fail to open the file!"<<endl;
     else
-        cout<<"Error!1"<<endl;
-    
+    {
+        radical_grep(regex,filename,search);
+    }
     return 0;
 }
 
