@@ -22,7 +22,7 @@ using namespace std;
 
 #define _MAX_FNAME 100
 vector<string> getAllFiles(const string &path);
-void ExecuteFiles(const string &spath, const string &dpath, const string &program,const vector<string>& files);
+void ExecuteFiles(const string &spath,const string& dpath, const string &program,const vector<string>& files);
 void CompareFiles(const string &epath, const string &dpath,const vector<string>&files);
 
 int main(int args, char* argv[])
@@ -42,7 +42,7 @@ int main(int args, char* argv[])
     ExecuteFiles(sourcepath,destpath,program,files);
     cout<<endl<<endl<<"Initiating csv2jsontest"<<endl<<endl;
     CompareFiles(expectpath,destpath,files);
-    cout<<endl<<"csv2jsontest complete"<<endl;
+    cout<<endl<<"csv2jsontest completed"<<endl;
     return 0;
 }
 
@@ -50,6 +50,11 @@ vector<string> getAllFiles(const string &path)
 {
     vector<string> files;
     DIR* folder=opendir(path.c_str());
+    if(!folder)
+    {
+        cout<<"Empty folder!"<<endl;
+        return files;
+    }
     struct dirent* file = NULL;
     size_t index;
     while(file=readdir(folder))
@@ -58,11 +63,14 @@ vector<string> getAllFiles(const string &path)
         if((index=filename.find(".csv"))!=filename.npos)
         files.push_back(filename.substr(0,index));
     }
+    closedir(folder);
     return files;
 }
 
-void ExecuteFiles(const string &spath, const string &dpath, const string &program,const vector<string>& files)
+void ExecuteFiles(const string &spath,const string &dpath, const string &program,const vector<string>& files)
 {
+    DIR* folder=opendir(dpath.c_str());
+    if(!folder)mkdir(dpath.c_str(),0777);
     for(int i=0;i<files.size();i++)
     {
         string dfile=dpath+files[i]+".json";
@@ -70,6 +78,7 @@ void ExecuteFiles(const string &spath, const string &dpath, const string &progra
         string cmd=program+" "+sfile+" "+dfile;
         system(cmd.c_str());
     }
+    closedir(folder);
 }
 
 void CompareFiles(const string &epath, const string &dpath,const vector<string>&files)
@@ -94,7 +103,7 @@ void CompareFiles(const string &epath, const string &dpath,const vector<string>&
         expect.close();
         out.close();
         cout<<"testcase: "<<files[i];
-        if(pass)cout<<" passed."<<endl;
+        if(pass)cout<<" passed"<<endl;
         else cout<<" failed"<<endl;
     }
 }
