@@ -27,9 +27,9 @@ void FilterByMask(const std::unique_ptr<ProgramBuilder> & P,
                   StreamSet * mask, StreamSet * inputs, StreamSet * outputs,
                   unsigned streamOffset,
                   unsigned extractionFieldWidth) {
-    Scalar * base = P->CreateConstant(P->getDriver().getBuilder()->getSize(streamOffset));
     StreamSet * const compressed = P->CreateStreamSet(outputs->getNumElements());
-    P->CreateKernelCall<FieldCompressKernel>(mask, inputs, compressed, base, extractionFieldWidth);
+    std::vector<uint32_t> output_indices = streamutils::Range(streamOffset, streamOffset + outputs->getNumElements());
+    P->CreateKernelCall<FieldCompressKernel>(Select(mask, {0}), SelectOperationList { Select(inputs, output_indices)}, compressed, extractionFieldWidth);
     P->CreateKernelCall<StreamCompressKernel>(mask, compressed, outputs, extractionFieldWidth);
 }
 
@@ -107,12 +107,12 @@ void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * c
     BasicBlock * processBlock = kb->CreateBasicBlock("processBlock");
     BasicBlock * done = kb->CreateBasicBlock("done");
     Constant * const ZERO = kb->getSize(0);
-    Value * const baseOffset = kb->getScalarField("base");
     kb->CreateBr(processBlock);
     kb->SetInsertPoint(processBlock);
     PHINode * blockOffsetPhi = kb->CreatePHI(kb->getSizeTy(), 2);
     blockOffsetPhi->addIncoming(ZERO, entry);
-
+    std::vector<Value *> maskVec = streamutils::loadInputSelectionsBlock(kb, {mMaskOp}, blockOffsetPhi);
+    std::vector<Value *> input = streamutils::loadInputSelectionsBlock(kb, mInputOps, blockOffsetPhi);
     if (BMI2_available() && ((mCompressFieldWidth == 32) || (mCompressFieldWidth == 64))) {
         Type * fieldTy = kb->getIntNTy(mCompressFieldWidth);
         Type * fieldPtrTy = PointerType::get(fieldTy, 0);
@@ -123,32 +123,26 @@ void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * c
             PEXT_func = Intrinsic::getDeclaration(kb->getModule(), Intrinsic::x86_bmi_pext_32);
         }
         const unsigned fieldsPerBlock = kb->getBitBlockWidth()/mCompressFieldWidth;
-        SmallVector<Value *, 16> mask(fieldsPerBlock);
-        Value * extractionMaskPtr = kb->getInputStreamBlockPtr("extractionMask", ZERO, blockOffsetPhi);
-        extractionMaskPtr = kb->CreatePointerCast(extractionMaskPtr, fieldPtrTy);
+        Value * extractionMask = kb->fwCast(mCompressFieldWidth, maskVec[0]);
+        std::vector<Value *> mask(fieldsPerBlock);
         for (unsigned i = 0; i < fieldsPerBlock; i++) {
-            mask[i] = kb->CreateLoad(kb->CreateGEP(extractionMaskPtr, kb->getInt32(i)));
+            mask[i] = kb->CreateExtractElement(extractionMask, kb->getInt32(i));
         }
-        for (unsigned j = 0; j < mStreamCount; ++j) {
-            Value * const streamIndex = kb->CreateAdd(baseOffset, ConstantInt::get(baseOffset->getType(), j));
-            Value * inputPtr = kb->getInputStreamBlockPtr("inputStreamSet", streamIndex, blockOffsetPhi);
-            inputPtr = kb->CreatePointerCast(inputPtr, fieldPtrTy);
+        for (unsigned j = 0; j < input.size(); ++j) {
+            Value * fieldVec = kb->fwCast(mCompressFieldWidth, input[j]);
             Value * outputPtr = kb->getOutputStreamBlockPtr("outputStreamSet", kb->getInt32(j), blockOffsetPhi);
             outputPtr = kb->CreatePointerCast(outputPtr, fieldPtrTy);
             for (unsigned i = 0; i < fieldsPerBlock; i++) {
-                Value * field = kb->CreateLoad(kb->CreateGEP(inputPtr, kb->getInt32(i)));
+                Value * field = kb->CreateExtractElement(fieldVec, kb->getInt32(i));
                 Value * compressed = kb->CreateCall(PEXT_func, {field, mask[i]});
                 kb->CreateStore(compressed, kb->CreateGEP(outputPtr, kb->getInt32(i)));
             }
         }
     } else {
-        Value * extractionMask = kb->loadInputStreamBlock("extractionMask", ZERO, blockOffsetPhi);
-        Value * delMask = kb->simd_not(extractionMask);
+        Value * delMask = kb->simd_not(maskVec[0]);
         const auto move_masks = parallel_prefix_deletion_masks(kb, mCompressFieldWidth, delMask);
-        for (unsigned j = 0; j < mStreamCount; ++j) {
-            Value * const streamIndex = kb->CreateAdd(baseOffset, ConstantInt::get(baseOffset->getType(), j));
-            Value * input = kb->loadInputStreamBlock("inputStreamSet", streamIndex, blockOffsetPhi);
-            Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input);
+        for (unsigned j = 0; j < input.size(); ++j) {
+            Value * output = apply_parallel_prefix_deletion(kb, mCompressFieldWidth, delMask, move_masks, input[j]);
             kb->storeOutputStreamBlock("outputStreamSet", kb->getInt32(j), blockOffsetPhi, output);
         }
     }
@@ -160,22 +154,27 @@ void FieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * c
 }
 
 FieldCompressKernel::FieldCompressKernel(BuilderRef b,
-                                         StreamSet * extractionMask, StreamSet * inputStreamSet, StreamSet * outputStreamSet,
-                                         Scalar * inputBase, unsigned fieldWidth)
+                                         SelectOperation const & maskOp,
+                                         SelectOperationList const & inputOps,
+                                         StreamSet * outputStreamSet,
+                                         unsigned fieldWidth)
 : MultiBlockKernel(b, "fieldCompress" + std::to_string(fieldWidth) + "_" +
-                   std::to_string(inputStreamSet->getNumElements()) +
-                   ":" + std::to_string(outputStreamSet->getNumElements()) ,
-// input streams
-{Binding{"extractionMask", extractionMask},
-Binding{"inputStreamSet", inputStreamSet, FixedRate(), ZeroExtended()}},
-// output stream
+                   streamutils::genSignature(maskOp) +
+                   ":" + streamutils::genSignature(inputOps),
+{},
 {Binding{"outputStreamSet", outputStreamSet}},
-// input scalar
-{Binding{"base", inputBase}},
-{}, {})
-, mCompressFieldWidth(fieldWidth)
-, mStreamCount(outputStreamSet->getNumElements()) {
-
+{}, {}, {})
+, mCompressFieldWidth(fieldWidth) {
+    mMaskOp.operation = maskOp.operation;
+    mMaskOp.bindings.push_back(std::make_pair("extractionMask", maskOp.bindings[0].second));
+    // assert (streamutil::resultStreamCount(maskOp) == 1);
+    mInputStreamSets.push_back({"extractionMask", maskOp.bindings[0].first});
+    // assert (streamutil::resultStreamCount(inputOps) == outputStreamSet->getNumElements());
+    std::unordered_map<StreamSet *, std::string> inputBindings;
+    std::tie(mInputOps, inputBindings) = streamutils::mapOperationsToStreamNames(inputOps);
+    for (auto const & kv : inputBindings) {
+        mInputStreamSets.push_back({kv.second, kv.first, FixedRate(), ZeroExtended()});
+    }
 }
 
 void PEXTFieldCompressKernel::generateMultiBlockLogic(BuilderRef kb, llvm::Value * const numOfBlocks) {

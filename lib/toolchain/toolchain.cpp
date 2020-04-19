@@ -139,6 +139,10 @@ std::string CCCOption = "";
 static cl::opt<std::string, true> CCTypeOption("ccc-type", cl::location(CCCOption), cl::init("binary"),
                                             cl::desc("The character class compiler"), cl::value_desc("[binary, ternary]"));
 
+bool TimeKernelsIsEnabled;
+static cl::opt<bool, true> OptCompileTime("time-kernels", cl::location(TimeKernelsIsEnabled),
+                                        cl::desc("Times each kernel, printing elapsed time for each on exit"), cl::init(false));
+
 CodeGenOpt::Level OptLevel;
 CodeGenOpt::Level BackEndOptLevel;
 

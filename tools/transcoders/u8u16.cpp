@@ -20,6 +20,7 @@
 #include <kernel/io/stdout_kernel.h>
 #include <kernel/streamutils/swizzle.h>
 #include <kernel/streamutils/zeroextend.h>
+#include <kernel/streamutils/stream_select.h>
 #include <pablo/builder.hpp>
 #include <pablo/boolean.h>
 #include <pablo/pablo_kernel.h>
@@ -300,8 +301,10 @@ u8u16FunctionType generatePipeline(CPUDriver & pxDriver, cc::ByteNumbering byteN
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
     } else {
         const auto fieldWidth = b->getBitBlockWidth() / 16;
-        Scalar * inputBase = P->CreateConstant(b->getSize(0));
-        P->CreateKernelCall<FieldCompressKernel>(selectors, u8bits, u16bits, inputBase, fieldWidth);
+        P->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                                 u16bits,
+                                                 fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
     }
 
@@ -342,8 +345,10 @@ void makeNonAsciiBranch(Kernel::BuilderRef b,
         P->CreateKernelCall<P2S16Kernel>(u16bits, u16bytes);
     } else {
         const auto fieldWidth = b->getBitBlockWidth() / 16;
-        Scalar * inputBase = P->CreateConstant(b->getSize(0));
-        P->CreateKernelCall<FieldCompressKernel>(selectors, u8bits, u16bits, inputBase, fieldWidth);
+        P->CreateKernelCall<FieldCompressKernel>(Select(selectors, {0}),
+                                                 SelectOperationList{Select(u8bits, streamutils::Range(0, 16))},
+                                                 u16bits,
+                                                 fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
     }
 }

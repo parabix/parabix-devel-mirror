@@ -183,7 +183,7 @@ static cl::alias MaxCountAlias("max-count", cl::desc("Alias for -m"), cl::aliaso
 
 ColoringType ColorFlag;
 
-static cl::opt<ColoringType, true> Color("colors", cl::desc("Set colorization of the output"), cl::location(ColorFlag), cl::cat(Output_Options), cl::init(autoColor),
+static cl::opt<ColoringType, true> Color("colors", cl::desc("Set colorization of the output"), cl::location(ColorFlag), cl::cat(Output_Options), cl::init(neverColor),
                                  cl::values(clEnumValN(alwaysColor, "always", "Enable colorization"),
                                             clEnumValN(autoColor,   "auto", "Colorize output to stdout"),
                                             clEnumValN(neverColor,  "never", "Disable colorization")

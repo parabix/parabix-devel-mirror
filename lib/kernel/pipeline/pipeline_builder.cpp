@@ -7,6 +7,7 @@
 #include <boost/graph/topological_sort.hpp>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/Timer.h>
 #include <llvm/IR/Module.h>
 #include <llvm/IR/Constants.h>
 #include <toolchain/toolchain.h>
@@ -31,6 +32,25 @@ void * ProgramBuilder::compile() {
     if (LLVM_UNLIKELY(kernel == nullptr)) {
         report_fatal_error("Main pipeline contains no kernels nor function calls.");
     }
+    void * finalObj;
+    {
+#if LLVM_VERSION_INTEGER >= LLVM_VERSION_CODE(4, 0, 0)
+        NamedRegionTimer T(kernel->getSignature(), kernel->getName(),
+                           "pipeline", "Pipeline Compilation",
+                           codegen::TimeKernelsIsEnabled);
+#else
+        NamedRegionTimer T(kernel->getName(), "Pipeline Compilation",
+                           codegen::TimeKernelsIsEnabled);
+#endif
+        finalObj = compileKernel(kernel);
+    }
+    return finalObj;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief compileKernel
+ ** ------------------------------------------------------------------------------------------------------------- */
+void * ProgramBuilder::compileKernel(Kernel * const kernel) {
     mDriver.addKernel(kernel);
     mDriver.generateUncachedKernels();
     return mDriver.finalizeObject(kernel);
