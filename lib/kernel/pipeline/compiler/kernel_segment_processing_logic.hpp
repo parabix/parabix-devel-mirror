@@ -709,8 +709,6 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         mAnyProgressedAtLoopExitPhi->addIncoming(mAlreadyProgressedPhi, exitBlock);
     }
 
-    mKernelInsufficientInputExit = b->GetInsertBlock();
-
     if (mIsPartitionRoot) {
         assert (mKernelJumpToNextUsefulPartition);
         assert (mNextPartitionWithPotentialInput);

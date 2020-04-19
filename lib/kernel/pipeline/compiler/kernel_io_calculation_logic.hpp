@@ -158,7 +158,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         }
     }
 
-    Value * numOfOutputStrides = nullptr;
     Value * numOfActualInputStrides = numOfLinearStrides;
 
     const auto prefix = makeKernelName(mKernelId);

@@ -15,25 +15,31 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
         // If the out-degree for this buffer is zero, then we've proven that its consumption rate
         // is identical to its production rate.
         const auto numOfIndependentConsumers = out_degree(streamSet, mConsumerGraph);
-        if (LLVM_UNLIKELY((numOfIndependentConsumers == 0) && (producer != PipelineInput))) {
-            continue;
-        }
-        const BufferNode & bn = mBufferGraph[streamSet];
-        const BufferRateData & rd = mBufferGraph[e];
-        assert (rd.Port.Type == PortType::Output);
-        const auto name = makeBufferName(producer, rd.Port) + CONSUMED_ITEM_COUNT_SUFFIX;
+        if ((numOfIndependentConsumers > 0) || (producer == PipelineInput)) {
+            const BufferNode & bn = mBufferGraph[streamSet];
+            const BufferRateData & rd = mBufferGraph[e];
+            assert (rd.Port.Type == PortType::Output);
+            const auto prefix = makeBufferName(producer, rd.Port);
+            const auto name = prefix + CONSUMED_ITEM_COUNT_SUFFIX;
 
-        // If we're tracing the consumer item counts, we need to store one for each
-        // (non-nested) consumer. Any nested consumers will have their own trace.
-        Type * countTy = sizeTy;
-        if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
-            countTy = ArrayType::get(sizeTy, numOfIndependentConsumers + 1);
+            // If we're tracing the consumer item counts, we need to store one for each
+            // (non-nested) consumer. Any nested consumers will have their own trace.
+            Type * countTy = sizeTy;
+            if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
+                countTy = ArrayType::get(sizeTy, numOfIndependentConsumers + 1);
+            }
+            if (LLVM_LIKELY(bn.isOwned() || bn.isInternal() || mTraceIndividualConsumedItemCounts)) {
+                mTarget->addInternalScalar(countTy, name, producer);
+            } else {
+                mTarget->addNonPersistentScalar(countTy, name);
+            }
         }
-        if (LLVM_LIKELY(bn.isOwned() || bn.isInternal() || mTraceIndividualConsumedItemCounts)) {
-            mTarget->addInternalScalar(countTy, name, producer);
-        } else {
-            mTarget->addNonPersistentScalar(countTy, name);
-        }
+
+//        if (CheckAssertions) {
+//            const auto prefix = std::to_string(streamSet);
+//            const auto name = prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX;
+//            mTarget->addNonPersistentScalar(sizeTy, name);
+//        }
     }
 }
 
@@ -57,12 +63,29 @@ void PipelineCompiler::readConsumedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief readConsumedItemCount
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t streamSet) {
+Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t streamSet, const bool useFinalCount) {
 
     if (out_degree(streamSet, mConsumerGraph) == 0) {
         // This stream either has no consumers or we've proven that
         // its consumption rate is identical to its production rate.
-        return mInitiallyProducedItemCount[streamSet];
+        Value * produced = nullptr;
+        if (useFinalCount) {
+            produced = mLocallyAvailableItems[streamSet];
+        } else {
+            produced = mInitiallyProducedItemCount[streamSet];
+        }
+//        const auto e = in_edge(streamSet, mBufferGraph);
+//        const BufferRateData & br = mBufferGraph[e];
+//        auto delayOrLookBehind = std::max(br.Delay, br.LookBehind);
+//        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+//            const BufferRateData & br = mBufferGraph[e];
+//            const auto d = std::max(br.Delay, br.LookBehind);
+//            delayOrLookBehind = std::max(delayOrLookBehind, d);
+//        }
+//        if (delayOrLookBehind) {
+//            produced = b->CreateSaturatingSub(produced, b->getSize(delayOrLookBehind));
+//        }
+        return produced;
     }
 
     const auto e = in_edge(streamSet, mConsumerGraph);
@@ -94,6 +117,20 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const St
     const auto streamSet = target(output, mBufferGraph);
     const ConsumerNode & cn = mConsumerGraph[streamSet];
     cn.Consumed = initiallyConsumed;
+
+//    if (CheckAssertions) {
+//        const auto prefix = std::to_string(streamSet);
+//        const auto name = prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX;
+//        Value * const ptr = b->getScalarFieldPtr(name);
+//        #ifdef PRINT_DEBUG_MESSAGES
+//        const auto output = in_edge(streamSet, mBufferGraph);
+//        const auto producer = source(output, mBufferGraph);
+//        const auto prefix2 = makeBufferName(producer, mBufferGraph[output].Port);
+//        debugPrint(b, prefix2 + "_expected_consumed = %" PRIu64 " (%" PRIx64 ")", initiallyConsumed, ptr);
+//        #endif
+//        b->CreateStore(initiallyConsumed, ptr);
+//    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -147,6 +184,33 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
             cn.Consumed = b->CreateUMin(cn.Consumed, processed);
         }
     }
+
+//    // When checking assertions, keep an absolute running tally of how many items
+//    // are actually consumed to verify the final number.
+//    if (CheckAssertions) {
+//        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+//            const BufferRateData & br = mBufferGraph[e];
+//            const auto streamSet = source(e, mBufferGraph);
+//            const auto prefix = std::to_string(streamSet);
+//            const auto name = prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX;
+//            Value * ptr = b->getScalarFieldPtr(prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX);
+//            Value * current = b->CreateLoad(ptr);
+//            Value * processed = mFullyProcessedItemCount(br.Port);
+//            if (LLVM_UNLIKELY(br.LookBehind != 0)) {
+//                ConstantInt * const amount = b->getSize(br.LookBehind);
+//                processed = b->CreateSaturatingSub(processed, amount);
+//            }
+//            current = b->CreateUMin(current, processed);
+//            #ifdef PRINT_DEBUG_MESSAGES
+//            const auto output = in_edge(streamSet, mBufferGraph);
+//            const auto producer = source(output, mBufferGraph);
+//            const auto prefix2 = makeBufferName(producer, mBufferGraph[output].Port);
+//            debugPrint(b, prefix2 + "_expected_consumed' = %" PRIu64 " (%" PRIx64 ")", current, ptr);
+//            #endif
+//            b->CreateStore(current, ptr);
+//        }
+//    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -178,6 +242,41 @@ inline void PipelineCompiler::writeConsumedItemCounts(BuilderRef b) {
 
         }
     }
+
+//    // When checking assertions, keep an absolute running tally of how many items
+//    // are actually consumed to verify the final number.
+//    if (CheckAssertions) {
+//        flat_set<unsigned> inputStreamSets;
+//        inputStreamSets.reserve(in_degree(mKernelId, mBufferGraph));
+
+//        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+//            const auto streamSet = source(e, mBufferGraph);
+//            auto lastConsumer = mKernelId;
+//            for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+//                const auto consumer = target(e, mBufferGraph);
+//                lastConsumer = std::max<unsigned>(lastConsumer, consumer);
+//            }
+//            if (lastConsumer == mKernelId) {
+//                inputStreamSets.insert(streamSet);
+//            }
+//        }
+
+//        const auto msg = "Expected to consume %" PRIu64 " items of %s.%s but instead consumed %" PRIu64;
+
+//        for (const auto streamSet : inputStreamSets) {
+//            const auto prefix = std::to_string(streamSet);
+//            Value * const current = b->getScalarField(prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX);
+//            Value * const consumed = readConsumedItemCount(b, streamSet, true);
+//            Value * const valid = b->CreateICmpEQ(current, consumed);
+//            const auto output = in_edge(streamSet, mBufferGraph);
+//            const auto producer = source(output, mBufferGraph);
+//            const BufferRateData & br = mBufferGraph[output];
+//            const Binding & binding = br.Binding;
+//            b->CreateAssert(valid, msg, current, mKernelName[producer], b->GetString(binding.getName()), consumed);
+//        }
+
+//    }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

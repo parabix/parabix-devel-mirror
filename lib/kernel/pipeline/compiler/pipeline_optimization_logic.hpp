@@ -46,7 +46,6 @@ void PipelineCompiler::replacePhiCatchWithCurrentBlock(BuilderRef b, BasicBlock 
             list.push_back(toMove);
             toMove = next;
         }
-
     }
 
 

@@ -551,7 +551,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mKernelIsPenultimate = nullptr;
 
     mKernelInsufficientInput = nullptr;
-    mKernelInsufficientInputExit = nullptr;
     mKernelTerminated = nullptr;
     mKernelInitiallyTerminated = nullptr;
     mKernelInitiallyTerminatedExit = nullptr;

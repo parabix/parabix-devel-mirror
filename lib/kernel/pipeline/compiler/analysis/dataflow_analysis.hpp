@@ -984,7 +984,9 @@ void PipelineAnalysis::identifyLocalPortIds() {
     unsigned nextRateId = 0;
 
     flat_map<Vertex, unsigned> partialSumRefId;
-    flat_map<Vertex, unsigned> addId;
+    flat_map<unsigned, unsigned> addId;
+    flat_map<unsigned, unsigned> lookAheadId;
+    flat_map<unsigned, unsigned> lookBehindId;
     flat_map<StreamSetPort, RefWrapper<BitSet>> relativeRefId;
 
     Graph H(LastStreamSet + 1);
@@ -1041,13 +1043,13 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 return f->second.get();
             };
 
-            auto insertAddId = [&] (BitSet & S, const int k) {
+            auto insert = [&] (BitSet & S, const int k, flat_map<unsigned, unsigned> & M) {
                 if (k) {
                     unsigned id;
-                    const auto f = addId.find(k);
-                    if (f == addId.end()) {
+                    const auto f = M.find(k);
+                    if (f == M.end()) {
                         id = nextRateId++;
-                        addId.emplace(k, id);
+                        M.emplace(k, id);
                     } else {
                         id = f->second;
                     }
@@ -1055,8 +1057,17 @@ void PipelineAnalysis::identifyLocalPortIds() {
                 }
             };
 
-            addId.clear();
+            auto reset = [&]() {
+                addId.clear();
+                lookAheadId.clear();
+                lookBehindId.clear();
+            };
 
+            reset();
+
+            bool needsZeroExtendId = true;
+            unsigned zeroExtendId = 0;
+            bool hasLookBehind = false;
             bool hasInputFixedRate = false;
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const BufferRateData & data = mBufferGraph[input];
@@ -1087,12 +1098,19 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     relativeRefId.emplace(data.Port, S);
                 }                
                 if (data.IsZeroExtended) {
-                    addRateId(S, nextRateId++);
+                    if (needsZeroExtendId) {
+                        zeroExtendId = nextRateId++;
+                        needsZeroExtendId = false;
+                    }
+                    addRateId(S, zeroExtendId);
                 }
-                insertAddId(S, data.TransitiveAdd);
+                insert(S, data.TransitiveAdd, addId);
                 combine(K, S);
+//                insert(K, data.LookBehind, lookBehindId);
+//                insert(K, data.LookAhead, lookAheadId);
             }
-            addId.clear();
+
+            reset();
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const BufferRateData & data = mBufferGraph[output];
@@ -1119,7 +1137,9 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     }
                     relativeRefId.emplace(data.Port, S);
                 }
-                insertAddId(S, data.TransitiveAdd);
+                insert(S, data.TransitiveAdd, addId);
+//                insert(S, data.LookAhead, lookAheadId);
+//                insert(S, data.LookBehind, lookBehindId);
             }
             relativeRefId.clear();
         }

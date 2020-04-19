@@ -472,6 +472,7 @@ void PipelineAnalysis::generateInitialPipelineGraph(BuilderRef b) {
         add_edge(p_in, v, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, mRelationships);
         add_edge(v, p_out, RelationshipType{PortType::Input, 0, ReasonType::OrderingConstraint}, mRelationships);
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

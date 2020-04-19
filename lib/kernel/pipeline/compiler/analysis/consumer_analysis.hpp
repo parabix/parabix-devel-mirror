@@ -14,11 +14,11 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::makeConsumerGraph() {
 
+    constexpr bool forced = false;
+
     mConsumerGraph = ConsumerGraph(LastStreamSet + 1);
 
     flat_set<unsigned> observedGlobalPortIds;
-
-    const auto enableAsserts = codegen::DebugOptionIsSet(codegen::EnableAsserts);
 
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         // copy the producing edge
@@ -41,7 +41,7 @@ void PipelineAnalysis::makeConsumerGraph() {
             const BufferRateData & br = mBufferGraph[ce];
             const auto consumer = target(ce, mBufferGraph);
             // check if any consumer has a rate we have not yet observed
-            if (enableAsserts || observedGlobalPortIds.insert(br.GlobalPortId).second) {
+            if (forced || observedGlobalPortIds.insert(br.GlobalPortId).second) {
                 lastConsumer = std::max<unsigned>(lastConsumer, consumer);
                 add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
             }
@@ -86,33 +86,36 @@ void PipelineAnalysis::makeConsumerGraph() {
         }
     }
 
-//    auto & out = errs();
+#if 0
 
-//    out << "digraph \"C\" {\n";
-//    for (auto v : make_iterator_range(vertices(mConsumerGraph))) {
-//        out << "v" << v << " [label=\"" << v << "\"];\n";
-//    }
-//    for (auto e : make_iterator_range(edges(mConsumerGraph))) {
-//        const auto s = source(e, mConsumerGraph);
-//        const auto t = target(e, mConsumerGraph);
-//        out << "v" << s << " -> v" << t <<
-//               " [label=\"";
-//        const ConsumerEdge & c = mConsumerGraph[e];
-//        if (c.Flags & ConsumerEdge::UpdatePhi) {
-//            out << 'U';
-//        }
-//        if (c.Flags & ConsumerEdge::WriteConsumedCount) {
-//            out << 'W';
-//        }
-//        if (c.Flags & ConsumerEdge::UpdateExternalCount) {
-//            out << 'E';
-//        }
-//        out << "\"];\n";
-//    }
+    auto & out = errs();
 
-//    out << "}\n\n";
-//    out.flush();
+    out << "digraph \"ConsumerGraph\" {\n";
+    for (auto v : make_iterator_range(vertices(mConsumerGraph))) {
+        out << "v" << v << " [label=\"" << v << "\"];\n";
+    }
+    for (auto e : make_iterator_range(edges(mConsumerGraph))) {
+        const auto s = source(e, mConsumerGraph);
+        const auto t = target(e, mConsumerGraph);
+        out << "v" << s << " -> v" << t <<
+               " [label=\"";
+        const ConsumerEdge & c = mConsumerGraph[e];
+        if (c.Flags & ConsumerEdge::UpdatePhi) {
+            out << 'U';
+        }
+        if (c.Flags & ConsumerEdge::WriteConsumedCount) {
+            out << 'W';
+        }
+        if (c.Flags & ConsumerEdge::UpdateExternalCount) {
+            out << 'E';
+        }
+        out << "\"];\n";
+    }
 
+    out << "}\n\n";
+    out.flush();
+
+#endif
 
 }
 

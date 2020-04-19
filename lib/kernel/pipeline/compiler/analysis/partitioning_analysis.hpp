@@ -383,6 +383,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         out.flush();
     };
 
+
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));
     assert (nextKernel == kernels);
@@ -568,8 +569,6 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     using BitSet = BitVector;
     using EdgeIterator = graph_traits<ConstraintGraph>::edge_iterator;
 
-
-
     std::vector<unsigned> kernels;
     for (const auto u : orderingOfG) {
         const RelationshipNode & node = mRelationships[u];
@@ -588,24 +587,6 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     }
 
     const auto numOfKernels = kernels.size();
-
-    // Rewrite the ordering w.r.t. the chosen partitions.
-
-//    BEGIN_SCOPED_REGION
-//    std::vector<unsigned> temp;
-//    temp.reserve(numOfKernels);
-//    for (unsigned selectedPartitionId = 0; selectedPartitionId < PartitionCount; ++selectedPartitionId) {
-//        for (auto u : kernels) {
-//            const auto f = mPartitionIds.find(u);
-//            assert (f != mPartitionIds.end());
-//            const auto id = f->second;
-//            if (id == selectedPartitionId) {
-//                temp.push_back(u);
-//            }
-//        }
-//    }
-//    kernels.swap(temp);
-//    END_SCOPED_REGION
 
     flat_map<unsigned, unsigned> mapping;
     mapping.reserve(numOfKernels);
@@ -629,6 +610,12 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
         reverse_mapping.emplace(i, u);
         ++i;
     }
+
+    const auto cfg = Z3_mk_config();
+    Z3_set_param_value(cfg, "model", "true");
+    Z3_set_param_value(cfg, "proof", "false");
+    const auto ctx = Z3_mk_context(cfg);
+    Z3_del_config(cfg);
 
     bool canRemake = true;
 
@@ -762,7 +749,8 @@ remake_constraint_graphs:
         const auto m = O.size();
 
         for (unsigned i = 0; i < m; ++i) {
-            BitSet & B = H[i]; // O[m - i - 1]
+            assert (i == O[m - i - 1]);
+            BitSet & B = H[i];
             B.resize(m);
             B.set(i);
         }
@@ -800,8 +788,26 @@ remake_constraint_graphs:
 
     const auto contractedPartitions = contract_constraint_graph(P, orderingOfP, false);
 
-    #warning generate a jump index tree here and add its constraints to P?
-
+//    BEGIN_SCOPED_REGION
+//    unsigned k = 0;
+//    bool restart = false;
+//    SmallVector<unsigned, 32> remappedPartitionId(PartitionCount);
+//    for (unsigned i = 0; i < PartitionCount; ++i) {
+//        const BitSet & nodes = P[i];
+//        for (unsigned j : nodes.set_bits()) {
+//            assert (k < PartitionCount);
+//            restart |= (j != k);
+//            remappedPartitionId[j] = k++;
+//        }
+//    }
+//    assert (k == PartitionCount);
+//    if (restart) {
+//        for (auto & i : mPartitionIds) {
+//            i.second = remappedPartitionId[i.second];
+//        }
+//        goto remake_constraint_graphs;
+//    }
+//    END_SCOPED_REGION
 
     // Build a partition mapping that reflects the *original* graph C
 
@@ -822,6 +828,7 @@ remake_constraint_graphs:
             }
         }
     }
+
     const auto contractedKernels = contract_constraint_graph(C, orderingOfC, true);
 
     // Modify the vertex mapping from G to C to reflect the contracted graph C'.
@@ -842,11 +849,6 @@ found:  ++i;
     // Construct an "ordering" for the partitions that attempts to minimize the liveness
     // of the partition streams.
 
-    const auto cfg = Z3_mk_config();
-    Z3_set_param_value(cfg, "model", "true");
-    Z3_set_param_value(cfg, "proof", "false");
-    const auto ctx = Z3_mk_context(cfg);
-    Z3_del_config(cfg);
     const auto solver = Z3_mk_optimize(ctx);
     Z3_optimize_inc_ref(ctx, solver);
 
@@ -893,8 +895,6 @@ found:  ++i;
     // shares the same kernels as the first partition of another and we can schedule one after the other,
     // this may improve I-Cache utilization.
 
-    // errs() << "CONTRACTED Z3\n";
-
     if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
         report_fatal_error("Z3 failed to find a partition ordering solution");
     }
@@ -934,6 +934,7 @@ found:  ++i;
 
     std::fill(mappedPartitionId.begin(), mappedPartitionId.end(), -1U);
 
+    bool restart = false;
     for (const auto p : partition_order) {
         const BitSet & K = P[p];
         assert (K.any());
@@ -965,44 +966,39 @@ found:  ++i;
     }
 
     BEGIN_SCOPED_REGION
+
     // iterate through the ordered partitions
-    SmallVector<Z3_ast, 32> kernelVars(32);
     unsigned start = 0;
-
     for (const auto p : partition_order) {
-
         for (const auto i : P[p].set_bits()) {
-
             const BitSet & nodes = nodesInPartition[i];
             const auto numOfMappedKernels = nodes.count();
-            if (numOfMappedKernels == 0) continue;
-
-            const auto end = start + numOfMappedKernels;
-            const auto lb = Z3_mk_int(ctx, start, varType);
-            const auto ub = Z3_mk_int(ctx, end, varType);
-            if (LLVM_UNLIKELY(kernelVars.size() < numOfMappedKernels)) {
-                kernelVars.resize(numOfMappedKernels);
-            }
-            // and bound each (contracted) kernel to its given partition
-            if (numOfMappedKernels == 1) {
-                const auto j = nodes.find_first();
-                assert (j != -1);
-                const auto var = vars[j]; assert (var);
-                Z3_optimize_assert(ctx, solver, Z3_mk_eq(ctx, var, lb));
-            } else {
-                unsigned k = 0;
-                for (const auto j : nodes.set_bits()) {
+            if (numOfMappedKernels > 0) {
+                const auto end = start + numOfMappedKernels;
+                const auto lb = Z3_mk_int(ctx, start, varType);
+                // and bound each (contracted) kernel to its given partition
+                if (numOfMappedKernels == 1) {
+                    const auto j = nodes.find_first();
+                    assert (j != -1);
                     const auto var = vars[j]; assert (var);
-                    Z3_optimize_assert(ctx, solver, Z3_mk_ge(ctx, var, lb));
-                    Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, var, ub));
-                    kernelVars[k++] = var;
+                    Z3_optimize_assert(ctx, solver, Z3_mk_eq(ctx, var, lb));
+                } else if (numOfMappedKernels > 1) {
+                    SmallVector<Z3_ast, 32> kernelVars(numOfMappedKernels);
+                    const auto ub = Z3_mk_int(ctx, end, varType);
+                    unsigned k = 0;
+                    for (const auto j : nodes.set_bits()) {
+                        const auto var = vars[j]; assert (var);
+                        Z3_optimize_assert(ctx, solver, Z3_mk_ge(ctx, var, lb));
+                        Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, var, ub));
+                        kernelVars[k++] = var;
+                    }
+                    assert (k == numOfMappedKernels);
+                    // whilst ensuring no kernel is assigned the same position
+                    auto distinct = Z3_mk_distinct(ctx, numOfMappedKernels, kernelVars.data());
+                    Z3_optimize_assert(ctx, solver, distinct);
                 }
-                assert (k == numOfMappedKernels);
-                // whilst ensuring no kernel is assigned the same position
-                Z3_optimize_assert(ctx, solver, Z3_mk_distinct(ctx, numOfMappedKernels, kernelVars.data()));
+                start = end;
             }
-            start = end;
-
         }
     }
     END_SCOPED_REGION
@@ -1014,35 +1010,37 @@ found:  ++i;
 
     while (ei != ei_end) {
         const auto e = *ei++;
-        const auto u = source(e, C);
-        const auto v = target(e, C);
+        const auto i = source(e, C);
+        const auto j = target(e, C);
 
-        const auto P = vars[u];
-        const auto C = vars[v];
+        assert (i != j);
 
-        const auto pu = mappedPartitionId[u];
-        const auto pv = mappedPartitionId[v];
         // We're already guaranteed that any cross partition dependency will be
         // satisfied.
-        if (pu == pv) {
-            Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, P, C));
+        if (mappedPartitionId[i] == mappedPartitionId[j]) {
+            const auto Vi = vars[i];
+            const auto Vj = vars[j];
+            Z3_optimize_assert(ctx, solver, Z3_mk_lt(ctx, Vi, Vj));
+
+            // TODO: the following needs to be reevaluated. Despite being a minimization
+            // goal, even non-contradictory goals can result in
+
+
+//            // Add some optimization goals to try minimize the distance between
+//            // producers and consumers. By limiting the goals to only the partition
+//            // we get a substantive speed-up on complex problems but a potentially
+//            // worse solution.
+//            Z3_ast args1[2] = { Vj, Vi };
+//            const auto r = Z3_mk_sub(ctx, 2, args1);
+//            Z3_optimize_minimize(ctx, solver, r);
         }
 
-        // Add some optimization goals to try minimize the distance between
-        // producers and consumers. By limiting the goals to only the partition
-        // we get a substantive speed-up on complex problems but a potentially
-        // worse solution.
-        Z3_ast args[2] = { C, P };
-        const auto r = Z3_mk_sub(ctx, 2, args);
-        Z3_optimize_minimize(ctx, solver, r);
 
     }
 
     const auto numOfContractedKernels = numOfKernels - contractedKernels;
 
-    BEGIN_SCOPED_REGION
-
-    // Now search through all kernels and try to find any with a matching signature.
+     // Now search through all kernels and try to find any with a matching signature.
     // Try to minimize the distance between such kernels. However, since a kernel
     // cannot escape its partition and each partition will be executed according to
     // an already determined ordering, rather than adding minimization goals globally,
@@ -1051,6 +1049,8 @@ found:  ++i;
     // in the number of minimization goals.
 
     transitive_closure_dag(orderingOfC, C);
+
+    BEGIN_SCOPED_REGION
 
     using SigGraph = adjacency_list<vecS, vecS, directedS, no_property, unsigned>;
 
@@ -1178,9 +1178,7 @@ found:  ++i;
 
     END_SCOPED_REGION
 
-   // errs() << "CONTRACTED Z3 #2\n";
-
-    if (Z3_optimize_check(ctx, solver) != Z3_L_TRUE) {
+    if (Z3_optimize_check(ctx, solver) == Z3_L_FALSE) {
         report_fatal_error("Z3 failed to find a kernel ordering solution");
     }
 

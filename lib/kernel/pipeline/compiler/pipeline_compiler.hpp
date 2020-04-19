@@ -56,6 +56,7 @@ const static std::string CONSUMER_TERMINATION_COUNT_PREFIX = "@PTC";
 const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
+const static std::string DEBUG_CONSUMED_ITEM_COUNT_SUFFIX = ".DCON";
 
 const static std::string STATISTICS_CYCLE_COUNT_SUFFIX = ".SCY";
 const static std::string STATISTICS_SEGMENT_COUNT_SUFFIX = ".SSC";
@@ -190,8 +191,8 @@ public:
     void determinePartitionStrideRates();
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(BuilderRef b) const;
 
-    void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const exitBlock);
-    void phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const exitBlock);
+    void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
+    void phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
 
     void acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId);
 
@@ -324,7 +325,7 @@ public:
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
     void readConsumedItemCounts(BuilderRef b);
-    Value * readConsumedItemCount(BuilderRef b, const size_t streamSet);
+    Value * readConsumedItemCount(BuilderRef b, const size_t streamSet, const bool useFinalCount = false);
     void setConsumedItemCount(BuilderRef b, const size_t bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
     void writeExternalConsumedItemCounts(BuilderRef b);
 
@@ -552,7 +553,6 @@ protected:
     BasicBlock *                                mKernelInitiallyTerminatedExit = nullptr;
     BasicBlock *                                mKernelTerminated = nullptr;
     BasicBlock *                                mKernelInsufficientInput = nullptr;
-    BasicBlock *                                mKernelInsufficientInputExit = nullptr;
     BasicBlock *                                mKernelJumpToNextUsefulPartition = nullptr;
     PHINode *                                   mExhaustedInputAtJumpPhi = nullptr;
     BasicBlock *                                mKernelLoopExit = nullptr;
