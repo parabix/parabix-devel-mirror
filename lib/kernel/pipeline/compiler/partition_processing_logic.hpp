@@ -181,9 +181,9 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
 
                     Value * alreadyProduced = nullptr;
                     if (LLVM_UNLIKELY(br.IsDeferred)) {
-                        alreadyProduced = mAlreadyProducedDeferredPhi(br.Port);
+                        alreadyProduced = mAlreadyProducedDeferredPhi[br.Port];
                     } else {
-                        alreadyProduced = mAlreadyProducedPhi(br.Port);
+                        alreadyProduced = mAlreadyProducedPhi[br.Port];
                     }
                     assert (alreadyProduced);
 

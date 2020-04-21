@@ -124,7 +124,16 @@ void KernelCompiler::addBaseInternalProperties(BuilderRef b) {
         }
     }
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
-        mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_SIGNAL);
+
+        // In multi-threaded mode, given a small file, the outer most pipeline kernel could be called
+        // after an earlier thread marked this pipeline as terminated. Since we cannot reliably detect
+        // and the behaviour is expected, ignore the pipeline.
+
+        if (mTarget->getTypeId() != Kernel::TypeId::Pipeline || mTarget->hasAttribute(AttrId::InternallySynchronized)) {
+            mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_SIGNAL);
+        } else {
+            mTarget->addNonPersistentScalar(b->getSizeTy(), TERMINATION_SIGNAL);
+        }
     } else {
         mTarget->addNonPersistentScalar(b->getSizeTy(), TERMINATION_SIGNAL);
     }
@@ -585,7 +594,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
                 b->CreateICmpEQ(b->CreateLoad(mTerminationSignalPtr), b->getSize(KernelBuilder::TerminationCode::None));
             b->CreateAssert(unterminated, getName() + ".doSegment was called after termination?");
         }
-
     }
 }
 
@@ -1311,6 +1319,14 @@ void KernelCompiler::runInternalOptimizationPasses(Module * const m) {
 
         Instruction * inst = bb.getFirstNonPHIOrDbgOrLifetime();
         while (inst) {
+            for (unsigned i = 0; i < inst->getNumOperands(); ++i) {
+                Value * const op = inst->getOperand(i);
+                if (op == nullptr) {
+                    report_fatal_error("null operand");
+                }
+            }
+
+
             Instruction * const nextNode = inst->getNextNode();
             if (isa<AllocaInst>(inst) || isa<GetElementPtrInst>(inst)) {
                 if (LLVM_UNLIKELY(inst->getNumUses() == 0)) {

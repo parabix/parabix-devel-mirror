@@ -65,7 +65,7 @@ void PipelineCompiler::runOptimizationPasses(BuilderRef b) {
     Module * const m = b->getModule();
 
     simplifyPhiNodes(m);
-    auto pm = make_unique<legacy::PassManager>();
+    auto pm = make_unique<legacy::PassManager>();   
     pm->add(createDeadCodeEliminationPass());        // Eliminate any trivially dead code
     pm->add(createCFGSimplificationPass());          // Remove dead basic blocks and unnecessary branch statements / phi nodes
     pm->run(*m);
@@ -105,14 +105,18 @@ inline void PipelineCompiler::simplifyPhiNodes(Module * const m) const {
                 inst = inst->getNextNode();
                 if (LLVM_LIKELY(phi->hasNUsesOrMore(1))) {
                     Value * const value = phi->getIncomingValue(0);
+                    assert (value);
                     const auto n = phi->getNumIncomingValues();
                     for (unsigned i = 1; i != n; ++i) {
-                        if (LLVM_LIKELY(phi->getIncomingValue(i) != value)) {
+                        Value * const op = phi->getIncomingValue(i);
+                        assert (op);
+                        if (LLVM_LIKELY(op != value)) {
                             goto keep_phi_node;
                         }
                     }
                     phi->replaceAllUsesWith(value);
                 }
+
                 RecursivelyDeleteDeadPHINode(phi);
                 continue;
                 // ----------------------------------------------------------------------------------

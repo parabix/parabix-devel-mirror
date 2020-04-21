@@ -211,9 +211,9 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
     Vec<Value *> finalProduced(numOfOutputs);
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const StreamSetPort port (PortType::Output, i);
-        finalProduced[i] = mProducedItemCount(port);
-        if (isCountableType(mReturnedProducedItemCountPtr(port), getOutputBinding(port))) {
-            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr(port));
+        finalProduced[i] = mProducedItemCount[port];
+        if (isCountableType(mReturnedProducedItemCountPtr[port], getOutputBinding(port))) {
+            finalProduced[i] = b->CreateLoad(mReturnedProducedItemCountPtr[port]);
             #ifdef PRINT_DEBUG_MESSAGES
             debugPrint(b, makeBufferName(mKernelId, port) +
                        "_producedAfterAbnormalTermination = %" PRIu64, finalProduced[i]);
@@ -224,7 +224,7 @@ void PipelineCompiler::readCountableItemCountsAfterAbnormalTermination(BuilderRe
 
     for (unsigned i = 0; i < numOfOutputs; i++) {
         const StreamSetPort port (PortType::Output, i);
-        mProducedAtTerminationPhi(port)->addIncoming(finalProduced[i], exitBlock);
+        mProducedAtTerminationPhi[port]->addIncoming(finalProduced[i], exitBlock);
     }
 }
 
@@ -242,7 +242,7 @@ void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
             if (LLVM_UNLIKELY(br.IsZeroExtended)) continue;
             Value * const closed = isClosed(b, br.Port);
             Value * const avail = getLocallyAvailableItemCount(b, br.Port);
-            Value * const processed = mProcessedItemCount(br.Port); assert (processed);
+            Value * const processed = mProcessedItemCount[br.Port]; assert (processed);
 
             Value * const fullyConsumed = b->CreateAnd(closed, b->CreateICmpULE(avail, processed));
             if (LLVM_UNLIKELY(br.IsPrincipal)) {

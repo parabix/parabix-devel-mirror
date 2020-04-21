@@ -151,7 +151,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
             const Kernel * const kernelObj = node.Kernel;
 
-            if (kernelObj == mPipelineKernel) {
+            if ((kernelObj == mPipelineKernel) && (out_degree(u, mRelationships) == 0)) {
                 continue;
             }
 
@@ -382,7 +382,6 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         out << "}\n\n";
         out.flush();
     };
-
 
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));

@@ -163,7 +163,7 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
         const ConsumerEdge & c = mConsumerGraph[e];
         if (c.Flags & ConsumerEdge::UpdatePhi) {
             const StreamSetPort port(PortType::Input, c.Port);
-            Value * processed = mFullyProcessedItemCount(port);
+            Value * processed = mFullyProcessedItemCount[port];
             // To support the lookbehind attribute, we need to withhold the items from
             // our consumed count and rely on the initial buffer underflow to access any
             // items before the start of the physical buffer.
@@ -195,7 +195,7 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
 //            const auto name = prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX;
 //            Value * ptr = b->getScalarFieldPtr(prefix + DEBUG_CONSUMED_ITEM_COUNT_SUFFIX);
 //            Value * current = b->CreateLoad(ptr);
-//            Value * processed = mFullyProcessedItemCount(br.Port);
+//            Value * processed = mFullyProcessedItemCount[br.Port];
 //            if (LLVM_UNLIKELY(br.LookBehind != 0)) {
 //                ConstantInt * const amount = b->getSize(br.LookBehind);
 //                processed = b->CreateSaturatingSub(processed, amount);

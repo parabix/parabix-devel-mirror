@@ -110,8 +110,9 @@ uint64_t ucount1(UCountFunctionType fn_ptr, const uint32_t fileIdx) {
         close(fd);
         return 0;
     }
-    return fn_ptr(fd);
+    auto r = fn_ptr(fd);
     close(fd);
+    return r;
 }
 
 int main(int argc, char *argv[]) {

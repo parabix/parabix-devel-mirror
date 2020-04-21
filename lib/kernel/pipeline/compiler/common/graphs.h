@@ -41,40 +41,6 @@ using BuilderRef = KernelCompiler::BuilderRef;
 using ArgIterator = KernelCompiler::ArgIterator;
 using InitArgTypes = KernelCompiler::InitArgTypes;
 
-struct StreamSetInputPort {
-    operator StreamSetPort () const noexcept {
-        return StreamSetPort{Type, Number};
-    }
-    StreamSetInputPort() = default;
-    explicit StreamSetInputPort(const StreamSetPort port)
-    : Number(port.Number) {
-        assert (port.Type == Type);
-    }
-    explicit StreamSetInputPort(const StreamSetInputPort & port)
-    : Number(port.Number) {
-
-    }
-    static constexpr PortType Type = PortType::Input;
-    unsigned Number = 0;
-};
-
-struct StreamSetOutputPort {
-    operator StreamSetPort() const noexcept {
-        return StreamSetPort{Type, Number};
-    }
-    StreamSetOutputPort() = default;
-    explicit StreamSetOutputPort(const StreamSetPort port)
-    : Number(port.Number) {
-        assert (port.Type == Type);
-    }
-    explicit StreamSetOutputPort(const StreamSetOutputPort & port)
-    : Number(port.Number) {
-
-    }    
-    static constexpr PortType Type = PortType::Output;
-    unsigned Number = 0;
-};
-
 struct RelationshipNode {
 
     enum RelationshipNodeType : unsigned {
@@ -451,21 +417,6 @@ bool operator < (const PartitioningGraphEdge &A, const PartitioningGraphEdge & B
 using PartitioningGraph = adjacency_list<vecS, vecS, bidirectionalS, PartitioningGraphNode, PartitioningGraphEdge>;
 
 using PartitionJumpTree = adjacency_list<vecS, vecS, bidirectionalS, no_property, no_property, no_property>;
-
-struct InputTruncation {
-    StreamSetInputPort  Port;
-    bool                CreateTemporaryBuffer = false;
-
-    InputTruncation() = default;
-
-    explicit InputTruncation(const StreamSetPort port)
-    : Port(port)
-    , CreateTemporaryBuffer(true) {
-
-    }
-};
-
-using InputTruncationGraph = adjacency_list<hash_setS, vecS, directedS, no_property, InputTruncation>;
 
 struct IOCheckEdge {
     unsigned        Kernel = 0;

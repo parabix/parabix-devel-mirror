@@ -779,7 +779,7 @@ void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const StreamSe
         // new capacity 1
         b->CreateStore(buffer->getCapacity(b), b->CreateGEP(entryArray, {traceIndex, ONE}));
         // produced item count 2
-        Value * const produced = mAlreadyProducedPhi(outputPort);
+        Value * const produced = mAlreadyProducedPhi[outputPort];
         b->CreateStore(produced, b->CreateGEP(entryArray, {traceIndex, TWO}));
 
         // consumer processed item count [3,n)
@@ -1315,7 +1315,7 @@ void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
         for (unsigned i = 0; i != n; ++i) {
             const StreamSetPort port(PortType::Output, i);
             const auto streamSet = getOutputBufferVertex(port);
-            current[i] = mFullyProducedItemCount(port);
+            current[i] = mFullyProducedItemCount[port];
             prior[i] = mInitiallyProducedItemCount[streamSet];
         }
         recordItemCountDeltas(b, current, prior, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);

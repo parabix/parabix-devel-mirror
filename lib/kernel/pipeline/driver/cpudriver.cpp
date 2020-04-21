@@ -224,7 +224,7 @@ void CPUDriver::generateUncachedKernels() {
             kernel->generateKernel(mBuilder);
             Module * const module = kernel->getModule(); assert (module);
             module->setTargetTriple(mMainModule->getTargetTriple());
-            mPassManager->run(*module);
+ //           mPassManager->run(*module);
             mCachedKernel.emplace_back(kernel.release());
         }
     }

@@ -136,8 +136,13 @@ public:
         unsigned Number;
 
         StreamSetPort() : Type(PortType::Input), Number(0) { }
-        explicit StreamSetPort(PortType Type, unsigned Number) : Type(Type), Number(Number) { }
-
+        StreamSetPort(const PortType Type, const unsigned Number) : Type(Type), Number(Number) { }
+        StreamSetPort(const StreamSetPort & other) = default;
+        StreamSetPort & operator = (const StreamSetPort & other) {
+            Type = other.Type;
+            Number = other.Number;
+            return *this;
+        }
         bool operator < (const StreamSetPort other) const {
             if (Type == other.Type) {
                 return Number < other.Number;

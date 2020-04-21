@@ -89,13 +89,14 @@ class PipelineCompiler final : public KernelCompiler, public PipelineCommonGraph
             std::memset(mVec, 0, sizeof(T) * pc->mInputPortSet.size());
             #endif
         }
-        BOOST_FORCEINLINE
-        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
-            return mVec[mPC.getInputPortIndex(kernel, port)];
-        }
+//        BOOST_FORCEINLINE
+//        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
+//            assert (mVec);
+//            return mVec[mPC.getInputPortIndex(kernel, port)];
+//        }
         BOOST_FORCEINLINE
         T & operator()(const StreamSetPort port) const {
-            return operator()(mPC.mKernelId, port);
+            return mVec[mPC.getInputPortIndex(mPC.mKernelId, port)];
         }
     private:
         const PipelineCompiler & mPC;
@@ -114,13 +115,14 @@ class PipelineCompiler final : public KernelCompiler, public PipelineCommonGraph
             std::memset(mVec, 0, sizeof(T) * pc->mOutputPortSet.size());
             #endif
         }
-        BOOST_FORCEINLINE
-        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
-            return mVec[mPC.getOutputPortIndex(kernel, port)];
-        }
+//        BOOST_FORCEINLINE
+//        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
+//            return mVec[mPC.getOutputPortIndex(kernel, port)];
+//        }
         BOOST_FORCEINLINE
         T & operator()(const StreamSetPort port) const {
-            return operator()(mPC.mKernelId, port);
+            // return operator()(mPC.mKernelId, port);
+            return mVec[mPC.getOutputPortIndex(mPC.mKernelId, port)];
         }
     private:
         const PipelineCompiler & mPC;
@@ -128,6 +130,9 @@ class PipelineCompiler final : public KernelCompiler, public PipelineCommonGraph
     };
 
     template<typename T> friend struct OutputPortVec;
+
+    enum { WITH_OVERFLOW = 0, WITHOUT_OVERFLOW = 1};
+    using OverflowItemCounts = Vec<std::array<Value *, 2>, 8>;
 
 public:
 
@@ -276,7 +281,7 @@ public:
 
     Value * getInputStrideLength(BuilderRef b, const StreamSetPort inputPort);
     Value * getOutputStrideLength(BuilderRef b, const StreamSetPort outputPort);
-    Value * calculateStrideLength(BuilderRef b, const size_t kernel, const StreamSetPort port);
+    Value * calculateStrideLength(BuilderRef b, const StreamSetPort port);
     Value * calculateNumOfLinearItems(BuilderRef b, const StreamSetPort port, Value * const adjustment);
     Value * getAccessibleInputItems(BuilderRef b, const StreamSetPort inputPort, const bool useOverflow = true);
     Value * getNumOfAccessibleStrides(BuilderRef b, const StreamSetPort inputPort, Value * const numOfLinearStrides);
@@ -292,7 +297,7 @@ public:
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
-    Value * getPartialSumItemCount(BuilderRef b, const size_t kernel, const StreamSetPort port, Value * const offset = nullptr) const;
+    Value * getPartialSumItemCount(BuilderRef b, const StreamSetPort port, Value * const offset = nullptr) const;
     Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const StreamSetPort port, Value * const numOfLinearStrides);
 
 // termination codegen functions
@@ -404,7 +409,6 @@ public:
     bool isBounded() const;
     bool requiresExplicitFinalStride() const ;
     bool mayLoopBackToEntry() const;
-    bool canTruncateInputBuffer() const;
     void identifyPipelineInputs(const unsigned kernelId);
     void identifyLocalPortIds(const unsigned kernelId);
 
@@ -517,7 +521,7 @@ protected:
 
     const RelationshipGraph                     mStreamGraph;
     const RelationshipGraph                     mScalarGraph;
-    const InputTruncationGraph                  mInputTruncationGraph;
+//    const InputTruncationGraph                  mInputTruncationGraph;
     const BufferGraph                           mBufferGraph;
 //    const PartitioningGraph                     mPartitioningGraph;
     const std::vector<unsigned>                 mPartitionJumpIndex;
@@ -634,7 +638,6 @@ protected:
     bool                                        mKernelIsInternallySynchronized = false;
     bool                                        mKernelCanTerminateEarly = false;
     bool                                        mHasExplicitFinalPartialStride = false;
-    bool                                        mCanTruncatedInput = false;
     bool                                        mIsPartitionRoot = false;
     bool                                        mMayLoopToEntry = false;
     bool                                        mCheckIO = false;
@@ -648,48 +651,46 @@ protected:
 
     PHINode *                                   mZeroExtendBufferPhi = nullptr;
 
-    InputPortVec<Value *>                       mInitiallyProcessedItemCount; // *before* entering the kernel
-    InputPortVec<Value *>                       mInitiallyProcessedDeferredItemCount;
-    InputPortVec<PHINode *>                     mAlreadyProcessedPhi; // entering the segment loop
-    InputPortVec<PHINode *>                     mAlreadyProcessedDeferredPhi;
+    InputPortVector<Value *>                    mInitiallyProcessedItemCount; // *before* entering the kernel
+    InputPortVector<Value *>                    mInitiallyProcessedDeferredItemCount;
+    InputPortVector<PHINode *>                  mAlreadyProcessedPhi; // entering the segment loop
+    InputPortVector<PHINode *>                  mAlreadyProcessedDeferredPhi;
 
-    enum { WITH_OVERFLOW = 0, WITHOUT_OVERFLOW = 1};
-    using OverflowItemCounts = Vec<std::array<Value *, 2>, 8>;
+    InputPortVector<Value *>                    mInputEpoch;
+    InputPortVector<Value *>                    mIsInputZeroExtended;
+    InputPortVector<PHINode *>                  mInputVirtualBaseAddressPhi;
+    InputPortVector<Value *>                    mFirstInputStrideLength;
 
-    InputPortVec<Value *>                       mInputEpoch;
-    InputPortVec<Value *>                       mIsInputZeroExtended;
-    InputPortVec<PHINode *>                     mInputVirtualBaseAddressPhi;
-    InputPortVec<Value *>                       mFirstInputStrideLength;
     OverflowItemCounts                          mAccessibleInputItems;
-    InputPortVec<PHINode *>                     mLinearInputItemsPhi;
-    InputPortVec<Value *>                       mReturnedProcessedItemCountPtr; // written by the kernel
-    InputPortVec<Value *>                       mProcessedItemCount; // exiting the segment loop
-    InputPortVec<Value *>                       mProcessedDeferredItemCount;
-    InputPortVec<PHINode *>                     mInsufficientIOProcessedPhi; // exiting insufficient io
-    InputPortVec<PHINode *>                     mInsufficientIOProcessedDeferredPhi;
-    InputPortVec<PHINode *>                     mUpdatedProcessedPhi; // exiting the kernel
-    InputPortVec<PHINode *>                     mUpdatedProcessedDeferredPhi;
-    InputPortVec<Value *>                       mFullyProcessedItemCount; // *after* exiting the kernel
+    InputPortVector<PHINode *>                  mLinearInputItemsPhi;
+    InputPortVector<Value *>                    mReturnedProcessedItemCountPtr; // written by the kernel
+    InputPortVector<Value *>                    mProcessedItemCount; // exiting the segment loop
+    InputPortVector<Value *>                    mProcessedDeferredItemCount;
+    InputPortVector<PHINode *>                  mInsufficientIOProcessedPhi; // exiting insufficient io
+    InputPortVector<PHINode *>                  mInsufficientIOProcessedDeferredPhi;
+    InputPortVector<PHINode *>                  mUpdatedProcessedPhi; // exiting the kernel
+    InputPortVector<PHINode *>                  mUpdatedProcessedDeferredPhi;
+    InputPortVector<Value *>                    mFullyProcessedItemCount; // *after* exiting the kernel
 
     FixedVector<Value *>                        mInitiallyProducedItemCount; // *before* entering the kernel
     FixedVector<Value *>                        mInitiallyProducedDeferredItemCount;
-    OutputPortVec<PHINode *>                    mAlreadyProducedPhi; // entering the segment loop
-    OutputPortVec<Value *>                      mAlreadyProducedDelayedPhi;
-    OutputPortVec<PHINode *>                    mAlreadyProducedDeferredPhi;
-    OutputPortVec<Value *>                      mFirstOutputStrideLength;
+    OutputPortVector<PHINode *>                 mAlreadyProducedPhi; // entering the segment loop
+    OutputPortVector<Value *>                   mAlreadyProducedDelayedPhi;
+    OutputPortVector<PHINode *>                 mAlreadyProducedDeferredPhi;
+    OutputPortVector<Value *>                   mFirstOutputStrideLength;
 
     OverflowItemCounts                          mWritableOutputItems;
-    OutputPortVec<PHINode *>                    mLinearOutputItemsPhi;
-    OutputPortVec<Value *>                      mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
-    OutputPortVec<Value *>                      mReturnedProducedItemCountPtr; // written by the kernel
-    OutputPortVec<Value *>                      mProducedItemCount; // exiting the segment loop
-    OutputPortVec<Value *>                      mProducedDeferredItemCount;
-    OutputPortVec<PHINode *>                    mProducedAtTerminationPhi; // exiting after termination
-    OutputPortVec<PHINode *>                    mInsufficientIOProducedPhi; // exiting insufficient io
-    OutputPortVec<PHINode *>                    mInsufficientIOProducedDeferredPhi;
-    OutputPortVec<PHINode *>                    mUpdatedProducedPhi; // exiting the kernel
-    OutputPortVec<PHINode *>                    mUpdatedProducedDeferredPhi;
-    OutputPortVec<PHINode *>                    mFullyProducedItemCount; // *after* exiting the kernel
+    OutputPortVector<PHINode *>                 mLinearOutputItemsPhi;
+    OutputPortVector<Value *>                   mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
+    OutputPortVector<Value *>                   mReturnedProducedItemCountPtr; // written by the kernel
+    OutputPortVector<Value *>                   mProducedItemCount; // exiting the segment loop
+    OutputPortVector<Value *>                   mProducedDeferredItemCount;
+    OutputPortVector<PHINode *>                 mProducedAtTerminationPhi; // exiting after termination
+    OutputPortVector<PHINode *>                 mInsufficientIOProducedPhi; // exiting insufficient io
+    OutputPortVector<PHINode *>                 mInsufficientIOProducedDeferredPhi;
+    OutputPortVector<PHINode *>                 mUpdatedProducedPhi; // exiting the kernel
+    OutputPortVector<PHINode *>                 mUpdatedProducedDeferredPhi;
+    OutputPortVector<PHINode *>                 mFullyProducedItemCount; // *after* exiting the kernel
 
     // cycle counter state
     std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
@@ -763,7 +764,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))
-, mInputTruncationGraph(std::move(P.mInputTruncationGraph))
+// , mInputTruncationGraph(std::move(P.mInputTruncationGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
 // , mPartitioningGraph(std::move(P.mPartitioningGraph))
 , mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
@@ -794,42 +795,42 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mPartitionTerminationSignalPhi(extents[PartitionCount][PartitionCount])
 , mPartitionPipelineProgressPhi(PartitionCount, mAllocator)
 
-, mInitiallyProcessedItemCount(this)
-, mInitiallyProcessedDeferredItemCount(this)
-, mAlreadyProcessedPhi(this)
-, mAlreadyProcessedDeferredPhi(this)
-, mInputEpoch(this)
-, mIsInputZeroExtended(this)
-, mInputVirtualBaseAddressPhi(this)
-, mFirstInputStrideLength(this)
-, mLinearInputItemsPhi(this)
-, mReturnedProcessedItemCountPtr(this)
-, mProcessedItemCount(this)
-, mProcessedDeferredItemCount(this)
-, mInsufficientIOProcessedPhi(this)
-, mInsufficientIOProcessedDeferredPhi(this)
-, mUpdatedProcessedPhi(this)
-, mUpdatedProcessedDeferredPhi(this)
-, mFullyProcessedItemCount(this)
+, mInitiallyProcessedItemCount(P.MaxNumOfInputPorts, mAllocator)
+, mInitiallyProcessedDeferredItemCount(P.MaxNumOfInputPorts, mAllocator)
+, mAlreadyProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
+, mAlreadyProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
+, mInputEpoch(P.MaxNumOfInputPorts, mAllocator)
+, mIsInputZeroExtended(P.MaxNumOfInputPorts, mAllocator)
+, mInputVirtualBaseAddressPhi(P.MaxNumOfInputPorts, mAllocator)
+, mFirstInputStrideLength(P.MaxNumOfInputPorts, mAllocator)
+, mLinearInputItemsPhi(P.MaxNumOfInputPorts, mAllocator)
+, mReturnedProcessedItemCountPtr(P.MaxNumOfInputPorts, mAllocator)
+, mProcessedItemCount(P.MaxNumOfInputPorts, mAllocator)
+, mProcessedDeferredItemCount(P.MaxNumOfInputPorts, mAllocator)
+, mInsufficientIOProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
+, mInsufficientIOProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
+, mUpdatedProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
+, mUpdatedProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
+, mFullyProcessedItemCount(P.MaxNumOfInputPorts, mAllocator)
 
 , mInitiallyProducedItemCount(FirstStreamSet, LastStreamSet, mAllocator)
 , mInitiallyProducedDeferredItemCount(FirstStreamSet, LastStreamSet, mAllocator)
 
-, mAlreadyProducedPhi(this)
-, mAlreadyProducedDelayedPhi(this)
-, mAlreadyProducedDeferredPhi(this)
-, mFirstOutputStrideLength(this)
-, mLinearOutputItemsPhi(this)
-, mReturnedOutputVirtualBaseAddressPtr(this)
-, mReturnedProducedItemCountPtr(this)
-, mProducedItemCount(this)
-, mProducedDeferredItemCount(this)
-, mProducedAtTerminationPhi(this)
-, mInsufficientIOProducedPhi(this)
-, mInsufficientIOProducedDeferredPhi(this)
-, mUpdatedProducedPhi(this)
-, mUpdatedProducedDeferredPhi(this)
-, mFullyProducedItemCount(this)
+, mAlreadyProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mAlreadyProducedDelayedPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mAlreadyProducedDeferredPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mFirstOutputStrideLength(P.MaxNumOfOutputPorts, mAllocator)
+, mLinearOutputItemsPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mReturnedOutputVirtualBaseAddressPtr(P.MaxNumOfOutputPorts, mAllocator)
+, mReturnedProducedItemCountPtr(P.MaxNumOfOutputPorts, mAllocator)
+, mProducedItemCount(P.MaxNumOfOutputPorts, mAllocator)
+, mProducedDeferredItemCount(P.MaxNumOfOutputPorts, mAllocator)
+, mProducedAtTerminationPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mInsufficientIOProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mInsufficientIOProducedDeferredPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mUpdatedProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mUpdatedProducedDeferredPhi(P.MaxNumOfOutputPorts, mAllocator)
+, mFullyProducedItemCount(P.MaxNumOfOutputPorts, mAllocator)
 
 , mKernelName(FirstKernel, LastKernel, mAllocator)
 

@@ -35,15 +35,23 @@ template <typename ... Args>
 BOOST_NOINLINE void PipelineCompiler::debugPrint(BuilderRef b, Twine format, Args ...args) const {
     SmallVector<char, 512> tmp;
     raw_svector_ostream out(tmp);
-    SmallVector<Value *, 8> argVals(2);
-    argVals[0] = b->getInt32(STDERR_FILENO);
     if (mThreadId) {
         out << "%016" PRIx64 "  ";
+    }   
+    out << format << "\n";
+
+    SmallVector<Value *, 8> argVals(2);
+    argVals[0] = b->getInt32(STDERR_FILENO);
+    argVals[1] = b->GetString(out.str());
+    if (mThreadId) {
         argVals.push_back(mThreadId);
     }
-    out << format << "\n";
-    argVals[1] = b->GetString(out.str());
     argVals.append(std::initializer_list<llvm::Value *>{std::forward<Args>(args)...});
+    #ifndef NDEBUG
+    for (Value * arg : argVals) {
+        assert ("null argument given to debugPrint" && arg);
+    }
+    #endif
     b->CreateCall(b->GetDprintf(), argVals);
 }
 

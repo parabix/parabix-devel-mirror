@@ -6,7 +6,7 @@
 namespace kernel {
 
 void PipelineAnalysis::makeInputTruncationGraph() {
-
+#if 0
     mInputTruncationGraph = InputTruncationGraph(LastKernel + 1);
 
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
@@ -46,6 +46,7 @@ void PipelineAnalysis::makeInputTruncationGraph() {
 
         }
     }
+#endif
 }
 
 }

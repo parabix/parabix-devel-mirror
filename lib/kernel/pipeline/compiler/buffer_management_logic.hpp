@@ -216,10 +216,10 @@ void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
         const Binding & input = br.Binding;
         const auto prefix = makeBufferName(mKernelId, inputPort);
         Value * const processed = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
-        mInitiallyProcessedItemCount(mKernelId, inputPort) = processed;
+        mInitiallyProcessedItemCount[inputPort] = processed;
         if (input.isDeferred()) {
             Value * const deferred = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
-            mInitiallyProcessedDeferredItemCount(mKernelId, inputPort) = deferred;
+            mInitiallyProcessedDeferredItemCount[inputPort] = deferred;
         }
     }
 }
@@ -291,16 +291,16 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
         const BufferRateData & br = mBufferGraph[e];
         const StreamSetPort inputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, inputPort);
-        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProcessedPhi(inputPort));
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProcessedPhi[inputPort]);
 
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, " @ writing " + prefix + "_processed = %" PRIu64, mUpdatedProcessedPhi(inputPort));
+        debugPrint(b, " @ writing " + prefix + "_processed = %" PRIu64, mUpdatedProcessedPhi[inputPort]);
         #endif
 
         if (br.IsDeferred) {
-            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProcessedDeferredPhi(inputPort));
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProcessedDeferredPhi[inputPort]);
             #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, " @ writing " + prefix + "_processed(deferred) = %" PRIu64, mUpdatedProcessedDeferredPhi(inputPort));
+            debugPrint(b, " @ writing " + prefix + "_processed(deferred) = %" PRIu64, mUpdatedProcessedDeferredPhi[inputPort]);
             #endif
         }
     }
@@ -309,14 +309,14 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
         const BufferRateData & br = mBufferGraph[e];
         const StreamSetPort outputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, outputPort);
-        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProducedPhi(outputPort));
+        b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProducedPhi[outputPort]);
         #ifdef PRINT_DEBUG_MESSAGES
-        debugPrint(b, " @ writing " + prefix + "_produced = %" PRIu64, mUpdatedProducedPhi(outputPort));
+        debugPrint(b, " @ writing " + prefix + "_produced = %" PRIu64, mUpdatedProducedPhi[outputPort]);
         #endif
         if (br.IsDeferred) {
-            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProducedDeferredPhi(outputPort));
+            b->setScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX, mUpdatedProducedDeferredPhi[outputPort]);
             #ifdef PRINT_DEBUG_MESSAGES
-            debugPrint(b, " @ writing " + prefix + "_produced(deferred) = %" PRIu64, mUpdatedProducedDeferredPhi(outputPort));
+            debugPrint(b, " @ writing " + prefix + "_produced(deferred) = %" PRIu64, mUpdatedProducedDeferredPhi[outputPort]);
             #endif
         }
     }
@@ -331,9 +331,9 @@ void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
         const auto outputPort = br.Port;
         Value * fullyProduced = nullptr;
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
-            fullyProduced = mProducedItemCount(outputPort);
+            fullyProduced = mProducedItemCount[outputPort];
         } else {
-            fullyProduced = mFullyProducedItemCount(outputPort);
+            fullyProduced = mFullyProducedItemCount[outputPort];
         }
 
         #ifdef PRINT_DEBUG_MESSAGES
@@ -368,12 +368,12 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         }
         const BufferRateData & rd = mBufferGraph[e];
         const StreamSetPort port(rd.Port.Type, rd.Port.Number);
-        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr(port); assert (ptr);
+        Value * const ptr = mReturnedOutputVirtualBaseAddressPtr[port]; assert (ptr);
         Value * vba = b->CreateLoad(ptr);
         StreamSetBuffer * const buffer = bn.Buffer;
         vba = b->CreatePointerCast(vba, buffer->getPointerType());
         buffer->setBaseAddress(b.get(), vba);
-        buffer->setCapacity(b.get(), mProducedItemCount(port));
+        buffer->setCapacity(b.get(), mProducedItemCount[port]);
         const auto handleName = makeBufferName(mKernelId, port);
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, handleName + "_updatedVirtualBaseAddress = 0x%" PRIx64, buffer->getBaseAddress(b));
@@ -416,7 +416,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
             const BufferRateData & br = mBufferGraph[e];
             const StreamSetBuffer * const buffer = bn.Buffer;
             Constant * const underflow = b->getSize(bn.LookBehind);
-            Value * const produced = mAlreadyProducedPhi(br.Port);
+            Value * const produced = mAlreadyProducedPhi[br.Port];
             Value * const capacity = buffer->getCapacity(b);
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const needsCopy = b->CreateICmpULE(producedOffset, underflow);
@@ -462,9 +462,9 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
             const BufferRateData & br = mBufferGraph[e];
             const StreamSetBuffer * const buffer = bn.Buffer;
             Value * const capacity = buffer->getCapacity(b);
-            Value * const alreadyProduced = mAlreadyProducedPhi(br.Port);
+            Value * const alreadyProduced = mAlreadyProducedPhi[br.Port];
             Value * const priorOffset = b->CreateURem(alreadyProduced, capacity);
-            Value * const produced = mProducedItemCount(br.Port);
+            Value * const produced = mProducedItemCount[br.Port];
             Value * const producedOffset = b->CreateURem(produced, capacity);
             Value * const nonCapacityAlignedWrite = b->CreateIsNotNull(producedOffset);
             Value * const wroteToOverflow = b->CreateICmpULT(producedOffset, priorOffset);
@@ -493,7 +493,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
 
             Value * const capacity = buffer->getCapacity(b);
             Value * const initial = mInitiallyProducedItemCount[streamSet];
-            Value * const produced = mUpdatedProducedPhi(br.Port);
+            Value * const produced = mUpdatedProducedPhi[br.Port];
 
             // If we wrote anything and it was not our first write to the buffer ...
             Value * overwroteData = b->CreateICmpUGT(produced, capacity);
@@ -713,12 +713,11 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
 void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
-        assert (rt.Port.Type == PortType::Input);
         PHINode * processed = nullptr;
-        if (mAlreadyProcessedDeferredPhi(rt.Port)) {
-            processed = mAlreadyProcessedDeferredPhi(rt.Port);
+        if (mAlreadyProcessedDeferredPhi[rt.Port]) {
+            processed = mAlreadyProcessedDeferredPhi[rt.Port];
         } else {
-            processed = mAlreadyProcessedPhi(rt.Port);
+            processed = mAlreadyProcessedPhi[rt.Port];
         }
         const auto buffer = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[buffer];

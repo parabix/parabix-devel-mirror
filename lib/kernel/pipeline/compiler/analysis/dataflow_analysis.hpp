@@ -1026,6 +1026,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
             auto getPartialSumRefId = [&] (const StreamSetPort port) {
                 const auto refPort = getReference(kernel, port);
+                assert (refPort.Type == PortType::Input);
                 const auto ref = getInputBufferVertex(kernel, refPort);
                 const auto f = partialSumRefId.find(ref);
                 if (f == partialSumRefId.end()) {

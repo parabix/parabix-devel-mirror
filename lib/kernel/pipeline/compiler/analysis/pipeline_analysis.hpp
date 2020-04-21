@@ -59,9 +59,12 @@ public:
 
         P.makeInputTruncationGraph();
 
+        P.gatherInfo();
+
         #ifdef PRINT_BUFFER_GRAPH
         P.printBufferGraph(errs());
         #endif
+
 
         return P;
     }
@@ -97,6 +100,15 @@ private:
     void identifyPipelineInputs();
 
     void transcribeRelationshipGraph();
+
+    void gatherInfo() {        
+        MaxNumOfInputPorts = in_degree(PipelineOutput, mBufferGraph);
+        MaxNumOfOutputPorts = out_degree(PipelineInput, mBufferGraph);
+        for (auto i = FirstKernel; i <= LastKernel; ++i) {
+            MaxNumOfInputPorts = std::max<unsigned>(MaxNumOfInputPorts, in_degree(i, mBufferGraph));
+            MaxNumOfOutputPorts = std::max<unsigned>(MaxNumOfOutputPorts, out_degree(i, mBufferGraph));
+        }
+    }
 
     // partitioning analysis
 
@@ -181,6 +193,10 @@ public:
     unsigned                        PartitionCount = 0;
     bool                            HasZeroExtendedStream = false;
 
+    unsigned                        MaxNumOfInputPorts = 0;
+    unsigned                        MaxNumOfOutputPorts = 0;
+
+
     unsigned                        MaxNumOfLocalInputPortIds = 0;
     unsigned                        MaxNumOfLocalOutputPortIds = 0;
 
@@ -207,7 +223,7 @@ public:
 
     TerminationPropagationGraph     mTerminationPropagationGraph;
 
-    InputTruncationGraph            mInputTruncationGraph;
+//    InputTruncationGraph            mInputTruncationGraph;
     IOCheckGraph                    mIOCheckGraph;
 
 

@@ -35,13 +35,13 @@ void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
         const StreamSetPort port{PortType::Input, i};
         const Binding & input = getInputBinding(port);
         Value * processed = nullptr;
-        if (mUpdatedProcessedDeferredPhi(port)) {
-            processed = mUpdatedProcessedDeferredPhi(port);
+        if (mUpdatedProcessedDeferredPhi[port]) {
+            processed = mUpdatedProcessedDeferredPhi[port];
         } else {
-            processed = mUpdatedProcessedPhi(port);
+            processed = mUpdatedProcessedPhi[port];
         }
         Value * const fullyProcessed = truncateBlockSize(b, input, processed, mKernelIsFinal);
-        mFullyProcessedItemCount(port) = fullyProcessed;
+        mFullyProcessedItemCount[port] = fullyProcessed;
     }
 }
 
@@ -53,9 +53,9 @@ void PipelineCompiler::computeFullyProducedItemCounts(BuilderRef b) {
     const auto numOfOutputs = numOfStreamOutputs(mKernelId);
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const StreamSetPort port{PortType::Output, i};
-        Value * produced = mUpdatedProducedPhi(port);
+        Value * produced = mUpdatedProducedPhi[port];
         Value * const fullyProduced = computeFullyProducedItemCount(b, mKernelId, port, produced, mKernelIsFinal);
-        mFullyProducedItemCount(port)->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
+        mFullyProducedItemCount[port]->addIncoming(fullyProduced, mKernelLoopExitPhiCatch);
     }
 }
 
@@ -397,14 +397,6 @@ bool PipelineCompiler::mayLoopBackToEntry() const {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief canTruncateInputBuffer
- ** ------------------------------------------------------------------------------------------------------------- */
-bool PipelineCompiler::canTruncateInputBuffer() const {
-    assert (mKernelId >= FirstKernel && mKernelId <= LastKernel);
-    return out_degree(mKernelId, mInputTruncationGraph) != 0;
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyPipelineInputs
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::identifyPipelineInputs(const unsigned kernelId) {
@@ -562,9 +554,44 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
 
     const auto numOfInputs = in_degree(mKernelId, mBufferGraph);
     reset(mAccessibleInputItems, numOfInputs);
+    mInitiallyProcessedItemCount.reset(numOfInputs);
+    mInitiallyProcessedDeferredItemCount.reset(numOfInputs);
+    mAlreadyProcessedPhi.reset(numOfInputs);
+    mAlreadyProcessedDeferredPhi.reset(numOfInputs);
+    mInputEpoch.reset(numOfInputs);
+    mIsInputZeroExtended.reset(numOfInputs);
+    mInputVirtualBaseAddressPhi.reset(numOfInputs);
+    mFirstInputStrideLength.reset(numOfInputs);
+    mLinearInputItemsPhi.reset(numOfInputs);
+    mReturnedProcessedItemCountPtr.reset(numOfInputs);
+    mProcessedItemCount.reset(numOfInputs);
+    mProcessedDeferredItemCount.reset(numOfInputs);
+    mInsufficientIOProcessedPhi.reset(numOfInputs);
+    mInsufficientIOProcessedDeferredPhi.reset(numOfInputs);
+    mUpdatedProcessedPhi.reset(numOfInputs);
+    mUpdatedProcessedDeferredPhi.reset(numOfInputs);
+    mFullyProcessedItemCount.reset(numOfInputs);
 
     const auto numOfOutputs = out_degree(mKernelId, mBufferGraph);
     reset(mWritableOutputItems, numOfOutputs);
+//    mInitiallyProducedItemCount.reset(numOfOutputs);
+//    mInitiallyProducedDeferredItemCount.reset(numOfOutputs);
+    mAlreadyProducedPhi.reset(numOfOutputs);
+    mAlreadyProducedDelayedPhi.reset(numOfOutputs);
+    mAlreadyProducedDeferredPhi.reset(numOfOutputs);
+    mFirstOutputStrideLength.reset(numOfOutputs);
+    mLinearOutputItemsPhi.reset(numOfOutputs);
+    mReturnedOutputVirtualBaseAddressPtr.reset(numOfOutputs);
+    mReturnedProducedItemCountPtr.reset(numOfOutputs);
+    mProducedItemCount.reset(numOfOutputs);
+    mProducedDeferredItemCount.reset(numOfOutputs);
+    mProducedAtTerminationPhi.reset(numOfOutputs);
+    mInsufficientIOProducedPhi.reset(numOfOutputs);
+    mInsufficientIOProducedDeferredPhi.reset(numOfOutputs);
+    mUpdatedProducedPhi.reset(numOfOutputs);
+    mUpdatedProducedDeferredPhi.reset(numOfOutputs);
+    mFullyProducedItemCount.reset(numOfOutputs);
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

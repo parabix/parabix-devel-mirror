@@ -11,7 +11,6 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlock * const insertBefore) const {
     #ifndef DISABLE_ZERO_EXTEND
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
     const auto strideSize = mKernel->getStride();
     const auto blockWidth = b->getBitBlockWidth();
     Value * requiredSpace = nullptr;
@@ -48,7 +47,7 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
             } else if (fieldWidth > 8) {
                 requiredBytes = b->CreateMul(requiredBytes, b->getSize(fieldWidth / 8));
             }
-            requiredBytes = b->CreateSelect(mIsInputZeroExtended(br.Port), requiredBytes, ZERO);
+            requiredBytes = b->CreateSelect(mIsInputZeroExtended[br.Port], requiredBytes, ZERO);
             requiredSpace = b->CreateUMax(requiredSpace, requiredBytes);
         }
     }
@@ -96,13 +95,13 @@ void PipelineCompiler::getZeroExtendedInputVirtualBaseAddresses(BuilderRef b,
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
         const BufferRateData & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
-        Value * const zeroExtended = mIsInputZeroExtended(rt.Port);
+        Value * const zeroExtended = mIsInputZeroExtended[rt.Port];
         if (zeroExtended) {
             PHINode * processed = nullptr;
-            if (mAlreadyProcessedDeferredPhi(rt.Port)) {
-                processed = mAlreadyProcessedDeferredPhi(rt.Port);
+            if (mAlreadyProcessedDeferredPhi[rt.Port]) {
+                processed = mAlreadyProcessedDeferredPhi[rt.Port];
             } else {
-                processed = mAlreadyProcessedPhi(rt.Port);
+                processed = mAlreadyProcessedPhi[rt.Port];
             }
             const BufferNode & bn = mBufferGraph[source(e, mBufferGraph)];
             const Binding & binding = rt.Binding;
@@ -192,8 +191,8 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             Value * total = getAccessibleInputItems(b, port);
             Value * const tooMany = b->CreateICmpULT(selected, total);
             Value * computeMask = tooMany;
-            if (mIsInputZeroExtended(port)) {
-                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended(port)));
+            if (mIsInputZeroExtended[port]) {
+                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended[port]));
             }
 
             BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -368,11 +367,11 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             FixedArray<Value *, 7> args;
             args[0] = b->CreatePointerCast(inputBaseAddresses[port.Number], voidPtrTy);
             args[1] = b->getSize(bytesPerSegment);
-            args[2] = mAlreadyProcessedPhi(port);
+            args[2] = mAlreadyProcessedPhi[port];
             if (input.isDeferred()) {
-                args[3] = mAlreadyProcessedDeferredPhi(port);
+                args[3] = mAlreadyProcessedDeferredPhi[port];
             } else {
-                args[3] = mAlreadyProcessedPhi(port);
+                args[3] = mAlreadyProcessedPhi[port];
             }
             args[4] = accessibleItems[port.Number];
             args[5] = buffer->getStreamSetCount(b);
@@ -558,9 +557,9 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
 
         Value * produced = nullptr;
         if (mKernelIsInternallySynchronized) {
-            produced = mProducedItemCount(port);
+            produced = mProducedItemCount[port];
         } else {
-            produced = mProducedAtTerminationPhi(port);
+            produced = mProducedAtTerminationPhi[port];
         }
 
         FixedArray<Value *, 4> args;
@@ -619,11 +618,11 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         const auto itemWidth = getItemWidth(buffer->getBaseType());
 
         const auto prefix = makeBufferName(mKernelId, port);
-        Value * produced = mProducedItemCount(port);
+        Value * produced = mProducedItemCount[port];
         if (mKernelIsInternallySynchronized) {
-            produced = mProducedItemCount(port);
+            produced = mProducedItemCount[port];
         } else {
-            produced = mProducedAtTerminationPhi(port);
+            produced = mProducedAtTerminationPhi[port];
         }
         Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
         Constant * const ITEM_WIDTH = b->getSize(itemWidth);

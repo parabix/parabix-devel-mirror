@@ -56,10 +56,69 @@ private:
     #endif
 };
 
+
+struct StreamSetInputPort {
+    operator StreamSetPort () const noexcept {
+        return StreamSetPort{Type, Number};
+    }
+    StreamSetInputPort() = default;
+    StreamSetInputPort(const StreamSetPort port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    StreamSetInputPort(const StreamSetPort & port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    StreamSetInputPort(const RelationshipType & port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    explicit StreamSetInputPort(const StreamSetInputPort & port)
+    : Number(port.Number) {
+
+    }
+    static constexpr PortType Type = PortType::Input;
+    unsigned Number = 0;
+};
+
+struct StreamSetOutputPort {
+    operator StreamSetPort() const noexcept {
+        return StreamSetPort{Type, Number};
+    }
+    StreamSetOutputPort() = default;
+    StreamSetOutputPort(const StreamSetPort port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    StreamSetOutputPort(const StreamSetPort & port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    StreamSetOutputPort(const RelationshipType & port)
+    : Number(port.Number) {
+        assert (port.Type == Type);
+    }
+    explicit StreamSetOutputPort(const StreamSetOutputPort & port)
+    : Number(port.Number) {
+
+    }
+    static constexpr PortType Type = PortType::Output;
+    unsigned Number = 0;
+};
+
 template <typename T>
 struct InputPortVector {
     inline InputPortVector(const size_t n, Allocator & A)
-    : mArray(n, A) {
+    : mArray(0, n, A) {
+    }
+    inline T operator[](const StreamSetPort port) const {
+        assert (port.Type == PortType::Input);
+        return mArray[port.Number];
+    }
+    inline T & operator[](const StreamSetPort port) {
+        assert (port.Type == PortType::Input);
+        return mArray[port.Number];
     }
     inline T operator[](const StreamSetInputPort port) const {
         return mArray[port.Number];
@@ -77,7 +136,15 @@ private:
 template <typename T>
 struct OutputPortVector {
     inline OutputPortVector(const size_t n, Allocator & A)
-    : mArray(n, A) {
+    : mArray(0, n, A) {
+    }
+    inline T operator[](const StreamSetPort port) const {
+        assert (port.Type == PortType::Output);
+        return mArray[port.Number];
+    }
+    inline T & operator[](const StreamSetPort port) {
+        assert (port.Type == PortType::Output);
+        return mArray[port.Number];
     }
     inline T operator[](const StreamSetOutputPort port) const {
         return mArray[port.Number];
@@ -271,21 +338,23 @@ RelationshipGraph::edge_descriptor PipelineCommonGraphFunctions::getReferenceEdg
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReferenceBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
-inline unsigned PipelineCommonGraphFunctions::getReferenceBufferVertex(const size_t kernel, const StreamSetPort port) const {
-    return parent(source(getReferenceEdge(kernel, port), mStreamGraphRef), mStreamGraphRef);
+inline unsigned PipelineCommonGraphFunctions::getReferenceBufferVertex(const size_t kernel, const StreamSetPort inputPort) const {
+    assert (inputPort.Type == PortType::Input);
+    return parent(source(getReferenceEdge(kernel, inputPort), mStreamGraphRef), mStreamGraphRef);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getReference
  ** ------------------------------------------------------------------------------------------------------------- */
-inline const StreamSetPort PipelineCommonGraphFunctions::getReference(const size_t kernel, const StreamSetPort port) const {
-    return mStreamGraphRef[getReferenceEdge(kernel, port)];
+inline const StreamSetPort PipelineCommonGraphFunctions::getReference(const size_t kernel, const StreamSetPort inputPort) const {
+    return mStreamGraphRef[getReferenceEdge(kernel, inputPort)];
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief getInputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCommonGraphFunctions::getInputBufferVertex(const size_t kernel, const StreamSetPort inputPort) const {
+    assert (inputPort.Type == PortType::Input);
     return source(getInput(kernel, inputPort), mBufferGraphRef);
 }
 
@@ -350,6 +419,7 @@ inline const BufferGraph::edge_descriptor PipelineCommonGraphFunctions::getInput
  * @brief getOutputBufferVertex
  ** ------------------------------------------------------------------------------------------------------------- */
 unsigned PipelineCommonGraphFunctions::getOutputBufferVertex(const size_t kernel, const StreamSetPort outputPort) const {
+    assert (outputPort.Type == PortType::Output);
     return target(getOutput(kernel, outputPort), mBufferGraphRef);
 }
 
@@ -357,6 +427,8 @@ unsigned PipelineCommonGraphFunctions::getOutputBufferVertex(const size_t kernel
  * @brief getOutputBinding
  ** ------------------------------------------------------------------------------------------------------------- */
 const Binding & PipelineCommonGraphFunctions::getOutputBinding(const size_t kernel, const StreamSetPort outputPort) const {
+
+    assert (outputPort.Type == PortType::Output);
 
     RelationshipGraph::vertex_descriptor v;
     RelationshipGraph::edge_descriptor e;
@@ -378,6 +450,7 @@ const Binding & PipelineCommonGraphFunctions::getOutputBinding(const size_t kern
  * @brief getOutputBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 StreamSetBuffer * PipelineCommonGraphFunctions::getOutputBuffer(const size_t kernel, const StreamSetPort outputPort) const {
+    assert (outputPort.Type == PortType::Output);
     return mBufferGraphRef[getOutputBufferVertex(kernel, outputPort)].Buffer;
 }
 

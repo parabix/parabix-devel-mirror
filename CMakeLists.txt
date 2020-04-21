@@ -193,9 +193,9 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
 endif()
 
 # Release & Debug flags
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_RELEASE}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_DEBUG} -O1 -ggdb -fvisibility=default -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 function(parabix_add_module)
     cmake_parse_arguments(
