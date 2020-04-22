@@ -6,7 +6,7 @@ Authored by Group Beta: Joshua Malmberg, Vincent Chen, Josie Zhou
 
 Last Updated: April 21st, 2020
 
-# CSV Specification
+## CSV Specification
 
 There are many standards for the CSV file format that exist and are in use. For this project, the default file format used is the IETF standard, described in IETF RFC 4180 (https://tools.ietf.org/html/rfc4180). The specification is given below:
 
@@ -29,7 +29,7 @@ There are many standards for the CSV file format that exist and are in use. For 
 
 + white-space in a field should not be ignored.
 
-# JSON Specification
+## JSON Specification
 
 + Basic Data Types
     - **Number**
@@ -46,11 +46,11 @@ There are many standards for the CSV file format that exist and are in use. For 
     > An empty value, using the word null.
 + A JSON file consists of data represented using the basic data types described above.
 
-# Project Objective
+## Project Objective
 
 Write a program that converts CSV files to JSON using the Parabix framework.
 
-# Basic Requirements
+### Basic Requirements
 
 -	Interprets the first line of the CSV file as a header containing field names.
 -   Outputs an array containing the field names at the beginning of the file. Then outputs an array of objects containing the records of the CSV file.
@@ -66,7 +66,8 @@ Write a program that converts CSV files to JSON using the Parabix framework.
 -	Option to ignore white-space in the CSV file.
 -	Option to interpret backslash escape sequencing in the CSV document and includes it in the JSON file accordingly.
 -	Option to write the JSON file as an array of arrays, each sub-array containing 1 record.
-##	Input Format
+
+#	Input Format
 
 - The csv2json executable can be called using the following command:
 
@@ -86,7 +87,7 @@ Write a program that converts CSV files to JSON using the Parabix framework.
 
   
 
-##	Current Output Format
+###	Output Format
 
 - If the ouput file is not of .json extension, throw an error and write nothing to the file.
 - If the input file is not of .csv extension, throw an error and write nothing to the file.
@@ -99,7 +100,7 @@ Write a program that converts CSV files to JSON using the Parabix framework.
 - If an input file contains only a header, ie. only 1 line of data, output the field names in an array and an empty array of objects, ie. [].
 - If an input file is entirely empty, throw a warning and output a file containing two empty arrays
 
-# References
+## References
 
 - https://en.wikipedia.org/wiki/JSON
 - https://en.wikipedia.org/wiki/Comma-separated_values
