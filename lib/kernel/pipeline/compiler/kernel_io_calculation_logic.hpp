@@ -93,7 +93,13 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
 void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
     const auto & max = MaximumNumOfStrides[mKernelId];
     if (mIsPartitionRoot) {
-        mMaximumNumOfStrides = b->getSize(ceiling(max));
+        if (ExternallySynchronized) {
+            assert (mStrideRateFactor);
+            mMaximumNumOfStrides = b->CreateCeilUMulRate(mStrideRateFactor, max);
+        } else {
+            assert (mStrideRateFactor == nullptr);
+            mMaximumNumOfStrides = b->getSize(ceiling(max));
+        }
     } else {
         const auto factor = (max / MaxPartitionStrideRate);
         assert (mNumOfPartitionStrides);
@@ -259,9 +265,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
        Value * const match = b->CreateICmpEQ(numOfLinearStrides, numOfActualLinearStrides);
        b->CreateAssert(match, "%s was expected to execute %" PRIu64 " strides but can only execute %" PRIu64,
                        mCurrentKernelName, numOfLinearStrides, numOfActualLinearStrides);
-   }
-
-
+    }
 
     if (mMayLoopToEntry) {
         mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, numOfLinearStrides);
@@ -578,7 +582,7 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
             Value * const hasMoreStrides = b->CreateICmpNE(mNumOfLinearStrides, sz_ZERO);
             mKernelIsPenultimate = b->CreateAnd(anyClosed, hasMoreStrides);
         } else {
-            mKernelIsFinal = anyClosed;
+            mKernelIsFinal = anyClosed;            
         }
     }
 }
@@ -593,7 +597,6 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
     assert (mMaximumNumOfStrides);
 
     Value * const notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
-
     if (mIsPartitionRoot) {
 
         BasicBlock * const lastTestExit = b->CreateBasicBlock("", mKernelLoopExit);

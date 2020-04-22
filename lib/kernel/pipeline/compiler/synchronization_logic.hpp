@@ -111,6 +111,8 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
             raw_svector_ostream out(tmp);
             out << "%s: logical segment number is %" PRIu64 " "
                    "but was expected to be [0,%" PRIu64 "]";
+            assert (mCurrentKernelName);
+            assert (mSegNo);
             b->CreateAssert(pendingOrReady, out.str(), mCurrentKernelName, currentSegNo, mSegNo);
         }
         Value * const ready = b->CreateICmpEQ(mSegNo, currentSegNo);

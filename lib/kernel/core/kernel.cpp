@@ -558,6 +558,7 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     if (LLVM_LIKELY(internallySynchronized || greedy)) {
         if (internallySynchronized) {
             fields.push_back(sizeTy); // external SegNo
+            fields.push_back(sizeTy); // stride rate factor
         }
         fields.push_back(b->getInt1Ty()); // isFinal
     } else {
@@ -655,7 +656,8 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
         const auto greedy = isGreedy();
         if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
             if (internallySynchronized) {
-                setNextArgName("externalSegNo");
+                setNextArgName("segNo");
+                setNextArgName("strideRateFactor");
             }
             setNextArgName("isFinal");
         } else {

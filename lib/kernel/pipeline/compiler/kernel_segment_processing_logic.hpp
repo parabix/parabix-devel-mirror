@@ -91,7 +91,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         mIsBounded = isBounded();
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
         const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
-        mMayLoopToEntry = nonSourceKernel && (mMayHaveNonLinearIO || mHasExplicitFinalPartialStride);
+        mMayLoopToEntry = nonSourceKernel && (mMayHaveNonLinearIO || mHasExplicitFinalPartialStride || ExternallySynchronized);
         mCheckIO = nonSourceKernel && (mIsPartitionRoot || mMayHaveNonLinearIO);
     } else {
         mHasExplicitFinalPartialStride = false;
@@ -430,13 +430,11 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         mExecutedAtLeastOnceAtLoopEntryPhi->addIncoming(i1_TRUE, entryBlock);
         mCurrentNumOfStridesAtLoopEntryPhi->addIncoming(mUpdatedNumOfStrides, entryBlock);
 
-        //if (mIsPartitionRoot) {
-            const auto prefix = makeKernelName(mKernelId);
-            BasicBlock * const isFinalCheck = b->CreateBasicBlock(prefix + "_isFinalCheck", mKernelTerminated);
-            b->CreateCondBr(loopAgain, mKernelLoopEntry, isFinalCheck);
+        const auto prefix = makeKernelName(mKernelId);
+        BasicBlock * const isFinalCheck = b->CreateBasicBlock(prefix + "_isFinalCheck", mKernelTerminated);
+        b->CreateCondBr(loopAgain, mKernelLoopEntry, isFinalCheck);
 
-            b->SetInsertPoint(isFinalCheck);
-        //}
+        b->SetInsertPoint(isFinalCheck);
     }
 
     Value * terminationSignal = mIsFinalInvocationPhi;
@@ -460,22 +458,6 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
         mPartialPartitionStridesAtLoopExitPhi->addIncoming(mPartialPartitionStridesPhi, exitBlock);
     }
     b->CreateUnlikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
-
-//    if (mIsPartitionRoot) {
-//        // update KernelTerminated phi nodes
-//        for (unsigned i = 0; i < numOfOutputs; ++i) {
-//            const auto port = StreamSetPort{ PortType::Output, i };
-//            mProducedAtTerminationPhi[port]->addIncoming(mProducedItemCount[port], exitBlock);
-//        }
-//        mTerminatedSignalPhi->addIncoming(terminationSignal, exitBlock);
-//        mPartialPartitionStridesAtLoopExitPhi->addIncoming(mPartialPartitionStridesPhi, exitBlock);
-//        b->CreateUnlikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
-
-//    } else if (mMayLoopToEntry) {
-//        b->CreateCondBr(loopAgain, mKernelLoopEntry, mKernelLoopExit);
-//    } else { // just exit the loop
-//        b->CreateBr(mKernelLoopExit);
-//    }
 
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto port = StreamSetPort{ PortType::Input, i };
@@ -894,6 +876,7 @@ void PipelineCompiler::end(BuilderRef b) {
         Value * const retVal = b->CreateSelect(mPipelineProgress, unterminated, terminated);
         b->setTerminationSignal(retVal);
     }
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

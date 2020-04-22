@@ -370,13 +370,10 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
         if (internallySynchronized) {
             mExternalSegNo = nextArg();
-        } else {
-            mExternalSegNo = nullptr;
+            mStrideRateFactor = nextArg();
         }
-        mNumOfStrides = nullptr;
         mIsFinal = nextArg();
     } else {
-        mExternalSegNo = nullptr;
         mNumOfStrides = nextArg();
         mIsFinal = b->CreateIsNull(mNumOfStrides);
         mNumOfStrides = b->CreateSelect(mIsFinal, b->getSize(1), mNumOfStrides);
@@ -620,6 +617,7 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
     if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
         if (internallySynchronized) {
             props.push_back(mExternalSegNo);
+            props.push_back(mStrideRateFactor);
         }
         props.push_back(mIsFinal);
     } else {
@@ -786,7 +784,7 @@ std::vector<Value *> KernelCompiler::storeDoSegmentState() const {
     const auto numOfOutputs = getNumOfStreamOutputs();
 
     std::vector<Value *> S;
-    S.resize(7 + numOfInputs * 4 + numOfOutputs * 6);
+    S.resize(8 + numOfInputs * 4 + numOfOutputs * 6);
 
     auto o = S.begin();
 
@@ -801,6 +799,7 @@ std::vector<Value *> KernelCompiler::storeDoSegmentState() const {
     append(mNumOfStrides);
     append(mFixedRateFactor);
     append(mExternalSegNo);
+    append(mStrideRateFactor);
 
     auto copy = [&](const Vec<llvm::Value *> & V, const size_t n) {
         o = std::copy_n(V.begin(), n, o);
@@ -843,6 +842,7 @@ void KernelCompiler::restoreDoSegmentState(const std::vector<Value *> & S) {
     extract(mNumOfStrides);
     extract(mFixedRateFactor);
     extract(mExternalSegNo);
+    extract(mStrideRateFactor);
 
     auto revert = [&](Vec<llvm::Value *> & V, const size_t n) {
         assert (static_cast<size_t>(std::distance(o, S.end())) >= n);

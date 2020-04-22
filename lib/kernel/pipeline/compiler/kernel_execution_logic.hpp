@@ -127,6 +127,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
+            addNextArg(mMaximumNumOfStrides);
         }
         addNextArg(mKernelIsFinal);
     } else {

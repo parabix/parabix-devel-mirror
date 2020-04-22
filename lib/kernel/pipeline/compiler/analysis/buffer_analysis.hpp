@@ -228,22 +228,14 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             bn.LookAhead = maxLookAhead;
             bn.LookBehind = maxLookBehind;
 
-
-
-
-
-
-//            reqOverflow = std::max(bn.MaxAdd, maxLookAhead);
-//            if (bn.MaxAdd) {
-//                reqOverflow = std::max(reqOverflow, bn.MaxAdd);
-//            }
-//            if (reqOverflow > 0)  {
-//                reqOverflow = std::max(reqOverflow, ceiling(consumeMax));
-//            }
-
             // calculate overflow (copyback) and fascimile (copyforward) space
-            const auto overflowSize = round_up_to(std::max(bn.MaxAdd, bn.LookAhead), blockWidth) / blockWidth;
-            const auto underflowSize = round_up_to(std::max(bn.LookBehind, maxDelay), blockWidth) / blockWidth;
+
+            const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
+            const auto overflow1 = std::max(overflow0, bMax);
+            const auto overflowSize = round_up_to(overflow1, blockWidth) / blockWidth;
+
+            const auto underflow0 = std::max(bn.LookBehind, maxDelay);
+            const auto underflowSize = round_up_to(underflow0, blockWidth) / blockWidth;
             const auto required = (bMax * 2) - bMin;
 
             const auto reqSize1 = round_up_to(required, blockWidth) / blockWidth;
