@@ -14,3 +14,16 @@ DEPS
     kernel.io
     re.cc
 )
+
+parabix_add_executable(
+NAME
+    ucount
+SRC
+    ucount.cpp
+DEPS
+    fileselect
+    kernel.basis
+    kernel.io
+    re.cc
+    re.parse
+)
