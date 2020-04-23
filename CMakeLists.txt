@@ -359,7 +359,7 @@ set(BIN_DIR ${PROJECT_BINARY_DIR}/bin)
 add_test(
   NAME pinyintest
   WORKING_DIRECTORY ${QA_DIR}/pinyintest
-  COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyintest/testfiles -t ${QA_DIR}/pinyintest ${BIN_DIR}/pinyingrep)
+  COMMAND python ../greptest.py -v -d ${QA_DIR}/pinyintest/testfiles -t ${QA_DIR}/pinyintest/pinyintest.xml ${BIN_DIR}/pinyingrep)
 
 add_test(
   NAME greptest
