@@ -36,8 +36,6 @@ public:
         P.generateInitialBufferGraph();
 
         P.computeDataFlowRates();
-        P.generatePartitioningGraph();
-
         P.identifyTerminationChecks();
         P.determinePartitionJumpIndices();
 
@@ -51,13 +49,10 @@ public:
         // Make the remaining graphs
         P.makeConsumerGraph();        
         P.makePartitionJumpTree();
-        P.makeKernelIOGraph();       
         P.makeTerminationPropagationGraph();
 
         // Finish the buffer graph
         P.addStreamSetsToBufferGraph(b);
-
-        P.makeInputTruncationGraph();
 
         P.gatherInfo();
 
@@ -209,7 +204,6 @@ public:
     std::vector<Rational>           MaximumNumOfStrides;
 
     BufferGraph                     mBufferGraph;
-//    PartitioningGraph               mPartitioningGraph;
     std::vector<unsigned>           mPartitionJumpIndex;
     PartitionJumpTree               mPartitionJumpTree;
 
@@ -218,10 +212,6 @@ public:
     TerminationChecks               mTerminationCheck;
 
     TerminationPropagationGraph     mTerminationPropagationGraph;
-
-//    InputTruncationGraph            mInputTruncationGraph;
-    IOCheckGraph                    mIOCheckGraph;
-
 
     OwningVector<Kernel>            mInternalKernels;
     OwningVector<Binding>           mInternalBindings;
@@ -238,8 +228,6 @@ public:
 #include "partitioning_analysis.hpp"
 #include "termination_analysis.hpp"
 #include "zero_extend_analysis.hpp"
-#include "input_truncation_analysis.hpp"
 #include "add_analysis.hpp"
-#include "io_analysis.hpp"
 
 #endif

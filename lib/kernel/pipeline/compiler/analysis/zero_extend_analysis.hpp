@@ -18,7 +18,7 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
     #ifndef DISABLE_ZERO_EXTEND
     using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
 
-    flat_set<unsigned> inputPartitionIds;
+    flat_set<unsigned> globalIds;
 
     for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         const RelationshipNode & rn = mStreamGraph[kernel];
@@ -83,10 +83,10 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
 
         bool necessary = false;
 
-        inputPartitionIds.clear();
+        globalIds.clear();
         const auto partitionId = KernelPartitionId[kernel];
         for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-            const BufferRateData & inputData = mBufferGraph[input];
+            BufferRateData & inputData = mBufferGraph[input];
             const auto streamSet = source(input, mBufferGraph);
             const auto producer = parent(streamSet, mBufferGraph);
             const auto prodPartitionId = KernelPartitionId[producer];
@@ -94,23 +94,10 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
                 necessary = true;
                 break;
             }
-            inputPartitionIds.insert(inputData.GlobalPortId);
+            globalIds.insert(inputData.GlobalPortId);
         }
 
-//        const auto necessary = (inputPartitionIds.size() != 1);
-
-//        if (partitionId != prodPartitionId) {
-//            necessary = true;
-////                for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
-////                    const PartitioningGraphEdge & E = mPartitioningGraph[e];
-////                    if (E.Kernel == kernel && E.Port == inputData.Port) {
-////                        necessary = true;
-////                        break;
-////                    }
-////                }
-//        }
-
-        if (necessary) {
+        if (necessary || globalIds.size() > 1) {
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 BufferRateData & inputData = mBufferGraph[input];
                 const Binding & binding = inputData.Binding;

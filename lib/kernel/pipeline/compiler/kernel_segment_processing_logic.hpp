@@ -728,19 +728,8 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     IntegerType * const boolTy = b->getInt1Ty();
     mTerminatedAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtKernelExit");
     mTerminatedAtExitPhi->addIncoming(mTerminatedAtLoopExitPhi, mKernelLoopExitPhiCatch);
-
-
-//    if (mIsPartitionRoot) {
-//        Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
-//        mTerminatedAtExitPhi->addIncoming(completed, mKernelInitiallyTerminatedPhiCatch);
-//    }
-
     mTotalNumOfStridesAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtExit");
     mTotalNumOfStridesAtExitPhi->addIncoming(mTotalNumOfStridesAtLoopExitPhi, mKernelLoopExitPhiCatch);
-//    if (mIsPartitionRoot) {
-//        ConstantInt * const ZERO = b->getSize(0);
-//        mTotalNumOfStridesAtExitPhi->addIncoming(ZERO, mKernelInitiallyTerminatedPhiCatch);
-//    }
 
     createConsumedPhiNodes(b);
 
@@ -749,25 +738,15 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
         const auto port = br.Port;
         const auto prefix = makeBufferName(mKernelId, port);
         PHINode * const fullyProduced = b->CreatePHI(sizeTy, 2, prefix + "_fullyProducedAtKernelExit");
-//        if (mIsPartitionRoot) {
-//            const auto streamSet = target(e, mBufferGraph);
-//            fullyProduced->addIncoming(mInitiallyProducedItemCount[streamSet], mKernelInitiallyTerminatedPhiCatch);
-//        }
         mFullyProducedItemCount[port] = fullyProduced;
     }
 
     PHINode * const progress = b->CreatePHI(boolTy, 2, prefix + "_anyProgressAtKernelExit");
     progress->addIncoming(mAnyProgressedAtLoopExitPhi, mKernelLoopExitPhiCatch);
-//    if (mIsPartitionRoot) {
-//        progress->addIncoming(mPipelineProgress, mKernelInitiallyTerminatedPhiCatch);
-//    }
     mAnyProgressedAtExitPhi = progress;
 
     PHINode * const exhausted = b->CreatePHI(boolTy, 2, prefix + "_exhaustedPipelineInputAtKernelExit");
     exhausted->addIncoming(mExhaustedPipelineInputAtLoopExitPhi, mKernelLoopExitPhiCatch);
-//    if (mIsPartitionRoot) {
-//        exhausted->addIncoming(mExhaustedPipelineInputAtExit, mKernelInitiallyTerminatedPhiCatch);
-//    }
     mExhaustedPipelineInputAtExit = exhausted;
 
 }

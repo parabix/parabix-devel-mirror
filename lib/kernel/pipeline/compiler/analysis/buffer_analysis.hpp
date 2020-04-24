@@ -225,10 +225,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             }
 
+            // calculate overflow (copyback) and fascimile (copyforward) space
             bn.LookAhead = maxLookAhead;
             bn.LookBehind = maxLookBehind;
-
-            // calculate overflow (copyback) and fascimile (copyforward) space
 
             const auto overflow0 = std::max(bn.MaxAdd, bn.LookAhead);
             const auto overflow1 = std::max(overflow0, bMax);
@@ -256,7 +255,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 // an upper bound to the buffer size for all potential inputs. Build a dataflow analysis to
                 // determine this.
                 const auto bufferSize = requiredSize * mNumOfThreads;
-                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, true, 0U); // !bn.NonLinear
+                buffer = new DynamicBuffer(b, baseType, bufferSize, overflowSize, underflowSize, !bn.NonLinear, 0U);
             } else {
                 assert (!bn.NonLinear);
                 buffer = new StaticBuffer(b, baseType, requiredSize, overflowSize, underflowSize, true, 0U);

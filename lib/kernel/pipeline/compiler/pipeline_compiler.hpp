@@ -79,56 +79,6 @@ using PartitionPhiNodeTable = multi_array<PHINode *, 2>;
 
 class PipelineCompiler final : public KernelCompiler, public PipelineCommonGraphFunctions {
 
-    template<typename T>
-    struct InputPortVec {
-    public:
-        InputPortVec(PipelineCompiler * const pc)
-        : mPC(*pc)
-        , mVec(pc->mAllocator.allocate<T>(pc->mInputPortSet.size())) {
-            #ifndef NDEBUG
-            std::memset(mVec, 0, sizeof(T) * pc->mInputPortSet.size());
-            #endif
-        }
-//        BOOST_FORCEINLINE
-//        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
-//            assert (mVec);
-//            return mVec[mPC.getInputPortIndex(kernel, port)];
-//        }
-        BOOST_FORCEINLINE
-        T & operator()(const StreamSetPort port) const {
-            return mVec[mPC.getInputPortIndex(mPC.mKernelId, port)];
-        }
-    private:
-        const PipelineCompiler & mPC;
-        T * const mVec;
-    };
-
-    template<typename T> friend struct InputPortVec;
-
-    template<typename T>
-    struct OutputPortVec {
-    public:
-        OutputPortVec(PipelineCompiler * const pc)
-        : mPC(*pc)
-        , mVec(pc->mAllocator.allocate<T>(pc->mOutputPortSet.size())) {
-            #ifndef NDEBUG
-            std::memset(mVec, 0, sizeof(T) * pc->mOutputPortSet.size());
-            #endif
-        }
-//        BOOST_FORCEINLINE
-//        LLVM_READNONE T & operator()(const unsigned kernel, const StreamSetPort port) const {
-//            return mVec[mPC.getOutputPortIndex(kernel, port)];
-//        }
-        BOOST_FORCEINLINE
-        T & operator()(const StreamSetPort port) const {
-            // return operator()(mPC.mKernelId, port);
-            return mVec[mPC.getOutputPortIndex(mPC.mKernelId, port)];
-        }
-    private:
-        const PipelineCompiler & mPC;
-        T * const mVec;
-    };
-
     template<typename T> friend struct OutputPortVec;
 
     enum { WITH_OVERFLOW = 0, WITHOUT_OVERFLOW = 1};
@@ -403,8 +353,6 @@ public:
 
 // kernel config functions
 
-    BufferPortMap constructInputPortMappings() const;
-    BufferPortMap constructOutputPortMappings() const;
     bool supportsInternalSynchronization() const;
     bool isBounded() const;
     bool requiresExplicitFinalStride() const ;
@@ -521,18 +469,12 @@ protected:
 
     const RelationshipGraph                     mStreamGraph;
     const RelationshipGraph                     mScalarGraph;
-//    const InputTruncationGraph                  mInputTruncationGraph;
     const BufferGraph                           mBufferGraph;
-//    const PartitioningGraph                     mPartitioningGraph;
     const std::vector<unsigned>                 mPartitionJumpIndex;
     const PartitionJumpTree                     mPartitionJumpTree;
     const ConsumerGraph                         mConsumerGraph;
     const TerminationChecks                     mTerminationCheck;
     const TerminationPropagationGraph           mTerminationPropagationGraph;
-    const IOCheckGraph                          mIOCheckGraph;
-
-    const BufferPortMap                         mInputPortSet;
-    const BufferPortMap                         mOutputPortSet;
 
     // pipeline state
     unsigned                                    mKernelId = 0;
@@ -764,18 +706,13 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , mStreamGraph(std::move(P.mStreamGraph))
 , mScalarGraph(std::move(P.mScalarGraph))
-// , mInputTruncationGraph(std::move(P.mInputTruncationGraph))
 , mBufferGraph(std::move(P.mBufferGraph))
-// , mPartitioningGraph(std::move(P.mPartitioningGraph))
 , mPartitionJumpIndex(std::move(P.mPartitionJumpIndex))
 , mPartitionJumpTree(std::move(P.mPartitionJumpTree))
 , mConsumerGraph(std::move(P.mConsumerGraph))
 , mTerminationCheck(std::move(P.mTerminationCheck))
 , mTerminationPropagationGraph(std::move(P.mTerminationPropagationGraph))
-, mIOCheckGraph(std::move(P.mIOCheckGraph))
 
-, mInputPortSet(constructInputPortMappings())
-, mOutputPortSet(constructOutputPortMappings())
 , mInitiallyAvailableItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
 , mLocallyAvailableItems(FirstStreamSet, LastStreamSet, mAllocator)
 
