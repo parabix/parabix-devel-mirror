@@ -129,7 +129,7 @@ SelectOperation Intersect(std::vector<StreamSet *> sets) {
 StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation operation)
 : BlockOrientedKernel(b, "StreamSelect" + streamutils::genSignature(operation), {}, {{"output", output}}, {}, {}, {})
 {
-    assert (resultStreamCount(operation) == output->getNumElements());
+    assert (kernel::streamutils::resultStreamCount(operation) == output->getNumElements());
     for (auto const & kv : operation.bindings) {
         if (kv.first->getFieldWidth() != 1) {
             llvm::report_fatal_error("StreamSelect: operations with this kernel are only supported for bitstreams");
@@ -145,7 +145,7 @@ StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperation ope
 StreamSelect::StreamSelect(BuilderRef b, StreamSet * output, SelectOperationList operations)
 : BlockOrientedKernel(b, "StreamSelect" + streamutils::genSignature(operations), {}, {{"output", output}}, {}, {}, {})
 {
-    assert (resultStreamCount(operations) == output->getNumElements());
+    assert (kernel::streamutils::resultStreamCount(operations) == output->getNumElements());
     std::unordered_map<StreamSet *, std::string> inputBindings;
     std::tie(mOperations, inputBindings) = streamutils::mapOperationsToStreamNames(operations);
     for (auto const & kv : inputBindings) {
@@ -166,7 +166,7 @@ IStreamSelect::IStreamSelect(BuilderRef b, StreamSet * output, SelectOperation o
     {{"output", output, BoundedRate(0, 1)}},
     {}, {}, {})
 {
-    assert(resultStreamCount(operation) == output->getNumElements());
+    assert(kernel::streamutils::resultStreamCount(operation) == output->getNumElements());
     std::unordered_map<StreamSet *, std::string> inputBindings;
     std::vector<__selops::__selop<std::string>> ops;
     std::tie(ops, inputBindings) = streamutils::mapOperationsToStreamNames(operation);
