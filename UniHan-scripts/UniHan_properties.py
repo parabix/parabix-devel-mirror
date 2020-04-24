@@ -74,7 +74,7 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
         else:
             raise ValueError("Invalide Property Type " + property_type)
 
-    set_list = ['&%s_Set' % v.lower() for v in prop_values]
+    set_list = ['&%s_Set[%d]' % (v.lower(), i) for v in prop_values for i in range(5)]
     f.write("    static EnumeratedPropertyObject property_object\n")
     f.write("        {%s,\n" % property_code)
     f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
