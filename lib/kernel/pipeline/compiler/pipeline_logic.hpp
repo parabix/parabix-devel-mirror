@@ -341,10 +341,8 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     createThreadStateForSingleThread(b);
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        setActiveKernel(b, i, true);
-        startCycleCounter(b, CycleCounter::INITIAL);        
+        setActiveKernel(b, i, true);            
         executeKernel(b);
-        updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::FINAL);
     }
     end(b);
 }
@@ -464,9 +462,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         setActiveKernel(b, i, true);
-        startCycleCounter(b, CycleCounter::INITIAL);
         executeKernel(b);
-        updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::FINAL);
     }
     mKernel = nullptr;
     mKernelId = 0;

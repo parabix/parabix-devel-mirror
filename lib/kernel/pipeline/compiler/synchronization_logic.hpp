@@ -86,7 +86,7 @@ void PipelineCompiler::incrementCurrentSegNo(BuilderRef /* b */, BasicBlock * co
  * Before the segment is processed, this loads the segment number of the kernel state and ensures the previous
  * segment is complete (by checking that the acquired segment number is equal to the desired segment number).
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start) {
+void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned kernelId) {
 
     if (LLVM_LIKELY(RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized))) {
         const auto prefix = makeKernelName(kernelId);
@@ -117,7 +117,6 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
         b->CreateLikelyCondBr(ready, acquired, acquire);
 
         b->SetInsertPoint(acquired);
-        updateCycleCounter(b, start, CycleCounter::AFTER_SYNCHRONIZATION);
 
         #ifdef PRINT_DEBUG_MESSAGES
         debugPrint(b, "# " + prefix + " acquired SegNo %" PRIu64, mSegNo);

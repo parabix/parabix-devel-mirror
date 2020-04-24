@@ -40,7 +40,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     } else {
         doSegmentRetVal = b->CreateCall(doSegment, args);
     }
-    updateCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
+    updateCycleCounter(b, mKernelId, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);

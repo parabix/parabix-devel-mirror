@@ -311,7 +311,7 @@ public:
 
     void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
     void startCycleCounter(BuilderRef b, const CycleCounter type);
-    void updateCycleCounter(BuilderRef b, const CycleCounter start, const CycleCounter end) const;
+    void updateCycleCounter(BuilderRef b, const unsigned kernelId, const CycleCounter start, const CycleCounter end) const;
 
 
     void incrementNumberOfSegmentsCounter(BuilderRef b) const;
@@ -365,7 +365,7 @@ public:
     void identifyAllInternallySynchronizedKernels();
     void obtainCurrentSegmentNumber(BuilderRef b, BasicBlock * const entryBlock);
     void incrementCurrentSegNo(BuilderRef b, BasicBlock * const exitBlock);
-    void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId, const CycleCounter start);
+    void acquireSynchronizationLock(BuilderRef b, const unsigned kernelId);
     void releaseSynchronizationLock(BuilderRef b, const unsigned kernelId);
 
 // family functions

@@ -638,7 +638,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
 
         if (EnableCycleCounter) {
             b->SetInsertPoint(recordCopyCycleCount);
-            updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
+            updateCycleCounter(b, mKernelId, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
             b->CreateBr(copyExit);
         }
 
@@ -647,7 +647,7 @@ void PipelineCompiler::copy(BuilderRef b, const CopyMode mode, Value * cond,
         Value * const totalBytesToCopy = b->CreateMul(bytesToCopy, numOfStreams);
         b->CreateMemCpy(target, source, totalBytesToCopy, bitsToCopy / 8);
         if (EnableCycleCounter) {
-            updateCycleCounter(b, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
+            updateCycleCounter(b, mKernelId, CycleCounter::BEFORE_COPY, CycleCounter::AFTER_COPY);
         }
         b->CreateBr(copyExit);
 

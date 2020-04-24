@@ -42,7 +42,11 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
     b->SetInsertPoint(entry);
     mCurrentPartitionId = -1U;
     setActiveKernel(b, FirstKernel, true);
-    acquireSynchronizationLock(b, FirstKernel, CycleCounter::INITIAL);
+
+    startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+    acquireSynchronizationLock(b, FirstKernel);
+    updateCycleCounter(b, FirstKernel, CycleCounter::BEFORE_SYNCHRONIZATION, CycleCounter::AFTER_SYNCHRONIZATION);
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -388,7 +392,10 @@ void PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef 
 //    // TODO: experiment with a mutex lock here.
 //    const auto lockingKernel = std::min(firstKernelInTargetPartition, LastKernel);
 //    assert ((firstKernelInNextPartition == lockingKernel) || (firstKernelInNextPartition == PipelineOutput));
-    acquireSynchronizationLock(b, LastKernel, CycleCounter::INITIAL);
+    startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+    acquireSynchronizationLock(b, lastConsumer);
+    updateCycleCounter(b, firstKernelInTargetPartition, CycleCounter::BEFORE_SYNCHRONIZATION, CycleCounter::AFTER_SYNCHRONIZATION);
+
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
         releaseSynchronizationLock(b, kernel);
     }
@@ -413,6 +420,9 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
     loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
 
     if (LLVM_LIKELY(nextPartitionId != jumpId)) {
+
+        updateCycleCounter(b, mKernelId, CycleCounter::INITIAL, CycleCounter::FINAL);
+
         acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
         mKernelInitiallyTerminatedExit = b->GetInsertBlock();
 
@@ -430,6 +440,7 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
         }
 
         phiOutPartitionStatusFlags(b, nextPartitionId, true, mKernelInitiallyTerminated);
+
         b->CreateBr(mNextPartitionEntryPoint);
 
     } else {
@@ -451,6 +462,8 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
 
     const auto nextPartitionId = mPartitionJumpIndex[mCurrentPartitionId];
     assert (mCurrentPartitionId < nextPartitionId);
+
+    updateCycleCounter(b, mKernelId, CycleCounter::INITIAL, CycleCounter::FINAL);
 
     acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
 
@@ -494,7 +507,9 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
 
     const auto nextKernel = mKernelId + 1U;
     if (nextKernel != PipelineOutput) {
-        acquireSynchronizationLock(b, nextKernel, CycleCounter::INITIAL);
+        startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+        acquireSynchronizationLock(b, nextKernel);
+        updateCycleCounter(b, nextKernel, CycleCounter::BEFORE_SYNCHRONIZATION, CycleCounter::AFTER_SYNCHRONIZATION);
     }
 
     const auto nextPartitionId = KernelPartitionId[nextKernel];

@@ -147,9 +147,12 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelLoopExitPhiCatch = b->CreateBasicBlock(prefix + "_kernelExitPhiCatch", mNextPartitionEntryPoint);
     mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", mNextPartitionEntryPoint);
 
+    startCycleCounter(b, CycleCounter::INITIAL);
+
     readProcessedItemCounts(b);
     readProducedItemCounts(b);
     readConsumedItemCounts(b);
+
     prepareLinearBuffers(b);
 
     incrementNumberOfSegmentsCounter(b);
@@ -345,6 +348,8 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         verifyPostInvocationTerminationSignal(b);
         verifyExpectedNumOfStrides(b);
     }
+
+    updateCycleCounter(b, mKernelId, CycleCounter::INITIAL, CycleCounter::FINAL);
 
     checkForPartitionExit(b);
 }
