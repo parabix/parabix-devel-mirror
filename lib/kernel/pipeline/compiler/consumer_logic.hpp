@@ -74,17 +74,17 @@ Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t strea
         } else {
             produced = mInitiallyProducedItemCount[streamSet];
         }
-//        const auto e = in_edge(streamSet, mBufferGraph);
-//        const BufferRateData & br = mBufferGraph[e];
-//        auto delayOrLookBehind = std::max(br.Delay, br.LookBehind);
-//        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-//            const BufferRateData & br = mBufferGraph[e];
-//            const auto d = std::max(br.Delay, br.LookBehind);
-//            delayOrLookBehind = std::max(delayOrLookBehind, d);
-//        }
-//        if (delayOrLookBehind) {
-//            produced = b->CreateSaturatingSub(produced, b->getSize(delayOrLookBehind));
-//        }
+        const auto e = in_edge(streamSet, mBufferGraph);
+        const BufferRateData & br = mBufferGraph[e];
+        auto delayOrLookBehind = std::max(br.Delay, br.LookBehind);
+        for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+            const BufferRateData & br = mBufferGraph[e];
+            const auto d = std::max(br.Delay, br.LookBehind);
+            delayOrLookBehind = std::max(delayOrLookBehind, d);
+        }
+        if (delayOrLookBehind) {
+            produced = b->CreateSaturatingSub(produced, b->getSize(delayOrLookBehind));
+        }
         return produced;
     }
 
@@ -108,15 +108,20 @@ inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const St
     Value * initiallyConsumed = produced;
     const auto output = getOutput(mKernelId, outputPort);
     const BufferRateData & br = mBufferGraph[output];
-    if (br.LookBehind) {
-        Constant * const lookBehind = b->getSize(br.LookBehind);
-        Value * consumed = b->CreateSub(initiallyConsumed, lookBehind);
-        Value * const satisfies = b->CreateICmpUGT(initiallyConsumed, lookBehind);
-        initiallyConsumed = b->CreateSelect(satisfies, consumed, b->getSize(0));
+    if (br.LookBehind || br.Delay) {
+        const auto delayOrLookBehind = std::max(br.Delay, br.LookBehind);
+        initiallyConsumed = b->CreateSaturatingSub(produced, b->getSize(delayOrLookBehind));
     }
     const auto streamSet = target(output, mBufferGraph);
     const ConsumerNode & cn = mConsumerGraph[streamSet];
     cn.Consumed = initiallyConsumed;
+
+
+    #ifdef PRINT_DEBUG_MESSAGES
+    const auto prefix = makeBufferName(mKernelId, outputPort);
+    debugPrint(b, prefix + " -> " + prefix + "_initiallyConsumed = %" PRIu64, initiallyConsumed);
+    #endif
+
 
 //    if (CheckAssertions) {
 //        const auto prefix = std::to_string(streamSet);
@@ -182,6 +187,14 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
             }
             assert (cn.Consumed);
             cn.Consumed = b->CreateUMin(cn.Consumed, processed);
+
+            #ifdef PRINT_DEBUG_MESSAGES
+            const auto output = in_edge(streamSet, mBufferGraph);
+            const auto producer = source(output, mBufferGraph);
+            const auto prodPrefix = makeBufferName(producer, mBufferGraph[output].Port);
+            const auto consPrefix = makeBufferName(mKernelId, port);
+            debugPrint(b, consPrefix + " -> " + prodPrefix + "_consumed' = %" PRIu64, cn.Consumed);
+            #endif
         }
     }
 

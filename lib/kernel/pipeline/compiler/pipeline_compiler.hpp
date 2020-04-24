@@ -512,7 +512,7 @@ protected:
 
     const bool                                  ExternallySynchronized;
     const bool                                  PipelineHasTerminationSignal;
-    const bool                                  mHasZeroExtendedStream;
+    const bool                                  HasZeroExtendedStream;
     const bool                                  EnableCycleCounter;
 
     const Partition                             KernelPartitionId;
@@ -755,7 +755,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , ExternallySynchronized(pipelineKernel->hasAttribute(AttrId::InternallySynchronized))
 , PipelineHasTerminationSignal(pipelineKernel->canSetTerminateSignal())
-, mHasZeroExtendedStream(P.mHasZeroExtendedStream)
+, HasZeroExtendedStream(P.HasZeroExtendedStream)
 , EnableCycleCounter(DebugOptionIsSet(codegen::EnableCycleCounter))
 
 , KernelPartitionId(std::move(P.KernelPartitionId))

@@ -143,7 +143,8 @@ Value * StreamSetBuffer::getRawItemPointer(BuilderPtr b, Value * streamIndex, Va
         const Rational itemsPerByte{8, itemWidth};
         if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
             b->CreateAssertZero(b->CreateURemRate(absolutePosition, itemsPerByte),
-                                "absolutePosition must be byte aligned");
+                                "absolutePosition (%" PRIu64 " * %" PRIu64 "x%" PRIu64 ") must be byte aligned",
+                                absolutePosition, getStreamSetCount(b), b->getSize(itemWidth));
         }
         positionInBlock = b->CreateUDivRate(positionInBlock, itemsPerByte);
         PointerType * const itemPtrTy = b->getInt8Ty()->getPointerTo(mAddressSpace);
@@ -837,7 +838,6 @@ void DynamicBuffer::reserveCapacity(BuilderPtr b, Value * const produced, Value 
 
             b->SetInsertPoint(copyBack);
             b->CreateMemCpy(mallocAddress, unreadDataPtr, bytesToCopy, blockSize);
-            // Value * const bufferCapacity = b->CreateLoad(intCapacityField);
             BasicBlock * const copyBackExit = b->GetInsertBlock();
             b->CreateBr(updateBaseAddress);
 

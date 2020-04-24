@@ -415,7 +415,11 @@ void MemorySourceKernel::generateDoSegmentMethod(BuilderRef b) {
         // make sure our copy is block-aligned
         Value * const consumedOffset = b->CreateAnd(consumedItems, ConstantExpr::getNeg(BLOCK_WIDTH));
         readStart = b->getRawOutputPointer("sourceBuffer", consumedOffset);
-        readEnd = b->getRawOutputPointer("sourceBuffer", fileItems);
+        Value * fileOffset = fileItems;
+        if (codeUnitWidth < 8) {
+            fileOffset = b->CreateAnd(fileOffset, ConstantExpr::getNeg(b->getSize(8 / codeUnitWidth)));
+        }
+        readEnd = b->getRawOutputPointer("sourceBuffer", fileOffset);
         if (codeUnitWidth == 1) {
             // If trying to load a bitstream and the number of items is not byte-aligned, load an extra byte.
             Value * const isPartialByte = b->CreateICmpNE(b->CreateURem(fileItems, b->getSize(8)), b->getSize(0));

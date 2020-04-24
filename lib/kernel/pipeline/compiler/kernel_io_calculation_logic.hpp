@@ -212,7 +212,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
                 if (strides) {
                     Value * const minStrides = b->CreateUMin(numOfOutputStrides, strides);
                     Value * const isZero = b->CreateICmpEQ(strides, ZERO);
-                    numOfOutputStrides = b->CreateSelect(isZero, numOfOutputStrides, minStrides);
+                    numOfOutputStrides = b->CreateSelect(isZero, numOfOutputStrides, minStrides, "numOfOutputStrides");
                 }
             }
         }
@@ -254,7 +254,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
            if (strides) {
                Value * const minStrides = b->CreateUMin(numOfActualOutputStrides, strides);
                Value * const isZero = b->CreateICmpEQ(strides, ZERO);
-               numOfActualOutputStrides = b->CreateSelect(isZero, numOfActualOutputStrides, minStrides);
+               numOfActualOutputStrides = b->CreateSelect(isZero, numOfActualOutputStrides, minStrides, "numOfActualOutputStrides");
            }
        }
 
@@ -1039,7 +1039,7 @@ Value * PipelineCompiler::getNumOfAccessibleStrides(BuilderRef b,
     }
     Value * const ze = mIsInputZeroExtended[inputPort];
     if (ze) {
-        numOfStrides = b->CreateSelect(ze, mNumOfLinearStrides, numOfStrides);
+        numOfStrides = b->CreateSelect(ze, numOfLinearStrides, numOfStrides, "numOfZeroExtendedStrides");
     }
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, "< " + prefix + "_numOfStrides = %" PRIu64, numOfStrides);
@@ -1112,7 +1112,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
             } else  {
                 selected = b->CreateSaturatingSub(accessible, b->getSize(-k));
             }
-            accessible = b->CreateSelect(isClosedNormally(b, inputPort), selected, accessible);
+            accessible = b->CreateSelect(isClosedNormally(b, inputPort), selected, accessible, "accessible");
         }
         accessibleItems[i] = accessible;
     }
@@ -1142,7 +1142,7 @@ void PipelineCompiler::calculateFinalItemCounts(BuilderRef b,
                 const auto factor = rate.getRate() / mFixedRateLCM;
                 accessible = b->CreateCeilUMulRate(principalFixedRateFactor, factor);
             } else {
-                Value * maxItems = b->CreateAdd(mAlreadyProcessedPhi[inputPort], mFirstInputStrideLength[inputPort]);
+                Value * maxItems = b->CreateAdd(mAlreadyProcessedPhi[inputPort], getInputStrideLength(b, inputPort));
                 // But since we may not necessarily be in our zero extension region, we must first
                 // test whether we are:
                 accessible = b->CreateSelect(mIsInputZeroExtended[inputPort], maxItems, accessible);

@@ -366,14 +366,14 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             // does this use of the buffer cross a partition boundary?
             if (pId != tId) {
                 isLocal = false;
-                // does the consuming partition need to check this buffer?
-                for (const auto f : make_iterator_range(in_edges(tId, mPartitioningGraph))) {
-                    const PartitioningGraphEdge & E = mPartitioningGraph[f];
-                    if (E.Kernel == t && E.Port == pd.Port) {
-                        isChecked = true;
-                        break;
-                    }
-                }
+//                // does the consuming partition need to check this buffer?
+//                for (const auto f : make_iterator_range(in_edges(tId, mPartitioningGraph))) {
+//                    const PartitioningGraphEdge & E = mPartitioningGraph[f];
+//                    if (E.Kernel == t && E.Port == pd.Port) {
+//                        isChecked = true;
+//                        break;
+//                    }
+//                }
             }
         }
 
@@ -405,7 +405,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
                 break;
             default: llvm_unreachable("unknown or unhandled rate type in buffer graph");
         }
-        out << " {" << pd.GlobalPortId << "}";
+        out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
         if (pd.IsPrincipal) {
             out << " [P]";
         }

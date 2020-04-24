@@ -18,6 +18,8 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
     #ifndef DISABLE_ZERO_EXTEND
     using Graph = adjacency_list<vecS, vecS, bidirectionalS>;
 
+    flat_set<unsigned> inputPartitionIds;
+
     for (unsigned kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         const RelationshipNode & rn = mStreamGraph[kernel];
         assert (rn.Type == RelationshipNode::IsKernel);
@@ -78,8 +80,10 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
         // whether *any* of the inputs to a kernel are inputs to the partition. Any such input would not
         // dictate the dataflow within the partition until after this kernel has been executed.
 
+
         bool necessary = false;
 
+        inputPartitionIds.clear();
         const auto partitionId = KernelPartitionId[kernel];
         for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
             const BufferRateData & inputData = mBufferGraph[input];
@@ -87,15 +91,24 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
             const auto producer = parent(streamSet, mBufferGraph);
             const auto prodPartitionId = KernelPartitionId[producer];
             if (partitionId != prodPartitionId) {
-                for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
-                    const PartitioningGraphEdge & E = mPartitioningGraph[e];
-                    if (E.Kernel == kernel && E.Port == inputData.Port) {
-                        necessary = true;
-                        break;
-                    }
-                }
+                necessary = true;
+                break;
             }
+            inputPartitionIds.insert(inputData.GlobalPortId);
         }
+
+//        const auto necessary = (inputPartitionIds.size() != 1);
+
+//        if (partitionId != prodPartitionId) {
+//            necessary = true;
+////                for (const auto e : make_iterator_range(in_edges(partitionId, mPartitioningGraph))) {
+////                    const PartitioningGraphEdge & E = mPartitioningGraph[e];
+////                    if (E.Kernel == kernel && E.Port == inputData.Port) {
+////                        necessary = true;
+////                        break;
+////                    }
+////                }
+//        }
 
         if (necessary) {
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {

@@ -58,7 +58,6 @@ void PipelineCompiler::start(BuilderRef b) {
     mExhaustedInput = i1_FALSE;
     obtainCurrentSegmentNumber(b, entryBlock);
 
-    acquireSynchronizationLock(b, FirstKernel, CycleCounter::INITIAL);
     branchToInitialPartition(b);
 }
 
@@ -814,6 +813,8 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
  * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::end(BuilderRef b) {
+
+
 
     // A pipeline will end for one or two reasons:
 

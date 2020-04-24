@@ -110,7 +110,7 @@ Value * PipelineCompiler::subtractLookahead(BuilderRef b, const StreamSetPort in
                         b->GetString(binding.getName()));
     }
     Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
-    return b->CreateSelect(closed, itemCount, reducedItemCount);
+    return b->CreateSelect(closed, itemCount, reducedItemCount, "subtractLookahead");
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

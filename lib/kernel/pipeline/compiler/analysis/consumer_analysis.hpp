@@ -14,8 +14,6 @@ namespace kernel {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::makeConsumerGraph() {
 
-    constexpr bool forced = false;
-
     mConsumerGraph = ConsumerGraph(LastStreamSet + 1);
 
     flat_set<unsigned> observedGlobalPortIds;
@@ -33,6 +31,7 @@ void PipelineAnalysis::makeConsumerGraph() {
             continue;
         }
 
+
         auto lastConsumer = PipelineInput;
         auto index = 0U;
         // flag the production rate as ignorable by inserting it upfront
@@ -41,7 +40,15 @@ void PipelineAnalysis::makeConsumerGraph() {
             const BufferRateData & br = mBufferGraph[ce];
             const auto consumer = target(ce, mBufferGraph);
             // check if any consumer has a rate we have not yet observed
-            if (forced || observedGlobalPortIds.insert(br.GlobalPortId).second) {
+            auto testConsumer = [&]() {
+                #ifndef TEST_ALL_CONSUMERS
+                return observedGlobalPortIds.insert(br.GlobalPortId).second;
+                #else
+                return true;
+                #endif
+            };
+
+            if (testConsumer()) {
                 lastConsumer = std::max<unsigned>(lastConsumer, consumer);
                 add_edge(streamSet, consumer, ConsumerEdge{br.Port, ++index, ConsumerEdge::UpdatePhi}, mConsumerGraph);
             }

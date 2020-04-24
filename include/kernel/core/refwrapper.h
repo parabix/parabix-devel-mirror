@@ -14,6 +14,9 @@ struct RefWrapper {
     operator const T & () const noexcept {
         return get();
     }
+    operator T & () noexcept {
+        return get();
+    }
     const T & get() const noexcept {
         assert (mReference && "was not set!");
         return *mReference;

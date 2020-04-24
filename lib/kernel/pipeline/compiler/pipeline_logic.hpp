@@ -70,7 +70,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     // NOTE: both the shared and thread local objects are parameters to the kernel.
     // They get automatically set by reading in the appropriate params.
 
-    if (mHasZeroExtendedStream) {
+    if (HasZeroExtendedStream) {
         PointerType * const voidPtrTy = b->getVoidPtrTy();
         mTarget->addThreadLocalScalar(voidPtrTy, ZERO_EXTENDED_BUFFER);
         mTarget->addThreadLocalScalar(sizeTy, ZERO_EXTENDED_SPACE);
@@ -322,6 +322,7 @@ void PipelineCompiler::generateAllocateThreadLocalInternalStreamSetsMethod(Build
  * @brief generateKernelMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::generateKernelMethod(BuilderRef b) {
+    initializeKernelAssertions(b);
     verifyBufferRelationships();
     mScalarValue.reset(FirstKernel, LastScalar);
     readPipelineIOItemCounts(b);
@@ -340,8 +341,8 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
     createThreadStateForSingleThread(b);
     start(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
-        startCycleCounter(b, CycleCounter::INITIAL);
         setActiveKernel(b, i, true);
+        startCycleCounter(b, CycleCounter::INITIAL);        
         executeKernel(b);
         updateCycleCounter(b, CycleCounter::INITIAL, CycleCounter::FINAL);
     }

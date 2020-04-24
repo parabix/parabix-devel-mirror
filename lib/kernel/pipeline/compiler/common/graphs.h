@@ -224,8 +224,8 @@ enum class BufferType : unsigned {
     , Internal = 1
     , External = 2
     , Unowned = 4
-    , ManagedByKernel = 5
-    , UnownedExternal = 6
+    , ManagedByKernel = Unowned | Internal
+    , UnownedExternal = Unowned | External
 };
 
 ENABLE_ENUM_FLAGS(BufferType)

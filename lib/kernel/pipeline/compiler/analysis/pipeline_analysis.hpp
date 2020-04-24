@@ -209,13 +209,9 @@ public:
     std::vector<Rational>           MaximumNumOfStrides;
 
     BufferGraph                     mBufferGraph;
-    PartitioningGraph               mPartitioningGraph;
+//    PartitioningGraph               mPartitioningGraph;
     std::vector<unsigned>           mPartitionJumpIndex;
     PartitionJumpTree               mPartitionJumpTree;
-
-
-    bool                            mHasZeroExtendedStream;
-    bool                            mHasThreadLocalPipelineState;
 
     ConsumerGraph                   mConsumerGraph;
 

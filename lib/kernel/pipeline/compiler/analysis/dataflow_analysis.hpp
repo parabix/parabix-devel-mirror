@@ -963,6 +963,290 @@ void PipelineAnalysis::computeDataFlowRates() {
 
 #endif
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyLinkedIOPorts
+ *
+ * Some I/O ports will always have an identical item count (relative to some known constant) throughout the
+ * lifetime of the program. E.g., any partition local edge must be between two fixed rate I/O ports, which
+ * entails that by knowing the initial value of one we can compute the latter.
+ *
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyLocalPortIds() {
+
+    using BitSet = dynamic_bitset<>;
+    using Vertex = BufferGraph::vertex_descriptor;
+
+    struct Edge {
+        RefWrapper<BufferRateData> Port;
+        BitSet RateSet;
+        Edge() = default;
+        Edge(BufferRateData & br)
+        : Port(br) { }
+    };
+
+    using Graph = adjacency_list<vecS, vecS, bidirectionalS, no_property, Edge>;
+
+    const auto firstKernel = out_degree(PipelineInput, mBufferGraph) == 0 ? FirstKernel : PipelineInput;
+    const auto lastKernel = in_degree(PipelineOutput, mBufferGraph) == 0 ? LastKernel : PipelineOutput;
+
+    flat_set<Rational> fixedRate;
+
+//    unsigned nextRateId = 0;
+
+//    flat_map<Vertex, unsigned> partialSumRefId;
+//    flat_map<unsigned, unsigned> addId;
+//    flat_map<unsigned, unsigned> lookAheadId;
+//    flat_map<unsigned, unsigned> lookBehindId;
+//    flat_map<StreamSetPort, RefWrapper<BitSet>> relativeRefId;
+
+    Graph H(LastStreamSet + 1);
+
+    auto maxRateId = PartitionCount;
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+        maxRateId += in_degree(kernel, mBufferGraph);
+        maxRateId += out_degree(kernel, mBufferGraph);
+    }
+
+    const auto n = fixedRate.size();
+    maxRateId += n;
+    auto nextRateId = n;
+
+    for (auto start = firstKernel; start <= lastKernel; ) {
+        // Determine which kernels are in this partition
+        const auto partitionId = KernelPartitionId[start];
+        assert (partitionId < PartitionCount);
+        auto end = start + 1U;
+        for (; end <= LastKernel; ++end) {
+            if (KernelPartitionId[end] != partitionId) {
+                break;
+            }
+        }
+
+        auto addRateId = [&](BitSet & bv, const unsigned rateId) {
+           bv.resize(maxRateId);
+           assert (rateId < maxRateId);
+           bv.set(rateId);
+        };
+
+        const auto partRateId = nextRateId++;
+
+        for (auto kernel = start; kernel < end; ++kernel) {
+
+            auto updateBitSet = [&](const BufferRateData & data, BitSet & S) {
+                addRateId(S, partRateId);
+                const auto anyFlags =
+                    data.IsZeroExtended || data.IsDeferred ||
+                    data.Add || data.Truncate ||
+                    data.Delay || data.LookAhead || data.LookBehind;
+                if (anyFlags || data.Minimum != data.Maximum) {
+                    addRateId(S, nextRateId++);
+                } else {
+                    const auto f = fixedRate.find(data.Minimum);
+                    const auto k = std::distance(fixedRate.begin(), f);
+                    addRateId(S, k);
+                }
+            };
+
+            for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+                const auto streamSet = source(input, mBufferGraph);
+                BufferRateData & data = mBufferGraph[input];
+                const auto e = add_edge(streamSet, kernel, data, H).first;
+                BitSet & S = H[e].RateSet;
+                updateBitSet(data, S);
+            }
+
+            for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+                const auto streamSet = target(output, mBufferGraph);
+                BufferRateData & data = mBufferGraph[output];
+                const auto e = add_edge(kernel, streamSet, data, H).first;
+                BitSet & S = H[e].RateSet;
+                updateBitSet(data, S);
+            }
+
+        }
+        start = end;
+    }
+
+    #if 0
+
+    auto & out = errs();
+    out << "digraph \"H\" {\n";
+    for (auto e : make_iterator_range(edges(H))) {
+        const auto s = source(e, H);
+        const auto t = target(e, H);
+        out << "v" << s << " -> v" << t << " [label=\"{";
+        const BitSet & S = H[e].RateSet;
+        bool comma = false;
+        for (auto i = S.find_first(); i != BitSet::npos; i = S.find_next(i)) {
+            if (comma) out << ',';
+            out << i;
+            comma = true;
+        }
+        out << "}\"];\n";
+    }
+
+    out << "}\n\n";
+    out.flush();
+
+    #endif
+
+    using GlobalPortIds = std::map<BitSet, unsigned>;
+
+    GlobalPortIds globalPortIds;
+    unsigned nextGlobalPortId = 0;
+
+    auto getGlobalPortId = [&](const BitSet & B) {
+        const auto f = globalPortIds.find(B);
+        if (f == globalPortIds.end()) {
+            const auto id = nextGlobalPortId++;
+            globalPortIds.emplace(std::move(B), id);
+            return id;
+        }
+        return f->second;
+    };
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        for (const auto input : make_iterator_range(in_edges(kernel, H))) {
+            auto & data = H[input];
+            BufferRateData & port = data.Port;
+            port.GlobalPortId = getGlobalPortId(data.RateSet);
+        }
+
+        for (const auto output : make_iterator_range(out_edges(kernel, H))) {
+            auto & data = H[output];
+            BufferRateData & port = data.Port.get();
+            port.GlobalPortId = getGlobalPortId(data.RateSet);
+        }
+
+    }
+
+    using LocalPortIdSet = SmallFlatSet<unsigned, 4>;
+    using LocalPortIds = flat_map<std::pair<LocalPortIdSet, Rational>, unsigned>;
+
+
+    LocalPortIds localPortIds;
+    LocalPortIdSet ids;
+    unsigned nextLocalPortId = 0;
+
+    auto getLocalPortId = [&](const BufferNode & node, const BufferRateData & rateData) {
+
+//        Rational fillRate{};
+//        if (node.NonLinear) {
+//            const StreamSetBuffer * const buffer = node.Buffer;
+//            assert (buffer);
+//            if (isa<DynamicBuffer>(buffer)) {
+//                return nextLocalPortId++;
+//            } else if (isa<StaticBuffer>(buffer)) {
+//                const Binding & binding = rateData.Binding;
+//                const ProcessingRate & rate = binding.getRate();
+//                if (LLVM_LIKELY(rate.isFixed())) {
+//                    const StaticBuffer * const sbuffer = cast<StaticBuffer>(buffer);
+//                    const Rational capacity{sbuffer->getCapacity()};
+//                    fillRate = capacity / rateData.Minimum;
+//                } else {
+//                    return nextLocalPortId++;
+//                }
+//            }
+//        }
+
+        // auto key = std::make_pair(ids, fillRate);
+        auto key = std::make_pair(ids, Rational{0});
+        const auto f = localPortIds.find(key);
+        if (f == localPortIds.end()) {
+            const auto id = nextLocalPortId++;
+            localPortIds.emplace(std::move(key), id);
+            return id;
+        } else {
+            return f->second;
+        }
+    };
+
+    auto resetLocalPortIds = [&]() {
+        localPortIds.clear();
+        nextLocalPortId = 0;
+    };
+
+//    auto calculateFillRatio = [&](const BufferNode & node, const BufferRateData & rateData) {
+//        const StreamSetBuffer * const buffer = node.Buffer;
+//        if (isa<StaticBuffer>(buffer)) {
+//            const Binding & binding = rateData.Binding;
+//            const ProcessingRate & rate = binding.getRate();
+//            if (LLVM_LIKELY(rate.isFixed())) {
+//                const StaticBuffer * const sbuffer = cast<StaticBuffer>(buffer);
+//                const Rational capacity{sbuffer->getCapacity()};
+//                return capacity / rateData.Minimum;
+//            }
+//        }
+//        return Rational{};
+//    };
+
+    for (auto kernel = firstKernel; kernel <= lastKernel; ++kernel) {
+
+        assert (localPortIds.empty());
+
+        for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+            const auto streamSet = source(input, mBufferGraph);
+            const auto output = in_edge(streamSet, mBufferGraph);
+
+            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
+
+            assert (ids.empty());
+
+            const BufferNode & node = mBufferGraph[streamSet];
+
+            BufferRateData & I = mBufferGraph[input];
+            if (node.NonLocal) {
+                I.LocalPortId = nextLocalPortId++;
+            } else {
+                ids.insert(I.GlobalPortId);
+                const BufferRateData & O = mBufferGraph[output];
+                ids.insert(O.GlobalPortId);
+                I.LocalPortId = getLocalPortId(node, I);
+                ids.clear();
+            }
+
+        }
+
+        assert (nextLocalPortId <= in_degree(kernel, mBufferGraph));
+
+        MaxNumOfLocalInputPortIds = std::max<unsigned>(MaxNumOfLocalInputPortIds, nextLocalPortId);
+
+        resetLocalPortIds();
+
+        for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
+            assert (ids.empty());
+
+            BufferRateData & O = mBufferGraph[output];
+            ids.insert(O.GlobalPortId);
+
+            const auto streamSet = target(output, mBufferGraph);
+
+            assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
+
+            for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
+                BufferRateData & I = mBufferGraph[input];
+                ids.insert(I.GlobalPortId);
+            }
+
+            const BufferNode & node = mBufferGraph[streamSet];
+            O.LocalPortId = getLocalPortId(node, O);
+            ids.clear();
+        }
+
+        assert (nextLocalPortId <= out_degree(kernel, mBufferGraph));
+
+        MaxNumOfLocalOutputPortIds = std::max<unsigned>(MaxNumOfLocalOutputPortIds, nextLocalPortId);
+
+        resetLocalPortIds();
+    }
+
+}
+
+
+#if 0
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyLinkedIOPorts
  *
@@ -1106,9 +1390,9 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     addRateId(S, zeroExtendId);
                 }
                 insert(S, data.TransitiveAdd, addId);
+                insert(S, data.LookAhead, lookAheadId);
+                insert(S, data.LookBehind, lookBehindId);
                 combine(K, S);
-//                insert(K, data.LookBehind, lookBehindId);
-//                insert(K, data.LookAhead, lookAheadId);
             }
 
             reset();
@@ -1139,8 +1423,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
                     relativeRefId.emplace(data.Port, S);
                 }
                 insert(S, data.TransitiveAdd, addId);
-//                insert(S, data.LookAhead, lookAheadId);
-//                insert(S, data.LookBehind, lookBehindId);
+                insert(S, data.LookAhead, lookAheadId);
+                insert(S, data.LookBehind, lookBehindId);
             }
             relativeRefId.clear();
         }
@@ -1335,6 +1619,8 @@ void PipelineAnalysis::identifyLocalPortIds() {
     }
 
 }
+
+#endif
 
 #if 0
 

@@ -55,7 +55,7 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
             buffer->setHandle(handle);
         }
     }
-    if (mHasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
+    if (HasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
         mZeroExtendBuffer = b->getScalarFieldPtr(ZERO_EXTENDED_BUFFER);
         mZeroExtendSpace = b->getScalarFieldPtr(ZERO_EXTENDED_SPACE);
     }
@@ -150,7 +150,7 @@ void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
             }
         }
     }
-    if (mHasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
+    if (HasZeroExtendedStream && (mTarget->hasThreadLocal() != nonLocal)) {
         assert (isFromCurrentFunction(b, mZeroExtendBuffer, false));
         b->CreateFree(b->CreateLoad(mZeroExtendBuffer));
     }
@@ -399,6 +399,9 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
         Value * const vba = b->getScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
         StreamSetBuffer * const buffer = bn.Buffer;
         buffer->setBaseAddress(b.get(), vba);
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, handleName + "_loadPriorVirtualBaseAddress = 0x%" PRIx64, buffer->getBaseAddress(b));
+        #endif
     }
 }
 

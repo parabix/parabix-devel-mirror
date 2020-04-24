@@ -1267,6 +1267,8 @@ found:  ++i;
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::generatePartitioningGraph() {
 
+#if 0
+
     using BufferVertex = BufferGraph::vertex_descriptor;
     using PartitioningVertex = PartitioningGraph::vertex_descriptor;
     using StreamSetMap = flat_map<BufferVertex, PartitioningVertex>;
@@ -1740,6 +1742,8 @@ skip_edge_2:        // -----------------
     END_SCOPED_REGION
 
 //    printG();
+
+#endif
 
 }
 

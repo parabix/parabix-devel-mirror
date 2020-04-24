@@ -24,6 +24,8 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
         const BufferRateData & br = mBufferGraph[e];
         if (br.IsZeroExtended) {
 
+            assert (HasZeroExtendedStream);
+
             const auto streamSet = source(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
             const Binding & input = br.Binding;
@@ -47,18 +49,20 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
             } else if (fieldWidth > 8) {
                 requiredBytes = b->CreateMul(requiredBytes, b->getSize(fieldWidth / 8));
             }
-            requiredBytes = b->CreateSelect(mIsInputZeroExtended[br.Port], requiredBytes, ZERO);
+            requiredBytes = b->CreateSelect(mIsInputZeroExtended[br.Port], requiredBytes, ZERO, "zeroExtendRequiredBytes");
             requiredSpace = b->CreateUMax(requiredSpace, requiredBytes);
         }
     }
-    assert (requiredSpace);
+    assert (requiredSpace);    
     const auto prefix = makeKernelName(mKernelId);
     BasicBlock * const entry = b->GetInsertBlock();
     BasicBlock * const expandZeroExtension =
         b->CreateBasicBlock(prefix + "_expandZeroExtensionBuffer", insertBefore);
     BasicBlock * const hasSufficientZeroExtendSpace =
         b->CreateBasicBlock(prefix + "_hasSufficientZeroExtendSpace", insertBefore);
+    assert (mZeroExtendSpace);
     Value * const currentSpace = b->CreateLoad(mZeroExtendSpace);
+    assert (mZeroExtendBuffer);
     Value * const currentBuffer = b->CreateLoad(mZeroExtendBuffer);
     requiredSpace = b->CreateRoundUp(requiredSpace, b->getSize(b->getCacheAlignment()));
 
@@ -119,7 +123,7 @@ void PipelineCompiler::getZeroExtendedInputVirtualBaseAddresses(BuilderRef b,
             addr = b->CreatePointerCast(addr, bufferType);
             const auto i = rt.Port.Number;
             assert (addr->getType() == baseAddresses[i]->getType());
-            addr = b->CreateSelect(zeroExtended, addr, baseAddresses[i]);
+            addr = b->CreateSelect(zeroExtended, addr, baseAddresses[i], "zeroExtendAddr");
             zeroExtendedVirtualBaseAddress[i] = addr;
         }
     }
