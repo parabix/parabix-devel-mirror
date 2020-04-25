@@ -2,7 +2,7 @@
 # unihan_config.py - configuration for unihan generator
 #
 
-UniHan_src_dir = "Unihan"
+UniHan_src_dir = "unihan-scripts/Unihan"
 
 UniHan_output_dir = "generated_radicals"
 

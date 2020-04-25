@@ -24,24 +24,22 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
     f.write("        " + cformat.multiline_fill(set_list, ',', 8))
     f.write("\n        }};"
         "\n    }\n")
-
+def sum_bytes(value_map):
+    byte_sum = 0
+    byte_sum = sum([value_map[v].bytes() for v in value_map.keys()])
+    return byte_sum
+    
+def get_property_full_name(property_code):
+    property_name = None
+    if(property_code == "krs"):
+        property_name = "kRSKangXi"
+    return property_name
+    
 class unihan_generator():
     def __init__(self):
         self.parsed_map = []
         self.supported_props = []
         self.property_data_headers = []
-        
-    def sum_bytes(value_map):
-        byte_sum = 0
-        for i in value_map.keys()
-        byte_sum=byte_sum+value_map[i].bytes()
-        return byte_sum
-        
-    def get_property_full_name(property_code):
-        property_name = None
-        if(property_code == "krs"):
-            property_name = "kRSKangXi"
-        return property_name
 
     def emit_property(self, f, property_code, prop_values, independent_prop_values, value_map):
     

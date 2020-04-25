@@ -29,10 +29,10 @@ def parse_radicals_txt(f, property_code):
     line = f.readlines()
     if(property_code == 'krs'):
         for info in line:
-            wether_match = krs_Pattern.match(info)
-            if(wether_match is not None):
-                    codepoint = whether_match.group(1) #U+(????)
-                    fields = whether_match.group(2) #???.???
+            match_obj = krs_Pattern.match(info)
+            if(match_obj is not None):
+                    codepoint = match_obj.group(1) #U+(????)
+                    fields = match_obj.group(2) #???.???
                     radical_list = parse_fields(fields)
 
                     for radicals in radical_list:
