@@ -33,7 +33,7 @@ using ModeFlagSet = unsigned;
 class RE_Parser {
 public:
 
-    static RE * parse(const std::string &input_string, ModeFlagSet initialFlags, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
+    static RE * parse(const std::string &input_string, ModeFlagSet initialFlag = DEFAULT_MODE, RE_Syntax syntax = RE_Syntax::PCRE, bool ByteMode = false);
 
 protected:
 

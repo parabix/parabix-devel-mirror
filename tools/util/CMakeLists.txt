@@ -17,5 +17,21 @@ DEPS
     toolchain
 )
 
+parabix_add_executable(
+NAME
+    csv_escape_quotes
+SRC
+    csv_escape_quotes.cpp
+DEPS
+    pablo
+    kernel.basis
+    kernel.io
+    kernel.pipeline
+    kernel.streamutils
+    kernel.util
+    toolchain
+)
+
+
 
 
