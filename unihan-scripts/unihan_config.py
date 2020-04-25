@@ -4,7 +4,7 @@
 
 UniHan_src_dir = "unihan-scripts/Unihan"
 
-UniHan_output_dir = "generated_radicals"
+UniHan_output_dir = "include/generated_radicals"
 
 version = "Unknown"
 
