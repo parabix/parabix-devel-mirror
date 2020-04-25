@@ -31,13 +31,9 @@ def parse_radicals_txt(f, property_code):
         for info in line:
             wether_match = krs_Pattern.match(info)
             if(wether_match is not None):
-                    parsed_property = {}
                     codepoint = whether_match.group(1) #U+(????)
                     fields = whether_match.group(2) #???.???
                     radical_list = parse_fields(fields)
-
-                    parsed_property["codepoint"] = codepoint
-                    parsed_property["radical"] = radical_list
 
                     for radicals in radical_list:
                         if(prop_values.count(radicals) == 0):
@@ -61,9 +57,6 @@ def parse_property_file(filename_root, property_code):
         prop_values, independent_prop_values, value_map = parse_radicals_txt(f, property_code)
     return (prop_values, independent_prop_values, value_map)
 
-
-if __name__ == "__main__":
-    parse_property_file("Unihan_RadicalStrokeCounts", "krs")
     
 
     
