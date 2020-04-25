@@ -20,8 +20,6 @@ void PipelineCompiler::start(BuilderRef b) {
     if (CheckAssertions) {
         mRethrowException = b->WriteDefaultRethrowBlock();
     }
-    assert ((!!mNumOfStrides) ^ ExternallySynchronized);
-    assert (mIsFinal);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugInit(b);

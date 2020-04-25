@@ -437,6 +437,7 @@ protected:
 
     const bool                       			CheckAssertions;
     const bool                                  mTraceProcessedProducedItemCounts;
+    const bool                                  mTraceDynamicBuffers;
     const bool                       			mTraceIndividualConsumedItemCounts;
 
     const unsigned								mNumOfThreads;
@@ -681,7 +682,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , CheckAssertions(codegen::DebugOptionIsSet(codegen::EnableAsserts))
 #endif
 , mTraceProcessedProducedItemCounts(codegen::DebugOptionIsSet(codegen::TraceCounts))
-, mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
+, mTraceDynamicBuffers(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))
+, mTraceIndividualConsumedItemCounts(mTraceProcessedProducedItemCounts || mTraceDynamicBuffers)
 , mNumOfThreads(pipelineKernel->getNumOfThreads())
 , mLengthAssertions(pipelineKernel->getLengthAssertions())
 , LastKernel(P.LastKernel)

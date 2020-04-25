@@ -743,8 +743,8 @@ void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordBufferExpansionHistory(BuilderRef b, const StreamSetPort outputPort,
                                                     const StreamSetBuffer * const buffer) const {
-    if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-        assert (isa<DynamicBuffer>(buffer));
+
+    if (LLVM_UNLIKELY(mTraceDynamicBuffers && isa<DynamicBuffer>(buffer))) {
 
         const auto prefix = makeBufferName(mKernelId, outputPort);
 

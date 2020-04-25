@@ -839,7 +839,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
         // held back by some input stream, we may end up expanding twice in the same iteration of this kernel,
         // which could result in free'ing the "old" buffer twice.
 
-        const auto output = getOutput(mKernelId, outputPort);
         Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
         Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
 
