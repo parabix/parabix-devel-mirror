@@ -537,7 +537,9 @@ void PipelineCompiler::generateFinalizeMethod(BuilderRef b) {
     // calculate the last segment # used by any kernel in case any reports require it.
     mSegNo = nullptr;
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
-        Value * const segNo = b->getScalarField(makeKernelName(i) + LOGICAL_SEGMENT_SUFFIX);
+        const auto prefix = makeKernelName(i);
+        Value * const ptr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
+        Value * const segNo = b->CreateLoad(ptr);
         mSegNo = b->CreateUMax(mSegNo, segNo);
     }
     printOptionalCycleCounter(b);

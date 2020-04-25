@@ -1198,8 +1198,12 @@ Value * KernelCompiler::getScalarFieldPtr(KernelBuilder * /* b */, const StringR
     } else {
         const auto f = mScalarFieldMap.find(name);
         if (LLVM_UNLIKELY(f == mScalarFieldMap.end())) {
+            #ifdef NDEBUG
             SmallVector<char, 1024> tmp;
             raw_svector_ostream out(tmp);
+            #else
+            auto & out = errs();
+            #endif
             out << "Scalar map for " << getName() << " does not contain " << name << "\n\n"
                 "Currently contains:";
             char spacer = ' ';
@@ -1207,7 +1211,13 @@ Value * KernelCompiler::getScalarFieldPtr(KernelBuilder * /* b */, const StringR
                 out << spacer << entry.getKey();
                 spacer = ',';
             }
+            #ifdef NDEBUG
             report_fatal_error(out.str());
+            #else
+            out << "\n";
+            assert (false);
+            #endif
+
         }
         return f->second;
     }

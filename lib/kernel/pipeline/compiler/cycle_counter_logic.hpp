@@ -1289,7 +1289,7 @@ void PipelineCompiler::printOptionalStridesPerSegment(BuilderRef b) const {
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigned kernel) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceProducedItemCounts)) {
         addItemCountDeltaProperties(b, kernel, STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1298,7 +1298,7 @@ void PipelineCompiler::addProducedItemCountDeltaProperties(BuilderRef b, unsigne
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceProducedItemCounts)) {
         const auto n = out_degree(mKernelId, mBufferGraph);
         if (LLVM_UNLIKELY(n == 0)) {
             return;
@@ -1319,7 +1319,7 @@ void PipelineCompiler::recordProducedItemCountDeltas(BuilderRef b) const {
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceProducedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceProducedItemCounts)) {
         printItemCountDeltas(b, "PRODUCED ITEM COUNT DELTAS PER SEGMENT:", STATISTICS_PRODUCED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1328,7 +1328,7 @@ void PipelineCompiler::printProducedItemCountDeltas(BuilderRef b) const {
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned kernel) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceUnconsumedItemCounts)) {
         addItemCountDeltaProperties(b, kernel, STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1337,7 +1337,7 @@ void PipelineCompiler::addUnconsumedItemCountProperties(BuilderRef b, unsigned k
  * @brief recordStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceUnconsumedItemCounts)) {
         const auto n = out_degree(mKernelId, mBufferGraph);
         if (LLVM_UNLIKELY(n == 0)) {
             return;
@@ -1358,7 +1358,7 @@ void PipelineCompiler::recordUnconsumedItemCounts(BuilderRef b) const {
  * @brief printOptionalStridesPerSegment
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::printUnconsumedItemCounts(BuilderRef b) const {
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))) {
+    if (LLVM_UNLIKELY(TraceUnconsumedItemCounts)) {
         printItemCountDeltas(b, "UNCONSUMED ITEM COUNTS PER SEGMENT:", STATISTICS_UNCONSUMED_ITEM_COUNT_SUFFIX);
     }
 }
@@ -1378,7 +1378,6 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
     BasicBlock * const record = b->CreateBasicBlock("");
 
     Value * const offset = b->CreateURem(mSegNo, b->getSize(ITEM_COUNT_DELTA_CHUNK_LENGTH));
-
     Constant * const ZERO = b->getInt32(0);
     Constant * const ONE = b->getInt32(1);
 
@@ -1389,7 +1388,7 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
     b->SetInsertPoint(expand);
     Type * const logTy = currentLog->getType()->getPointerElementType();
     Value * const newLog = b->CreateCacheAlignedMalloc(logTy);
-    PointerType * const voidPtrTy = b->getVoidPtrTy();
+    PointerType * const voidPtrTy = b->getVoidPtrTy();   
     b->CreateStore(b->CreatePointerCast(currentLog, voidPtrTy), b->CreateGEP(newLog, { ZERO, ONE}));
     b->CreateStore(newLog, trace);
     BasicBlock * const expandExit = b->GetInsertBlock();
@@ -1419,9 +1418,6 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::addItemCountDeltaProperties(BuilderRef b, const unsigned kernel, const StringRef suffix) const {
     const auto n = out_degree(kernel, mBufferGraph);
-    if (LLVM_UNLIKELY(n == 0)) {
-        return;
-    }
     LLVMContext & C = b->getContext();
     IntegerType * const sizeTy = b->getSizeTy();
     PointerType * const voidPtrTy = b->getVoidPtrTy();
@@ -1504,16 +1500,17 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
     }
 
     Constant * const CHUNK_LENGTH = b->getSize(ITEM_COUNT_DELTA_CHUNK_LENGTH);
+    Value * const chunkCount = b->CreateCeilUDiv(mSegNo, CHUNK_LENGTH);
+    if (LLVM_UNLIKELY(CheckAssertions)) {
+        b->CreateAssert(mSegNo, "final segment number cannot be zero");
+    }
 
-    Value * const chunkCount = b->CreateCeilUDiv(mSegNo,CHUNK_LENGTH);
     // Start printing the data lines
     BasicBlock * const loopEntry = b->GetInsertBlock();
     BasicBlock * const loopStart = b->CreateBasicBlock("reportStridesPerSegment");
     BasicBlock * const getNextLogChunk = b->CreateBasicBlock("getNextLogChunk");
     BasicBlock * const selectLogChunk = b->CreateBasicBlock("getNextLogChunk");
     BasicBlock * const printLogEntry = b->CreateBasicBlock("getNextLogChunk");
-
-
     b->CreateBr(loopStart);
 
     b->SetInsertPoint(loopStart);
@@ -1545,6 +1542,8 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         subsequentChunk[i] = b->CreatePHI(ty, 2);
         subsequentChunk[i]->addIncoming(traceLogArray[i], loopStart);
     }
+
+
     FixedArray<Value *, 2> nextChunkIndices;
     nextChunkIndices[0] = ZERO;
     nextChunkIndices[1] = ONE;

@@ -130,7 +130,8 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
  * After executing the kernel, the segment number must be incremented to release the kernel for the next thread.
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned kernelId) {
-    if (LLVM_LIKELY(RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized))) {
+    const auto required = RequiresSynchronization[kernelId] && (mNumOfThreads > 1 || ExternallySynchronized);
+    if (LLVM_LIKELY(required || TraceProducedItemCounts || TraceUnconsumedItemCounts)) {
         const auto prefix = makeKernelName(kernelId);
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), prefix + LOGICAL_SEGMENT_SUFFIX);
         Value * currentSegNo = nullptr;
@@ -141,7 +142,7 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned k
 //        #ifdef PRINT_DEBUG_MESSAGES
 //        debugPrint(b, prefix + ": released %" PRIu64, mSegNo);
 //        #endif
-        if (LLVM_UNLIKELY(CheckAssertions)) {
+        if (LLVM_UNLIKELY(CheckAssertions && required)) {
             Value * const unchanged = b->CreateICmpEQ(mSegNo, currentSegNo);
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);

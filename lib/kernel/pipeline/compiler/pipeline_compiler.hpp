@@ -464,6 +464,8 @@ protected:
     const bool                                  HasZeroExtendedStream;
     const bool                                  EnableCycleCounter;
     const bool                                  TraceIO;
+    const bool                                  TraceUnconsumedItemCounts;
+    const bool                                  TraceProducedItemCounts;
 
     const Partition                             KernelPartitionId;
     const std::vector<Rational>                 MinimumNumOfStrides;
@@ -703,6 +705,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , HasZeroExtendedStream(P.HasZeroExtendedStream)
 , EnableCycleCounter(DebugOptionIsSet(codegen::EnableCycleCounter))
 , TraceIO(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))
+, TraceUnconsumedItemCounts(DebugOptionIsSet(codegen::TraceUnconsumedItemCounts))
+, TraceProducedItemCounts(DebugOptionIsSet(codegen::TraceProducedItemCounts))
 
 , KernelPartitionId(std::move(P.KernelPartitionId))
 , MinimumNumOfStrides(std::move(P.MinimumNumOfStrides))

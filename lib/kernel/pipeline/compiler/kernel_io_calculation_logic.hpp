@@ -242,7 +242,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
        ConstantInt * const ZERO = b->getSize(0);
        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-           const auto streamSet = target(e, mBufferGraph);
            const BufferRateData & br = mBufferGraph[e];
            if (numOfActualOutputStrides == nullptr) {
                ConstantInt * const ONE = b->getSize(1);
