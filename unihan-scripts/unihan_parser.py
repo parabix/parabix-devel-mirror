@@ -41,8 +41,7 @@ def parse_radicals_txt(f, property_code):
                             prop_values.append(radicals)
                             value_map[radicals]=singleton_uset(int(codepoint,16))
                         else:
-                            value_map[radicals]=uset_union(value_map[radicals],
-                            singleton_uset(int(codepoint, 16)))
+                            value_map[radicals]=uset_union(value_map[radicals],singleton_uset(int(codepoint, 16)))
 
         independent_prop_values = len(prop_values)
         return (prop_values, independent_prop_values, value_map)
