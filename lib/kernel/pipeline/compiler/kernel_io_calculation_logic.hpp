@@ -119,7 +119,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
     // left to process (either due to some data being divided across a buffer boundary or because another stream
     // has less data (relatively speaking) than the closed stream.
 
-    if (LLVM_UNLIKELY(DebugOptionIsSet(codegen::EnableBlockingIOCounter) || DebugOptionIsSet(codegen::TraceBlockedIO))) {
+    if (LLVM_UNLIKELY(TraceIO)) {
         mBranchToLoopExit = b->getFalse();
     }
 
@@ -243,9 +243,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
        ConstantInt * const ZERO = b->getSize(0);
        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
            const auto streamSet = target(e, mBufferGraph);
-           const BufferNode & bn = mBufferGraph[streamSet];
            const BufferRateData & br = mBufferGraph[e];
-
            if (numOfActualOutputStrides == nullptr) {
                ConstantInt * const ONE = b->getSize(1);
                numOfActualOutputStrides = b->CreateUMax(numOfActualInputStrides, ONE);
@@ -271,17 +269,6 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         mUpdatedNumOfStrides = b->CreateAdd(mCurrentNumOfStridesAtLoopEntryPhi, numOfLinearStrides);
     } else {
         mUpdatedNumOfStrides = numOfLinearStrides;
-    }
-
-    // When tracing blocking I/O, test all I/O streams but do not execute the
-    // kernel if any stream is insufficient.
-    if (mBranchToLoopExit) {
-        assert (mIsBounded);
-
-        BasicBlock * const noStreamIsInsufficient = b->CreateBasicBlock("", mKernelCheckOutputSpace);
-        b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientInput, noStreamIsInsufficient);
-        updatePHINodesForLoopExit(b);
-        b->SetInsertPoint(noStreamIsInsufficient);
     }
 
     assert (mIsFinal);
@@ -474,17 +461,14 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     BasicBlock * recordBlockedIO = nullptr;
     BasicBlock * insufficentIO = mKernelInsufficientInput;
     assert (mKernelInsufficientInput);
-    if (mBranchToLoopExit) {
-        recordBlockedIO = b->CreateBasicBlock(prefix + "_recordBlockedIO", mKernelInsufficientInput);
+    if (LLVM_UNLIKELY(TraceIO)) {
+        recordBlockedIO = b->CreateBasicBlock(prefix + "_recordBlockedIO", hasInputData);
         insufficentIO = recordBlockedIO;
     }
 
-    BasicBlock * const entryBlock = b->GetInsertBlock();
-
-
     Value * test = sufficientInput;
     Value * insufficient = mBranchToLoopExit;
-    if (mBranchToLoopExit) {
+    if (LLVM_UNLIKELY(TraceIO)) {
         // do not record the block if this not the first execution of the
         // kernel but ensure that the system knows at least one failed.
         test = b->CreateOr(sufficientInput, mExecutedAtLeastOnceAtLoopEntryPhi);
@@ -495,11 +479,23 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
     debugPrint(b, prefix + "_hasInputData = %" PRIu8, test);
     #endif
 
+
+    if (mExhaustedPipelineInputPhi && !TraceIO) {
+        Value * exhausted = mExhaustedInput;
+        if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
+            exhausted = b->getTrue();
+        }
+        BasicBlock * const exitBlock = b->GetInsertBlock();
+        mExhaustedPipelineInputPhi->addIncoming(exhausted, exitBlock);
+    }
+
     b->CreateLikelyCondBr(test, hasInputData, insufficentIO);
 
     // When tracing blocking I/O, test all I/O streams but do not execute
     // the kernel if any stream is insufficient.
-    if (mBranchToLoopExit) {
+    if (LLVM_UNLIKELY(TraceIO)) {
+        BasicBlock * const entryBlock = b->GetInsertBlock();
+
         b->SetInsertPoint(recordBlockedIO);
         recordBlockingIO(b, inputPort);
         BasicBlock * const exitBlock = b->GetInsertBlock();
@@ -512,14 +508,6 @@ void PipelineCompiler::checkForSufficientInputData(BuilderRef b, const StreamSet
         anyInsufficient->addIncoming(insufficient, entryBlock);
         anyInsufficient->addIncoming(b->getTrue(), exitBlock);
         mBranchToLoopExit = anyInsufficient;
-    }
-
-    if (mExhaustedPipelineInputPhi) {
-        Value * exhausted = mExhaustedInput;
-        if (LLVM_UNLIKELY(mHasPipelineInput.test(inputPort.Number))) {
-            exhausted = b->getTrue();
-        }
-        mExhaustedPipelineInputPhi->addIncoming(exhausted, entryBlock);
     }
 
     b->SetInsertPoint(hasInputData);
@@ -635,23 +623,9 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
                     avail = b->CreateAdd(avail, added);
                 }
 
-
-
-
                 Value * const remaining = b->CreateSub(avail, processed);
-
-//                const auto prefix = makeBufferName(mKernelId, br.Port) + "_next";
-//                b->CallPrintInt(prefix + "_remaining", remaining);
-
-                const Binding & binding = br.Binding;
-
                 Value * const required = calculateNumOfLinearItems(b, br.Port, nextStrideIndex);
-
-//                b->CallPrintInt(prefix + "_required", required);
-
                 Value * hasEnough = b->CreateOr(closed, b->CreateICmpUGE(remaining, required));
-
-//                b->CallPrintInt(prefix + "_hasEnough", hasEnough);
 
                 // If the next rate we check is a PartialSum, always check it; otherwise we expect that
                 // if this test passes the first check, it will pass the remaining ones so don't bother
@@ -679,15 +653,13 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
 
                     if (firstTest) {
                         enoughInput = b->CreateAnd(enoughInput, hasEnough);
-
-                        // Value * const hasMore = hasEnough; // b->CreateOr(hasEnough, mKernelIsPenultimate);
                         Value * const supportsAnotherStride = b->CreateAnd(enoughInput, notAtSegmentLimit);
                         b->CreateUnlikelyCondBr(supportsAnotherStride, nextTest, lastTestExit);
                         firstTest = false;
                     } else {
                         assert (enoughInput);
                         enoughInput = b->CreateAnd(enoughInput, hasEnough);
-                        Value * const supportsAnotherStride = enoughInput; // b->CreateOr(enoughInput, mKernelIsPenultimate);
+                        Value * const supportsAnotherStride = enoughInput;
 
                         b->CreateLikelyCondBr(supportsAnotherStride, nextTest, lastTestExit);
                     }
@@ -708,16 +680,8 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
         } else {
             hasMore = enoughInputPhi;
         }
-
-//        b->CallPrintInt("hasMore", hasMore);
-
-//        if (mKernelIsPenultimate) {
-//            hasMore = b->CreateOr(mKernelIsPenultimate, hasMore);
-//        }
         return hasMore;
     } else {        
-//        Value * const notDone = b->CreateAnd(notAtSegmentLimit, b->CreateNot(mKernelIsFinal));
-//        return b->CreateOr(mKernelIsPenultimate, notDone);
         return b->CreateOr(mKernelIsPenultimate, notAtSegmentLimit);
    }
 
@@ -876,7 +840,6 @@ void PipelineCompiler::ensureSufficientOutputSpace(BuilderRef b, const StreamSet
         // which could result in free'ing the "old" buffer twice.
 
         const auto output = getOutput(mKernelId, outputPort);
-        const BufferRateData & br = mBufferGraph[output];
         Value * const produced = mAlreadyProducedPhi[outputPort]; assert (produced);
         Value * const consumed = mInitialConsumedItemCount[streamSet]; assert (consumed);
 

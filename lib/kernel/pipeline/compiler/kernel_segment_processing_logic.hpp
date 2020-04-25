@@ -91,7 +91,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         mHasExplicitFinalPartialStride = requiresExplicitFinalStride();
         const auto nonSourceKernel = in_degree(mKernelId, mBufferGraph) > 0;
         mMayLoopToEntry = nonSourceKernel && (mMayHaveNonLinearIO || mHasExplicitFinalPartialStride || ExternallySynchronized);
-        mCheckIO = nonSourceKernel && (mIsPartitionRoot || mMayHaveNonLinearIO);
+        mCheckIO = nonSourceKernel && (mIsPartitionRoot || mMayHaveNonLinearIO || TraceIO);
     } else {
         mHasExplicitFinalPartialStride = false;
         mMayHaveNonLinearIO = false;
@@ -200,7 +200,16 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         // FIXME: temporary change to minimize changes to PHI nodes
         mUpdatedNumOfStrides = b->getSize(0);
     }
-    b->CreateBr(mKernelLoopCall);
+
+    // When tracing blocking I/O, test all I/O streams but do not execute the
+    // kernel if any stream is insufficient.
+    if (mCheckIO && TraceIO) {
+        b->CreateUnlikelyCondBr(mBranchToLoopExit, mKernelInsufficientInput, mKernelLoopCall);
+        BasicBlock * const exitBlock = b->GetInsertBlock();
+        mExhaustedPipelineInputPhi->addIncoming(mExhaustedInput, exitBlock);
+    } else {
+        b->CreateBr(mKernelLoopCall);
+    }
 
     /// -------------------------------------------------------------------------------------
     /// KERNEL CALL
