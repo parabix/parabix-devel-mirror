@@ -9,6 +9,7 @@
 #include <initializer_list>
 #include <utility>
 #include <vector>
+#include <unordered_map>
 #include <kernel/pipeline/pipeline_builder.h>
 #include <kernel/core/kernel.h>
 
@@ -31,6 +32,11 @@ struct __selop {
 using SelectOperation = __selops::__selop<StreamSet *>;
 
 using SelectOperationList = std::vector<SelectOperation>;
+
+using SelectedInput = __selops::__selop<std::string>;
+
+using SelectedInputList = std::vector<SelectedInput>;
+
 
 /**
  * Utility kernel allowing for moving, merging, and intersecting streams for
@@ -75,7 +81,7 @@ protected:
     void generateDoBlockMethod(BuilderRef b) override;
 
 private:
-    std::vector<__selops::__selop<std::string>> mOperations;
+    SelectedInputList mOperations;
 };
 
 
@@ -108,7 +114,7 @@ protected:
     void generateMultiBlockLogic(BuilderRef b, llvm::Value * const numOfStrides) override;
 
 private:
-    __selops::__selop<std::string> mOperation;
+    SelectedInput mOperation;
     uint32_t mFieldWidth = 0;
 };
 
@@ -244,6 +250,30 @@ namespace streamutils {
  * @param ub The exclusive upper bound; must be strictly greater than `lb`.
  */
 std::vector<uint32_t> Range(uint32_t lb, uint32_t ub);
+
+/*
+   Stream Set View Operations: Loading selected streams.
+
+*/
+std::string genSignature(SelectOperation const & operation);
+
+std::string genSignature(SelectOperationList const & operations);
+
+uint32_t resultStreamCount(SelectOperation const & op);
+
+uint32_t resultStreamFieldWidth(SelectOperation const & op);
+
+uint32_t resultStreamCount(SelectOperationList const & ops);
+
+std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
+mapOperationsToStreamNames(SelectOperation const & operations);
+
+std::pair<SelectedInputList, std::unordered_map<StreamSet *, std::string>>
+mapOperationsToStreamNames(SelectOperationList const & operations);
+
+using BuilderRef = const std::unique_ptr<KernelBuilder> &;
+
+std::vector<llvm::Value *> loadInputSelectionsBlock(BuilderRef b, SelectedInputList ops, llvm::Value * blockOffset);
 
 /*
     Stream Set Generators
