@@ -10,6 +10,8 @@ def replace_equivalence(syllable):
         # 'ê̌':'ěi',
         # 'ề':'èi',
         'ü':'v',
+        'ê':'e_hat'
+
     }
     for key in equivalence_map.keys():
         if(syllable.find(key) != -1):
