@@ -54,8 +54,9 @@ def parse_pinyins(pinyins):
     preprocessed = pinyins.split(',')
     preprocessed = filter(None,preprocessed)
     for toned_syllable in preprocessed:
-        toned_syllable = replace_equivalence(toned_syllable)
+        
         syllable, tone = process_tone(toned_syllable)
+        syllable = replace_equivalence(syllable)
         first, final = process_syllable(syllable)
         pinyin_list.append(
             {
