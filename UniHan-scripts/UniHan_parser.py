@@ -1,3 +1,9 @@
+#
+#  Copyright Group ALpha
+#  in Software Engineering(2020 Spring), ZJU
+#  Advisor: Prof. Cameron
+#
+
 from unicode_set import *
 from syllable_util import *
 import UniHan_config

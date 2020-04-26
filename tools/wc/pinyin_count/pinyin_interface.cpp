@@ -1,3 +1,9 @@
+/*
+ *  Copyright Group ALpha
+ *  in Software Engineering(2020 Spring), ZJU
+ *  Advisor: Prof. Cameron
+ */
+
 #include "pinyin_interface.h"
 
 using namespace std;

@@ -1,6 +1,6 @@
 /*
  *  Copyright Group ALpha
- *  in 2020 Software Engineering, ZJU
+ *  in Software Engineering(2020 Spring), ZJU
  *  Advisor: Prof. Cameron
  */
 
