@@ -1,3 +1,8 @@
+#
+#  Copyright Group ALpha
+#  in Software Engineering(Spring 2020), ZJU
+#  Advisor: Prof. Cameron
+#
 def replace_equivalence(syllable):
     equivalence_map = {
         # 'ê̄':'ēi',
