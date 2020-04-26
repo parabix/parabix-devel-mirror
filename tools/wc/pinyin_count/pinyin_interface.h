@@ -107,9 +107,9 @@ namespace PY{
         // return the tone
         int replace_tone(string& toned);
     private:
-        static vector<string> _initial_syllable_list;
-        static vector<string> _final_syllable_list;
-        static map<string, std::pair<string, int>> _toned_character_table;
+        static vector<string> _initial_syllable_list; // storing all valid initial parts of syllables
+        static vector<string> _final_syllable_list;   // storing all valid final parts of syllables
+        static map<string, std::pair<string, int>> _toned_character_table; 
         
     };
 
