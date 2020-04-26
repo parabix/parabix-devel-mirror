@@ -161,6 +161,20 @@ inline void PipelineCompiler::createConsumedPhiNodes(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief phiOutConsumedItemCountsAfterInitiallyTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::phiOutConsumedItemCountsAfterInitiallyTerminated(BuilderRef /* b */) {
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mConsumerGraph))) {
+        const ConsumerEdge & c = mConsumerGraph[e];
+        if (c.Flags & ConsumerEdge::UpdatePhi) {
+            const auto streamSet = source(e, mConsumerGraph);
+            const ConsumerNode & cn = mConsumerGraph[streamSet];
+            cn.PhiNode->addIncoming(mInitialConsumedItemCount[streamSet], mKernelInitiallyTerminatedExit);
+        }
+    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeMinimumConsumedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {

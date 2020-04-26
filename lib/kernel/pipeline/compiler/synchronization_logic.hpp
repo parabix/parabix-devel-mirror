@@ -94,9 +94,9 @@ void PipelineCompiler::acquireSynchronizationLock(BuilderRef b, const unsigned k
         const unsigned waitingOnIdx = serialize ? LastKernel : kernelId;
         const auto waitingOn = makeKernelName(waitingOnIdx);
         Value * const waitingOnPtr = getScalarFieldPtr(b.get(), waitingOn + LOGICAL_SEGMENT_SUFFIX);
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        debugPrint(b, prefix + ": waiting for %" PRIu64 ", initially %" PRIu64, mSegNo, b->CreateLoad(waitingOnPtr));
-//        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + ": waiting for %" PRIu64 ", initially %" PRIu64, mSegNo, b->CreateLoad(waitingOnPtr));
+        #endif
         BasicBlock * const nextNode = b->GetInsertBlock()->getNextNode();
         BasicBlock * const acquire = b->CreateBasicBlock(prefix + "_acquire" + LOGICAL_SEGMENT_SUFFIX, nextNode);
         BasicBlock * const acquired = b->CreateBasicBlock(prefix + "_acquired" + LOGICAL_SEGMENT_SUFFIX, nextNode);
@@ -139,9 +139,9 @@ void PipelineCompiler::releaseSynchronizationLock(BuilderRef b, const unsigned k
             currentSegNo = b->CreateLoad(waitingOnPtr);
         }
         b->CreateAtomicStoreRelease(mNextSegNo, waitingOnPtr);
-//        #ifdef PRINT_DEBUG_MESSAGES
-//        debugPrint(b, prefix + ": released %" PRIu64, mSegNo);
-//        #endif
+        #ifdef PRINT_DEBUG_MESSAGES
+        debugPrint(b, prefix + ": released %" PRIu64, mSegNo);
+        #endif
         if (LLVM_UNLIKELY(CheckAssertions && required)) {
             Value * const unchanged = b->CreateICmpEQ(mSegNo, currentSegNo);
             SmallVector<char, 256> tmp;

@@ -19,11 +19,15 @@ inline void PipelineCompiler::makePartitionEntryPoints(BuilderRef b) {
 
     const auto ip = b->saveIP();
     IntegerType * const boolTy = b->getInt1Ty();
+    IntegerType * const sizeTy = b->getInt64Ty();
     for (auto i = firstPartition + 1U; i < PartitionCount; ++i) {
         b->SetInsertPoint(mPartitionEntryPoint[i]);
         assert (mPartitionEntryPoint[i]->getFirstNonPHI() == nullptr);
         mPartitionPipelineProgressPhi[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".pipelineProgress");
         mExhaustedPipelineInputAtPartitionEntry[i] = b->CreatePHI(boolTy, PartitionCount, std::to_string(i) + ".exhaustedInput");
+        if (LLVM_UNLIKELY(EnableCycleCounter)) {
+            mPartitionStartTimePhi[i] = b->CreatePHI(sizeTy, PartitionCount, std::to_string(i) + ".startTimeCycleCounter");
+        }
     }
     initializePipelineInputConsumedPhiNodes(b);
     b->restoreIP(ip);
@@ -43,9 +47,9 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
     mCurrentPartitionId = -1U;
     setActiveKernel(b, FirstKernel, true);
 
-    startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+    mKernelStartTime = startCycleCounter(b);
     acquireSynchronizationLock(b, FirstKernel);
-    updateCycleCounter(b, FirstKernel, CycleCounter::BEFORE_SYNCHRONIZATION, CycleCounter::AFTER_SYNCHRONIZATION);
+    updateCycleCounter(b, FirstKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
 
 }
 
@@ -371,7 +375,7 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief releaseAllSynchronizationLocksUntil
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId) {
+Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId) {
     // Find the first kernel in the partition we're jumping to and acquire the LSN
     // then release all of the kernels we skipped over.
     auto firstKernelInTargetPartition = mKernelId;
@@ -388,17 +392,20 @@ void PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef 
             break;
         }
     }
+    assert (firstKernelInTargetPartition > mKernelId);    
     lastConsumer = std::min(lastConsumer, LastKernel);
+
 //    // TODO: experiment with a mutex lock here.
 //    const auto lockingKernel = std::min(firstKernelInTargetPartition, LastKernel);
 //    assert ((firstKernelInNextPartition == lockingKernel) || (firstKernelInNextPartition == PipelineOutput));
-    startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+    Value * const startTime = startCycleCounter(b);
     acquireSynchronizationLock(b, lastConsumer);
-    updateCycleCounter(b, firstKernelInTargetPartition, CycleCounter::BEFORE_SYNCHRONIZATION, CycleCounter::AFTER_SYNCHRONIZATION);
-
+    updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);
     for (auto kernel = mKernelId; kernel < firstKernelInTargetPartition; ++kernel) {
         releaseSynchronizationLock(b, kernel);
     }
+
+    return startTime;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -406,53 +413,66 @@ void PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef 
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
 
-    #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
+    loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
 
     // create a temporary basic block to act a constant exit block of any phi nodes;
     // once we've determined the actual exit block of this portion of the program,
     // replace the phi catch with it.
 
-    const auto nextPartitionId = mCurrentPartitionId + 1U;
-    const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
+    if (mIsPartitionRoot) {
 
-    assert (nextPartitionId <= jumpId);
+        #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
+        const auto nextPartitionId = mCurrentPartitionId + 1U;
+        const auto jumpId = mPartitionJumpIndex[mCurrentPartitionId];
 
-    loadLastGoodVirtualBaseAddressesOfUnownedBuffersInPartition(b);
+        assert (nextPartitionId <= jumpId);       
+        if (LLVM_LIKELY(nextPartitionId != jumpId)) {
 
-    if (LLVM_LIKELY(nextPartitionId != jumpId)) {
+            Value * const startTime = acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
+            mKernelInitiallyTerminatedExit = b->GetInsertBlock();
 
-        updateCycleCounter(b, mKernelId, CycleCounter::INITIAL, CycleCounter::FINAL);
-
-        acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
-        mKernelInitiallyTerminatedExit = b->GetInsertBlock();
-
-        PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
-        exhaustedInputPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
-
-        for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
-            phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, mKernelInitiallyTerminated);
-        }
-        for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
-            if (KernelPartitionId[kernel] != mCurrentPartitionId) {
-                break;
+            if (LLVM_UNLIKELY(EnableCycleCounter)) {
+                mPartitionStartTimePhi[nextPartitionId]->addIncoming(startTime, mKernelInitiallyTerminatedExit);
             }
-            phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, mKernelInitiallyTerminated);
+
+            PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
+            exhaustedInputPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
+
+            for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
+                phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, mKernelInitiallyTerminated);
+            }
+            for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
+                if (KernelPartitionId[kernel] != mCurrentPartitionId) {
+                    break;
+                }
+                phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, mKernelInitiallyTerminated);
+            }
+
+            phiOutPartitionStatusFlags(b, nextPartitionId, true, mKernelInitiallyTerminated);
+
+            updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
+
+            b->CreateBr(mNextPartitionEntryPoint);
+
+        } else {
+        #endif
+            mKernelInitiallyTerminatedExit = b->GetInsertBlock();
+            b->CreateBr(mKernelJumpToNextUsefulPartition);
+            if (mExhaustedInputAtJumpPhi) {
+                mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
+            }
+        #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
         }
+        #endif
 
-        phiOutPartitionStatusFlags(b, nextPartitionId, true, mKernelInitiallyTerminated);
+    } else { // if (!mIsPartitionRoot) {
 
-        b->CreateBr(mNextPartitionEntryPoint);
-
-    } else {
-    #endif
         mKernelInitiallyTerminatedExit = b->GetInsertBlock();
-        b->CreateBr(mKernelJumpToNextUsefulPartition);
-        if (mExhaustedInputAtJumpPhi) {
-            mExhaustedInputAtJumpPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
-        }
-    #ifdef INITIALLY_TERMINATED_KERNELS_JUMP_TO_NEXT_PARTITION
+        updateKernelExitPhisAfterInitiallyTerminated(b);
+        b->CreateBr(mKernelExit);
+
     }
-    #endif
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -463,11 +483,11 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     const auto nextPartitionId = mPartitionJumpIndex[mCurrentPartitionId];
     assert (mCurrentPartitionId < nextPartitionId);
 
-    updateCycleCounter(b, mKernelId, CycleCounter::INITIAL, CycleCounter::FINAL);
-
-    acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
-
+    Value * const startTime = acquireAndReleaseAllSynchronizationLocksUntil(b, nextPartitionId);
     BasicBlock * const exitBlock = b->GetInsertBlock(); // b->CreateBasicBlock();
+    if (LLVM_UNLIKELY(EnableCycleCounter)) {
+        mPartitionStartTimePhi[nextPartitionId]->addIncoming(startTime, exitBlock);
+    }
     for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
     }
@@ -487,11 +507,12 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     if (LLVM_UNLIKELY(nextPartitionId == (PartitionCount - 1U))) {
         updatePipelineInputConsumedItemCounts(b, exitBlock);
     }
-//    replacePhiCatchWithCurrentBlock(b, exitBlock, mNextPartitionWithPotentialInput);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, "** " + makeKernelName(mKernelId) + ".jumping = %" PRIu64, mSegNo);
     #endif
+
+    updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
 
     b->CreateBr(mNextPartitionWithPotentialInput);
 }
@@ -506,10 +527,10 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
     releaseSynchronizationLock(b, mKernelId);
 
     const auto nextKernel = mKernelId + 1U;
-    if (nextKernel != PipelineOutput) {
-        startCycleCounter(b, CycleCounter::BEFORE_SYNCHRONIZATION);
+    if (LLVM_LIKELY(nextKernel < PipelineOutput)) {
+        mKernelStartTime = startCycleCounter(b);
         acquireSynchronizationLock(b, nextKernel);
-        updateCycleCounter(b, nextKernel, CycleCounter::BEFORE_SYNCHRONIZATION, CycleCounter::AFTER_SYNCHRONIZATION);
+        updateCycleCounter(b, nextKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
     }
 
     const auto nextPartitionId = KernelPartitionId[nextKernel];
@@ -527,6 +548,12 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
         PHINode * const progressPhi = mPartitionPipelineProgressPhi[nextPartitionId];
         progressPhi->addIncoming(mPipelineProgress, exitBlock);
         mPipelineProgress = progressPhi;
+        // Since there may be multiple paths into this kernel, phi out the start time
+        // for each path.
+        if (LLVM_UNLIKELY(EnableCycleCounter)) {
+            mPartitionStartTimePhi[nextPartitionId]->addIncoming(mKernelStartTime, exitBlock);
+            mKernelStartTime = mPartitionStartTimePhi[nextPartitionId];
+        }
 
         PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
         if (exhaustedInputPhi) {

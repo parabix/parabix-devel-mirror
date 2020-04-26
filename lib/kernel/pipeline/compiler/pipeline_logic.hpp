@@ -83,13 +83,14 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
         addBufferHandlesToPipelineKernel(b, i);
         // Is this the start of a new partition?
         const auto partitionId = KernelPartitionId[i];
-        if (partitionId != currentPartitionId) {
+        const bool isRoot = (partitionId != currentPartitionId);
+        if (isRoot) {
             addTerminationProperties(b, i);
             currentPartitionId = partitionId;
         }
         addInternalKernelProperties(b, i);
         addConsumerKernelProperties(b, i);
-        addCycleCounterProperties(b, i);
+        addCycleCounterProperties(b, i, isRoot);
         addProducedItemCountDeltaProperties(b, i);
         addUnconsumedItemCountProperties(b, i);
         addFamilyKernelProperties(b, i);
@@ -344,7 +345,7 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
         setActiveKernel(b, i, true);            
         executeKernel(b);
     }
-    end(b);
+    type(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -466,7 +467,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     }
     mKernel = nullptr;
     mKernelId = 0;
-    end(b);
+    type(b);
 
     // only call pthread_exit() within spawned threads; otherwise it'll be equivalent to calling exit() within the process
     BasicBlock * const exitThread = b->CreateBasicBlock("ExitThread");

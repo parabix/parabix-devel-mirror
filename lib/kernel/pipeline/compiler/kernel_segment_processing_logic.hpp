@@ -145,8 +145,6 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     mKernelLoopExitPhiCatch = b->CreateBasicBlock(prefix + "_kernelExitPhiCatch", mNextPartitionEntryPoint);
     mKernelExit = b->CreateBasicBlock(prefix + "_kernelExit", mNextPartitionEntryPoint);
 
-    startCycleCounter(b, CycleCounter::INITIAL);
-
     readProcessedItemCounts(b);
     readProducedItemCounts(b);
     readConsumedItemCounts(b);
@@ -351,12 +349,12 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
         #endif
     }
 
+    updateCycleCounter(b, mKernelId, mKernelStartTime, CycleCounter::TOTAL_TIME);
+
     if (LLVM_UNLIKELY(CheckAssertions)) {        
         verifyPostInvocationTerminationSignal(b);
         verifyExpectedNumOfStrides(b);
     }
-
-    updateCycleCounter(b, mKernelId, CycleCounter::INITIAL, CycleCounter::FINAL);
 
     checkForPartitionExit(b);
 }
@@ -738,6 +736,7 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelId);
     IntegerType * const sizeTy = b->getSizeTy();
     IntegerType * const boolTy = b->getInt1Ty();
+
     mTerminatedAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedAtKernelExit");
     mTerminatedAtExitPhi->addIncoming(mTerminatedAtLoopExitPhi, mKernelLoopExitPhiCatch);
     mTotalNumOfStridesAtExitPhi = b->CreatePHI(sizeTy, 2, prefix + "_totalNumOfStridesAtExit");
@@ -761,6 +760,27 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     exhausted->addIncoming(mExhaustedPipelineInputAtLoopExitPhi, mKernelLoopExitPhiCatch);
     mExhaustedPipelineInputAtExit = exhausted;
 
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief updateKernelExitPhisAfterInitiallyTerminated
+ ** ------------------------------------------------------------------------------------------------------------- */
+inline void PipelineCompiler::updateKernelExitPhisAfterInitiallyTerminated(BuilderRef b) {
+    Constant * const completed = getTerminationSignal(b, TerminationSignal::Completed);
+    mTerminatedAtExitPhi->addIncoming(completed, mKernelInitiallyTerminatedExit);
+    mTotalNumOfStridesAtExitPhi->addIncoming(b->getSize(0), mKernelInitiallyTerminatedExit);
+
+    phiOutConsumedItemCountsAfterInitiallyTerminated(b);
+
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto streamSet = target(e, mBufferGraph);
+        const BufferRateData & br = mBufferGraph[e];
+        const auto port = br.Port;
+        mFullyProducedItemCount[port]->addIncoming(mInitiallyProducedItemCount[streamSet], mKernelInitiallyTerminatedExit);
+    }
+
+    mAnyProgressedAtExitPhi->addIncoming(mPipelineProgress, mKernelInitiallyTerminatedExit);
+    cast<PHINode>(mExhaustedPipelineInputAtExit)->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -803,7 +823,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::end(BuilderRef b) {
+void PipelineCompiler::type(BuilderRef b) {
 
 
 
@@ -869,6 +889,7 @@ void PipelineCompiler::end(BuilderRef b) {
         b->setTerminationSignal(retVal);
     }
 
+   // b->GetInsertBlock()->getParent()->print(errs());
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

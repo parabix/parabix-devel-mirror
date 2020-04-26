@@ -30,7 +30,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
         b->CreateMProtect(mKernelSharedHandle, CBuilder::Protect::WRITE);
     }
 
-    startCycleCounter(b, CycleCounter::BEFORE_KERNEL_CALL);
+    Value * const beforeKernelCall = startCycleCounter(b);
     Value * doSegmentRetVal = nullptr;
     if (mRethrowException) {
         const auto prefix = makeKernelName(mKernelId);
@@ -40,7 +40,7 @@ void PipelineCompiler::writeKernelCall(BuilderRef b) {
     } else {
         doSegmentRetVal = b->CreateCall(doSegment, args);
     }
-    updateCycleCounter(b, mKernelId, CycleCounter::BEFORE_KERNEL_CALL, CycleCounter::AFTER_KERNEL_CALL);
+    updateCycleCounter(b, mKernelId, beforeKernelCall, CycleCounter::KERNEL_EXECUTION);
 
     #ifdef PRINT_DEBUG_MESSAGES
     debugResume(b);

@@ -139,13 +139,13 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     SmallVector<unsigned, 8> testedPortIds;
 
-    auto unchecked = [&](const unsigned globalId) {
+    auto unchecked = [&](const unsigned portId) {
         for (const auto checked : testedPortIds) {
-            if (checked == globalId) {
+            if (checked == portId) {
                 return false;
             }
         }
-        testedPortIds.push_back(globalId);
+        testedPortIds.push_back(portId);
         return true;
     };
 
@@ -157,7 +157,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         const BufferRateData & br = mBufferGraph[e];
-        if (mCheckIO && bn.NonLocal && unchecked(br.GlobalPortId)) {
+        if (mCheckIO && bn.NonLocal && unchecked(br.LocalPortId)) {
             checkForSufficientInputData(b, br.Port);
         } else { // ensure the accessible input count dominates all uses
             getAccessibleInputItems(b, br.Port);
@@ -950,17 +950,6 @@ Value * PipelineCompiler::getWritableOutputItems(BuilderRef b, const StreamSetPo
     #ifdef PRINT_DEBUG_MESSAGES
     debugPrint(b, prefix + "_writable = %" PRIu64, writable);
     #endif
-
-//    if (LLVM_UNLIKELY(CheckAssertions)) {
-//        Value * intCapacity = buffer->getInternalCapacity(b);
-//        if (overflow) {
-//            intCapacity = b->CreateAdd(intCapacity, overflow);
-//        }
-//        Value * const ok = b->CreateICmpULE(writable, intCapacity);
-//        const Binding & output = getOutputBinding(outputPort);
-//        b->CreateAssert(ok, "%s.%s reported %" PRIu64 " writable items but only has capacity for %" PRIu64,
-//                        mCurrentKernelName, b->GetString(output.getName()), writable, intCapacity);
-//    }
 
     // cache the values for later use
     if (useOverflow) {

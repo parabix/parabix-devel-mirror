@@ -25,18 +25,14 @@ inline static unsigned floor_log2(const unsigned v) {
 namespace kernel {
 
 enum CycleCounter {
-  INITIAL
-  , BEFORE_KERNEL_CALL
-  , BEFORE_SYNCHRONIZATION
-  , BEFORE_COPY
+  KERNEL_SYNCHRONIZATION
+  , PARTITION_JUMP_SYNCHRONIZATION
+  , BUFFER_EXPANSION  
+  , BUFFER_COPY
+  , KERNEL_EXECUTION
+  , TOTAL_TIME
   // ------------------
   , NUM_OF_STORED_COUNTERS
-  // ------------------
-  , AFTER_SYNCHRONIZATION
-  , BUFFER_EXPANSION
-  , AFTER_COPY
-  , AFTER_KERNEL_CALL
-  , FINAL
 };
 
 
@@ -118,7 +114,7 @@ public:
     void start(BuilderRef b);
     void setActiveKernel(BuilderRef b, const unsigned index, const bool allowThreadLocal);
     void executeKernel(BuilderRef b);
-    void end(BuilderRef b);
+    void type(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
     void writeExternalProducedItemCounts(BuilderRef b);
@@ -149,7 +145,7 @@ public:
     void phiOutPartitionItemCounts(BuilderRef b, const unsigned kernel, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
     void phiOutPartitionStatusFlags(BuilderRef b, const unsigned targetPartitionId, const bool fromKernelEntry, BasicBlock * const entryPoint);
 
-    void acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId);
+    Value * acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId);
 
     void writeInitiallyTerminatedPartitionExit(BuilderRef b);
     void checkForPartitionExit(BuilderRef b);
@@ -213,6 +209,7 @@ public:
     void computeFullyProducedItemCounts(BuilderRef b);
     Value * computeFullyProducedItemCount(BuilderRef b, const size_t kernel, const StreamSetPort port, Value * produced, Value * const terminationSignal);
 
+    void updateKernelExitPhisAfterInitiallyTerminated(BuilderRef b);
     void updatePhisAfterTermination(BuilderRef b);
 
     void clearUnwrittenOutputData(BuilderRef b);
@@ -279,6 +276,7 @@ public:
     void updatePipelineInputConsumedItemCounts(BuilderRef b, BasicBlock * const exit);
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
+    void phiOutConsumedItemCountsAfterInitiallyTerminated(BuilderRef b);
     void readConsumedItemCounts(BuilderRef b);
     Value * readConsumedItemCount(BuilderRef b, const size_t streamSet, const bool useFinalCount = false);
     void setConsumedItemCount(BuilderRef b, const size_t bufferVertex, not_null<Value *> consumed, const unsigned slot) const;
@@ -309,9 +307,9 @@ public:
 
 // cycle counter functions
 
-    void addCycleCounterProperties(BuilderRef b, const unsigned kernel);
-    void startCycleCounter(BuilderRef b, const CycleCounter type);
-    void updateCycleCounter(BuilderRef b, const unsigned kernelId, const CycleCounter start, const CycleCounter end) const;
+    void addCycleCounterProperties(BuilderRef b, const unsigned kernel, const bool isRoot);
+    Value * startCycleCounter(BuilderRef b);
+    void updateCycleCounter(BuilderRef b, const unsigned kernelId, Value * const start, const CycleCounter type) const;
 
 
     void incrementNumberOfSegmentsCounter(BuilderRef b) const;
@@ -639,6 +637,8 @@ protected:
     OutputPortVector<PHINode *>                 mFullyProducedItemCount; // *after* exiting the kernel
 
     // cycle counter state
+    Value *                                     mKernelStartTime = nullptr;
+    FixedVector<PHINode *>                      mPartitionStartTimePhi;
     std::array<Value *, NUM_OF_STORED_COUNTERS> mCycleCounters;
 
     // debug state
@@ -776,6 +776,8 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mUpdatedProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mUpdatedProducedDeferredPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mFullyProducedItemCount(P.MaxNumOfOutputPorts, mAllocator)
+
+, mPartitionStartTimePhi(PartitionCount, mAllocator)
 
 , mKernelName(FirstKernel, LastKernel, mAllocator)
 
