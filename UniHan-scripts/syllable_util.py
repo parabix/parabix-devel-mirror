@@ -1,3 +1,8 @@
+#
+#  Copyright Group ALpha
+#  in Software Engineering(Spring 2020), ZJU
+#  Advisor: Prof. Cameron
+#
 def replace_equivalence(syllable):
     equivalence_map = {
         # 'ê̄':'ēi',
@@ -5,6 +10,8 @@ def replace_equivalence(syllable):
         # 'ê̌':'ěi',
         # 'ề':'èi',
         'ü':'v',
+        'ê':'e_hat'
+
     }
     for key in equivalence_map.keys():
         if(syllable.find(key) != -1):

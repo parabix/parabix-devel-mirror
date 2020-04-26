@@ -341,6 +341,8 @@ add_subdirectory(tools/ztf8)
 add_subdirectory(tools/util)
 add_subdirectory(tools/pinyingrep)
 
+add_subdirectory(tools/wc/pinyin_count)
+
 # Kernel Tests
 add_subdirectory(tests)
 

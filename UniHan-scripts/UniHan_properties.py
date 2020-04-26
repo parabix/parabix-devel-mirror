@@ -74,7 +74,7 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
         else:
             raise ValueError("Invalide Property Type " + property_type)
 
-    set_list = ['&%s_Set' % v.lower() for v in prop_values]
+    set_list = ['&%s_Set[%d]' % (v.lower(), i) for v in prop_values for i in range(5)]
     f.write("    static EnumeratedPropertyObject property_object\n")
     f.write("        {%s,\n" % property_code)
     f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
@@ -107,7 +107,7 @@ class UniHan_generator():
         prop_values, independent_prop_values, value_map = parse_property_file(filename_root, property_code)
         property_name = get_property_full_name(property_code)
         f = cformat.open_header_file_for_write(property_name)
-        cformat.write_imports(f, ['<array>','"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '"unicode_set.h"'])
+        cformat.write_imports(f, ['<array>','"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code, prop_values, independent_prop_values, value_map)
         f.write("}\n")
