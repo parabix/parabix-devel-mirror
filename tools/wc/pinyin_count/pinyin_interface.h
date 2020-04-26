@@ -12,6 +12,7 @@
 #include <array>
 #include <map>
 #include <utility>
+#include <set>
 #include <pinyin/KHanyuPinyin.h>
 
 namespace PY{
@@ -20,6 +21,7 @@ namespace PY{
     using std::string;
     // using std::wstring;
     using std::map;
+    using std::set;
 
     // Pinyin Values Parser Class
     // takes in input string(to do: take in unicode input)
@@ -107,8 +109,9 @@ namespace PY{
         // return the tone
         int replace_tone(string& toned);
     private:
-        static vector<string> _initial_syllable_list; // storing all valid initial parts of syllables
-        static vector<string> _final_syllable_list;   // storing all valid final parts of syllables
+        static set<string> _initial_syllable_set; // storing all valid initial parts of syllables
+        static set<string> _final_syllable_set;   // storing all valid final parts of syllables
+        static set<string> _legal_syllables_set;      // storing all valid combinations of initials and finals 
         static map<string, std::pair<string, int>> _toned_character_table; 
         
     };
@@ -130,3 +133,4 @@ namespace PY{
 
 
 #endif
+
