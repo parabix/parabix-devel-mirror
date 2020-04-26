@@ -49,7 +49,9 @@ namespace PY{
         }
 
     private:
-        std::pair<vector<string>, vector<int>> _parsed_syllable_tone; // record the possible syllables and tones
+        vector<std::pair<vector<string>, vector<int>>> _parsed_syllable_tone; // record the possible syllables and tones
+        // e.g. (<,> for pair, and {} for vector)
+        // { <{jin},{0,1,2,3,4}>, <{rong},{0,1,2,3,4}>} for input "jin rong"
 
         bool _parsed; // whether the parser has done the parsing or not
     };
@@ -70,7 +72,9 @@ namespace PY{
         // which contains all possible values of <syllable,tone> pairs
         void enumerate(PinyinValuesParser& parser);
     private:
-        vector<std::pair<string, int>> _enumerated_list;
+        vector<vector<std::pair<string, int>>> _enumerated_list;
+        // e.g.  (<,> for pair, and {} for vector)
+	// { {<jin, 0>, <rong, 0>}, {<jin,0>, <rong, 1>}, ... } for input ""jin rong"
         bool _enumerated;
     };
 
