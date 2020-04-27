@@ -17,7 +17,7 @@ inline void PipelineCompiler::addConsumerKernelProperties(BuilderRef b, const un
         const auto numOfIndependentConsumers = out_degree(streamSet, mConsumerGraph);
         if (LLVM_UNLIKELY((numOfIndependentConsumers != 0) || (producer == PipelineInput))) {
             const BufferNode & bn = mBufferGraph[streamSet];
-            const BufferRateData & rd = mBufferGraph[e];
+            const BufferPort & rd = mBufferGraph[e];
             assert (rd.Port.Type == PortType::Output);
             const auto prefix = makeBufferName(producer, rd.Port);
             const auto name = prefix + CONSUMED_ITEM_COUNT_SUFFIX;
@@ -63,7 +63,7 @@ inline void PipelineCompiler::readExternalConsumerItemCounts(BuilderRef b) {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (LLVM_LIKELY(bn.isOwned())) {
-            const BufferRateData & externalPort = mBufferGraph[e];
+            const BufferPort & externalPort = mBufferGraph[e];
             Value * const consumed = getConsumedOutputItems(externalPort.Port.Number); assert (consumed);
             const auto numOfIndependentConsumers = out_degree(streamSet, mConsumerGraph);
             const auto producer = parent(streamSet, mBufferGraph);
@@ -89,10 +89,10 @@ Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t strea
             produced = mInitiallyProducedItemCount[streamSet];
         }
         const auto e = in_edge(streamSet, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         auto delayOrLookBehind = std::max(br.Delay, br.LookBehind);
         for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const auto d = std::max(br.Delay, br.LookBehind);
             delayOrLookBehind = std::max(delayOrLookBehind, d);
         }
@@ -121,7 +121,7 @@ Value * PipelineCompiler::readConsumedItemCount(BuilderRef b, const size_t strea
 inline void PipelineCompiler::initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced) {
     Value * initiallyConsumed = produced;
     const auto output = getOutput(mKernelId, outputPort);
-    const BufferRateData & br = mBufferGraph[output];
+    const BufferPort & br = mBufferGraph[output];
     if (br.LookBehind || br.Delay) {
         const auto delayOrLookBehind = std::max(br.Delay, br.LookBehind);
         initiallyConsumed = b->CreateSaturatingSub(produced, b->getSize(delayOrLookBehind));
@@ -187,7 +187,7 @@ inline void PipelineCompiler::computeMinimumConsumedItemCounts(BuilderRef b) {
             // our consumed count and rely on the initial buffer underflow to access any
             // items before the start of the physical buffer.
             const auto input = getInput(mKernelId, port);
-            const BufferRateData & br = mBufferGraph[input];
+            const BufferPort & br = mBufferGraph[input];
             if (LLVM_UNLIKELY(br.LookBehind != 0)) {
                 ConstantInt * const amount = b->getSize(br.LookBehind);
                 processed = b->CreateSaturatingSub(processed, amount);
@@ -232,7 +232,7 @@ inline void PipelineCompiler::writeConsumedItemCounts(BuilderRef b) {
             if (c.Flags & ConsumerEdge::WriteConsumedCount) {
                 #ifdef PRINT_DEBUG_MESSAGES
                 const auto output = in_edge(streamSet, mBufferGraph);
-                const BufferRateData & br = mBufferGraph[output];
+                const BufferPort & br = mBufferGraph[output];
                 const auto producer = source(output, mBufferGraph);
                 const auto prefix = makeBufferName(producer, br.Port);
                 debugPrint(b, " * writing " + prefix + "_consumed = %" PRIu64, cn.Consumed);
@@ -250,7 +250,7 @@ inline void PipelineCompiler::writeConsumedItemCounts(BuilderRef b) {
 void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet, not_null<Value *> consumed, const unsigned slot) const {
     const auto pe = in_edge(streamSet, mBufferGraph);
     const auto producer = source(pe, mBufferGraph);
-    const BufferRateData & rd = mBufferGraph[pe];
+    const BufferPort & rd = mBufferGraph[pe];
     const auto prefix = makeBufferName(producer, rd.Port);
     Value * ptr = b->getScalarFieldPtr(prefix + CONSUMED_ITEM_COUNT_SUFFIX);
     if (LLVM_UNLIKELY(mTraceIndividualConsumedItemCounts)) {
@@ -295,7 +295,7 @@ void PipelineCompiler::setConsumedItemCount(BuilderRef b, const size_t streamSet
 inline void PipelineCompiler::initializePipelineInputConsumedPhiNodes(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto prefix = makeBufferName(PipelineInput, br.Port);
         PHINode * const phi = b->CreatePHI(b->getSizeTy(), 2, prefix + "_consumedItemCount");
         mExternalConsumedItemsPhi[streamSet] = phi;
@@ -321,7 +321,7 @@ void PipelineCompiler::updatePipelineInputConsumedItemCounts(BuilderRef /* b */,
 inline void PipelineCompiler::writeExternalConsumedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
-        const BufferRateData & rd = mBufferGraph[e];
+        const BufferPort & rd = mBufferGraph[e];
         Value * const ptr = getProcessedInputItemsPtr(rd.Port.Number);
         Value * const consumed = mExternalConsumedItemsPhi[streamSet]; assert (consumed);
         b->CreateStore(consumed, ptr);

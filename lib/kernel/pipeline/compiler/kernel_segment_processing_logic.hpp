@@ -406,9 +406,6 @@ void PipelineCompiler::verifyExpectedNumOfStrides(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-
     ConstantInt * const i1_TRUE = b->getTrue();
 
     Value * loopAgain = nullptr;
@@ -419,16 +416,16 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
 
         BasicBlock * const entryBlock = b->GetInsertBlock();
 
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto port = StreamSetPort{ PortType::Input, i };
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
             mAlreadyProcessedPhi[port]->addIncoming(mProcessedItemCount[port], entryBlock);
             if (mAlreadyProcessedDeferredPhi[port]) {
                 mAlreadyProcessedDeferredPhi[port]->addIncoming(mProcessedDeferredItemCount[port], entryBlock);
             }
         }
 
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
-            const auto port = StreamSetPort{ PortType::Output, i };
+        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
             mAlreadyProducedPhi[port]->addIncoming(mProducedItemCount[port], entryBlock);
             if (mAlreadyProducedDeferredPhi[port]) {
                 mAlreadyProducedDeferredPhi[port]->addIncoming(mProducedDeferredItemCount[port], entryBlock);
@@ -458,8 +455,8 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     BasicBlock * const exitBlock = b->GetInsertBlock();
 
     // update KernelTerminated phi nodes
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Output, i };
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         mProducedAtTerminationPhi[port]->addIncoming(mProducedItemCount[port], exitBlock);
     }
     mTerminatedSignalPhi->addIncoming(terminationSignal, exitBlock);
@@ -468,15 +465,15 @@ inline void PipelineCompiler::normalCompletionCheck(BuilderRef b) {
     }
     b->CreateUnlikelyCondBr(mKernelIsFinal, mKernelTerminated, mKernelLoopExit);
 
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Input, i };
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         mUpdatedProcessedPhi[port]->addIncoming(mProcessedItemCount[port], exitBlock);
         if (mUpdatedProcessedDeferredPhi[port]) {
             mUpdatedProcessedDeferredPhi[port]->addIncoming(mProcessedDeferredItemCount[port], exitBlock);
         }
     }
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Output, i };
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         mUpdatedProducedPhi[port]->addIncoming(mProducedItemCount[port], exitBlock);
         if (mUpdatedProducedDeferredPhi[port]) {
             mUpdatedProducedDeferredPhi[port]->addIncoming(mProducedDeferredItemCount[port], exitBlock);
@@ -503,7 +500,7 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     assert (mKernelLoopStart);
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto port = br.Port;
         const auto prefix = makeBufferName(mKernelId, port);
         mAlreadyProcessedPhi[port] = b->CreatePHI(sizeTy, 2, prefix + "_alreadyProcessed");
@@ -519,7 +516,7 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
     }
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto port = br.Port;
         const auto prefix = makeBufferName(mKernelId, port);
         const auto streamSet = target(e, mBufferGraph);
@@ -551,19 +548,16 @@ inline void PipelineCompiler::initializeKernelLoopEntryPhis(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 inline void PipelineCompiler::initializeKernelCheckOutputSpacePhis(BuilderRef b) {
     b->SetInsertPoint(mKernelCheckOutputSpace);
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
     IntegerType * const sizeTy = b->getSizeTy();
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto inputPort = StreamSetPort{PortType::Input, i};
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const auto inputPort = mBufferGraph[e].Port;
         const auto prefix = makeBufferName(mKernelId, inputPort);
         mLinearInputItemsPhi[inputPort] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyAccessible");
         Type * const bufferTy = getInputBuffer(inputPort)->getPointerType();
         mInputVirtualBaseAddressPhi[inputPort] = b->CreatePHI(bufferTy, 2, prefix + "_baseAddress");
     }
-
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto outputPort = StreamSetPort{PortType::Output, i};
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto outputPort = mBufferGraph[e].Port;
         const auto prefix = makeBufferName(mKernelId, outputPort);
         mLinearOutputItemsPhi[outputPort] = b->CreatePHI(sizeTy, 2, prefix + "_linearlyWritable");
     }
@@ -588,11 +582,10 @@ inline void PipelineCompiler::initializeKernelTerminatedPhis(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelId);
     mTerminatedSignalPhi = b->CreatePHI(sizeTy, 2, prefix + "_terminatedSignal");
 
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Output, i };
-        const auto prefix = makeBufferName(mKernelId, port);
-        mProducedAtTerminationPhi[port] = b->CreatePHI(sizeTy, 2, prefix + "_finalProduced");
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto outputPort = mBufferGraph[e].Port;
+        const auto prefix = makeBufferName(mKernelId, outputPort);
+        mProducedAtTerminationPhi[outputPort] = b->CreatePHI(sizeTy, 2, prefix + "_finalProduced");
     }
 }
 
@@ -627,18 +620,16 @@ inline void PipelineCompiler::initializeKernelLoopExitPhis(BuilderRef b) {
     const auto prefix = makeKernelName(mKernelId);
     IntegerType * const sizeTy = b->getSizeTy();
     IntegerType * const boolTy = b->getInt1Ty();
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Input, i };
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         const auto prefix = makeBufferName(mKernelId, port);
         mUpdatedProcessedPhi[port] = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessedAtLoopExit");
         if (mAlreadyProcessedDeferredPhi[port]) {
             mUpdatedProcessedDeferredPhi[port] = b->CreatePHI(sizeTy, 2, prefix + "_updatedProcessedDeferredAtLoopExit");
         }
     }
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Output, i };
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         const auto prefix = makeBufferName(mKernelId, port);
         mUpdatedProducedPhi[port] = b->CreatePHI(sizeTy, 2, prefix + "_updatedProducedAtLoopExit");
         if (mAlreadyProducedDeferredPhi[port]) {
@@ -672,24 +663,21 @@ inline void PipelineCompiler::writeInsufficientIOExit(BuilderRef b) {
         assert (mTerminatedInitially);
 
         mTerminatedAtLoopExitPhi->addIncoming(mTerminatedInitially, exitBlock);
-        const auto numOfInputs = numOfStreamInputs(mKernelId);
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto port = StreamSetPort{ PortType::Input, i };
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
             mUpdatedProcessedPhi[port]->addIncoming(mAlreadyProcessedPhi[port], exitBlock);
             if (mAlreadyProcessedDeferredPhi[port]) {
                 mUpdatedProcessedDeferredPhi[port]->addIncoming(mAlreadyProcessedDeferredPhi[port], exitBlock);
             }
         }
-        const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
-            const auto port = StreamSetPort{ PortType::Output, i };
+
+        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
             mUpdatedProducedPhi[port]->addIncoming(mAlreadyProducedPhi[port], exitBlock);
             if (mAlreadyProducedDeferredPhi[port]) {
                 mUpdatedProducedDeferredPhi[port]->addIncoming(mAlreadyProducedDeferredPhi[port], exitBlock);
             }
         }
-
-        assert (mCurrentNumOfStridesAtLoopEntryPhi);
 
         Value * currentNumOfStrides;
         if (mMayLoopToEntry) {
@@ -745,8 +733,7 @@ inline void PipelineCompiler::initializeKernelExitPhis(BuilderRef b) {
     createConsumedPhiNodes(b);
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
-        const auto port = br.Port;
+        const auto port = mBufferGraph[e].Port;
         const auto prefix = makeBufferName(mKernelId, port);
         PHINode * const fullyProduced = b->CreatePHI(sizeTy, 2, prefix + "_fullyProducedAtKernelExit");
         mFullyProducedItemCount[port] = fullyProduced;
@@ -774,8 +761,7 @@ inline void PipelineCompiler::updateKernelExitPhisAfterInitiallyTerminated(Build
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[e];
-        const auto port = br.Port;
+        const auto port = mBufferGraph[e].Port;
         mFullyProducedItemCount[port]->addIncoming(mInitiallyProducedItemCount[streamSet], mKernelInitiallyTerminatedExit);
     }
 
@@ -795,18 +781,17 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
     if (mIsPartitionRoot) {
         mPartialPartitionStridesAtLoopExitPhi->addIncoming(mPartialPartitionStridesPhi, exitBlock);
     }
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Input, i };
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         Value * const totalCount = getLocallyAvailableItemCount(b, port);
         mUpdatedProcessedPhi[port]->addIncoming(totalCount, exitBlock);
         if (mUpdatedProcessedDeferredPhi[port]) {
             mUpdatedProcessedDeferredPhi[port]->addIncoming(totalCount, exitBlock);
         }
     }
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
-    for (unsigned i = 0; i < numOfOutputs; ++i) {
-        const auto port = StreamSetPort{ PortType::Output, i };
+
+    for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
+        const auto port = mBufferGraph[e].Port;
         Value * const produced = mProducedAtTerminationPhi[port];
 
         #ifdef PRINT_DEBUG_MESSAGES
@@ -897,7 +882,7 @@ void PipelineCompiler::type(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::writeExternalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const BufferRateData & external = mBufferGraph[e];
+        const BufferPort & external = mBufferGraph[e];
         const auto streamSet = source(e, mBufferGraph);
         Value * const ptr = getProducedOutputItemsPtr(external.Port.Number);
         b->CreateStore(mLocallyAvailableItems[streamSet], ptr);

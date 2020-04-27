@@ -21,7 +21,7 @@ void PipelineAnalysis::makeConsumerGraph() {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         // copy the producing edge
         const auto pe = in_edge(streamSet, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[pe];
+        const BufferPort & br = mBufferGraph[pe];
         const auto producer = source(pe, mBufferGraph);
         add_edge(producer, streamSet, ConsumerEdge{br.Port, 0, ConsumerEdge::None}, mConsumerGraph);
 
@@ -37,7 +37,7 @@ void PipelineAnalysis::makeConsumerGraph() {
         // flag the production rate as ignorable by inserting it upfront
         observedGlobalPortIds.insert(br.GlobalPortId);
         for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[ce];
+            const BufferPort & br = mBufferGraph[ce];
             const auto consumer = target(ce, mBufferGraph);
             // check if any consumer has a rate we have not yet observed
             auto testConsumer = [&]() {
@@ -88,7 +88,7 @@ void PipelineAnalysis::makeConsumerGraph() {
             ConsumerEdge & cn = mConsumerGraph[f];
             cn.Flags |= flags;
         } else {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             add_edge(streamSet, PipelineOutput, ConsumerEdge{br.Port, 0, flags}, mConsumerGraph);
         }
     }

@@ -34,15 +34,16 @@ void PipelineCompiler::addCycleCounterProperties(BuilderRef b, const unsigned ke
 
         // # of blocked I/O channel attempts in which no strides
         // were possible (i.e., blocked on first iteration)
-        const auto numOfInputs = numOfStreamInputs(kernel);
-        for (unsigned i = 0; i < numOfInputs; ++i) {
-            const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Input, i});
+
+        for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+            const auto port = mBufferGraph[e].Port;
+            const auto prefix = makeBufferName(kernel, port);
             mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX, kernel);
         }
-        const auto numOfOutputs = numOfStreamOutputs(kernel);
-        for (unsigned i = 0; i < numOfOutputs; ++i) {
+        for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
             // TODO: ignore dynamic buffers
-            const auto prefix = makeBufferName(kernel, StreamSetPort{PortType::Output, i});
+            const auto port = mBufferGraph[e].Port;
+            const auto prefix = makeBufferName(kernel, port);
             mTarget->addInternalScalar(int64Ty, prefix + STATISTICS_BLOCKING_IO_SUFFIX, kernel);
         }
     }
@@ -375,12 +376,12 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
             const Kernel * const kernel = getKernel(i);
             maxKernelLength = std::max(maxKernelLength, kernel->getName().size());
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
@@ -451,7 +452,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
 
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 args.push_back(STDERR);
                 if (kernelName) {
                     args.push_back(firstLine);
@@ -485,7 +486,7 @@ void PipelineCompiler::printOptionalBlockingIOStatistics(BuilderRef b) {
 
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
 
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 args.push_back(STDERR);
                 if (kernelName) {
                     args.push_back(firstLine);
@@ -553,7 +554,9 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
             std::string temp = kernel->getName();
             boost::replace_all(temp, "\"", "\\\"");
             format << ",\"" << i << " " << temp << "\"";
-            const auto numOfPorts = numOfStreamInputs(i) + numOfStreamOutputs(i);
+            const auto numOfInputs = in_degree(i, mBufferGraph);
+            const auto numOfOutputs = out_degree(i, mBufferGraph);
+            const auto numOfPorts = numOfInputs + numOfOutputs;
             for (unsigned j = 1; j < numOfPorts; ++j) {
                 format.write(',');
             }
@@ -591,7 +594,9 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         format << "%" PRIu64; // seg #
         unsigned fieldCount = 0;
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
-            const auto numOfPorts = numOfStreamInputs(i) + numOfStreamOutputs(i);
+            const auto numOfInputs = in_degree(i, mBufferGraph);
+            const auto numOfOutputs = out_degree(i, mBufferGraph);
+            const auto numOfPorts = numOfInputs + numOfOutputs;
             fieldCount += numOfPorts;
             for (unsigned j = 0; j < numOfPorts; ++j) {
                 format << ",%" PRIu64; // strides
@@ -612,9 +617,8 @@ void PipelineCompiler::printOptionalBlockedIOPerSegment(BuilderRef b) const {
         SmallVector<Value *, 64> updatedIndex(fieldCount);
 
         for (unsigned i = FirstKernel, j = 0; i <= LastKernel; ++i) {
-            const auto numOfInputs = numOfStreamInputs(i);
-            const auto numOfOutputs = numOfStreamOutputs(i);
-
+            const auto numOfInputs = in_degree(i, mBufferGraph);
+            const auto numOfOutputs = out_degree(i, mBufferGraph);
             for (unsigned k = 0; k < numOfInputs; ++k, ++j) {
                 const auto prefix = makeBufferName(i, StreamSetPort{PortType::Input, k});
                 Value * const historyPtr = b->getScalarFieldPtr(prefix + STATISTICS_BLOCKING_IO_HISTORY_SUFFIX);
@@ -738,7 +742,7 @@ void PipelineCompiler::initializeBufferExpansionHistory(BuilderRef b) const {
             if (LLVM_LIKELY(bn.isOwned())) {
                 const auto pe = in_edge(i, mBufferGraph);
                 const auto p = source(pe, mBufferGraph);
-                const BufferRateData & rd = mBufferGraph[pe];
+                const BufferPort & rd = mBufferGraph[pe];
                 const auto prefix = makeBufferName(p, rd.Port);
                 const StreamSetBuffer * const buffer = bn.Buffer; assert (buffer);
 
@@ -830,12 +834,12 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
             const Kernel * const kernel = getKernel(i);
             maxKernelLength = std::max(maxKernelLength, kernel->getName().size());
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
             for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-                const BufferRateData & binding = mBufferGraph[e];
+                const BufferPort & binding = mBufferGraph[e];
                 const Binding & ref = binding.Binding;
                 maxBindingLength = std::max(maxBindingLength, ref.getName().length());
             }
@@ -933,7 +937,7 @@ void PipelineCompiler::printOptionalBufferExpansionHistory(BuilderRef b) {
         for (auto i = FirstKernel; i <= LastKernel; ++i) {
 
             for (const auto output : make_iterator_range(out_edges(i, mBufferGraph))) {
-                const BufferRateData & br = mBufferGraph[output];
+                const BufferPort & br = mBufferGraph[output];
                 const auto buffer = target(output, mBufferGraph);
                 const BufferNode & bn = mBufferGraph[buffer];
                 if (isa<DynamicBuffer>(bn.Buffer)) {
@@ -1431,7 +1435,7 @@ void PipelineCompiler::recordItemCountDeltas(BuilderRef b,
     indices[2] = offset;
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & out = mBufferGraph[e];
+        const BufferPort & out = mBufferGraph[e];
         const auto i = out.Port.Number;
         Value * const delta = b->CreateSub(current[i], prior[i]);
         indices[3] = b->getInt32(i);
@@ -1481,7 +1485,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         boost::replace_all(kernelName, "\"", "\\\"");
 
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & out = br.Binding;
             format << "," << target(e, mBufferGraph)
                    << " " << kernelName
@@ -1615,7 +1619,7 @@ void PipelineCompiler::printItemCountDeltas(BuilderRef b, const StringRef title,
         if (LLVM_UNLIKELY(currentChunkPhi[i] == nullptr)) continue;
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
             const auto idx = target(e, mBufferGraph) - FirstStreamSet + 3;
-            const BufferRateData & out = mBufferGraph[e];
+            const BufferPort & out = mBufferGraph[e];
             indices[3] = b->getInt32(out.Port.Number);
             args[idx] = b->CreateLoad(b->CreateGEP(currentChunkPhi[i], indices));
         }

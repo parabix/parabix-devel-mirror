@@ -159,7 +159,7 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
         // the prior produced count.
 
 
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         // Select/compute/load the appropriate produced item count
         Value * produced = nullptr;
 
@@ -376,8 +376,12 @@ void PipelineCompiler::phiOutPartitionStatusFlags(BuilderRef b, const unsigned t
  * @brief releaseAllSynchronizationLocksUntil
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderRef b, const unsigned partitionId) {
-    // Find the first kernel in the partition we're jumping to and acquire the LSN
-    // then release all of the kernels we skipped over.
+    // Find the first kernel in the partition we're jumping to and acquire the LSN then release
+    // all of the kernels we skipped over. However, to safely jump to a partition, we need to
+    // know how many items were processed by any consumers of the kernels up to the target
+    // kernel; otherwise we run the risk of mangling the buffer state. For safety, wait until we
+    // can acquire the last consumer's lock but only release the locks that we end up skipping.
+
     auto firstKernelInTargetPartition = mKernelId;
     auto lastConsumer = mKernelId;
     for (; firstKernelInTargetPartition <= LastKernel; ++firstKernelInTargetPartition) {
@@ -395,9 +399,7 @@ Value * PipelineCompiler::acquireAndReleaseAllSynchronizationLocksUntil(BuilderR
     assert (firstKernelInTargetPartition > mKernelId);    
     lastConsumer = std::min(lastConsumer, LastKernel);
 
-//    // TODO: experiment with a mutex lock here.
-//    const auto lockingKernel = std::min(firstKernelInTargetPartition, LastKernel);
-//    assert ((firstKernelInNextPartition == lockingKernel) || (firstKernelInNextPartition == PipelineOutput));
+    // TODO: experiment with a mutex lock here.
     Value * const startTime = startCycleCounter(b);
     acquireSynchronizationLock(b, lastConsumer);
     updateCycleCounter(b, mKernelId, startTime, CycleCounter::PARTITION_JUMP_SYNCHRONIZATION);

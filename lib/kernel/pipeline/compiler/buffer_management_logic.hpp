@@ -18,7 +18,7 @@ inline void PipelineCompiler::addBufferHandlesToPipelineKernel(BuilderRef b, con
         if (LLVM_UNLIKELY(bn.isExternal())) {
             continue;
         }
-        const BufferRateData & rd = mBufferGraph[e];
+        const BufferPort & rd = mBufferGraph[e];
         const auto handleName = makeBufferName(index, rd.Port);
         StreamSetBuffer * const buffer = bn.Buffer;
         Type * const handleType = buffer->getHandleType(b);
@@ -48,7 +48,7 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
         } else if (bn.NonLocal == nonLocal) {
             const auto pe = in_edge(streamSet, mBufferGraph);
             const auto producer = source(pe, mBufferGraph);
-            const BufferRateData & rd = mBufferGraph[pe];
+            const BufferPort & rd = mBufferGraph[pe];
             const auto handleName = makeBufferName(producer, rd.Port);
             Value * const handle = b->getScalarFieldPtr(handleName);
             assert (buffer->getHandle() == nullptr);
@@ -106,7 +106,7 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
             if (LLVM_UNLIKELY(bn.isOwned() && bn.NonLocal == shared)) {
                 StreamSetBuffer * const buffer = bn.Buffer;
                 if (LLVM_LIKELY(bn.isInternal())) {
-                    const BufferRateData & rd = mBufferGraph[e];
+                    const BufferPort & rd = mBufferGraph[e];
                     const auto handleName = makeBufferName(i, rd.Port);
                     Value * const handle = b->getScalarFieldPtr(handleName);
                     buffer->setHandle(handle);
@@ -140,7 +140,7 @@ void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
 
                     const auto pe = in_edge(i, mBufferGraph);
                     const auto p = source(pe, mBufferGraph);
-                    const BufferRateData & rd = mBufferGraph[pe];
+                    const BufferPort & rd = mBufferGraph[pe];
                     const auto prefix = makeBufferName(p, rd.Port);
 
                     Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
@@ -180,7 +180,7 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
     const auto numOfInputStreams = out_degree(PipelineInput, mBufferGraph);
     mStreamSetInputBuffers.resize(numOfInputStreams);
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        const BufferRateData & rd = mBufferGraph[e];
+        const BufferPort & rd = mBufferGraph[e];
         const auto i = rd.Port.Number;
         const auto streamSet = target(e, mBufferGraph);
         assert (mBufferGraph[streamSet].isExternal());
@@ -194,7 +194,7 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
     const auto numOfOutputStreams = in_degree(PipelineOutput, mBufferGraph);
     mStreamSetOutputBuffers.resize(numOfOutputStreams);
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        const BufferRateData & rd = mBufferGraph[e];
+        const BufferPort & rd = mBufferGraph[e];
         const auto i = rd.Port.Number;
         const auto streamSet = source(e, mBufferGraph);
         assert (mBufferGraph[streamSet].isExternal());
@@ -211,7 +211,7 @@ void PipelineCompiler::constructStreamSetBuffers(BuilderRef /* b */) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto inputPort = br.Port;
         const Binding & input = br.Binding;
         const auto prefix = makeBufferName(mKernelId, inputPort);
@@ -230,7 +230,7 @@ void PipelineCompiler::readProcessedItemCounts(BuilderRef b) {
 void PipelineCompiler::readProducedItemCounts(BuilderRef b) {
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto outputPort = br.Port;
         const Binding & output = br.Binding;
         const auto prefix = makeBufferName(mKernelId, outputPort);
@@ -288,7 +288,7 @@ void PipelineCompiler::setLocallyAvailableItemCount(BuilderRef /* b */, const St
 void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const StreamSetPort inputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, inputPort);
         b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProcessedPhi[inputPort]);
@@ -306,7 +306,7 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
     }
 
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const StreamSetPort outputPort = br.Port;
         const auto prefix = makeBufferName(mKernelId, outputPort);
         b->setScalarField(prefix + ITEM_COUNT_SUFFIX, mUpdatedProducedPhi[outputPort]);
@@ -327,7 +327,7 @@ void PipelineCompiler::writeUpdatedItemCounts(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::recordFinalProducedItemCounts(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto outputPort = br.Port;
         Value * fullyProduced = nullptr;
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
@@ -366,7 +366,7 @@ void PipelineCompiler::readReturnedOutputVirtualBaseAddresses(BuilderRef b) cons
         if (LLVM_LIKELY(bn.isOwned() || bn.isExternal())) {
             continue;
         }
-        const BufferRateData & rd = mBufferGraph[e];
+        const BufferPort & rd = mBufferGraph[e];
         const StreamSetPort port(rd.Port.Type, rd.Port.Number);
         Value * const ptr = mReturnedOutputVirtualBaseAddressPtr[port]; assert (ptr);
         Value * vba = b->CreateLoad(ptr);
@@ -394,7 +394,7 @@ void PipelineCompiler::loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderR
         if (LLVM_LIKELY(bn.isOwned() || bn.isExternal())) {
             continue;
         }
-        const BufferRateData & rd = mBufferGraph[e];
+        const BufferPort & rd = mBufferGraph[e];
         const auto handleName = makeBufferName(kernelId, rd.Port);
         Value * const vba = b->getScalarField(handleName + LAST_GOOD_VIRTUAL_BASE_ADDRESS);
         StreamSetBuffer * const buffer = bn.Buffer;
@@ -416,7 +416,7 @@ void PipelineCompiler::writeLookBehindLogic(BuilderRef b) {
         if (buffer->isLinear()) continue;
 
         if (bn.LookBehind) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             Constant * const underflow = b->getSize(bn.LookBehind);
             Value * const produced = mAlreadyProducedPhi[br.Port];
             Value * const capacity = buffer->getCapacity(b);
@@ -437,10 +437,10 @@ void PipelineCompiler::writeDelayReflectionLogic(BuilderRef b) {
         const StreamSetBuffer * const buffer = bn.Buffer;
         if (buffer->isLinear()) continue;
 
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         if (br.Delay) {
             Value * const capacity = buffer->getCapacity(b);
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             Value * const produced = mAlreadyProducedPhi[br.Port];
             const auto size = round_up_to(br.Delay, b->getBitBlockWidth());
             Constant * const reflection = b->getSize(size);
@@ -462,7 +462,7 @@ void PipelineCompiler::writeCopyBackLogic(BuilderRef b) {
         if (buffer->isLinear()) continue;
 
         if (bn.CopyBack) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             Value * const capacity = buffer->getCapacity(b);
             Value * const alreadyProduced = mAlreadyProducedPhi[br.Port];
             Value * const priorOffset = b->CreateURem(alreadyProduced, capacity);
@@ -491,7 +491,7 @@ void PipelineCompiler::writeLookAheadLogic(BuilderRef b) {
 
         if (bn.CopyBackReflection) {
 
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             Value * const capacity = buffer->getCapacity(b);
             Value * const initial = mInitiallyProducedItemCount[streamSet];
             Value * const produced = mUpdatedProducedPhi[br.Port];
@@ -671,7 +671,7 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
             if (LLVM_UNLIKELY(bn.NonLocal)) {
                 consumed = mInitialConsumedItemCount[streamSet];
             }
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             buffer->prepareLinearBuffer(b, produced, consumed, br.LookBehind);
         }
     }
@@ -683,7 +683,7 @@ void PipelineCompiler::prepareLinearBuffers(BuilderRef b) {
  * Returns the address of the "zeroth" item of the (logically-unbounded) stream set.
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
-                                                const BufferRateData & rateData,
+                                                const BufferPort & rateData,
                                                 const StreamSetBuffer * const buffer,
                                                 Value * position) const {
     assert ("buffer cannot be null!" && buffer);
@@ -710,7 +710,7 @@ Value * PipelineCompiler::getVirtualBaseAddress(BuilderRef b,
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const {
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & rt = mBufferGraph[e];
+        const BufferPort & rt = mBufferGraph[e];
         PHINode * processed = nullptr;
         if (mAlreadyProcessedDeferredPhi[rt.Port]) {
             processed = mAlreadyProcessedDeferredPhi[rt.Port];

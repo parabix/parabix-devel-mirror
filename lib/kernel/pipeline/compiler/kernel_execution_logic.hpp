@@ -73,8 +73,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     // WARNING: any change to this must be reflected in Kernel::addDoSegmentDeclaration, Kernel::getDoSegmentFields,
     // Kernel::setDoSegmentProperties and Kernel::getDoSegmentProperties.
 
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
+    const auto numOfInputs = in_degree(mKernelId, mBufferGraph);
+    const auto numOfOutputs = out_degree(mKernelId, mBufferGraph);
 
     ArgVec args;
 
@@ -141,7 +141,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     }
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto port = getInput(mKernelId, StreamSetPort(PortType::Input, i));
-        const BufferRateData & rt = mBufferGraph[port];
+        const BufferPort & rt = mBufferGraph[port];
 
         if (LLVM_LIKELY(rt.Port.Reason == ReasonType::Explicit)) {
 
@@ -216,7 +216,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
     for (unsigned i = 0; i < numOfOutputs; ++i) {
         const auto port = getOutput(mKernelId, StreamSetPort(PortType::Output, i));
-        const BufferRateData & rt = mBufferGraph[port];
+        const BufferPort & rt = mBufferGraph[port];
 
         assert (rt.Port.Reason == ReasonType::Explicit);
         assert (rt.Port.Type == PortType::Output);
@@ -264,8 +264,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    const auto numOfOutputs = numOfStreamOutputs(mKernelId);
+    const auto numOfInputs = in_degree(mKernelId, mBufferGraph);
+    const auto numOfOutputs = out_degree(mKernelId, mBufferGraph);
 
     // calculate or read the item counts (assuming this kernel did not terminate)
     for (unsigned i = 0; i < numOfInputs; ++i) {

@@ -238,7 +238,7 @@ void PipelineCompiler::informInputKernelsOfTermination(BuilderRef b) {
         bool hasPrincipal = false;
         Value * atLeastOneExhausted = nullptr;
         for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             if (LLVM_UNLIKELY(br.IsZeroExtended)) continue;
             Value * const closed = isClosed(b, br.Port);
             Value * const avail = getLocallyAvailableItemCount(b, br.Port);

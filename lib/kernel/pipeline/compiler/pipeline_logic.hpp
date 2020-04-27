@@ -135,7 +135,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
 
 
     for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto prefix = makeBufferName(kernelId, br.Port);
         const Binding & binding = br.Binding;
         if (LLVM_UNLIKELY(binding.isDeferred())) {
@@ -145,7 +145,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
     }
 
     for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto prefix = makeBufferName(kernelId, br.Port);
         const Binding & binding = br.Binding;
 
@@ -160,7 +160,7 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
             const auto bufferVertex = target(e, mBufferGraph);
             const BufferNode & bn = mBufferGraph[bufferVertex];
             if (isa<DynamicBuffer>(bn.Buffer)) {
-                const BufferRateData & rd = mBufferGraph[e];
+                const BufferPort & rd = mBufferGraph[e];
                 const auto prefix = makeBufferName(kernelId, rd.Port);
                 LLVMContext & C = b->getContext();
                 const auto numOfConsumers = out_degree(bufferVertex, mConsumerGraph);
@@ -718,7 +718,7 @@ void PipelineCompiler::verifyBufferRelationships() const {
             const auto producer = parent(streamSet, mBufferGraph);
             const Kernel * const kernelObj = getKernel(producer); assert (kernelObj);
             const auto synchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & output = br.Binding;
             const auto unmanaged = !output.hasAttribute(AttrId::ManagedBuffer);
 

@@ -20,7 +20,7 @@ void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
                 const auto streamSet = source(e, mBufferGraph);
                 int k = transitiveAdd[streamSet - FirstStreamSet];
-                BufferRateData & br = mBufferGraph[e];
+                BufferPort & br = mBufferGraph[e];
                 k += br.Add;
                 k -= br.Truncate;
                 minAddK = std::min(minAddK, k);
@@ -34,19 +34,19 @@ void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
 
             if (LLVM_LIKELY(noPrincipal)) {
                 for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                    BufferRateData & br = mBufferGraph[e];
+                    BufferPort & br = mBufferGraph[e];
                     br.TransitiveAdd -= minAddK;
                 }
             } else {
                 for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                    BufferRateData & br = mBufferGraph[e];
+                    BufferPort & br = mBufferGraph[e];
                     br.TransitiveAdd = 0;
                 }
             }
         }
 
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            BufferRateData & br = mBufferGraph[e];
+            BufferPort & br = mBufferGraph[e];
             auto k = minAddK;
             k += br.Add;
             k -= br.Truncate;
@@ -63,11 +63,11 @@ void PipelineAnalysis::annotateBufferGraphWithAddAttributes() {
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         int maxK = 0;
         for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-            const BufferRateData & rate = mBufferGraph[e];
+            const BufferPort & rate = mBufferGraph[e];
             maxK = std::max(maxK, rate.TransitiveAdd);
         }
         for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-            const BufferRateData & rate = mBufferGraph[e];
+            const BufferPort & rate = mBufferGraph[e];
             maxK = std::max(maxK, rate.TransitiveAdd);
         }
         for (const auto e : make_iterator_range(in_edges(kernel, mBufferGraph))) {

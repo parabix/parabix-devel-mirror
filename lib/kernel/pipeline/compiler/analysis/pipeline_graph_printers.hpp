@@ -354,7 +354,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         const auto s = source(e, mBufferGraph);
         const auto t = target(e, mBufferGraph);
 
-        const BufferRateData & pd = mBufferGraph[e];
+        const BufferPort & pd = mBufferGraph[e];
 
         bool isLocal = true;
         bool isChecked = false;

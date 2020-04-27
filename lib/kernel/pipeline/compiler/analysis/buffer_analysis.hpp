@@ -59,8 +59,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
         const Kernel * const kernelObj = getKernel(kernel);
         const auto internallySynchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
         for (const auto e : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-            const BufferRateData & producerRate = mBufferGraph[e];
-            const Binding & output = producerRate.Binding;
+            const BufferPort & rate = mBufferGraph[e];
+            const Binding & output = rate.Binding;
+
             if (LLVM_UNLIKELY(internallySynchronized || Kernel::isLocalBuffer(output))) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & bn = mBufferGraph[streamSet];
@@ -75,8 +76,11 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
+        const BufferPort & rate = mBufferGraph[e];
+        const Binding & input = rate.Binding;
+
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
-            const BufferRateData & rate = mBufferGraph[e];
+            const BufferPort & rate = mBufferGraph[e];
             const Binding & input = rate.Binding;
             bn.Buffer = new ExternalBuffer(b, input.getType(), true, 0);
             bn.Type = BufferType::UnownedExternal;
@@ -87,8 +91,14 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
+
+        const BufferPort & rate = mBufferGraph[e];
+        errs() << " $< " << streamSet << "  " << rate.Add << "\n";
+
+
+
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
-            const BufferRateData & rate = mBufferGraph[e];
+            const BufferPort & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
                 continue;
@@ -101,8 +111,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     const auto blockWidth = b->getBitBlockWidth();
 
     mInternalBuffers.resize(LastStreamSet - FirstStreamSet + 1);
-
-    std::vector<unsigned> partitionRoot(LastKernel + 1U);
 
     std::vector<unsigned> minStride(LastKernel + 1U);
 
@@ -125,7 +133,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             minFactor[kernel] = floor(m * minFactor[partitionRootId]);
             maxFactor[kernel] = ceiling(m * maxFactor[partitionRootId]);
         }
-        partitionRoot[kernel] = partitionRootId;
     }
     minFactor[PipelineOutput] = 1;
     maxFactor[PipelineOutput] = 1;
@@ -136,8 +143,10 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
         BufferNode & bn = mBufferGraph[streamSet];
         const auto producerOutput = in_edge(streamSet, mBufferGraph);
-        const BufferRateData & producerRate = mBufferGraph[producerOutput];
+        const BufferPort & producerRate = mBufferGraph[producerOutput];
         const Binding & output = producerRate.Binding;
+
+        const BufferPort & rate = mBufferGraph[producerOutput];
 
         bool nonLocal = false;
 
@@ -147,7 +156,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             nonLocal = true;
         }
         const auto producerPartitionId = KernelPartitionId[producer];
-        const auto root = partitionRoot[producer];
 
         for (const auto ce : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
             const auto consumer = target(ce, mBufferGraph);
@@ -190,8 +198,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             for (const auto e : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
 
-                const BufferRateData & consumerRate = mBufferGraph[e];
-                const Binding & input = consumerRate.Binding;
+                const BufferPort & consumerRate = mBufferGraph[e];
 
                 const auto consumer = target(e, mBufferGraph);
 
@@ -212,7 +219,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 bMin = std::min(bMin, cMin);
                 bMax = std::max(bMax, cMax);
 
-                const Binding & inputBinding = consumerRate.Binding;
 //                // Get output overflow size
                 auto lookAhead = consumerRate.LookAhead;
                 if (consumerRate.Maximum > consumerRate.Minimum) {
@@ -286,9 +292,10 @@ void PipelineAnalysis::generateInitialBufferGraph() {
 
         auto makeBufferPort = [&](const RelationshipType port,
                                   const RelationshipNode & bindingNode,
-                                  const unsigned streamSet) {
+                                  const unsigned streamSet) -> BufferPort {
             assert (bindingNode.Type == RelationshipNode::IsBinding);
             const Binding & binding = bindingNode.Binding;
+
             const ProcessingRate & rate = binding.getRate();
             Rational lb{rate.getLowerBound()};
             Rational ub{rate.getUpperBound()};
@@ -301,7 +308,7 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                     report_fatal_error(out.str());
                 }
                 const auto e = in_edge(streamSet, mBufferGraph);
-                const BufferRateData & producerBr = mBufferGraph[e];
+                const BufferPort & producerBr = mBufferGraph[e];
                 ub = std::max(lb, producerBr.Maximum);
             } else {
                 const auto strideLength = kernelObj->getStride();
@@ -315,50 +322,37 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                 ub *= strideLength;
             }
 
-            auto add = 0U;
-            auto delay = 0U;
-            auto lookAhead = 0U;
-            auto lookBehind = 0U;
-            auto truncate = 0U;
-            auto isPrincipal = false;
-            auto isDeferred = false;
+            BufferPort bp(port, binding, lb, ub);
 
-//            if (lb != ub) {
-//                lookAhead = ceiling(ub - lb) - 1U;
-//            }
+            assert (bp.Add == 0);
 
             for (const Attribute & attr : binding.getAttributes()) {
                 switch (attr.getKind()) {
-                    case AttrId::Add:
-                        add = std::max(add, attr.amount());
+                    case AttrId::Add:                        
+                        bp.Add = std::max(bp.Add, attr.amount());
                         break;
                     case AttrId::Delayed:
-                        delay = std::max(delay, attr.amount());
+                        bp.Delay = std::max(bp.Delay, attr.amount());
                         break;
                     case AttrId::LookAhead:
-                        lookAhead = std::max(lookAhead, attr.amount());
+                        bp.LookAhead = std::max(bp.LookAhead, attr.amount());
                         break;
                     case AttrId::LookBehind:
-                        lookBehind = std::max(lookBehind, attr.amount());
+                        bp.LookBehind = std::max(bp.LookBehind, attr.amount());
                         break;
                     case AttrId::Truncate:
-                        truncate = std::max(truncate, attr.amount());
+                        bp.Truncate = std::max(bp.Truncate, attr.amount());
                         break;
                     case AttrId::Principal:
-                        isPrincipal = true;
+                        bp.IsPrincipal = true;
                         break;
                     case AttrId::Deferred:
-                        isDeferred = true;
+                        bp.IsDeferred = true;
                         break;
                     default: break;
                 }
             }
-
-
-
-            return BufferRateData{port, binding, lb, ub, add, truncate,
-                                  delay, lookAhead, lookBehind,
-                                  isPrincipal, isDeferred};
+            return bp;
         };
 
         // Evaluate the input/output ordering here and ensure that any reference port is stored first.
@@ -571,7 +565,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         BufferNode & N = mBufferGraph[streamSet];
         const auto output = in_edge(streamSet, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[output];
+        const BufferPort & br = mBufferGraph[output];
         N.NonLinear = isNonLinear(br.Binding);
     }
 
@@ -603,7 +597,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
             mustBeLinear = true;
         } else {
             for (const auto e : make_iterator_range(in_edges(i, mBufferGraph))) {
-                const BufferRateData & rateData = mBufferGraph[e];
+                const BufferPort & rateData = mBufferGraph[e];
                 const Binding & binding = rateData.Binding;
                 const ProcessingRate & rate = binding.getRate();
                 if (LLVM_UNLIKELY(rate.isGreedy())) {
@@ -631,7 +625,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
         }
 
         const auto binding = in_edge(streamSet, mBufferGraph);
-        const BufferRateData & producerRate = mBufferGraph[binding];
+        const BufferPort & producerRate = mBufferGraph[binding];
         const Binding & output = producerRate.Binding;
 
 
@@ -645,7 +639,7 @@ void PipelineAnalysis::identifyLinearBuffers() {
             bool samePartition = true;
 
             for (const auto binding : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-                const BufferRateData & consumerRate = mBufferGraph[binding];
+                const BufferPort & consumerRate = mBufferGraph[binding];
                 const Binding & input = consumerRate.Binding;
                 if (LLVM_UNLIKELY(isNonLinear(input))) {
                     nonLinear = false;

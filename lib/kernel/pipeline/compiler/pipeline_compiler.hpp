@@ -165,8 +165,8 @@ public:
 
     void detemineMaximumNumberOfStrides(BuilderRef b);
     void determineNumOfLinearStrides(BuilderRef b);
-    void checkForSufficientInputData(BuilderRef b, const StreamSetPort inputPort);
-    void ensureSufficientOutputSpace(BuilderRef b, const StreamSetPort outputPort);
+    void checkForSufficientInputData(BuilderRef b, const BufferPort & inputPort, const unsigned streamSet);
+    void ensureSufficientOutputSpace(BuilderRef b, const BufferPort & port, const unsigned streamSet);
     void updatePHINodesForLoopExit(BuilderRef b);
 
     void calculateItemCounts(BuilderRef b);
@@ -226,17 +226,16 @@ public:
 
 // intra-kernel codegen functions
 
-    Value * getInputStrideLength(BuilderRef b, const StreamSetPort inputPort);
-    Value * getOutputStrideLength(BuilderRef b, const StreamSetPort outputPort);
-    Value * calculateStrideLength(BuilderRef b, const StreamSetPort port);
-    Value * calculateNumOfLinearItems(BuilderRef b, const StreamSetPort port, Value * const adjustment);
-    Value * getAccessibleInputItems(BuilderRef b, const StreamSetPort inputPort, const bool useOverflow = true);
-    Value * getNumOfAccessibleStrides(BuilderRef b, const StreamSetPort inputPort, Value * const numOfLinearStrides);
-    Value * getNumOfWritableStrides(BuilderRef b, const StreamSetPort outputPort, Value * const numOfLinearStrides);
-    Value * getWritableOutputItems(BuilderRef b, const StreamSetPort outputPort, const bool useOverflow = true);
-    Value * addLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) const;
-    Value * subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount);
-    Constant * getLookahead(BuilderRef b, const StreamSetPort inputPort) const;
+    Value * getInputStrideLength(BuilderRef b, const BufferPort &inputPort);
+    Value * getOutputStrideLength(BuilderRef b, const BufferPort &outputPort);
+    Value * calculateStrideLength(BuilderRef b, const BufferPort & port);
+    Value * calculateNumOfLinearItems(BuilderRef b, const BufferPort &port, Value * const adjustment);
+    Value * getAccessibleInputItems(BuilderRef b, const BufferPort & inputPort, const bool useOverflow = true);
+    Value * getNumOfAccessibleStrides(BuilderRef b, const BufferPort & inputPort, Value * const numOfLinearStrides);
+    Value * getNumOfWritableStrides(BuilderRef b, const BufferPort & outputPort, Value * const numOfLinearStrides);
+    Value * getWritableOutputItems(BuilderRef b, const BufferPort & outputPort, const bool useOverflow = true);
+    Value * addLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount) const;
+    Value * subtractLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount);
     Value * truncateBlockSize(BuilderRef b, const Binding & binding, Value * itemCount, Value * const terminationSignal) const;
 
     void initializeLocallyAvailableItemCounts(BuilderRef b, BasicBlock * const entryBlock);
@@ -244,8 +243,8 @@ public:
     Value * getLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort) const;
     void setLocallyAvailableItemCount(BuilderRef b, const StreamSetPort inputPort, Value * const available);
 
-    Value * getPartialSumItemCount(BuilderRef b, const StreamSetPort port, Value * const offset = nullptr) const;
-    Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const StreamSetPort port, Value * const numOfLinearStrides);
+    Value * getPartialSumItemCount(BuilderRef b, const BufferPort &port, Value * const offset = nullptr) const;
+    Value * getMaximumNumOfPartialSumStrides(BuilderRef b, const BufferPort &port, Value * const numOfLinearStrides);
 
 // termination codegen functions
 
@@ -284,11 +283,6 @@ public:
 
 // buffer management codegen functions
 
-    enum StreamSetAllocationType {
-        Shared
-        , ThreadLocal
-    };
-
     void addBufferHandlesToPipelineKernel(BuilderRef b, const unsigned index);
     void allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal);
     void loadInternalStreamSetHandles(BuilderRef b, const bool nonLocal);
@@ -297,13 +291,9 @@ public:
     void loadLastGoodVirtualBaseAddressesOfUnownedBuffers(BuilderRef b, const size_t kernelId) const;
 
     void prepareLinearBuffers(BuilderRef b);
-    Value * getVirtualBaseAddress(BuilderRef b, const BufferRateData & rateData, const StreamSetBuffer * const buffer, Value * position) const;
+    Value * getVirtualBaseAddress(BuilderRef b, const BufferPort & rateData, const StreamSetBuffer * const buffer, Value * position) const;
     void getInputVirtualBaseAddresses(BuilderRef b, Vec<Value *> & baseAddresses) const;
     void getZeroExtendedInputVirtualBaseAddresses(BuilderRef b, const Vec<Value *> & baseAddresses, Value * const zeroExtensionSpace, Vec<Value *> & zeroExtendedVirtualBaseAddress) const;
-
-    LLVM_READNONE unsigned getInputPortIndex(const unsigned kernel, StreamSetPort port) const;
-
-    LLVM_READNONE unsigned getOutputPortIndex(const unsigned kernel, StreamSetPort port) const;
 
 // cycle counter functions
 

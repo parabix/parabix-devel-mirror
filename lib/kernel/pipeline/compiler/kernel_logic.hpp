@@ -29,17 +29,17 @@ void PipelineCompiler::setActiveKernel(BuilderRef b, const unsigned index, const
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief computeFullyProcessedItemCounts
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {
-    const auto numOfInputs = numOfStreamInputs(mKernelId);
-    for (unsigned i = 0; i < numOfInputs; ++i) {
-        const StreamSetPort port{PortType::Input, i};
-        const Binding & input = getInputBinding(port);
+void PipelineCompiler::computeFullyProcessedItemCounts(BuilderRef b) {       
+    for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
+        const BufferPort & br = mBufferGraph[e];
+        const auto port = br.Port;
         Value * processed = nullptr;
         if (mUpdatedProcessedDeferredPhi[port]) {
             processed = mUpdatedProcessedDeferredPhi[port];
         } else {
             processed = mUpdatedProcessedPhi[port];
         }
+        const Binding & input = br.Binding;
         Value * const fullyProcessed = truncateBlockSize(b, input, processed, mKernelIsFinal);
         mFullyProcessedItemCount[port] = fullyProcessed;
     }
@@ -85,43 +85,32 @@ Value * PipelineCompiler::computeFullyProducedItemCount(BuilderRef b,
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) const {
-    Constant * const lookAhead = getLookahead(b, inputPort);
-    if (LLVM_LIKELY(lookAhead == nullptr)) {
+Value * PipelineCompiler::addLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount) const {
+    if (LLVM_LIKELY(inputPort.LookAhead == 0)) {
         return itemCount;
     }
+    Constant * const lookAhead = b->getSize(inputPort.LookAhead);
     return b->CreateAdd(itemCount, lookAhead);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief subtractLookahead
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::subtractLookahead(BuilderRef b, const StreamSetPort inputPort, Value * const itemCount) {
-    Constant * const lookAhead = getLookahead(b, inputPort);
-    if (LLVM_LIKELY(lookAhead == nullptr)) {
+Value * PipelineCompiler::subtractLookahead(BuilderRef b, const BufferPort & inputPort, Value * const itemCount) {
+    if (LLVM_LIKELY(inputPort.LookAhead == 0)) {
         return itemCount;
     }
-    Value * const closed = isClosed(b, inputPort);
+    Constant * const lookAhead = b->getSize(inputPort.LookAhead);
+    Value * const closed = isClosed(b, inputPort.Port);
     if (LLVM_UNLIKELY(CheckAssertions)) {
-        const Binding & binding = getInputBinding(inputPort);
+        const Binding & binding = inputPort.Binding;
         b->CreateAssert(b->CreateOr(b->CreateICmpUGE(itemCount, lookAhead), closed),
                         "%s.%s: look ahead exceeds item count",
                         mCurrentKernelName,
                         b->GetString(binding.getName()));
     }
     Value * const reducedItemCount = b->CreateSub(itemCount, lookAhead);
-    return b->CreateSelect(closed, itemCount, reducedItemCount, "subtractLookahead");
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief getLookahead
- ** ------------------------------------------------------------------------------------------------------------- */
-Constant * PipelineCompiler::getLookahead(BuilderRef b, const StreamSetPort inputPort) const {
-    const Binding & input = getInputBinding(inputPort);
-    if (LLVM_UNLIKELY(input.hasLookahead())) {
-        return b->getSize(input.getLookahead());
-    }
-    return nullptr;
+    return b->CreateSelect(closed, itemCount, reducedItemCount);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -261,7 +250,7 @@ bool PipelineCompiler::isBounded() const {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.NonLocal) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & binding = br.Binding;
             const ProcessingRate & rate = binding.getRate();
             switch (rate.getKind()) {
@@ -292,7 +281,7 @@ bool PipelineCompiler::requiresExplicitFinalStride() const {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.isOwned()) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & binding = br.Binding;
             const ProcessingRate & rate = binding.getRate();
             switch (rate.getKind()) {
@@ -307,7 +296,7 @@ bool PipelineCompiler::requiresExplicitFinalStride() const {
         const auto streamSet = target(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.isOwned()) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & binding = br.Binding;
             const ProcessingRate & rate = binding.getRate();
             switch (rate.getKind()) {
@@ -331,7 +320,7 @@ bool PipelineCompiler::mayLoopBackToEntry() const {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         if (bn.NonLinear) {
-            const BufferRateData & br = mBufferGraph[e];
+            const BufferPort & br = mBufferGraph[e];
             const Binding & binding = br.Binding;
             const ProcessingRate & rate = binding.getRate();
 
@@ -366,7 +355,7 @@ void PipelineCompiler::identifyPipelineInputs(const unsigned kernelId) {
             const auto streamSet = source(e, mBufferGraph);
             const auto producer = parent(streamSet, mBufferGraph);
             if (LLVM_UNLIKELY(producer == PipelineInput)) {
-                const BufferRateData & br = mBufferGraph[e];
+                const BufferPort & br = mBufferGraph[e];
                 mHasPipelineInput.set(br.Port.Number);
             }
         }
@@ -390,7 +379,7 @@ void PipelineCompiler::identifyLocalPortIds(const unsigned kernelId) {
     #endif
     mNumOfLocalInputPortIds = 0;
     for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto id = br.LocalPortId;
         #ifndef NDEBUG
         assert ("local port id exceeded num of input ports?" && (id < numOfInputs));
@@ -406,7 +395,7 @@ void PipelineCompiler::identifyLocalPortIds(const unsigned kernelId) {
     #endif
     mNumOfLocalOutputPortIds = 0;
     for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         const auto id = br.LocalPortId;
         #ifndef NDEBUG
         assert ("local port id exceeded num of output ports?" && (id < numOfOutputs));

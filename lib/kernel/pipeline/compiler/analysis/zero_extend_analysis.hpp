@@ -86,7 +86,7 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
         globalIds.clear();
         const auto partitionId = KernelPartitionId[kernel];
         for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-            BufferRateData & inputData = mBufferGraph[input];
+            BufferPort & inputData = mBufferGraph[input];
             const auto streamSet = source(input, mBufferGraph);
             const auto producer = parent(streamSet, mBufferGraph);
             const auto prodPartitionId = KernelPartitionId[producer];
@@ -99,7 +99,7 @@ void PipelineAnalysis::identifyZeroExtendedStreamSets() {
 
         if (necessary || globalIds.size() > 1) {
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
-                BufferRateData & inputData = mBufferGraph[input];
+                BufferPort & inputData = mBufferGraph[input];
                 const Binding & binding = inputData.Binding;
                 if (LLVM_UNLIKELY(binding.hasAttribute(AttrId::ZeroExtended))) {
                     inputData.IsZeroExtended = true;

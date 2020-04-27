@@ -21,7 +21,7 @@ Value * PipelineCompiler::allocateLocalZeroExtensionSpace(BuilderRef b, BasicBlo
 
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
 
-        const BufferRateData & br = mBufferGraph[e];
+        const BufferPort & br = mBufferGraph[e];
         if (br.IsZeroExtended) {
 
             assert (HasZeroExtendedStream);
@@ -97,7 +97,7 @@ void PipelineCompiler::getZeroExtendedInputVirtualBaseAddresses(BuilderRef b,
                                                                 Vec<Value *> & zeroExtendedVirtualBaseAddress) const {
     #ifndef DISABLE_ZERO_EXTEND
     for (const auto e : make_iterator_range(in_edges(mKernelId, mBufferGraph))) {
-        const BufferRateData & rt = mBufferGraph[e];
+        const BufferPort & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Input);
         Value * const zeroExtended = mIsInputZeroExtended[rt.Port];
         if (zeroExtended) {
@@ -148,10 +148,10 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
         const BufferNode & bn = mBufferGraph[streamSet];
         const StreamSetBuffer * const buffer = bn.Buffer;
-        const BufferRateData & rt = mBufferGraph[e];
-        assert (rt.Port.Type == PortType::Input);
-        const auto port = rt.Port;
-        const Binding & input = rt.Binding;
+        const BufferPort & port = mBufferGraph[e];
+        const auto inputPort = port.Port;
+        assert (inputPort.Type == PortType::Input);
+        const Binding & input = port.Binding;
         const ProcessingRate & rate = input.getRate();
 
         if (LLVM_LIKELY(rate.isFixed())) {
@@ -178,7 +178,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             }
             ++mNumOfTruncatedInputBuffers;
 
-            const auto prefix = makeBufferName(mKernelId, port);
+            const auto prefix = makeBufferName(mKernelId, inputPort);
             const auto itemWidth = getItemWidth(buffer->getBaseType());
             Constant * const ITEM_WIDTH = b->getSize(itemWidth);
 
@@ -191,12 +191,12 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             BasicBlock * const maskedInput = b->CreateBasicBlock(prefix + "_maskInput", mKernelCheckOutputSpace);
             BasicBlock * const selectedInput = b->CreateBasicBlock(prefix + "_selectInput", mKernelCheckOutputSpace);
 
-            Value * selected = accessibleItems[port.Number];
+            Value * selected = accessibleItems[inputPort.Number];
             Value * total = getAccessibleInputItems(b, port);
             Value * const tooMany = b->CreateICmpULT(selected, total);
             Value * computeMask = tooMany;
-            if (mIsInputZeroExtended[port]) {
-                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended[port]));
+            if (mIsInputZeroExtended[inputPort]) {
+                computeMask = b->CreateAnd(tooMany, b->CreateNot(mIsInputZeroExtended[inputPort]));
             }
 
             BasicBlock * const entryBlock = b->GetInsertBlock();
@@ -210,7 +210,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             #ifdef PRINT_DEBUG_MESSAGES
             debugPrint(b, prefix + " truncating item count from %" PRIu64 " to %" PRIu64,
-                      getAccessibleInputItems(b, port), accessibleItems[port.Number]);
+                      getAccessibleInputItems(b, port), accessibleItems[inputPort.Number]);
             #endif
 
             // Generate a name to describe this masking function.
@@ -369,15 +369,15 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             }
 
             FixedArray<Value *, 7> args;
-            args[0] = b->CreatePointerCast(inputBaseAddresses[port.Number], voidPtrTy);
+            args[0] = b->CreatePointerCast(inputBaseAddresses[inputPort.Number], voidPtrTy);
             args[1] = b->getSize(bytesPerSegment);
-            args[2] = mAlreadyProcessedPhi[port];
+            args[2] = mAlreadyProcessedPhi[inputPort];
             if (input.isDeferred()) {
-                args[3] = mAlreadyProcessedDeferredPhi[port];
+                args[3] = mAlreadyProcessedDeferredPhi[inputPort];
             } else {
-                args[3] = mAlreadyProcessedPhi[port];
+                args[3] = mAlreadyProcessedPhi[inputPort];
             }
-            args[4] = accessibleItems[port.Number];
+            args[4] = accessibleItems[inputPort.Number];
             args[5] = buffer->getStreamSetCount(b);
             args[6] = bufferStorage;
             Value * const maskedAddress = b->CreatePointerCast(b->CreateCall(maskInput, args), bufferType);
@@ -386,9 +386,9 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
 
             b->SetInsertPoint(selectedInput);
             PHINode * const phi = b->CreatePHI(bufferType, 2);
-            phi->addIncoming(inputBaseAddresses[port.Number], entryBlock);
+            phi->addIncoming(inputBaseAddresses[inputPort.Number], entryBlock);
             phi->addIncoming(maskedAddress, maskedInputLoopExit);
-            inputBaseAddresses[port.Number] = phi;
+            inputBaseAddresses[inputPort.Number] = phi;
 
         }
     }
@@ -615,7 +615,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         }
 
         const StreamSetBuffer * const buffer = bn.Buffer;
-        const BufferRateData & rt = mBufferGraph[e];
+        const BufferPort & rt = mBufferGraph[e];
         assert (rt.Port.Type == PortType::Output);
         const auto port = rt.Port;
 
@@ -693,7 +693,7 @@ void PipelineCompiler::clearUnwrittenOutputData(BuilderRef b) {
         Rational strideLength{0};
         const auto bufferVertex = getOutputBufferVertex(port);
         for (const auto e : make_iterator_range(out_edges(bufferVertex, mBufferGraph))) {
-            const BufferRateData & rd = mBufferGraph[e];
+            const BufferPort & rd = mBufferGraph[e];
             const Binding & input = rd.Binding;
 
             Rational R{rd.Maximum};

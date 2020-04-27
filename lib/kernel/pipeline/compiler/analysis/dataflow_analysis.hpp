@@ -26,7 +26,7 @@ PartitionConstraintGraph PipelineAnalysis::identifyHardPartitionConstraints(Buff
             const auto producerPartitionId = KernelPartitionId[producer];
             assert (producerPartitionId <= partitionId);
             if (producerPartitionId != partitionId) {
-                const BufferRateData & inputRate = G[input];
+                const BufferPort & inputRate = G[input];
                 const Binding & binding = inputRate.Binding;
                 const ProcessingRate & rate = binding.getRate();
                 if (LLVM_UNLIKELY(!rate.isFixed())) {
@@ -43,7 +43,7 @@ PartitionConstraintGraph PipelineAnalysis::identifyHardPartitionConstraints(Buff
                 assert (consumerPartitionId >= partitionId);
                 assert (consumerPartitionId < PartitionCount);
                 if (consumerPartitionId != partitionId) {
-                    const BufferRateData & outputRate = G[output];
+                    const BufferPort & outputRate = G[output];
                     const Binding & binding = outputRate.Binding;
                     const ProcessingRate & rate = binding.getRate();
                     if (LLVM_UNLIKELY(!rate.isFixed())) {
@@ -72,7 +72,7 @@ LengthConstraintGraph PipelineAnalysis::identifyLengthEqualityAssertions(BufferG
 
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
         const auto output = in_edge(streamSet, G);
-        const BufferRateData & br = G[output];
+        const BufferPort & br = G[output];
         const Binding & binding = br.Binding;
         M.emplace(cast<StreamSet>(binding.getRelationship()), streamSet);
     }
@@ -571,15 +571,15 @@ void PipelineAnalysis::computeDataFlowRates() {
 
     const auto ONE = constant(1);
 
-    auto average = [&](const BufferRateData & rate) {
+    auto average = [&](const BufferPort & rate) {
         return constant((rate.Minimum + rate.Maximum) * Rational{1, 2});
     };
 
-    auto maximum = [&](const BufferRateData & rate) {
+    auto maximum = [&](const BufferPort & rate) {
         return constant(rate.Maximum);
     };
 
-    auto minimum = [&](const BufferRateData & rate) {
+    auto minimum = [&](const BufferPort & rate) {
         return constant(rate.Minimum);
     };
 
@@ -590,14 +590,14 @@ void PipelineAnalysis::computeDataFlowRates() {
         return v;
     };
 
-    auto lower_bounded_variable = [&](const BufferRateData & rate) {
+    auto lower_bounded_variable = [&](const BufferPort & rate) {
         auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
         auto c1 = Z3_mk_ge(ctx, v, minimum(rate));
         Z3_solver_assert(ctx, solver, c1);
         return v;
     };
 
-    auto bounded_variable = [&](const BufferRateData & rate) {
+    auto bounded_variable = [&](const BufferPort & rate) {
         assert (rate.Minimum < rate.Maximum);
         auto v = Z3_mk_fresh_const(ctx, nullptr, varType);
         auto c1 = Z3_mk_ge(ctx, v, minimum(rate));
@@ -655,7 +655,7 @@ void PipelineAnalysis::computeDataFlowRates() {
         for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
             const auto buffer = source(input, mBufferGraph);
 
-            const BufferRateData & inputRate = mBufferGraph[input];
+            const BufferPort & inputRate = mBufferGraph[input];
             const Binding & binding = inputRate.Binding;
             const ProcessingRate & rate = binding.getRate();
 
@@ -723,7 +723,7 @@ void PipelineAnalysis::computeDataFlowRates() {
         }
 
         for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
-            const BufferRateData & outputRate = mBufferGraph[output];
+            const BufferPort & outputRate = mBufferGraph[output];
             const Binding & binding = outputRate.Binding;
             const ProcessingRate & rate = binding.getRate();
             const auto buffer = target(output, mBufferGraph);
@@ -927,40 +927,6 @@ void PipelineAnalysis::computeDataFlowRates() {
     #endif
 
 }
-
-///** ------------------------------------------------------------------------------------------------------------- *
-// * @brief computeBufferSizes
-// ** ------------------------------------------------------------------------------------------------------------- */
-//void PipelineAnalysis::computeBufferSizes() {
-
-//    const auto cfg = Z3_mk_config();
-//    Z3_set_param_value(cfg, "model", "true");
-//    Z3_set_param_value(cfg, "proof", "false");
-//    const auto ctx = Z3_mk_context(cfg);
-//    Z3_del_config(cfg);
-//    const auto solver = Z3_mk_solver(ctx);
-//    Z3_solver_inc_ref(ctx, solver);
-
-//    Z3_mk_int_sort(ctx);
-
-//    const auto varType = Z3_mk_real_sort(ctx);
-
-//    auto constant = [&](const Rational value) {
-//        return Z3_mk_real(ctx, value.numerator(), value.denominator());
-//    };
-
-//    const auto ONE = constant(1);
-
-//    auto multiply =[&](Z3_ast X, Z3_ast Y) {
-//        Z3_ast args[2] = { X, Y };
-//        return Z3_mk_mul(ctx, 2, args);
-//    };
-
-
-
-
-//}
-
 #endif
 
 
@@ -975,13 +941,12 @@ void PipelineAnalysis::computeDataFlowRates() {
 void PipelineAnalysis::identifyLocalPortIds() {
 
     using BitSet = dynamic_bitset<>;
-    using Vertex = BufferGraph::vertex_descriptor;
 
     struct Edge {
-        RefWrapper<BufferRateData> Port;
+        RefWrapper<BufferPort> Port;
         BitSet RateSet;
         Edge() = default;
-        Edge(BufferRateData & br)
+        Edge(BufferPort & br)
         : Port(br) { }
     };
 
@@ -1033,7 +998,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
         for (auto kernel = start; kernel < end; ++kernel) {
 
-            auto updateBitSet = [&](const BufferRateData & data, BitSet & S) {
+            auto updateBitSet = [&](const BufferPort & data, BitSet & S) {
                 addRateId(S, partRateId);
                 const auto anyFlags =
                     data.IsZeroExtended || data.IsDeferred ||
@@ -1050,7 +1015,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
             for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
                 const auto streamSet = source(input, mBufferGraph);
-                BufferRateData & data = mBufferGraph[input];
+                BufferPort & data = mBufferGraph[input];
                 const auto e = add_edge(streamSet, kernel, data, H).first;
                 BitSet & S = H[e].RateSet;
                 updateBitSet(data, S);
@@ -1058,7 +1023,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
             for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
                 const auto streamSet = target(output, mBufferGraph);
-                BufferRateData & data = mBufferGraph[output];
+                BufferPort & data = mBufferGraph[output];
                 const auto e = add_edge(kernel, streamSet, data, H).first;
                 BitSet & S = H[e].RateSet;
                 updateBitSet(data, S);
@@ -1110,13 +1075,13 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
         for (const auto input : make_iterator_range(in_edges(kernel, H))) {
             auto & data = H[input];
-            BufferRateData & port = data.Port;
+            BufferPort & port = data.Port;
             port.GlobalPortId = getGlobalPortId(data.RateSet);
         }
 
         for (const auto output : make_iterator_range(out_edges(kernel, H))) {
             auto & data = H[output];
-            BufferRateData & port = data.Port.get();
+            BufferPort & port = data.Port.get();
             port.GlobalPortId = getGlobalPortId(data.RateSet);
         }
 
@@ -1130,7 +1095,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
     LocalPortIdSet ids;
     unsigned nextLocalPortId = 0;
 
-    auto getLocalPortId = [&](const BufferNode & node, const BufferRateData & rateData) {
+    auto getLocalPortId = [&](const BufferNode & node, const BufferPort & rateData) {
 
 //        Rational fillRate{};
 //        if (node.NonLinear) {
@@ -1196,12 +1161,12 @@ void PipelineAnalysis::identifyLocalPortIds() {
 
             const BufferNode & node = mBufferGraph[streamSet];
 
-            BufferRateData & I = mBufferGraph[input];
+            BufferPort & I = mBufferGraph[input];
             if (node.NonLocal) {
                 I.LocalPortId = nextLocalPortId++;
             } else {
                 ids.insert(I.GlobalPortId);
-                const BufferRateData & O = mBufferGraph[output];
+                const BufferPort & O = mBufferGraph[output];
                 ids.insert(O.GlobalPortId);
                 I.LocalPortId = getLocalPortId(node, I);
                 ids.clear();
@@ -1218,7 +1183,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
         for (const auto output : make_iterator_range(out_edges(kernel, mBufferGraph))) {
             assert (ids.empty());
 
-            BufferRateData & O = mBufferGraph[output];
+            BufferPort & O = mBufferGraph[output];
             ids.insert(O.GlobalPortId);
 
             const auto streamSet = target(output, mBufferGraph);
@@ -1226,7 +1191,7 @@ void PipelineAnalysis::identifyLocalPortIds() {
             assert (streamSet >= FirstStreamSet && streamSet <= LastStreamSet);
 
             for (const auto input : make_iterator_range(out_edges(streamSet, mBufferGraph))) {
-                BufferRateData & I = mBufferGraph[input];
+                BufferPort & I = mBufferGraph[input];
                 ids.insert(I.GlobalPortId);
             }
 

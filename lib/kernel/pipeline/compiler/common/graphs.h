@@ -261,7 +261,7 @@ struct BufferNode {
 
 };
 
-struct BufferRateData {
+struct BufferPort {
 
     RelationshipType Port;
     BindingRef Binding;
@@ -283,34 +283,25 @@ struct BufferRateData {
 
     int TransitiveAdd = 0;
 
-    bool operator < (const BufferRateData & rn) const {
+    bool operator < (const BufferPort & rn) const {
         if (LLVM_LIKELY(Port.Type == rn.Port.Type)) {
             return Port.Number < rn.Port.Number;
         }
         return static_cast<unsigned>(Port.Type) < static_cast<unsigned>(rn.Port.Type);
     }
 
-    BufferRateData() = default;
+    BufferPort() = default;
 
-    BufferRateData(RelationshipType port, BindingRef binding,
-                   Rational minRate, Rational maxRate,
-                   unsigned add, unsigned truncate,
-                   unsigned delay,
-                   unsigned lookAhead, unsigned lookBehind,
-                   bool isPrincipal, bool isDeferred)
+    BufferPort(RelationshipType port, const struct Binding & binding,
+               Rational minRate, Rational maxRate)
     : Port(port), Binding(binding)
-    , Minimum(minRate), Maximum(maxRate)
-    , Add(add), Truncate(truncate)
-    , Delay(delay)
-    , LookAhead(lookAhead), LookBehind(lookBehind)
-    , IsPrincipal(isPrincipal)
-    , IsDeferred(isDeferred) {
+    , Minimum(minRate), Maximum(maxRate) {
 
     }
 
 };
 
-using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferRateData>;
+using BufferGraph = adjacency_list<vecS, vecS, bidirectionalS, BufferNode, BufferPort>;
 
 using BufferVertexSet = SmallFlatSet<BufferGraph::vertex_descriptor, 32>;
 
