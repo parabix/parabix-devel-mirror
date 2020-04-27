@@ -167,9 +167,9 @@ int main(int argc, char *argv[]) {
         ((argv::ColorFlag == argv::autoColor) && isatty(STDOUT_FILENO))) {
         grep->setColoring();
     }
+    grep->initFileResult(allFiles); // unnecessary copy!
     grep->initREs(REs);
     grep->grepCodeGen();
-    grep->initFileResult(allFiles); // unnecessary copy!
     const bool matchFound = grep->searchAllFiles();
 
     return matchFound ? argv::MatchFoundExitCode : argv::MatchNotFoundExitCode;
