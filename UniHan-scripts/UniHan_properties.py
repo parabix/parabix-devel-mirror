@@ -107,7 +107,7 @@ class UniHan_generator():
         prop_values, independent_prop_values, value_map = parse_property_file(filename_root, property_code)
         property_name = get_property_full_name(property_code)
         f = cformat.open_header_file_for_write(property_name)
-        cformat.write_imports(f, ['<array>','<unicode/data/PropertyAliases.h>', '<unicode/data/PropertyObjects.h>', '<unicode/data/PropertyValueAliases.h>', '<unicode/core/unicode_set.h>'])
+        cformat.write_imports(f, ['<array>','"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code, prop_values, independent_prop_values, value_map)
         f.write("}\n")
