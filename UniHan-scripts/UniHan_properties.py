@@ -3,7 +3,7 @@ import string, os.path
 from UniHan_parser import *
 
 # configuration for whether using array_format in the .h header file
-from UniHan_config import array_format
+from UniHan_config import array_format, independent_header
 
 def is_property_array(property_code):
     is_property_array_map = {
@@ -73,17 +73,18 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
                 f.write(write_array_format(v.lower(), value_map[v], 4))
         else:
             raise ValueError("Invalide Property Type " + property_type)
+    if(not independent_header):
+        set_list = ['&%s_Set[%d]' % (v.lower(), i) for v in prop_values for i in range(5)]
+        f.write("    static EnumeratedPropertyObject property_object\n")
+        f.write("        {%s,\n" % property_code)
+        f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
+        f.write("        std::move(%s_ns::enum_names),\n" % property_code.upper())
+        f.write("        std::move(%s_ns::value_names),\n" % property_code.upper())
+        f.write("        std::move(%s_ns::aliases_only_map),{\n" % property_code.upper())
+        f.write("        " + cformat.multiline_fill(set_list, ',', 8))
+        f.write("\n        }};")
 
-    set_list = ['&%s_Set[%d]' % (v.lower(), i) for v in prop_values for i in range(5)]
-    f.write("    static EnumeratedPropertyObject property_object\n")
-    f.write("        {%s,\n" % property_code)
-    f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
-    f.write("        std::move(%s_ns::enum_names),\n" % property_code.upper())
-    f.write("        std::move(%s_ns::value_names),\n" % property_code.upper())
-    f.write("        std::move(%s_ns::aliases_only_map),{\n" % property_code.upper())
-    f.write("        " + cformat.multiline_fill(set_list, ',', 8))
-    f.write("\n        }};"
-            "\n    }\n") # end } for namespace _ns
+    f.write("\n    }\n") # end } for namespace _ns
 
 class UniHan_generator():
     def __init__(self):

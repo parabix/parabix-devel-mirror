@@ -7,3 +7,5 @@ version = "Unknown"
 UCD_max_code_point = "0x10FFFF"
 
 array_format = True
+
+independent_header = True
