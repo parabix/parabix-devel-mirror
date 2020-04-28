@@ -91,6 +91,8 @@ class UCset:
                 "const static UnicodeSet %s{const_cast<UnicodeSet::run_t *>(__%s_runs), %i, 0, " \
                 "const_cast<UnicodeSet::bitquad_t *>(__%s_quads), %i, 0};\n\n" \
                 % (propertyName, propertyName, len(self.runs), propertyName, len(self.quads))
+        else:
+            str += " " * indent + "}\n\n"
 
         return str
 

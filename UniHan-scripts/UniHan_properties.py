@@ -35,7 +35,7 @@ def get_property_full_name(property_code):
 
 def write_array_format(propertyValue, uset_array, indent = 4 ):
     # propertyValue is without "_Set" postfix
-    str = (" " * indent) + "}\n\n" + \
+    str = (" " * indent) + "\n\n" + \
                 (" " * indent) + \
                 "const static std::array<UnicodeSet, 5> %s_Set = {\n" % propertyValue
     for index, uset in enumerate(uset_array):
@@ -83,7 +83,7 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
     f.write("        std::move(%s_ns::aliases_only_map),{\n" % property_code.upper())
     f.write("        " + cformat.multiline_fill(set_list, ',', 8))
     f.write("\n        }};"
-            "\n    }\n")
+            "\n    }\n") # end } for namespace _ns
 
 class UniHan_generator():
     def __init__(self):
