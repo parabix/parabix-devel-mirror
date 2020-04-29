@@ -100,9 +100,10 @@ void PipelineKernel::linkExternalMethods(BuilderRef b) {
  * @brief addAdditionalFunctions
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineKernel::addAdditionalFunctions(BuilderRef b) {
-    if (!externallyInitialized()) {
-        addOrDeclareMainFunction(b, Kernel::AddExternal);
+    if (hasAttribute(AttrId::InternallySynchronized) || externallyInitialized()) {
+        return;
     }
+    addOrDeclareMainFunction(b, Kernel::AddExternal);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *

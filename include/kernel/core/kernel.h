@@ -360,7 +360,7 @@ public:
     template <typename ExternalFunctionType>
     void link(llvm::StringRef name, ExternalFunctionType & functionPtr);
 
-    static bool isLocalBuffer(const Binding & output);
+    static bool isLocalBuffer(const Binding & output, const bool includeShared = true);
 
     LLVM_READNONE bool canSetTerminateSignal() const;
 

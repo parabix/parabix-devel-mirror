@@ -131,6 +131,16 @@ struct Attribute {
         // that a particular output stream needs both the consumed item count and a pointer
         // to each of its consumers logical segment number for its internal logic.
 
+        SharedManagedBuffer,
+
+        // A shared buffer is a managed buffer that is not owned strictly by one kernel.
+        // For example, an output of an OptimizationBranch kernel may be owned by the
+        // OptimizationBranch; however, each branch contains some kernel that may write
+        // to the output and could have to expand it to fit the produced data. While the
+        // synchronization will prevent two kernels from simultaneously writing/expanding
+        // the buffers, both must be coordinated to ensure that every possible writer
+        // sees the same view.
+
         Delayed,
 
         // Similar to Deferred, a consumer of a stream of N items with a Delayed attribute
@@ -373,6 +383,10 @@ inline Attribute RoundUpTo(const unsigned k) {
 
 inline Attribute ManagedBuffer() {
     return Attribute(Attribute::KindId::ManagedBuffer, 0);
+}
+
+inline Attribute SharedManagedBuffer() {
+    return Attribute(Attribute::KindId::SharedManagedBuffer, 0);
 }
 
 inline Attribute Principal() {

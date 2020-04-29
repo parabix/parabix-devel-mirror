@@ -112,9 +112,9 @@ protected:
 
     LLVM_READNONE bool allocatesInternalStreamSets() const final;
 
-    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) final;
 
-    void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides);
+    void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) final;
 
     void addAdditionalFunctions(BuilderRef b) final;
 

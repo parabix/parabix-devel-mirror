@@ -118,24 +118,28 @@ void KernelCompiler::addBaseInternalProperties(BuilderRef b) {
     const auto n = mOutputStreamSets.size();
     for (unsigned i = 0; i < n; ++i) {
         const Binding & output = mOutputStreamSets[i];
-        if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
-            Type * const handleTy = mStreamSetOutputBuffers[i]->getHandleType(b);
+        Type * const handleTy = mStreamSetOutputBuffers[i]->getHandleType(b);
+        if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output, false))) {
             mTarget->addInternalScalar(handleTy, output.getName() + BUFFER_HANDLE_SUFFIX);
+        } else {
+            mTarget->addNonPersistentScalar(handleTy, output.getName() + BUFFER_HANDLE_SUFFIX);
         }
     }
+    IntegerType * const sizeTy = b->getSizeTy();
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableAsserts))) {
 
-        // In multi-threaded mode, given a small file, the outer most pipeline kernel could be called
-        // after an earlier thread marked this pipeline as terminated. Since we cannot reliably detect
-        // and the behaviour is expected, ignore the pipeline.
+        // In multi-threaded mode, given a small file, the pipeline could finish before all of the
+        // threads are constructed. Since we cannot detect when this occurs without additional
+        // book keeping and the behaviour is safe, we do not guard against double termination.
+        // All other kernels are checked to ensure that there are no pipeline errors.
 
         if (mTarget->getTypeId() != Kernel::TypeId::Pipeline || mTarget->hasAttribute(AttrId::InternallySynchronized)) {
-            mTarget->addInternalScalar(b->getSizeTy(), TERMINATION_SIGNAL);
+            mTarget->addInternalScalar(sizeTy, TERMINATION_SIGNAL);
         } else {
-            mTarget->addNonPersistentScalar(b->getSizeTy(), TERMINATION_SIGNAL);
+            mTarget->addNonPersistentScalar(sizeTy, TERMINATION_SIGNAL);
         }
     } else {
-        mTarget->addNonPersistentScalar(b->getSizeTy(), TERMINATION_SIGNAL);
+        mTarget->addNonPersistentScalar(sizeTy, TERMINATION_SIGNAL);
     }
 }
 
@@ -177,8 +181,11 @@ inline void KernelCompiler::callGenerateInitializeMethod(BuilderRef b) {
         b->setScalarField(binding.getName(), nextArg());
     }
     bindFamilyInitializationArguments(b, arg, arg_end);
-    assert (arg == arg_end);
-    loadHandlesOfLocalOutputStreamSets(b);
+    assert (arg == arg_end);    
+    // TODO: we could permit shared managed buffers here if we passed in the buffer
+    // into the init method. However, since there are no uses of this in any written
+    // program, we currently prohibit it.
+    initializeOwnedBufferHandles(b, InitializeOptions::SkipThreadLocal);
     // any kernel can set termination on initialization
     mTerminationSignalPtr = b->getScalarFieldPtr(TERMINATION_SIGNAL);
     b->CreateStore(b->getSize(KernelBuilder::TerminationCode::None), mTerminationSignalPtr);
@@ -491,7 +498,8 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     // set all of the output buffers
     const auto numOfOutputs = getNumOfStreamOutputs();
     reset(mProducedOutputItemPtr, numOfOutputs);
-    reset(mInitiallyProducedOutputItems, numOfOutputs);
+    reset(mInitiallyProducedOutputItems, numOfOutputs);    
+    reset(mUpdatableWritableOutputItemPtr, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
     reset(mConsumedOutputItems, numOfOutputs);
     reset(mUpdatableProducedOutputItemPtr, numOfOutputs);
@@ -503,9 +511,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
         /// ----------------------------------------------------
         /// logical buffer base address
         /// ----------------------------------------------------
-
-
-
         const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
         const Binding & output = mOutputStreamSets[i];
         const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output);
@@ -514,7 +519,12 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             // If an output is a managed buffer, the address is stored within the state instead
             // of being passed in through the function call.
             mUpdatableOutputBaseVirtualAddressPtr[i] = nextArg();
-            Value * const handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
+            Value * handle = nullptr;
+            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
+                handle = b->CreateLoad(mUpdatableOutputBaseVirtualAddressPtr[i]);
+            } else {
+                handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
+            }
             buffer->setHandle(handle);
         } else {
             Value * const virtualBaseAddress = nextArg();
@@ -523,6 +533,8 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             buffer->setHandle(localHandle);
             buffer->setBaseAddress(b, virtualBaseAddress);
         }
+
+        assert (buffer->getHandle());
 
         /// ----------------------------------------------------
         /// produced item count
@@ -558,6 +570,12 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             Value * const consumed = nextArg();
             assert (consumed->getType() == sizeTy);
             mConsumedOutputItems[i] = consumed;
+            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
+                mUpdatableWritableOutputItemPtr[i] = nextArg();
+                writable = b->CreateLoad(mUpdatableWritableOutputItemPtr[i]);
+            } else {
+                writable = buffer->getLinearlyWritableItems(b, produced, consumed);
+            }
         } else {
             if (requiresItemCount(output)) {
                 writable = nextArg();
@@ -578,6 +596,7 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             }
             #endif
         }
+        assert (writable);
         mWritableOutputItems[i] = writable;
     }
     assert (arg == args.end());
@@ -682,6 +701,9 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         if (LLVM_UNLIKELY(isLocal)) {
             props.push_back(mConsumedOutputItems[i]);
+            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
+                props.push_back(mUpdatableWritableOutputItemPtr[i]);
+            }
         } else if (requiresItemCount(output)) {
             props.push_back(mWritableOutputItems[i]);
         }
@@ -915,7 +937,7 @@ inline void KernelCompiler::callGenerateFinalizeMethod(BuilderRef b) {
     if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::EnableMProtect))) {
         b->CreateMProtect(mSharedHandle,CBuilder::Protect::WRITE);
     }
-    loadHandlesOfLocalOutputStreamSets(b);
+    initializeOwnedBufferHandles(b, InitializeOptions::SkipThreadLocal);
     mTarget->generateFinalizeMethod(b); // may be overridden by the Kernel subtype
     const auto outputs = getFinalOutputScalars(b);
     if (LLVM_LIKELY(mTarget->isStateful())) {
@@ -1119,10 +1141,10 @@ void KernelCompiler::initializeIOBindingMap() {
 void KernelCompiler::initializeOwnedBufferHandles(BuilderRef b, const InitializeOptions /* options */) {
     const auto numOfOutputs = getNumOfStreamOutputs();
     for (unsigned i = 0; i < numOfOutputs; i++) {
-        const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
         const Binding & output = mOutputStreamSets[i];
-        if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
+        if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output, false))) {
             Value * const handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
+            const auto & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
             buffer->setHandle(handle);
         }
     }
@@ -1145,13 +1167,20 @@ const BindingMapEntry & KernelCompiler::getBinding(const BindingType type, const
     out << "Kernel " << getName() << " does not contain an ";
     switch (type) {
         case BindingType::ScalarInput:
-            out << "input scalar"; break;
-        case BindingType::ScalarOutput:
-            out << "output scalar"; break;
         case BindingType::StreamInput:
-            out << "input streamset"; break;
+            out << "input"; break;
+        case BindingType::ScalarOutput:
         case BindingType::StreamOutput:
-            out << "output streamset"; break;
+            out << "output"; break;
+    }
+    out << ' ';
+    switch (type) {
+        case BindingType::ScalarInput:
+        case BindingType::ScalarOutput:
+            out << "scalar"; break;
+        case BindingType::StreamInput:
+        case BindingType::StreamOutput:
+            out << "streamset"; break;
     }
     out << " named " << name;
     report_fatal_error(out.str());
@@ -1265,20 +1294,6 @@ bool KernelCompiler::requiresOverflow(const Binding & binding) const {
         return requiresOverflow(getStreamBinding(rate.getReference()));
     } else {
         return true;
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief loadHandlesOfLocalOutputStreamSets
- ** ------------------------------------------------------------------------------------------------------------- */
-void KernelCompiler::loadHandlesOfLocalOutputStreamSets(BuilderRef b) const {
-    const auto numOfOutputs = mOutputStreamSets.size();
-    for (unsigned i = 0; i < numOfOutputs; i++) {
-        const Binding & output = mOutputStreamSets[i];
-        if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
-            Value * const handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
-            mStreamSetOutputBuffers[i]->setHandle(handle);
-        }
     }
 }
 

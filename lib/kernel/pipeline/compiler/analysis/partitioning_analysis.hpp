@@ -354,6 +354,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         }
     }
 
+    #if 0
 
     auto printGraph =[&](const Graph & G, raw_ostream & out, const StringRef name = "G") {
 
@@ -382,6 +383,8 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
         out << "}\n\n";
         out.flush();
     };
+
+    #endif
 
     // Note: it's possible some stream sets are produced but never consumed
     assert (nextStreamSet <= (streamSets + kernels));
@@ -505,12 +508,12 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                 for (auto i = begin; i != entry; ++i) {
                     assert (*i < fixedRate);
                     if ((fixedRate % *i) == 0) {
-                        const auto k = maxPartitionId + std::distance(begin, i);
+                        const unsigned k = maxPartitionId + std::distance(begin, i);
                         assert (k < patitionIdSize);
                         nodeRateSet.set(k);
                     }
                 }
-                const auto k = maxPartitionId + std::distance(begin, entry);
+                const unsigned k = maxPartitionId + std::distance(begin, entry);
                 assert (k < patitionIdSize);
                 nodeRateSet.set(k);
             }
@@ -616,7 +619,7 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
     const auto ctx = Z3_mk_context(cfg);
     Z3_del_config(cfg);
 
-    bool canRemake = true;
+    #if 0
 
     auto print_constraint_graph = [&](ConstraintGraph & G, raw_ostream & out, const StringRef name = "G") {
 
@@ -642,6 +645,8 @@ void PipelineAnalysis::addOrderingConstraintsToPartitionSubgraphs(const std::vec
         out.flush();
 
     };
+
+    #endif
 
 remake_constraint_graphs:
 
@@ -933,7 +938,6 @@ found:  ++i;
 
     std::fill(mappedPartitionId.begin(), mappedPartitionId.end(), -1U);
 
-    bool restart = false;
     for (const auto p : partition_order) {
         const BitSet & K = P[p];
         assert (K.any());
@@ -1268,7 +1272,6 @@ void PipelineAnalysis::determinePartitionJumpIndices() {
 
     using BV = dynamic_bitset<>;
     using Graph = adjacency_list<hash_setS, vecS, bidirectionalS>;
-    using Vertex = Graph::vertex_descriptor;
 
     // Summarize the partitioning graph to only represent the existance of a dataflow relationship
     // between the partitions.

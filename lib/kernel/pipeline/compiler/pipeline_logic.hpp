@@ -716,11 +716,39 @@ void PipelineCompiler::verifyBufferRelationships() const {
         for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
             const auto streamSet = source(e, mBufferGraph);
             const auto producer = parent(streamSet, mBufferGraph);
-            const Kernel * const kernelObj = getKernel(producer); assert (kernelObj);
+            const Kernel * const kernelObj = getKernel(producer);
+            assert (kernelObj);
             const auto synchronized = kernelObj->hasAttribute(AttrId::InternallySynchronized);
             const BufferPort & br = mBufferGraph[e];
             const Binding & output = br.Binding;
-            const auto unmanaged = !output.hasAttribute(AttrId::ManagedBuffer);
+
+            bool managed = false;
+            bool sharedManaged = false;
+
+            for (const Attribute & attr : output.getAttributes()) {
+                switch (attr.getKind()) {
+                    case AttrId::ManagedBuffer:
+                        managed = true;
+                        break;
+                    case AttrId::SharedManagedBuffer:
+                        sharedManaged = true;
+
+                        errs() << "SharedManagedBufferX: " << streamSet << "\n";
+
+                        break;
+                    default: break;
+                }
+            }
+
+            if (LLVM_UNLIKELY(managed && sharedManaged)) {
+                SmallVector<char, 256> tmp;
+                raw_svector_ostream out(tmp);
+                out << mTarget->getName() << "." << output.getName();
+                out << " cannot be both a Managed and SharedManaged buffer.";
+                report_fatal_error(out.str());
+            }
+
+            const auto unmanaged = !(managed | sharedManaged);
 
             if (LLVM_UNLIKELY(synchronized ^ unmanaged)) {
                 SmallVector<char, 256> tmp;

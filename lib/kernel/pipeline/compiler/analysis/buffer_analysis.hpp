@@ -76,9 +76,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
-        const BufferPort & rate = mBufferGraph[e];
-        const Binding & input = rate.Binding;
-
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & input = rate.Binding;
@@ -91,16 +88,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
-
-        const BufferPort & rate = mBufferGraph[e];
-        errs() << " $< " << streamSet << "  " << rate.Add << "\n";
-
-
-
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
+                if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
+                    bn.Type = BufferType::Shared;
+                }
                 continue;
             }
             bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
@@ -137,16 +131,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     minFactor[PipelineOutput] = 1;
     maxFactor[PipelineOutput] = 1;
 
+//    #error test all attributes for managed / shared managed
 
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
         BufferNode & bn = mBufferGraph[streamSet];
         const auto producerOutput = in_edge(streamSet, mBufferGraph);
-        const BufferPort & producerRate = mBufferGraph[producerOutput];
-        const Binding & output = producerRate.Binding;
-
-        const BufferPort & rate = mBufferGraph[producerOutput];
 
         bool nonLocal = false;
 
@@ -171,9 +162,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // be bounded a priori. During initialization, we could pass a "suggestion"
             // argument to indicate what the outer pipeline believes its I/O rates will be.
 
-            const auto bufferType = internalOrExternal(streamSet);
+            const BufferPort & producerRate = mBufferGraph[producerOutput];
 
-            bn.Type = bufferType;
+            bn.Type |= internalOrExternal(streamSet);
 
             // If this buffer is externally used, we cannot analyze the dataflow rate of
             // external consumers. Default to dynamic for such buffers.
@@ -181,7 +172,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // Similarly if any internal consumer has a deferred rate, we cannot analyze
             // any consumption rates.
 
-            bool dynamic = nonLocal || (bufferType == BufferType::External) || producerRate.IsDeferred;
+            bool dynamic = nonLocal || bn.isExternal() || bn.isShared() || producerRate.IsDeferred;
+
+            const Binding & output = producerRate.Binding;
 
             auto maxDelay = producerRate.Delay;
             auto maxLookAhead = producerRate.LookAhead;
@@ -214,6 +207,9 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 } else if (LLVM_UNLIKELY(consumerRate.IsDeferred)) {
                     dynamic = true;
                 }
+
+
+
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
 
                 bMin = std::min(bMin, cMin);
@@ -228,7 +224,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
                 maxDelay = std::max(maxDelay, consumerRate.Delay);
                 maxLookAhead = std::max(maxLookAhead, lookAhead);
                 maxLookBehind = std::max(maxLookBehind, consumerRate.LookBehind);
-
             }
 
             // calculate overflow (copyback) and fascimile (copyforward) space

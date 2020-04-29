@@ -215,7 +215,10 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             out << '?';
         } else {
             char bufferType = '?';
-            switch (bn.Type) {
+            if (bn.isShared()) {
+                out << 'S';
+            }
+            switch (bn.Type & (BufferType::Internal | BufferType::External | BufferType::Unowned)) {
                 case BufferType::Internal:
                     switch (buffer->getBufferKind()) {
                         case BufferId::StaticBuffer:

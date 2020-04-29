@@ -30,6 +30,27 @@ void OptimizationBranch::addInternalProperties(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasInternalStreamSets
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool OptimizationBranch::allocatesInternalStreamSets() const {
+    return true;
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateSharedInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    COMPILER->generateAllocateSharedInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief generateAllocateThreadLocalInternalStreamSetsMethod
+ ** ------------------------------------------------------------------------------------------------------------- */
+void OptimizationBranch::generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, Value * const expectedNumOfStrides) {
+    COMPILER->generateAllocateThreadLocalInternalStreamSetsMethod(b, expectedNumOfStrides);
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief generateInitializeMethod
  ** ------------------------------------------------------------------------------------------------------------- */
 void OptimizationBranch::generateInitializeMethod(BuilderRef b) {
@@ -76,17 +97,16 @@ OptimizationBranch::OptimizationBranch(BuilderRef b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-{InternalScalar{b->getSizeTy(), LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), ALL_ZERO_LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), ALL_ZERO_ACTIVE_THREADS},
+{InternalScalar{b->getSizeTy(), ALL_ZERO_LOGICAL_SEGMENT_NUMBER},
  InternalScalar{b->getSizeTy(), NON_ZERO_LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), NON_ZERO_ACTIVE_THREADS},
  InternalScalar{ScalarType::ThreadLocal, b->getSizeTy()->getPointerTo(), SPAN_BUFFER},
  InternalScalar{ScalarType::ThreadLocal, b->getSizeTy(), SPAN_CAPACITY}})
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {
-    addAttribute(InternallySynchronized());
+    errs() << "OptimizationBranch\n";
+    assert (mNonZeroKernel->getOutputStreamSetBinding(0).hasAttribute(Attribute::KindId::SharedManagedBuffer));
+    assert (mAllZeroKernel->getOutputStreamSetBinding(0).hasAttribute(Attribute::KindId::SharedManagedBuffer));
 }
 
 }

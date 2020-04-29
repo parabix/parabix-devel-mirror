@@ -53,6 +53,12 @@ protected:
 
     void addInternalProperties(BuilderRef b) override;
 
+    LLVM_READNONE bool allocatesInternalStreamSets() const final;
+
+    void generateAllocateSharedInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) override;
+
+    void generateAllocateThreadLocalInternalStreamSetsMethod(BuilderRef b, llvm::Value * expectedNumOfStrides) override;
+
     void generateInitializeMethod(BuilderRef b) override;
 
     void generateInitializeThreadLocalMethod(BuilderRef b) override;

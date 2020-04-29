@@ -64,7 +64,7 @@ void PipelineCompiler::loadInternalStreamSetHandles(BuilderRef b, const bool non
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief allocateOwnedBuffers
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool shared) {
+void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expectedNumOfStrides, const bool nonLocal) {
     assert (expectedNumOfStrides);
 
     if (LLVM_UNLIKELY(CheckAssertions)) {
@@ -79,15 +79,15 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
     for (auto i = FirstKernel; i <= LastKernel; ++i) {
         const Kernel * const kernelObj = getKernel(i);
         if (LLVM_UNLIKELY(kernelObj->allocatesInternalStreamSets())) {
-            if (shared || kernelObj->hasThreadLocal()) {
-                setActiveKernel(b, i, !shared);
+            if (nonLocal || kernelObj->hasThreadLocal()) {
+                setActiveKernel(b, i, !nonLocal);
                 assert (mKernel == kernelObj);
                 SmallVector<Value *, 3> params;
                 if (LLVM_LIKELY(mKernelSharedHandle)) {
                     params.push_back(mKernelSharedHandle);
                 }
                 Value * func = nullptr;
-                if (shared) {
+                if (nonLocal) {
                     func = getKernelAllocateSharedInternalStreamSetsFunction(b);
                 } else {
                     func = getKernelAllocateThreadLocalInternalStreamSetsFunction(b);
@@ -101,21 +101,22 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
         }
         // and allocate any output buffers
         for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const auto j = target(e, mBufferGraph);
-            const BufferNode & bn = mBufferGraph[j];
-            if (LLVM_UNLIKELY(bn.isOwned() && bn.NonLocal == shared)) {
-                StreamSetBuffer * const buffer = bn.Buffer;
-                if (LLVM_LIKELY(bn.isInternal())) {
-                    const BufferPort & rd = mBufferGraph[e];
-                    const auto handleName = makeBufferName(i, rd.Port);
-                    Value * const handle = b->getScalarFieldPtr(handleName);
-                    buffer->setHandle(handle);
-                }
-                assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || shared));
-                assert (buffer->getHandle());
-                assert (isFromCurrentFunction(b, buffer->getHandle(), false));
-                buffer->allocateBuffer(b, expectedNumOfStrides);
+            const auto streamSet = target(e, mBufferGraph);
+            const BufferNode & bn = mBufferGraph[streamSet];
+            if (bn.isUnowned() || bn.isShared() || bn.NonLocal != nonLocal) {
+                continue;
             }
+            StreamSetBuffer * const buffer = bn.Buffer;
+            if (LLVM_LIKELY(bn.isInternal())) {
+                const BufferPort & rd = mBufferGraph[e];
+                const auto handleName = makeBufferName(i, rd.Port);
+                Value * const handle = b->getScalarFieldPtr(handleName);
+                buffer->setHandle(handle);
+            }
+            assert ("a threadlocal buffer cannot be external" && (bn.isInternal() || nonLocal));
+            assert (buffer->getHandle());
+            assert (isFromCurrentFunction(b, buffer->getHandle(), false));
+            buffer->allocateBuffer(b, expectedNumOfStrides);
         }
     }
 

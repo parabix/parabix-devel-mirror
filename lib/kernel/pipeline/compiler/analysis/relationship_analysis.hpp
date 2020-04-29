@@ -253,9 +253,6 @@ void PipelineAnalysis::transcribeRelationshipGraph() {
     LastScalar = LastCall + numOfScalars;
 
     // Now fill in all of the remaining kernels subsitute position
-
-    #warning rewrite partition ids after generating jump tree
-
     KernelPartitionId.reserve(PipelineOutput + 1);
 
     auto inputPartitionId = 0U;

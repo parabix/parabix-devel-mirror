@@ -385,8 +385,6 @@ protected:
 
 private:
 
-    void loadHandlesOfLocalOutputStreamSets(BuilderRef b) const;
-
     void clearInternalStateAfterCodeGen();
 
     static Rational getLCMOfFixedRateInputs(const Kernel * const target);
@@ -433,6 +431,8 @@ protected:
     Vec<llvm::Value *>              mUpdatableProducedOutputItemPtr;
     Vec<llvm::Value *>              mInitiallyProducedOutputItems;
 
+
+    Vec<llvm::Value *>              mUpdatableWritableOutputItemPtr;
     Vec<llvm::Value *>              mWritableOutputItems;
     Vec<llvm::Value *>              mConsumedOutputItems;
 

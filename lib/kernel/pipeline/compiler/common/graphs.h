@@ -219,11 +219,11 @@ private:
     flat_map<const void *, Vertex> mMap;
 };
 
-enum class BufferType : unsigned {
-    None = 0
-    , Internal = 1
+enum BufferType : unsigned {
+    Internal = 1
     , External = 2
     , Unowned = 4
+    , Shared = 8
     , ManagedByKernel = Unowned | Internal
     , UnownedExternal = Unowned | External
 };
@@ -232,7 +232,7 @@ ENABLE_ENUM_FLAGS(BufferType)
 
 struct BufferNode {
     StreamSetBuffer * Buffer = nullptr;
-    BufferType Type = BufferType::None;
+    unsigned Type = 0;
     bool NonLocal = false;
     bool NonLinear = false;
 
@@ -244,19 +244,23 @@ struct BufferNode {
     unsigned MaxAdd = 0;
 
     bool isOwned() const {
-        return (Type & BufferType::Unowned) == BufferType::None;
+        return (Type & BufferType::Unowned) == 0;
     }
 
     bool isUnowned() const {
-        return (Type & BufferType::Unowned) != BufferType::None;
+        return (Type & BufferType::Unowned) != 0;
     }
 
     bool isInternal() const {
-        return (Type & BufferType::Internal) != BufferType::None;
+        return (Type & BufferType::Internal) != 0;
     }
 
     bool isExternal() const {
-        return (Type & BufferType::External) != BufferType::None;
+        return (Type & BufferType::External) != 0;
+    }
+
+    bool isShared() const {
+        return (Type & BufferType::Shared) != 0;
     }
 
 };

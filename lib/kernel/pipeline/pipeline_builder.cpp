@@ -383,41 +383,6 @@ void combineAttributes(const Binding & S, AttributeCombineSet & C) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
- * @brief writeAttributes
- ** ------------------------------------------------------------------------------------------------------------- */
-void writeAttributes(const AttributeCombineSet & C, Binding & S) {
-    S.clear();
-    for (auto i = C.begin(); i != C.end(); ++i) {
-        Attribute::KindId k;
-        unsigned m;
-        std::tie(k, m) = *i;
-        S.addAttribute(Attribute(k, m));
-    }
-}
-
-/** ------------------------------------------------------------------------------------------------------------- *
- * @brief makeKernel
- ** ------------------------------------------------------------------------------------------------------------- */
-bool combineBindingAttributes(const Bindings & A, const Bindings & B, Bindings & R) {
-    const auto n = A.size();
-    if (LLVM_UNLIKELY(n != B.size() || n != R.size())) {
-        return false;
-    }
-    AttributeCombineSet C;
-    for (unsigned i = 0; i < n; ++i) {
-        combineAttributes(A[i], C);
-        combineAttributes(B[i], C);
-        combineAttributes(R[i], C);
-        writeAttributes(C, R[i]);
-        C.clear();
-    }
-    return true;
-}
-
-
-
-
-/** ------------------------------------------------------------------------------------------------------------- *
  * @brief makeKernel
  ** ------------------------------------------------------------------------------------------------------------- */
 Kernel * OptimizationBranchBuilder::makeKernel() {
@@ -425,12 +390,10 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     // TODO: the rates of the optimization branches should be determined by
     // the actual kernels within the branches.
 
-    mDriver.generateUncachedKernels();
     Kernel * const nonZero = mNonZeroBranch->makeKernel();
     if (nonZero) mDriver.addKernel(nonZero);
     Kernel * const allZero = mAllZeroBranch->makeKernel();
     if (allZero) mDriver.addKernel(allZero);
-    mDriver.generateUncachedKernels();
 
     std::string name;
     raw_string_ostream out(name);
@@ -450,24 +413,13 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     out << "\"";
     out.flush();
 
-    combineBindingAttributes(nonZero->getInputStreamSetBindings(),
-                             allZero->getInputStreamSetBindings(),
-                             mInputStreamSets);
-
-    combineBindingAttributes(nonZero->getOutputStreamSetBindings(),
-                             allZero->getOutputStreamSetBindings(),
-                             mOutputStreamSets);
-
-
-
     OptimizationBranch * const br =
             new OptimizationBranch(mDriver.getBuilder(), std::move(name),
                                    mCondition, nonZero, allZero,
                                    std::move(mInputStreamSets), std::move(mOutputStreamSets),
                                    std::move(mInputScalars), std::move(mOutputScalars));
-
     addKernelProperties({nonZero, allZero}, br);
-
+    br->addAttribute(InternallySynchronized());
     return br;
 }
 
@@ -576,6 +528,23 @@ ProgramBuilder::ProgramBuilder(
 
 }
 
+Bindings replaceManagedWithSharedManagedBuffers(const Bindings & bindings) {
+    Bindings replaced;
+    replaced.reserve(bindings.size());
+    for (const Binding & binding : bindings) {        
+        Binding newBinding(binding.getName(), binding.getRelationship(), binding.getRate());
+        for (const Attribute & attr : binding.getAttributes()) {
+            if (attr.getKind() == Attribute::KindId::ManagedBuffer) {
+                newBinding.push_back(SharedManagedBuffer());
+            } else {
+                newBinding.push_back(attr);
+            }
+        }
+        replaced.emplace_back(std::move(newBinding));
+    }
+    return replaced;
+}
+
 OptimizationBranchBuilder::OptimizationBranchBuilder(
       BaseDriver & driver,
       Relationship * const condition,
@@ -589,12 +558,12 @@ OptimizationBranchBuilder::OptimizationBranchBuilder(
 , mNonZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
-                    mInputStreamSets, mOutputStreamSets,
+                    mInputStreamSets, std::move(replaceManagedWithSharedManagedBuffers(mOutputStreamSets)),
                     mInputScalars, mOutputScalars)))
 , mAllZeroBranch(std::unique_ptr<PipelineBuilder>(
                     new PipelineBuilder(
                     PipelineBuilder::Internal{}, mDriver,
-                    mInputStreamSets, mOutputStreamSets,
+                    mInputStreamSets, std::move(replaceManagedWithSharedManagedBuffers(mOutputStreamSets)),
                     mInputScalars, mOutputScalars))) {
 
 }

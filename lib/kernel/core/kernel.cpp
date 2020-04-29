@@ -40,8 +40,14 @@ const static auto THREAD_LOCAL_SUFFIX = "_thread_local";
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief isLocalBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
-/* static */ bool Kernel::isLocalBuffer(const Binding & output) {
-    return output.getRate().isUnknown() || output.hasAttribute(AttrId::ManagedBuffer);
+/* static */ bool Kernel::isLocalBuffer(const Binding & output, const bool includeShared) {
+    if (LLVM_UNLIKELY(output.hasAttribute(AttrId::ManagedBuffer) || output.getRate().isUnknown())) {
+        return true;
+    }
+    if (LLVM_UNLIKELY(output.hasAttribute(AttrId::SharedManagedBuffer))) {
+        return includeShared;
+    }
+    return false;
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -611,9 +617,20 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
         } else if (isCountable(output)) {
             fields.push_back(sizeTy); // constant
         }
-        // consumed / writable item count
-        if (isLocal || requiresItemCount(output)) {
-            fields.push_back(sizeTy);
+        // Although local buffers are considered to be owned by (and thus the memory managed by) this
+        // kernel, the OptimizationBranch kernel delegates owned buffer management to its branch
+        // pipelines. This means there are at least two seperate owners for a buffer; however, we know
+        // by construction only one branch can be executing and any kernels within the pipelines must
+        // be synchronized; thus at most one branch could resize a buffer at any particular moment.
+        // However, we need to share the current state of the buffer between the branches to ensure
+        // that we are not using an old buffer allocation.
+        if (isLocal) {
+            fields.push_back(sizeTy); // consumed
+            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
+                fields.push_back(sizePtrTy); // updatable writable item count
+            }
+        } else if (requiresItemCount(output)) {
+            fields.push_back(sizeTy); // writable item count
         }
     }
     return fields;
@@ -689,7 +706,8 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
             const auto isLocal = internallySynchronized || isLocalBuffer(output);
             if (LLVM_UNLIKELY(isLocal)) {
                 setNextArgName(output.getName() + "_consumed");
-            } else if (internallySynchronized || requiresItemCount(output)) {
+            }
+            if (output.hasAttribute(AttrId::SharedManagedBuffer) || requiresItemCount(output)) {
                 setNextArgName(output.getName() + "_writable");
             }
 
@@ -833,6 +851,8 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
         suppliedArgs += 1;
     }
 
+
+
     Module * const m = b->getModule();
     Function * const doSegment = getDoSegmentFunction(b, false); assert (doSegment);
     assert (doSegment->arg_size() >= suppliedArgs);
@@ -876,7 +896,8 @@ Function * Kernel::addOrDeclareMainFunction(BuilderRef b, const MainMethodGenera
     }
 
     if (LLVM_UNLIKELY(hasAttribute(AttrId::InternallySynchronized))) {
-        report_fatal_error("main cannot be externally synchronized");
+        assert (false);
+        report_fatal_error(doSegment->getName() + " cannot be externally synchronized");
     }
 
     assert (main->empty());

@@ -351,6 +351,8 @@ void makeNonAsciiBranch(Kernel::BuilderRef b,
                                                  fieldWidth);
         P->CreateKernelCall<P2S16KernelWithCompressedOutput>(u16bits, selectors, u16bytes, byteNumbering);
     }
+
+    P->setExternallySynchronized(true);
 }
 
 void makeAllAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, StreamSet * const ByteStream, StreamSet * const u16bytes, cc::ByteNumbering byteNumbering) {
@@ -361,7 +363,7 @@ void makeAllAsciiBranch(const std::unique_ptr<PipelineBuilder> & P, StreamSet * 
     }
 }
 
-u8u16FunctionType generatePipeline2(CPUDriver & pxDriver, cc::ByteNumbering byteNumbering) {
+u8u16FunctionType generatePipelineWithOptimizationBranch(CPUDriver & pxDriver, cc::ByteNumbering byteNumbering) {
 
     auto & b = pxDriver.getBuilder();
     auto P = pxDriver.makePipeline({Binding{b->getInt32Ty(), "inputFileDecriptor"}, Binding{b->getInt8PtrTy(), "outputFileName"}}, {});
@@ -379,7 +381,7 @@ u8u16FunctionType generatePipeline2(CPUDriver & pxDriver, cc::ByteNumbering byte
 
     auto B = P->CreateOptimizationBranch(nonAscii,
         {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}},
-        {Binding{"u16bytes", u16bytes, BoundedRate(0, 1)}});
+        {Binding{"u16bytes", u16bytes, BoundedRate(0, 1), ManagedBuffer()}});
 
     makeAllAsciiBranch(B->getAllZeroBranch(), ByteStream, u16bytes, byteNumbering);
 
@@ -414,7 +416,7 @@ int main(int argc, char *argv[]) {
     CPUDriver pxDriver("u8u16");
     u8u16FunctionType u8u16Function = nullptr;
     if (BranchingMode) {
-        u8u16Function = generatePipeline2(pxDriver, byteNumbering);
+        u8u16Function = generatePipelineWithOptimizationBranch(pxDriver, byteNumbering);
     } else {
         u8u16Function = generatePipeline(pxDriver, byteNumbering);
     }
