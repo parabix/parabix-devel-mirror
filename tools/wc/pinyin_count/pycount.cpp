@@ -169,7 +169,7 @@ int main(int argc, char *argv[]) {
     //     exit(1);
     // }
     if(CC_expr == std::string("zhong1")){
-        re::CC* CC_ast = re::makeCC(std::move(UCD::KPY_ns::zhong_Set[0]));
+        re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KPY_ns::zhong_Set[1])));
         uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     }
     else{
