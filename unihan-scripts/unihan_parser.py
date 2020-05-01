@@ -10,7 +10,8 @@ fields_pattern = re.compile(r"\d*\.\d*")
 def parse_fields(fields):
     radical_list = []
     radicalpoint = fields.split('.')
-    radical_list.append(radicalpoint[0])
+    radical_t = "_" + radicalpoint[0]
+    radical_list.append(radical_t)
     result_list = []
     for radical_dict in radical_list:
         if(result_list.count(radical_dict)==0):
