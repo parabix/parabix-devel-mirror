@@ -139,6 +139,9 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             addNextArg(mFixedRateFactorPhi);
         }
     }
+
+    PointerType * const voidPtrTy = b->getVoidPtrTy();
+
     for (unsigned i = 0; i < numOfInputs; ++i) {
         const auto port = getInput(mKernelId, StreamSetPort(PortType::Input, i));
         const BufferPort & rt = mBufferGraph[port];
@@ -192,7 +195,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
                 addr = mInputVirtualBaseAddressPhi[rt.Port];
             }
 
-            addNextArg(addr);
+            addNextArg(b->CreatePointerCast(addr, voidPtrTy));
 
             const auto addressable = mKernelIsInternallySynchronized | deferred;
             mReturnedProcessedItemCountPtr[rt.Port] = addItemCountArg(b, input, addressable, processed, args);
@@ -236,12 +239,13 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             produced = mAlreadyProducedPhi[rt.Port];
         }
 
-        const auto managed = bn.Type == BufferType::ManagedByKernel;
-
-        if (LLVM_UNLIKELY(managed)) {
+        const auto managed = rt.IsShared || bn.Type == BufferType::ManagedByKernel;
+        if (LLVM_UNLIKELY(rt.IsShared)) {
+            addNextArg(b->CreatePointerCast(buffer->getHandle(), voidPtrTy));
+        } else if (LLVM_UNLIKELY(managed)) {
             mReturnedOutputVirtualBaseAddressPtr[rt.Port] = addVirtualBaseAddressArg(b, buffer, args);
         } else {
-            addNextArg(getVirtualBaseAddress(b, rt, buffer, produced));
+            addNextArg(b->CreatePointerCast(getVirtualBaseAddress(b, rt, buffer, produced), voidPtrTy));
         }
         const auto addressable = mKernelIsInternallySynchronized | mKernelCanTerminateEarly;
         mReturnedProducedItemCountPtr[rt.Port] = addItemCountArg(b, output, addressable, produced, args);
@@ -417,8 +421,9 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
  * @brief addVirtualBaseAddressArg
  ** ------------------------------------------------------------------------------------------------------------- */
 Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args) {
+    PointerType * const voidPtrTy = b->getVoidPtrTy();
     if (LLVM_UNLIKELY(mNumOfVirtualBaseAddresses == mVirtualBaseAddressPtr.size())) {
-        auto vba = b->CreateAllocaAtEntryPoint(b->getVoidPtrTy());
+        auto vba = b->CreateAllocaAtEntryPoint(voidPtrTy);
         mVirtualBaseAddressPtr.push_back(vba);
     }
 
@@ -429,10 +434,10 @@ Value * PipelineCompiler::addVirtualBaseAddressArg(BuilderRef b, const StreamSet
         args.push_back(arg);
     };
 
-    Value * ptr = mVirtualBaseAddressPtr[mNumOfVirtualBaseAddresses++]; assert (isa<ExternalBuffer>(buffer));
+    Value * ptr = mVirtualBaseAddressPtr[mNumOfVirtualBaseAddresses++];
     ptr = b->CreatePointerCast(ptr, buffer->getPointerType()->getPointerTo());
     b->CreateStore(buffer->getBaseAddress(b.get()), ptr);
-    addNextArg(ptr);
+    addNextArg(b->CreatePointerCast(ptr, voidPtrTy->getPointerTo()));
     return ptr;
 }
 

@@ -574,12 +574,12 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
         }
     }
 
+    PointerType * const voidPtrTy = b->getVoidPtrTy();
 
     for (unsigned i = 0; i < n; ++i) {
         const Binding & input = mInputStreamSets[i];
-        auto const bufferType = StreamSetBuffer::resolveType(b, input.getType())->getPointerTo();
         // virtual base input address
-        fields.push_back(bufferType);
+        fields.push_back(voidPtrTy);
         // processed input items
         if (internallySynchronized || isAddressable(input)) {
             fields.push_back(sizePtrTy); // updatable
@@ -597,16 +597,19 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
 
     for (unsigned i = 0; i < m; ++i) {
         const Binding & output = mOutputStreamSets[i];
-        // virtual base output address
-        const auto isLocal = internallySynchronized || isLocalBuffer(output);
-        auto const bufferType = StreamSetBuffer::resolveType(b, output.getType())->getPointerTo();
-        auto bufferParamType = bufferType;
-        if (LLVM_UNLIKELY(isLocal)) {
-            // If this buffer is owned by this kernel, it is responsible for
-            // informing the calling kernel what its virtual base address is.                       
-            bufferParamType = bufferType->getPointerTo();
+
+        const auto isShared = output.hasAttribute(AttrId::SharedManagedBuffer);
+        const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output, false);
+
+        // shared dynamic buffer handle or virtual base output address
+        if (LLVM_UNLIKELY(isShared)) {
+            fields.push_back(voidPtrTy);
+        } else if (LLVM_UNLIKELY(isLocal)) {
+            fields.push_back(voidPtrTy->getPointerTo());
+        } else {
+            fields.push_back(voidPtrTy);
         }
-        fields.push_back(bufferParamType);
+
         // produced output items
         if (internallySynchronized || hasTerminationSignal || isAddressable(output)) {
             // NOTE: if this kernel is an internally synchronized kernel, we pass a pointer in for
@@ -624,11 +627,8 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
         // be synchronized; thus at most one branch could resize a buffer at any particular moment.
         // However, we need to share the current state of the buffer between the branches to ensure
         // that we are not using an old buffer allocation.
-        if (isLocal) {
+        if (isShared || isLocal) {
             fields.push_back(sizeTy); // consumed
-            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
-                fields.push_back(sizePtrTy); // updatable writable item count
-            }
         } else if (requiresItemCount(output)) {
             fields.push_back(sizeTy); // writable item count
         }
@@ -706,8 +706,7 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
             const auto isLocal = internallySynchronized || isLocalBuffer(output);
             if (LLVM_UNLIKELY(isLocal)) {
                 setNextArgName(output.getName() + "_consumed");
-            }
-            if (output.hasAttribute(AttrId::SharedManagedBuffer) || requiresItemCount(output)) {
+            } else if (requiresItemCount(output)) {
                 setNextArgName(output.getName() + "_writable");
             }
 

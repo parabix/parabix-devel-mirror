@@ -114,7 +114,7 @@ public:
     void start(BuilderRef b);
     void setActiveKernel(BuilderRef b, const unsigned index, const bool allowThreadLocal);
     void executeKernel(BuilderRef b);
-    void type(BuilderRef b);
+    void end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
     void writeExternalProducedItemCounts(BuilderRef b);

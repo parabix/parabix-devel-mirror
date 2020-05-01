@@ -92,13 +92,13 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
             if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
-                if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
+                if (rate.IsShared) {
                     bn.Type = BufferType::Shared;
                 }
-                continue;
+            } else {
+                bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
+                bn.Type = BufferType::UnownedExternal;
             }
-            bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
-            bn.Type = BufferType::UnownedExternal;
         }
     }
 
@@ -131,13 +131,12 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     minFactor[PipelineOutput] = 1;
     maxFactor[PipelineOutput] = 1;
 
-//    #error test all attributes for managed / shared managed
-
     // then construct the rest
     for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
 
         BufferNode & bn = mBufferGraph[streamSet];
         const auto producerOutput = in_edge(streamSet, mBufferGraph);
+        const BufferPort & producerRate = mBufferGraph[producerOutput];
 
         bool nonLocal = false;
 
@@ -162,8 +161,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // be bounded a priori. During initialization, we could pass a "suggestion"
             // argument to indicate what the outer pipeline believes its I/O rates will be.
 
-            const BufferPort & producerRate = mBufferGraph[producerOutput];
-
             bn.Type |= internalOrExternal(streamSet);
 
             // If this buffer is externally used, we cannot analyze the dataflow rate of
@@ -172,7 +169,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // Similarly if any internal consumer has a deferred rate, we cannot analyze
             // any consumption rates.
 
-            bool dynamic = nonLocal || bn.isExternal() || bn.isShared() || producerRate.IsDeferred;
+            nonLocal |= bn.isExternal() || producerRate.IsDeferred;
 
             const Binding & output = producerRate.Binding;
 
@@ -202,13 +199,11 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
                 // Could we consume less data than we produce?
                 if (consumerRate.Minimum < consumerRate.Maximum) {
-                    dynamic = true;
+                    nonLocal = true;
                 // Or is the data consumption rate unpredictable despite its type?
-                } else if (LLVM_UNLIKELY(consumerRate.IsDeferred)) {
-                    dynamic = true;
+                } else if (LLVM_UNLIKELY(consumerRate.IsShared || consumerRate.IsDeferred)) {
+                    nonLocal = true;
                 }
-
-
 
                 assert (consumerRate.Maximum >= consumerRate.Minimum);
 
@@ -251,7 +246,7 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
             // A DynamicBuffer is necessary when we cannot bound the amount of unconsumed data a priori.
             StreamSetBuffer * buffer = nullptr;
-            if (dynamic || nonLocal) {
+            if (nonLocal) {
                 // TODO: we can make some buffers static despite crossing a partition but only if we can guarantee
                 // an upper bound to the buffer size for all potential inputs. Build a dataflow analysis to
                 // determine this.
@@ -343,6 +338,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         break;
                     case AttrId::Deferred:
                         bp.IsDeferred = true;
+                        break;
+                    case AttrId::SharedManagedBuffer:
+                        bp.IsShared = true;
                         break;
                     default: break;
                 }
@@ -494,45 +492,6 @@ void PipelineAnalysis::generateInitialBufferGraph() {
             }
         }
     }
-
-#if 0
-    Rational ONE{1};
-
-    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
-        const auto e = in_edge(i, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[e];
-        BufferNode & bn = mBufferGraph[i];
-        bn.CopyBack = ceiling(br.Maximum - br.Minimum);
-        auto peekable = br.Delay;
-        auto maxLookAhead = 0U;
-
-        auto maxLookBehind = br.LookBehind;
-
-        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[e];
-            if (br.Maximum != br.Minimum) {
-                const auto diff = br.Maximum - br.Minimum;
-                peekable = std::max(peekable, ceiling(diff) - 1U);
-            }
-            maxLookAhead = std::max(maxLookAhead, br.LookAhead);
-            maxLookBehind = std::max(maxLookBehind, br.LookBehind);
-        }
-        bn.CopyBackReflection = std::max(maxLookAhead, peekable);
-        bn.LookBehind = maxLookBehind;
-    }
-
-    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
-        const auto e = in_edge(i, mBufferGraph);
-        const BufferRateData & br = mBufferGraph[e];
-        auto copyBack = br.LookAhead;
-        for (const auto e : make_iterator_range(out_edges(i, mBufferGraph))) {
-            const BufferRateData & br = mBufferGraph[e];
-            copyBack = std::max(copyBack, br.LookAhead);
-        }
-        BufferNode & bn = mBufferGraph[i];
-        bn.CopyBack = copyBack;
-    }
-#endif
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -668,6 +627,16 @@ void PipelineAnalysis::identifyLinearBuffers() {
         }
     }
 #endif
+}
+
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief identifyNonLocalBuffers
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineAnalysis::identifyNonLocalBuffers() {
+
+
+
 }
 
 }

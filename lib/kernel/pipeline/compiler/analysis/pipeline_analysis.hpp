@@ -45,6 +45,7 @@ public:
         P.identifyLinearBuffers();
         P.identifyZeroExtendedStreamSets();
         P.identifyLocalPortIds();
+        P.identifyLinearBuffers();
 
         // Make the remaining graphs
         P.makeConsumerGraph();        
@@ -124,8 +125,8 @@ private:
     void addStreamSetsToBufferGraph(BuilderRef b);
     void generateInitialBufferGraph();
     void identifyLinearBuffers();
+    void identifyNonLocalBuffers();
     void identifyLocalPortIds();
-    void identifyPortsToCheck();
 
     // consumer analysis functions
 

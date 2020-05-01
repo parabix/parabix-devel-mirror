@@ -716,7 +716,7 @@ Value * DynamicBuffer::getInternalCapacity(BuilderPtr b) const {
     return b->CreateMul(capacity, BLOCK_WIDTH);
 }
 
-void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* c */) const {
+void DynamicBuffer::setCapacity(BuilderPtr /* b */, Value * /* capacity */) const {
     unsupported("setCapacity", "Dynamic");
 }
 

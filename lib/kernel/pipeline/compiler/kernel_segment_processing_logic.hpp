@@ -194,7 +194,7 @@ inline void PipelineCompiler::executeKernel(BuilderRef b) {
     } else {
         determineIsFinal(b);
         // FIXME: temporary change to minimize changes to PHI nodes
-        mUpdatedNumOfStrides = b->getSize(0);
+        mUpdatedNumOfStrides = mMaximumNumOfStrides;
     }
 
     // When tracing blocking I/O, test all I/O streams but do not execute the
@@ -808,7 +808,7 @@ inline void PipelineCompiler::updatePhisAfterTermination(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief end
  ** ------------------------------------------------------------------------------------------------------------- */
-void PipelineCompiler::type(BuilderRef b) {
+void PipelineCompiler::end(BuilderRef b) {
 
 
 

@@ -345,7 +345,7 @@ void PipelineCompiler::generateSingleThreadKernelMethod(BuilderRef b) {
         setActiveKernel(b, i, true);            
         executeKernel(b);
     }
-    type(b);
+    end(b);
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
@@ -467,7 +467,7 @@ void PipelineCompiler::generateMultiThreadKernelMethod(BuilderRef b) {
     }
     mKernel = nullptr;
     mKernelId = 0;
-    type(b);
+    end(b);
 
     // only call pthread_exit() within spawned threads; otherwise it'll be equivalent to calling exit() within the process
     BasicBlock * const exitThread = b->CreateBasicBlock("ExitThread");
@@ -732,9 +732,6 @@ void PipelineCompiler::verifyBufferRelationships() const {
                         break;
                     case AttrId::SharedManagedBuffer:
                         sharedManaged = true;
-
-                        errs() << "SharedManagedBufferX: " << streamSet << "\n";
-
                         break;
                     default: break;
                 }

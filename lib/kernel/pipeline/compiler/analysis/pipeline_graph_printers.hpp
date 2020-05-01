@@ -215,10 +215,7 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             out << '?';
         } else {
             char bufferType = '?';
-            if (bn.isShared()) {
-                out << 'S';
-            }
-            switch (bn.Type & (BufferType::Internal | BufferType::External | BufferType::Unowned)) {
+            switch (bn.Type & 7) {
                 case BufferType::Internal:
                     switch (buffer->getBufferKind()) {
                         case BufferId::StaticBuffer:
@@ -243,6 +240,11 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
             if (buffer->isLinear()) {
                 out << 'L';
             }
+            if (bn.isShared()) {
+                out << '*';
+            }
+
+
             Type * ty = buffer->getBaseType();
             out << ':'
                 << ty->getArrayNumElements() << 'x';
@@ -411,6 +413,9 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         out << " {G" << pd.GlobalPortId << ",L" << pd.LocalPortId << '}';
         if (pd.IsPrincipal) {
             out << " [P]";
+        }
+        if (pd.IsShared) {
+            out << " [S]";
         }
         if (pd.TransitiveAdd) {
             out << " +" << pd.TransitiveAdd;

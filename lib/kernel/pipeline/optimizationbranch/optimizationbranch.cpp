@@ -97,16 +97,16 @@ OptimizationBranch::OptimizationBranch(BuilderRef b,
 : Kernel(b, TypeId::OptimizationBranch, std::move(signature),
          std::move(stream_inputs), std::move(stream_outputs),
          std::move(scalar_inputs), std::move(scalar_outputs),
-{InternalScalar{b->getSizeTy(), ALL_ZERO_LOGICAL_SEGMENT_NUMBER},
- InternalScalar{b->getSizeTy(), NON_ZERO_LOGICAL_SEGMENT_NUMBER},
+{InternalScalar{b->getSizeTy(), ALL_ZERO_EXTERNAL_SEGMENT_NUMBER},
+ InternalScalar{b->getSizeTy(), NON_ZERO_EXTERNAL_SEGMENT_NUMBER},
+ InternalScalar{b->getSizeTy(), ALL_ZERO_INTERNAL_SEGMENT_NUMBER},
+ InternalScalar{b->getSizeTy(), NON_ZERO_INTERNAL_SEGMENT_NUMBER},
  InternalScalar{ScalarType::ThreadLocal, b->getSizeTy()->getPointerTo(), SPAN_BUFFER},
  InternalScalar{ScalarType::ThreadLocal, b->getSizeTy(), SPAN_CAPACITY}})
 , mCondition(condition)
 , mNonZeroKernel(nonZeroKernel)
 , mAllZeroKernel(allZeroKernel) {
-    errs() << "OptimizationBranch\n";
-    assert (mNonZeroKernel->getOutputStreamSetBinding(0).hasAttribute(Attribute::KindId::SharedManagedBuffer));
-    assert (mAllZeroKernel->getOutputStreamSetBinding(0).hasAttribute(Attribute::KindId::SharedManagedBuffer));
+
 }
 
 }

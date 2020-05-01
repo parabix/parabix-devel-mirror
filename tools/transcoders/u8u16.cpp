@@ -29,7 +29,7 @@
 #include <pablo/pe_zeroes.h>
 #include <kernel/pipeline/driver/cpudriver.h>
 #include <toolchain/toolchain.h>
-
+#include <kernel/util/debug_display.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <iostream>
@@ -378,6 +378,8 @@ u8u16FunctionType generatePipelineWithOptimizationBranch(CPUDriver & pxDriver, c
     CC * const nonAsciiCC = makeByte(0x80, 0xFF);
     P->CreateKernelCall<CharacterClassKernelBuilder>(
         std::vector<CC *>{nonAsciiCC}, ByteStream, nonAscii);
+
+    P->CreateKernelCall<DebugDisplayKernel>("nonAscii", nonAscii);
 
     auto B = P->CreateOptimizationBranch(nonAscii,
         {Binding{"ByteStream", ByteStream}, Binding{"condition", nonAscii}},

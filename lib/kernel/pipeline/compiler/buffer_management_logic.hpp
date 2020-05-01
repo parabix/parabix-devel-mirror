@@ -127,27 +127,30 @@ void PipelineCompiler::allocateOwnedBuffers(BuilderRef b, Value * const expected
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::releaseOwnedBuffers(BuilderRef b, const bool nonLocal) {
     loadInternalStreamSetHandles(b, nonLocal);
-    for (auto i = FirstStreamSet; i <= LastStreamSet; ++i) {
-        const BufferNode & bn = mBufferGraph[i];
-        if (LLVM_LIKELY(bn.isOwned() && bn.NonLocal == nonLocal)) {
-            StreamSetBuffer * const buffer = bn.Buffer;
-            assert (isFromCurrentFunction(b, buffer->getHandle(), false));
-            buffer->releaseBuffer(b);
 
-            #warning TraceDynamicBuffers needs to be fixed to permit thread local buffers.
+    for (auto streamSet = FirstStreamSet; streamSet <= LastStreamSet; ++streamSet) {
+        const BufferNode & bn = mBufferGraph[streamSet];
+        if (bn.isUnowned() || bn.isShared() || bn.NonLocal != nonLocal) {
+            continue;
+        }
 
-            if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
-                if (isa<DynamicBuffer>(buffer)) {
+        StreamSetBuffer * const buffer = bn.Buffer;
+        assert (isFromCurrentFunction(b, buffer->getHandle(), false));
+        buffer->releaseBuffer(b);
 
-                    const auto pe = in_edge(i, mBufferGraph);
-                    const auto p = source(pe, mBufferGraph);
-                    const BufferPort & rd = mBufferGraph[pe];
-                    const auto prefix = makeBufferName(p, rd.Port);
+        // TODO: TraceDynamicBuffers needs to be fixed to permit thread local buffers.
 
-                    Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
-                    Constant * const ZERO = b->getInt32(0);
-                    b->CreateFree(b->CreateLoad(b->CreateInBoundsGEP(traceData, {ZERO, ZERO})));
-                }
+        if (LLVM_UNLIKELY(codegen::DebugOptionIsSet(codegen::TraceDynamicBuffers))) {
+            if (isa<DynamicBuffer>(buffer)) {
+
+                const auto pe = in_edge(streamSet, mBufferGraph);
+                const auto p = source(pe, mBufferGraph);
+                const BufferPort & rd = mBufferGraph[pe];
+                const auto prefix = makeBufferName(p, rd.Port);
+
+                Value * const traceData = b->getScalarFieldPtr(prefix + STATISTICS_BUFFER_EXPANSION_SUFFIX);
+                Constant * const ZERO = b->getInt32(0);
+                b->CreateFree(b->CreateLoad(b->CreateInBoundsGEP(traceData, {ZERO, ZERO})));
             }
         }
     }

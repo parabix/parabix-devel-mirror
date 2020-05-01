@@ -263,6 +263,8 @@ struct BufferNode {
         return (Type & BufferType::Shared) != 0;
     }
 
+
+
 };
 
 struct BufferPort {
@@ -284,6 +286,7 @@ struct BufferPort {
     bool IsPrincipal = false;
     bool IsZeroExtended = false;
     bool IsDeferred = false;
+    bool IsShared = false;
 
     int TransitiveAdd = 0;
 

@@ -390,8 +390,11 @@ Kernel * OptimizationBranchBuilder::makeKernel() {
     // TODO: the rates of the optimization branches should be determined by
     // the actual kernels within the branches.
 
+    mNonZeroBranch->setExternallySynchronized(true);
     Kernel * const nonZero = mNonZeroBranch->makeKernel();
     if (nonZero) mDriver.addKernel(nonZero);
+
+    mAllZeroBranch->setExternallySynchronized(true);
     Kernel * const allZero = mAllZeroBranch->makeKernel();
     if (allZero) mDriver.addKernel(allZero);
 

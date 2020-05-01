@@ -432,16 +432,21 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
 
     IntegerType * const sizeTy = b->getSizeTy();
     for (unsigned i = 0; i < numOfInputs; i++) {
+
         /// ----------------------------------------------------
         /// virtual base address
         /// ----------------------------------------------------
-        auto & buffer = mStreamSetInputBuffers[i]; assert (buffer.get());
+        auto & buffer = mStreamSetInputBuffers[i];
+        assert (buffer.get() && buffer->isLinear());
         const Binding & input = mInputStreamSets[i];
-        Value * const virtualBaseAddress = nextArg();
-        assert (virtualBaseAddress->getType() == buffer->getPointerType());
+        Value * const virtualBaseAddress = b->CreatePointerCast(nextArg(), buffer->getPointerType());
         Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
         buffer->setHandle(localHandle);
         buffer->setBaseAddress(b, virtualBaseAddress);
+        if (LLVM_UNLIKELY(enableAsserts)) {
+            b->CreateAssert(buffer->getBaseAddress(b), "%s.%s: virtual base address cannot be null",
+                            b->GetString(getName()), b->GetString(input.getName()));
+        }
 
         /// ----------------------------------------------------
         /// processed item count
@@ -499,7 +504,6 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     const auto numOfOutputs = getNumOfStreamOutputs();
     reset(mProducedOutputItemPtr, numOfOutputs);
     reset(mInitiallyProducedOutputItems, numOfOutputs);    
-    reset(mUpdatableWritableOutputItemPtr, numOfOutputs);
     reset(mWritableOutputItems, numOfOutputs);
     reset(mConsumedOutputItems, numOfOutputs);
     reset(mUpdatableProducedOutputItemPtr, numOfOutputs);
@@ -508,33 +512,38 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
     const auto canTerminate = canSetTerminateSignal();
 
     for (unsigned i = 0; i < numOfOutputs; i++) {
+
         /// ----------------------------------------------------
         /// logical buffer base address
         /// ----------------------------------------------------
-        const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i]; assert (buffer.get());
+        const std::unique_ptr<StreamSetBuffer> & buffer = mStreamSetOutputBuffers[i];
+        assert (buffer.get() && buffer->isLinear());
         const Binding & output = mOutputStreamSets[i];
-        const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output);
+        const auto isShared = output.hasAttribute(AttrId::SharedManagedBuffer);
+        const auto isLocal = internallySynchronized || isShared || Kernel::isLocalBuffer(output, false);
 
-        if (LLVM_UNLIKELY(isLocal)) {
+        if (LLVM_UNLIKELY(isShared)) {
+            Value * const handle = nextArg();
+            assert (isa<DynamicBuffer>(buffer));
+            buffer->setHandle(b->CreatePointerCast(handle, buffer->getHandlePointerType(b)));
+        } else if (LLVM_UNLIKELY(isLocal)) {
             // If an output is a managed buffer, the address is stored within the state instead
             // of being passed in through the function call.
             mUpdatableOutputBaseVirtualAddressPtr[i] = nextArg();
-            Value * handle = nullptr;
-            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
-                handle = b->CreateLoad(mUpdatableOutputBaseVirtualAddressPtr[i]);
-            } else {
-                handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
-            }
+            Value * handle = getScalarFieldPtr(b.get(), output.getName() + BUFFER_HANDLE_SUFFIX);
             buffer->setHandle(handle);
         } else {
-            Value * const virtualBaseAddress = nextArg();
-            assert (virtualBaseAddress->getType() == buffer->getPointerType());
+            Value * const virtualBaseAddress = b->CreatePointerCast(nextArg(), buffer->getPointerType());
             Value * const localHandle = b->CreateAllocaAtEntryPoint(buffer->getHandleType(b));
             buffer->setHandle(localHandle);
             buffer->setBaseAddress(b, virtualBaseAddress);
         }
-
         assert (buffer->getHandle());
+        if (LLVM_UNLIKELY(enableAsserts)) {
+            b->CreateAssert(buffer->getBaseAddress(b), "%s.%s: virtual base address cannot be null",
+                            b->GetString(getName()), b->GetString(output.getName()));
+        }
+
 
         /// ----------------------------------------------------
         /// produced item count
@@ -570,33 +579,29 @@ void KernelCompiler::setDoSegmentProperties(BuilderRef b, const ArrayRef<Value *
             Value * const consumed = nextArg();
             assert (consumed->getType() == sizeTy);
             mConsumedOutputItems[i] = consumed;
-            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
-                mUpdatableWritableOutputItemPtr[i] = nextArg();
-                writable = b->CreateLoad(mUpdatableWritableOutputItemPtr[i]);
-            } else {
-                writable = buffer->getLinearlyWritableItems(b, produced, consumed);
-            }
+            writable = buffer->getLinearlyWritableItems(b, produced, consumed);
+            assert (writable && writable->getType() == sizeTy);
         } else {
             if (requiresItemCount(output)) {
                 writable = nextArg();
                 assert (writable && writable->getType() == sizeTy);
             } else if (mFixedRateFactor) {
                 writable = b->CreateCeilUMulRate(mFixedRateFactor, rate.getRate() / fixedRateLCM);
+                assert (writable && writable->getType() == sizeTy);
             }
             Value * capacity = nullptr;
             if (writable) {
                 capacity = b->CreateAdd(produced, writable);
+                #ifdef CHECK_IO_ADDRESS_RANGE
+                if (LLVM_UNLIKELY(enableAsserts)) {
+                    checkStreamRange(buffer, output, produced);
+                }
+                #endif
             } else {
                 capacity = ConstantExpr::getNeg(b->getSize(1));
             }
             buffer->setCapacity(b, capacity);
-            #ifdef CHECK_IO_ADDRESS_RANGE
-            if (LLVM_UNLIKELY(enableAsserts)) {
-                checkStreamRange(buffer, output, produced);
-            }
-            #endif
         }
-        assert (writable);
         mWritableOutputItems[i] = writable;
     }
     assert (arg == args.end());
@@ -646,13 +651,15 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         }
     }
 
+    PointerType * const voidPtrTy = b->getVoidPtrTy();
+
     const auto numOfInputs = getNumOfStreamInputs();
     for (unsigned i = 0; i < numOfInputs; i++) {
         /// ----------------------------------------------------
         /// logical buffer base address
         /// ----------------------------------------------------
         const auto & buffer = mStreamSetInputBuffers[i];
-        props.push_back(buffer->getBaseAddress(b));
+        props.push_back(b->CreatePointerCast(buffer->getBaseAddress(b), voidPtrTy));
         /// ----------------------------------------------------
         /// processed item count
         /// ----------------------------------------------------
@@ -680,14 +687,25 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         const auto & buffer = mStreamSetOutputBuffers[i];
         const Binding & output = mOutputStreamSets[i];
-        const auto isLocal = internallySynchronized || Kernel::isLocalBuffer(output);
-        if (LLVM_UNLIKELY(isLocal)) {
-            // If an output is a managed buffer, the address is stored within the state instead
-            // of being passed in through the function call.
-            props.push_back(mUpdatableOutputBaseVirtualAddressPtr[i]);
+
+        const auto isShared = output.hasAttribute(AttrId::SharedManagedBuffer);
+        const auto isLocal = internallySynchronized || isShared || Kernel::isLocalBuffer(output, false);
+
+        Value * handle = nullptr;
+        if (LLVM_UNLIKELY(isShared)) {            
+            handle = b->CreatePointerCast(buffer->getHandle(), voidPtrTy);
         } else {
-            props.push_back(buffer->getBaseAddress(b));
+            if (LLVM_UNLIKELY(isLocal)) {
+                // If an output is a managed buffer, the address is stored within the state instead
+                // of being passed in through the function call.
+                PointerType * const voidPtrPtrTy = voidPtrTy->getPointerTo();
+                handle = b->CreatePointerCast(mUpdatableOutputBaseVirtualAddressPtr[i], voidPtrPtrTy);
+            } else {
+                handle = b->CreatePointerCast(buffer->getBaseAddress(b), voidPtrTy);
+            }
         }
+        props.push_back(handle);
+
         /// ----------------------------------------------------
         /// produced item count
         /// ----------------------------------------------------
@@ -701,9 +719,6 @@ std::vector<Value *> KernelCompiler::getDoSegmentProperties(BuilderRef b) const 
         /// ----------------------------------------------------
         if (LLVM_UNLIKELY(isLocal)) {
             props.push_back(mConsumedOutputItems[i]);
-            if (output.hasAttribute(AttrId::SharedManagedBuffer)) {
-                props.push_back(mUpdatableWritableOutputItemPtr[i]);
-            }
         } else if (requiresItemCount(output)) {
             props.push_back(mWritableOutputItems[i]);
         }
@@ -778,7 +793,8 @@ inline void KernelCompiler::callGenerateDoSegmentMethod(BuilderRef b) {
             }
             Value * const blockIndex = b->CreateLShr(produced, LOG_2_BLOCK_WIDTH);
             Value * vba = buffer->getStreamLogicalBasePtr(b.get(), baseAddress, ZERO, blockIndex);
-            vba = b->CreatePointerCast(vba, buffer->getPointerType());
+            vba = b->CreatePointerCast(vba, b->getVoidPtrTy());
+
             b->CreateStore(vba, mUpdatableOutputBaseVirtualAddressPtr[i]);
         }
         if (mUpdatableProducedOutputItemPtr[i]) {
@@ -943,6 +959,7 @@ inline void KernelCompiler::callGenerateFinalizeMethod(BuilderRef b) {
     if (LLVM_LIKELY(mTarget->isStateful())) {
         b->CreateFree(mSharedHandle);
     }
+
     if (outputs.empty()) {
         b->CreateRetVoid();
     } else {
@@ -954,6 +971,9 @@ inline void KernelCompiler::callGenerateFinalizeMethod(BuilderRef b) {
         }
     }
     clearInternalStateAfterCodeGen();
+
+
+
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
