@@ -360,7 +360,7 @@ set(C2JTEST_DIR ${PROJECT_SOURCE_DIR}/QA/csv2json)
 add_test(
   NAME csv2jsontest
   WORKING_DIRECTORY ${QA_DIR}/csv2json
-  COMMAND ${QA_DIR}/SimpleCheck ${BIN_DIR}/csv2json ${C2JTEST_DIR}/testcases/ ${C2JTEST_DIR}/outs/ ${C2JTEST_DIR}/expect/)
+  COMMAND ${BIN_DIR}/SimpleCheck ${BIN_DIR}/csv2json ${C2JTEST_DIR}/testcases/ ${C2JTEST_DIR}/outs/ ${C2JTEST_DIR}/expect/)
 
 add_test(
   NAME greptest
@@ -411,7 +411,7 @@ SET_PROPERTY(TEST u8u16_test editd_test base64_test PROPERTY TIMEOUT 40)
 # csv2json 
 add_custom_target(csv2jsontest
   WORKING_DIRECTORY ${QA_DIR}/csv2json
-  COMMAND ${QA_DIR}/SimpleCheck ${BIN_DIR}/csv2json ${C2JTEST_DIR}/testcases/ ${C2JTEST_DIR}/outs/ ${C2JTEST_DIR}/expect/)
+  COMMAND ${BIN_DIR}/SimpleCheck ${BIN_DIR}/csv2json ${C2JTEST_DIR}/testcases/ ${C2JTEST_DIR}/outs/ ${C2JTEST_DIR}/expect/)
 
 add_custom_target (greptest
     WORKING_DIRECTORY ${QA_DIR}

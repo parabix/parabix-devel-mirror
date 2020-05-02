@@ -10,3 +10,12 @@ DEPS
     
 )
 
+parabix_add_executable(
+NAME
+    SimpleCheck
+SRC
+    SimpleCheck.cpp
+DEPS
+    
+)
+
