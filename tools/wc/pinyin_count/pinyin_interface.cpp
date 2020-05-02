@@ -19,10 +19,74 @@ namespace PY{
     }
 
     // Methods in PinyinValuesTable
+    // Method: get_initial
+    // Get the initial part of the syllable
+    // if no initial part(e.g. "an" ), simply return ""
     string PinyinValuesTable::get_intial(string s){
-
+        int len = (int)s.length();
+        for(int i = 1;i <= len;++i){
+            string initial_part = s.substr(0, i);
+            if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()){
+                return initial_part;
+            }
+        }
+        return "";
     }
-    // ...
+    // Method: get_final
+    // Get the final part of the syllable
+    // if toned, the tone will be replaced
+    string PinyinValuesTable::get_final(string s){
+        int len = (int)s.length();
+        for(int i = 0;i < len;++i){
+            string final_part = s.substr(i);
+            if(_toned_character_table.find(final_part) != _toned_character_table.end()){
+                replace_tone(final_part);
+                return final_part;
+            }else if(_final_syllable_set.find(final_part) != _final_syllable_set.end()){
+                return final_part;
+            }
+        }
+        return "";
+    }
+    // Method: is_legal
+    // Check whether the syllable is legal or not
+    string PinyinValuesTable::is_legal(string s){
+        return _legal_syllables_set.find(get_initial(s) + get_final(s)) != _legal_syllables_set.end();
+    }
+    // Method: is_toned
+    // Check whether the syllable has toned final
+    string PinyinValuesTable::is_toned(string s){
+        int len = (int)s.length();
+        for(int i = 0;i < len;++i){
+            string final_part = s.substr(i);
+            if(_toned_character_table.find(final_part) != _toned_character_table.end()){
+                return true;
+            }
+        }
+        return false;
+    }
+    // Method: get_tone
+    // get the tone of the syllable
+    // returning 0 as neutral tone
+    string PinyinValuesTable::get_tone(string s){
+        int len = (int)s.length();
+        for(int i = 0; i < len; ++i){
+            string final_part = s.substr(i);
+            if(_toned_character_table.find(final_part) != _toned_character_table.end()){
+                return _toned_character_table[final_part].second;
+            }
+        }
+        return 0;
+    }
+    // Method: replace_tone
+    // replace the toned part of syllable with non-toned
+    // return the tone
+    string PinyinValuesTable::replace_tone(string& toned){
+        std::pair<string, int> final_part_and_tone = _toned_character_table[toned];
+        toned = final_part_and_tone.first;
+        return final_part_and_tone.second;
+    }
+
     static set<string> PinyinValuesTable::_initial_syllable_set{"","b","p","m","f","d","t","n","l","g","k","h","j","q","x","zh","ch","sh","r","z","c","s","y","w"};
     static set<string> PinyinValuesTable::_final_syllable_set{"i","a","o","e","ai","ei","ao","ou","an","en","ang","eng","ong","er","e_hat""i","ia","ie","iao","iu","ian","in","ing","iang","iong","u","ua","uo","uai","ui","uan","un","uang","ueng","ü","üe","üan","ün"};   
     static set<string> PinyinValuesTable::_legal_syllables_set{'a', 'o', 'e', 'ai', 'ei', 'ao', 'ou', 'an', 'en', 'ang', 'eng', 'er', 'e_hat', 'bi', 'ba', 'bo', 'bai', 'bei', 'bao', 'ban', 'ben', 'bang', 'beng', 'bi', 'bie', 'biao', 'bian', 'bin', 'bing', 'bu', 'pi', 'pa', 'po', 'pai', 'pei', 'pao', 'pou', 'pan', 'pen', 'pang', 'peng', 'pi', 'pie', 'piao', 'pian', 'pin', 'ping', 'pu', 'mi', 'ma', 'mo', 'me', 'mai', 'mei', 'mao', 'mou', 'man', 'men', 'mang', 'meng', 'mi', 'mie', 'miao', 'miu', 'mian', 'min', 'ming', 'mu', 'fa', 'fo', 'fei', 'fou', 'fan', 'fen', 'fang', 'feng', 'fu', 'di', 'da', 'de', 'dai', 'dei', 'dao', 'dou', 'dan', 'den', 'dang', 'deng', 'dong', 'di', 'dia', 'die', 'diao', 'diu', 'dian', 'din', 'ding', 'du', 'duo', 'dui', 'duan', 'dun', 'ti', 'ta', 'te', 'tai', 'tao', 'tou', 'tan', 'tang', 'teng', 'tong', 'ti', 'tie', 'tiao', 'tian', 'ting', 'tu', 'tuo', 'tui', 'tuan', 'tun', 'ni', 'na', 'ne', 'nai', 'nei', 'nao', 'nou', 'nan', 'nen', 'nang', 'neng', 'nong', 'ni', 'nia', 'nie', 'niao', 'niu', 'nian', 'nin', 'ning', 'niang', 'nu', 'nuo', 'nuan', 'nun', 'nv', 'nve', 'li', 'la', 'lo', 'le', 'lai', 'lei', 'lao', 'lou', 'lan', 'len', 'lang', 'leng', 'long', 'li', 'lia', 'lie', 'liao', 'liu', 'lian', 'lin', 'ling', 'liang', 'lu', 'luo', 'luan', 'lun', 'lv', 'lve', 'ga', 'ge', 'gai', 'gei', 'gao', 'gou', 'gan', 'gen', 'gang', 'geng', 'gong', 'gu', 'gua', 'guo', 'guai', 'gui', 'guan', 'gun', 'guang', 'ka', 'ke', 'kai', 'kei', 'kao', 'kou', 'kan', 'ken', 'kang', 'keng', 'kong', 'ku', 'kua', 'kuo', 'kuai', 'kui', 'kuan', 'kun', 'kuang', 'ha', 'he', 'hai', 'hei', 'hao', 'hou', 'han', 'hen', 'hang', 'heng', 'hong', 'hu', 'hua', 'huo', 'huai', 'hui', 'huan', 'hun', 'huang', 'ji', 'ji', 'jia', 'jie', 'jiao', 'jiu', 'jian', 'jin', 'jing', 'jiang', 'jiong', 'ju', 'juan', 'jun', 'qi', 'qi', 'qia', 'qie', 'qiao', 'qiu', 'qian', 'qin', 'qing', 'qiang', 'qiong', 'qu', 'quan', 'qun', 'xi', 'xi', 'xia', 'xie', 'xiao', 'xiu', 'xian', 'xin', 'xing', 'xiang', 'xiong', 'xu', 'xuan', 'xun', 'zhi', 'zha', 'zhe', 'zhai', 'zhei', 'zhao', 'zhou', 'zhan', 'zhen', 'zhang', 'zheng', 'zhong', 'zhi', 'zhu', 'zhua', 'zhuo', 'zhuai', 'zhui', 'zhuan', 'zhun', 'zhuang', 'chi', 'cha', 'che', 'chai', 'chao', 'chou', 'chan', 'chen', 'chang', 'cheng', 'chong', 'chi', 'chu', 'chua', 'chuo', 'chuai', 'chui', 'chuan', 'chun', 'chuang', 'shi', 'sha', 'she', 'shai', 'shei', 'shao', 'shou', 'shan', 'shen', 'shang', 'sheng', 'shi', 'shu', 'shua', 'shuo', 'shuai', 'shui', 'shuan', 'shun', 'shuang', 'ri', 're', 'rao', 'rou', 'ran', 'ren', 'rang', 'reng', 'rong', 'ri', 'ru', 'rua', 'ruo', 'rui', 'ruan', 'run', 'zi', 'za', 'ze', 'zai', 'zei', 'zao', 'zou', 'zan', 'zen', 'zang', 'zeng', 'zong', 'zi', 'zu', 'zuo', 'zui', 'zuan', 'zun', 'ci', 'ca', 'ce', 'cai', 'cao', 'cou', 'can', 'cen', 'cang', 'ceng', 'cong', 'ci', 'cu', 'cuo', 'cui', 'cuan', 'cun', 'si', 'sa', 'se', 'sai', 'sao', 'sou', 'san', 'sen', 'sang', 'seng', 'song', 'si', 'su', 'suo', 'sui', 'suan', 'sun', 'yi', 'ya', 'yo', 'ye', 'yao', 'you', 'yan', 'yang', 'yong', 'yi', 'yin', 'ying', 'yu', 'yuan', 'yun', 'wa', 'wo', 'wai', 'wei', 'wan', 'wen', 'wang', 'weng', 'wong', 'wu'}
