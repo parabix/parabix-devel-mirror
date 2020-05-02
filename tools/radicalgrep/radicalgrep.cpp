@@ -16,7 +16,6 @@ cl::OptionCategory optionsPrompt("Options for Radical Grep");
 
 static cl::opt<std::string> regex(cl::Positional, cl::desc("<radical expression>"), cl::Required, cl::cat(optionsPrompt));
 static cl::opt<std::string> filepath(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(optionsPrompt));
-//cl::opt<std::string> outputFile("o", cl::desc("specify name of output file."), cl::value_desc("filename"));
 
 void radical_grep(const string regex,const string filename,ifstream&search);
 

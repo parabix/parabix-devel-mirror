@@ -65,7 +65,7 @@ bool resolvePropertyDefinition(Name * const property) {
         } else if (value == "$s") { // "end anchor ($) in single-line mode"
             property->setDefinition(makeNegativeLookAheadAssertion(makeCC(0, 0x10FFFF)));
             return true;
-        }
+        } 
     }
     return false;
 }
@@ -167,7 +167,7 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
                 Name * surr = makeName("surrogate", Name::Type::UnicodeProperty);
                 Name * unassigned = makeName("cn", Name::Type::UnicodeProperty);
                 return ~(resolveUnicodeSet(space) + resolveUnicodeSet(ctrl) + resolveUnicodeSet(surr) + resolveUnicodeSet(unassigned));
-            }
+            } 
 
 
         }
