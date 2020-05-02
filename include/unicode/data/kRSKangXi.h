@@ -3593,49 +3593,7 @@ namespace UCD {
 
     const static UnicodeSet _214_Set{const_cast<UnicodeSet::run_t *>(___214_Set_runs), 5, 0, const_cast<UnicodeSet::bitquad_t *>(___214_Set_quads), 2, 0};
 
-    static EnumeratedPropertyObject property_object
-        {krs,
-        KRS_ns::independent_prop_values,
-        std::move(KRS_ns::enum_names),
-        std::move(KRS_ns::value_names),
-        std::move(KRS_ns::aliases_only_map),{
-        &_35_Set, &_64_Set, &_72_Set, &_130_Set, &_111_Set, &_121_Set,
-        &_172_Set, &_196_Set, &_203_Set, &_1_Set, &_24_Set, &_2_Set,
-        &_90_Set, &_3_Set, &_4_Set, &_37_Set, &_5_Set, &_15_Set, &_52_Set,
-        &_80_Set, &_213_Set, &_6_Set, &_7_Set, &_8_Set, &_117_Set, &_30_Set,
-        &_9_Set, &_10_Set, &_16_Set, &_11_Set, &_12_Set, &_26_Set,
-        &_140_Set, &_28_Set, &_13_Set, &_14_Set, &_159_Set, &_187_Set,
-        &_34_Set, &_182_Set, &_17_Set, &_85_Set, &_18_Set, &_58_Set,
-        &_118_Set, &_19_Set, &_86_Set, &_20_Set, &_21_Set, &_22_Set,
-        &_23_Set, &_25_Set, &_131_Set, &_27_Set, &_212_Set, &_61_Set,
-        &_42_Set, &_29_Set, &_75_Set, &_122_Set, &_38_Set, &_31_Set,
-        &_32_Set, &_46_Set, &_102_Set, &_33_Set, &_36_Set, &_39_Set,
-        &_40_Set, &_41_Set, &_43_Set, &_44_Set, &_45_Set, &_47_Set,
-        &_48_Set, &_49_Set, &_50_Set, &_51_Set, &_53_Set, &_54_Set,
-        &_55_Set, &_56_Set, &_57_Set, &_59_Set, &_60_Set, &_62_Set,
-        &_63_Set, &_65_Set, &_66_Set, &_135_Set, &_67_Set, &_210_Set,
-        &_68_Set, &_69_Set, &_70_Set, &_71_Set, &_73_Set, &_74_Set,
-        &_76_Set, &_77_Set, &_211_Set, &_114_Set, &_78_Set, &_79_Set,
-        &_81_Set, &_82_Set, &_83_Set, &_84_Set, &_109_Set, &_87_Set,
-        &_88_Set, &_89_Set, &_91_Set, &_92_Set, &_93_Set, &_94_Set,
-        &_95_Set, &_96_Set, &_97_Set, &_98_Set, &_99_Set, &_100_Set,
-        &_101_Set, &_106_Set, &_103_Set, &_104_Set, &_105_Set, &_107_Set,
-        &_108_Set, &_110_Set, &_112_Set, &_113_Set, &_115_Set, &_195_Set,
-        &_116_Set, &_119_Set, &_129_Set, &_120_Set, &_123_Set, &_124_Set,
-        &_125_Set, &_126_Set, &_127_Set, &_128_Set, &_132_Set, &_133_Set,
-        &_134_Set, &_136_Set, &_137_Set, &_138_Set, &_139_Set, &_141_Set,
-        &_142_Set, &_184_Set, &_143_Set, &_144_Set, &_145_Set, &_146_Set,
-        &_147_Set, &_148_Set, &_149_Set, &_150_Set, &_151_Set, &_152_Set,
-        &_153_Set, &_154_Set, &_155_Set, &_156_Set, &_157_Set, &_158_Set,
-        &_175_Set, &_160_Set, &_161_Set, &_162_Set, &_163_Set, &_164_Set,
-        &_165_Set, &_166_Set, &_167_Set, &_168_Set, &_169_Set, &_170_Set,
-        &_171_Set, &_173_Set, &_174_Set, &_176_Set, &_177_Set, &_178_Set,
-        &_179_Set, &_180_Set, &_181_Set, &_183_Set, &_185_Set, &_186_Set,
-        &_188_Set, &_189_Set, &_190_Set, &_191_Set, &_192_Set, &_193_Set,
-        &_194_Set, &_197_Set, &_198_Set, &_199_Set, &_200_Set, &_201_Set,
-        &_202_Set, &_204_Set, &_205_Set, &_206_Set, &_207_Set, &_208_Set,
-        &_209_Set, &_214_Set
-        }};
+
     }
 }
 
