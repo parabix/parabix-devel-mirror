@@ -6,34 +6,6 @@ from unicode_set import *
 import unihan_config
 import re
 
-PropertyAliases_template = r"""
-namespace UCD {
-    enum property_t {
-        %s};
-    const static std::vector<std::string> property_enum_name = {
-        %s};
-    const static std::vector<std::string> property_full_name = {
-        %s};
-    static std::unordered_map<std::string, int> alias_map {{
-        %s}};
-}
-"""
-
-EnumeratedProperty_template = r"""
-    namespace %s_ns {
-        enum value_t {
-            %s};
-        const static std::vector<std::string> enum_names = {
-            %s};
-        const static std::vector<std::string> value_names = {
-            %s};
-        static std::unordered_map<std::string, int> aliases_only_map {{
-            %s}};
-    }
-"""
-
-
-
 fields_pattern = re.compile(r"\d*\.\d*")
 def parse_fields(fields):
     radical_list = []
