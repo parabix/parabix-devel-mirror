@@ -48,7 +48,7 @@
 
 namespace UCD {
 
-  const std::array<PropertyObject *, 128> property_object_table = {{
+  const std::array<PropertyObject *, 127> property_object_table = {{
     new UnsupportedPropertyObject(cjkAccountingNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkOtherNumeric, PropertyObject::ClassTypeId::NumericProperty),
     new UnsupportedPropertyObject(cjkPrimaryNumeric, PropertyObject::ClassTypeId::NumericProperty),
@@ -175,8 +175,7 @@ namespace UCD {
     &EMOJIMODIFIER_ns::property_object,
     &EMOJIMODIFIERBASE_ns::property_object,
     &EMOJICOMPONENT_ns::property_object,
-    &EXTENDEDPICTOGRAPHIC_ns::property_object,
-    &KRS_ns::property_object
+    &EXTENDEDPICTOGRAPHIC_ns::property_object
     }};
 }
 

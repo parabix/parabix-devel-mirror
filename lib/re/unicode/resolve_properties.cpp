@@ -65,7 +65,10 @@ bool resolvePropertyDefinition(Name * const property) {
         } else if (value == "$s") { // "end anchor ($) in single-line mode"
             property->setDefinition(makeNegativeLookAheadAssertion(makeCC(0, 0x10FFFF)));
             return true;
-        } 
+        } else if (value == "kangxi") {
+            property->setDefinition(makeName("blk", "kangxi", Name::Type::UnicodeProperty));
+            return true;
+        }
     }
     return false;
 }

@@ -641,6 +641,8 @@ def UCD_main():
         # Binary properties from PropList.txt
     ucd.generate_multisection_properties_file('emoji/emoji-data')
     
+    #kRsKangXi Properties
+    ucd.generate_property_value_file('kRsKangXi', 'krs')
     #
     ucd.generate_PropertyValueAliases_h()
 
