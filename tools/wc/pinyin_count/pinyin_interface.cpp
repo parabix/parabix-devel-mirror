@@ -15,8 +15,31 @@ namespace PY{
 
     // Methods in PinyinValuesEnumerator
     void PinyinValuesEnumerator::enumerate(PinyinValuesParser& parser){
-
+        vector<vector<pair<string,int>>> temp_enumerated; //temporary vector of all pairs of parsed inputs
+        for(iterator first_syl=parser._parsed_syllable_tone.begin().first;first_syl!=parser._parsed_syllable_tone.begin().first;first_syl++){
+            vector<pair<string,int>> temp;
+            for(iterator syl=first_syl.first.begin();syl!=first_syl.first.end();syl++){
+                for(iterator tone=first_syl.second.begin();tone!=first_syl.second.end();tone++){
+                    temp.push_back(make_pair(syl,tone));
+                }
+            }            
+            temp_enumerated.push_back(temp);
+        }
+        vector<int> indices(temp_enumerated.size());
+        int i=temp_enumerated.size()-1;
+        while(i>=0){
+            vector<pair<string,int>> T; //temporary vector of pairs
+            for(int k=0;k<temp_enumerated.size();k++){
+                T.push_back(temp_enumerated[k][indices[k]]); //build current combination
+            }
+            _enumerated_list.push_back(T); //add to final vector
+            i=temp_enumerated.size()-1;
+            while(i>=0&&++indices[i]==temp_enumerated[i].size()){ 
+                indices[i--]=0; //reset indices to 0;
+            }
+        }
     }
+
 
     // Methods in PinyinValuesTable
     // Method: get_initial
