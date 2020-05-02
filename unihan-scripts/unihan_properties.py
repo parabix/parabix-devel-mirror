@@ -14,16 +14,8 @@ def emit_enumerated_property(f, property_code, independent_prop_values, prop_val
         f.write(cformat.multiline_fill(['[%04x, %04x]' % (lo, hi) for (lo, hi) in uset_to_range_list(value_map[v])], ',', 4))
         f.write("**/\n\n")
         f.write(value_map[v].generate(v.lower() + "_Set", 4))
-    set_list = ['&%s_Set' % v.lower() for v in prop_values]
-    f.write("    static EnumeratedPropertyObject property_object\n")
-    f.write("        {%s,\n" % property_code)
-    f.write("        %s_ns::independent_prop_values,\n" % property_code.upper())
-    f.write("        std::move(%s_ns::enum_names),\n" % property_code.upper())
-    f.write("        std::move(%s_ns::value_names),\n" % property_code.upper())
-    f.write("        std::move(%s_ns::aliases_only_map),{\n" % property_code.upper())
-    f.write("        " + cformat.multiline_fill(set_list, ',', 8))
-    f.write("\n        }};"
-        "\n    }\n")
+    f.write("\n    }\n")
+ 
 def sum_bytes(value_map):
     byte_sum = 0
     byte_sum = sum([value_map[v].bytes() for v in value_map.keys()])
@@ -68,4 +60,3 @@ def unihan_main():
 if __name__ == "__main__":
     unihan_main()
 
- 
