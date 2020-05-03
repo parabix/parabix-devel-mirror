@@ -17,8 +17,25 @@ for syllable in legal:
         test="    const static UnicodeSet::run_t __"+syllable+x+"_Set_runs[] = {\n"
         if test in lines:
             #< <jing,1>, &jing_Set[1] >
-            table.append("<<"+syllable+","+x+">,&"+syllable+"_Set["+x+"]>")
+            temp=('{("'+syllable+'",'+x+"),&"+syllable+"_Set["+x+"]}")
+            temp+=","
+            table.append(temp.ljust(30))
 
-output.writelines(str(table)[1:-1])
+#get rid of last comma
+table[-1]=table[-1].strip(' ')
+table[-1]=table[-1][:-1]
+
+
+count=0
+for entry in table:
+    if entry==table[-1]:
+        output.write(entry)
+        continue
+    output.write(entry)
+    count+=1
+    if (count>=7):
+        output.write('\n')
+        count=0
+
 output.close()
 
