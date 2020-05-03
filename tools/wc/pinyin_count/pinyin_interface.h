@@ -118,6 +118,14 @@ namespace PY{
         // Method: replace_equivalence
         // replave unicode v and e_hat
         void replace_equivalence(string& s);
+
+        // utility to iterate through _legal_syllables_table
+        set<string>::const_iterator legal_begin(){
+            return _legal_syllables_set.cbegin();
+        }
+        const set<string>::const_iterator legal_end(){
+            return _legal_syllables_set.cend();
+        }
     private:
         static set<string> _initial_syllable_set; // storing all valid initial parts of syllables
         static set<string> _final_syllable_set;   // storing all valid final parts of syllables
