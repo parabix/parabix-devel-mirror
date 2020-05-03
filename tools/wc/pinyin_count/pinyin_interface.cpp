@@ -153,10 +153,26 @@ namespace PY{
     // if toned, the tone will be replaced
     string PinyinValuesTable::get_final(string s){
         int len = (int)s.length();
-        for(int i = 0;i < len;++i){
+        int i;
+        for(i = 1;i <= len;++i){
+            string initial_part = s.substr(0, i);
+            if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()){
+                break;
+            }else if(_toned_character_table.find(initial_part) != _toned_character_table.end()){
+                replace_tone(initial_part);
+                if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()) break;
+            }
+        }
+        if(i > len){
+            string final_part = s;
+        }else{
             string final_part = s.substr(i);
-            if(_toned_character_table.find(final_part) != _toned_character_table.end()){
-                replace_tone(final_part);
+        }
+        for(i = 0;i < final_part.lengh();++i){
+            string toned_char = final_part.substr(i,1);
+            if(_toned_character_table.find(toned_char) != _toned_character_table.end()){
+                replace_tone(toned_char);
+                final_part = final_part.replace(i,1,toned_char);
                 if(_final_syllable_set.find(final_part) != _final_syllable_set.end()) return final_part;
             }else if(_final_syllable_set.find(final_part) != _final_syllable_set.end()){
                 return final_part;
@@ -174,7 +190,7 @@ namespace PY{
     string PinyinValuesTable::is_toned(string s){
         int len = (int)s.length();
         for(int i = 0;i < len;++i){
-            string final_part = s.substr(i);
+            string final_part = s.substr(i,1);
             if(_toned_character_table.find(final_part) != _toned_character_table.end()){
                 return true;
             }
@@ -187,7 +203,7 @@ namespace PY{
     string PinyinValuesTable::get_tone(string s){
         int len = (int)s.length();
         for(int i = 0; i < len; ++i){
-            string final_part = s.substr(i);
+            string final_part = s.substr(i,1);
             if(_toned_character_table.find(final_part) != _toned_character_table.end()){
                 return _toned_character_table[final_part].second;
             }
