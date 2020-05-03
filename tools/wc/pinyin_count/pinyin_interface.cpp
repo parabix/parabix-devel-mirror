@@ -40,8 +40,8 @@ namespace PY{
         }
     }
 
-
     // Methods in PinyinValuesTable
+    
     // Method: get_initial
     // Get the initial part of the syllable
     // if no initial part(e.g. "an" ), simply return ""
@@ -51,7 +51,10 @@ namespace PY{
             string initial_part = s.substr(0, i);
             if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()){
                 return initial_part;
-            }
+            }else if(_toned_character_table.find(initial_part) != _toned_character_table.end()){
+                replace_tone(initial_part);
+                if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()) return initial_part;
+            }//for m/n
         }
         return "";
     }
@@ -64,7 +67,7 @@ namespace PY{
             string final_part = s.substr(i);
             if(_toned_character_table.find(final_part) != _toned_character_table.end()){
                 replace_tone(final_part);
-                return final_part;
+                if(_final_syllable_set.find(final_part) != _final_syllable_set.end()) return final_part;
             }else if(_final_syllable_set.find(final_part) != _final_syllable_set.end()){
                 return final_part;
             }
