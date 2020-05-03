@@ -1,20 +1,5 @@
 #	Testsuite Design
 
-##	Input Format
-
-- Any .csv file. The goal is to design a tool that can handle any input by throwing an error, throwing a warning and writing to an output file, or only writing to an output file. 
-
-##	Output Format
-
-- .json
-- At the beginning of the file there is an array of strings containing the field names in order.
-- The records are output in an array of objects. Each object consists of 0 or more key-element pairs.
-- If a field in a given record is empty in the input file, that field should not occur in the corresponding object in the output file.
-- If a record consists entirely of empty fields, it should be output as an empty object, ie. {}.
-- If a record contains more fields than there are in the header, throw a warning and go to the next record, skipping the remaining entries
-- If an input file contains only a header, ie. only 1 line of data, output the field names in an array and an empty array of objects, ie. []
-- If an input file is entirely empty, throw a warning and output a file containing two empty arrays.
-
 ##	Black Box Testing
 
 To attain adequate test coverage using black box testing, the domain of inputs is broken into partitions for each input parameter.
