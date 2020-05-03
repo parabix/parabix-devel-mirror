@@ -8,10 +8,100 @@
 
 using namespace std;
 namespace PY{
-    // Methods in PinyinValuesParser
-    void PinyinValuesParser::parse(string toparse){
-        
+    // Method of Parser
+    // Parse multiple pinyin regexes into a list based on ' ' space
+    // with no extra space in both ends
+    void PinyinValuesParser::_parse_multi_syllable(string s, vector<string>& list){
+        int start = s.find_first_not_of(' '), end;
+        while(start != s.npos){
+            s = s.substr(start);        // replace prefix empty space
+            end = s.find_first_of(' '); // find the end of the current syllable 
+            list.push_back(s.substr(start, end - start));
+
+            // erase the current syllable
+            s = s.substr(end);  
+            start = s.find_first_not_of(' ');
+        }
     }
+
+    // interpret
+    std::pair<vector<string>, vector<int>>
+    PinyinValuesParser::_interpret_regex(string s){
+        std::pair<vector<string>, vector<int>> resolved;
+        PinyinValuesTable table;
+
+        // resloved tones specified 
+        regex pattern(".*([0-4]).*");
+        smatch match_result;
+        if(regex_search(s, match_result, pattern)){
+            string tone = match_result.str();
+            if(tone.length() > 1) throw ParserException("Invalid Syntax -- Too many numbers to specify tones");
+            s = regex_replace(s, pattern, ""); // erase the tone number
+            resolved.second.push_back(*tone.begin() - '0'); // convert char to int
+        }
+        else if(table.is_toned(s)){
+            // resolve unicode tones
+            int tone = table.replace_tone(s);
+            resolved.second.push_back(tone);
+        }
+        else{
+            // no tone
+            table.replace_equivalence(s);
+            resolved.second = vector<int>{0, 1, 2, 3, 4};
+        }
+        // resolve regex '?'
+        int qmark_index = s.find('?');
+        if(qmark_index != s.npos){
+            if(s.find("g?") == s.npos) 
+                throw ParserException("Invalid Syntax -- only support ? after \'g\'");
+            // erase ?
+            s = s.substr(0, qmark_index);
+            resolved.first.push_back(s.substr(s.find_last_of('g'))); // push_back the syllable without g
+        }
+        resolved.first.push_back(s); // push s into possibly final result
+        
+        // resolve regex '.'
+        if(s.find('.') != s.npos){
+            int initial_size = resolved.first.size();
+            for(int i = 0; i < initial_size; i++){
+                pattern = regex(resolved.first[0]);
+                for(auto iter = table.legal_begin(); iter != table.legal_end(); iter++){
+                    if(regex_search(*iter, pattern, match_result)){
+                        resolved.first.push_back(*iter);
+                    }
+                }
+                resolved.first.erase(resolved.first.begin()); // erase the regex with .
+            }
+        }
+        
+        return resolved;
+    }
+
+    void PinyinValuesParser::parse(string toparse){
+        vector<string> list;
+        _parse_multi_syllable(toparse, list);
+        try{
+            for(auto iter = list.begin(); iter != list.end(); iter++){
+                _parsed_syllable_tone.push_back(_interpret_regex(*iter));
+            }
+            _parsed = true;
+        }catch(ParserException& e){
+            cout<<"ParserException:";
+            cout<<e.what()<<endl;
+        }catch(std::exception& e){
+            cout<<"Unexpected Exception!"<<endl;
+            cout<<e.what()<<endl;
+        }
+    }
+
+    // elimiate extra space in both ends of the string
+    void PinyinValuesParser::eliminate_space(string& s){
+        int first_index = s.find_first_not_of(' ');
+        int len = s.find_last_not_of(' ')+1 - first_index;
+        s = s.substr(first_index, len);
+    }
+
+
 
     // Methods in PinyinValuesEnumerator
     void PinyinValuesEnumerator::enumerate(PinyinValuesParser& parser){

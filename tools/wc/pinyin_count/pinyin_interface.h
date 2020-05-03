@@ -13,6 +13,7 @@
 #include <map>
 #include <utility>
 #include <set>
+#include <regex>
 #include <pinyin/KHanyuPinyin.h>
 
 namespace PY{
@@ -22,6 +23,7 @@ namespace PY{
     // using std::wstring;
     using std::map;
     using std::set;
+
 
     // Pinyin Values Parser Class
     // takes in input string(to do: take in unicode input)
@@ -48,14 +50,34 @@ namespace PY{
             return _parsed;
         }
 
+        friend class PinyinValuesEnumerator;
     private:
         vector<std::pair<vector<string>, vector<int>>> _parsed_syllable_tone; // record the possible syllables and tones
-
-        friend class PinyinValuesEnumerator;
         // e.g. (<,> for pair, and {} for vector)
         // { <{jin},{0,1,2,3,4}>, <{rong},{0,1,2,3,4}>} for input "jin rong"
 
         bool _parsed; // whether the parser has done the parsing or not
+
+        // Private Method
+
+        // Parse multiple pinyin regexes into a list based on ' ' space
+        void _parse_multi_syllable(string s, vector<string>& list);
+
+        // interpret pinyin regex
+        std::pair<vector<string>, vector<int>> _interpret_regex(string s);
+
+        // elimiate extra space in both ends of the string
+        void eliminate_space(string& s);
+    };
+
+    class ParserException : public std::exception{
+    public:
+        ParserException(const char* c): message(c) {}
+        const char* what() throw(){
+            return message.c_str();
+        }
+    private:
+        string message;
     };
 
     
