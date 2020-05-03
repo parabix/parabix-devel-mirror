@@ -315,6 +315,19 @@ void ICGrepKernel::generatePabloMethod() {
         }
         RE_Compiler re_compiler(scope1, mOptions->mCodeUnitAlphabet);
         re_compiler.addAlphabet(mOptions->mCodeUnitAlphabet, basis);
+        for (unsigned i = 0; i < mOptions->mAlphabets.size(); i++) {
+            auto & alpha = mOptions->mAlphabets[i].first;
+            auto basis = getInputStreamSet(alpha->getName() + "_basis");
+            re_compiler.addAlphabet(alpha, basis);
+        }
+        if (mOptions->mEncodingTransformer) {
+            PabloAST * idxStrm = pb.createExtract(getInputStreamVar("mIndexing"), pb.getInteger(0));
+            re_compiler.addIndexingAlphabet(mOptions->mEncodingTransformer, idxStrm);
+        }
+        for (const auto & e : mOptions->mExternals) {
+            PabloAST * extStrm = pb.createExtract(getInputStreamVar(e.getName()), pb.getInteger(0));
+            re_compiler.addPrecompiled(e.getName(), RE_Compiler::Marker(extStrm));
+        }
         RE_Compiler::Marker matches = re_compiler.compileRE(mOptions->mRE, prefixMatches);
         PabloAST * matchResult = matches.stream();
         if (matches.offset() == 0) matchResult = scope1->createAdvance(matchResult, scope1->getInteger(1));
