@@ -15,9 +15,9 @@ namespace PY{
 
     // Methods in PinyinValuesEnumerator
     void PinyinValuesEnumerator::enumerate(PinyinValuesParser& parser){
-        vector(vector(pair(string,int))) temp_enumerated; //temporary vector of all pairs of parsed inputs
+        vector<vector<pair<string,int>>> temp_enumerated; //temporary vector of all pairs of parsed inputs
         for(iterator first_syl=parser._parsed_syllable_tone.begin().first;first_syl!=parser._parsed_syllable_tone.begin().first;first_syl++){
-            vector(pair(string,int)) temp;
+            vector<pair<string,int>> temp;
             for(iterator syl=first_syl.first.begin();syl!=first_syl.first.end();syl++){
                 for(iterator tone=first_syl.second.begin();tone!=first_syl.second.end();tone++){
                     temp.push_back(make_pair(syl,tone));
@@ -25,16 +25,16 @@ namespace PY{
             }            
             temp_enumerated.push_back(temp);
         }
-        vector(int) indices(temp_enumerated.size());
+        vector<int> indices(temp_enumerated.size());
         int i=temp_enumerated.size()-1;
-        while(i)=0){
-            vector(pair(string,int)) T; //temporary vector of pairs
+        while(i>=0){
+            vector<pair<string,int>> T; //temporary vector of pairs
             for(int k=0;k(temp_enumerated.size();k++){
                 T.push_back(temp_enumerated[k][indices[k]]); //build current combination
             }
             _enumerated_list.push_back(T); //add to final vector
             i=temp_enumerated.size()-1;
-            while(i)=0&&++indices[i]==temp_enumerated[i].size()){ 
+            while(i>=0&&++indices[i]==temp_enumerated[i].size()){ 
                 indices[i--]=0; //reset indices to 0;
             }
         }
@@ -47,7 +47,7 @@ namespace PY{
     // if no initial part(e.g. "an" ), simply return ""
     string PinyinValuesTable::get_intial(string s){
         int len = (int)s.length();
-        for(int i = 1;i (= len;++i){
+        for(int i = 1;i <= len;++i){
             string initial_part = s.substr(0, i);
             if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()){
                 return initial_part;
@@ -63,7 +63,7 @@ namespace PY{
     // if toned, the tone will be replaced
     string PinyinValuesTable::get_final(string s){
         int len = (int)s.length();
-        for(int i = 0;i ( len;++i){
+        for(int i = 0;i < len;++i){
             string final_part = s.substr(i);
             if(_toned_character_table.find(final_part) != _toned_character_table.end()){
                 replace_tone(final_part);
@@ -83,7 +83,7 @@ namespace PY{
     // Check whether the syllable has toned final
     string PinyinValuesTable::is_toned(string s){
         int len = (int)s.length();
-        for(int i = 0;i ( len;++i){
+        for(int i = 0;i < len;++i){
             string final_part = s.substr(i);
             if(_toned_character_table.find(final_part) != _toned_character_table.end()){
                 return true;
@@ -96,7 +96,7 @@ namespace PY{
     // returning 0 as neutral tone
     string PinyinValuesTable::get_tone(string s){
         int len = (int)s.length();
-        for(int i = 0; i ( len; ++i){
+        for(int i = 0; i < len; ++i){
             string final_part = s.substr(i);
             if(_toned_character_table.find(final_part) != _toned_character_table.end()){
                 return _toned_character_table[final_part].second;
@@ -108,17 +108,17 @@ namespace PY{
     // replace the toned part of syllable with non-toned
     // return the tone
     string PinyinValuesTable::replace_tone(string& toned){
-        std::pair(string, int) final_part_and_tone = _toned_character_table[toned];
+        std::pair<string, int> final_part_and_tone = _toned_character_table[toned];
         toned = final_part_and_tone.first;
         return final_part_and_tone.second;
     }
 
-    static set(string) PinyinValuesTable::_initial_syllable_set{"b","p","m","f","d","t","n","l","g","k","h","j","q","x","zh","ch","sh","r","z","c","s","y","w"
+    static set<string> PinyinValuesTable::_initial_syllable_set{"b","p","m","f","d","t","n","l","g","k","h","j","q","x","zh","ch","sh","r","z","c","s","y","w"
     };
-    static set(string) PinyinValuesTable::_final_syllable_set{"i","a","o","e","ai","ei","e_hat","ao","ou","an","en","ang","eng","ong","er","i","ia","ie","iao","iu","ian","in","ing","iang","iong","u","ua",
+    static set<string> PinyinValuesTable::_final_syllable_set{"i","a","o","e","ai","ei","e_hat","ao","ou","an","en","ang","eng","ong","er","i","ia","ie","iao","iu","ian","in","ing","iang","iong","u","ua",
     "uo","uai","ui","uan","un","uang","ueng","v","ve","van","vn"
     };
-    static set(string) PinyinValuesTable::_legal_syllables_set{
+    static set<string> PinyinValuesTable::_legal_syllables_set{
     "a", "o", "e", "ai", "ei", "ao", "ou", "an", "en", "ang", "eng", "er", "bi", "ba", "bo", "bai", "bei", "bao", "ban", "ben", "bang", "beng", "bi", "bie",
     "biao", "bian", "bin", "bing", "bu", "pi", "pa", "po", "pai", "pei", "pao", "pou", "pan", "pen", "pang", "peng", "pi", "pie", "piao", "pian", "pin", "ping", "pu", "m",
     "mi", "ma", "mo", "me", "mai", "mei", "mao", "mou", "man", "men", "mang", "meng", "mi", "mie", "miao", "miu", "mian", "min", "ming", "mu", "fa", "fo", "fei", "fou",
@@ -138,14 +138,14 @@ namespace PY{
     "ci", "cu", "cuo", "cui", "cuan", "cun", "si", "sa", "se", "sai", "sao", "sou", "san", "sen", "sang", "seng", "song", "si", "su", "suo", "sui", "suan", "sun", "yi",
     "ya", "yo", "ye", "yao", "you", "yan", "yang", "yong", "yi", "yin", "ying", "yu", "yuan", "yun", "wa", "wo", "wai", "wei", "wan", "wen", "wang", "weng", "wong", "wu"
     };
-    static map(string, std::pair(string, int)) PinyinValuesTable::_toned_character_table{ 
+    static map<string, std::pair<string, int>> PinyinValuesTable::_toned_character_table{ 
     {"ā",("a",1)},{"á",("a",2)},{"ǎ",("a",3)},{"à",("a",4)},
     {"ī",("i",1)},{"í",("i",2)},{"ǐ",("i",3)},{"ì",("i",4)},    {"ū",("u",1)},{"ú",("u",2)},{"ǔ",("u",3)},{"ù",("u",4)},
     {"ē",("e",1)},{"é",("e",2)},{"ě",("e",3)},{"è",("e",4)},    {"ō",("o",1)},{"ó",("o",2)},{"ǒ",("o",3)},{"ò",("o",4)},
     {"ǜ",("v",1)},{"ǘ",("v",2)},{"ǚ",("v",3)},{"ǜ",("v",4)},    {"m̄",("m",1)},{"ḿ",("m",2)},{"m̀",("m",4)},
     {"ń",("n",2)},{"ň",("n",3)},{"ǹ",("n",4)},                  {'ê̄',("e_hat",1)},{'ế',("e_hat",2)},{'ê̌',("e_hat",3)},{'ề',("e_hat",4)}
     }; 
-    static map(std::pair(string, int), UCD::UnicodeSet*) UnicodeSetTable:: _unicodeset_table{ 
+    static map<std::pair<string, int>, UCD::UnicodeSet*> UnicodeSetTable:: _unicodeset_table{ 
     {("a",0),&a_Set[0]},          {("a",1),&a_Set[1]},          {("a",2),&a_Set[2]},          {("a",3),&a_Set[3]},          {("a",4),&a_Set[4]},          {("o",0),&o_Set[0]},          {("o",1),&o_Set[1]},          
     {("o",2),&o_Set[2]},          {("e",0),&e_Set[0]},          {("e",1),&e_Set[1]},          {("e",2),&e_Set[2]},          {("e",3),&e_Set[3]},          {("e",4),&e_Set[4]},          {("ai",1),&ai_Set[1]},        
     {("ai",2),&ai_Set[2]},        {("ai",3),&ai_Set[3]},        {("ai",4),&ai_Set[4]},        {("ei",2),&ei_Set[2]},        {("ei",3),&ei_Set[3]},        {("ei",4),&ei_Set[4]},        {("ao",1),&ao_Set[1]},        
