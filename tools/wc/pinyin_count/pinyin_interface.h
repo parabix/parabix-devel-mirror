@@ -14,7 +14,7 @@
 #include <utility>
 #include <set>
 #include <regex>
-#include <pinyin/KHanyuPinyin.h>
+#include <unicode/data/KHanyuPinyin.h>
 
 namespace PY{
     using std::vector;
