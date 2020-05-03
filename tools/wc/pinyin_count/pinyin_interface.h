@@ -50,6 +50,8 @@ namespace PY{
 
     private:
         vector<std::pair<vector<string>, vector<int>>> _parsed_syllable_tone; // record the possible syllables and tones
+
+        friend class PinyinValuesEnumerator;
         // e.g. (<,> for pair, and {} for vector)
         // { <{jin},{0,1,2,3,4}>, <{rong},{0,1,2,3,4}>} for input "jin rong"
 
