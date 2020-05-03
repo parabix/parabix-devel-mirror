@@ -133,7 +133,7 @@ namespace PY{
                 return std::move(UCD::UnicodeSet());
         }
     private:
-        static map<std::pair<string, int>, UCD::UnicodeSet* uc_ptr> _unicodeset_table;
+        static map<std::pair<string, int>, UCD::UnicodeSet*> _unicodeset_table;
     };
 }
 
