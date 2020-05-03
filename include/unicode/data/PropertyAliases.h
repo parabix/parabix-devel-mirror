@@ -29,7 +29,7 @@ namespace UCD {
         Radical, RI, SD, STerm, Term, UIdeo, Upper, VS, WSpace, XIDC, XIDS,
         XO_NFC, XO_NFD, XO_NFKC, XO_NFKD, emoji, emojipresentation,
         emojimodifier, emojimodifierbase, emojicomponent,
-        extendedpictographic, kangxi};
+        extendedpictographic};
     const static std::vector<std::string> property_enum_name = {
         "cjkAccountingNumeric", "cjkOtherNumeric", "cjkPrimaryNumeric",
         "nv", "cf", "cjkCompatibilityVariant", "dm", "FC_NFKC", "lc",
@@ -50,7 +50,7 @@ namespace UCD {
         "SD", "STerm", "Term", "UIdeo", "Upper", "VS", "WSpace", "XIDC",
         "XIDS", "XO_NFC", "XO_NFD", "XO_NFKC", "XO_NFKD", "emoji",
         "emojipresentation", "emojimodifier", "emojimodifierbase",
-        "emojicomponent", "extendedpictographic", "kangxi"};
+        "emojicomponent", "extendedpictographic"};
     const static std::vector<std::string> property_full_name = {
         "kAccountingNumeric", "kOtherNumeric", "kPrimaryNumeric",
         "Numeric_Value", "Case_Folding", "kCompatibilityVariant",
@@ -92,7 +92,7 @@ namespace UCD {
         "Uppercase", "Variation_Selector", "White_Space", "XID_Continue",
         "XID_Start", "Expands_On_NFC", "Expands_On_NFD", "Expands_On_NFKC",
         "Expands_On_NFKD", "Emoji", "Emoji_Presentation", "Emoji_Modifier",
-        "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic", "kRSKangXi"};
+        "Emoji_Modifier_Base", "Emoji_Component", "Extended_Pictographic"};
     static std::unordered_map<std::string, int> alias_map {{
         {"age", age}, {"ahex", AHex}, {"alpha", Alpha},
         {"alphabetic", Alpha}, {"asciihexdigit", AHex}, {"bc", bc},
@@ -199,7 +199,7 @@ namespace UCD {
         {"whitespace", WSpace}, {"wordbreak", WB}, {"wspace", WSpace},
         {"xidc", XIDC}, {"xidcontinue", XIDC}, {"xids", XIDS},
         {"xidstart", XIDS}, {"xonfc", XO_NFC}, {"xonfd", XO_NFD},
-        {"xonfkc", XO_NFKC}, {"xonfkd", XO_NFKD},{"kangxi", kangxi}}};
+        {"xonfkc", XO_NFKC}, {"xonfkd", XO_NFKD}}};
 }
 
 #endif
