@@ -15,7 +15,7 @@ namespace PY{
 
     // Methods in PinyinValuesEnumerator
     void PinyinValuesEnumerator::enumerate(PinyinValuesParser& parser){
-        vector<vector<pair<string,int>>> temp_enumerated; //temporary vector of all pairs of parsed inputs
+        std::vector<vector<pair<string,int>>> temp_enumerated; //temporary vector of all pairs of parsed inputs
         for(iterator first_syl=parser._parsed_syllable_tone.begin().first;first_syl!=parser._parsed_syllable_tone.begin().first;first_syl++){
             vector<pair<string,int>> temp;
             for(iterator syl=first_syl.first.begin();syl!=first_syl.first.end();syl++){
@@ -113,6 +113,20 @@ namespace PY{
         return final_part_and_tone.second;
     }
 
+    // Method: replace_equivalence
+    // replave unicode v and e_hat
+    void PinyinValuesTable::replace_equivalence(string& s){
+        for(auto iter = _equivalence_table.begin(); iter != _equivalence_table.end(); iter++){
+            int index = s.find(iter->first);
+            if(index != s.npos){
+                s = s.replace(index, iter->first.length(), iter->second);
+            }
+        }
+    }
+
+    static map<string, string> PinyinValuesTable::_equivalence_table{
+        make_pair("ü", "v"), make_pair("ê", "e_hat")
+    }
     static set<string> PinyinValuesTable::_initial_syllable_set{"b","p","m","f","d","t","n","l","g","k","h","j","q","x","zh","ch","sh","r","z","c","s","y","w"
     };
     static set<string> PinyinValuesTable::_final_syllable_set{"i","a","o","e","ai","ei","e_hat","ao","ou","an","en","ang","eng","ong","er","i","ia","ie","iao","iu","ian","in","ing","iang","iong","u","ua",

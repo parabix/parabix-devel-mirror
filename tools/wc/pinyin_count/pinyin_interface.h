@@ -114,11 +114,16 @@ namespace PY{
         // replace the toned part of syllable with non-toned
         // return the tone
         int replace_tone(string& toned);
+
+        // Method: replace_equivalence
+        // replave unicode v and e_hat
+        void replace_equivalence(string& s);
     private:
         static set<string> _initial_syllable_set; // storing all valid initial parts of syllables
         static set<string> _final_syllable_set;   // storing all valid final parts of syllables
         static set<string> _legal_syllables_set;      // storing all valid combinations of initials and finals 
         static map<string, std::pair<string, int>> _toned_character_table; 
+        static map<string, string> _equivalence_table;
         
     };
 
