@@ -30,6 +30,7 @@ namespace PY{
     // takes in input string(to do: take in unicode input)
     // parse the input into possible syllables and tones    
     class PinyinValuesParser{
+    public:
         // Constructor
         PinyinValuesParser(string input): _parsed(false){
             parse(input);
