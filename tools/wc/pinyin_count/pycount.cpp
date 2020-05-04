@@ -168,12 +168,18 @@ int main(int argc, char *argv[]) {
     //     std::cerr << "Input expression must be a Unicode property or CC but found: " << CC_expr << " instead.\n";
     //     exit(1);
     // }
+    PY::PinyinValuesParser parser;
+    PY::PinyinValuesEnumerator enumerator;
+    parser.parse(CC_expr);
+    
+
     if(CC_expr == std::string("zhong1")){
         re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KPY_ns::zhong_Set[1])));
         uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     }
     else{
 	    std:: cout<<"Not yet supported input! Try \"zhong1\""<<std::endl;
+        return -1;
     }
         
     

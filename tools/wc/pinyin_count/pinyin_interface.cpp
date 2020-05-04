@@ -14,15 +14,26 @@ namespace PY{
     // Parse multiple pinyin regexes into a list based on ' ' space
     // with no extra space in both ends
     void PinyinValuesParser::_parse_multi_syllable(string s, vector<string>& list){
-        unsigned int start = s.find_first_not_of(' '), end;
+        std::size_t start = s.find_first_not_of(' '), end;
         while(start != s.npos){
+            #if DEBUG
+                cout<<"start:"<<start<<endl;
+            #endif
             s = s.substr(start);        // replace prefix empty space
             end = s.find_first_of(' '); // find the end of the current syllable 
-            list.push_back(s.substr(start, end - start));
-
-            // erase the current syllable
-            s = s.substr(end);  
-            start = s.find_first_not_of(' ');
+            if(end != s.npos){
+                #if DEBUG
+                    cout<<"end:"<<end<<endl;
+                #endif
+                list.push_back(s.substr(start, end - start));
+                // erase the current syllable
+                s = s.substr(end);  
+                start = s.find_first_not_of(' ');
+            }
+            else{
+                list.push_back(s); break;
+            }
+            
         }
         #if DEBUG
             cout<<s<<" -- Parse Multi syllables Result:"<<endl;
@@ -42,9 +53,12 @@ namespace PY{
         regex pattern(".*([0-4]).*");
         smatch match_result;
         if(regex_search(s, match_result, pattern)){
-            string tone = match_result.str();
+            string tone = match_result[1].str();
+            #if DEBUG
+                cout<<"tone:"<<tone<<endl;
+            #endif
             if(tone.length() > 1) throw ParserException("Invalid Syntax -- Too many numbers to specify tones");
-            s = regex_replace(s, pattern, ""); // erase the tone number
+            s = regex_replace(s, regex("[0-4]"), ""); // erase the tone number
             resolved.second.push_back(*tone.begin() - '0'); // convert char to int
         }
         else if(table.is_toned(s)){
@@ -58,7 +72,7 @@ namespace PY{
             resolved.second = vector<int>{0, 1, 2, 3, 4};
         }
         // resolve regex '?'
-        unsigned int qmark_index = s.find('?');
+        std::size_t qmark_index = s.find('?');
         if(qmark_index != s.npos){
             if(s.find("g?") == s.npos) 
                 throw ParserException("Invalid Syntax -- only support ? after \'g\'");
