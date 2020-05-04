@@ -87,6 +87,7 @@ namespace PY{
     // enumerate the parsed values into all possible combinations
     // of syllables and tones
     class PinyinValuesEnumerator{
+    public:
         PinyinValuesEnumerator(): _enumerated(false) {}
         // Core Method
 
@@ -107,6 +108,7 @@ namespace PY{
     // and separate tones as integers
     // This is to facilitate the parsing of PinyinValuesParser
     class PinyinValuesTable{
+    public:
         // Core Method
 
         // Method: get_initial
