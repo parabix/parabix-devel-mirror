@@ -5,6 +5,7 @@
  */
 
 #include "pinyin_interface.h"
+#define DEBUG 0
 
 using namespace std;
 namespace PY{
@@ -22,6 +23,12 @@ namespace PY{
             s = s.substr(end);  
             start = s.find_first_not_of(' ');
         }
+        #if DEBUG
+            cout<<s<<" -- Parse Multi syllables Result:"<<endl;
+            for(auto iter = list.begin(); iter != list.end(); iter++){
+                cout<<*iter<<endl;
+            }
+        #endif
     }
 
     // interpret
@@ -74,6 +81,15 @@ namespace PY{
             }
         }
         
+        #if DEBUG
+            cout<<s<<" -- Interpret Result:"<<endl;
+            for(auto iter = resolved.first.begin(); iter != resolved.first.end(); iter++)
+                cout<<"* "<<*iter<<endl;
+            cout<<"=============="<<endl;
+            for(auto iter = resolved.second.begin(); iter != resolved.second.end(); iter++)
+                cout<<"* "<<*iter<<endl;
+            cout<<"=============="<<endl;
+        #endif
         return resolved;
     }
 
@@ -85,6 +101,7 @@ namespace PY{
                 _parsed_syllable_tone.push_back(_interpret_regex(*iter));
             }
             _parsed = true;
+            
         }catch(ParserException& e){
             cout<<"ParserException:";
             cout<<e.what()<<endl;
