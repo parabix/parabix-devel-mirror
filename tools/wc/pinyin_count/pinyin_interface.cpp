@@ -272,7 +272,6 @@ namespace PY{
         }
         return 0;
     }
-
     // Method: replace_equivalence
     // replave unicode v and e_hat
     void PinyinValuesTable::replace_equivalence(string& s){
