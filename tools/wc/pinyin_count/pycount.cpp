@@ -40,7 +40,7 @@
 #include <map>
 
 #include <unicode/data/KHanyuPinyin.h>
-//#include "pinyin_interface.h"
+#include "pinyin_interface.h"
 
 namespace fs = boost::filesystem;
 

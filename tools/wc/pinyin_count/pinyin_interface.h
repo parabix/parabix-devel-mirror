@@ -164,7 +164,7 @@ namespace PY{
     // mapping pairs of a syllable and its tone
     // to corresponding UnicodeSet predefined in KHanyuPinyin.h
     class UnicodeSetTable{
-        UCD::UnicodeSet&& get_uset(string syllable, int tone){
+        const UCD::UnicodeSet&& get_uset(string syllable, int tone){
             if(_unicodeset_table.find(make_pair(syllable, tone)) != _unicodeset_table.end()) 
                 return std::move(*_unicodeset_table[make_pair(syllable, tone)]);
             else 

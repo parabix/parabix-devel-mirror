@@ -5,6 +5,7 @@ NAME
     pycount
 SRC
     pycount.cpp
+    pinyin_interface.cpp
 DEPS
     fileselect
     kernel.basis
