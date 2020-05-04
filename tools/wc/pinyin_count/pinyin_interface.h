@@ -14,6 +14,7 @@
 #include <utility>
 #include <set>
 #include <regex>
+#include <iostream>
 #include <unicode/data/KHanyuPinyin.h>
 
 namespace PY{
