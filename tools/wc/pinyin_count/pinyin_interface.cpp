@@ -14,7 +14,7 @@ namespace PY{
     // Parse multiple pinyin regexes into a list based on ' ' space
     // with no extra space in both ends
     void PinyinValuesParser::_parse_multi_syllable(string s, vector<string>& list){
-        int start = s.find_first_not_of(' '), end;
+        unsigned int start = s.find_first_not_of(' '), end;
         while(start != s.npos){
             s = s.substr(start);        // replace prefix empty space
             end = s.find_first_of(' '); // find the end of the current syllable 
@@ -58,7 +58,7 @@ namespace PY{
             resolved.second = vector<int>{0, 1, 2, 3, 4};
         }
         // resolve regex '?'
-        int qmark_index = s.find('?');
+        unsigned int qmark_index = s.find('?');
         if(qmark_index != s.npos){
             if(s.find("g?") == s.npos) 
                 throw ParserException("Invalid Syntax -- only support ? after \'g\'");
