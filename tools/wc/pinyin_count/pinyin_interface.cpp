@@ -186,14 +186,17 @@ namespace PY{
         }else{
             final_part = s.substr(i);
         }
-        for(i = 0;i < final_part.length();++i){
-            string toned_char = final_part.substr(i,2);
-            if(_toned_character_table.find(toned_char) != _toned_character_table.end()){
-                replace_tone(toned_char);
-                final_part = final_part.replace(i,2,toned_char);
-                if(_final_syllable_set.find(final_part) != _final_syllable_set.end()) return final_part;
-            }else if(_final_syllable_set.find(final_part) != _final_syllable_set.end()){
-                return final_part;
+        for(int charlen=1;charlen<5;charlen++){
+            if(charlen > final_part.length()) break;
+            for(i = 0;i <= final_part.length()-charlen;++i){
+                string toned_char = final_part.substr(i,charlen);
+                if(_toned_character_table.find(toned_char) != _toned_character_table.end()){
+                    replace_tone(toned_char);
+                    final_part = final_part.replace(i,charlen,toned_char);
+                    if(_final_syllable_set.find(final_part) != _final_syllable_set.end()) return final_part;
+                }else if(_final_syllable_set.find(final_part) != _final_syllable_set.end()){
+                    return final_part;
+                }
             }
         }
         return "";
@@ -207,10 +210,13 @@ namespace PY{
     // Check whether the syllable has toned final
     bool PinyinValuesTable::is_toned(string s){
         int len = (int)s.length();
-        for(int i = 0;i < len;++i){
-            string final_part = s.substr(i,2);
-            if(_toned_character_table.find(final_part) != _toned_character_table.end()){
-                return true;
+        for(int charlen=1;charlen<5;charlen++){
+            if(charlen > len) break;
+            for(int i = 0;i <= len-charlen;++i){
+                string final_part = s.substr(i,charlen);
+                if(_toned_character_table.find(final_part) != _toned_character_table.end()){
+                    return true;
+                }
             }
         }
         return false;
@@ -220,10 +226,13 @@ namespace PY{
     // returning 0 as neutral tone
     int PinyinValuesTable::get_tone(string s){
         int len = (int)s.length();
-        for(int i = 0; i < len; ++i){
-            string final_part = s.substr(i,2);
-            if(_toned_character_table.find(final_part) != _toned_character_table.end()){
-                return _toned_character_table[final_part].second;
+        for(int charlen=1;charlen<5;charlen++){
+            if(charlen > len) break;
+            for(int i = 0; i <= len-charlen; ++i){
+                string final_part = s.substr(i,charlen);
+                if(_toned_character_table.find(final_part) != _toned_character_table.end()){
+                    return _toned_character_table[final_part].second;
+                }
             }
         }
         return 0;
