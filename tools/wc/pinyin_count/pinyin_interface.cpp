@@ -258,7 +258,7 @@ namespace PY{
     "ci", "cu", "cuo", "cui", "cuan", "cun", "si", "sa", "se", "sai", "sao", "sou", "san", "sen", "sang", "seng", "song", "si", "su", "suo", "sui", "suan", "sun", "yi",
     "ya", "yo", "ye", "yao", "you", "yan", "yang", "yong", "yi", "yin", "ying", "yu", "yuan", "yun", "wa", "wo", "wai", "wei", "wan", "wen", "wang", "weng", "wong", "wu"
     };
-    map<string, std::pair<string, int>> PinyinValuesTable::_toned_character_table = { 
+    map<string, std::pair<string, int>> PinyinValuesTable::_toned_character_table{ 
     {"ā",make_pair("a",1)},{"á",make_pair("a",2)},{"ǎ",make_pair("a",3)},{"à",make_pair("a",4)},
     {"ī",make_pair("i",1)},{"í",make_pair("i",2)},{"ǐ",make_pair("i",3)},{"ì",make_pair("i",4)},    {"ū",make_pair("u",1)},{"ú",make_pair("u",2)},{"ǔ",make_pair("u",3)},{"ù",make_pair("u",4)},
     {"ē",make_pair("e",1)},{"é",make_pair("e",2)},{"ě",make_pair("e",3)},{"è",make_pair("e",4)},    {"ō",make_pair("o",1)},{"ó",make_pair("o",2)},{"ǒ",make_pair("o",3)},{"ò",make_pair("o",4)},
