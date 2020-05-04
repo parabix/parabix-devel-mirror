@@ -106,10 +106,10 @@ namespace PY{
     // Methods in PinyinValuesEnumerator
     void PinyinValuesEnumerator::enumerate(PinyinValuesParser& parser){
         std::vector<vector<pair<string,int>>> temp_enumerated; //temporary vector of all pairs of parsed inputs
-        for(iterator first_syl=parser._parsed_syllable_tone.begin().first;first_syl!=parser._parsed_syllable_tone.begin().first;first_syl++){
+        for(auto first_syl=parser._parsed_syllable_tone.begin().first;first_syl!=parser._parsed_syllable_tone.begin().first;first_syl++){
             vector<pair<string,int>> temp;
-            for(iterator syl=first_syl.first.begin();syl!=first_syl.first.end();syl++){
-                for(iterator tone=first_syl.second.begin();tone!=first_syl.second.end();tone++){
+            for(auto syl=first_syl.first.begin();syl!=first_syl.first.end();syl++){
+                for(auto tone=first_syl.second.begin();tone!=first_syl.second.end();tone++){
                     temp.push_back(make_pair(syl,tone));
                 }
             }            
@@ -230,15 +230,15 @@ namespace PY{
         }
     }
 
-    static map<string, string> PinyinValuesTable::_equivalence_table{
+    map<string, string> PinyinValuesTable::_equivalence_table{
         make_pair("ü", "v"), make_pair("ê", "e_hat")
-    }
-    static set<string> PinyinValuesTable::_initial_syllable_set{"b","p","m","f","d","t","n","l","g","k","h","j","q","x","zh","ch","sh","r","z","c","s","y","w"
     };
-    static set<string> PinyinValuesTable::_final_syllable_set{"i","a","o","e","ai","ei","e_hat","ao","ou","an","en","ang","eng","ong","er","i","ia","ie","iao","iu","ian","in","ing","iang","iong","u","ua",
+    set<string> PinyinValuesTable::_initial_syllable_set{"b","p","m","f","d","t","n","l","g","k","h","j","q","x","zh","ch","sh","r","z","c","s","y","w"
+    };
+    set<string> PinyinValuesTable::_final_syllable_set{"i","a","o","e","ai","ei","e_hat","ao","ou","an","en","ang","eng","ong","er","i","ia","ie","iao","iu","ian","in","ing","iang","iong","u","ua",
     "uo","uai","ui","uan","un","uang","ueng","v","ve","van","vn"
     };
-    static set<string> PinyinValuesTable::_legal_syllables_set{
+    set<string> PinyinValuesTable::_legal_syllables_set{
     "a", "o", "e", "ai", "ei", "ao", "ou", "an", "en", "ang", "eng", "er", "bi", "ba", "bo", "bai", "bei", "bao", "ban", "ben", "bang", "beng", "bi", "bie",
     "biao", "bian", "bin", "bing", "bu", "pi", "pa", "po", "pai", "pei", "pao", "pou", "pan", "pen", "pang", "peng", "pi", "pie", "piao", "pian", "pin", "ping", "pu", "m",
     "mi", "ma", "mo", "me", "mai", "mei", "mao", "mou", "man", "men", "mang", "meng", "mi", "mie", "miao", "miu", "mian", "min", "ming", "mu", "fa", "fo", "fei", "fou",
@@ -258,14 +258,14 @@ namespace PY{
     "ci", "cu", "cuo", "cui", "cuan", "cun", "si", "sa", "se", "sai", "sao", "sou", "san", "sen", "sang", "seng", "song", "si", "su", "suo", "sui", "suan", "sun", "yi",
     "ya", "yo", "ye", "yao", "you", "yan", "yang", "yong", "yi", "yin", "ying", "yu", "yuan", "yun", "wa", "wo", "wai", "wei", "wan", "wen", "wang", "weng", "wong", "wu"
     };
-    static map<string, std::pair<string, int>> PinyinValuesTable::_toned_character_table{ 
+    map<string, std::pair<string, int>> PinyinValuesTable::_toned_character_table = { 
     {"ā",make_pair("a",1)},{"á",make_pair("a",2)},{"ǎ",make_pair("a",3)},{"à",make_pair("a",4)},
     {"ī",make_pair("i",1)},{"í",make_pair("i",2)},{"ǐ",make_pair("i",3)},{"ì",make_pair("i",4)},    {"ū",make_pair("u",1)},{"ú",make_pair("u",2)},{"ǔ",make_pair("u",3)},{"ù",make_pair("u",4)},
     {"ē",make_pair("e",1)},{"é",make_pair("e",2)},{"ě",make_pair("e",3)},{"è",make_pair("e",4)},    {"ō",make_pair("o",1)},{"ó",make_pair("o",2)},{"ǒ",make_pair("o",3)},{"ò",make_pair("o",4)},
     {"ǜ",make_pair("v",1)},{"ǘ",make_pair("v",2)},{"ǚ",make_pair("v",3)},{"ǜ",make_pair("v",4)},    {"m̄",make_pair("m",1)},{"ḿ",make_pair("m",2)},{"m̀",make_pair("m",4)},
     {"ń",make_pair("n",2)},{"ň",make_pair("n",3)},{"ǹ",make_pair("n",4)},                           {'ê̄',make_pair("e_hat",1)},{'ế',make_pair("e_hat",2)},{'ê̌',make_pair("e_hat",3)},{'ề',make_pair("e_hat",4)}
     }; 
-    static map<std::pair<string, int>, UCD::UnicodeSet*> UnicodeSetTable:: _unicodeset_table{ 
+    map<std::pair<string, int>, UCD::UnicodeSet*> UnicodeSetTable:: _unicodeset_table{ 
     {make_pair("a",0),&a_Set[0]},           {make_pair("a",1),&a_Set[1]},           {make_pair("a",2),&a_Set[2]},           {make_pair("a",3),&a_Set[3]},           {make_pair("a",4),&a_Set[4]},           {make_pair("o",0),&o_Set[0]},           
     {make_pair("o",1),&o_Set[1]},           {make_pair("o",2),&o_Set[2]},           {make_pair("e",0),&e_Set[0]},           {make_pair("e",1),&e_Set[1]},           {make_pair("e",2),&e_Set[2]},           {make_pair("e",3),&e_Set[3]},           
     {make_pair("e",4),&e_Set[4]},           {make_pair("e_hat",1),&e_hat_Set[1]},   {make_pair("e_hat",2),&e_hat_Set[2]},   {make_pair("e_hat",3),&e_hat_Set[3]},   {make_pair("e_hat",4),&e_hat_Set[4]},   {make_pair("ai",1),&ai_Set[1]},         
