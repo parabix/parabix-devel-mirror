@@ -280,7 +280,7 @@ namespace PY{
     {"ī",make_pair("i",1)},{"í",make_pair("i",2)},{"ǐ",make_pair("i",3)},{"ì",make_pair("i",4)},    {"ū",make_pair("u",1)},{"ú",make_pair("u",2)},{"ǔ",make_pair("u",3)},{"ù",make_pair("u",4)},
     {"ē",make_pair("e",1)},{"é",make_pair("e",2)},{"ě",make_pair("e",3)},{"è",make_pair("e",4)},    {"ō",make_pair("o",1)},{"ó",make_pair("o",2)},{"ǒ",make_pair("o",3)},{"ò",make_pair("o",4)},
     {"ǜ",make_pair("v",1)},{"ǘ",make_pair("v",2)},{"ǚ",make_pair("v",3)},{"ǜ",make_pair("v",4)},    {"m̄",make_pair("m",1)},{"ḿ",make_pair("m",2)},{"m̀",make_pair("m",4)},
-    {"ń",make_pair("n",2)},{"ň",make_pair("n",3)},{"ǹ",make_pair("n",4)},                           {'ê̄',make_pair("e_hat",1)},{'ế',make_pair("e_hat",2)},{'ê̌',make_pair("e_hat",3)},{'ề',make_pair("e_hat",4)}
+    {"ń",make_pair("n",2)},{"ň",make_pair("n",3)},{"ǹ",make_pair("n",4)},                           {"ê̄",make_pair("e_hat",1)},{"ế",make_pair("e_hat",2)},{"ê̌",make_pair("e_hat",3)},{"ề",make_pair("e_hat",4)}
     }; 
     map<std::pair<string, int>, UCD::UnicodeSet*> UnicodeSetTable:: _unicodeset_table{ 
     {make_pair("a",0),&a_Set[0]},           {make_pair("a",1),&a_Set[1]},           {make_pair("a",2),&a_Set[2]},           {make_pair("a",3),&a_Set[3]},           {make_pair("a",4),&a_Set[4]},           {make_pair("o",0),&o_Set[0]},           
