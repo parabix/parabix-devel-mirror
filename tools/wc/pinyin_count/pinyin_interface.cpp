@@ -256,9 +256,21 @@ namespace PY{
     // replace the toned part of syllable with non-toned
     // return the tone
     int PinyinValuesTable::replace_tone(string& toned){
-        std::pair<string, int> final_part_and_tone = _toned_character_table[toned];
-        toned = final_part_and_tone.first;
-        return final_part_and_tone.second;
+        int len = (int)toned.length();
+        string tonedchar;
+        for(int charlen=1;charlen<5;charlen++){
+            if(charlen > len) break;
+            for(int i = 0;i <= len-charlen;++i){
+                string check_part = s.substr(i,charlen);
+                if(_toned_character_table.find(check_part) != _toned_character_table.end()){
+                    std::pair<string, int> final_part_and_tone = _toned_character_table[check_part];
+                    tonedchar = final_part_and_tone.first;
+                    toned = toned.replace(i,charlen,tonedchar);
+                    return final_part_and_tone.second;
+                }
+            }
+        }
+        return 0;
     }
 
     // Method: replace_equivalence
