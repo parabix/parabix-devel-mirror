@@ -5,7 +5,7 @@
  */
 
 #include "pinyin_interface.h"
-#define DEBUG 0
+#define DEBUG 1
 
 using namespace std;
 using namespace UCD::KPY_ns;
@@ -78,7 +78,7 @@ namespace PY{
                 throw ParserException("Invalid Syntax -- only support ? after \'g\'");
             // erase ?
             s = s.substr(0, qmark_index);
-            resolved.first.push_back(s.substr(s.find_last_of('g'))); // push_back the syllable without g
+            resolved.first.push_back(s.substr(0, s.find_last_of('g'))); // push_back the syllable without g
         }
         resolved.first.push_back(s); // push s into possibly final result
         
