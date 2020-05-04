@@ -152,7 +152,7 @@ namespace PY{
     // Method: get_initial
     // Get the initial part of the syllable
     // if no initial part(e.g. "an" ), simply return ""
-    string PinyinValuesTable::get_intial(string s){
+    string PinyinValuesTable::get_initial(string s){
         int len = (int)s.length();
         for(int i = 1;i <= len;++i){
             string initial_part = s.substr(0, i);
@@ -171,6 +171,7 @@ namespace PY{
     string PinyinValuesTable::get_final(string s){
         int len = (int)s.length();
         int i;
+        string final_part;
         for(i = 1;i <= len;++i){
             string initial_part = s.substr(0, i);
             if(_initial_syllable_set.find(initial_part) != _initial_syllable_set.end()){
@@ -181,11 +182,11 @@ namespace PY{
             }
         }
         if(i > len){
-            string final_part = s;
+            final_part = s;
         }else{
-            string final_part = s.substr(i);
+            final_part = s.substr(i);
         }
-        for(i = 0;i < final_part.lengh();++i){
+        for(i = 0;i < final_part.length();++i){
             string toned_char = final_part.substr(i,2);
             if(_toned_character_table.find(toned_char) != _toned_character_table.end()){
                 replace_tone(toned_char);
@@ -199,12 +200,12 @@ namespace PY{
     }
     // Method: is_legal
     // Check whether the syllable is legal or not
-    string PinyinValuesTable::is_legal(string s){
+    bool PinyinValuesTable::is_legal(string s){
         return _legal_syllables_set.find(get_initial(s) + get_final(s)) != _legal_syllables_set.end();
     }
     // Method: is_toned
     // Check whether the syllable has toned final
-    string PinyinValuesTable::is_toned(string s){
+    bool PinyinValuesTable::is_toned(string s){
         int len = (int)s.length();
         for(int i = 0;i < len;++i){
             string final_part = s.substr(i,2);
@@ -217,7 +218,7 @@ namespace PY{
     // Method: get_tone
     // get the tone of the syllable
     // returning 0 as neutral tone
-    string PinyinValuesTable::get_tone(string s){
+    int PinyinValuesTable::get_tone(string s){
         int len = (int)s.length();
         for(int i = 0; i < len; ++i){
             string final_part = s.substr(i,2);
@@ -230,7 +231,7 @@ namespace PY{
     // Method: replace_tone
     // replace the toned part of syllable with non-toned
     // return the tone
-    string PinyinValuesTable::replace_tone(string& toned){
+    int PinyinValuesTable::replace_tone(string& toned){
         std::pair<string, int> final_part_and_tone = _toned_character_table[toned];
         toned = final_part_and_tone.first;
         return final_part_and_tone.second;
