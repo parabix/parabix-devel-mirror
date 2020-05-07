@@ -20,16 +20,22 @@ using namespace re;
 using namespace llvm;
 
 namespace UCD {
-    
+
 void UnicodePropertyExpressionError(std::string errmsg) {
     llvm::report_fatal_error(errmsg);
 }
 
 bool resolvePropertyDefinition(Name * const property) {
     if (property->hasNamespace()) {
-        auto propit = alias_map.find(property->getNamespace());
+        const std::string value = property->getName();
+        const std::string ns = property -> getNamespace();
+        auto propit = alias_map.find(ns);
+        if (ns == "kangxi") {
+            property->setDefinition(makeName(ns, value, Name::Type::UnicodeProperty));
+            return true;
+        }
         if (propit == alias_map.end()) {
-            UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead");
+            UnicodePropertyExpressionError("Expected a property name but '" + property->getNamespace() + "' was found instead.");
         }
         auto theprop = static_cast<UCD::property_t>(propit->second);
         if (isa<BinaryPropertyObject>(getPropertyObject(theprop))){
@@ -65,10 +71,7 @@ bool resolvePropertyDefinition(Name * const property) {
         } else if (value == "$s") { // "end anchor ($) in single-line mode"
             property->setDefinition(makeNegativeLookAheadAssertion(makeCC(0, 0x10FFFF)));
             return true;
-        } else if (value == "kangxi") {
-            property->setDefinition(makeName("blk", "kangxi", Name::Type::UnicodeProperty));
-            return true;
-        }
+        } 
     }
     return false;
 }
@@ -141,7 +144,6 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
             }
             // Try special cases of Unicode TR #18
             // Now compatibility properties of UTR #18 Annex C
-                    
             else if (canon == ".") return UnicodeSet(0, 0x10FFFF);
             else if (canon == "alnum") {
                 Name * digit = makeName("nd", Name::Type::UnicodeProperty);
