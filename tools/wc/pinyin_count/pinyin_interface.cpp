@@ -261,7 +261,7 @@ namespace PY{
         for(int charlen=1;charlen<5;charlen++){
             if(charlen > len) break;
             for(int i = 0;i <= len-charlen;++i){
-                string check_part = s.substr(i,charlen);
+                string check_part = toned.substr(i,charlen);
                 if(_toned_character_table.find(check_part) != _toned_character_table.end()){
                     std::pair<string, int> final_part_and_tone = _toned_character_table[check_part];
                     tonedchar = final_part_and_tone.first;
