@@ -1,0 +1,13 @@
+parabix_add_executable(
+NAME
+    radicalcount
+SRC
+    radicalcount.cpp
+    radical_interface.cpp
+DEPS
+    fileselect
+    kernel.basis
+    kernel.io
+    re.cc
+    re.parse
+)
