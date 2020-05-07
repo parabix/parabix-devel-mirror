@@ -79,6 +79,7 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
     auto currentPartitionId = -1U;
     addBufferHandlesToPipelineKernel(b, PipelineInput);
     addConsumerKernelProperties(b, PipelineInput);
+    addPipelinePriorItemCountProperties(b);
     for (unsigned i = FirstKernel; i <= LastKernel; ++i) {
         addBufferHandlesToPipelineKernel(b, i);
         // Is this the start of a new partition?
@@ -98,9 +99,65 @@ inline void PipelineCompiler::addPipelineKernelProperties(BuilderRef b) {
 }
 
 /** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addPipelinePriorItemCountProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::addPipelinePriorItemCountProperties(BuilderRef b) {
+    // If we have external I/O, it's possible that the processed/produced counts passed into
+    // the pipeline are greater than the expected number. E.g.,, the OptimizationBranch kernel
+    // could perform a segment of work utilizing one branch A before switching to branch B. The
+    // latter would be unaware of any computations performed by the former and (unless the
+    // OptimizationBranch adjusted the item counts and the virtual base address of each stream)
+    // and would try to redo the work, likely leading to invalid output. To handle it in a
+    // general way, the pipeline automatically increments all of the internal processed/
+    // produced counts of the
+
+//    if (ExternallySynchronized) {
+
+//        IntegerType * const sizeTy = b->getSizeTy();
+
+//        for (const auto input : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+//            const BufferPort & br = mBufferGraph[input];
+//            const auto prefix = makeBufferName(PipelineInput, br.Port);
+//            mTarget->addInternalScalar(sizeTy, prefix + EXTERNAL_IO_PRIOR_ITEM_COUNT_SUFFIX, 0);
+//        }
+
+//        for (const auto output : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
+//            const BufferPort & br = mBufferGraph[output];
+//            const auto prefix = makeBufferName(PipelineOutput, br.Port);
+//            mTarget->addInternalScalar(sizeTy, prefix + EXTERNAL_IO_PRIOR_ITEM_COUNT_SUFFIX, 0);
+//        }
+
+//    }
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief addPipelinePriorItemCountProperties
+ ** ------------------------------------------------------------------------------------------------------------- */
+void PipelineCompiler::updateInternalPipelineItemCount(BuilderRef b) {
+
+//    if (ExternallySynchronized) {
+
+//        for (const auto input : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
+//            const BufferPort & br = mBufferGraph[input];
+//            const auto prefix = makeBufferName(PipelineInput, br.Port);
+//            Value * const ptr = b->getScalarFieldPtr(prefix + EXTERNAL_IO_PRIOR_ITEM_COUNT_SUFFIX);
+//            Value * const prior = b->CreateLoad(ptr);
+//            Value * const current = getProcessedInputItemsPtr(br.Port.Number);
+//            b->CreateStore(current, ptr);
+//            b->CreateSub(current, prior);
+
+//        }
+
+
+
+//    }
+
+}
+
+/** ------------------------------------------------------------------------------------------------------------- *
  * @brief addInternalKernelProperties
  ** ------------------------------------------------------------------------------------------------------------- */
-inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelId) {
+void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const unsigned kernelId) {
     const Kernel * const kernel = getKernel(kernelId);
     IntegerType * const sizeTy = b->getSizeTy();
 
@@ -133,23 +190,31 @@ inline void PipelineCompiler::addInternalKernelProperties(BuilderRef b, const un
         mTarget->addThreadLocalScalar(localStateTy, name + KERNEL_THREAD_LOCAL_SUFFIX, kernelId);
     }
 
-
     for (const auto e : make_iterator_range(in_edges(kernelId, mBufferGraph))) {
+//        const auto streamSet = source(e, mBufferGraph);
+//        const BufferNode & bn = mBufferGraph[streamSet];
+//        if (LLVM_UNLIKELY(bn.isExternal())) {
+//            continue;
+//        }
+//        assert (parent(streamSet, mBufferGraph) != PipelineInput);
         const BufferPort & br = mBufferGraph[e];
         const auto prefix = makeBufferName(kernelId, br.Port);
-        const Binding & binding = br.Binding;
-        if (LLVM_UNLIKELY(binding.isDeferred())) {
+        if (LLVM_UNLIKELY(br.IsDeferred)) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX, kernelId);
         }
         mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX);
     }
 
     for (const auto e : make_iterator_range(out_edges(kernelId, mBufferGraph))) {
+//        const auto streamSet = target(e, mBufferGraph);
+//        const BufferNode & bn = mBufferGraph[streamSet];
+//        if (LLVM_UNLIKELY(bn.isExternal())) {
+//            continue;
+//        }
+//        assert (parent(streamSet, mBufferGraph) != PipelineInput);
         const BufferPort & br = mBufferGraph[e];
         const auto prefix = makeBufferName(kernelId, br.Port);
-        const Binding & binding = br.Binding;
-
-        if (LLVM_UNLIKELY(binding.isDeferred())) {
+        if (LLVM_UNLIKELY(br.IsDeferred)) {
             mTarget->addInternalScalar(sizeTy, prefix + DEFERRED_ITEM_COUNT_SUFFIX, kernelId);
         }
         mTarget->addInternalScalar(sizeTy, prefix + ITEM_COUNT_SUFFIX, kernelId);
@@ -722,20 +787,8 @@ void PipelineCompiler::verifyBufferRelationships() const {
             const BufferPort & br = mBufferGraph[e];
             const Binding & output = br.Binding;
 
-            bool managed = false;
-            bool sharedManaged = false;
-
-            for (const Attribute & attr : output.getAttributes()) {
-                switch (attr.getKind()) {
-                    case AttrId::ManagedBuffer:
-                        managed = true;
-                        break;
-                    case AttrId::SharedManagedBuffer:
-                        sharedManaged = true;
-                        break;
-                    default: break;
-                }
-            }
+            const auto managed = br.IsManaged;
+            const auto sharedManaged = br.IsShared;
 
             if (LLVM_UNLIKELY(managed && sharedManaged)) {
                 SmallVector<char, 256> tmp;

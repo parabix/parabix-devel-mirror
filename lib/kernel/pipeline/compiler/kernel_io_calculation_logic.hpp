@@ -43,10 +43,6 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
         initializeConsumedItemCount(b, inputPort, available);
     }
 
-    if (LLVM_UNLIKELY(ExternallySynchronized)) {
-        return;
-    }
-
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
 
         const auto buffer = target(e, mBufferGraph);
@@ -63,7 +59,6 @@ void PipelineCompiler::readPipelineIOItemCounts(BuilderRef b) {
             b->CreateStore(processed, ptr);
         }
     }
-
 
     mKernelId = PipelineOutput;
 
@@ -93,10 +88,8 @@ void PipelineCompiler::detemineMaximumNumberOfStrides(BuilderRef b) {
     const auto & max = MaximumNumOfStrides[mKernelId];
     if (mIsPartitionRoot) {
         if (ExternallySynchronized) {
-            assert (mStrideRateFactor);
-            mMaximumNumOfStrides = b->CreateCeilUMulRate(mStrideRateFactor, max);
+            mMaximumNumOfStrides = nullptr;
         } else {
-            assert (mStrideRateFactor == nullptr);
             mMaximumNumOfStrides = b->getSize(ceiling(max));
         }
     } else {
@@ -130,7 +123,7 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
 
     Value * numOfLinearStrides = nullptr;
 
-    if (mMayLoopToEntry) {
+    if (mMayLoopToEntry && !ExternallySynchronized) {
         numOfLinearStrides = b->CreateSub(mMaximumNumOfStrides, mCurrentNumOfStridesAtLoopEntryPhi);
     } else {
         numOfLinearStrides = mMaximumNumOfStrides;
@@ -156,6 +149,9 @@ void PipelineCompiler::determineNumOfLinearStrides(BuilderRef b) {
         const auto streamSet = source(e, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         const BufferPort & br = mBufferGraph[e];
+
+        assert (bn.isInternal() || (bn.NonLocal && mCheckIO));
+
         if (mCheckIO && bn.NonLocal && unchecked(br.LocalPortId)) {
             checkForSufficientInputData(b, br, streamSet);
         } else { // ensure the accessible input count dominates all uses
@@ -581,10 +577,13 @@ void PipelineCompiler::determineIsFinal(BuilderRef b) {
 Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
     assert (mMayLoopToEntry);
     assert (mKernelIsPenultimate);
-    assert (mUpdatedNumOfStrides);
-    assert (mMaximumNumOfStrides);
 
-    Value * const notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
+    ConstantInt * const i1_TRUE = b->getTrue();
+    Value * notAtSegmentLimit = i1_TRUE;
+    if (mMaximumNumOfStrides) {
+        assert (mUpdatedNumOfStrides);
+        notAtSegmentLimit = b->CreateICmpNE(mUpdatedNumOfStrides, mMaximumNumOfStrides);
+    }
     if (mIsPartitionRoot) {
 
         BasicBlock * const lastTestExit = b->CreateBasicBlock("", mKernelLoopExit);
@@ -594,8 +593,6 @@ Value * PipelineCompiler::hasMoreInput(BuilderRef b) {
 
         graph_traits<BufferGraph>::in_edge_iterator ei, ei_end;
         std::tie(ei, ei_end) = in_edges(mKernelId, mBufferGraph);
-
-        ConstantInt * const i1_TRUE = b->getTrue();
 
         Value * enoughInput = b->CreateNot(mKernelIsFinal);
 

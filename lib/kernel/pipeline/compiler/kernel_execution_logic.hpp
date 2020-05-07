@@ -127,7 +127,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
     if (mKernelIsInternallySynchronized || greedy) {
         if (mKernelIsInternallySynchronized) {
             addNextArg(mSegNo);
-            addNextArg(mMaximumNumOfStrides);
+            // addNextArg(mMaximumNumOfStrides);
         }
         addNextArg(mKernelIsFinal);
     } else {
@@ -151,11 +151,8 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
             const auto streamSet = source(port, mBufferGraph);
             const BufferNode & bn = mBufferGraph[streamSet];
             const StreamSetBuffer * const buffer = bn.Buffer;
-            const Binding & input = rt.Binding;
 
-            assert ("input buffer type mismatch?" && (input.getType() == buffer->getBaseType()));
-
-            const auto  deferred = input.isDeferred();
+            const auto  deferred = rt.IsDeferred;
 
             Value * processed = nullptr;
 
@@ -197,15 +194,25 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
 
             addNextArg(b->CreatePointerCast(addr, voidPtrTy));
 
-            const auto addressable = mKernelIsInternallySynchronized | deferred;
-            mReturnedProcessedItemCountPtr[rt.Port] = addItemCountArg(b, input, addressable, processed, args);
+            if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+                Value * ptr = nullptr;
+                if (LLVM_UNLIKELY(rt.IsDeferred)) {
+                    ptr = mProcessedDeferredItemCountPtr[rt.Port];
+                } else {
+                    ptr = mProcessedItemCountPtr[rt.Port];
+                }
+                mReturnedProcessedItemCountPtr[rt.Port] = ptr;
+                addNextArg(ptr);
+            } else {
+                mReturnedProcessedItemCountPtr[rt.Port] = addItemCountArg(b, rt, deferred, processed, args);
+            }
 
             if (mKernelIsInternallySynchronized) {
                 const auto streamSet = source(port, mBufferGraph);
                 Value * const avail = mLocallyAvailableItems[streamSet]; assert (avail);
                 Value * const accessible = b->CreateSub(avail, processed);
                 addNextArg(accessible);
-            } else if (LLVM_UNLIKELY(requiresItemCount(input))) {
+            } else if (LLVM_UNLIKELY(requiresItemCount(rt.Binding))) {
                 // calculate how many linear items are from the *deferred* position
                 Value * inputItems = mLinearInputItemsPhi[rt.Port]; assert (inputItems);
                 if (deferred) {
@@ -227,9 +234,6 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         const auto streamSet = target(port, mBufferGraph);
         const BufferNode & bn = mBufferGraph[streamSet];
         const StreamSetBuffer * const buffer = bn.Buffer;
-        const Binding & output = rt.Binding;
-
-        assert ("output buffer type mismatch?" && (output.getType() == buffer->getBaseType()));
 
         Value * produced = nullptr;
         if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
@@ -238,8 +242,7 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         } else {
             produced = mAlreadyProducedPhi[rt.Port];
         }
-
-        const auto managed = rt.IsShared || bn.Type == BufferType::ManagedByKernel;
+        const auto managed = rt.IsShared || mKernelIsInternallySynchronized || rt.IsManaged;
         if (LLVM_UNLIKELY(rt.IsShared)) {
             addNextArg(b->CreatePointerCast(buffer->getHandle(), voidPtrTy));
         } else if (LLVM_UNLIKELY(managed)) {
@@ -247,12 +250,23 @@ ArgVec PipelineCompiler::buildKernelCallArgumentList(BuilderRef b) {
         } else {
             addNextArg(b->CreatePointerCast(getVirtualBaseAddress(b, rt, buffer, produced), voidPtrTy));
         }
-        const auto addressable = mKernelIsInternallySynchronized | mKernelCanTerminateEarly;
-        mReturnedProducedItemCountPtr[rt.Port] = addItemCountArg(b, output, addressable, produced, args);
+
+        if (LLVM_UNLIKELY(mKernelIsInternallySynchronized)) {
+            Value * ptr = nullptr;
+            if (LLVM_UNLIKELY(rt.IsDeferred)) {
+                ptr = mProducedDeferredItemCountPtr[rt.Port];
+            } else {
+                ptr = mProducedItemCountPtr[rt.Port];
+            }
+            mReturnedProducedItemCountPtr[rt.Port] = ptr;
+            addNextArg(ptr);
+        } else {
+            mReturnedProducedItemCountPtr[rt.Port] = addItemCountArg(b, rt, mKernelCanTerminateEarly, produced, args);
+        }
 
         if (LLVM_UNLIKELY(managed)) {
             addNextArg(mInitialConsumedItemCount[streamSet]);
-        } else if (requiresItemCount(output)) {
+        } else if (requiresItemCount(rt.Binding)) {
             addNextArg(mLinearOutputItemsPhi[rt.Port]);
         }
 
@@ -386,10 +400,11 @@ void PipelineCompiler::updateProcessedAndProducedItemCounts(BuilderRef b) {
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief addItemCountArg
  ** ------------------------------------------------------------------------------------------------------------- */
-Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
+Value * PipelineCompiler::addItemCountArg(BuilderRef b, const BufferPort & port,
                                           const bool forceAddressability,
                                           Value * const itemCount,
                                           ArgVec & args) {
+    const Binding & binding = port.Binding;
     const ProcessingRate & rate = binding.getRate();
     if (LLVM_UNLIKELY(rate.isRelative())) {
         return nullptr;
@@ -403,6 +418,7 @@ Value * PipelineCompiler::addItemCountArg(BuilderRef b, const Binding & binding,
     };
 
     Value * ptr = nullptr;
+
     if (forceAddressability || isAddressable(binding)) {
         if (LLVM_UNLIKELY(mNumOfAddressableItemCount == mAddressableItemCountPtr.size())) {
             auto aic = b->CreateAllocaAtEntryPoint(b->getSizeTy());

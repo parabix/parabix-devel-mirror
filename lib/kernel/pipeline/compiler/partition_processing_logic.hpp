@@ -49,6 +49,7 @@ inline void PipelineCompiler::branchToInitialPartition(BuilderRef b) {
 
     mKernelStartTime = startCycleCounter(b);
     acquireSynchronizationLock(b, FirstKernel);
+    updateInternalPipelineItemCount(b);
     updateCycleCounter(b, FirstKernel, mKernelStartTime, CycleCounter::KERNEL_SYNCHRONIZATION);
 
 }
@@ -163,20 +164,8 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
         // Select/compute/load the appropriate produced item count
         Value * produced = nullptr;
 
-        #ifdef PRINT_DEBUG_MESSAGES
-        SmallVector<char, 256> tmp;
-        raw_svector_ostream out(tmp);
-        out << makeKernelName(mKernelId) << " -> " << makeBufferName(kernel, br.Port);
-        out << "_avail";
-        #endif
-
         if (kernel < mKernelId) {
             produced = mLocallyAvailableItems[streamSet];
-
-            #ifdef PRINT_DEBUG_MESSAGES
-            out << '0';
-            #endif
-
         } else {
             if (kernel == mKernelId) {
                 if (fromInitiallyTerminated) {
@@ -185,9 +174,6 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                     } else {
                         produced = mInitiallyProducedItemCount[streamSet];
                     }
-                    #ifdef PRINT_DEBUG_MESSAGES
-                    out << '1';
-                    #endif
                 } else {
 
                     Value * alreadyProduced = nullptr;
@@ -230,46 +216,32 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
 
                 }
                 produced = computeFullyProducedItemCount(b, kernel, br.Port, produced, mTerminatedInitially);
-                #ifdef PRINT_DEBUG_MESSAGES
-                out << '2';
-                #endif
             } else {
                 if (fromInitiallyTerminated) {
-//                    const auto ip = b->saveIP();
-//                    b->SetInsertPoint(phiCatchBlock);
                     const auto prefix = makeBufferName(kernel, br.Port);
                     if (LLVM_UNLIKELY(br.IsDeferred)) {
                         produced = b->getScalarField(prefix + DEFERRED_ITEM_COUNT_SUFFIX);
                     } else {
                         produced = b->getScalarField(prefix + ITEM_COUNT_SUFFIX);
                     }
-//                    b->restoreIP(ip);
-                    #ifdef PRINT_DEBUG_MESSAGES
-                    out << '3';
-                    #endif
                 } else {
                     produced = mInitiallyAvailableItemsPhi[streamSet];
-                    #ifdef PRINT_DEBUG_MESSAGES
-                    out << '4';
-                    #endif
                 }
             }
         }
 
         #ifdef PRINT_DEBUG_MESSAGES
-        out << " = %" PRIu64;
-//        const auto ip = b->saveIP();
-//        b->SetInsertPoint(phiCatchBlock);
+        SmallVector<char, 256> tmp;
+        raw_svector_ostream out(tmp);
+        out << makeKernelName(mKernelId) << " -> " <<
+               makeBufferName(kernel, br.Port) << "_avail = %" PRIu64;
         debugPrint(b, out.str(), produced);
-//        b->restoreIP(ip);
         #endif
 
         producedSet.emplace_back(streamSet, produced);
 
         bool prepareConsumedPhi = false;
         for (const auto f : make_iterator_range(out_edges(streamSet, mConsumerGraph))) {
-            const ConsumerEdge & c = mConsumerGraph[f];
-            assert (c.Flags != ConsumerEdge::None);
             const auto consumer = target(f, mConsumerGraph);
             const auto p = KernelPartitionId[consumer];
             if (p >= targetPartitionId) {
@@ -277,25 +249,22 @@ void PipelineCompiler::phiOutPartitionItemCounts(BuilderRef b, const unsigned ke
                 break;
             }
         }
+
         if (prepareConsumedPhi) {
+            Value * consumed = nullptr;
+            if (kernel >= mKernelId) {
+                consumed = readConsumedItemCount(b, streamSet);
+                assert (consumed);
+            } else {
+                consumed = mInitialConsumedItemCount[streamSet];
+                assert (consumed);
+            }            
 
             #ifdef PRINT_DEBUG_MESSAGES
             SmallVector<char, 256> tmp;
             raw_svector_ostream out(tmp);
-            out << makeKernelName(mKernelId) << " -> " << makeBufferName(kernel, br.Port);
-            out << "_consumed";
-            #endif
-
-            Value * consumed = nullptr;
-            if (kernel >= mKernelId) {
-                consumed = readConsumedItemCount(b, streamSet);
-            } else {
-                consumed = mInitialConsumedItemCount[streamSet];
-            }
-            assert (consumed);
-
-            #ifdef PRINT_DEBUG_MESSAGES
-            out << "1 = %" PRIu64;
+            out << makeKernelName(mKernelId) << " -> " <<
+                   makeBufferName(kernel, br.Port) << "_consumed = %" PRIu64;
             debugPrint(b, out.str(), consumed);
             #endif
 
@@ -440,7 +409,7 @@ void PipelineCompiler::writeInitiallyTerminatedPartitionExit(BuilderRef b) {
             PHINode * const exhaustedInputPhi = mExhaustedPipelineInputAtPartitionEntry[nextPartitionId];
             exhaustedInputPhi->addIncoming(mExhaustedInput, mKernelInitiallyTerminatedExit);
 
-            for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
+            for (auto kernel = PipelineInput; kernel <= mKernelId; ++kernel) {
                 phiOutPartitionItemCounts(b, kernel, nextPartitionId, true, mKernelInitiallyTerminated);
             }
             for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
@@ -490,7 +459,7 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     if (LLVM_UNLIKELY(EnableCycleCounter)) {
         mPartitionStartTimePhi[nextPartitionId]->addIncoming(startTime, exitBlock);
     }
-    for (auto kernel = FirstKernel; kernel <= mKernelId; ++kernel) {
+    for (auto kernel = PipelineInput; kernel <= mKernelId; ++kernel) {
         phiOutPartitionItemCounts(b, kernel, nextPartitionId, false, mKernelJumpToNextUsefulPartition);
     }
     for (auto kernel = mKernelId + 1U; kernel <= LastKernel; ++kernel) {
@@ -504,10 +473,6 @@ inline void PipelineCompiler::writeJumpToNextPartition(BuilderRef b) {
     if (exhaustedInputPhi) {       
         Value * const exhausted = mIsBounded ? mExhaustedInputAtJumpPhi : mExhaustedInput;
         exhaustedInputPhi->addIncoming(exhausted, exitBlock); assert (exhausted);
-    }
-    // if we jump to the end of the pipeline, phi out the consumed item counts.
-    if (LLVM_UNLIKELY(nextPartitionId == (PartitionCount - 1U))) {
-        updatePipelineInputConsumedItemCounts(b, exitBlock);
     }
 
     #ifdef PRINT_DEBUG_MESSAGES
@@ -582,6 +547,7 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
                 assert (cn.Consumed);
                 phi->addIncoming(cn.Consumed, exitBlock);
                 cn.Consumed = phi;
+                assert (cn.PhiNode == nullptr);
                 // The consumed phi node propagates the *initial* consumed item count for
                 // each item to reflect the fact we've skipped some kernel. However, since
                 // we might skip the actual producer, we need to constantly update the
@@ -590,11 +556,6 @@ inline void PipelineCompiler::checkForPartitionExit(BuilderRef b) {
                 // per pipeline iteration.
                 mInitialConsumedItemCount[streamSet] = phi;
             }
-        }
-
-        // if we jump to the end of the pipeline, phi out the consumed item counts.
-        if (LLVM_UNLIKELY(nextPartitionId == (PartitionCount - 1U))) {
-            updatePipelineInputConsumedItemCounts(b, exitBlock);
         }
 
         for (unsigned i = 0; i != nextPartitionId; ++i) {

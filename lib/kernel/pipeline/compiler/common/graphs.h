@@ -220,12 +220,9 @@ private:
 };
 
 enum BufferType : unsigned {
-    Internal = 1
-    , External = 2
-    , Unowned = 4
-    , Shared = 8
-    , ManagedByKernel = Unowned | Internal
-    , UnownedExternal = Unowned | External
+    External = 1
+    , Unowned = 2
+    , Shared = 4
 };
 
 ENABLE_ENUM_FLAGS(BufferType)
@@ -252,7 +249,7 @@ struct BufferNode {
     }
 
     bool isInternal() const {
-        return (Type & BufferType::Internal) != 0;
+        return (Type & BufferType::External) == 0;
     }
 
     bool isExternal() const {
@@ -283,10 +280,12 @@ struct BufferPort {
     unsigned Delay = 0;
     unsigned LookAhead = 0;
     unsigned LookBehind = 0;
+
     bool IsPrincipal = false;
     bool IsZeroExtended = false;
     bool IsDeferred = false;
     bool IsShared = false;
+    bool IsManaged = false;
 
     int TransitiveAdd = 0;
 

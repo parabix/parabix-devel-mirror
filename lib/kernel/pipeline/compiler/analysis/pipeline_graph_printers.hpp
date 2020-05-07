@@ -214,29 +214,25 @@ void PipelineAnalysis::printBufferGraph(raw_ostream & out) const {
         if (buffer == nullptr) {
             out << '?';
         } else {
-            char bufferType = '?';
-            switch (bn.Type & 7) {
-                case BufferType::Internal:
-                    switch (buffer->getBufferKind()) {
-                        case BufferId::StaticBuffer:
-                            bufferType = 'S'; break;
-                        case BufferId::DynamicBuffer:
-                            bufferType = 'D'; break;
-                        default: llvm_unreachable("unknown streamset type");
-                    }
-                    break;
-                case BufferType::ManagedByKernel:
-                    bufferType = 'M';
-                    break;
-                case BufferType::External:
-                    bufferType = 'E';
-                    break;
-                case BufferType::UnownedExternal:
-                    bufferType = 'U';
-                    break;
-                default: llvm_unreachable("unknown buffer type id");
+            if (bn.isExternal()) {
+                out << 'X';
             }
-            out << bufferType;
+            switch (buffer->getBufferKind()) {
+                case BufferId::StaticBuffer:
+                    out << 'S'; break;
+                case BufferId::DynamicBuffer:
+                    out << 'D'; break;
+                case BufferId::ExternalBuffer:
+                    out << 'E'; break;
+                default: llvm_unreachable("unknown streamset type");
+            }
+
+            if (bn.isUnowned()) {
+                out << 'U';
+            }
+            if (bn.isExternal()) {
+                out << 'P';
+            }
             if (buffer->isLinear()) {
                 out << 'L';
             }

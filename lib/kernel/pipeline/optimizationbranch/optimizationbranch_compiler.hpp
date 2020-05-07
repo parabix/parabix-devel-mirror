@@ -802,7 +802,6 @@ void OptimizationBranchCompiler::executeBranch(BuilderRef b,
     b->CreateStore(nextSegNo, mInternalSegmentNumber[branchType]);
 
     addNextArg(segNo);
-    addNextArg(mStrideRateFactor);
     addNextArg(isFinal);
 
     PointerType * const voidPtrTy = b->getVoidPtrTy();

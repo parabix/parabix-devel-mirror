@@ -372,7 +372,7 @@ void PipelineCompiler::zeroInputAfterFinalItemCount(BuilderRef b, const Vec<Valu
             args[0] = b->CreatePointerCast(inputBaseAddresses[inputPort.Number], voidPtrTy);
             args[1] = b->getSize(bytesPerSegment);
             args[2] = mAlreadyProcessedPhi[inputPort];
-            if (input.isDeferred()) {
+            if (port.IsDeferred) {
                 args[3] = mAlreadyProcessedDeferredPhi[inputPort];
             } else {
                 args[3] = mAlreadyProcessedPhi[inputPort];

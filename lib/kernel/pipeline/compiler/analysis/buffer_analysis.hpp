@@ -33,27 +33,6 @@ inline static unsigned ceil_udiv(const unsigned x, const unsigned y) {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
 
-    // Identify all External I/O buffers
-    SmallFlatSet<BufferGraph::vertex_descriptor, 16> IsExternal;
-
-    IsExternal.reserve(out_degree(PipelineInput, mBufferGraph) + in_degree(PipelineOutput, mBufferGraph));
-    for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
-        IsExternal.insert(target(e, mBufferGraph));
-    }
-
-
-    for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
-        IsExternal.insert(source(e, mBufferGraph));
-    }
-
-    auto internalOrExternal = [&IsExternal](BufferGraph::vertex_descriptor streamSet) -> BufferType {
-        if (LLVM_LIKELY(IsExternal.count(streamSet) == 0)) {
-            return BufferType::Internal;
-        } else {
-            return BufferType::External;
-        }
-    };
-
     // fill in any known managed buffers
     for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
         const Kernel * const kernelObj = getKernel(kernel);
@@ -62,12 +41,15 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
 
-            if (LLVM_UNLIKELY(internallySynchronized || Kernel::isLocalBuffer(output))) {
+            if (LLVM_UNLIKELY(internallySynchronized || rate.IsManaged)) {
                 const auto streamSet = target(e, mBufferGraph);
                 BufferNode & bn = mBufferGraph[streamSet];
                 // Every managed buffer is considered linear to the pipeline
                 bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
-                bn.Type = BufferType::Unowned | internalOrExternal(streamSet);
+                bn.Type |= BufferType::Unowned;
+                if (rate.IsShared) {
+                    bn.Type |= BufferType::Shared;
+                }
             }
         }
     }
@@ -76,11 +58,12 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(out_edges(PipelineInput, mBufferGraph))) {
         const auto streamSet = target(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
+        bn.Type |= BufferType::External;
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & input = rate.Binding;
             bn.Buffer = new ExternalBuffer(b, input.getType(), true, 0);
-            bn.Type = BufferType::UnownedExternal;
+            bn.Type |= BufferType::Unowned;
         }
     }
 
@@ -88,16 +71,17 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
     for (const auto e : make_iterator_range(in_edges(PipelineOutput, mBufferGraph))) {
         const auto streamSet = source(e, mBufferGraph);
         BufferNode & bn = mBufferGraph[streamSet];
+        bn.Type |= BufferType::External;
         if (LLVM_LIKELY(bn.Buffer == nullptr)) {
             const BufferPort & rate = mBufferGraph[e];
             const Binding & output = rate.Binding;
-            if (LLVM_UNLIKELY(Kernel::isLocalBuffer(output))) {
+            if (LLVM_UNLIKELY(rate.IsShared || rate.IsManaged)) {
                 if (rate.IsShared) {
-                    bn.Type = BufferType::Shared;
+                    bn.Type |= BufferType::Shared;
                 }
             } else {
                 bn.Buffer = new ExternalBuffer(b, output.getType(), true, 0);
-                bn.Type = BufferType::UnownedExternal;
+                bn.Type |= BufferType::Unowned;
             }
         }
     }
@@ -161,7 +145,6 @@ void PipelineAnalysis::addStreamSetsToBufferGraph(BuilderRef b) {
             // be bounded a priori. During initialization, we could pass a "suggestion"
             // argument to indicate what the outer pipeline believes its I/O rates will be.
 
-            bn.Type |= internalOrExternal(streamSet);
 
             // If this buffer is externally used, we cannot analyze the dataflow rate of
             // external consumers. Default to dynamic for such buffers.
@@ -314,7 +297,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
 
             BufferPort bp(port, binding, lb, ub);
 
-            assert (bp.Add == 0);
+            if (LLVM_UNLIKELY(rate.getKind() == RateId::Unknown)) {
+                bp.IsManaged = true;
+            }
 
             for (const Attribute & attr : binding.getAttributes()) {
                 switch (attr.getKind()) {
@@ -341,6 +326,9 @@ void PipelineAnalysis::generateInitialBufferGraph() {
                         break;
                     case AttrId::SharedManagedBuffer:
                         bp.IsShared = true;
+                        break;                        
+                    case AttrId::ManagedBuffer:
+                        bp.IsManaged = true;
                         break;
                     default: break;
                 }

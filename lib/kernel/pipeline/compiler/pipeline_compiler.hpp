@@ -51,6 +51,7 @@ const static std::string TERMINATION_PREFIX = "@TERM";
 const static std::string CONSUMER_TERMINATION_COUNT_PREFIX = "@PTC";
 const static std::string ITEM_COUNT_SUFFIX = ".IN";
 const static std::string DEFERRED_ITEM_COUNT_SUFFIX = ".DC";
+const static std::string EXTERNAL_IO_PRIOR_ITEM_COUNT_SUFFIX = ".EP";
 const static std::string CONSUMED_ITEM_COUNT_SUFFIX = ".CON";
 const static std::string DEBUG_CONSUMED_ITEM_COUNT_SUFFIX = ".DCON";
 
@@ -105,6 +106,7 @@ private:
 
 public:
 
+    void addPipelinePriorItemCountProperties(BuilderRef b);
     void addInternalKernelProperties(BuilderRef b, const unsigned kernelId);
     void generateSingleThreadKernelMethod(BuilderRef b);
     void generateMultiThreadKernelMethod(BuilderRef b);
@@ -117,6 +119,7 @@ public:
     void end(BuilderRef b);
 
     void readPipelineIOItemCounts(BuilderRef b);
+    void updateInternalPipelineItemCount(BuilderRef b);
     void writeExternalProducedItemCounts(BuilderRef b);
 
 // internal pipeline functions
@@ -189,7 +192,7 @@ public:
     ArgVec buildKernelCallArgumentList(BuilderRef b);
     void updateProcessedAndProducedItemCounts(BuilderRef b);
     void readReturnedOutputVirtualBaseAddresses(BuilderRef b) const;
-    Value * addItemCountArg(BuilderRef b, const Binding & binding, const bool addressable, Value * const itemCount, ArgVec &args);
+    Value * addItemCountArg(BuilderRef b, const BufferPort &binding, const bool addressable, Value * const itemCount, ArgVec &args);
     Value * addVirtualBaseAddressArg(BuilderRef b, const StreamSetBuffer * buffer, ArgVec & args);
 
     void normalCompletionCheck(BuilderRef b);
@@ -272,7 +275,6 @@ public:
     void addConsumerKernelProperties(BuilderRef b, const unsigned producer);
     void initializeConsumedItemCount(BuilderRef b, const StreamSetPort outputPort, Value * const produced);
     void initializePipelineInputConsumedPhiNodes(BuilderRef b);
-    void updatePipelineInputConsumedItemCounts(BuilderRef b, BasicBlock * const exit);
     void readExternalConsumerItemCounts(BuilderRef b);
     void createConsumedPhiNodes(BuilderRef b);
     void phiOutConsumedItemCountsAfterInitiallyTerminated(BuilderRef b);
@@ -347,6 +349,7 @@ public:
     bool mayLoopBackToEntry() const;
     void identifyPipelineInputs(const unsigned kernelId);
     void identifyLocalPortIds(const unsigned kernelId);
+    bool hasExternalIO(const size_t kernel) const;
 
 // synchronization functions
 
@@ -505,8 +508,6 @@ protected:
     FixedVector<PHINode *>                      mInitiallyAvailableItemsPhi;
     FixedVector<Value *>                        mLocallyAvailableItems;
 
-    FixedVector<PHINode *>                      mExternalConsumedItemsPhi;
-
     FixedVector<Value *>                        mScalarValue;
     FixedVector<bool>                           RequiresSynchronization;
 
@@ -598,7 +599,9 @@ protected:
     OverflowItemCounts                          mAccessibleInputItems;
     InputPortVector<PHINode *>                  mLinearInputItemsPhi;
     InputPortVector<Value *>                    mReturnedProcessedItemCountPtr; // written by the kernel
-    InputPortVector<Value *>                    mProcessedItemCount; // exiting the segment loop
+    InputPortVector<Value *>                    mProcessedItemCountPtr; // exiting the segment loop
+    InputPortVector<Value *>                    mProcessedItemCount;
+    InputPortVector<Value *>                    mProcessedDeferredItemCountPtr;
     InputPortVector<Value *>                    mProcessedDeferredItemCount;
     InputPortVector<PHINode *>                  mInsufficientIOProcessedPhi; // exiting insufficient io
     InputPortVector<PHINode *>                  mInsufficientIOProcessedDeferredPhi;
@@ -617,7 +620,9 @@ protected:
     OutputPortVector<PHINode *>                 mLinearOutputItemsPhi;
     OutputPortVector<Value *>                   mReturnedOutputVirtualBaseAddressPtr; // written by the kernel
     OutputPortVector<Value *>                   mReturnedProducedItemCountPtr; // written by the kernel
-    OutputPortVector<Value *>                   mProducedItemCount; // exiting the segment loop
+    OutputPortVector<Value *>                   mProducedItemCountPtr; // exiting the segment loop
+    OutputPortVector<Value *>                   mProducedItemCount;
+    OutputPortVector<Value *>                   mProducedDeferredItemCountPtr;
     OutputPortVector<Value *>                   mProducedDeferredItemCount;
     OutputPortVector<PHINode *>                 mProducedAtTerminationPhi; // exiting after termination
     OutputPortVector<PHINode *>                 mInsufficientIOProducedPhi; // exiting insufficient io
@@ -714,8 +719,6 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mInitiallyAvailableItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
 , mLocallyAvailableItems(FirstStreamSet, LastStreamSet, mAllocator)
 
-, mExternalConsumedItemsPhi(FirstStreamSet, LastStreamSet, mAllocator)
-
 , mScalarValue(FirstKernel, LastScalar, mAllocator)
 , RequiresSynchronization(PipelineInput, PipelineOutput, mAllocator)
 
@@ -740,7 +743,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mFirstInputStrideLength(P.MaxNumOfInputPorts, mAllocator)
 , mLinearInputItemsPhi(P.MaxNumOfInputPorts, mAllocator)
 , mReturnedProcessedItemCountPtr(P.MaxNumOfInputPorts, mAllocator)
+, mProcessedItemCountPtr(P.MaxNumOfInputPorts, mAllocator)
 , mProcessedItemCount(P.MaxNumOfInputPorts, mAllocator)
+, mProcessedDeferredItemCountPtr(P.MaxNumOfInputPorts, mAllocator)
 , mProcessedDeferredItemCount(P.MaxNumOfInputPorts, mAllocator)
 , mInsufficientIOProcessedPhi(P.MaxNumOfInputPorts, mAllocator)
 , mInsufficientIOProcessedDeferredPhi(P.MaxNumOfInputPorts, mAllocator)
@@ -758,7 +763,9 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 , mLinearOutputItemsPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mReturnedOutputVirtualBaseAddressPtr(P.MaxNumOfOutputPorts, mAllocator)
 , mReturnedProducedItemCountPtr(P.MaxNumOfOutputPorts, mAllocator)
+, mProducedItemCountPtr(P.MaxNumOfOutputPorts, mAllocator)
 , mProducedItemCount(P.MaxNumOfOutputPorts, mAllocator)
+, mProducedDeferredItemCountPtr(P.MaxNumOfOutputPorts, mAllocator)
 , mProducedDeferredItemCount(P.MaxNumOfOutputPorts, mAllocator)
 , mProducedAtTerminationPhi(P.MaxNumOfOutputPorts, mAllocator)
 , mInsufficientIOProducedPhi(P.MaxNumOfOutputPorts, mAllocator)
@@ -769,7 +776,7 @@ PipelineCompiler::PipelineCompiler(PipelineKernel * const pipelineKernel, Pipeli
 
 , mPartitionStartTimePhi(PartitionCount, mAllocator)
 
-, mKernelName(FirstKernel, LastKernel, mAllocator)
+, mKernelName(PipelineInput, LastKernel, mAllocator)
 
 , mInternalKernels(std::move(P.mInternalKernels))
 , mInternalBindings(std::move(P.mInternalBindings))

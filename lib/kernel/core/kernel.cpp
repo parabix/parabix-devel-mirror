@@ -41,6 +41,7 @@ const static auto THREAD_LOCAL_SUFFIX = "_thread_local";
  * @brief isLocalBuffer
  ** ------------------------------------------------------------------------------------------------------------- */
 /* static */ bool Kernel::isLocalBuffer(const Binding & output, const bool includeShared) {
+    // NOTE: if this function is modified, fix the PipelineCompiler to match it.
     if (LLVM_UNLIKELY(output.hasAttribute(AttrId::ManagedBuffer) || output.getRate().isUnknown())) {
         return true;
     }
@@ -564,7 +565,6 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
     if (LLVM_LIKELY(internallySynchronized || greedy)) {
         if (internallySynchronized) {
             fields.push_back(sizeTy); // external SegNo
-            fields.push_back(sizeTy); // stride rate factor
         }
         fields.push_back(b->getInt1Ty()); // isFinal
     } else {
@@ -609,6 +609,8 @@ std::vector<Type *> Kernel::getDoSegmentFields(BuilderRef b) const {
         } else {
             fields.push_back(voidPtrTy);
         }
+
+        #warning if an I/O rate is deferred and this is internally synchronized, we need both item counts
 
         // produced output items
         if (internallySynchronized || hasTerminationSignal || isAddressable(output)) {
@@ -674,7 +676,6 @@ Function * Kernel::addDoSegmentDeclaration(BuilderRef b) const {
         if (LLVM_UNLIKELY(internallySynchronized || greedy)) {
             if (internallySynchronized) {
                 setNextArgName("segNo");
-                setNextArgName("strideRateFactor");
             }
             setNextArgName("isFinal");
         } else {

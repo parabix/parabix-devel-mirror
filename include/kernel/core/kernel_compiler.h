@@ -416,7 +416,6 @@ protected:
     llvm::Value *                   mNumOfStrides = nullptr;
     llvm::Value *                   mFixedRateFactor = nullptr;
     llvm::Value *                   mExternalSegNo = nullptr;
-    llvm::Value *                   mStrideRateFactor = nullptr;
 
     Vec<llvm::Value *>              mUpdatableProcessedInputItemPtr;
     Vec<llvm::Value *>              mProcessedInputItemPtr;

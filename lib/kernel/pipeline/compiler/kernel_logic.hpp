@@ -362,6 +362,21 @@ void PipelineCompiler::identifyPipelineInputs(const unsigned kernelId) {
     }
 }
 
+
+/** ------------------------------------------------------------------------------------------------------------- *
+ * @brief hasExternalIO
+ ** ------------------------------------------------------------------------------------------------------------- */
+bool PipelineCompiler::hasExternalIO(const size_t kernel) const {
+    for (const auto input : make_iterator_range(in_edges(kernel, mBufferGraph))) {
+        const auto streamSet = source(input, mBufferGraph);
+        const BufferNode & node = mBufferGraph[streamSet];
+        if (node.isExternal()) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** ------------------------------------------------------------------------------------------------------------- *
  * @brief identifyPipelineInputs
  ** ------------------------------------------------------------------------------------------------------------- */
@@ -511,7 +526,9 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mFirstInputStrideLength.reset(numOfInputs);
     mLinearInputItemsPhi.reset(numOfInputs);
     mReturnedProcessedItemCountPtr.reset(numOfInputs);
+    mProcessedItemCountPtr.reset(numOfInputs);
     mProcessedItemCount.reset(numOfInputs);
+    mProcessedDeferredItemCountPtr.reset(numOfInputs);
     mProcessedDeferredItemCount.reset(numOfInputs);
     mInsufficientIOProcessedPhi.reset(numOfInputs);
     mInsufficientIOProcessedDeferredPhi.reset(numOfInputs);
@@ -521,8 +538,6 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
 
     const auto numOfOutputs = out_degree(mKernelId, mBufferGraph);
     reset(mWritableOutputItems, numOfOutputs);
-//    mInitiallyProducedItemCount.reset(numOfOutputs);
-//    mInitiallyProducedDeferredItemCount.reset(numOfOutputs);
     mAlreadyProducedPhi.reset(numOfOutputs);
     mAlreadyProducedDelayedPhi.reset(numOfOutputs);
     mAlreadyProducedDeferredPhi.reset(numOfOutputs);
@@ -530,7 +545,9 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
     mLinearOutputItemsPhi.reset(numOfOutputs);
     mReturnedOutputVirtualBaseAddressPtr.reset(numOfOutputs);
     mReturnedProducedItemCountPtr.reset(numOfOutputs);
+    mProducedItemCountPtr.reset(numOfOutputs);
     mProducedItemCount.reset(numOfOutputs);
+    mProducedDeferredItemCountPtr.reset(numOfOutputs);
     mProducedDeferredItemCount.reset(numOfOutputs);
     mProducedAtTerminationPhi.reset(numOfOutputs);
     mInsufficientIOProducedPhi.reset(numOfOutputs);
@@ -546,7 +563,7 @@ void PipelineCompiler::clearInternalStateForCurrentKernel() {
  ** ------------------------------------------------------------------------------------------------------------- */
 void PipelineCompiler::initializeKernelAssertions(BuilderRef b) {
     SmallVector<char, 256> tmp;
-    for (auto kernel = FirstKernel; kernel <= LastKernel; ++kernel) {
+    for (auto kernel = PipelineInput; kernel <= LastKernel; ++kernel) {
         raw_svector_ostream out(tmp);
         out << kernel << "." << getKernel(kernel)->getName();
         mKernelName[kernel] = b->GetString(out.str());

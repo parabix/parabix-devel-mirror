@@ -151,7 +151,8 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
 
             const Kernel * const kernelObj = node.Kernel;
 
-            if ((kernelObj == mPipelineKernel) && (out_degree(u, mRelationships) == 0)) {
+            const auto isPipelineKernel = (kernelObj == mPipelineKernel);
+            if (isPipelineKernel && (out_degree(u, mRelationships) == 0)) {
                 continue;
             }
 
@@ -168,6 +169,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
                     const auto streamSet = source(f, mRelationships);
                     assert (mRelationships[streamSet].Type == RelationshipNode::IsRelationship);
                     assert (isa<StreamSet>(mRelationships[streamSet].Relationship));
+
                     auto buffer = mapStreamSet(streamSet);
 
                     const Binding & b = rn.Binding;
@@ -256,7 +258,7 @@ void PipelineAnalysis::identifyKernelPartitions(const std::vector<unsigned> & or
             // would need to know to calculate it from its outputs. Rather than handling this complication,
             // for now we simply prevent this case.
 
-            const auto demarcateOutputs = mayTerminateEarly || internallySynchronized; // (isNewPartitionRoot && internallySynchronized);
+            const auto demarcateOutputs = mayTerminateEarly || internallySynchronized || isPipelineKernel; // (isNewPartitionRoot && internallySynchronized);
             unsigned demarcationId = 0;
 
             if (LLVM_UNLIKELY(demarcateOutputs)) {
