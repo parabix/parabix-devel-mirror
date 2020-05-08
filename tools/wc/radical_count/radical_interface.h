@@ -29,7 +29,7 @@ namespace BS
                 return std::move(UCD::UnicodeSet());
         }
         private:
-        static <string, const UCD::UnicodeSet*> _unicodeset_radical_table;
+            static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
     };
 }
 
