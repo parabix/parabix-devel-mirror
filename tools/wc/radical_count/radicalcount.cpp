@@ -145,9 +145,17 @@ int main(int argc, char *argv[]) {
 
     UCountFunctionType uCountFunctionPtr = nullptr;
     
-    BS::UnicodeSetTable ucd_radical;
-    re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::ucd_radical.get_uset(CC_expr))));
-    uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
+    //BS::UnicodeSetTable ucd_radical;
+    //UCD::UnicodeSet setNum = ucd_radical.get_uset(CC_expr)
+    //re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::ucd_radical.get_uset(CC_expr))));
+    //uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
+    
+    if ((CC_expr == std::string("85"))) {
+        re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::_85_Set)));
+        uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
+    } else {
+        llvm::report_fatal_error("Input not supported.");
+    }
 
     std::vector<uint64_t> theCounts;
     
