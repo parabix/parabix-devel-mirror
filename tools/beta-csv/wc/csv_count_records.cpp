@@ -88,14 +88,11 @@ using namespace pablo;
 
 static cl::OptionCategory ucFlags("Command Flags", "ucount options");
 
-//  The character class expression may be a single character, a bracketted expression
-//  listing characters (e.g., [aeiou] or [A-Za-z0-9]) or a character class corresponding
-//  to a Unicode property (e.g., \p{Greek}.
-static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Unicode character class expression>"), cl::Required, cl::cat(ucFlags));
+//modified: taken out cl::opt
 
 //  Multiple input files are allowed on the command line; counts are produced
 //  for each file.
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(ucFlags));
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::CommaSeparated, cl::cat(ucFlags));//modified cl::OneOrMore to CommaSeparated
 
 std::vector<fs::path> allFiles;
 
@@ -109,9 +106,9 @@ std::vector<fs::path> allFiles;
 class CSV_Quote_Translate : public PabloKernel {
 public:
 
-    CSV_Quote_Translate(BuilderRef kb, StreamSet * dquote, StreamSet * basis, StreamSet * translatedBasis,StreamSet * target)///modified
+    CSV_Quote_Translate(BuilderRef kb, StreamSet * dquote, StreamSet * basis, StreamSet * translatedBasis,StreamSet * target)///modified added StreamSet * target
         : PabloKernel(kb, "CSV_Quote_Translate",
-                      {Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, Binding{"basis", basis},Binding{"target",target}},///modified
+                      {Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, Binding{"basis", basis},Binding{"target",target}},///modified added Binding{"target",target}
                       {Binding{"translatedBasis", translatedBasis}}) {}
 protected:
     void generatePabloMethod() override;
@@ -137,7 +134,7 @@ void CSV_Quote_Translate::generatePabloMethod() {
     PabloAST * literal_target = pb.createAnd(target,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
     // Translate \r to \n    ASCII value of \r = 0x0d, ASCII value of \n = 0x0a
     std::vector<PabloAST *> translated_basis(8, nullptr);
-    translated_basis[0] = basis[0];                              // no changes
+    translated_basis[0] = basis[0];  // no changes
     translated_basis[1] = basis[1];  // no changes
     translated_basis[2] = basis[2];  // no changes
     translated_basis[3] = basis[3];  // no changes
@@ -171,8 +168,8 @@ typedef uint64_t (*CSVCountFunctionType)(uint32_t fd);
 //  an integer "file descriptor" as its input, and will produce the count of
 //  the number of characters of the given character class as a result.
 //
-CSVCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
-
+//CSVCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
+CSVCountFunctionType pipelineGen(CPUDriver & pxDriver) {
     auto & B = pxDriver.getBuilder();
 
     auto P = pxDriver.makePipeline(
@@ -204,10 +201,6 @@ CSVCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
     ////modified///////////////////////////////////////////////
     //  Create a character class bit stream.
     StreamSet * CCstream = P->CreateStreamSet(1, 1);
-    
-    std::map<std::string, StreamSet *> propertyStreamMap;
-    auto nameString = CC_name->getFullName();
-    propertyStreamMap.emplace(nameString, CCstream);
 
     StreamSet * Dquote = P->CreateStreamSet(1);
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x22)}, BasisBits, Dquote);
@@ -219,16 +212,18 @@ CSVCountFunctionType pipelineGen(CPUDriver & pxDriver, re::Name * CC_name) {
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0d)}, BasisBits, newlines);
     P->CreateKernelCall<CSV_Quote_Translate>(Dquote, BasisBits, translatedBasis,newlines);
 
-    //StreamSet * translated = P->CreateStreamSet(1, 8);                            //<-  uncomment to see translated output
-    //P->CreateKernelCall<P2SKernel>(translatedBasis, translated);                  //<-  uncomment to see translated output
-    //P->CreateKernelCall<StdOutKernel>(translated);                                //<-  uncomment to see translated output
+    //StreamSet * translated = P->CreateStreamSet(1, 8);                            //<-  uncomment to see translated stream
+    //P->CreateKernelCall<P2SKernel>(translatedBasis, translated);                  //<-  uncomment to see translated stream
+    //P->CreateKernelCall<StdOutKernel>(translated);                                //<-  uncomment to see translated stream
 
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
-    P->CreateKernelCall<UnicodePropertyKernelBuilder>(CC_name, translatedBasis, CCstream);
+    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0d)}, translatedBasis, CCstream);     //checks for '\r'
+    //P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0a)}, translatedBasis, CCstream);   //checks for '\n'
+    //for the two lines of code above, make valid one of them to check either '\r' or '\n'
     P->CreateKernelCall<PopcountKernel>(CCstream, P->getOutputScalar("countResult"));
 
     return reinterpret_cast<CSVCountFunctionType>(P->compile());
@@ -265,15 +260,19 @@ uint64_t ucount1(CSVCountFunctionType fn_ptr, const uint32_t fileIdx) {
 
 int main(int argc, char *argv[]) {
     codegen::ParseCommandLineOptions(argc, argv, {&ucFlags, codegen::codegen_flags()});
+    /*
+    modified: taken out CC_expr
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
         argv::DirectoriesFlag = argv::Recurse;
-    }
+    }*/
     CPUDriver pxDriver("wc");
 
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     const auto fileCount = allFiles.size();
 
     CSVCountFunctionType CSVCountFunctionPtr = nullptr;
+    /*
+    modified: taken out CC_expr
     re::RE * CC_re = re::RE_Parser::parse(CC_expr);
     resolveUnicodeNames(CC_re);
     if (re::Name * UCD_property_name = dyn_cast<re::Name>(CC_re)) {
@@ -284,7 +283,8 @@ int main(int argc, char *argv[]) {
         std::cerr << "Input expression must be a Unicode property or CC but found: " << CC_expr << " instead.\n";
         exit(1);
     }
-    
+    */
+    CSVCountFunctionPtr=pipelineGen(pxDriver);
     std::vector<uint64_t> theCounts;
     
     theCounts.resize(fileCount);
