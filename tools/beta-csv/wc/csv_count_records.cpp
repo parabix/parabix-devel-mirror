@@ -1,6 +1,18 @@
-
-
 #include <kernel/core/idisa_target.h>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/core/streamset.h>
+#include <kernel/pipeline/pipeline_builder.h>
+#include <kernel/pipeline/driver/cpudriver.h>
+#include <kernel/streamutils/deletion.h>
+#include <kernel/streamutils/pdep_kernel.h>
+#include <kernel/streamutils/stream_select.h>
+#include <kernel/streamutils/stream_shift.h>
+#include <kernel/unicode/UCD_property_kernel.h>
+#include <kernel/basis/s2p_kernel.h>
+#include <kernel/basis/p2s_kernel.h>
+#include <kernel/io/source_kernel.h>
+#include <kernel/io/stdout_kernel.h>
+#include <kernel/scan/scanmatchgen.h>
 #include <boost/filesystem.hpp>
 #include <re/cc/cc_compiler.h>
 #include <re/cc/cc_compiler_target.h>
@@ -9,21 +21,17 @@
 #include <re/unicode/re_name_resolve.h>
 #include <re/cc/cc_kernel.h>
 #include <re/ucd/ucd_compiler.hpp>
-#include <kernel/core/kernel_builder.h>
-#include <kernel/pipeline/pipeline_builder.h>
-#include <kernel/basis/s2p_kernel.h>
-#include <kernel/io/source_kernel.h>
-#include <kernel/core/streamset.h>
-#include <kernel/unicode/UCD_property_kernel.h>
 #include <llvm/IR/Function.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
 #include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/ErrorHandling.h>
 #include <pablo/pablo_kernel.h>
 #include <pablo/builder.hpp>
 #include <pablo/pe_zeroes.h>
+#include <pablo/pe_ones.h>
+#include <pablo/bixnum/bixnum.h>
 #include <toolchain/pablo_toolchain.h>
-#include <kernel/pipeline/driver/cpudriver.h>
 #include <grep/grep_kernel.h>
 #include <toolchain/toolchain.h>
 #include <fileselect/file_select.h>
@@ -34,40 +42,13 @@
 #include <sys/stat.h>
 #include <vector>
 #include <map>
-
 #include <cstdio>
-#include <vector>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/ErrorHandling.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/IR/Module.h>
-#include <re/adt/re_name.h>
-#include <re/adt/re_re.h>
-#include <kernel/core/kernel_builder.h>
-#include <kernel/pipeline/pipeline_builder.h>
-#include <kernel/streamutils/deletion.h>
-#include <kernel/streamutils/pdep_kernel.h>
-#include <kernel/streamutils/stream_select.h>
-#include <kernel/streamutils/stream_shift.h>
-#include <kernel/basis/s2p_kernel.h>
-#include <kernel/basis/p2s_kernel.h>
-#include <kernel/io/source_kernel.h>
-#include <kernel/io/stdout_kernel.h>
-#include <kernel/scan/scanmatchgen.h>
-#include <re/adt/re_name.h>
-#include <re/cc/cc_kernel.h>
-#include <re/cc/cc_compiler.h>
-#include <re/cc/cc_compiler_target.h>
-#include <string>
-#include <toolchain/toolchain.h>
-#include <toolchain/pablo_toolchain.h>
-#include <pablo/builder.hpp>
-#include <pablo/pe_ones.h>
-#include <pablo/pe_zeroes.h>
-#include <pablo/bixnum/bixnum.h>
-#include <fcntl.h>
-#include <iostream>
-#include <kernel/pipeline/driver/cpudriver.h>
+
+//#include <re/adt/re_re.h>
+//#include <re/adt/re_name.h>
+//unused in adapted version of code
+
+
 
 
 namespace fs = boost::filesystem;
@@ -95,7 +76,6 @@ static cl::OptionCategory ucFlags("Command Flags", "ucount options");
 static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::CommaSeparated, cl::cat(ucFlags));//modified cl::OneOrMore to CommaSeparated
 
 std::vector<fs::path> allFiles;
-
 
 
 //
