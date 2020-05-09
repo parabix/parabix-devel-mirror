@@ -12,9 +12,13 @@
 #include "PropertyObjects.h"
 #include "PropertyValueAliases.h"
 #include <unicode/core/unicode_set.h>
+#include <../tools/wc/radical_count/radical_interface.h>
 
 namespace UCD {
   namespace KRS_ns {
+
+    BS::UnicodeSetTable ucd_radical;
+    
     const unsigned independent_prop_values = 214;
     /** Code Point Ranges for _35
     [3687, 3687], [5909, 5910], [5912, 5914], [2003c, 2003c],

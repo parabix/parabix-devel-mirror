@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <vector>
 #include <map>
+#include <regex>
 #include <unicode/data/kRSKangXi.h>
 #include "radical_interface.h"
 
@@ -150,11 +151,13 @@ int main(int argc, char *argv[]) {
     //re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::ucd_radical.get_uset(CC_expr))));
     //uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     
-    if ((CC_expr == std::string("85"))) {
-        re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::_85_Set)));
+    std::regex regex_pattern("-?[0-9]+.?[0-9]+");
+    if ((std::regex_match(CC_expr, regex_pattern))) { 
+        //re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::_85_Set)));
+        re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::ucd_radical.get_uset(CC_expr))));
         uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     } else {
-        llvm::report_fatal_error("Input not supported.");
+        llvm::report_fatal_error("Input Error: Enter a integer from 1 to 214.");
     }
 
     std::vector<uint64_t> theCounts;

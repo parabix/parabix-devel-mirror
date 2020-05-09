@@ -1,9 +1,11 @@
 #include "radical_interface.h"
+#include <unicode/data/kRSKangXi.h>
 
 using namespace std;
 using namespace UCD::KRS_ns;
 namespace BS
 {
+
     map<string, const UCD::UnicodeSet*> UnicodeSetTable::_unicodeset_radical_table
     {
         {"1",&_1_Set},                       {"2",&_2_Set},                       {"3",&_3_Set},                       {"4",&_4_Set},                       {"5",&_5_Set},                       {"6",&_6_Set},
@@ -43,5 +45,6 @@ namespace BS
         {"205",&_205_Set},                   {"206",&_206_Set},                   {"207",&_207_Set},                   {"208",&_208_Set},                   {"209",&_209_Set},                   {"210",&_210_Set},
         {"211",&_211_Set},                   {"212",&_212_Set},                   {"213",&_213_Set},                   {"214",&_214_Set}
     };
+
 }
 

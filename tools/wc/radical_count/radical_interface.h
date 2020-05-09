@@ -20,17 +20,19 @@ namespace BS
     using std::set;
 
     class UnicodeSetTable
-    {
-        const UCD::UnicodeSet&& get_uset(string radical)
-        {
-            if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
-                return std::move(*_unicodeset_radical_table[radical]);
-            else
-                return std::move(UCD::UnicodeSet());
-        }
+    {   
+        public:
+            const UCD::UnicodeSet&& get_uset(string radical)
+            {
+                if(_unicodeset_radical_table.find(radical) != _unicodeset_radical_table.end())
+                    return std::move(*_unicodeset_radical_table[radical]);
+                else
+                    return std::move(UCD::UnicodeSet());
+            }
         private:
             static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
     };
+    
 }
 
 #endif /* radical_interface_h */
