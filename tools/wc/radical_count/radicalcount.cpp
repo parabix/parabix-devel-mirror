@@ -48,11 +48,11 @@ using namespace kernel;
 
 static cl::OptionCategory ucFlags("Command Flags", "ucount options");
 
-static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical>"), cl::Required, cl::cat(ucFlags));
+static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Expression>"), cl::Required, cl::cat(ucFlags));
 
 //  Multiple input files are allowed on the command line; counts are produced
 //  for each file.
-static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<input file ...>"), cl::OneOrMore, cl::cat(ucFlags));
+static cl::list<std::string> inputFiles(cl::Positional, cl::desc("<Input File>"), cl::OneOrMore, cl::cat(ucFlags));
 
 std::vector<fs::path> allFiles;
 
