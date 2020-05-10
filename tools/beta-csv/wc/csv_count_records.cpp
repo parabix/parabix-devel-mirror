@@ -83,18 +83,19 @@ std::vector<fs::path> allFiles;
 //  from a source bit stream set called spreadBasis and the insertMask
 //  used to spread out the bits.
 //
-class CSV_Quote_Translate : public PabloKernel {
+class CSV_CountRecords : public PabloKernel {
 public:
-
-    CSV_Quote_Translate(BuilderRef kb, StreamSet * dquote, StreamSet * basis, StreamSet * translatedBasis,StreamSet * target)///modified added StreamSet * target
-        : PabloKernel(kb, "CSV_Quote_Translate",
-                      {Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, Binding{"basis", basis},Binding{"target",target}},///modified added Binding{"target",target}
-                      {Binding{"translatedBasis", translatedBasis}}) {}
+    CSV_CountRecords(BuilderRef kb, StreamSet * dquote, StreamSet * basis, StreamSet * target, Scalar * countResult)   //modified
+        : PabloKernel(kb, "CSV_CountRecords",
+                      {Binding{"dquote", dquote, FixedRate(), LookAhead(1)}, Binding{"basis", basis},Binding{"target",target}},///modified 
+                      {},
+                      {},
+                      {Binding{"countResult", countResult}}) {}
 protected:
     void generatePabloMethod() override;
 };
 
-void CSV_Quote_Translate::generatePabloMethod() {
+void CSV_CountRecords::generatePabloMethod() {
     pablo::PabloBuilder pb(getEntryScope());
     std::vector<PabloAST *> basis = getInputStreamSet("basis");
     PabloAST * dquote = getInputStreamSet("dquote")[0];
@@ -112,26 +113,17 @@ void CSV_Quote_Translate::generatePabloMethod() {
     PabloAST * start_dquote = pb.createXor(dquote_odd, escaped_quote);
     PabloAST * end_dquote = pb.createXor(dquote_even, quote_escape);
     PabloAST * literal_target = pb.createAnd(target,pb.createIntrinsicCall(pablo::Intrinsic::InclusiveSpan, {start_dquote, end_dquote}));
-    // Translate \r to \n    ASCII value of \r = 0x0d, ASCII value of \n = 0x0a
-    std::vector<PabloAST *> translated_basis(8, nullptr);
-    translated_basis[0] = basis[0];  // no changes
-    translated_basis[1] = basis[1];  // no changes
-    translated_basis[2] = basis[2];  // no changes
-    translated_basis[3] = basis[3];  // no changes
-    translated_basis[4] = basis[4];  // no changes
-    translated_basis[5] = pb.createXor(basis[5], literal_target);  // flip
-    translated_basis[6] = pb.createXor(basis[6], literal_target);  // flip
-    translated_basis[7] = pb.createXor(basis[7], literal_target);  // flip
+    PabloAST * CSV_newlines = pb.createXor(target,literal_target);
+    PabloAST * newline_count=pb.createCount(CSV_newlines);
      ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
-
-    Var * translatedVar = getOutputStreamVar("translatedBasis");
-    for (unsigned i = 0; i < 8; i++) {
-        pb.createAssign(pb.createExtract(translatedVar, pb.getInteger(i)), translated_basis[i]);
-    }
+    Var * countResult = getOutputScalarVar("countResult");
+    pb.createAssign(countResult, newline_count);
+    //Var * translatedVar = getOutputStreamVar("count");
+    //pb.createAssign(pb.createExtract(translatedVar, pb.getInteger(0)), CSV_newlines);
 }
 
 
@@ -169,43 +161,23 @@ CSVCountFunctionType pipelineGen(CPUDriver & pxDriver) {
 
     //  Transpose the ByteSteam into parallel bit stream form.
     P->CreateKernelCall<S2PKernel>(ByteStream, BasisBits);
-
-
-    
-
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ////modified///////////////////////////////////////////////
-    //  Create a character class bit stream.
-    StreamSet * CCstream = P->CreateStreamSet(1, 1);
-
     StreamSet * Dquote = P->CreateStreamSet(1);
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x22)}, BasisBits, Dquote);
 
-    std::map<std::string, StreamSet *>::iterator it;
-    StreamSet * translatedBasis = P->CreateStreamSet(8,1);
-
     StreamSet * newlines = P->CreateStreamSet(1);
     P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0d)}, BasisBits, newlines);
-    P->CreateKernelCall<CSV_Quote_Translate>(Dquote, BasisBits, translatedBasis,newlines);
-
-    //StreamSet * translated = P->CreateStreamSet(1, 8);                            //<-  uncomment to see translated stream
-    //P->CreateKernelCall<P2SKernel>(translatedBasis, translated);                  //<-  uncomment to see translated stream
-    //P->CreateKernelCall<StdOutKernel>(translated);                                //<-  uncomment to see translated stream
-
+    P->CreateKernelCall<CSV_CountRecords>(Dquote, BasisBits,newlines,P->getOutputScalar("countResult"));
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
     ///////////////////////////////////////////////////////////
-    P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0d)}, translatedBasis, CCstream);     //checks for '\r'
-    //P->CreateKernelCall<CharacterClassKernelBuilder>(std::vector<re::CC *>{re::makeByte(0x0a)}, translatedBasis, CCstream);   //checks for '\n'
-    //for the two lines of code above, make valid one of them to check either '\r' or '\n'
-    P->CreateKernelCall<PopcountKernel>(CCstream, P->getOutputScalar("countResult"));
-
     return reinterpret_cast<CSVCountFunctionType>(P->compile());
 }
 //
