@@ -9,6 +9,7 @@ from unihan_parser import *
 
 def emit_enumerated_property(f, property_code, independent_prop_values, prop_values, value_map):
     f.write("  namespace %s_ns {\n" % property_code.upper())
+    f.write("    static UnicodeSet radSet;\n")
     f.write("    const unsigned independent_prop_values = %s;\n" % independent_prop_values)
 
     for v in prop_values:
@@ -45,7 +46,7 @@ class unihan_generator():
         prop_values, independent_prop_values, value_map = parse_property_file(filename_root, property_code)
         property_name = get_property_full_name(property_code)
         f = cformat.open_header_file_for_write(property_name)
-        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>'])
+        cformat.write_imports(f, ['"PropertyAliases.h"', '"PropertyObjects.h"', '"PropertyValueAliases.h"', '<unicode/core/unicode_set.h>', '<../tools/wc/radical_count/radical_interface.h>'])
         f.write("\nnamespace UCD {\n")
         self.emit_property(f, property_code, prop_values, independent_prop_values, value_map)
         f.write("}\n")

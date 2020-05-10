@@ -41,7 +41,6 @@ namespace fs = boost::filesystem;
 using namespace llvm;
 using namespace codegen;
 using namespace kernel;
-using namespace BS;
 
 //  Given a Unicode character class (set of Unicode characters), ucount
 //  counts the number of occurrences of characters in that class within
@@ -147,15 +146,11 @@ int main(int argc, char *argv[]) {
 
     UCountFunctionType uCountFunctionPtr = nullptr;
     
-    //BS::UnicodeSetTable ucd_radical;
-    //UCD::UnicodeSet setNum = ucd_radical.get_uset(CC_expr)
-    //re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::ucd_radical.get_uset(CC_expr))));
-    //uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
-    
+    //Check if inputted radical index is an integer 
+    //TODO: Check if integer is between [1,214]
     std::regex regex_pattern("-?[0-9]+.?[0-9]+");
     if ((std::regex_match(CC_expr, regex_pattern))) { 
         UCD::KRS_ns::radSet = BS::ucd_radical.get_uset(CC_expr);
-        //re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::_85_Set)));
         re::CC* CC_ast = re::makeCC(std::move(UCD::UnicodeSet(UCD::KRS_ns::radSet)));
         uCountFunctionPtr = pipelineGen(pxDriver, makeName(CC_ast));
     } else {

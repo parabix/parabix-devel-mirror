@@ -1,7 +1,7 @@
-fr = open("unicodeset_radical_table.txt", "w+")
+fr = open("unicodeset_radical_table.txt", "w")
 
 lines = []
-krskangxi_path = '/Users/yuruonan/Downloads/parabix-devel/include/unicode/data/kRSKangXi.h'
+krskangxi_path = '../../../include/unicode/data/kRSKangXi.h'
 f = open(krskangxi_path, "r")
 
 for l in f:
@@ -13,7 +13,7 @@ for i in range(1, 215):
     code = str(i)
     search = "    const static UnicodeSet::run_t __" + "_" + code + "_Set_runs[] = {\n"
     if search in lines:
-        temp = ("{" + code + ",&_" + code + "_Set}")  #{74,&_74_Set}
+        temp = ("{" + "\"" + code +  "\"" + ",&_" + code + "_Set}")  #{"74",&_74_Set}
         temp = temp + ","
         table.append(temp.ljust(35))
         

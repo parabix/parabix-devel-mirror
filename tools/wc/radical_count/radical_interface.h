@@ -34,7 +34,6 @@ namespace BS
     };
 
     static UnicodeSetTable ucd_radical;
-
 }
 
 #endif /* radical_interface_h */
