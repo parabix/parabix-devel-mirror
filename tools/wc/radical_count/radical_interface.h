@@ -32,7 +32,9 @@ namespace BS
         private:
             static map<string, const UCD::UnicodeSet*> _unicodeset_radical_table;
     };
-    
+
+    static UnicodeSetTable ucd_radical;
+
 }
 
 #endif /* radical_interface_h */

@@ -2,11 +2,10 @@
 #include <unicode/data/kRSKangXi.h>
 
 using namespace std;
+using namespace BS;
 using namespace UCD::KRS_ns;
-namespace BS
-{
 
-    map<string, const UCD::UnicodeSet*> UnicodeSetTable::_unicodeset_radical_table
+    BS::map<string, const UCD::UnicodeSet*> UnicodeSetTable::_unicodeset_radical_table
     {
         {"1",&_1_Set},                       {"2",&_2_Set},                       {"3",&_3_Set},                       {"4",&_4_Set},                       {"5",&_5_Set},                       {"6",&_6_Set},
         {"7",&_7_Set},                       {"8",&_8_Set},                       {"9",&_9_Set},                       {"10",&_10_Set},                     {"11",&_11_Set},                     {"12",&_12_Set},
@@ -46,5 +45,4 @@ namespace BS
         {"211",&_211_Set},                   {"212",&_212_Set},                   {"213",&_213_Set},                   {"214",&_214_Set}
     };
 
-}
 
