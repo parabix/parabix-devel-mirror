@@ -211,7 +211,7 @@ uint64_t ucount1(CSVCountFunctionType fn_ptr, const uint32_t fileIdx) {
 }
 
 int main(int argc, char *argv[]) {
-    codegen::ParseCommandLineOptions(argc, argv, {&ucFlags, codegen::codegen_flags()});
+    codegen::ParseCommandLineOptions(argc, argv, {&ucFlags,pablo::pablo_toolchain_flags(), codegen::codegen_flags()});
     /*
     modified: taken out CC_expr
     if (argv::RecursiveFlag || argv::DereferenceRecursiveFlag) {
