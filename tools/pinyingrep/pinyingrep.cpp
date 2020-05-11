@@ -77,7 +77,7 @@ int main(int argc, char* argv[]){
     allFiles = argv::getFullFileList(pxDriver, inputFiles);
     const auto fileCount = allFiles.size();
 
-    std::unique_ptr<grep::GrepEngine> grep;
+    std::unique_ptr<grep::GrepEngine> grep =  make_unique<grep::EmitMatchesEngine>(pxDriver);
     auto pinyinREs = generateREs(pyregex);
     grep->initREs(pinyinREs);
     grep->grepCodeGen();
