@@ -14,25 +14,21 @@ After everything passes, you are ready to run Radical Grep.
 
 ## How to Run Radical Grep
 
-To run Radical Grep for iteration 1, run the following commands on your terminal:
+To run Radical Grep, run the following commands in the bin directory:
 
-~~~
-cd QA
-python greptest.py -t radicaltest/radicaltest.xml -d . ../build/bin/icgrep
-~~~
-
-## Iteration 1
+## Iteration 1: Hard-Coding the Testcases into the Program
 
 In the first iteration, Radical Grep takes in pre-programmed inputs and returns the phrase with the corresponding radicals.
 
- ## Test 1
+ ## Example 1
 
-    Input: 亻_心_
+    Input: ./radicalgrep 亻_心_ ../QA/radicaltest/testfiles/test1
     Output: 以下是一些关于部首分类的信息
 
-## Test 2
-    Input: 氵_宀 _
+## Example 2
+    Input: ./radicalgrep 氵_宀 _ ../QA/radicaltest/testfiles/test1
     Output: 这是采用“两分法”对汉字进行结构分析得出的认识
+
 
 ## Iteration 2
 
@@ -40,4 +36,16 @@ Plans for iteration 2 include:
 * Implementing UniHan scripts to "grep" characters
 * Improving LLVM command line functionality
 * Support regular expressions
+
+## Radical Count
+Radical Count is a program built based off of `ucount`. Given a filepath and the index of a radical, it counts the occurences of characters with the corresponding radical in the input file.
+
+## How to Run Radical Count
+Build the program by typing `make radicalcount` into the terminal. Go into the bin diretory and run the following commands.
+
+    ./radicalcount <[1,214]> <Path of Input File>
+
+## Example 1
+    Input: ./radicalcount 85 ../QA/radicaltest/testfiles/test1
+    Output: 3       ../QA/radicaltest/testfiles/test1
 

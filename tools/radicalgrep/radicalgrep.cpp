@@ -7,6 +7,7 @@
 #include <string.h>
 #include <vector>
 #include <fstream>
+#include <regex>
 #include <llvm/Support/CommandLine.h>
 
 using namespace std;
@@ -14,10 +15,10 @@ using namespace llvm;
 
 cl::OptionCategory optionsPrompt("Options for Radical Grep");
 
-static cl::opt<std::string> regex(cl::Positional, cl::desc("<radical expression>"), cl::Required, cl::cat(optionsPrompt));
-static cl::opt<std::string> filepath(cl::Positional, cl::desc("<input file>"), cl::Required, cl::cat(optionsPrompt));
+static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(optionsPrompt));
+static cl::opt<std::string> filepath(cl::Positional, cl::desc("<Input File>"), cl::Required, cl::cat(optionsPrompt));
 
-void radical_grep(const string regex,const string filename,ifstream&search);
+void radical_grep(const string CC_expr,const string filename,ifstream&search);
 
 
 int main(int argc, char* argv[])
@@ -37,12 +38,12 @@ int main(int argc, char* argv[])
         cout<<"Fail to open the file!"<<endl;
     else
     {
-        radical_grep(regex,filename,search);
+        radical_grep(CC_expr,filename,search);
     }
     return 0;
 }
 
-void radical_grep(const string regex,const string filename,ifstream&search)
+void radical_grep(const string CC_expr,const string filename,ifstream&search)
 {
     vector<string>record;
     vector<string>result;
@@ -55,16 +56,16 @@ void radical_grep(const string regex,const string filename,ifstream&search)
     }
     if(filename=="test1")
     {
-        if(regex=="亻_心_")
+        if(CC_expr =="亻_心_")
         {
             result.push_back(record[3]);
         }
-        else if(regex=="氵_宀 _")
+        else if(CC_expr =="氵_宀 _")
         {
             result.push_back(record[4]);
             result.push_back(record[6]);
         }
-        else if(regex=="扌_刂_ ")
+        else if(CC_expr =="扌_刂_ ")
         {
             result.push_back(record[5]);
         }
@@ -76,14 +77,14 @@ void radical_grep(const string regex,const string filename,ifstream&search)
     }
     else if(filename=="test2")
     {
-        if(regex=="氵_宀 _")
+        if(CC_expr =="氵_宀 _")
         {
             result.push_back(record[4]);
             result.push_back(record[5]);
             result.push_back(record[6]);
             result.push_back(record[8]);
         }
-        else if(regex=="扌_刂_ ")
+        else if(CC_expr=="扌_刂_ ")
         {
             result.push_back(record[6]);
             result.push_back(record[8]);
