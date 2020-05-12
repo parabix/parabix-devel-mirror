@@ -74,6 +74,60 @@ UnicodeSet resolveUnicodeSet(Name * const name) {
     if (name->getType() == Name::Type::UnicodeProperty) {
         std::string prop = name->getNamespace();
         std::string value = name->getName();
+        if (value[0] == '<') {
+             prop = canonicalize_value_name(prop);
+             auto propit = alias_map.find(prop);
+             auto theprop = static_cast<UCD::property_t>(propit->second);
+             auto propObj = getPropertyObject(theprop);
+
+             auto p = dyn_cast<UCD::EnumeratedPropertyObject>(propObj);
+             UCD::UnicodeSet a;
+             // check if the operator is <=
+             if (value[1] == '=') {
+                 const std::string& val = value.erase(0, 2);
+                 auto e = p->GetPropertyValueEnumCode(val);
+                 for (int i = 1; i <= e; i++) {
+                     const int enum_val = i;
+                     a.insert(p->GetCodepointSet(enum_val));
+                 }
+                 return a;
+             }
+             const std::string& val = value.erase(0, 1);
+             auto e = p->GetPropertyValueEnumCode(val);
+             for (int i = 1; i < e; i++) {
+                 const int enum_val = i;
+                 a.insert(p->GetCodepointSet(enum_val));
+             }
+             return a;
+         }
+
+         if (value[0] == '>') {
+             prop = canonicalize_value_name(prop);
+             auto propit = alias_map.find(prop);
+             auto theprop = static_cast<UCD::property_t>(propit->second);
+             auto propObj = getPropertyObject(theprop);
+
+             auto p = dyn_cast<UCD::EnumeratedPropertyObject>(propObj);
+             UCD::UnicodeSet a;
+
+             // check if the operator is >=
+             if (value[1] == '=') {
+                 const std::string& val = value.erase(0, 2);
+                 auto e = p->GetPropertyValueEnumCode(val);
+                 for (int i = 20; i >= e; i--) {
+                     const int enum_val = i;
+                     a.insert(p->GetCodepointSet(enum_val));
+                 }
+                 return a;
+             }
+             const std::string& val = value.erase(0, 1);
+             auto e = p->GetPropertyValueEnumCode(val);
+             for (int i = 20; i > e; i--) {
+                 const int enum_val = i;
+                 a.insert(p->GetCodepointSet(enum_val));
+             }
+             return a;
+         }
         if (prop.length() > 0) {
             prop = canonicalize_value_name(prop);
             auto propit = alias_map.find(prop);

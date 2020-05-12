@@ -483,7 +483,7 @@ std::string RE_Parser::canonicalize(const cursor_t begin, const cursor_t end) {
 
 RE * RE_Parser::parsePropertyExpression() {
     const auto start = mCursor.pos();
-    while (mCursor.more() && !atany("}:=")) {
+    while (mCursor.more() && !atany("}:=<>")) {
         get1();
     }
     if (accept('=')) {
@@ -550,6 +550,50 @@ RE * RE_Parser::parsePropertyExpression() {
             return createName(canonicalize(start, prop_end), std::string(val_start, mCursor.pos()));
         }
     }
+    // to accept < symbol for the property value assignment
+     if (accept('<')) {
+         // We have a property-name < value expression
+         const auto prop_end = mCursor.pos() - 1;
+         auto val_start = mCursor.pos() - 1;
+
+         // property-value is normal string
+         while (mCursor.more()) {
+             bool done = false;
+             switch (*mCursor) {
+                 case '}':
+                 case ':':
+                     done = true;
+             }
+             if (done) {
+                 break;
+             }
+             ++mCursor;
+         }
+         return createName(canonicalize(start, prop_end),
+                           std::string(val_start, mCursor.pos()));
+     }
+     // to accept > symbol for the property value assignment
+     if (accept('>')) {
+         // We have a property-name > value expression
+         const auto prop_end = mCursor.pos() - 1;
+         auto val_start = mCursor.pos() - 1;
+
+         // property-value is normal string
+         while (mCursor.more()) {
+             bool done = false;
+             switch (*mCursor) {
+                 case '}':
+                 case ':':
+                     done = true;
+             }
+             if (done) {
+                 break;
+             }
+             ++mCursor;
+         }
+         return createName(canonicalize(start, prop_end),
+                           std::string(val_start, mCursor.pos()));
+     }
     return createName(canonicalize(start, mCursor.pos()));
 }
 
