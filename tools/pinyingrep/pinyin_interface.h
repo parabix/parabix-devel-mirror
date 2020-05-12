@@ -99,24 +99,30 @@ namespace PY{
     // of syllables and tones
     class PinyinValuesEnumerator{
     public:
-        PinyinValuesEnumerator(): _enumerated(false) {}
+        PinyinValuesEnumerator(bool flag = false): _enumerated(false), _fully_enumerate(flag) {}
         // Core Method
 
         // Method: emumerate
         // takes the reference of a parser
-        // and generate _enumerated_list
+        // , generate _half_enumerated_list
+        // and generate _enumerated_list if _fully_enumerate is true
         // which contains all possible values of <syllable,tone> pairs
         void enumerate(PinyinValuesParser& parser);
 
+        // Method: createREs()
+        // create a vector of RE* for grep engine
         std::vector<re::RE*> createREs();
     private:
         vector<vector<std::pair<string, int>>> _enumerated_list;
         // e.g.  (<,> for pair, and {} for vector)
-	// { {<jin, 0>, <rong, 0>}, {<jin,0>, <rong, 1>}, ... } for input ""jin rong"
+	    // { {<jin, 0>, <rong, 0>}, {<jin,0>, <rong, 1>}, ... } for input ""jin rong"
 
         std::vector<vector<std::pair<string,int>>> _half_enumerated_list;
+        // e.g.
+        // { {<jin, 0>, <jin, 1>,...}, {<rong, 0>, <rong, 1>, ...}}
 
         bool _enumerated;
+        bool _fully_enumerate; // whether to enumerate fully
     };
 
     // PinyinValuesTable
