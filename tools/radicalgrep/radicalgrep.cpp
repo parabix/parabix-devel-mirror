@@ -3,31 +3,71 @@
 //  radicalgrep
 //
 
-#include <iostream>
-#include <string.h>
-#include <vector>
-#include <fstream>
-#include <regex>
+#include <kernel/core/idisa_target.h>
+#include <boost/filesystem.hpp>
+#include <re/cc/cc_compiler.h>
+#include <re/cc/cc_compiler_target.h>
+#include <re/adt/adt.h>
+#include <re/parse/parser.h>
+#include <re/unicode/re_name_resolve.h>
+#include <re/cc/cc_kernel.h>
+#include <re/ucd/ucd_compiler.hpp>
+#include <kernel/core/kernel_builder.h>
+#include <kernel/streamutils/pdep_kernel.h>
+#include <kernel/io/source_kernel.h>
+#include <kernel/core/streamset.h>
+#include <kernel/unicode/UCD_property_kernel.h>
+#include <llvm/IR/Function.h>
+#include <llvm/IR/Module.h>
 #include <llvm/Support/CommandLine.h>
+#include <llvm/Support/raw_ostream.h>
+#include <pablo/pablo_kernel.h>
+#include <pablo/builder.hpp>
+#include <pablo/pe_zeroes.h>
+#include <pablo/bixnum/bixnum.h>
+#include <toolchain/pablo_toolchain.h>
+#include <kernel/pipeline/driver/cpudriver.h>
+#include <grep/grep_kernel.h>
+#include <toolchain/toolchain.h>
+#include <fileselect/file_select.h>
+#include <grep/grep_engine.h>
+#include <fcntl.h>
+#include <iostream>
+#include <fstream>
+#include <string>
+#include <vector>
+#include <map>
+#include <regex>
+#include <../tools/wc/radical_count/radical_interface.h>
+#include <unicode/data/kRSKangXi.h>
+
+namespace fs = boost::filesystem;
 
 using namespace std;
 using namespace llvm;
+using namespace pablo;
+using namespace kernel;
 
 cl::OptionCategory optionsPrompt("Options for Radical Grep");
 
 static cl::opt<std::string> CC_expr(cl::Positional, cl::desc("<Radical Index>"), cl::Required, cl::cat(optionsPrompt));
 static cl::opt<std::string> filepath(cl::Positional, cl::desc("<Input File>"), cl::Required, cl::cat(optionsPrompt));
 
-void radical_grep(const string CC_expr,const string filename,ifstream&search);
+typedef uint64_t (*RadicalFunctionType)(uint32_t fd);
 
+void radical_grep(const string CC_expr,const string filename,ifstream&search);
 
 int main(int argc, char* argv[])
 {
 
     cl::ParseCommandLineOptions(argc, argv);
-
+    
+    CPUDriver driver("radicalgrep");
+    
     string filename;
     const char * pos;
+
+    std::unique_ptr<grep::GrepEngine> grep;
 
     ifstream search(filepath);
 

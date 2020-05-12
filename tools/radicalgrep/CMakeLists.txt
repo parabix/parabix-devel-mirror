@@ -8,5 +8,7 @@ NAME
 SRC
     radicalgrep.cpp
 DEPS
+    fileselect
+    grep
     toolchain
 )
